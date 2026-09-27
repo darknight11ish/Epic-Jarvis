@@ -1214,9 +1214,15 @@ pub fn run() {
             #[cfg(desktop)]
             {
                 let bound = hotkeys::apply(&handle);
+                // A blank accelerator means `hotkeys::apply` already left it
+                // unbound because its own default lost to another action's
+                // saved key (finding #7, 2026-09-27) - that is not "another
+                // application", it is Jarvis settling a fight with itself,
+                // and it already says so in the Settings page's own error
+                // for that row, so it does not belong in this toast.
                 let refused: Vec<String> = bound
                     .iter()
-                    .filter(|b| !b.registered)
+                    .filter(|b| !b.registered && !b.accelerator.is_empty())
                     .map(|b| format!("{} ({})", b.accelerator, b.label))
                     .collect();
 

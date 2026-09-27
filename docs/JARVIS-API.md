@@ -8119,6 +8119,13 @@ until `waiting` and `checking` are both false and a fresh `report` has
 arrived - the same "start it, poll for it" shape `hardware-panel.js`
 already uses for measuring the graphics cards.
 
+`GET /api/tool_updates` is a read and is never held on a stale link.
+`POST /api/tool_updates/check` IS held on a stale link (fixed 2026-09-27,
+bug audit desktop-rust finding #8): the first-ever press can raise a fresh
+approval card, and like `set_second_card`, `set_briefing` and
+`set_backup_folder`, that card should be answered by someone watching a
+live queue, not a frozen one.
+
 ### 53.2 What is checked, and against what
 
 1. **Python packages** - `backend/requirements.lock` (copied beside

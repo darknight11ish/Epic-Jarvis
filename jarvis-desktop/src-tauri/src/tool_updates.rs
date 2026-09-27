@@ -28,15 +28,18 @@
 //! only shows the exact command to run yourself, and this Rust side never
 //! runs one either.
 //!
-//! Not held on a stale link, either command: reading changes nothing, and
-//! starting the check (or raising its one-time card) does not itself act on
-//! an approval - the card, if one is ever raised, is decided by the normal
-//! approval flow this command never touches, the same reasoning
-//! `backup_now` already gives for why it is not held.
+//! [`get_tool_updates`] is not held on a stale link: reading changes
+//! nothing. [`check_tool_updates`] IS held, unlike an earlier version of
+//! this file claimed (bug audit 2026-09-27, desktop-rust finding #8): the
+//! first-ever press raises an approval card the same as `set_second_card`,
+//! `set_briefing` and `set_backup_folder` do, and all three of those are
+//! held on a stale link so that card is answered by someone looking at a
+//! live queue, not a frozen one. `backup_now`'s own "not held" reasoning
+//! does not transfer here - `backup_now` never raises a card at all.
 
 use std::time::Duration;
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::commands::{
     backend_refusal, backend_unreachable, jarvis_base, jarvis_client, jarvis_headers,
@@ -57,6 +60,19 @@ const READ_TIMEOUT: Duration = Duration::from_secs(15);
 /// Starting the check (or raising its card), never waiting for the check
 /// itself to finish - the backend answers this request at once.
 const CHECK_TIMEOUT: Duration = Duration::from_secs(15);
+
+const STALE: &str =
+    "The connection to Jarvis is catching up, so nothing can be sent until it does.";
+
+/// [`get_tool_updates`] reads and changes nothing, so it is never held.
+/// [`check_tool_updates`] IS held: it can raise a fresh approval card.
+pub(crate) fn held_on_stale(path: &str) -> bool {
+    path == CHECK_PATH
+}
+
+fn stale(app: &AppHandle) -> bool {
+    app.state::<crate::stream::StreamState>().link().stale
+}
 
 fn missing(code: u16, body: &str) -> bool {
     code == 404
@@ -118,9 +134,14 @@ pub async fn get_tool_updates(app: AppHandle) -> Result<serde_json::Value, Strin
 }
 
 /// Starts the check (or raises the one-time approval card) and returns at
-/// once - never blocks on the check itself.
+/// once - never blocks on the check itself. Held on a stale link: the
+/// first-ever press raises a card, and that card should be answered by
+/// someone looking at a live queue (bug audit 2026-09-27, finding #8).
 #[tauri::command]
 pub async fn check_tool_updates(app: AppHandle) -> Result<serde_json::Value, String> {
+    if held_on_stale(CHECK_PATH) && stale(&app) {
+        return Err(STALE.to_string());
+    }
     let base = jarvis_base(&app);
     let response = jarvis_client(Some(CHECK_TIMEOUT))?
         .post(format!("{base}{CHECK_PATH}"))
@@ -136,7 +157,7 @@ pub async fn check_tool_updates(app: AppHandle) -> Result<serde_json::Value, Str
 
 #[cfg(test)]
 mod tests {
-    use super::{check_answer, read_answer, TOOL_UPDATES_MISSING};
+    use super::{check_answer, held_on_stale, read_answer, CHECK_PATH, PATH, TOOL_UPDATES_MISSING};
 
     #[test]
     fn a_pc_without_it_says_so() {
@@ -145,6 +166,15 @@ mod tests {
         assert_eq!(got["why"], TOOL_UPDATES_MISSING);
         assert_eq!(check_answer(404, "").unwrap_err(), TOOL_UPDATES_MISSING);
         assert!(read_answer(200, "{nope").is_err());
+    }
+
+    /// Bug audit 2026-09-27, finding #8: reading is never held, but
+    /// starting a check IS - it can raise a fresh approval card, and that
+    /// card should be answered by someone looking at a live queue.
+    #[test]
+    fn only_the_check_is_held_on_a_stale_link() {
+        assert!(!held_on_stale(PATH));
+        assert!(held_on_stale(CHECK_PATH));
     }
 
     #[test]
