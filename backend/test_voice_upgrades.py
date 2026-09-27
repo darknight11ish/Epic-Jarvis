@@ -272,6 +272,18 @@ def t_the_speaker_choices_come_from_the_pc():
     check("the title and the detail say what it is",
           view["title"] == "Jarvis's built-in voice" and "Kokoro" in view["detail"])
     check("GET /api/voice/voices carries it", V.status()["speaker"] == V.speaker_view())
+    # The detail points at the "Voices" list, which both apps draw BELOW this
+    # choice - it said "above" (play tester, 2026-09-27). Read from the two
+    # screens themselves, so a reordering there shows up here.
+    root = HERE.parent
+    html = (root / "jarvis-desktop" / "src" / "settings.html").read_text(encoding="utf-8")
+    kt = (root / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+          / "client" / "ui" / "screens" / "VoicesScreen.kt").read_text(encoding="utf-8")
+    check("the detail says the recorded voices are under \"Voices\" below, and on both "
+          "screens they are",
+          view["detail"].endswith('stays under "Voices" below.')
+          and html.index('id="cv-speaker"') < html.index('<h3 class="subhead">Voices</h3>')
+          and kt.index("SpeakerPlate(sk") < kt.index('Text("Voices"'), view["detail"])
 
 
 def t_setting_the_speaker_asks_nothing_and_says_so():
