@@ -74,4 +74,16 @@
     <string name="widget_quicklink_name">Jarvis quick link</string>
     <string name="widget_quicklink_desc">The link status, and a one-tap Talk button that opens the
         app with the hold-to-talk mic ready - it does not record from the widget itself.</string>
+
+    <!-- "Floating Jarvis": Overlay (data/FloatingAvatar.kt, service/AvatarOverlayService.kt). -->
+    <string name="fgs_avatar_overlay_reason">Draws the small "Floating Jarvis" avatar
+        the owner turned on, over other apps, so it stays reachable by voice
+        without switching back to Jarvis.</string>
+    <string name="channel_avatar_name">Floating Jarvis</string>
+    <string name="channel_avatar_desc">Shown for as long as the floating avatar is on
+        screen.</string>
+    <string name="avatar_overlay_title">Floating Jarvis</string>
+    <string name="avatar_overlay_text">The small avatar is on your screen. Tap "Turn off"
+        below, or turn "Floating Jarvis" off in Settings.</string>
+    <string name="avatar_overlay_stop">Turn off</string>
 </resources>

@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -25,6 +26,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.audio.Wav
+import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.net.Heard
 import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.SpeechRun
@@ -573,6 +575,58 @@ class WakeWordService : Service() {
         }
     }
 
+    /**
+     * "Floating Jarvis: Bubble" (data/FloatingAvatar.kt): turns this same
+     * "hey Jarvis" listening notification into a chat bubble - the floating
+     * circle Android draws over other apps - rather than posting a second
+     * one.
+     *
+     * Its OWN `PendingIntent`, deliberately not [open] (this notification's
+     * ordinary tap target): [open] is unchanged so tapping the notification
+     * itself keeps doing exactly what it always did, for every owner,
+     * Floating Jarvis on or off. The bubble's expanded content is a NEW
+     * surface, so it gets to open somewhere more useful than "wherever the
+     * app happened to be" - Home, ready to talk, the same place a tap on
+     * the Overlay avatar reaches ([AvatarOverlayService.openApp]).
+     *
+     * `Notification.BubbleMetadata.Builder(PendingIntent, Icon)` needs no
+     * associated shortcut - unlike the older, messaging-style bubble builder
+     * - which is why it is the one used here: this is not a messaging app.
+     * Added in API 30; this app's `minSdk` is 33, so no version check is
+     * needed. Best-effort and silent on failure: a bubble that could not be
+     * attached leaves the plain "hey Jarvis" notification exactly as it
+     * already was, never a crash - the same reasoning `runCatching` is used
+     * for everywhere else in this file.
+     *
+     * Still gated by Android's OWN, separate "Allow bubbles" switch for this
+     * app or channel, which nothing here can turn on
+     * (`FloatingAvatarPlate.kt` only ever links to it) - so this can run
+     * every time and still not show a bubble on a phone that has not also
+     * flipped that switch.
+     */
+    private fun attachBubble(notification: Notification) {
+        runCatching {
+            // The launcher icon, not `ic_notification` - that one is a
+            // single-colour status-bar mask (see its own file comment), and
+            // the bubble is a small round AVATAR on the screen, not a status
+            // bar glyph.
+            val icon = Icon.createWithResource(this, R.mipmap.ic_launcher_round)
+            val bubbleIntent = PendingIntent.getActivity(
+                this,
+                3,
+                Intent(this, MainActivity::class.java)
+                    .setAction(MainActivity.ACTION_START_VOICE)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            notification.bubbleMetadata = Notification.BubbleMetadata.Builder(bubbleIntent, icon)
+                .setDesiredHeight(BUBBLE_HEIGHT_DP)
+                .setAutoExpandBubble(false)
+                .setSuppressNotification(false)
+                .build()
+        }.onFailure { Log.w(TAG, "could not attach bubble metadata", it) }
+    }
+
     private fun readFully(rec: AudioRecord, buf: ShortArray): Boolean {
         var got = 0
         while (got < buf.size) {
@@ -658,6 +712,7 @@ class WakeWordService : Service() {
             // lock screen. (Nothing here can turn listening ON.)
             .addAction(0, getString(R.string.wake_stop), stop)
             .build()
+        if (JarvisRuntime.settings.floatingAvatar.value == FloatingAvatarMode.BUBBLE) attachBubble(notification)
         return try {
             ServiceCompat.startForeground(
                 this,
@@ -693,6 +748,8 @@ class WakeWordService : Service() {
         /** The clip's cap, under the desktop's 30 s. */
         private const val MAX_SECONDS = 17f
         private const val STATUS_EVERY_MS = 5 * 60 * 1000L
+        /** The expanded bubble's height, in dp - Android clamps it to a sane range either way. */
+        private const val BUBBLE_HEIGHT_DP = 480
 
         private val _state = MutableStateFlow<WakeListen>(WakeListen.Off)
 
@@ -729,6 +786,15 @@ class WakeWordService : Service() {
                 ).apply {
                     description = context.getString(R.string.channel_wake_desc)
                     setShowBadge(false)
+                    // "Floating Jarvis: Bubble" (data/FloatingAvatar.kt) turns
+                    // this same notification into a bubble - the channel has
+                    // to allow it too, or Android drops the bubble metadata
+                    // below without a word. Harmless with Floating Jarvis
+                    // off: allowing bubbles on a channel does not make one
+                    // appear by itself, and Android's own separate per-app
+                    // "Allow bubbles" switch (`FloatingAvatarPlate.kt` links
+                    // to it) still has the last word.
+                    setAllowBubbles(true)
                 },
             )
         }

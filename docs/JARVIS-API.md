@@ -8272,3 +8272,171 @@ call).
 **No new way out of the PC** (`docs/ARCHITECTURE.md` §4). This only reads
 what a tool ALREADY fetched this turn, by reference; it adds no fetch of
 anything, on either app.
+
+## 56. Floating Jarvis (phone, added 2026-09-27)
+
+The owner's request, 2026-09-27: a picture-in-picture-style avatar that
+stays visible while using other apps, voice only (no visible text box),
+that expands into the real chat screen on "open a chat" (or a close
+phrasing) or a tap. Built as a three-state setting the owner picks
+between, with BOTH of the two ways to do this on Android, as asked. Phone
+only for now - see `docs/ARCHITECTURE.md` §8, "One-sided on purpose": the
+Windows half, if any, is a separate piece of work, not part of this
+section.
+
+**No new backend route.** Nothing here changes `/api/chat`, `/api/voice/
+utterance` or any other route; every existing rule about the voice loop,
+approvals and outside text applies exactly as before. This section is
+about what the PHONE does with a setting it already keeps and words the
+desktop already sends back - see 56.4.
+
+### 56.1 The setting
+
+`ClientSettings.floatingAvatar` (`data/FloatingAvatar.kt`, new
+`FloatingAvatarMode`), saved on the phone only, off by default:
+
+| State | What it is |
+|---|---|
+| `off` | Nothing floats over other apps (default). |
+| `bubble` | Android's own chat-bubble notification (`Notification.BubbleMetadata`, API 30+). No dialog of its own from this app - only Android's separate, per-app "Allow bubbles" switch, which this app cannot flip for the owner. |
+| `overlay` | A fully custom window drawn over every app (`TYPE_APPLICATION_OVERLAY`), gated behind the owner granting "draw over other apps" (`Settings.ACTION_MANAGE_OVERLAY_PERMISSION`), explained in plain words before that system screen ever opens. |
+
+Shown in Settings -> This app (`FloatingAvatarPlate.kt`'s
+`FloatingAvatarSection`, in `SettingsScreen.kt`, next to Appearance), the
+same `Choices` control the Security screen already uses for its own
+three- and four-state settings - no new control was invented. Neither
+choice does anything by itself while "Listen on this phone" (the
+wake-word switch, Checks) is off: the avatar has nothing to hear then, and
+says so in its own explainer rather than sitting there looking like it is
+listening.
+
+### 56.2 The Bubble path
+
+`service/WakeWordService.kt`'s existing "hey Jarvis" listening
+notification (`docs/JARVIS-API.md`'s own voice-flow sections; the same one
+"Listen on this phone" already posts) gets `Notification.BubbleMetadata`
+attached to it when the setting is `bubble` - a NEW notification was
+deliberately not invented, since the whole point is one bubble tied to
+one already-ongoing "Jarvis is listening" surface, not a second one that
+could say something different. The channel is marked
+`setAllowBubbles(true)` in `ensureChannel`; the metadata itself uses
+`Notification.BubbleMetadata.Builder(PendingIntent, Icon)` (API 30, no
+associated shortcut needed - this is not a messaging app), with its OWN
+`PendingIntent` - `ACTION_START_VOICE`, Home ready to talk - deliberately
+NOT the notification's own plain tap target, which stays exactly as it
+was for every owner whether or not Floating Jarvis is on
+(`MainActivity`, now `android:resizeableActivity="true"` for the
+bubble's own expanded window). Attaching it is wrapped in `runCatching`:
+on any failure the plain "hey Jarvis" notification is unaffected, never a
+crash.
+
+Still gated by Android's own, separate per-app "Allow bubbles" toggle,
+which nothing in this app can turn on - `FloatingAvatarPlate.kt` only ever
+links to it (`Settings.ACTION_APP_NOTIFICATION_BUBBLE_SETTINGS`, with a
+fallback to the app's general notification settings if that action is
+missing on a given build). Said plainly in the Settings screen itself,
+not glossed over: the bubble may not appear even with everything here
+right, until that switch is also on.
+
+### 56.3 The Overlay path
+
+`service/AvatarOverlayService.kt` (new): a foreground service
+(`foregroundServiceType="specialUse"`, its own subtype string - see §3.1(2)
+for why specialUse over dataSync) holding one small `WindowManager`
+window: a draggable circle showing the launcher icon, with a small coloured
+badge for the link (nothing shown when everything is fine, amber while
+reconnecting, red while offline - neutral under App lock, 56.5).
+`FLAG_NOT_FOCUSABLE` and `FLAG_NOT_TOUCH_MODAL` mean it never steals key
+input or the touches meant for whatever app is underneath it. The whole
+avatar also dims (still tappable, never hidden) whenever "Listen on this
+phone" is off or paused by the talk button - the same worry the brief
+raised about the PC being unreachable applies just as much to nothing
+actually listening: a bright avatar that cannot hear anything would be
+floating uselessly.
+
+Requesting the permission is entirely `FloatingAvatarPlate.kt`'s own
+explainer, shown BEFORE `Settings.ACTION_MANAGE_OVERLAY_PERMISSION` is
+ever opened: what "draw over other apps" means, why Jarvis wants it (only
+to show the avatar), and the honest caveat that Android shows its own
+warning screen for this permission because some ad-heavy apps have
+misused it - never glossed over as something wrong with Jarvis rather
+than a standard Android screen. `MainActivity`'s own top-level
+`LaunchedEffect(floatingAvatar, tick)` is the one place that starts or
+stops the service, re-checking `Settings.canDrawOverlays` on every
+resume (the permission is revocable at any time in Android's own
+settings) - the service re-checks it once more itself in `onCreate`, on
+principle. `AvatarOverlayService.start`/`stop` never restart themselves
+(`START_NOT_STICKY`, the same choice `WakeWordService` already makes);
+`MainActivity`'s effect is what starts it again the next time the app is
+opened while the setting and the permission both still say yes.
+
+### 56.4 "Open a chat"
+
+Recognising the phrase is NOT a second speech-to-text path (CLAUDE.md: "a
+client must not do speech-to-text"). The desktop already transcribes and
+voice-checks every "hey Jarvis" clip and hands the words back as
+`Heard.text` - the exact field `VoiceSession` already reads to send the
+turn on to the model (§17). `net/OpenChatPhrase.kt` (new, pure Kotlin)
+matches THAT text, on the phone, against a short fixed phrase list ("open
+a chat", "open the chat", "show me the chat", "let's chat", and close
+phrasings, a leading "hey Jarvis" aside) - the same shape as `CardWords`
+and the backend's own `jarvis_quick.py` grammar: an exact set, never a
+guess, and a sentence that is not wholly one of them is an ordinary
+question. `VoiceSession.deliver` checks it right after the transcript
+arrives and, if it matches AND `floatingAvatar` is not `off`, brings
+`MainActivity` to the front (`ACTION_START_VOICE` - Home, ready to talk,
+the same destination the home-screen widget's own Talk button already
+opens) - IN ADDITION to sending the turn on to the model as usual, never
+instead of it, so nothing here can make an answer that would have
+happened stop happening. A tap on the avatar itself (Bubble or Overlay)
+reaches the exact same destination.
+
+No change was needed in `jarvis_quick.py` for this: recognising the
+phrase happens entirely on the phone, from a field the desktop already
+sends. (A concurrent piece of work may add a comparable phrase to
+`jarvis_quick.py` for the Windows side - that is a separate mechanism for
+a separate platform, and nothing here depends on it or collides with it.)
+
+### 56.5 App lock
+
+The floating avatar is this app's OWN drawn surface, on top of every
+other app - not a launcher-drawn widget, which is why it does not follow
+`ApprovalWidget`'s "stays visible, shows less" rule as-is. It is closer in
+shape to the desktop's HUD window, which `docs/ARCHITECTURE.md` §8 already
+covers with App lock in full. But unlike the HUD, which simply is not
+shown until asked for, the floating avatar's entire purpose is to stay
+reachable - hiding it every time the phone relocks (which can be as often
+as every minute, "Lock again after") would be its own nuisance, and
+disappearing and reappearing is itself a bigger tell than a neutral dot.
+
+So the chosen rule (`data/FloatingAvatar.kt`'s `floatingAvatarShowsContent`):
+**while App lock is on, the avatar keeps showing - it never vanishes -
+but shows nothing content-bearing while it is locked.** Concretely, the
+Overlay's link-coloured badge goes neutral (grey, and hidden when nothing
+is wrong) rather than green/amber/red, and the Bubble path shows nothing
+beyond what `WakeWordService`'s own pre-existing "hey Jarvis" notification
+already showed (unaffected by this feature - attaching bubble metadata to
+it adds no new content, only a new way to tap the same notification).
+Tapping either always opens `MainActivity`, whose own existing App-lock
+screen - unchanged, not duplicated here - decides what is shown next; the
+avatar's own neutral state is only about what it says BEFORE that tap.
+
+Known simplification, said plainly: the rule above reads only
+`Security.appLock` (on or off), not the "Lock again after" relock timer -
+a background service has no reliable feed of `LockSession`'s own
+in-memory clock, which is scoped to `MainActivity`'s lifetime. An owner
+who wants the stricter behaviour turns App lock on; there is no separate
+dial for "neutral only after the relock timer has actually fired" today.
+
+### 56.6 Verification
+
+No local Android build in this container (`CLAUDE.md`); GitHub Actions is
+the only real compiler for `jarvis-client`. `data/FloatingAvatar.kt` and
+`net/OpenChatPhrase.kt` are pure Kotlin (no Android types) and were
+compiled and run against real JUnit tests on a plain JVM before this was
+committed (`FloatingAvatarTest.kt`, `OpenChatPhraseTest.kt`); everything
+touching `Service`, `WindowManager`, `Notification.BubbleMetadata` or
+`MainActivity` was checked by hand against the platform's documented API
+shape (constructor signatures, the API level each one needs) rather than
+run, and is left for CI's emulator smoke job and the owner's own device to
+confirm.

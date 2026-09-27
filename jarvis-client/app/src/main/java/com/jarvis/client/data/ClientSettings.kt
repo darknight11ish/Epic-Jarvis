@@ -107,6 +107,22 @@ class ClientSettings(context: Context) {
         _watchNotifications.value = value
     }
 
+    private val _floatingAvatar = MutableStateFlow(
+        FloatingAvatarMode.fromWire(prefs.getString(KEY_FLOATING_AVATAR, null)),
+    )
+
+    /**
+     * "Floating Jarvis" (Settings -> This app, [FloatingAvatarMode]): off,
+     * Bubble or Overlay. Off by default, like every new setting. Saved on
+     * this phone only - nothing about it reaches the PC.
+     */
+    val floatingAvatar: StateFlow<FloatingAvatarMode> = _floatingAvatar.asStateFlow()
+
+    fun setFloatingAvatar(mode: FloatingAvatarMode) {
+        prefs.edit { putString(KEY_FLOATING_AVATAR, mode.wire) }
+        _floatingAvatar.value = mode
+    }
+
     private val _security = MutableStateFlow(SecurityRules.fromStored { prefs.getString(it, null) })
 
     /**
@@ -186,6 +202,7 @@ class ClientSettings(context: Context) {
         const val KEY_ONE_MOMENT = "one_moment"
         const val KEY_HEARD_SOUND = "heard_sound"
         const val KEY_WATCH_NOTIFICATIONS = "watch_notifications"
+        const val KEY_FLOATING_AVATAR = "floating_avatar"
         const val KEY_UPDATE_CHECKS = "update_checks"
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
         const val KEY_UPDATE_NEWER = "update_newer_line"
