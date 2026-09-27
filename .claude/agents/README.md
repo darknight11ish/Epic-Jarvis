@@ -21,6 +21,7 @@ Or ask for several at once ("run the play testers and the scouts").
 | `voice-playtester` | Walks every voice path (talk button, "Hey Jarvis", interruptions, read-aloud) for timing and trust problems | No |
 | `competitor-scout` | Searches the web for closed-source assistants (ChatGPT, Gemini, Alexa+, Siri, Copilot, Muse...) and what they shipped lately | No |
 | `open-source-scout` | Reads GitHub projects (OpenClaw, Hermes, Home Assistant, Open WebUI...) for ideas Jarvis can safely borrow | No |
+| `integration-scout` | Looks on GitHub for code Jarvis can actually use (a library, a model, a module to adapt) in one area, checking the licence, whether it runs on Windows/Android, and privacy | No |
 | `rules-guardian` | Checks any idea or change against the five non-negotiable rules and the owner's decisions in `CLAUDE.md` | No |
 | `feature-auditor` | The owner's standing three-part audit for every new feature: bugs, both apps, fit | No |
 | `bug-hunter` | Finds real bugs, each one checked against the source before it is reported | No |
