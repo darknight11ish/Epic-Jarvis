@@ -27,6 +27,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
+import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.data.Security
 import com.jarvis.client.data.floatingAvatarShowsContent
 import kotlin.math.abs
@@ -84,15 +85,26 @@ class AvatarOverlayService : Service() {
         super.onCreate()
         JarvisRuntime.initialize(this)
         ensureChannel(this)
-        // Checked again here, not only by the caller: nothing stops this
-        // service being started some other way, and adding a window without
-        // the permission throws rather than failing quietly.
-        if (!Settings.canDrawOverlays(this)) {
-            Log.w(TAG, "started without the overlay permission; stopping")
+        // Bug audit 2026-09-27, finding #6: this is started with
+        // ContextCompat.startForegroundService, so on Android 8.1+ Android
+        // crashes the whole app if the service stops without ever calling
+        // startForeground() first ("Context.startForegroundService() did
+        // not then call Service.startForeground()"). goForeground() is the
+        // only call that reaches startForeground(), so it must run before
+        // any path below that can call stopSelf() - including the
+        // permission check, which used to run first and could stop the
+        // service before startForeground() had ever been called.
+        if (!goForeground()) {
             stopSelf()
             return
         }
-        if (!goForeground()) {
+        // Checked again here, not only by the caller: nothing stops this
+        // service being started some other way, and adding a window without
+        // the permission throws rather than failing quietly. Still runs
+        // before the window is ever added, so the permission gate itself is
+        // unchanged - only the crash-inducing order above it.
+        if (!Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "started without the overlay permission; stopping")
             stopSelf()
             return
         }
@@ -113,6 +125,15 @@ class AvatarOverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            // Bug audit 2026-09-27, finding #5: this used to only stop the
+            // service, so the setting still said Overlay - the next time
+            // MainActivity.onResume ran, its own LaunchedEffect saw Overlay
+            // still on and the permission still granted, and started this
+            // right back up. "Turn off" now really turns it off, with the
+            // exact call Settings' own Floating Jarvis switch uses
+            // (MainActivity's onFloatingAvatarChange, wired to
+            // SettingsScreen).
+            JarvisRuntime.settings.setFloatingAvatar(FloatingAvatarMode.OFF)
             stopSelf()
             return START_NOT_STICKY
         }

@@ -123,6 +123,15 @@ fun SettingsScreen(
      * and the answer already named the place in words.
      */
     initialSection: String? = null,
+    /**
+     * Called once, right after [initialSection] has been acted on (scrolled
+     * to, or found to have no row here) - never again for that same value.
+     * `MainActivity` uses this to clear its own copy of the target, bug
+     * audit 2026-09-27 finding #4: without it, a manual reopen of Settings
+     * later scrolled to the same place again, because `initialSection`
+     * itself never changed.
+     */
+    onSectionConsumed: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     // The same gate every other write on this screen already uses
@@ -134,8 +143,10 @@ fun SettingsScreen(
         TopBar("Settings", onBack)
 
         LaunchedEffect(initialSection) {
-            val index = initialSection?.let(SETTINGS_ITEM_INDEX::get)
+            val section = initialSection ?: return@LaunchedEffect
+            val index = SETTINGS_ITEM_INDEX[section]
             if (index != null) listState.animateScrollToItem(index)
+            onSectionConsumed()
         }
 
         LazyColumn(
