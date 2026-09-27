@@ -22,14 +22,14 @@ Or ask for several at once ("run the play testers and the scouts").
 | `competitor-scout` | Searches the web for closed-source assistants (ChatGPT, Gemini, Alexa+, Siri, Copilot, Muse...) and what they shipped lately | No |
 | `open-source-scout` | Reads GitHub projects (OpenClaw, Hermes, Home Assistant, Open WebUI...) for ideas Jarvis can safely borrow | No |
 | `integration-scout` | Looks on GitHub for code Jarvis can actually use (a library, a model, a module to adapt) in one area, checking the licence, whether it runs on Windows/Android, and privacy | No |
-| `clean-room-spec-writer` | For a good idea whose licence Jarvis cannot copy from (GPL, AGPL, closed apps): first checks if it can simply run as a separate program; if not, writes a plain-words spec with no code in it, for a different agent to build from | Only `docs/clean-room/` |
+| `clean-room-spec-writer` | For a good idea whose licence Jarvis cannot copy from (GPL, AGPL, closed apps): first checks if it can simply run as a separate program; if not, writes a plain-words spec with no code in it, for a different agent to build from | No (hands the spec back; the main session saves it) |
 | `rules-guardian` | Checks any idea or change against the five non-negotiable rules and the owner's decisions in `CLAUDE.md` | No |
 | `feature-auditor` | The owner's standing three-part audit for every new feature: bugs, both apps, fit | No |
 | `bug-hunter` | Finds real bugs, each one checked against the source before it is reported | No |
 | `plain-words-editor` | Checks on-screen wording and write-ups for jargon, vagueness and blame | No |
 | `ci-reader` | Reads GitHub Actions results (the only Android compiler) and says in plain words what failed and why | No |
 
-None of them changes code (the clean-room spec writer only writes specs in `docs/clean-room/`). They report; the main session (or you) decides what
+None of them changes files: helper agents hand their report back as text. They report; the main session (or you) decides what
 to fix. That keeps one place responsible for every change.
 
 ## House rules every agent follows
