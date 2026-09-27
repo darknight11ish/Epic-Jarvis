@@ -5469,7 +5469,11 @@ is added (`jarvis_tellme.add`, before any card is raised) and again by
 `_look_page` immediately before every GET - DNS can answer differently
 later (rebinding), so "checked once at setup" would not be enough. A
 redirect is followed only where the same check would allow it
-(`_PageRedirect`).
+(`_PageRedirect`). Since 2026-09-27 (security/privacy audit) the GET itself
+goes through `jarvis_local_http.public_urlopen`, whose connection makes the
+same check on the addresses it actually connects to - before, urllib did a
+second lookup of its own, so an answer that changed between the check and
+the connect got through.
 
 ### 30.3 A match only notifies
 
@@ -8019,8 +8023,12 @@ is purely "is it current".
 This is a new named way out of the PC (`docs/ARCHITECTURE.md` §4): it calls
 PyPI, crates.io and, if a real GitHub-hosted tool is ever added to the
 registry (see 48.3), GitHub's API. What leaves, ever: a package or crate's
-NAME and the version it is PINNED to - never a file path, a folder name, or
-anything about the owner. The owner decided: ask with a card the first time
+NAME (the request is `pypi.org/pypi/<name>/json` or
+`crates.io/api/v1/crates/<name>`; the version the PC is on is compared on
+the PC and never sent - checked 2026-09-27, the security/privacy audit),
+with a User-Agent naming the tool only (`Jarvis-tool-update-check/1`; it
+carried the owner's GitHub address until that audit) - never a file path,
+a folder name, or anything about the owner. The owner decided: ask with a card the first time
 this is ever run; the card is decided by `jarvis_gate.check` like any
 other, and only "approved" writes `tool_updates.json` in the Jarvis
 settings folder (`{"approved": true, "changed": epoch}`) - a damaged or

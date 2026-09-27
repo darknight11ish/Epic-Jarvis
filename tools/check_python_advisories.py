@@ -10,7 +10,8 @@ WHAT IT CHECKS
    asks for is pinned there with `==`, and every pinned line carries at least
    one `--hash`. pip's hash-checking mode refuses a lock with a line missing
    either, so this finds it here first - and it finds a requirement added to
-   requirements.txt but never locked.
+   requirements.txt but never locked, or locked at a version its own line in
+   requirements.txt no longer allows (`markitdown==0.1.9` asked, 0.1.8 locked).
 
 2. Advisories (network). For every (name, version) pinned in the lock - on
    every platform and Python version the lock covers, not only this one - it
@@ -105,15 +106,89 @@ def lock_entries(text: str) -> tuple:
     return entries, problems
 
 
+_SPEC = re.compile(r"(===|==|!=|~=|>=|<=|>|<)\s*([^\s,;]+)")
+
+
+def requirement_specs(text: str) -> dict:
+    """{name: [(operator, version), ...]} for the requirement lines that
+    carry a version rule (`sherpa-onnx>=1.12.26`, `markitdown[...]==0.1.8`).
+    The marker after `;` is left out: it says WHERE a line applies, not
+    which versions."""
+    out = {}
+    for raw in text.splitlines():
+        s = raw.split("#", 1)[0].split(";", 1)[0].strip()
+        if not s or s.startswith("-"):
+            continue
+        name = canonical(re.split(r"[\s;<>=!~\[]", s, maxsplit=1)[0])
+        rest = re.sub(r"^[^\s<>=!~\[]+(\[[^\]]*\])?", "", s)
+        specs = _SPEC.findall(rest)
+        if specs:
+            out.setdefault(name, []).extend(specs)
+    return out
+
+
+def _vkey(v: str):
+    """The release numbers of `v` as a tuple of ints ("2.9.0.post0" ->
+    (2, 9, 0)), or None when `v` does not start with one. Enough for the
+    plain numbered versions requirements.txt uses; anything else is
+    reported as "cannot check", never guessed."""
+    m = re.match(r"^(\d+(?:\.\d+)*)", v)
+    return tuple(int(p) for p in m.group(1).split(".")) if m else None
+
+
+def _satisfies(version: str, op: str, want: str):
+    """True/False, or None when this simple comparison cannot decide."""
+    if op in ("==", "===", "!=") and want.endswith(".*"):
+        prefix = _vkey(want[:-2])
+        have = _vkey(version)
+        if prefix is None or have is None:
+            return None
+        same = have[:len(prefix)] == prefix
+        return same if op != "!=" else not same
+    a, b = _vkey(version), _vkey(want)
+    if a is None or b is None or op == "~=":
+        return None
+    n = max(len(a), len(b))
+    a, b = a + (0,) * (n - len(a)), b + (0,) * (n - len(b))
+    return {"==": a == b, "===": version == want, "!=": a != b, ">=": a >= b,
+            "<=": a <= b, ">": a > b, "<": a < b}[op]
+
+
+def spec_problems(req_text: str, entries: list) -> list:
+    """Every version rule requirements.txt states, checked against EVERY
+    version the lock pins for that package (security/privacy audit,
+    2026-09-27: the check used to compare names only, so requirements.txt
+    could say `markitdown==0.1.9` while the lock still pinned 0.1.8, and
+    nothing noticed - the two files disagreeing, silently)."""
+    problems = []
+    by_name = {}
+    for n, v, _h in entries:
+        by_name.setdefault(n, set()).add(v)
+    for name, specs in sorted(requirement_specs(req_text).items()):
+        for version in sorted(by_name.get(name, ())):
+            for op, want in specs:
+                ok = _satisfies(version, op, want)
+                if ok is None:
+                    problems.append(f"{name}: cannot check the lock's {version} against "
+                                    f"requirements.txt's {op}{want} - check it by hand")
+                elif not ok:
+                    problems.append(f"{name}: requirements.txt asks for {op}{want}, but "
+                                    f"requirements.lock pins {version} - make the lock again "
+                                    f"(the command is at the top of this file)")
+    return problems
+
+
 def check_lock() -> tuple:
     """(pins, problems)."""
     if not LOCK.is_file():
         return [], [f"{LOCK.relative_to(ROOT)} is missing"]
     entries, problems = lock_entries(LOCK.read_text(encoding="utf-8"))
     pinned = {n for n, _v, _h in entries}
-    for name in sorted(requirement_names(REQS.read_text(encoding="utf-8")) - pinned):
+    req_text = REQS.read_text(encoding="utf-8")
+    for name in sorted(requirement_names(req_text) - pinned):
         problems.append(f"{name} is in requirements.txt but not in requirements.lock - "
                         f"make the lock again (the command is at the top of this file)")
+    problems.extend(spec_problems(req_text, entries))
     return sorted({(n, v) for n, v, _h in entries}), problems
 
 
@@ -155,7 +230,8 @@ def main(argv=None) -> int:
     for p in problems:
         print(f"FAIL  {p}")
     print(f"{'ok   ' if not problems else 'FAIL '} requirements.lock: {len(pins)} pinned "
-          f"releases, every one with a hash, every requirement locked")
+          f"releases, every one with a hash, every requirement locked at a version "
+          f"requirements.txt allows")
     if problems or a.offline:
         return 1 if problems else 0
     found = 0
