@@ -193,6 +193,8 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 
 <script src="faces-spec.js"></script>
 <script src="critter-pose.js"></script>
+<script src="critter-owl.js"></script>
+<script src="critter-otter.js"></script>
 <script src="critters-gen.js"></script>
 <script>
 "use strict";
@@ -1117,6 +1119,145 @@ void main(){
 
 
 /* ============================== the faces ============================= */
+/* THE ANIMAL FACES ("critters") - the red panda, the pygmy owl and the
+   sea otter.
+
+   Every other face here is an instrument: rings, orbits, a drum skin. These
+   are characters, so they are built differently in two ways.
+
+   A CHARACTER, not a table of speeds. The shell hands most faces one of four
+   motion tables and borrows for the rest; an animal declares all eight
+   states in `st`, so drawSurface() hands it the real one (see its `motion`
+   line) and it can sleep through standby, wave for an approval and be
+   puzzled at an error rather than borrow idle's pose. The shell's
+   transforms (dim, the approval clock, the error hitch) still apply on top,
+   exactly as they do for every other face.
+
+   And the pose is worked out outside the shader, once a frame, by the
+   animal's pose code (critter-pose.js, critter-owl.js, critter-otter.js) -
+   the same maths the phone runs, checked against it by a fixture. The
+   shader (critters/, one source for both apps) only draws the animal in
+   whatever pose it is given.
+
+   critterFace() is everything the three share; each passes its own name,
+   words and flat fallback. */
+function critterFace(o){
+  return Object.assign({
+    family:"critter", dim:"3d", wave:4,
+    geo:"sphere-traced soft-body character", type:"Syne / IBM Plex Mono",
+    fonts:{d:'"Syne"', m:'"IBM Plex Mono"'},
+    heavy:false,
+    // All eight states, so the shell passes each one through instead of
+    // borrowing. `sp` is the shell's spin rate; an animal barely uses it
+    // (only the orb's swirl turns with PHASE) because a creature's breathing
+    // and blinking should not stop when a state's spin does. The four states
+    // other faces borrow for carry the rate of the movement they would
+    // borrow (idle .5, thinking 1.6), because that is what the phone's
+    // speedFor receives - so the orb swirls at the same pace on both. The
+    // colours are the unbound defaults; a binding replaces them like any
+    // other face's. A fresh object per animal: withOverride() writes into it.
+    st:{ idle:     {sp:.5, glow:"#1d6f8a", hot:"#7fe3ff"},
+         listening:{sp:1,  glow:"#8a3a12", hot:"#ff8a3d"},
+         thinking: {sp:1.6,glow:"#3a3490", hot:"#8f7bff"},
+         speaking: {sp:.8, glow:"#2a7890", hot:"#9ff0ff"},
+         approval: {sp:.5, glow:"#8a5a10", hot:"#ffc14d"},
+         standby:  {sp:.5, glow:"#3a4048", hot:"#9aa3ad"},
+         error:    {sp:1.6, glow:"#8a1f35", hot:"#ff5a7a"},
+         banked:   {sp:.5, glow:"#444a52", hot:"#b0b6bf"} },
+    // This animal's pose code, looked up when first drawn (the scripts load
+    // before this page's own, but a missing one should cost the face its 3D
+    // picture, not the page).
+    get species(){
+      return (typeof CritterPose !== "undefined" && CritterPose.species && CritterPose.species[this.id]) || null;
+    },
+    // Which state each SURFACE last showed, and when it changed, so a change of
+    // state melts over CritterPose.BLEND_S instead of cutting. Keyed by the
+    // surface's own view object (VIEW is swapped per surface before each
+    // draw): the grid card and the solo view can show this same face in two
+    // different states at once, and must not fight over one memory.
+    //
+    // Timed in real seconds, not the face clock `t`, so the melt takes the
+    // same half second at any speed-slider setting - and matches the phone,
+    // whose FaceHost measures it the same way.
+    mem: new WeakMap(),
+    track(st, amp){
+      const now = performance.now() / 1000;
+      let m = this.mem.get(VIEW);
+      if(!m){
+        m = { st, prev: st, prev2: st, at: -1e9, gap: 1e9, prevAmp: amp, lastAmp: amp,
+              lookW: 0, lookAt: now };
+        this.mem.set(VIEW, m);
+      }
+      if(m.st !== st){
+        // What CritterPose.pose needs to carry on from what was on screen:
+        // the loudness at the change, and whether the state being left was
+        // itself still melting in.
+        m.prev2 = m.prev; m.gap = now - m.at; m.prevAmp = m.lastAmp;
+        m.prev = m.st; m.st = st; m.at = now;
+      }
+      m.lastAmp = amp;
+      return m;
+    },
+    look(m){
+      // The pointer, for a few seconds after it last moved over the face. The
+      // weight is EASED, both ways: taken straight from the pointer it jumped
+      // from 0 to 1 on the first move after a pause, and to 0 on a click, and
+      // the head snapped round. Only the Faces window has a pointer; the
+      // Widget, HUD and floating face have none, so there it stays 0.
+      const now = performance.now() / 1000;
+      const age = now - (TOUCH.at || -1e12) / 1000;
+      const want = Math.max(0, Math.min(1, 1 - (age - 2) / 1.5));
+      const dt = Math.max(0, now - m.lookAt); m.lookAt = now;
+      m.lookW += (want - m.lookW) * (1 - Math.exp(-dt / 0.3));
+      return { x: TOUCH.x, y: -TOUCH.y, w: m.lookW };
+    },
+    pose(t, st, amp){
+      if(!this.species) return null;
+      const m = this.track(st, amp);
+      return this.species.pose(st, m.prev, performance.now() / 1000 - m.at, t, amp, this.look(m),
+                              { prev2: m.prev2, gap: m.gap, prevAmp: m.prevAmp });
+    },
+    gpu(g, w, h, t, st, amp, P){
+      if(typeof GPU === "undefined" || GPU.dead || !GPUOK || !P) return false;
+      if(typeof JARVIS_CRITTERS === "undefined") return false;
+      const rw = Math.max(96, Math.min(w, GPUPX));
+      const U = this.species.uniforms(P);
+      const p = this.st[st];
+      const bg = parseCol(this.swatch[0]), hot = parseCol(p.hot), cool = parseCol(p.glow);
+      if(!JARVIS_CRITTERS[this.id]) return false;
+      const out = GPU.pass(this.id, JARVIS_CRITTERS[this.id], rw, rw, (G, L) => {
+        for(const k in U){
+          const v = U[k], l = L[k];
+          if(!l) continue;
+          if(v.length === 1) G.uniform1f(l, v[0]);
+          else if(v.length === 2) G.uniform2f(l, v[0], v[1]);
+          else if(v.length === 3) G.uniform3f(l, v[0], v[1], v[2]);
+          else G.uniform4f(l, v[0], v[1], v[2], v[3]);
+        }
+        G.uniform3f(L.uHot, hot[0]/255, hot[1]/255, hot[2]/255);
+        G.uniform3f(L.uCool, cool[0]/255, cool[1]/255, cool[2]/255);
+        G.uniform3f(L.uBg, bg[0]/255, bg[1]/255, bg[2]/255);
+        G.uniform1f(L.uYaw, VIEW.yaw);
+        G.uniform1f(L.uPit, VIEW.pitch);
+        G.uniform1f(L.uZoom, VIEW.zoom || 1);
+        G.uniform1f(L.uTime, PHASE);
+        // One pixel in the shader's own units (it spans -1..1 across rw), for
+        // its soft outline.
+        G.uniform1f(L.uPx, 2 / rw);
+      });
+      if(!out) return false;
+      g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+      g.drawImage(out, 0, 0, w, h);
+      return true;
+    },
+    draw(g, w, h, t, st, amp){
+      const P = this.pose(t, st, amp);
+      if(this.gpu(g, w, h, t, st, amp, P)) return;
+      this.flat(g, w, h, st, P);
+    },
+  }, o);
+}
+
 const THEMES = [
 {
   id:"arc", name:"Arc", family:"core", tagline:"The classic, tightened", wave:1, dim:"2d",
@@ -2879,130 +3020,10 @@ const THEMES = [
   }
 },
 
-/* Red Panda - the first animal face.
-
-   Every other face here is an instrument: rings, orbits, a drum skin. This
-   one is a character, so it is built differently in two ways.
-
-   It is a CHARACTER, not a table of speeds. The shell hands most faces one
-   of four motion tables and borrows for the rest; this face declares all
-   eight states in `st`, so drawSurface() hands it the real one (see its
-   `motion` line) and the panda can sleep through standby, wave for an
-   approval and scratch its head at an error rather than borrow idle's pose.
-   The shell's transforms (dim, the approval clock, the error hitch) still
-   apply on top, exactly as they do for every other face.
-
-   And the pose is worked out outside the shader, once a frame, by
-   critter-pose.js - the same maths the phone runs in CritterPose.kt, checked
-   against it by a fixture. The shader (critters/redpanda.sksl, one source
-   for both apps) only draws a panda in whatever pose it is given. */
-{
-  id:"redpanda", name:"Red Panda", family:"critter", tagline:"A friend who keeps the light on", dim:"3d", wave:4,
-  geo:"sphere-traced soft-body character", type:"Syne / IBM Plex Mono",
-  fonts:{d:'"Syne"', m:'"IBM Plex Mono"'},
+critterFace({
+  id:"redpanda", name:"Red Panda", tagline:"A friend who keeps the light on",
   swatch:["#04060b","#ff8a3d","#1d6f8a","#f2e2c8"],
   spec:"A red panda made of maths rather than a model file. Its head, cheeks, ears, paws and ringed tail are simple rounded shapes melted together with a smooth minimum, so it bends like felt instead of hinging like a toy, and every pixel is ray-traced with soft shadows and occlusion. The glowing orb it holds is the state colour, and it is a real light: it tints the panda's paws and chin, and the rim light round its fur is the state's second colour.",
-  heavy:false,
-  // All eight states, so the shell passes each one through instead of
-  // borrowing. `sp` is the shell's spin rate; the panda barely uses it (only
-  // the orb's swirl turns with PHASE) because a creature's breathing and
-  // blinking should not stop when a state's spin does. The four states other
-  // faces borrow for carry the rate of the movement they would borrow (idle
-  // .5, thinking 1.6), because that is what the phone's speedFor receives -
-  // so the orb swirls at the same pace on both. The colours are the unbound
-  // defaults; a binding replaces them like any other face's.
-  st:{ idle:     {sp:.5, glow:"#1d6f8a", hot:"#7fe3ff"},
-       listening:{sp:1,  glow:"#8a3a12", hot:"#ff8a3d"},
-       thinking: {sp:1.6,glow:"#3a3490", hot:"#8f7bff"},
-       speaking: {sp:.8, glow:"#2a7890", hot:"#9ff0ff"},
-       approval: {sp:.5, glow:"#8a5a10", hot:"#ffc14d"},
-       standby:  {sp:.5, glow:"#3a4048", hot:"#9aa3ad"},
-       error:    {sp:1.6, glow:"#8a1f35", hot:"#ff5a7a"},
-       banked:   {sp:.5, glow:"#444a52", hot:"#b0b6bf"} },
-  // Which state each SURFACE last showed, and when it changed, so a change of
-  // state melts over CritterPose.BLEND_S instead of cutting. Keyed by the
-  // surface's own view object (VIEW is swapped per surface before each
-  // draw): the grid card and the solo view can show this same face in two
-  // different states at once, and must not fight over one memory.
-  //
-  // Timed in real seconds, not the face clock `t`, so the melt takes the
-  // same half second at any speed-slider setting - and matches the phone,
-  // whose FaceHost measures it the same way.
-  mem: new WeakMap(),
-  track(st, amp){
-    const now = performance.now() / 1000;
-    let m = this.mem.get(VIEW);
-    if(!m){
-      m = { st, prev: st, prev2: st, at: -1e9, gap: 1e9, prevAmp: amp, lastAmp: amp,
-            lookW: 0, lookAt: now };
-      this.mem.set(VIEW, m);
-    }
-    if(m.st !== st){
-      // What CritterPose.pose needs to carry on from what was on screen:
-      // the loudness at the change, and whether the state being left was
-      // itself still melting in.
-      m.prev2 = m.prev; m.gap = now - m.at; m.prevAmp = m.lastAmp;
-      m.prev = m.st; m.st = st; m.at = now;
-    }
-    m.lastAmp = amp;
-    return m;
-  },
-  look(m){
-    // The pointer, for a few seconds after it last moved over the face. The
-    // weight is EASED, both ways: taken straight from the pointer it jumped
-    // from 0 to 1 on the first move after a pause, and to 0 on a click, and
-    // the head snapped round. Only the Faces window has a pointer; the
-    // Widget, HUD and floating face have none, so there it stays 0.
-    const now = performance.now() / 1000;
-    const age = now - (TOUCH.at || -1e12) / 1000;
-    const want = Math.max(0, Math.min(1, 1 - (age - 2) / 1.5));
-    const dt = Math.max(0, now - m.lookAt); m.lookAt = now;
-    m.lookW += (want - m.lookW) * (1 - Math.exp(-dt / 0.3));
-    return { x: TOUCH.x, y: -TOUCH.y, w: m.lookW };
-  },
-  pose(t, st, amp){
-    if(typeof CritterPose === "undefined") return null;
-    const m = this.track(st, amp);
-    return CritterPose.pose(st, m.prev, performance.now() / 1000 - m.at, t, amp, this.look(m),
-                            { prev2: m.prev2, gap: m.gap, prevAmp: m.prevAmp });
-  },
-  gpu(g, w, h, t, st, amp, P){
-    if(typeof GPU === "undefined" || GPU.dead || !GPUOK || !P) return false;
-    if(typeof JARVIS_CRITTERS === "undefined") return false;
-    const rw = Math.max(96, Math.min(w, GPUPX));
-    const U = CritterPose.uniforms(P);
-    const p = this.st[st];
-    const bg = parseCol(this.swatch[0]), hot = parseCol(p.hot), cool = parseCol(p.glow);
-    const out = GPU.pass("redpanda", JARVIS_CRITTERS.redpanda, rw, rw, (G, L) => {
-      for(const k in U){
-        const v = U[k], l = L[k];
-        if(!l) continue;
-        if(v.length === 1) G.uniform1f(l, v[0]);
-        else if(v.length === 2) G.uniform2f(l, v[0], v[1]);
-        else if(v.length === 3) G.uniform3f(l, v[0], v[1], v[2]);
-        else G.uniform4f(l, v[0], v[1], v[2], v[3]);
-      }
-      G.uniform3f(L.uHot, hot[0]/255, hot[1]/255, hot[2]/255);
-      G.uniform3f(L.uCool, cool[0]/255, cool[1]/255, cool[2]/255);
-      G.uniform3f(L.uBg, bg[0]/255, bg[1]/255, bg[2]/255);
-      G.uniform1f(L.uYaw, VIEW.yaw);
-      G.uniform1f(L.uPit, VIEW.pitch);
-      G.uniform1f(L.uZoom, VIEW.zoom || 1);
-      G.uniform1f(L.uTime, PHASE);
-      // One pixel in the shader's own units (it spans -1..1 across rw), for
-      // its soft outline.
-      G.uniform1f(L.uPx, 2 / rw);
-    });
-    if(!out) return false;
-    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
-    g.drawImage(out, 0, 0, w, h);
-    return true;
-  },
-  draw(g, w, h, t, st, amp){
-    const P = this.pose(t, st, amp);
-    if(this.gpu(g, w, h, t, st, amp, P)) return;
-    this.flat(g, w, h, st, P);
-  },
   // Without a GPU: the same panda as a flat sticker, in the same pose. Not
   // ray-traced, but it still tilts its head, blinks, perks its ears, holds
   // its orb and closes its eyes to sleep - the parts that say what Jarvis is
@@ -3067,7 +3088,101 @@ const THEMES = [
     // Paws.
     ell(P.pawLx, seat + P.pawLy, .085, .085, DARK); ell(P.pawRx, seat + P.pawRy, .085, .085, DARK);
   }
-}
+}),
+critterFace({
+  id:"pygmyowl", name:"Pygmy Owl", tagline:"Small, round, and paying attention",
+  swatch:["#04060b","#ffc14d","#1d6f8a","#e6d2b2"],
+  spec:"A pygmy owl on a branch, made of maths rather than a model file: one egg of a body, a big round head with huge yellow eyes in pale facial discs, folded spotted wings and a streaked front, all ray-traced with soft shadows. Owls have no hands, so its orb floats beside it - the state colour, and a real light on its feathers. It turns its head to follow what is going on, tips it right over while it thinks, waves a wing when something is waiting on you and puffs up round to sleep.",
+  // Without a GPU: a flat owl in the same pose - head tilt, eyes, beak,
+  // wings and orb - without the lighting.
+  flat(g, w, h, st, P){
+    if(!P) return;
+    const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1);
+    const X = x => w / 2 + x * S / 1.08, Y = y => h / 2 - (y + 0.12) * S / 1.08;
+    const R = r => r * S / 1.08;
+    const BROWN = "#9a6a40", CREAM = "#f0e2c8", DARK = "#1a0e08", IRIS = "#ffc93a", HORN = "#e3b56a";
+    const ell = (x, y, rx, ry, col, rot) => {
+      g.fillStyle = col; g.beginPath(); g.ellipse(X(x), Y(y), R(rx), R(ry), rot || 0, 0, TAU); g.fill();
+    };
+    const seat = -0.93 + P.bob, fl = P.fluff * P.breath;
+    g.strokeStyle = "#5a3a24"; g.lineWidth = R(0.13); g.lineCap = "round";
+    g.beginPath(); g.moveTo(X(-0.9), Y(-0.99)); g.lineTo(X(0.9), Y(-0.95)); g.stroke();
+    g.save(); g.shadowColor = rgba(p.glow, .9); g.shadowBlur = S * .09;
+    ell(0, seat + .40, .40 * fl, .47, BROWN);
+    g.restore();
+    ell(0, seat + .34, .22 * fl, .36, CREAM);
+    for(const side of [-1, 1]){
+      const lift = side < 0 ? P.wingL : P.wingR;
+      ell(side * (.34 + .15 * Math.min(1.6, lift)), seat + .40 + .12 * Math.min(1.6, lift), .12, .32, BROWN, side * Math.min(1.6, lift));
+    }
+    const ny = seat + .70 - P.neckDrop;
+    g.save();
+    g.translate(X(0), Y(ny)); g.rotate(P.headRoll); g.translate(-X(0), -Y(ny));
+    g.translate(R(P.headYaw * .2), -R(P.headPitch * .1));
+    ell(0, ny + .30, .48, .41, BROWN);
+    for(const side of [-1, 1]){
+      const open = Math.max(.08, Math.min(1.2, side < 0 ? P.eyeL : P.eyeR));
+      const ex = side * .165, ey = ny + .33;
+      ell(ex, ey, .17, .17, CREAM);
+      ell(ex, ey, .115, .115 * open, DARK);
+      if(open > .3){
+        ell(ex + .02 * P.lookX, ey + .018 * P.lookY, .085, .085 * open, IRIS);
+        ell(ex + .02 * P.lookX, ey + .018 * P.lookY, .045, .045 * open, DARK);
+        ell(ex - .03, ey + .036, .018, .018, "#ffffff");
+      }
+    }
+    ell(0, ny + .21 - .02 * P.beak, .05, .07, HORN);
+    g.restore();
+    const ox = P.orbX, oy = seat + P.orbY, or = P.orbR;
+    const og = g.createRadialGradient(X(ox), Y(oy), 0, X(ox), Y(oy), R(or * 3.2));
+    og.addColorStop(0, rgba(p.hot, .55 * Math.min(1, P.orbGlow + .2))); og.addColorStop(1, rgba(p.hot, 0));
+    g.fillStyle = og; g.beginPath(); g.arc(X(ox), Y(oy), R(or * 3.2), 0, TAU); g.fill();
+    ell(ox, oy, or, or, lift(p.hot, .25));
+  }
+}),
+critterFace({
+  id:"seaotter", name:"Sea Otter", tagline:"Afloat, and keeping your stone safe",
+  swatch:["#04060b","#7fe3ff","#1d6f8a","#d8c8b0"],
+  spec:"A sea otter floating on its back in a small round pool, made of maths rather than a model file and ray-traced with soft shadows; rings spread across the water from it as it bobs. It holds a glowing pebble on its chest - the orb, in the state colour, and a real light on its paws and face. It taps the pebble while it thinks, puts its paws to its cheeks to listen, waves while something is waiting on you and covers its eyes with its paws to sleep.",
+  // Without a GPU: a flat otter on a flat pool, in the same pose, without
+  // the lighting.
+  flat(g, w, h, st, P){
+    if(!P) return;
+    const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1);
+    const X = x => w / 2 + x * S / 1.1, Y = y => h / 2 - (y + 0.05) * S / 1.1;
+    const R = r => r * S / 1.1;
+    const FUR = "#6e4a34", FACE = "#e2d4bc", DARK = "#150c08", WATER = "#15586e";
+    const ell = (x, y, rx, ry, col, rot) => {
+      g.fillStyle = col; g.beginPath(); g.ellipse(X(x), Y(y), R(rx), R(ry), rot || 0, 0, TAU); g.fill();
+    };
+    ell(0, -.18, 1.0, .42, WATER);
+    g.strokeStyle = rgba(p.glow, .5); g.lineWidth = Math.max(1, S * .01);
+    g.beginPath(); g.ellipse(X(0), Y(-.18), R(.62 + .05 * Math.sin(P.wave)), R(.26), 0, 0, TAU); g.stroke();
+    const by = P.bob;
+    ell(.08, by, .62, .22, FUR);
+    ell(.66, by + .06 + .04 * P.paddle, .12, .06, DARK);
+    const hx = -.55, hy = by + .18;
+    g.save();
+    g.translate(X(hx), Y(hy)); g.rotate(P.headRoll); g.translate(-X(hx), -Y(hy));
+    ell(hx, hy, .25, .23, FACE);
+    for(const side of [-1, 1]){
+      const open = Math.max(.08, Math.min(1.2, side < 0 ? P.eyeL : P.eyeR));
+      ell(hx + side * .095, hy + .05, .035, .035 * open, DARK);
+    }
+    ell(hx, hy - .03, .045, .03, DARK);
+    if(P.mouth > .05) ell(hx, hy - .10, .035, .03 * P.mouth, "#4a0d10");
+    g.restore();
+    // The paws, then the pebble on its chest.
+    for(const k of ["L", "R"]){
+      ell(.02 + P["paw" + k + "x"], by + P["paw" + k + "y"] - .12, .07, .07, FUR);
+    }
+    const ox = .02 + P.orbX, oy = by + P.orbY - .12, or = P.orbR;
+    const og = g.createRadialGradient(X(ox), Y(oy), 0, X(ox), Y(oy), R(or * 3.2));
+    og.addColorStop(0, rgba(p.hot, .55 * Math.min(1, P.orbGlow + .2))); og.addColorStop(1, rgba(p.hot, 0));
+    g.fillStyle = og; g.beginPath(); g.arc(X(ox), Y(oy), R(or * 3.2), 0, TAU); g.fill();
+    ell(ox, oy, or, or, lift(p.hot, .25));
+  }
+}),
 ];
 
 /* ====================================================================== *

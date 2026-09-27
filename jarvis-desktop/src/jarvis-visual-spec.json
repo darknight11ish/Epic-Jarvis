@@ -1537,7 +1537,61 @@
     "pose": "jarvis-desktop/src/critter-pose.js and jarvis-client CritterPose.kt, held equal by tools/gen_critters.py's fixture and CritterPoseTest",
     "colour": "The fur keeps its own colours. The bound hot colour is the orb the panda holds, which lights its paws and chin; the dim colour is the rim light round its fur. Recolouring the whole animal per state would read as a different animal, not the same one changing its mind.",
     "fallback_desktop": "Without WebGL2, a flat sticker of the same panda in the same pose.",
-    "more_coming": "Pygmy owl and sea otter are designed but not built; the owner asked to see a working panda first."
+    "more_coming": "Built after it: the pygmy owl and the sea otter (the owner's go-ahead, 2026-09-27)."
+   }
+  },
+  {
+   "id": "pygmyowl",
+   "name": "Pygmy Owl",
+   "dim": "3d",
+   "geometry": "sphere-traced soft-body character",
+   "integrates_per_frame": false,
+   "heavy": false,
+   "speed": {
+    "min": 0.05,
+    "max": 6.0,
+    "default": 1.0,
+    "curve": "log",
+    "substeps_max": 1
+   },
+   "render": {
+    "supersample_max": 2.0,
+    "target_fps": 60,
+    "max_px": 1800,
+    "fit": 1.0
+   },
+   "archived": false,
+   "character": {
+    "note": "The second animal. Perches on a branch; its orb floats beside it (owls have no hands). All eight states: turns its head to follow the room, tilts it to listen, tips it right over while the orb circles to think, moves its beak with Jarvis's voice, waves a wing for approval, fluffs up with its eyes shut for standby, squints with a tilted head at an error, dozes when banked.",
+    "shader": "jarvis-desktop/critters/common_head.sksl + pygmyowl.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py",
+    "pose": "see the red panda's entry: the same scheme, in critter-owl.js and OwlPose.kt"
+   }
+  },
+  {
+   "id": "seaotter",
+   "name": "Sea Otter",
+   "dim": "3d",
+   "geometry": "sphere-traced soft-body character",
+   "integrates_per_frame": false,
+   "heavy": false,
+   "speed": {
+    "min": 0.05,
+    "max": 6.0,
+    "default": 1.0,
+    "curve": "log",
+    "substeps_max": 1
+   },
+   "render": {
+    "supersample_max": 2.0,
+    "target_fps": 60,
+    "max_px": 1800,
+    "fit": 1.0
+   },
+   "archived": false,
+   "character": {
+    "note": "The third animal. Floats on its back in a small round pool, looked down on, holding a glowing pebble (the orb) on its chest. All eight states: bobs and looks about when idle, paws to its cheeks to listen, taps the pebble to think, talks with Jarvis's voice, waves a paw for approval, covers its eyes with its paws for standby, drops the pebble and scratches its head at an error, dozes when banked.",
+    "shader": "jarvis-desktop/critters/common_head.sksl + seaotter.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py",
+    "pose": "see the red panda's entry: the same scheme, in critter-otter.js and OtterPose.kt"
    }
   }
  ],
@@ -1611,6 +1665,18 @@
  "renderer": {
   "note": "Most faces are meshes of a few thousand quads and a CPU rasteriser draws them fine. Three cannot be drawn sharply that way at phone resolution, and are rendered by a shader instead. The distinction is a property of the face, not of the client, so it is recorded here.",
   "gpu_faces": {
+   "pygmyowl": {
+    "kind": "sdf_raymarch",
+    "why": "The same scheme as the red panda: blended rounded shapes, soft shadows, the orb as a point light.",
+    "web": "WebGL2 fragment shader; flat canvas owl as the fallback.",
+    "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda."
+   },
+   "seaotter": {
+    "kind": "sdf_raymarch",
+    "why": "The same scheme as the red panda, plus a rippling pool of water under the otter.",
+    "web": "WebGL2 fragment shader; flat canvas otter as the fallback.",
+    "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda."
+   },
    "redpanda": {
     "kind": "sdf_raymarch",
     "why": "A character built from about twenty blended rounded shapes, lit with soft shadows, occlusion and the orb as a point light. Like nucleus, one full lighting solve per pixel.",

@@ -526,7 +526,7 @@ window.JARVIS_SPEC = Object.freeze({
       "character": {
         "colour": "The fur keeps its own colours. The bound hot colour is the orb the panda holds, which lights its paws and chin; the dim colour is the rim light round its fur. Recolouring the whole animal per state would read as a different animal, not the same one changing its mind.",
         "fallback_desktop": "Without WebGL2, a flat sticker of the same panda in the same pose.",
-        "more_coming": "Pygmy owl and sea otter are designed but not built; the owner asked to see a working panda first.",
+        "more_coming": "Built after it: the pygmy owl and the sea otter (the owner's go-ahead, 2026-09-27).",
         "note": "The first animal face. Unlike the twenty instruments before it, a character needs its own pose for every state, so it receives all eight rather than borrowing four motion tables: asleep for standby, a wave for approval, a head-scratch for error, a doze for banked. The shell's transforms (dim, the approval clock, the error hitch) still apply on top.",
         "pose": "jarvis-desktop/src/critter-pose.js and jarvis-client CritterPose.kt, held equal by tools/gen_critters.py's fixture and CritterPoseTest",
         "shader": "jarvis-desktop/critters/redpanda.sksl - one source for both apps, generated into each by tools/gen_critters.py"
@@ -537,6 +537,60 @@ window.JARVIS_SPEC = Object.freeze({
       "id": "redpanda",
       "integrates_per_frame": false,
       "name": "Red Panda",
+      "render": {
+        "fit": 1.0,
+        "max_px": 1800,
+        "supersample_max": 2.0,
+        "target_fps": 60
+      },
+      "speed": {
+        "curve": "log",
+        "default": 1.0,
+        "max": 6.0,
+        "min": 0.05,
+        "substeps_max": 1
+      }
+    },
+    {
+      "archived": false,
+      "character": {
+        "note": "The second animal. Perches on a branch; its orb floats beside it (owls have no hands). All eight states: turns its head to follow the room, tilts it to listen, tips it right over while the orb circles to think, moves its beak with Jarvis's voice, waves a wing for approval, fluffs up with its eyes shut for standby, squints with a tilted head at an error, dozes when banked.",
+        "pose": "see the red panda's entry: the same scheme, in critter-owl.js and OwlPose.kt",
+        "shader": "jarvis-desktop/critters/common_head.sksl + pygmyowl.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
+      },
+      "dim": "3d",
+      "geometry": "sphere-traced soft-body character",
+      "heavy": false,
+      "id": "pygmyowl",
+      "integrates_per_frame": false,
+      "name": "Pygmy Owl",
+      "render": {
+        "fit": 1.0,
+        "max_px": 1800,
+        "supersample_max": 2.0,
+        "target_fps": 60
+      },
+      "speed": {
+        "curve": "log",
+        "default": 1.0,
+        "max": 6.0,
+        "min": 0.05,
+        "substeps_max": 1
+      }
+    },
+    {
+      "archived": false,
+      "character": {
+        "note": "The third animal. Floats on its back in a small round pool, looked down on, holding a glowing pebble (the orb) on its chest. All eight states: bobs and looks about when idle, paws to its cheeks to listen, taps the pebble to think, talks with Jarvis's voice, waves a paw for approval, covers its eyes with its paws for standby, drops the pebble and scratches its head at an error, dozes when banked.",
+        "pose": "see the red panda's entry: the same scheme, in critter-otter.js and OtterPose.kt",
+        "shader": "jarvis-desktop/critters/common_head.sksl + seaotter.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
+      },
+      "dim": "3d",
+      "geometry": "sphere-traced soft-body character",
+      "heavy": false,
+      "id": "seaotter",
+      "integrates_per_frame": false,
+      "name": "Sea Otter",
       "render": {
         "fit": 1.0,
         "max_px": 1800,
@@ -1877,11 +1931,23 @@ window.JARVIS_SPEC = Object.freeze({
         "web": "WebGL2 fragment shader, one pass, full display resolution.",
         "why": "One full lighting solve per pixel. On a CPU it can only be computed into a small buffer and stretched, which is what read as low resolution: a 140 px buffer on a 1089 px display is a 7.8x upscale."
       },
+      "pygmyowl": {
+        "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda.",
+        "kind": "sdf_raymarch",
+        "web": "WebGL2 fragment shader; flat canvas owl as the fallback.",
+        "why": "The same scheme as the red panda: blended rounded shapes, soft shadows, the orb as a point light."
+      },
       "redpanda": {
         "android": "RuntimeShader (AGSL) on API 33+, from the same source as the desktop's shader.",
         "kind": "sdf_raymarch",
         "web": "WebGL2 fragment shader, one pass, full display resolution; flat canvas sticker as the fallback.",
         "why": "A character built from about twenty blended rounded shapes, lit with soft shadows, occlusion and the orb as a point light. Like nucleus, one full lighting solve per pixel."
+      },
+      "seaotter": {
+        "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda.",
+        "kind": "sdf_raymarch",
+        "web": "WebGL2 fragment shader; flat canvas otter as the fallback.",
+        "why": "The same scheme as the red panda, plus a rippling pool of water under the otter."
       },
       "tokamak": {
         "android": "GLES 3.0 indexed mesh.",

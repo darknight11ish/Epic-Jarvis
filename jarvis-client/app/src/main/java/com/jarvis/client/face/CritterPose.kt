@@ -92,8 +92,8 @@ object CritterPose {
         return sin((x / len) * PI.toFloat())
     }
 
-    private fun clamp(v: Float, lo: Float, hi: Float) = max(lo, min(hi, v))
-    private fun smooth(k: Float) = k * k * (3f - 2f * k)
+    internal fun clamp(v: Float, lo: Float, hi: Float) = max(lo, min(hi, v))
+    internal fun smooth(k: Float) = k * k * (3f - 2f * k)
 
     // Where things rest, in the body's own frame (origin on the seat).
     private val LAP_ORB = floatArrayOf(0f, 0.34f, -0.44f, 0.095f)
@@ -250,45 +250,60 @@ object CritterPose {
         amp: Float,
         look: Look = Look(),
         hist: Hist = Hist(),
+    ): FloatArray = blend(::stateTargets, state, prevState, since, t, amp, look, hist)
+
+    /**
+     * Any animal's melt from one state's pose to the next - the desktop's
+     * `makePose`. The owl ([OwlPose]) and the otter ([OtterPose]) use it too.
+     */
+    internal fun blend(
+        targets: (FaceState, Float, Float, Look) -> FloatArray,
+        state: FaceState,
+        prevState: FaceState,
+        since: Float,
+        t: Float,
+        amp: Float,
+        look: Look,
+        hist: Hist,
     ): FloatArray {
-        val cur = stateTargets(state, t, amp, look)
+        val cur = targets(state, t, amp, look)
         val k = clamp(since / BLEND_S, 0f, 1f)
         if (k >= 1f || prevState == state) return cur
         val prevAmp = if (hist.prevAmp.isNaN()) amp else hist.prevAmp
-        val prev = pose(prevState, hist.prev2 ?: prevState, since + hist.gap, t, prevAmp, look)
+        val prev = blend(targets, prevState, hist.prev2 ?: prevState, since + hist.gap, t, prevAmp, look, Hist())
         val e = smooth(k)
-        return FloatArray(N) { prev[it] + (cur[it] - prev[it]) * e }
+        return FloatArray(cur.size) { prev[it] + (cur[it] - prev[it]) * e }
     }
 
     // --- from a pose to the numbers the shader reads -----------------------
 
     // 3x3 matrices, row by row.
-    private fun rx(a: Float): FloatArray {
+    internal fun rx(a: Float): FloatArray {
         val c = cos(a); val s = sin(a)
         return floatArrayOf(1f, 0f, 0f, 0f, c, -s, 0f, s, c)
     }
-    private fun ry(a: Float): FloatArray {
+    internal fun ry(a: Float): FloatArray {
         val c = cos(a); val s = sin(a)
         return floatArrayOf(c, 0f, s, 0f, 1f, 0f, -s, 0f, c)
     }
-    private fun rz(a: Float): FloatArray {
+    internal fun rz(a: Float): FloatArray {
         val c = cos(a); val s = sin(a)
         return floatArrayOf(c, -s, 0f, s, c, 0f, 0f, 0f, 1f)
     }
-    private fun mul(a: FloatArray, b: FloatArray): FloatArray {
+    internal fun mul(a: FloatArray, b: FloatArray): FloatArray {
         val o = FloatArray(9)
         for (r in 0 until 3) for (c in 0 until 3) {
             o[r * 3 + c] = a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c]
         }
         return o
     }
-    private fun apply(m: FloatArray, x: Float, y: Float, z: Float) = floatArrayOf(
+    internal fun apply(m: FloatArray, x: Float, y: Float, z: Float) = floatArrayOf(
         m[0] * x + m[1] * y + m[2] * z,
         m[3] * x + m[4] * y + m[5] * z,
         m[6] * x + m[7] * y + m[8] * z,
     )
     /** Row i of the inverse = column i of the rotation. */
-    private fun invRow(m: FloatArray, i: Int) = floatArrayOf(m[i], m[3 + i], m[6 + i])
+    internal fun invRow(m: FloatArray, i: Int) = floatArrayOf(m[i], m[3 + i], m[6 + i])
 
     private val TAIL_WRAP = arrayOf(
         floatArrayOf(0.18f, 0.08f, 0.30f, 0.10f), floatArrayOf(0.46f, 0.10f, 0.20f, 0.15f),

@@ -1,0 +1,111 @@
+// SHARED START of every animal face's shader ("critters").
+//
+// `tools/gen_critters.py` builds each animal's shader as
+//     common_head.sksl + <animal>.sksl + common_tail.sksl
+// and copies the result into both apps: the desktop's GLSL
+// (`jarvis-desktop/src/critters-gen.js`, where a few #defines turn AGSL's type
+// names into GLSL's) and the phone's AGSL (`jarvis-client/.../face/
+// CritterShaders.kt`, used as-is by android.graphics.RuntimeShader). Edit
+// these files, then re-run the generator; `tools/gen_critters.py --check`
+// (run by CI) fails if a copy is stale.
+//
+// This part holds what every animal shares: the uniforms the host sets for
+// all of them, and the small shape and colour helpers. The animal's own file
+// supplies its body (map, mapLite, partAt) and its colouring (material,
+// sparkle) plus where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R). The
+// shared end (common_tail.sksl) does the rest: the march, the soft outline,
+// the lighting, the orb and its glow.
+//
+// There is no mesh and no model file. Every body part is a simple rounded
+// shape - an ellipsoid, a capsule - merged with a smooth minimum, so parts
+// melt into each other with a soft fillet instead of a seam. That is the
+// "made of felt" look, and why an animal can bend freely: a pose is just new
+// numbers for where each shape sits.
+//
+// PROGRAM SIZE - the rule that shapes all of this. Android compiles AGSL in
+// Skia's strict mode, which refuses (and the app crashes on) any shader whose
+// flattened size is over 100,000: every operation counts 1, a call counts the
+// whole size of the function called, and a loop counts its body once per
+// step. The march calls map() once per step, so map()'s size times the
+// number of steps is most of the total. The first red panda was about four
+// times over and crashed on Android while the desktop, and a newer Skia on a
+// PC, accepted it. `tools/shader_size.py` measures it (CI runs --check), so
+// keep map() small, give the shadows the cheap mapLite(), and ask which part
+// was hit only once, in partAt().
+//
+// Written in the common subset of GLSL ES 3.0 and AGSL (Android 13): no
+// arrays, no structs, no `out` parameters, loops with constant bounds, and
+// every literal a float. The pose arrives as uniforms, worked out once a
+// frame by each animal's pose code (critter-pose.js and friends on the
+// desktop, CritterPose.kt and friends on the phone); nothing here decides
+// WHAT the animal is doing, only how it looks doing it.
+//
+// Coordinates: x to the viewer's right, y up, the animal faces -z.
+// Rotations arrive as the three rows of each INVERSE matrix (world to
+// local), so turning a point into a body part's own frame is three dots.
+
+// Set by the host for every animal.
+uniform float4 uOrb;       // centre, radius
+uniform float uOrbGlow;
+uniform float3 uHot;       // the state's bright colour: the orb, and its light
+uniform float3 uCool;      // the state's structural colour: the rim light
+uniform float uYaw;
+uniform float uPit;
+uniform float uTime;
+uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
+uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+
+const float PI = 3.14159265;
+// The part id every animal gives its orb. Its own ids are its business.
+const float ID_ORB = 9.0;
+
+float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
+
+// Inigo Quilez's distance bounds. An ellipsoid has no exact distance
+// formula; this one is close enough near the surface, which is all the
+// march needs.
+float sdEllipsoid(float3 p, float3 r) {
+    float k0 = length(p / r);
+    float k1 = length(p / (r * r));
+    return k0 * (k0 - 1.0) / max(k1, 0.0001);
+}
+
+// A capsule: every point within r of the segment ab. The tail and arms are
+// made of these. (A tapered capsule would look a little better, but costs
+// three times as much, and size is the budget that matters on the phone -
+// see "program size" above.)
+float sdCapsule(float3 p, float3 a, float3 b, float r) {
+    float3 pa = p - a;
+    float3 ba = b - a;
+    float k = clamp(dot(pa, ba) / max(dot(ba, ba), 0.00001), 0.0, 1.0);
+    return length(pa - ba * k) - r;
+}
+
+// Polynomial smooth minimum: joins two shapes with a fillet of size k.
+float smin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}
+float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// The orb: held, not grown, so never blended into the body.
+float orbDist(float3 p) { return length(p - uOrb.xyz) - uOrb.w; }
+
+// Distance from point p to the segment ab, in 2D.
+float seg2(float2 p, float2 a, float2 b) {
+    float2 ba = b - a;
+    float k = clamp(dot(p - a, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(p - a - ba * k);
+}
+
+// Cheap fixed-pattern variation, standing in for felt or feathers: small
+// lumps in the colour, never moving, never flickering.
+float felt(float3 p) {
+    return sin(p.x * 41.0 + sin(p.y * 37.0)) * sin(p.y * 43.0 + sin(p.z * 31.0)) * sin(p.z * 39.0 + p.x * 7.0);
+}
+
+float3 aces(float3 x) {
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+
+// ---- the animal's own part (<animal>.sksl) follows ----

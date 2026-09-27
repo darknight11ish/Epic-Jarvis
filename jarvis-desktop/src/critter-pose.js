@@ -223,19 +223,28 @@
    *             where it would have settled. One level is enough: a third
    *             change inside the same half second is the only case left.
    */
-  function pose(state, prevState, since, t, amp, look, hist) {
-    look = look || {};
-    hist = hist || {};
-    const cur = stateTargets(state, t, amp, look);
-    const k = clamp(since / BLEND_S, 0, 1);
-    if (k >= 1 || !prevState || prevState === state) return cur;
-    const prevAmp = typeof hist.prevAmp === "number" ? hist.prevAmp : amp;
-    const gap = typeof hist.gap === "number" ? hist.gap : 1e9;
-    const prev = pose(prevState, hist.prev2 || prevState, since + gap, t, prevAmp, look);
-    const e = smooth(k), out = {};
-    for (const key of KEYS) out[key] = prev[key] + (cur[key] - prev[key]) * e;
-    return out;
+  /**
+   * Makes an animal's pose() from its stateTargets() and the names of its
+   * pose numbers. Every animal melts between states the same way, so the
+   * owl and the otter use this too (critter-owl.js, critter-otter.js).
+   */
+  function makePose(targets, keys) {
+    return function pose(state, prevState, since, t, amp, look, hist) {
+      look = look || {};
+      hist = hist || {};
+      const cur = targets(state, t, amp, look);
+      const k = clamp(since / BLEND_S, 0, 1);
+      if (k >= 1 || !prevState || prevState === state) return cur;
+      const prevAmp = typeof hist.prevAmp === "number" ? hist.prevAmp : amp;
+      const gap = typeof hist.gap === "number" ? hist.gap : 1e9;
+      const prev = pose(prevState, hist.prev2 || prevState, since + gap, t, prevAmp, look);
+      const e = smooth(k), out = {};
+      for (const key of keys) out[key] = prev[key] + (cur[key] - prev[key]) * e;
+      return out;
+    };
   }
+  const pose = makePose(stateTargets, KEYS);
+
 
   /* ------------------------------------------------------------------ *
    * From a pose to the numbers the shader reads.
@@ -338,7 +347,13 @@
     }, tail);
   }
 
-  const api = { KEYS, BLEND_S, hash01, blink, stateTargets, pose, uniforms };
+  const api = {
+    KEYS, BLEND_S, hash01, blink, stateTargets, pose, uniforms,
+    // Every animal, by face id. The owl and the otter add themselves.
+    species: { redpanda: { KEYS, stateTargets, pose, uniforms } },
+    // Shared with the other animals' files, so all three do their sums alike.
+    util: { makePose, clamp, smooth, rx, ry, rz, mul, apply, add, invRow },
+  };
   root.CritterPose = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

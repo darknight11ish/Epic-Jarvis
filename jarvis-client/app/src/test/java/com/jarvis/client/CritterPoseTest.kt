@@ -3,6 +3,8 @@ package com.jarvis.client
 import com.jarvis.client.face.CritterPose
 import com.jarvis.client.face.CritterShaders
 import com.jarvis.client.face.Faces
+import com.jarvis.client.face.OtterPose
+import com.jarvis.client.face.OwlPose
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.float
@@ -36,34 +38,53 @@ class CritterPoseTest {
 
     private fun state(id: String) = FaceState.valueOf(id.uppercase())
 
+    /** Each animal's pose and uniforms, by face id - the desktop's CritterPose.species. */
+    private fun poseOf(species: String): (FaceState, FaceState, Float, Float, Float, CritterPose.Look, CritterPose.Hist) -> FloatArray =
+        when (species) {
+            "redpanda" -> CritterPose::pose
+            "pygmyowl" -> OwlPose::pose
+            "seaotter" -> OtterPose::pose
+            else -> error("no Kotlin pose for '$species' - add one, or drop it from tools/gen_critters.py")
+        }
+
+    private fun uniformsOf(species: String): (FloatArray) -> Map<String, FloatArray> = when (species) {
+        "redpanda" -> CritterPose::uniforms
+        "pygmyowl" -> OwlPose::uniforms
+        "seaotter" -> OtterPose::uniforms
+        else -> error("no Kotlin pose for '$species'")
+    }
+
     @Test
     fun `every pose matches the desktop's`() {
-        assertTrue("the fixture should cover every state", cases.size >= 8 * 5)
+        val species = cases.map { it.jsonObject["species"]!!.jsonPrimitive.content }.toSet()
+        assertEquals("the fixture should cover every animal", setOf("redpanda", "pygmyowl", "seaotter"), species)
+        assertTrue("the fixture should cover every state", cases.size >= 3 * 8 * 5)
         for (c in cases) {
             val o = c.jsonObject
+            val sp = o["species"]!!.jsonPrimitive.content
             val look = o["look"]!!.jsonObject
             val hist = o["hist"]?.jsonObject
-            val pose = CritterPose.pose(
-                state = state(o["state"]!!.jsonPrimitive.content),
-                prevState = state(o["prev"]!!.jsonPrimitive.content),
-                since = o["since"]!!.jsonPrimitive.float,
-                t = o["t"]!!.jsonPrimitive.float,
-                amp = o["amp"]!!.jsonPrimitive.float,
-                look = CritterPose.Look(
+            val pose = poseOf(sp)(
+                state(o["state"]!!.jsonPrimitive.content),
+                state(o["prev"]!!.jsonPrimitive.content),
+                o["since"]!!.jsonPrimitive.float,
+                o["t"]!!.jsonPrimitive.float,
+                o["amp"]!!.jsonPrimitive.float,
+                CritterPose.Look(
                     x = look["x"]?.jsonPrimitive?.float ?: 0f,
                     y = look["y"]?.jsonPrimitive?.float ?: 0f,
                     w = look["w"]?.jsonPrimitive?.float ?: 0f,
                 ),
-                hist = CritterPose.Hist(
+                CritterPose.Hist(
                     prev2 = hist?.get("prev2")?.jsonPrimitive?.content?.let(::state),
                     gap = hist?.get("gap")?.jsonPrimitive?.float ?: 1e9f,
                     prevAmp = hist?.get("prevAmp")?.jsonPrimitive?.float ?: Float.NaN,
                 ),
             )
-            val got = CritterPose.uniforms(pose)
+            val got = uniformsOf(sp)(pose)
             val want = o["uniforms"]!!.jsonObject
             assertEquals("uniform names differ from the desktop's", want.keys, got.keys)
-            val where = "${o["state"]} from ${o["prev"]} at t=${o["t"]}"
+            val where = "$sp: ${o["state"]} from ${o["prev"]} at t=${o["t"]}"
             for ((name, arr) in want) {
                 val w = arr.jsonArray.map { it.jsonPrimitive.float }
                 val g = got.getValue(name)
@@ -82,17 +103,29 @@ class CritterPoseTest {
     }
 
     @Test
-    fun `the shader declares every uniform the pose sets`() {
+    fun `each shader declares every uniform its pose sets`() {
         // A uniform set but never declared would throw at draw time, on the
         // phone, in front of the owner. Cheaper to find it here.
-        val names = CritterPose.uniforms(
-            CritterPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),
-        ).keys + setOf("uHot", "uCool", "uYaw", "uPit", "uTime", "uZoom", "uCenter", "uR", "uPx")
-        for (n in names) {
-            assertTrue(
-                "CritterShaders.RED_PANDA has no uniform named $n",
-                Regex("""uniform\s+\w+\s+$n\s*;""").containsMatchIn(CritterShaders.RED_PANDA),
-            )
+        val host = setOf("uHot", "uCool", "uYaw", "uPit", "uTime", "uZoom", "uCenter", "uR", "uPx")
+        val shaders = mapOf(
+            "RED_PANDA" to (CritterShaders.RED_PANDA to CritterPose.uniforms(
+                CritterPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),
+            ).keys),
+            "PYGMY_OWL" to (CritterShaders.PYGMY_OWL to OwlPose.uniforms(
+                OwlPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),
+            ).keys),
+            "SEA_OTTER" to (CritterShaders.SEA_OTTER to OtterPose.uniforms(
+                OtterPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),
+            ).keys),
+        )
+        for ((const, pair) in shaders) {
+            val (src, names) = pair
+            for (n in names + host) {
+                assertTrue(
+                    "CritterShaders.$const has no uniform named $n",
+                    Regex("""uniform\s+\w+\s+$n\s*;""").containsMatchIn(src),
+                )
+            }
         }
     }
 
@@ -113,8 +146,10 @@ class CritterPoseTest {
     }
 
     @Test
-    fun `the panda is offered`() {
-        assertTrue(Faces.all.any { it.id == "redpanda" })
+    fun `all three animals are offered`() {
+        for (id in listOf("redpanda", "pygmyowl", "seaotter")) {
+            assertTrue("$id is not in Faces.all", Faces.all.any { it.id == id })
+        }
     }
 
     @Test

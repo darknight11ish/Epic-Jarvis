@@ -11,8 +11,12 @@ number as the last part - `0.2.57` is a build of 0.2.
   and tilts its head when listening, gazes into a glowing orb when thinking,
   talks with Jarvis's voice, waves when an approval is waiting, and scratches
   its head at an error. The orb is your colour for each state. Drawn in 3D
-  by the graphics card with no model file; see `docs/CRITTERS.md`. The owl
-  and the otter come after you have tried the panda.
+  by the graphics card with no model file; see `docs/CRITTERS.md`.
+- **A pygmy owl and a sea otter** join the panda, on both apps. The owl
+  perches on a branch, turns its head to follow the room and waves a wing
+  when something is waiting on you; the otter floats on its back in a
+  little pool, taps a glowing pebble while it thinks and covers its eyes
+  with its paws to sleep.
 
 ## 0.2.0 - 26 September 2026
 
