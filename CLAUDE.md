@@ -545,6 +545,16 @@ by the network policy, so the Android Gradle plugin cannot resolve and
 `jarvis-android`. Expect a CI round trip (~15 min) to find out whether
 anything compiles. Check work carefully before pushing.
 
+**A phone face's AGSL shader must stay under Android's size limit.** Android
+compiles `RuntimeShader`s in Skia's strict mode, which refuses any shader
+whose flattened size is over 100,000 - and the app crashes when that face is
+drawn. Every operation counts 1, a call counts the called function's whole
+size, and a loop counts its body once per step, so a big distance function
+inside a long march loop blows it fast. WebGL and a newer Skia on a PC
+(skia-python) accept an over-size shader without a word: the first red panda
+went out four times over and only the emulator test caught it. Measure with
+`python3 tools/shader_size.py` (CI runs `--check`) before pushing a shader.
+
 The `jarvis-client` APK is published to the rolling `client-latest` release,
 but only when the emulator smoke job passes. `jarvis-android` no longer
 publishes a release at all - see the top-level `README.md` for why.

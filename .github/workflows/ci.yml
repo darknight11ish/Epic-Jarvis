@@ -145,6 +145,17 @@ jobs:
       # other does not has to be a recorded decision (tools/check_parity.py).
       - name: Desktop / phone parity
         run: python tools/check_parity.py
+      # The animal faces' shader is generated for both apps from one source
+      # (tools/gen_critters.py), and must stay under the size Android's shader
+      # compiler accepts: over it, Android refuses the shader and the phone
+      # app crashes the moment the face is drawn - while the desktop, and a
+      # newer Skia on a PC, accept it without a word. The first red panda
+      # shipped four times over and was caught only by the emulator test.
+      - name: Animal faces - generated copies fresh, shader within Android's size limit
+        run: |
+          sudo apt-get install -y -q glslang-tools > /dev/null
+          python tools/gen_critters.py --check
+          python tools/shader_size.py --check
       # A command registered in lib.rs but missing from build.rs's own ACL
       # export list has no permission at all, and every window's call to it
       # is refused at runtime - a compile-time-invisible break that bit two

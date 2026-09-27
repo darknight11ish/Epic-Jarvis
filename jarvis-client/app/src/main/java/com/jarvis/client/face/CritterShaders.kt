@@ -20,6 +20,17 @@ internal object CritterShaders {
 // felt" look comes from, and why the panda can bend and squash freely: a
 // pose is just new numbers for where each shape sits.
 //
+// PROGRAM SIZE - the rule that shapes this whole file. Android compiles
+// AGSL in Skia's strict mode, which refuses (and the app crashes on) any
+// shader whose flattened size is over 100,000: every operation counts 1, a
+// call counts the whole size of the function called, and a loop counts its
+// body once per step. The march calls map() once per step, so map()'s size
+// times the number of steps is most of the total. The first version was
+// about four times over and crashed on Android while the desktop, and a
+// newer Skia on a PC, accepted it. `tools/shader_size.py` measures this
+// (tests/faces.mjs runs it), so keep map() small, give the shadows the
+// cheap mapLite(), and ask which part was hit only once, in partAt().
+//
 // Written in the common subset of GLSL ES 3.0 and AGSL (Android 13): no
 // arrays, no structs, no `out` parameters, loops with constant bounds, and
 // every literal a float. The pose arrives as uniforms, worked out once a
@@ -125,24 +136,15 @@ float sdEllipsoid(float3 p, float3 r) {
     return k0 * (k0 - 1.0) / max(k1, 0.0001);
 }
 
-// A capsule whose radius tapers from r1 at `a` to r2 at `b`.
-float sdRoundCone(float3 p, float3 a, float3 b, float r1, float r2) {
-    float3 ba = b - a;
-    float l2 = max(dot(ba, ba), 0.00001);
-    float rr = r1 - r2;
-    float a2 = l2 - rr * rr;
-    float il2 = 1.0 / l2;
+// A capsule: every point within r of the segment ab. The tail and arms are
+// made of these. (A tapered capsule would look a little better, but costs
+// three times as much, and size is the budget that matters on the phone -
+// see "program size" at the top of this file.)
+float sdCapsule(float3 p, float3 a, float3 b, float r) {
     float3 pa = p - a;
-    float y = dot(pa, ba);
-    float z = y - l2;
-    float3 xv = pa * l2 - ba * y;
-    float x2 = dot(xv, xv);
-    float y2 = y * y * l2;
-    float z2 = z * z * l2;
-    float k = sign(rr) * rr * rr * x2;
-    if (sign(z) * a2 * z2 > k) return sqrt(x2 + z2) * il2 - r2;
-    if (sign(y) * a2 * y2 < k) return sqrt(x2 + y2) * il2 - r1;
-    return (sqrt(x2 * a2 * il2) + y * rr) * il2 - r1;
+    float3 ba = b - a;
+    float k = clamp(dot(pa, ba) / max(dot(ba, ba), 0.00001), 0.0, 1.0);
+    return length(pa - ba * k) - r;
 }
 
 // Polynomial smooth minimum: joins two shapes with a fillet of size k.
@@ -152,101 +154,130 @@ float smin(float a, float b, float k) {
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 
-// Joins two (distance, id) pairs smoothly; the id is whichever is nearer.
-float2 sjoin(float2 a, float2 b, float k) {
-    float d = smin(a.x, b.x, k);
-    return float2(d, a.x < b.x ? a.y : b.y);
-}
-float2 hjoin(float2 a, float2 b) { return a.x < b.x ? a : b; }
+// --- the parts, each in the frame it is modelled in ---------------------
 
-// The head alone, in its own frame. Kept separate because the shading
-// needs to ask "is this point on the mouth or the muzzle" after the hit.
-float headShape(float3 h) {
-    float3 hs = float3(abs(h.x), h.y, h.z);
-    float d = sdEllipsoid(h - float3(0.0, 0.34, 0.0), float3(0.45, 0.37, 0.39));
-    // Big cheek fluff, the red panda's widest point.
-    d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
-    // The muzzle, a soft rounded snout.
-    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205, -0.29), float3(0.155, 0.115, 0.13)), 0.07);
-    // Eyebrow puffs, lifted by `brow`.
-    float by = 0.53 + 0.025 * uFace.z;
-    d = smin(d, sdEllipsoid(hs - float3(0.14, by, -0.27), float3(0.07, 0.04, 0.05)), 0.05);
-    return d;
+float partTorso(float3 b) {
+    float br = uBreath;
+    return sdEllipsoid(b - float3(0.0, 0.31, 0.02),
+                       float3(0.38 * br, 0.39 * (0.5 + 0.5 * br), 0.33 * br));
+}
+// One piece per leg: the thigh, reaching forward into the foot.
+float partLegs(float3 b) {
+    float3 bs = float3(abs(b.x), b.y, b.z);
+    return sdEllipsoid(bs - float3(0.205, 0.075, -0.22), float3(0.14, 0.11, 0.26));
+}
+// The rounded end of each arm is its paw.
+float partArms(float3 p) {
+    return min(sdCapsule(p, uShL, uPawL, 0.085), sdCapsule(p, uShR, uPawR, 0.085));
+}
+// Five segments, each as thick as the average of its two ends.
+float partTail(float3 p) {
+    float d = sdCapsule(p, uTail0.xyz, uTail1.xyz, 0.5 * (uTail0.w + uTail1.w));
+    d = smin(d, sdCapsule(p, uTail1.xyz, uTail2.xyz, 0.5 * (uTail1.w + uTail2.w)), 0.05);
+    d = smin(d, sdCapsule(p, uTail2.xyz, uTail3.xyz, 0.5 * (uTail2.w + uTail3.w)), 0.05);
+    d = smin(d, sdCapsule(p, uTail3.xyz, uTail4.xyz, 0.5 * (uTail3.w + uTail4.w)), 0.05);
+    return smin(d, sdCapsule(p, uTail4.xyz, uTail5.xyz, 0.5 * (uTail4.w + uTail5.w)), 0.05);
 }
 float mouthShape(float3 h) {
     float open = uFace.w;
     return sdEllipsoid(h - float3(0.0, 0.150 - 0.02 * open, -0.395),
                        float3(0.055 + 0.01 * open, 0.010 + 0.050 * open, 0.075));
 }
-
-float2 map(float3 p) {
-    // The orb stands apart: it is held, not grown.
-    float2 res = float2(length(p - uOrb.xyz) - uOrb.w, ID_ORB);
-
-    // --- body, legs, arms ---
-    float3 b = toBody(p);
-    float br = uBreath;
-    float2 body = float2(sdEllipsoid(b - float3(0.0, 0.31, 0.02),
-                                     float3(0.38 * br, 0.39 * (0.5 + 0.5 * br), 0.33 * br)), ID_BODY);
-    float3 bs = float3(abs(b.x), b.y, b.z);
-    float legs = sdEllipsoid(bs - float3(0.21, 0.10, -0.14), float3(0.15, 0.13, 0.21));
-    legs = smin(legs, sdEllipsoid(bs - float3(0.20, 0.03, -0.37), float3(0.10, 0.075, 0.12)), 0.05);
-    body = sjoin(body, float2(legs, ID_LIMB), 0.07);
-    float arms = sdRoundCone(p, uShL, uPawL, 0.085, 0.07);
-    arms = min(arms, sdRoundCone(p, uShR, uPawR, 0.085, 0.07));
-    arms = smin(arms, length(p - uPawL) - 0.088, 0.05);
-    arms = smin(arms, length(p - uPawR) - 0.088, 0.05);
-    body = sjoin(body, float2(arms, ID_LIMB), 0.06);
-
-    // --- tail: five tapered segments, blended into one bushy line ---
-    float t = sdRoundCone(p, uTail0.xyz, uTail1.xyz, uTail0.w, uTail1.w);
-    t = smin(t, sdRoundCone(p, uTail1.xyz, uTail2.xyz, uTail1.w, uTail2.w), 0.05);
-    t = smin(t, sdRoundCone(p, uTail2.xyz, uTail3.xyz, uTail2.w, uTail3.w), 0.05);
-    t = smin(t, sdRoundCone(p, uTail3.xyz, uTail4.xyz, uTail3.w, uTail4.w), 0.05);
-    t = smin(t, sdRoundCone(p, uTail4.xyz, uTail5.xyz, uTail4.w, uTail5.w), 0.05);
-    body = sjoin(body, float2(t, ID_TAIL), 0.05);
-
-    // --- head (only worked out near it: the far side of the frame is most
-    // of the pixels, and they have no business paying for a face) ---
-    float3 h = toHead(p);
-    float hb = (length(h - float3(0.0, 0.40, 0.0)) - 0.78) * HEAD_S;
-    if (hb > 0.2) {
-        return hjoin(res, float2(min(body.x, hb), body.y));
-    }
-    float head = headShape(h);
-    head = smax(head, -mouthShape(h), 0.012);
-    float2 hd = float2(head, ID_HEAD);
-    float3 el = toEarL(h);
-    float3 er = toEarR(h);
-    // Ears: a flattened ellipsoid pinched toward the tip.
-    float earL = sdEllipsoid(el - float3(0.0, 0.13, 0.0),
-                             float3(0.13 * (1.0 - 0.30 * clamp(el.y / 0.28, 0.0, 1.0)), 0.17, 0.055));
-    float earR = sdEllipsoid(er - float3(0.0, 0.13, 0.0),
-                             float3(0.13 * (1.0 - 0.30 * clamp(er.y / 0.28, 0.0, 1.0)), 0.17, 0.055));
-    hd = sjoin(hd, float2(min(earL, earR), ID_EAR), 0.05);
-    float nose = sdEllipsoid(h - float3(0.0, 0.285, -0.405), float3(0.062, 0.042, 0.045));
-    hd = sjoin(hd, float2(nose, ID_NOSE), 0.02);
-    // Button eyes. Closing is squashing: a shut eye is a thin dark line,
-    // which is also how a cartoon draws one.
+// The head (head frame, unscaled): skull, cheek fluff, muzzle and eyebrow
+// puffs, with the mouth carved out of it.
+float partHead(float3 h) {
     float3 hs = float3(abs(h.x), h.y, h.z);
+    float d = sdEllipsoid(h - float3(0.0, 0.34, 0.0), float3(0.45, 0.37, 0.39));
+    d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
+    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205, -0.29), float3(0.155, 0.115, 0.13)), 0.07);
+    // (The eyebrow spots are painted on - see headColour - not modelled:
+    // two more shapes here cost more than they showed.)
+    return smax(d, -mouthShape(h), 0.012);
+}
+// An ear: a flattened ellipsoid, pinched toward the tip.
+float earShape(float3 e) {
+    return sdEllipsoid(e - float3(0.0, 0.13, 0.0),
+                       float3(0.13 * (1.0 - 0.30 * clamp(e.y / 0.28, 0.0, 1.0)), 0.17, 0.055));
+}
+float partEars(float3 h) { return min(earShape(toEarL(h)), earShape(toEarR(h))); }
+float partNose(float3 h) {
+    return sdEllipsoid(h - float3(0.0, 0.285, -0.405), float3(0.062, 0.042, 0.045));
+}
+// Button eyes. Closing is squashing: a shut eye is a thin dark line, which
+// is also how a cartoon draws one.
+float partEyes(float3 h) {
     float open = h.x < 0.0 ? uFace.x : uFace.y;
     float2 ea = eyeAt();
-    float3 ep = float3(h.x - sign(h.x) * ea.x, h.y - ea.y, h.z + 0.31);
-    float eye = sdEllipsoid(ep, float3(0.074, max(0.008, 0.084 * open), 0.055));
-    hd = hjoin(hd, float2(eye, ID_EYE));
-    hd.x *= HEAD_S;
+    float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.31);
+    return sdEllipsoid(ep, float3(0.074, max(0.008, 0.084 * open), 0.055));
+}
+
+// The whole panda: distance to the nearest surface. This is the function the
+// march calls over and over, so it returns the distance only - which part
+// was hit is asked once, afterwards, by partAt().
+float map(float3 p) {
+    float3 b = toBody(p);
+    float d = smin(partTorso(b), partLegs(b), 0.07);
+    d = smin(d, partArms(p), 0.06);
+    d = smin(d, partTail(p), 0.05);
+    // The head is only worked out near it: most of the frame is far from a
+    // face and has no business paying for one.
+    float3 h = toHead(p);
+    float hd = (length(h - float3(0.0, 0.40, 0.0)) - 0.78) * HEAD_S;
+    if (hd < 0.2) {
+        float f = smin(partHead(h), partEars(h), 0.05);
+        hd = min(min(f, partNose(h)), partEyes(h)) * HEAD_S;
+    }
     // The neck: head and body share a thick fillet, so the head can tilt
     // without a gap opening under the chin.
-    hd = sjoin(hd, body, 0.12);
-    return hjoin(res, hd);
+    d = smin(hd, d, 0.12);
+    // The orb stands apart: it is held, not grown.
+    return min(d, length(p - uOrb.xyz) - uOrb.w);
+}
+
+// Which part a surface point belongs to: whichever is nearest.
+float partAt(float3 p) {
+    float3 b = toBody(p);
+    float3 h = toHead(p);
+    float best = partTorso(b);
+    float id = ID_BODY;
+    float d = min(partLegs(b), partArms(p));
+    if (d < best) { best = d; id = ID_LIMB; }
+    d = partTail(p);
+    if (d < best) { best = d; id = ID_TAIL; }
+    d = partHead(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_HEAD; }
+    d = partEars(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_EAR; }
+    d = partNose(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_NOSE; }
+    d = partEyes(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_EYE; }
+    d = length(p - uOrb.xyz) - uOrb.w;
+    if (d < best) { id = ID_ORB; }
+    return id;
+}
+
+// A rough panda for shadows and occlusion, which are soft anyway: body,
+// skull, arms and a two-piece tail. A fraction of map()'s size. Every piece
+// sits INSIDE the real shape, never outside it: a point on the real surface
+// that found itself inside this one would shadow itself (it drew a dark band
+// across the top of the head).
+float mapLite(float3 p) {
+    float d = partTorso(toBody(p));
+    float3 h = toHead(p);
+    d = min(d, sdEllipsoid(h - float3(0.0, 0.32, -0.02), float3(0.40, 0.32, 0.34)) * HEAD_S);
+    d = min(d, min(sdCapsule(p, uShL, uPawL, 0.07), sdCapsule(p, uShR, uPawR, 0.07)));
+    d = min(d, min(sdCapsule(p, uTail0.xyz, uTail2.xyz, 0.10), sdCapsule(p, uTail2.xyz, uTail5.xyz, 0.09)));
+    return d;
 }
 
 float3 normalAt(float3 p) {
     float e = 0.0015;
-    float m1 = map(p + float3(e, -e, -e)).x;
-    float m2 = map(p + float3(-e, -e, e)).x;
-    float m3 = map(p + float3(-e, e, -e)).x;
-    float m4 = map(p + float3(e, e, e)).x;
+    float m1 = map(p + float3(e, -e, -e));
+    float m2 = map(p + float3(-e, -e, e));
+    float m3 = map(p + float3(-e, e, -e));
+    float m4 = map(p + float3(e, e, e));
     return normalize(float3(m1 - m2 - m3 + m4, -m1 - m2 + m3 + m4, -m1 + m2 - m3 + m4));
 }
 
@@ -254,11 +285,11 @@ float3 normalAt(float3 p) {
 // came to being blocked.
 float softShadow(float3 ro, float3 rd) {
     float res = 1.0;
-    float t = 0.02;
-    for (int i = 0; i < 18; i++) {
-        float h = map(ro + rd * t).x;
-        res = min(res, 10.0 * h / t);
-        t += clamp(h, 0.02, 0.2);
+    float t = 0.03;
+    for (int i = 0; i < 10; i++) {
+        float h = mapLite(ro + rd * t);
+        res = min(res, 8.0 * h / t);
+        t += clamp(h, 0.04, 0.3);
         if (res < 0.005 || t > 2.0) break;
     }
     return clamp(res, 0.0, 1.0);
@@ -267,12 +298,12 @@ float softShadow(float3 ro, float3 rd) {
 float ambientOcclusion(float3 p, float3 n) {
     float occ = 0.0;
     float w = 1.0;
-    for (int i = 0; i < 5; i++) {
-        float hr = 0.02 + 0.06 * float(i);
-        occ += (hr - map(p + n * hr).x) * w;
-        w *= 0.7;
+    for (int i = 0; i < 3; i++) {
+        float hr = 0.03 + 0.09 * float(i);
+        occ += (hr - mapLite(p + n * hr)) * w;
+        w *= 0.6;
     }
-    return clamp(1.0 - 2.2 * occ, 0.0, 1.0);
+    return clamp(1.0 - 1.8 * occ, 0.0, 1.0);
 }
 
 // Cheap fixed-pattern variation, standing in for felt: small lumps in the
@@ -395,26 +426,33 @@ float4 critter(float2 p) {
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
     float bestR = 1000.0;
     float bestT = 0.0;
-    float bestId = 0.0;
     if (disc > 0.0) {
         float sq = sqrt(disc);
         float t = max(0.0, -bb - sq);
         float tMax = -bb + sq;
-        for (int i = 0; i < 110; i++) {
-            float2 h = map(ro + rd * t);
-            if (h.x < 0.0008 * t) { hitT = t; id = h.y; break; }
-            float r = h.x / max(t * fp, 0.000001);
-            if (r < bestR) { bestR = r; bestT = t; bestId = h.y; }
-            t += h.x * 0.9;
-            if (t > tMax) break;
+        // 32 steps. The size limit (top of file) is what sets this: the march
+        // is by far the largest part of the program, one map() per step.
+        // Measured: rays need 9 steps on average; only rays skimming along a
+        // surface need more. One that runs out of steps while still inside
+        // the bounds is taken as a hit where it stopped - it is a hair from
+        // the surface by then - rather than as a see-through gap.
+        bool escaped = false;
+        float h = 1.0;
+        for (int i = 0; i < 32; i++) {
+            h = map(ro + rd * t);
+            if (h < 0.0008 * t) { hitT = t; break; }
+            float r = h / max(t * fp, 0.000001);
+            if (r < bestR) { bestR = r; bestT = t; }
+            t += h * 0.95;
+            if (t > tMax) { escaped = true; break; }
         }
+        if (hitT < 0.0 && !escaped && h < 0.05) hitT = t;
     }
     float cover = 1.0;
     // A pixel and a half of feathering: one pixel alone still showed steps
     // once the phone's half-resolution picture was enlarged.
     if (hitT < 0.0 && bestR < 1.5) {
         hitT = bestT;
-        id = bestId;
         cover = 0.75 * (1.0 - bestR / 1.5);
     }
 
@@ -425,6 +463,7 @@ float4 critter(float2 p) {
     }
 
     float3 pos = ro + rd * hitT;
+    id = partAt(pos);
     float3 n = normalAt(pos);
     float3 v = -rd;
 

@@ -474,6 +474,19 @@ await check("the panda's generated shader, phone copy and pose fixture are up to
   }
 });
 
+await check("the panda's shader is within the size Android's compiler accepts", async () => {
+  // Android refuses a shader whose flattened size is over 100,000 and the
+  // phone app crashes when the face is drawn; this page's WebGL accepts it
+  // regardless. tools/shader_size.py measures it the way Skia does. (CI runs
+  // the same check in its own job, since this file needs a browser.)
+  try {
+    execFileSync("python3", [join(ROOT, "..", "tools", "shader_size.py"), "--check"],
+      { cwd: join(ROOT, ".."), stdio: "pipe" });
+  } catch (e) {
+    assert.fail(String(e.stdout || "") + String(e.stderr || e.message));
+  }
+});
+
 await check("the panda is handed every real state, not a borrowed movement", async () => {
   // Most faces have four motion tables and the shell borrows for the other
   // four states. A character cannot borrow: asleep has to look asleep, not

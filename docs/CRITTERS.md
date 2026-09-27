@@ -126,14 +126,24 @@ Sketchfab). Four reasons:
   Jarvis settings folder, copy the new one over too - otherwise choosing the
   panda on one device will not reach the other, and the desktop's start-up
   check will report that its copy and the backend's differ.
-- **Cost.** The panda is by far the most expensive face to draw: measured
-  through Skia (the engine Android draws with), **10 to 12 times Nucleus's
-  work per pixel**. (An earlier version of this page said "a little more
-  than Nucleus" - that was a guess, and wrong.) Most of it (about 80%) is
-  finding the panda's surface for each pixel; the shadows are the rest.
+- **The phone's size limit - this crashed the first version.** Android
+  compiles a face's shader in a strict mode that refuses any shader over a
+  size of 100,000 (every operation counts 1; a loop counts its body once per
+  step). The first panda was about four times over: **choosing it would have
+  crashed the phone app**. The desktop, and the newer Skia used for checking
+  on a PC, accepted it without complaint; GitHub's emulator test caught it
+  before it reached a phone. The shader was rebuilt to fit (smaller shapes,
+  32 march steps, a simplified panda for shadows) and now measures about
+  55,000 by `tools/shader_size.py`, which counts the way Skia does. CI runs
+  that check on every push, so it cannot quietly grow back over.
+- **Cost.** Measured through Skia (the engine Android draws with), the panda
+  costs **about 4 times Nucleus's work per pixel** (it was 10 to 12 times
+  before the rebuild; an even earlier version of this page said "a little
+  more than Nucleus", which was a guess, and wrong). Most of it is finding
+  the panda's surface for each pixel; the shadows are the rest.
   - **On the phone it is drawn at lower resolution and enlarged**: half the
     width and height at the High quality tier - a quarter of the pixels,
-    measured at 3.9 times less work - and less again when Auto adjust steps
+    measured at 4.3 times less work, so in total about what Nucleus costs - and less again when Auto adjust steps
     down to Medium (0.4) or Low (about 0.31). Max, chosen by hand, uses 0.75.
     Because the panda is soft and rounded, the enlarged picture differs from
     the sharp one by about 1 part in 255 on average; the shader feathers its
@@ -142,12 +152,10 @@ Sketchfab). Four reasons:
   - **On the desktop** it is drawn at full resolution; the Faces window's own
     speed check switches to the flat version if the graphics card cannot
     keep up.
-  - **Not yet measured on a real phone.** Rough arithmetic for a Pixel 9 at
-    the Large size said full resolution would have been choppy while
-    listening, thinking and speaking; a quarter of the work should bring it
-    within reach, but only the phone itself can confirm that. If it still
-    stutters or gets warm, say so - the next steps are a lower scale or a
-    simpler shadow.
+  - **Not yet measured on a real phone.** Four times Nucleus per pixel at a
+    quarter of the pixels should land near Nucleus's own cost, but only the
+    phone can confirm it. If it stutters or gets warm, say so - the next
+    step would be a lower scale.
 - **The phone makes about 90 small throwaway objects a frame** for the
   panda (its pose maths builds fresh number lists). Nucleus makes none. It
   is not measurable as slowness on its own, but it is more garbage than
