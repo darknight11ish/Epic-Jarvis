@@ -21,6 +21,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
@@ -589,21 +591,58 @@ class WakeWordService : Service() {
      * app happened to be" - Home, ready to talk, the same place a tap on
      * the Overlay avatar reaches ([AvatarOverlayService.openApp]).
      *
+     * UPDATED for bug audit 2026-09-27, phone finding #2 (owner's decision,
+     * 2026-09-27: build the shortcut). This used to build
      * `NotificationCompat.BubbleMetadata.Builder(PendingIntent, IconCompat)`
-     * needs no associated shortcut - unlike the older, messaging-style
-     * bubble builder - which is why it is the one used here: this is not a
-     * messaging app. Built here and handed to [goForeground]'s own
-     * `NotificationCompat.Builder` via `setBubbleMetadata` BEFORE that
-     * builder's `build()` runs: `Notification.bubbleMetadata` has no public
-     * setter on an already-built `Notification` (Kotlin sees it as a
-     * read-only property, backed only by a getter), so it can never be
-     * attached after the fact the way this function used to try to -
-     * androidx's compat metadata is a builder-time property everywhere down
-     * to API 30, matching this app's `minSdk` of 33 with no version check
-     * needed. Best-effort and null on failure: a bubble that could not be
-     * built leaves the plain "hey Jarvis" notification exactly as it
-     * already was, never a crash - the same reasoning `runCatching` is used
-     * for everywhere else in this file.
+     * on the reasoning that it "needs no associated shortcut - unlike the
+     * older, messaging-style bubble builder". That reasoning was checked
+     * against Android's own current docs (developer.android.com, the
+     * bubbles and the people-and-conversations pages, both re-read
+     * 2026-09-27) and does not hold: "If an app targets Android 11 (API
+     * level 30) or higher, a notification doesn't appear as a bubble unless
+     * it meets the conversation requirements" - and a conversation
+     * notification's requirements include "the notification is associated
+     * with a valid long-lived dynamic or cached sharing shortcut... by
+     * calling `setShortcutId()` or `setShortcutInfo()`". That gate applies
+     * no matter which `BubbleMetadata.Builder` constructor is used - the
+     * `PendingIntent`/`Icon` one was never an exemption from it, only a
+     * different way to supply the bubble's own icon and expand-intent when
+     * a shortcut is NOT how the app wants to describe them. This app's
+     * `minSdk` is 33, so every device it runs on is past that Android-11
+     * gate; the old code would never reliably show a bubble on a real
+     * phone. [publishBubbleShortcut] now publishes a long-lived dynamic
+     * shortcut for "talking to Jarvis" and this function builds
+     * `BubbleMetadata` from it via `Builder(shortcutId)` (`@RequiresApi(30)`,
+     * fine at `minSdk` 33) - that constructor takes the bubble's icon and
+     * expand-intent from the shortcut itself, so they are no longer built
+     * here. [goForeground] pairs this with `setShortcutId()` on the
+     * notification itself, matching the same id, which androidx's own
+     * `BubbleMetadata` doc comment says is checked for a match once both
+     * are set.
+     *
+     * KNOWN REMAINING GAP, left as found rather than routed around: the
+     * SAME conversation-requirements page also requires the notification to
+     * use `NotificationCompat.MessagingStyle`, unconditionally, not only for
+     * apps that look like messaging apps. This notification does not use
+     * it - it is a persistent status line ("listening for hey Jarvis..."),
+     * not a chat message - and switching it to `MessagingStyle` is a real
+     * redesign of what it looks like at all times, on or off Bubble mode,
+     * which is outside this narrowly-scoped fix. So even with the shortcut
+     * built and wired up correctly, Android may still decline to show this
+     * as a bubble on a real Android 11+ phone; a `MessagingStyle` rework -
+     * or an explicit owner decision not to do one - is the follow-up this
+     * finding still leaves open.
+     *
+     * Built here and handed to [goForeground]'s own `NotificationCompat.Builder`
+     * via `setBubbleMetadata` BEFORE that builder's `build()` runs:
+     * `Notification.bubbleMetadata` has no public setter on an
+     * already-built `Notification` (Kotlin sees it as a read-only property,
+     * backed only by a getter), so it can never be attached after the fact
+     * the way this function used to try to. Best-effort and null on
+     * failure: a bubble that could not be built leaves the plain "hey
+     * Jarvis" notification exactly as it already was, never a crash - the
+     * same reasoning `runCatching` is used for everywhere else in this
+     * file.
      *
      * Still gated by Android's OWN, separate "Allow bubbles" switch for this
      * app or channel, which nothing here can turn on
@@ -611,26 +650,56 @@ class WakeWordService : Service() {
      * every time and still not show a bubble on a phone that has not also
      * flipped that switch.
      */
-    private fun bubbleMetadata(): NotificationCompat.BubbleMetadata? = runCatching {
-        // The launcher icon, not `ic_notification` - that one is a
-        // single-colour status-bar mask (see its own file comment), and
-        // the bubble is a small round AVATAR on the screen, not a status
-        // bar glyph.
-        val icon = IconCompat.createWithResource(this, R.mipmap.ic_launcher_round)
-        val bubbleIntent = PendingIntent.getActivity(
-            this,
-            3,
-            Intent(this, MainActivity::class.java)
-                .setAction(MainActivity.ACTION_START_VOICE)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        NotificationCompat.BubbleMetadata.Builder(bubbleIntent, icon)
-            .setDesiredHeight(BUBBLE_HEIGHT_DP)
-            .setAutoExpandBubble(false)
-            .setSuppressNotification(false)
+    private fun bubbleMetadata(): NotificationCompat.BubbleMetadata? {
+        if (!publishBubbleShortcut()) return null
+        return runCatching {
+            NotificationCompat.BubbleMetadata.Builder(BUBBLE_SHORTCUT_ID)
+                .setDesiredHeight(BUBBLE_HEIGHT_DP)
+                .setAutoExpandBubble(false)
+                .setSuppressNotification(false)
+                .build()
+        }.onFailure { Log.w(TAG, "could not build bubble metadata", it) }.getOrNull()
+    }
+
+    /**
+     * The long-lived dynamic shortcut "talking to Jarvis" that
+     * [bubbleMetadata] builds the bubble from (bug audit 2026-09-27, phone
+     * finding #2). Its icon is the same launcher icon the bubble used to
+     * pass directly (`ic_notification` is a status-bar-only mask, wrong
+     * shape for a round avatar - see that icon's own file comment); its
+     * intent matches the `PendingIntent` the bubble used to open directly:
+     * [MainActivity] with [MainActivity.ACTION_START_VOICE].
+     *
+     * Republished every time [bubbleMetadata] runs (i.e. every
+     * [goForeground] call while Bubble mode is on) rather than once ever:
+     * that matches Android's own bubbles-guide sample, pushing is cheap and
+     * idempotent for one shortcut id, and it means a shortcut lost to a
+     * cleared-data or reinstalled app is simply republished the next time
+     * Jarvis posts its notification, with nothing here needing to notice
+     * that happened.
+     *
+     * Best-effort, like everywhere else in this file: `false` on failure
+     * (a denied permission, the shortcut limit, a locked user) means
+     * [bubbleMetadata] builds no bubble at all rather than one pointing at
+     * a shortcut that was never actually published - `Builder(shortcutId)`
+     * would still construct such a `BubbleMetadata` object without
+     * complaint, but androidx's own doc comment for it says plainly no
+     * bubble is ever produced from an unpublished shortcut, so returning it
+     * here would be a silent no-op dressed up as success.
+     */
+    private fun publishBubbleShortcut(): Boolean = runCatching {
+        val shortcut = ShortcutInfoCompat.Builder(this, BUBBLE_SHORTCUT_ID)
+            .setLongLived(true)
+            .setShortLabel(getString(R.string.app_name))
+            .setIcon(IconCompat.createWithResource(this, R.mipmap.ic_launcher_round))
+            .setIntent(
+                Intent(this, MainActivity::class.java)
+                    .setAction(MainActivity.ACTION_START_VOICE)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            )
             .build()
-    }.onFailure { Log.w(TAG, "could not build bubble metadata", it) }.getOrNull()
+        ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
+    }.onFailure { Log.w(TAG, "could not publish the bubble's shortcut", it) }.getOrDefault(false)
 
     private fun readFully(rec: AudioRecord, buf: ShortArray): Boolean {
         var got = 0
@@ -718,9 +787,15 @@ class WakeWordService : Service() {
             .addAction(0, getString(R.string.wake_stop), stop)
         // Bubble metadata is set on the BUILDER, before build() - a built
         // Notification has no public setter for it (see bubbleMetadata()'s
-        // own doc comment for why this used to fail to compile).
+        // own doc comment for why this used to fail to compile). setShortcutId
+        // here pairs with the same id bubbleMetadata() built the
+        // BubbleMetadata from (bug audit 2026-09-27, phone finding #2) -
+        // it's how a notification declares the shortcut association Android
+        // requires for it to be treated as a conversation at all on API 30+,
+        // and androidx's own BubbleMetadata doc comment says the two ids are
+        // checked for a match once both are set, so this always matches.
         if (JarvisRuntime.settings.floatingAvatar.value == FloatingAvatarMode.BUBBLE) {
-            bubbleMetadata()?.let { builder.setBubbleMetadata(it) }
+            bubbleMetadata()?.let { builder.setBubbleMetadata(it).setShortcutId(BUBBLE_SHORTCUT_ID) }
         }
         val notification: Notification = builder.build()
         return try {
@@ -760,6 +835,15 @@ class WakeWordService : Service() {
         private const val STATUS_EVERY_MS = 5 * 60 * 1000L
         /** The expanded bubble's height, in dp - Android clamps it to a sane range either way. */
         private const val BUBBLE_HEIGHT_DP = 480
+        /**
+         * The bubble's long-lived conversation shortcut (bug audit
+         * 2026-09-27, phone finding #2) - see [publishBubbleShortcut] and
+         * [bubbleMetadata]. Kept stable rather than regenerated: Android may
+         * cache a long-lived shortcut even after this app stops
+         * republishing it, and changing the id would only orphan that copy
+         * rather than update it.
+         */
+        private const val BUBBLE_SHORTCUT_ID = "jarvis_bubble_conversation"
 
         private val _state = MutableStateFlow<WakeListen>(WakeListen.Off)
 
