@@ -477,8 +477,18 @@ await check("the panda's generated shader, phone copy and pose fixture are up to
 await check("the panda's shader is within the size Android's compiler accepts", async () => {
   // Android refuses a shader whose flattened size is over 100,000 and the
   // phone app crashes when the face is drawn; this page's WebGL accepts it
-  // regardless. tools/shader_size.py measures it the way Skia does. (CI runs
-  // the same check in its own job, since this file needs a browser.)
+  // regardless. tools/shader_size.py measures it the way Skia does.
+  //
+  // It needs glslangValidator. CI's backend job installs it and runs this
+  // same check; the frontend job, which runs this file, does not have it -
+  // so without it this says so and stops, rather than failing a job whose
+  // real check lives elsewhere.
+  try {
+    execFileSync("glslangValidator", ["--version"], { stdio: "pipe" });
+  } catch {
+    console.log("      (skipped: glslangValidator is not installed - CI's backend job runs this check)");
+    return;
+  }
   try {
     execFileSync("python3", [join(ROOT, "..", "tools", "shader_size.py"), "--check"],
       { cwd: join(ROOT, ".."), stdio: "pipe" });
