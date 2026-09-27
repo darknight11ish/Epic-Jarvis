@@ -871,9 +871,15 @@ _R_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
 _R_SWITCH = threading.Lock()
 
 RESTORE_LAST_WORDS = {
-    "restored": "Restored. Restart Jarvis now (the tray icon's Restart, or close and reopen "
-               "the app) so every part of it uses the restored data - some of it was "
-               "already open while the files underneath it changed.",
+    # The tray has no "Restart" row, and closing a window only hides it
+    # (setup/recovery audit, 2026-09-27): these are the real steps. The
+    # safety backup's code is shown once, in this same panel, and lives only
+    # in this process's memory - so it comes before the restart.
+    "restored": "Restored. First write down the safety backup's recovery code (\"Your data "
+               "just before the restore\", in Settings, Backups). Then restart Jarvis so every part of it uses the restored data - "
+               "some of it was already open while the files underneath it changed: tray "
+               "icon, Stop the backend, then Start the backend (or, if you started Jarvis "
+               "yourself in PowerShell, close that window and start it again).",
     "denied": "You said no, so nothing was restored.",
     "timed_out": "Nobody answered the card in time, so nothing was restored.",
     "withdrawn": "You changed your mind before the card was answered, so nothing was "

@@ -158,8 +158,8 @@ DETAIL = ("Jarvis can look up whether the Python packages, the Rust building blo
           "pinned GitHub-hosted tool it is built from have a newer version out. It only "
           "reports - it never installs or changes anything itself; it shows the exact command "
           "to run yourself. The first time you run this, Jarvis asks once, because it means "
-          "reaching PyPI, crates.io and GitHub over the internet; after that one yes it never "
-          "asks again.")
+          "reaching the websites that publish them (PyPI for Python, crates.io for Rust, and "
+          "GitHub) over the internet; after that one yes it never asks again.")
 MISSING = "Your PC's Jarvis cannot check for tool updates yet - run apply-patches.ps1 on this PC."
 BUTTON_LABEL = "Check for tool updates"
 WAITING = "Waiting for your yes on the approval card."

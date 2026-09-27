@@ -913,10 +913,17 @@ pub fn spawn_watchdog(app: AppHandle) {
             let now = Instant::now();
             if !watchdog.try_reserve_restart(now) {
                 if watchdog.mark_given_up() {
+                    // Says where backend.log is and exactly which tray rows
+                    // to press (setup/recovery audit 2026-09-27): after a
+                    // crash the slot is still held (`snapshot` never drops
+                    // it), so the tray offers "Stop the backend" first, not
+                    // "Start". It names Jarvis, as every other screen does,
+                    // not "the backend".
                     let msg = format!(
-                        "The backend {} {} times in the last 10 minutes, so Jarvis stopped \
-                         restarting it automatically. Check backend.log, then start it again \
-                         from the tray.",
+                        "Jarvis {} {} times in 10 minutes, so Jarvis Desktop stopped restarting \
+                         it. Why: the end of backend.log (Settings, More options, Open the log \
+                         folder). To start it again: tray icon, Stop the backend if it is \
+                         shown, then Start the backend.",
                         if hung { "stopped answering" } else { "crashed" },
                         MAX_RESTARTS,
                     );

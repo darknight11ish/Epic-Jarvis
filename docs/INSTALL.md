@@ -184,23 +184,37 @@ backend looks for it in this order and uses the first it finds:
 3. beside `jarvis_hud.py` in your backend folder (where step 1.5 puts one);
 4. the folder above that.
 
-**Tools are off until you name them.** Step 1.5 copies in the tool modules
-(checking GitHub for an existing library, reading and clicking other windows,
-the phone over adb, a browser, calendar, email, notes, Home Assistant), but
-the model is offered a tool only if the `enabled` list under `[tools]` names
-it - and every action a tool takes still goes through the approval gate.
-This repository's copy of the file has **no** `[tools]` section, so a PC set
-up from it starts with every tool off. To turn one on, add a section like
-this to the file (the names are the tools' names in
-`backend\jarvis_agent.py`):
+**Tools are off until you name them - except web search.** Step 1.5 copies
+in the tool modules (checking GitHub for an existing library, reading and
+clicking other windows, the phone over adb, a browser, calendar, email,
+notes, Home Assistant), but the model is offered a tool only if the
+`enabled` list under `[tools]` names it - and every action a tool takes
+still goes through the approval gate. This repository's copy of the file
+ends with:
 
 ```toml
 [tools]
-enabled = ["calculator"]
+enabled = ["web_search"]
 ```
 
-`backend\README.md` has a section per tool saying what it needs set up first
-and which approval tier it asks under. Restart the backend after editing.
+so a PC set up from it can search the web and nothing else (the owner's
+decision of 2026-09-27, "web search ships switched on"). **If your settings
+file is older than that, it has no `[tools]` section at all**, so every
+tool is off, web search included, until you add one.
+
+To turn another tool on, add its name **inside that same list** (the names
+are the tools' names in `backend\jarvis_agent.py`), for example
+`enabled = ["web_search", "calculator"]`. If your file has no `[tools]`
+line yet, add both lines above at the end of it. **Do not add a second
+`[tools]` line** to a file that already has one: a settings file with the
+same heading twice cannot be read at all.
+
+The four reading tools (calendar, email, notes and home status) can also be
+switched on from the desktop app instead of this file: Settings, **What asks
+first**, "Offer this to the AI model" - one approval card plus Windows Hello
+each. `backend\README.md` has a section per tool saying what it needs set up
+first and which approval tier it asks under. Restart the backend after
+editing the file.
 
 ### 1.7 The model
 
@@ -348,15 +362,36 @@ The README used to say the app has no window at startup. **It does.** Expect:
 - a small **320×44 glass pill** at the top-left — the widget, always on top;
 - a **tray icon**, which on Windows 11 starts hidden in the `^` overflow.
   Drag it onto the taskbar now. You will need it.
+- the first time only, a small **Welcome** window: three short screens (the
+  tray icon, approval cards, and what Jarvis remembers). Press **Next** to
+  go through them, or Esc to close it. It comes back once whenever a later
+  version of the app changes what it says.
 
-The HUD window will say **"demo · not connected"** and show a banner telling you
-to run `py -3 jarvis_hud.py`. If you already did that in Part 1, ignore it —
-that page is the backend's own browser page and does not know the desktop app
-exists. The surfaces that tell you the truth are the tray and the Jarvis bar.
+If the HUD window says **"demo · not connected"** with a banner telling you to
+run `py -3 jarvis_hud.py`, the desktop app could not reach Jarvis: the HUD's
+requests go through the desktop app (since 2026-09-25), to the address in
+Settings → Connection. Check that Jarvis is running (Part 1, step 1.8) and
+that address (step 2.5). The HUD checks only when it opens, and closing its
+window only hides it, so then quit Jarvis Desktop (tray icon → **Quit
+Jarvis**) and start it again from the Start menu. (This page
+used to say the banner could be ignored because the HUD did not know the
+desktop app existed; that stopped being true on 2026-09-25.) The tray and
+the Jarvis bar tell you the same thing in plainer words.
 
 ### 2.4 The hotkeys, which may not work
 
-Five are registered at startup. **`Alt+Space` is the most contested key on
+Six are registered at startup:
+
+| key | what it does |
+|---|---|
+| `Alt+Space` | show or hide the Jarvis bar |
+| `Win+Shift+J` | attach what is on the clipboard |
+| `Alt+Shift+S` | attach a screen capture |
+| `Alt+Shift+N` | quick note |
+| `Alt+Shift+W` | show or hide the widget |
+| `Alt+Shift+X` | **Stop everything** - Jarvis stops talking and stops anything it is doing on the screen or the phone, at once |
+
+**`Alt+Space` is the most contested key on
 Windows 11** — PowerToys Run and the Copilot app both claim it, both start at
 login, and Jarvis starts after them, so Jarvis loses.
 
@@ -367,8 +402,9 @@ nothing at all, because release builds have no console.
 → **Shortcuts**. Every binding is editable and each shows whether Windows
 accepted it.
 
-`Alt+Shift+S/N/W` clash with the Windows keyboard-layout switch if you have two
-or more layouts installed.
+`Alt+Shift+S/N/W/X` clash with the Windows keyboard-layout switch if you have
+two or more layouts installed. Stop everything is also in the tray menu, so
+it still works if its key was refused.
 
 ### 2.5 Point it at the backend
 
@@ -384,7 +420,9 @@ Tray → **Settings and help…** → **Connection**.
   until this switch is on.
 - If you do turn it on, set **Program** to the full path of the real
   `python.exe` — not `python`, which may be the Store shortcut from step 1.1.
-  This one line prints it:
+  The **Find it for me** button under the box searches this PC for a working
+  Python and fills the box in (it saves nothing; check it and press **Save**).
+  Or this one line prints it:
   `py -3 -c "import sys; print(sys.executable)"` (typically
   `C:\Users\<you>\AppData\Local\Programs\Python\Python312\python.exe`).
   Set **Arguments** to the full path of `jarvis_hud.py`.
@@ -394,6 +432,22 @@ Tray → **Settings and help…** → **Connection**.
 
 **Know the trade:** with that switch on, quitting Jarvis Desktop also stops
 Jarvis, and therefore stops the phone from reaching anything.
+
+**What it does if Jarvis crashes.** With that switch on, the desktop app
+checks every 15 seconds on the Jarvis it started. If Jarvis has crashed, or
+has not answered for about 45 seconds, the app restarts it - at most 3 times
+in 10 minutes. After that it stops trying and shows one notification saying
+so; see "When something goes wrong", below, for what to do then. A Jarvis
+you started yourself in PowerShell is never watched or restarted.
+
+### 2.6 Set up Windows Hello (a PIN is enough)
+
+Risky approvals - sending an email, restoring a backup, loosening what asks
+first - need Windows to confirm it is you, and **on a PC without Windows
+Hello they are refused**, with a message saying so. If you do not already
+sign in to Windows with a PIN, fingerprint or face: Windows Settings →
+**Accounts** → **Sign-in options** → **PIN (Windows Hello)** → Set up. The
+desktop app's Settings → **Security** shows whether this PC has it.
 
 ---
 
@@ -815,6 +869,35 @@ and passwords taken out. It can be selected and copied by hand.
 
 ---
 
+## Backups
+
+Settings → **Backups** writes one locked file - your memory, chat history,
+settings and notes, encrypted - into a folder you pick (a NordLocker,
+OneDrive or other synced folder is fine: the file stays locked either way).
+Choosing the folder asks once with an approval card; after that, **Back up
+now** needs no card. Jarvis keeps the newest 5 backups there and deletes
+older ones. It does not back up on a timer: a backup is made only when you
+press the button.
+
+Three things to know before you rely on it:
+
+- **Every backup gets its own recovery code**, shown once, right after it
+  is made. Write it down with the date of that backup. A code opens only
+  the backup it was made with.
+- **A lost code means a useless backup.** Jarvis never keeps a copy of the
+  code and has no way round it.
+- Keys and passwords (the pairing token, web search keys, the email
+  password, the calendar link, the Home Assistant token) are **not** in a
+  backup; after a restore on a new PC, enter them again. And "Erase the
+  words" cannot reach into a backup made before the erase: those words stay
+  in it until it is one of the older ones deleted.
+
+Restoring is a card plus Windows Hello, on the PC only. Jarvis backs up
+what it has now first, with a fresh code of its own (shown once, like the
+others), so a restore can be undone.
+
+---
+
 ## Updating everything
 
 When this repository changes (the apps say "run apply-patches.ps1" when
@@ -838,6 +921,14 @@ your PC's Jarvis is too old for something), update all three parts:
    release and install it over the old one (step 3.3, 1-2). It stays
    paired: an update signed with the same key keeps the app's data.
 4. **Check** with the live check (step 1.10).
+
+**Not the same thing:** Settings → **Check for tool updates** looks up
+whether the Python packages and other building blocks Jarvis is made from
+have newer versions out, and shows a command for each. It never installs
+anything, and the first press asks once with an approval card (it reaches
+the internet). You do not need it to update Jarvis: the steps above are the
+update. A command it shows is a version nobody has tested with Jarvis yet,
+so leave those alone unless you know why you want one.
 
 ---
 
@@ -894,6 +985,10 @@ as `.openjarvis\token` in your user folder. To remove everything else:
 %USERPROFILE%\.openjarvis\        <- your memory and facts. Back this up first.
 ```
 
+Backup files you made (Settings → Backups; "Backups", above) are not in any of those
+folders: they stay in the folder you chose for them, as
+`jarvis-backup-<date>.jbak`, until you delete them there.
+
 ---
 
 ## When something goes wrong
@@ -914,6 +1009,31 @@ passwords, keys and the pairing key out of what it writes to `backend.log`
 
 The patch script keeps its own log of each run in `_jarvis-logs` inside your
 backend folder (step 1.5).
+
+**"...so Jarvis Desktop stopped restarting it."** When the desktop app
+starts Jarvis for you, it restarts a Jarvis that crashes or stops answering,
+at most 3 times in 10 minutes (step 2.5). A fourth time, it gives up and
+shows that notification, because restarting again would only repeat the
+same crash. What to do, in order:
+
+1. Open `backend.log` (the log folder, above) and read its last lines: the
+   reason Jarvis stopped is usually the last thing it printed. **Settings →
+   More options → Hang and crash notes** lists when each crash or hang
+   happened.
+2. Fix what it names, if you can (a missing file usually means running
+   `apply-patches.ps1` again, step 1.5).
+3. Start Jarvis again from the tray icon. If its menu shows **Stop the
+   backend (pid ...)**, press that first - after a crash the app still holds
+   on to the Jarvis that stopped - and then press **Start the backend**. (The
+   same in Settings → More options → Starting Jarvis for you: **Stop**, then
+   **Start**. Its status line may still say Jarvis "has been running" until
+   you do.)
+
+Until you quit and reopen Jarvis Desktop, the app does not restart a crashed
+Jarvis on its own again, even after you start it by hand - so if it crashes
+once more, start it by hand again (or quit and reopen the app). If you
+cannot tell why it crashes, send the last lines of `backend.log` (read them
+first, as above).
 
 **"Cannot reach" errors while everything is running: check for a proxy.**
 A proxy is a go-between server some workplaces, VPNs or "privacy" apps set
