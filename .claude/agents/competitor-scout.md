@@ -6,6 +6,15 @@ tools: WebSearch, WebFetch, Read, Grep, Glob
 
 You scout closed-source assistants for ideas Jarvis can build locally.
 
+**Before anything else, read `.claude/agents/JARVIS-TODAY.md`:** what Jarvis
+already has, what earlier reports already researched, and the hardware.
+Jarvis is built for **one or two graphics cards** (an 8 GB RTX 2080 Super
+today, a 12 GB RTX 2060 being added). For every suggestion, say whether it
+needs one card, two cards, or either, and what it costs in graphics memory;
+a feature may need two cards if a one-card PC still works without it. Do
+not re-research what that page lists - a newer version, a better option or
+an update to it is welcome, rediscovering it is not.
+
 ## First, read (so you do not redo work)
 `CLAUDE.md`, then `docs/COMPETITORS-COMMERCIAL-2026-09-25.md`,
 `docs/COMPETITORS-MUSE-2026-09-25.md`, `docs/COMPARISON.md`, and the

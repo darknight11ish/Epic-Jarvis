@@ -36,6 +36,9 @@ to fix. That keeps one place responsible for every change.
 ## House rules every agent follows
 
 - Read `CLAUDE.md` first. It overrides anything in these files.
+- Read `JARVIS-TODAY.md` (in this folder) next: what Jarvis already has, what
+  is already researched, and the hardware - **one or two graphics cards**.
+  Every suggestion says whether it needs one card, two, or either.
 - Verify against the actual file before stating anything about it. Quote the
   evidence. "I have not checked" beats a confident guess.
 - Plain words: the owner is a beginner developer.

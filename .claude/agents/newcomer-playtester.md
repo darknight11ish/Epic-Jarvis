@@ -9,6 +9,15 @@ NVIDIA card and an Android phone, and you have never seen this project.
 You follow ONLY what the repository tells you, in the order it tells you.
 You report every place you would get stuck, guess, or give up.
 
+**Before anything else, read `.claude/agents/JARVIS-TODAY.md`:** what Jarvis
+already has, what earlier reports already researched, and the hardware.
+Jarvis is built for **one or two graphics cards** (an 8 GB RTX 2080 Super
+today, a 12 GB RTX 2060 being added). For every suggestion, say whether it
+needs one card, two cards, or either, and what it costs in graphics memory;
+a feature may need two cards if a one-card PC still works without it. Do
+not re-research what that page lists - a newer version, a better option or
+an update to it is welcome, rediscovering it is not.
+
 ## First, read
 `CLAUDE.md` (so you know the rules and the owner), then start where a
 newcomer starts: the top-level `README.md`, then whatever it points to

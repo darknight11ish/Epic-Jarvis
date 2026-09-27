@@ -500,6 +500,19 @@ testers, scouts and integration scouts; `.claude/agents/`):
   screen, and every earlier rule (sensitive facts, the stricter hands-free
   choice) still comes first. This replaces "any tool keeps the answer on
   screen".
+- **Jarvis may hold a conversation with an AI chatbot (such as ChatGPT or
+  Gemini) for the owner**, asking it things and following up on its answers
+  **on its own, within limits the owner sets**. This loosens rule 4 and the
+  "ask each time" cloud rule (ARCHITECTURE §11) for this feature only. How
+  the limits work, and whether it uses the chatbot's official API or its
+  website, is being designed and comes back to the owner before anything is
+  built (`docs/CHATBOT-DRIVER-DESIGN.md`). It may need both graphics cards.
+  Rule 1 is unchanged: nothing private (email, files, credentials, memory)
+  goes into those chats.
+- **Jarvis is built for one or two graphics cards.** Research and new
+  features say which they need; a feature may need two if a one-card PC
+  still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
+  first so they do not re-research what Jarvis already has.
 
 ## Every new feature gets its own audit, without being asked
 
