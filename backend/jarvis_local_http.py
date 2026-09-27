@@ -66,6 +66,7 @@ Standard library only. Opens nothing on import.
 """
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import re
 import socket
@@ -245,6 +246,13 @@ def plain_http_problem(url: str, env_name: str, secret: str) -> str:
 # then with a home-network address by the time a later look actually
 # fetches it. `jarvis_tellme.py` calls this again immediately before every
 # GET, not only when the watch is created.
+#
+# That alone was NOT enough (security/privacy audit, 2026-09-27): urllib
+# then looked the name up a second time to connect, so an answer that
+# changed within that moment still got through. The fetch itself now goes
+# through `public_urlopen` (below), whose connection checks the very
+# addresses it connects to. This function stays as the early check that
+# gives the plain sentence (before a card, and before each look).
 
 #: Ranges refused for an address meant to be on the open internet - the
 #: reverse of _OWN_NETS's job above: here _OWN_NETS's ranges (this PC, the
@@ -263,7 +271,12 @@ def _resolved_addresses(host: str) -> list:
     `host` already is one, else every address a live DNS lookup returns.
     Never cached, and callers are expected to call this again before every
     fetch - see "WHY THIS IS CALLED AGAIN" above. Empty when the name will
-    not resolve at all (the caller then has nothing to fetch either)."""
+    not resolve at all (the caller then has nothing to fetch either).
+
+    An IPv4-mapped IPv6 answer (`::ffff:127.0.0.1`) is judged as the IPv4
+    address it carries, exactly as `_as_address` already did for a literal
+    one (security/privacy audit 2026-09-27: a DNS AAAA record of that shape
+    passed, although the same address typed literally was refused)."""
     ip = _as_address(host)
     if ip is not None:
         return [ip]
@@ -275,10 +288,18 @@ def _resolved_addresses(host: str) -> list:
     for info in infos:
         try:
             addr = info[4][0]
-            out.append(ipaddress.ip_address(addr.split("%", 1)[0]))
+            ip = ipaddress.ip_address(addr.split("%", 1)[0])
         except (ValueError, IndexError, TypeError):
             continue
+        if ip.version == 6 and ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        if ip not in out:
+            out.append(ip)
     return out
+
+
+def _is_private(ip) -> bool:
+    return any(ip in net for net in _PRIVATE_NETS if net.version == ip.version)
 
 
 def private_fetch_problem(url: str) -> str:
@@ -310,8 +331,103 @@ def private_fetch_problem(url: str) -> str:
     if not addrs:
         return f"{host} could not be looked up - there may be no such address."
     for ip in addrs:
-        if any(ip in net for net in _PRIVATE_NETS if net.version == ip.version):
-            return (f"{host} leads to {ip}, which is this PC or a private network address, "
-                    f"not somewhere on the open internet. Refused, so a web address could "
-                    f"never be used to make Jarvis fetch something from its own network.")
+        if _is_private(ip):
+            return _private_words(host, ip)
     return ""
+
+
+def _private_words(host, ip) -> str:
+    return (f"{host} leads to {ip}, which is this PC or a private network address, "
+            f"not somewhere on the open internet. Refused, so a web address could "
+            f"never be used to make Jarvis fetch something from its own network.")
+
+
+# --------------------------------------------------------------------------
+# THE CHECK AND THE CONNECTION MUST USE THE SAME LOOKUP (security/privacy
+# audit, 2026-09-27)
+#
+# `private_fetch_problem` above looks the name up, and then urllib looks it
+# up AGAIN, on its own, when it connects. A name whose DNS answer changes
+# between those two lookups (a public address for the check, 127.0.0.1 or
+# 192.168.x.x a moment later - "fast" DNS rebinding, with a zero-second
+# DNS lifetime) passed the check and was then fetched from this PC or the
+# home network. Re-checking before every fetch (above) only closes the
+# SLOW version, where the answer changes between the card and a later look.
+#
+# `public_urlopen` closes the fast one: its connections resolve the name
+# ONCE, refuse if ANY answer is private (the same rule, `_is_private`), and
+# then connect to one of exactly those checked addresses - never to the
+# name, so nothing can be looked up a second time. https still checks the
+# certificate against the NAME (http.client wraps the socket with
+# server_hostname=<the name>), so pinning the address costs no TLS safety.
+# Every connection a redirect makes goes through the same code, so a
+# redirect is checked here too, not only by the callers' redirect handlers.
+# No proxy, ever: a proxy would do its own lookup, out of this check's reach.
+# --------------------------------------------------------------------------
+
+class PrivateAddressRefused(OSError):
+    """A public fetch whose name, looked up at connect time, led somewhere
+    private. An OSError, so urllib reports it as it would any failed
+    connection (wrapped in URLError) and callers need nothing new."""
+
+
+def _connect_public(address, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None,
+                    *args, **kwargs):
+    """Stands in for socket.create_connection on a public fetch's
+    connection: ONE lookup, every answer checked, then a connection to a
+    checked address itself (see the section above)."""
+    host, port = address[0], address[1]
+    addrs = _resolved_addresses(host)
+    if not addrs:
+        raise PrivateAddressRefused(f"{host} could not be looked up")
+    for ip in addrs:
+        if _is_private(ip):
+            raise PrivateAddressRefused(_private_words(host, ip))
+    last = None
+    for ip in addrs:
+        try:
+            return socket.create_connection((str(ip), port), timeout, source_address)
+        except OSError as exc:
+            last = exc
+    raise last  # type: ignore[misc]
+
+
+class _PublicHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._create_connection = _connect_public
+
+
+class _PublicHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._create_connection = _connect_public
+
+
+class _PublicHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_PublicHTTPConnection, req)
+
+
+class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        kwargs = {"context": self._context}
+        if hasattr(self, "_check_hostname"):      # Python 3.11 and older only
+            kwargs["check_hostname"] = self._check_hostname
+        return self.do_open(_PublicHTTPSConnection, req, **kwargs)
+
+
+def public_opener(*handlers) -> urllib.request.OpenerDirector:
+    """An opener for an address the owner typed, meant to be on the open
+    internet (a news feed, a page to watch): never a proxy, and every
+    connection it makes - redirects included - checked by `_connect_public`
+    against the very address it then connects to. Plus any extra
+    `handlers` (a module's own redirect rule)."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _PublicHTTPHandler(),
+                                       _PublicHTTPSHandler(), *handlers)
+
+
+def public_urlopen(req, timeout: float, *handlers):
+    """`urllib.request.urlopen(req, timeout=timeout)` for a public address:
+    no proxy, and the private-address check made on the connection itself."""
+    return public_opener(*handlers).open(req, timeout=timeout)

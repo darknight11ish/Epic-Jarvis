@@ -12311,9 +12311,14 @@ and the chat-history key (read from Windows Credential Manager, kept
 base64 INSIDE the archive only), then encrypts the whole zip with
 AES-256-GCM under a key stretched from a fresh 20-character recovery code
 by Argon2id (`cryptography`, already a dependency here for chat history -
-not the design note's other option, `pyrage`: this repository hash-locks
-every dependency, and a package already here, already reviewed, is the
-lower-friction choice). The code is returned once, never written anywhere
+not the design note's other option, `pyrage`: this repository pins every
+dependency with hashes in `requirements.lock`, and a package already here,
+already reviewed, is the lower-friction choice). Said plainly: the install
+does not use that lock yet (`apply-patches.ps1` installs
+`requirements.txt` and leaves an installed package alone), so the PC's
+`cryptography` is whatever was installed first; one older than 44.0.0 has
+no Argon2id, and backing up then refuses in words rather than write
+anything unencrypted. The code is returned once, never written anywhere
 by this module. The newest 5 files in the folder are kept; two backups
 made in the same second get distinct names rather than overwrite one
 another.

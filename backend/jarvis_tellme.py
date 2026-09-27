@@ -940,15 +940,19 @@ class _PageRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _default_page_fetch(url: str) -> str:
-    """ONE GET, this PC's own opener (jarvis_local_http.opener - never a
-    proxy), a redirect followed only where the check above would allow it,
+    """ONE GET, through jarvis_local_http.public_urlopen (never a proxy, and
+    the private-address check made again on the connection itself), a
+    redirect followed only where the check above would allow it,
     the body capped at PAGE_MAX_BYTES and hashed. Returns a hex digest of
     the bytes read; the bytes themselves are never kept or returned."""
     import hashlib
     import jarvis_local_http as LH
     req = urllib.request.Request(url, headers={"User-Agent": "Jarvis (tell me when this page "
                                                               "changes)"})
-    with LH.urlopen(req, PAGE_TIMEOUT, _PageRedirect()) as resp:
+    # public_urlopen: the private-address check is made again on the
+    # connection itself (DNS rebinding between _look_page's check and this
+    # connect - the security/privacy audit of 2026-09-27).
+    with LH.public_urlopen(req, PAGE_TIMEOUT, _PageRedirect()) as resp:
         body = resp.read(PAGE_MAX_BYTES + 1)
     return hashlib.sha256(body[:PAGE_MAX_BYTES]).hexdigest()
 

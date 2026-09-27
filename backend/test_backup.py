@@ -500,6 +500,32 @@ class FakeHandler:
         self.sent = (code, obj)
 
 
+def t_restore_never_writes_outside_its_own_folders():
+    """Security/privacy audit, 2026-09-27: restore joined whatever name the
+    archive held, so "db/../../x" landed outside the settings folder.
+    build_archive never writes such a name; this is the second lock."""
+    conf, _backups = fresh_conf()
+    outside = conf.parent / f"escaped-{time.time_ns()}"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(f"db/../{outside.name}", b"x")
+        zf.writestr(f"settings/../../{outside.name}", b"x")
+        zf.writestr(f"notes/../../{outside.name}", b"x")
+        zf.writestr("notes/C:/Windows/evil.txt", b"x")
+        zf.writestr("voice/./sub/../../x.bin", b"x")
+        zf.writestr("settings/sub/deeper.json", b"{}")
+        zf.writestr("settings/fine.json", b"{}")
+        zf.writestr("notes/folder/fine.md", b"ok")
+        zf.writestr("manifest.json", "{}")
+    applied = B._apply_restore(buf.getvalue())
+    check("no name wrote outside the settings folder", not outside.exists(),
+          str(outside))
+    check("each bad name was skipped and counted", applied.get("skipped") == 6, applied)
+    check("ordinary names still restore",
+          (conf / "fine.json").is_file() and (conf / "notes" / "folder" / "fine.md").is_file()
+          and applied["settings_files"] == 1 and applied["notes_files"] == 1, applied)
+
+
 def t_the_routes():
     conf, backups = fresh_conf()
 

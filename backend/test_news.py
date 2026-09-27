@@ -132,6 +132,8 @@ def t_adding_one_card_only_a_yes_adds():
     check("the gate was asked change_own_config, with the full address in the card",
           calls and calls[0][0] == NW.CARD_ACTION
           and "https://example.com/feed.xml" in calls[0][1]["text"])
+    check("the card's detail says approving it leads off this PC",
+          calls and calls[0][1].get("leaves_this_pc") is True)
     check("added", NW.feeds() == ["https://example.com/feed.xml"])
     check("last outcome is 'added'", NW._P_STATE["last"]["outcome"] == "added")
 
@@ -257,6 +259,19 @@ def t_parse_headlines():
     check("feed_title reads the channel's own title",
           NW.feed_title(RSS) == "Example News" and NW.feed_title(ATOM) == "Atom Feed")
     check("feed_title also refuses a DOCTYPE document", NW.feed_title(DOCTYPE_BOMB) == "")
+    # Security/privacy audit, 2026-09-27: the byte search missed a UTF-16
+    # document (a zero byte after every letter), and ElementTree - which
+    # reads UTF-16 - then expanded its entities.
+    doc16 = ('<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE rss [<!ENTITY x "EXPANDED">]>'
+             '<rss><channel><title>&x;</title><item><title>&x;</title></item></channel>'
+             '</rss>').encode("utf-16")
+    check("a UTF-16 DOCTYPE/ENTITY document is refused too, never parsed",
+          NW.parse_headlines(doc16) == [] and NW.feed_title(doc16) == "",
+          (NW.parse_headlines(doc16), NW.feed_title(doc16)))
+    ok16 = ('<?xml version="1.0" encoding="UTF-16"?><rss><channel><item><title>Plain '
+            'UTF-16</title></item></channel></rss>').encode("utf-16")
+    check("... while an ordinary UTF-16 feed still reads",
+          NW.parse_headlines(ok16) == ["Plain UTF-16"], NW.parse_headlines(ok16))
 
 
 def t_read_feed_gating():

@@ -79,9 +79,14 @@ THE LOCK - AES-256-GCM with a key stretched from the recovery code by
 Argon2id (`cryptography`, already a dependency here for chat history and
 already pinned in requirements.lock at 50.0.1, which has had Argon2id since
 44.0.0). NOT the `pyrage`/age route the design doc offered as its other
-option: this repository hash-locks every dependency
+option: this repository pins every dependency with hashes
 (requirements.lock, tools/check_python_advisories.py) and a brand-new
-package needs that lock remade and re-checked before it can ship; a package
+package needs that lock remade and re-checked before it can ship. (Said
+plainly, security/privacy audit 2026-09-27: apply-patches.ps1 still
+installs from requirements.txt, not the lock, and leaves an installed
+package alone - so the PC's `cryptography` is whatever was there first. One
+older than 44.0.0 has no Argon2id; the import below then fails and backing
+up refuses in words, never writing anything unencrypted.) A package
 already here, already reviewed and already the exact tool this job needs,
 is the lower-friction and no less honest choice. The cost, said plainly:
 `age -d` cannot open this file - only Jarvis, or someone who reads this
@@ -933,32 +938,55 @@ def take_restore_result() -> Optional[dict]:
     return last or None
 
 
+def _inside(root: Path, rel: str, *, flat: bool = False) -> Optional[Path]:
+    """`root` joined with the archive path `rel`, or None when `rel` could
+    land anywhere but inside `root`: a "..", an empty or "." part, a
+    leading "/", a backslash, or a drive letter (on Windows, `root /
+    "C:/x"` IS "C:/x"). `flat`: one name only, no folder (db/ and
+    settings/ hold top-level files only - build_archive never writes
+    deeper). Security/privacy audit, 2026-09-27: restore used to join
+    whatever name the archive held, so "db/../../x" wrote outside the
+    settings folder. build_archive never writes such a name, and a file
+    needs its recovery code to open, so this is a second lock, not a
+    reported attack."""
+    if not rel or "\\" in rel or rel.startswith("/") or ":" in rel:
+        return None
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") for p in parts) or (flat and len(parts) != 1):
+        return None
+    return root.joinpath(*parts)
+
+
 def _apply_restore(zip_bytes: bytes) -> dict:
     """Writes the archive's files back. Additive/overwrite only - nothing
     present now but absent from the backup is deleted. Returns a short
-    summary for the audit log (counts only)."""
+    summary for the audit log (counts only). A name that would land
+    outside its own folder is skipped and counted (`_inside`)."""
     conf = _config_dir()
     conf.mkdir(parents=True, exist_ok=True)
     applied = {"databases": 0, "settings_files": 0, "notes_files": 0, "voice_files": 0,
-              "framework_toml": False, "chat_history_key": False}
+              "framework_toml": False, "chat_history_key": False, "skipped": 0}
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         for info in zf.infolist():
             name = info.filename
             if name.endswith("/") or name == "manifest.json":
                 continue
-            data = zf.read(info)
+            where = None
             if name.startswith("db/"):
-                dest = conf / name[len("db/"):]
-                applied["databases"] += 1
+                where = ("databases", _inside(conf, name[len("db/"):], flat=True))
             elif name.startswith("settings/"):
-                dest = conf / name[len("settings/"):]
-                applied["settings_files"] += 1
+                where = ("settings_files", _inside(conf, name[len("settings/"):], flat=True))
             elif name.startswith("notes/"):
-                dest = conf / "notes" / name[len("notes/"):]
-                applied["notes_files"] += 1
+                where = ("notes_files", _inside(conf / "notes", name[len("notes/"):]))
             elif name.startswith("voice/"):
-                dest = conf / "voice" / name[len("voice/"):]
-                applied["voice_files"] += 1
+                where = ("voice_files", _inside(conf / "voice", name[len("voice/"):]))
+            if where is not None and where[1] is None:
+                applied["skipped"] += 1
+                continue
+            data = zf.read(info)
+            if where is not None:
+                dest = where[1]
+                applied[where[0]] += 1
             elif name == "jarvis-framework.toml":
                 toml_dest = _toml_source()
                 dest = toml_dest if toml_dest is not None else (conf / name)

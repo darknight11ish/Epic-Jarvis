@@ -311,15 +311,20 @@ def _set_approved() -> None:
 
 # ---------------------------------------------------------------------------
 #   Fetching - stdlib only, one User-Agent per service naming this tool as
-#   local and non-commercial, with a contact address, as crates.io's own
-#   crawler policy asks for. Nothing here is called from a read-only path:
-#   only run_check() (itself only reached after a person's yes) opens a
-#   socket.
+#   local and non-commercial - a name of its own, not a bare HTTP library's,
+#   as crates.io's data-access policy asks. It used to add the owner's own
+#   GitHub address as a contact; the card promises "never ... anything
+#   about you", and that address named the owner to three services on every
+#   check, together with their internet address (security/privacy audit,
+#   2026-09-27). Checked that day: crates.io answers this User-Agent
+#   (HTTP 200 for /api/v1/crates/serde); its policy text was not re-read.
+#   Nothing here is called from a read-only path: only run_check() (itself
+#   only reached after a person's yes) opens a socket.
 # ---------------------------------------------------------------------------
 
-_PYPI_UA = "Jarvis-tool-update-check (local, non-commercial, github.com/darknight11ish/Epic-Jarvis)"
-_CRATES_UA = "Jarvis-tool-update-check (local, non-commercial, github.com/darknight11ish/Epic-Jarvis)"
-_GITHUB_UA = "Jarvis-tool-update-check (local, non-commercial, github.com/darknight11ish/Epic-Jarvis)"
+_PYPI_UA = "Jarvis-tool-update-check/1 (local, non-commercial)"
+_CRATES_UA = "Jarvis-tool-update-check/1 (local, non-commercial)"
+_GITHUB_UA = "Jarvis-tool-update-check/1 (local, non-commercial)"
 _TIMEOUT = 20.0
 
 
@@ -709,7 +714,10 @@ def _run_in_background(run: Callable[[], dict]) -> None:
 def _decide(pid: str, gate: Callable, tier_of: Callable, write: Callable[[], None],
            run: Callable[[], dict]) -> None:
     detail = {"text": CARD, "what": "check PyPI, crates.io and GitHub for newer versions of "
-                                    "the tools Jarvis is built from", "leaves_this_pc": False}
+                                    "the tools Jarvis is built from",
+              # True: approving it is what lets Jarvis ask PyPI, crates.io and
+              # GitHub over the internet.
+              "leaves_this_pc": True}
     try:
         v = gate(ACTION, detail, CARD)
     except Exception as exc:

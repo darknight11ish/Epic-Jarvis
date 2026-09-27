@@ -362,6 +362,14 @@ def t_not_approved_needs_a_card_only_a_yes_runs_it():
     check("the gate was asked check_tool_updates, and the card names PyPI/crates.io/GitHub",
           calls and calls[0][0] == TU.ACTION
           and "pypi.org" in calls[0][1]["text"] and "crates.io" in calls[0][1]["text"])
+    check("the card's detail says approving it leads off this PC",
+          calls and calls[0][1].get("leaves_this_pc") is True)
+    # The card promises "never ... anything about you" (security/privacy
+    # audit, 2026-09-27): the User-Agent used to carry the owner's GitHub name.
+    uas = (TU._PYPI_UA, TU._CRATES_UA, TU._GITHUB_UA)
+    check("no User-Agent names the owner or their GitHub address",
+          all("darknight" not in u.lower() and "github.com" not in u.lower() and "@" not in u
+              for u in uas), uas)
     check("approving it both sets the flag AND runs the check, once",
           TU.approved() is True and ran == [1])
     check("the report from that run is now the last report",

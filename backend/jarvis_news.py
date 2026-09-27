@@ -264,12 +264,50 @@ def _default_fetch(url: str) -> bytes:
                                                 "Accept": "application/rss+xml, "
                                                           "application/atom+xml, "
                                                           "application/xml, text/xml"})
-    with LH.urlopen(req, FEED_TIMEOUT, _FeedRedirect()) as resp:
+    # public_urlopen, not urlopen: the private-address check is made again on
+    # the connection itself, against the address it connects to (DNS
+    # rebinding between read_feed's check and this connect - the
+    # security/privacy audit of 2026-09-27).
+    with LH.public_urlopen(req, FEED_TIMEOUT, _FeedRedirect()) as resp:
         return resp.read(MAX_FEED_BYTES + 1)[:MAX_FEED_BYTES]
 
 
 def _text_of(el) -> str:
     return " ".join("".join(el.itertext()).split()) if el is not None else ""
+
+
+class _Declares(Exception):
+    pass
+
+
+def _declares_doctype(raw: bytes) -> bool:
+    """Does `raw` declare a DOCTYPE or an ENTITY, in ANY encoding the XML
+    parser itself would read it in?
+
+    The byte search alone was not enough (security/privacy audit,
+    2026-09-27): a feed sent as UTF-16 spells "<!DOCTYPE" with a zero byte
+    after every letter, so the search found nothing while ElementTree -
+    which reads UTF-16 - expanded its entities. So the same parser
+    (expat) reads it once first, and is stopped the moment it meets either
+    declaration, before any entity is expanded. A document it cannot read
+    at all is left to ElementTree, which then fails on it too."""
+    if re.search(rb"<!DOCTYPE|<!ENTITY", raw, re.IGNORECASE):
+        return True
+    import xml.parsers.expat
+
+    def _stop(*_args):
+        raise _Declares()
+
+    p = xml.parsers.expat.ParserCreate()
+    p.StartDoctypeDeclHandler = _stop
+    p.EntityDeclHandler = _stop
+    try:
+        p.Parse(raw, True)
+    except _Declares:
+        return True
+    except Exception:
+        return False
+    return False
 
 
 def parse_headlines(raw: bytes, cap: int = MAX_HEADLINES_PER_FEED) -> list:
@@ -279,7 +317,7 @@ def parse_headlines(raw: bytes, cap: int = MAX_HEADLINES_PER_FEED) -> list:
     docstring's "HEADLINES ARE OUTSIDE TEXT" section, above that): a real
     feed never needs either, so refusing them keeps this parser out of
     XML's entity tricks without a second dependency."""
-    if re.search(rb"<!DOCTYPE|<!ENTITY", raw, re.IGNORECASE):
+    if _declares_doctype(raw):
         return []
     try:
         root = ET.fromstring(raw)
@@ -306,7 +344,7 @@ def parse_headlines(raw: bytes, cap: int = MAX_HEADLINES_PER_FEED) -> list:
 def feed_title(raw: bytes) -> str:
     """The feed's OWN title (<channel><title> or <feed><title>), for the
     list - "" if it cannot be read. Never shown as a headline."""
-    if re.search(rb"<!DOCTYPE|<!ENTITY", raw, re.IGNORECASE):
+    if _declares_doctype(raw):
         return ""
     try:
         root = ET.fromstring(raw)
@@ -497,7 +535,10 @@ def _decide(pid: str, url: str, gate: Callable, tier_of: Callable,
             write: Callable[[str], None]) -> None:
     text = card(url)
     detail = {"text": text, "what": "let Jarvis read one more news feed",
-              "setting": "news feeds", "to": url, "leaves_this_pc": False}
+              "setting": "news feeds", "to": url,
+              # True: approving it is what lets Jarvis fetch this address from
+              # the internet (jarvis_tellme's page card says the same).
+              "leaves_this_pc": True}
     try:
         v = gate(CARD_ACTION, detail, text)
     except Exception as exc:
