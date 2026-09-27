@@ -115,6 +115,21 @@ await check("Up/Down inside a multi-line prompt moves the caret, not history", a
     "Up recalled history instead of moving the caret up a line");
 });
 
+/* ── The empty-answer note ───────────────────────────────────────────────── */
+
+await check("an empty answer's note shows in italics, not with raw underscores", async () => {
+  // Play tester, 2026-09-27: it read "_The server closed..._" because the
+  // renderer had no single-underscore italics (markdown.js).
+  const page = await open();
+  await submit(page, "anything");
+  const text = await page.locator("#answer").innerText();
+  const em = await page.locator("#answer em").allInnerTexts();
+  await page.close();
+  assert.match(text, /The server closed the stream without sending content\./);
+  assert.doesNotMatch(text, /_/, `underscores shown: ${JSON.stringify(text)}`);
+  assert.deepEqual(em, ["The server closed the stream without sending content."]);
+});
+
 /* ── Previous-answer scrollback ──────────────────────────────────────────── */
 
 await check("nothing to fold away after only one turn", async () => {
