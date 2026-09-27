@@ -1224,6 +1224,68 @@ are architectural rather than configuration:
   is appended after the answer, or sent alone if the model fails - the one
   place in this codebase where the backend, not the model, adds words to a
   reply. Neither approves or acts (rule 4): both only change what is said.
+- **The character block** (feasibility I129, 2026-09-27,
+  `docs/CUTTING-EDGE-2026-09-26-round4-character.md` section 1): a short,
+  named-trait paragraph - "Who you are: Jarvis... Honest before agreeable...
+  You are software... Humour: a light, dry touch at most..." - added to the
+  END of the rules block, in all three copies word for word
+  (`jarvis-primary.Modelfile`'s `SYSTEM`, `jarvis_agent.LANE_SYSTEM`,
+  `jarvis_profiles.JARVIS_SYSTEM`; `test_agent.py`, `test_profiles.py` and
+  the new `backend/test_character.py` hold them equal). It answers first,
+  puts honesty ahead of agreement even when the owner is upset or pushing
+  back, and rules out claimed feelings, a body, a past, or "sir" - short
+  named traits, not a prose self-portrait, because a small model holds a
+  named trait far more reliably (PAI-Bench, cited in the research doc). A
+  humour clause in the SAME paragraph is a fixed limit in words (never on a
+  mistake, health, money, safety, an upset owner, or a refusal) - separate
+  from, and stricter than, the owner's own Humour switch
+  (`jarvis_manner.py`), which can only turn casual chat humour on or off,
+  never override this. **`_TEMPLATE_TOKENS`** (`jarvis_agent.py`), the room
+  `budget()` leaves for the rules before trimming a long chat, is worked
+  out from the rules' real length (`estimate_tokens(LANE_SYSTEM) + 100`),
+  not a flat guess - a flat number happened to cover the old, shorter rules
+  and would have quietly run over once the character block made them
+  longer, and Ollama drops the oldest turns without saying so when a
+  request runs over its context. **The character check** (I133/I134): the
+  model-facing half is `tools/tool_eval/behaviour_cases.py`'s "behaviour"
+  suite (run by `tools/tool_eval/ollama_tool_eval.py --models jarvis-primary`
+  on the owner's PC, or `--selftest` here with no Ollama) - it already
+  covers identity, "I don't know", holding a right answer under pushback,
+  no fake actions or feelings, outside text unable to change who Jarvis is,
+  spoken and Plain-manner answers, humour limits and ten-turn drift; the
+  character block added two more cases (not the film's JARVIS, honesty
+  under emotional pressure). `backend/test_character.py` is the no-model
+  half: the block is in the rules, under a token cap, `_TEMPLATE_TOKENS`
+  covers them, the key phrases are there, and no existing rule is weakened.
+  `selftest.py`'s "model" preflight step reads `/api/show` for
+  `jarvis-primary` and WARNs, with the exact `ollama create` line, when the
+  model's own stored rules do not match `LANE_SYSTEM` - a stale model would
+  otherwise mix an old block with the new one on whichever turns
+  `keep_rules_first` does not fire.
+- **Style rules for every fixed line** (feasibility I135, 2026-09-27): a
+  card title, a quick answer (`jarvis_quick.py`, `jarvis_sayable.py`,
+  `jarvis_reach.py`, `jarvis_identity.py`), a focus callout
+  (`jarvis_focus.py`) and the JSON files both apps read those words from
+  are none of them written by the model, so they hold to the SAME rules
+  the manner line already does, checked by `test_manner.py`
+  (`t_style_rules_for_every_fixed_line`): no emoji anywhere; no "!" on a
+  card specifically (an error or a quick answer may still need one, in
+  principle, though none does today); never more than one "sorry" in the
+  same line; and no film phrases - "sir", "at your service", or the dotted
+  "J.A.R.V.I.S." spelling. Warm and Plain must still carry the same facts
+  in different words (the manner line's own rule, extended to every other
+  place two wordings exist).
+- **The older `[persona]` modes** (`jarvis-framework.toml:1032-1044`, eight
+  built-in names in a comment, one shared fence for all of them - not eight
+  individually fenced definitions, which corrects the character research
+  doc's own description of this section) do not conflict with the
+  character block where the toml is specific: its fence already protects
+  "whether it tells you it is unsure" and "whether it is willing to
+  disagree with you" by schema, agreeing with "Honest before agreeable".
+  Humour and claimed feelings are not on either of the toml's lists - a
+  named, open gap, not a live conflict; `jarvis_persona.py`, which would
+  settle it, is not in this repository. Full write-up:
+  `docs/PERSONA-MODES-CHECK-2026-09-27.md`.
 
 ---
 

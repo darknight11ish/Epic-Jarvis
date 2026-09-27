@@ -5866,6 +5866,29 @@ prints in the same window.)
   and the desktop's `stopSpeaking` silences a callout (`stopFocusCallout`).
 - English only, like the rest of the fast path.
 
+### 31.8 Briefer during focus (added 2026-09-27, feasibility I144)
+
+"Saved setting untouched." While a session is running AND NOT PAUSED,
+every local chat turn's request to the model carries one more system line
+(`jarvis_agent.FOCUS_NOTE`), added by `jarvis_agent._focus_active_now()`
+reading `jarvis_focus.is_active()` fresh, every turn - nothing is cached,
+and nothing here reads or changes what a session saw. It is placed exactly
+like the manner line (section 27): never first (the rules block leads,
+`keep_rules_first`), and just before the newest question - nearer than
+manner, further than the spoken, cut-off and crisis notes, which are more
+urgent. **Additive, never a replacement:** the owner's own manner (warm or
+plain) and humour setting are sent exactly as they always are; this is a
+second, separate line asking for brevity on top of them, the same "wording
+only" shape as manner - it changes no tier, card, memory or egress, and is
+never sent to a cloud lane (the relay's own filter keeps only the newest
+user message anyway). **Turns off at once** the moment the session ends or
+is PAUSED: pausing counts the same as off (`jarvis_focus.is_active()`
+checks `on and not paused`), because the owner stepped away from the
+session's brevity too, not only its watching - there is nothing to switch
+back later, since nothing was ever switched on outside this one read.
+`backend/test_focus_brief.py` proves the placement and the paused/off cases
+directly against `run_local_turn`.
+
 ## 32. What asks first (added 2026-09-26)
 
 The owner's decision of 2026-09-26, after the approvals audit
@@ -8066,3 +8089,71 @@ something the owner does from their phone - the same reasoning that keeps
 the model catalogue and deep config editing off the phone (`CLAUDE.md`).
 `docs/ARCHITECTURE.md` §8 has the row. `tools/check_parity.py` classifies
 both routes `deliberate`.
+
+## 54. "Who are you?" (added 2026-09-27)
+
+Feasibility idea I131: "Instant, honest, no model. Fixed text; no
+romance." Sits beside §41 ("Things you can say") and `jarvis_reach.py`:
+the model never improvises its own nature, what it can reach, or what it
+was told. `backend/jarvis_identity.py` (new module, shipped whole) -
+**no new route, and no new patch**: `jarvis_quick.py` (already shipped)
+answers it from the existing fast path, the same way it already answers
+"what can you do?" and "what can you reach?".
+
+### 54.1 What it answers, and how
+
+`jarvis_quick.match()`'s `_WHO_ARE_YOU` pattern catches "who/what are
+you", "are you an AI/robot/human/real/conscious/sentient/alive", "are you
+JARVIS from Iron Man", the dotted "J.A.R.V.I.S." spelling, "do you have
+feelings", "do you love/miss me", "are you my girlfriend/boyfriend/friend",
+"will you be my friend", "are you lonely", and "what model/AI/LLM are
+you running - whole sentences only, like every other fast-path match in
+this file: a near miss ("who are you calling", "are you free tomorrow")
+goes to the model as before. Every one of these is answered with the
+SAME one-paragraph text (`jarvis_identity.ANSWER`), from `jarvis_identity.
+sentence()`, with no model:
+
+```
+I'm Jarvis - your own assistant, running on this PC. I'm software: no
+feelings, no body and no past, and not the character from the Iron Man
+films - no old-fashioned titles, no butler routine. Everything I say
+comes from the AI model on this machine, under rules I cannot be talked
+out of. For what I can actually do or reach right now, ask "what can you
+do?" or "what can you reach?".
+```
+
+It never names a specific model (that changes with hardware and presets,
+`docs/MODEL-TOPOLOGY.md`) and never repeats what `jarvis_reach.py` already
+answers live from settings - it points to those two other fixed answers
+instead, so there is exactly one place each fact is written.
+
+### 54.2 Fixed text: no card, no setting, no route
+
+The same shape as `jarvis_manner.py` and `jarvis_sayable.py`: no approval
+card either way, nothing written, nothing read beyond the sentence itself.
+Without `jarvis_identity.py` on the backend, the fast path says to run
+`apply-patches.ps1` (`jarvis_quick.IDENTITY_MISSING`), the same fallback
+shape as `jarvis_reach.py`'s own.
+
+### 54.3 Why the model still has its own copy of the same facts
+
+`jarvis_agent.LANE_SYSTEM`'s character block (§7 of `docs/ARCHITECTURE.md`,
+2026-09-27) tells the model the same things - software, no feelings, not a
+film character - because a chat that does not literally match `_WHO_ARE_
+YOU`'s grammar ("would you ever want to be human?", asked mid-conversation
+about something else) still reaches the model, which needs its own,
+separately-tested reason not to improvise romance or a body. This fixed
+answer is the fast, certain path for the common phrasings; the character
+block is the fallback for everything else. `tools/tool_eval/
+behaviour_cases.py`'s `not_iron_man` case checks the model-answered path;
+`backend/test_identity.py` checks this one.
+
+### 54.4 Style rules
+
+`ANSWER` is checked by `test_manner.py`'s `t_style_rules_for_every_fixed_
+line` (§7's "Style rules for every fixed line", I135) along with every
+other fixed line in this repo: no emoji, never more than one "sorry", no
+film phrases. It deliberately avoids the literal word "sir" even while
+disclaiming it ("no old-fashioned titles, no butler routine" rather than
+"no 'sir' here") so a blunt word-boundary check cannot mistake the
+disclaimer for the thing it disclaims.

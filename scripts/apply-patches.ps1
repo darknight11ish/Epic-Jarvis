@@ -729,6 +729,8 @@ $SHIPPED = @(
     'jarvis_data_health.py'      # do the chat history and memory databases open, is there disk space, do the settings files parse - read-only, WARN never fix
     # --- "Check for tool updates" (tool-updates.patch) ---
     'jarvis_tool_updates.py'     # tool-updates.patch: reports outdated Python packages, Rust crates and pinned GitHub tools; one card ever, never installs anything
+    # --- "Who are you?" fixed answers (feasibility I131, 2026-09-27) ---
+    'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
 )
 
 # The settings file. Installed only where none exists; never overwritten.

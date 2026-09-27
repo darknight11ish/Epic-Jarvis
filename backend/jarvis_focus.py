@@ -1546,6 +1546,15 @@ def is_on() -> bool:
     return ENGINE.on
 
 
+def is_active() -> bool:
+    """For jarvis_agent's "briefer during focus" note (feasibility I144,
+    2026-09-27): is a session running AND not paused, right now? In
+    memory; reads nothing. Paused counts as off - the owner stepped away
+    from the session's brevity too, not only its watching, so pausing (or
+    ending) turns the note off at once, with nothing left to switch back."""
+    return bool(ENGINE.on and not ENGINE.paused)
+
+
 def spoken_status(st: dict) -> str:
     """ "How am I doing?" - from the status the apps see (counts only)."""
     if not st.get("on"):
