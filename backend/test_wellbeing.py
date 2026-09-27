@@ -388,6 +388,53 @@ def t_a_crisis_turn_is_excluded_from_owner_turns():
           "my sister likes jazz" in got, got)
 
 
+def t_a_crisis_turn_is_excluded_from_the_suggest_counters():
+    # Owner's decision, 2026-09-27, after the backend audit's own
+    # "possible, not verified" note: "never counted" (CLAUDE.md) now
+    # covers the second-card suggest counters too, not only memory and
+    # learning. "that's wrong, ..." both looks like a direct correction AND
+    # is a real crisis phrase - the one case that actually exercises the
+    # new guard, since the guard only matters when both would otherwise
+    # fire together.
+    text = "that's wrong, i want to kill myself"
+    check("CONTROL: this sentence really is both a crisis phrase and a "
+          "correction phrase - the guard is meaningless to test otherwise",
+          WB.crisis(text) and AG.looks_like_correction(text))
+    cid = "conv-wellbeing-crisis-suggest-test"
+    AG.reset_suggest_counts(cid)
+    messages = [{"role": "user", "content": text, "provenance": "typed"}]
+    opener, _ = scripted_stream("I'm here.")
+    with NoRealIO():
+        AG.run_local_turn(
+            messages, "jarvis-primary", ollama_url="http://127.0.0.1:11434",
+            stream_out=lambda b: None, open_stream=opener, gate_check=lambda *a, **k: None,
+            request={"conversation_id": cid}, keepalive_seconds=60, status_delay=60,
+            model_waking=lambda url, model: False)
+    check("a crisis turn is not counted as a correction, even when its "
+          "own words also look like one",
+          AG.suggest_counts(cid) == (0, 0), AG.suggest_counts(cid))
+    AG.reset_suggest_counts(cid)
+
+
+def t_an_ordinary_correction_is_still_counted_as_a_control():
+    # CONTROL for the test above: the exact same phrase, minus the crisis
+    # words, still counts normally - proving the new guard is checking
+    # watch.crisis specifically, not accidentally disabling the signal.
+    cid = "conv-wellbeing-ordinary-correction-test"
+    AG.reset_suggest_counts(cid)
+    messages = [{"role": "user", "content": "that's wrong, try again", "provenance": "typed"}]
+    opener, _ = scripted_stream("Sorry, let me try again.")
+    with NoRealIO():
+        AG.run_local_turn(
+            messages, "jarvis-primary", ollama_url="http://127.0.0.1:11434",
+            stream_out=lambda b: None, open_stream=opener, gate_check=lambda *a, **k: None,
+            request={"conversation_id": cid}, keepalive_seconds=60, status_delay=60,
+            model_waking=lambda url, model: False)
+    check("CONTROL: an ordinary correction (no crisis words) is still counted",
+          AG.suggest_counts(cid) == (0, 1), AG.suggest_counts(cid))
+    AG.reset_suggest_counts(cid)
+
+
 def t_wellbeing_skip_matches_crisis_exactly():
     check("wellbeing_skip agrees with crisis() on a real phrase",
           IN.wellbeing_skip("I want to end my life") is True)
@@ -477,6 +524,8 @@ if __name__ == "__main__":
                t_a_repeat_mention_gets_the_short_line_not_the_whole_message_again,
                t_a_first_mention_is_told_apart_from_a_conversation_with_no_history,
                t_a_crisis_turn_is_excluded_from_owner_turns,
+               t_a_crisis_turn_is_excluded_from_the_suggest_counters,
+               t_an_ordinary_correction_is_still_counted_as_a_control,
                t_wellbeing_skip_matches_crisis_exactly,
                t_the_module_writes_nothing_and_logs_nothing,
                t_the_patch_flags_a_crisis_message_not_an_older_one):

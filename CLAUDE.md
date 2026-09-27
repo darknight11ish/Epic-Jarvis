@@ -432,6 +432,25 @@ Decided 2026-09-27, the owner's answers to `docs/OWNER-QUESTIONS-2026-09-27.md`
 - **Humour: a switch in "How Jarvis talks", off to start**; never on cards,
   errors or serious topics.
 
+Decided 2026-09-27, the owner's answers to the cross-cutting/backend audits'
+own "owner's call" findings:
+- **A crisis turn is excluded from the "suggest the bigger model" counters
+  too** - the same "never counted" rule already covers memory and learning;
+  it now covers this in-memory signal as well.
+- **The phone and desktop "open a chat" phrase lists are unified** into one
+  shared source both sides check, so the two can no longer quietly drift
+  apart (`net/OpenChatPhrase.kt` and `jarvis_quick.py`'s `_OPEN_CHAT` used
+  to be two separately-maintained lists).
+- **"Floating Jarvis"'s Bubble mode gets the Android conversation shortcut
+  it needs** - without one, Android 11+ silently never shows it as a
+  bubble at all, even with the setting on.
+- **App lock matches on both apps for the floating face/avatar**: neither
+  is hidden or blanked while locked - matching the desktop's original
+  behaviour, which already showed link, approval and error state while
+  locked. The phone's avatar used to go neutral instead; it now shows the
+  same connectivity/listening state regardless of App lock, same as the
+  desktop always did.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

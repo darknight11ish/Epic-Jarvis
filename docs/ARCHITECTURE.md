@@ -1387,7 +1387,14 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
 - **Phone:** the whole app - including Home's "Stop everything" button,
   which is behind App lock like the rest of the app (JARVIS-API §28); the
   PC's hotkey and tray row are not. The home-screen widget only ever shows the
-  `notice` text and offers Deny only, lock or not.
+  `notice` text and offers Deny only, lock or not. **The floating avatar**
+  ("Floating Jarvis", §56) is not covered either, for the same reason as the
+  desktop's floating face: App lock does not change what it shows
+  (`floatingAvatarShowsContent`, `data/FloatingAvatar.kt` - matched to the
+  desktop by the owner's decision, 2026-09-27, cross-cutting audit finding
+  #7, after the two apps were found to disagree). It shows only whether the
+  PC is reachable and whether this phone is listening at all - never a word
+  Jarvis heard, said or is about, and there is no button on it to act with.
 - **Watches and other bridged devices (phone, 2026-09-26):** every
   notification Jarvis posts - approvals, timers, alarms, reminders, "tell me
   when", the link and wake-word status - is local only

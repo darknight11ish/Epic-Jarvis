@@ -42,19 +42,21 @@ enum class FloatingAvatarMode(val wire: String, val label: String) {
  * short "listening"/"heard you" status) or stay neutral - no words, no
  * status, just an idle mark.
  *
- * The same reasoning the desktop's HUD window already runs on
- * (`docs/ARCHITECTURE.md` section 8: the HUD is covered by App lock, unlike
- * the widget, which stays visible but shows less): the floating avatar is
- * this app's OWN drawn surface, on top of every other app, not a launcher
- * widget - so while the owner has asked for App lock, it follows the HUD's
- * rule rather than the widget's. It does not disappear (Overlay and Bubble
- * both persist through everything else the owner does with the phone;
- * flickering in and out on every relock would be its own nuisance and,
- * unlike a window, cannot simply not be shown while still doing its job),
- * but it never shows a word Jarvis heard, said or is about, while locked.
+ * Always `true`: App lock does not change what this surface shows (owner's
+ * decision, 2026-09-27, cross-cutting audit finding #7 - matching the
+ * desktop's own floating face, whose surfaceState keeps showing link,
+ * approval and error state regardless of App lock). What it shows is only
+ * connectivity and "am I listening right now" - never a word Jarvis heard,
+ * said or is about, never an approval's own text, and there is no button to
+ * act on any of it - so showing it while locked reveals nothing the desktop
+ * doesn't already, and the widget and tray already show this much on the
+ * PC while locked too.
  *
  * Tapping it always opens the real app, whose own App-lock screen decides
  * next - this only decides what the small floating surface itself may say
- * before that tap.
+ * before that tap. The parameter is kept (rather than dropping it and every
+ * caller's App lock argument) so a caller reads as "this is where App lock
+ * was considered", not as if App lock was never thought about here.
  */
-fun floatingAvatarShowsContent(appLockOn: Boolean): Boolean = !appLockOn
+@Suppress("UNUSED_PARAMETER")
+fun floatingAvatarShowsContent(appLockOn: Boolean): Boolean = true

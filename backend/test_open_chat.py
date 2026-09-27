@@ -149,9 +149,24 @@ def t_fixed_line_style():
         sched.close()
 
 
+def t_the_phones_own_list_is_current():
+    # Cross-cutting audit finding #7, 2026-09-27: the phone's local
+    # net/OpenChatPhrase.kt used to be a separately hand-maintained list
+    # that had already drifted from this grammar. Generated now, and
+    # checked here the same way test_card_words.py holds card-words-cases.json
+    # to its own producer.
+    sys.path.insert(0, str(HERE.parent / "tools"))
+    import gen_open_chat_cases as G
+    doc = G.document()
+    have = G.PHONE.read_text(encoding="utf-8") if G.PHONE.exists() else ""
+    check(f"{G.PHONE.relative_to(G.ROOT)} matches (python3 tools/gen_open_chat_cases.py)",
+          have == doc)
+
+
 if __name__ == "__main__":
     for fn in (t_every_phrasing_is_answered_with_no_model, t_answer_turn_end_to_end,
-               t_route_carries_the_intent_name, t_fixed_line_style):
+               t_route_carries_the_intent_name, t_fixed_line_style,
+               t_the_phones_own_list_is_current):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

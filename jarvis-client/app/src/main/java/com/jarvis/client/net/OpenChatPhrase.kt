@@ -10,38 +10,53 @@ package com.jarvis.client.net
  * - the exact same field [com.jarvis.client.voice.VoiceSession] already
  * reads to send the turn on to the model. This only matches THAT text, on
  * the phone, against a short fixed phrase list, the same shape as
- * [CardWords] and the backend's own `jarvis_quick.py` grammar (a small,
- * exact set, never a guess): a sentence that is not wholly one of these
- * phrases is an ordinary question and goes to the model as always, floating
- * avatar or not.
+ * [CardWords]: a sentence that is not wholly one of these phrases is an
+ * ordinary question and goes to the model as always, floating avatar or
+ * not.
  *
- * Deliberately no attempt to also mirror `jarvis_quick.py`'s own normaliser
- * (leading "please", trailing "thanks", and so on): that engine also
- * decides what the model never sees, and copying its exact edge cases here
- * would risk this list quietly drifting from it. This list is only ever
- * consulted for ONE extra thing - whether to also bring the app to the
- * front - never instead of sending the turn.
+ * [PHRASES] is a hand-picked subset of the backend's own `jarvis_quick.py`
+ * `_OPEN_CHAT` grammar - every "chat"-wording phrase it accepts (the
+ * backend also has "jarvis bar" wording, which is the desktop's own window
+ * name and has no place in this app's vocabulary). Cross-checked against
+ * that grammar by `tools/gen_open_chat_cases.py`
+ * (`open-chat-cases.json`, [OpenChatPhraseContractTest]) rather than
+ * hand-copied, after the cross-cutting audit (2026-09-27, finding #7)
+ * found this list had already drifted from it - phrases like "open
+ * jarvis" and "let's chat" used to bring the app to the front here but
+ * would not have opened anything if typed or said as an ordinary chat
+ * message, which is exactly the inconsistency unifying the two closes.
+ * Still deliberately narrower than the backend's own normaliser (leading
+ * "please", trailing "thanks", and so on): that engine also decides what
+ * the model never sees, and this list is only ever consulted for ONE
+ * extra thing - whether to also bring the app to the front - never
+ * instead of sending the turn, so it does not need to match everything
+ * the backend's fuller normaliser tolerates, only to never disagree about
+ * the phrases it does claim.
  */
 object OpenChatPhrase {
 
-    /** Fixed phrasings, already lower-cased and trimmed of outer whitespace. */
+    /**
+     * Fixed phrasings, already lower-cased and trimmed of outer whitespace.
+     * Every entry here must equal one of `open-chat-cases.json`'s own
+     * "matches" - [OpenChatPhraseContractTest] checks it.
+     */
     private val PHRASES = setOf(
         "open a chat",
-        "open the chat",
-        "open chat",
         "open a chat window",
+        "open the chat",
         "open the chat window",
-        "open the chat screen",
+        "show me a chat",
+        "show me a chat window",
         "show me the chat",
+        "show me the chat window",
+        "show chat",
+        "show chat window",
         "show the chat",
-        "show me the chat screen",
-        "show the chat screen",
-        "open jarvis",
-        "open the jarvis app",
-        "open the app",
+        "show the chat window",
+        "bring up a chat",
+        "bring up a chat window",
         "bring up the chat",
-        "let's chat",
-        "lets chat",
+        "bring up the chat window",
     )
 
     private val LEAD = Regex("^(?:(?:hey|hi|ok|okay)\\s+jarvis\\b[\\s,]*|jarvis\\b[\\s,]*)+")

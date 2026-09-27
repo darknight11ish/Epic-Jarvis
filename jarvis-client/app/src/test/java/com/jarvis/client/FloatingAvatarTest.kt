@@ -3,7 +3,6 @@ package com.jarvis.client
 import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.data.floatingAvatarShowsContent
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,8 +31,11 @@ class FloatingAvatarTest {
     }
 
     @Test
-    fun `app lock hides the avatar's own content`() {
-        assertFalse(floatingAvatarShowsContent(appLockOn = true))
+    fun `app lock does not change what the avatar shows (owner's decision, 2026-09-27)`() {
+        // Cross-cutting audit finding #7: matches the desktop's own
+        // floating face, which keeps showing link/approval/error state
+        // regardless of App lock.
+        assertTrue(floatingAvatarShowsContent(appLockOn = true))
         assertTrue(floatingAvatarShowsContent(appLockOn = false))
     }
 }

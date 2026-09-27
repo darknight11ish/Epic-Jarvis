@@ -8426,7 +8426,7 @@ for why specialUse over dataSync; that label is a convention shared between
 those two files, not a JARVIS-API.md section) holding one small `WindowManager`
 window: a draggable circle showing the launcher icon, with a small coloured
 badge for the link (nothing shown when everything is fine, amber while
-reconnecting, red while offline - neutral under App lock, 56.5).
+reconnecting, red while offline - real colour even under App lock, 56.5).
 `FLAG_NOT_FOCUSABLE` and `FLAG_NOT_TOUCH_MODAL` mean it never steals key
 input or the touches meant for whatever app is underneath it. The whole
 avatar also dims (still tappable, never hidden) whenever "Listen on this
@@ -8492,37 +8492,30 @@ other app - not a launcher-drawn widget, which is why it does not follow
 `ApprovalWidget`'s "stays visible, shows less" rule as-is. Its real
 counterpart is the desktop's floating face (§57), the other half of the
 same picture-in-picture idea; both are always-on-top surfaces with the
-same purpose. The two apps chose opposite App-lock rules for it, though:
-the desktop's floating face is NOT behind App lock at all, and keeps
-showing approval, error and offline states while locked (`windows.rs`),
-while the phone goes neutral instead (below). Whether the two should match
-is the owner's call, not resolved here (bug audit 2026-09-27, finding #7);
-this section only documents the phone's own rule. It is also closer in
-shape to the desktop's HUD window, which `docs/ARCHITECTURE.md` §8 already
-covers with App lock in full: unlike the HUD, which simply is not shown
-until asked for, the floating avatar's entire purpose is to stay
-reachable - hiding it every time the phone relocks (which can be as often
-as every minute, "Lock again after") would be its own nuisance, and
-disappearing and reappearing is itself a bigger tell than a neutral dot.
+same purpose. The two apps originally chose opposite App-lock rules for
+it: the desktop's floating face was never behind App lock at all, and
+kept showing approval, error and offline states while locked (`windows.rs`),
+while the phone went neutral instead. Found by the cross-cutting audit
+(2026-09-27, finding #7) and put to the owner, who chose to match the
+desktop: **App lock does not change what the avatar shows, on either
+app.**
 
-So the chosen rule (`data/FloatingAvatar.kt`'s `floatingAvatarShowsContent`):
-**while App lock is on, the avatar keeps showing - it never vanishes -
-but shows nothing content-bearing while it is locked.** Concretely, the
-Overlay's link-coloured badge goes neutral (grey, and hidden when nothing
-is wrong) rather than green/amber/red, and the Bubble path shows nothing
-beyond what `WakeWordService`'s own pre-existing "hey Jarvis" notification
-already showed (unaffected by this feature - attaching bubble metadata to
-it adds no new content, only a new way to tap the same notification).
-Tapping either always opens `MainActivity`, whose own existing App-lock
-screen - unchanged, not duplicated here - decides what is shown next; the
-avatar's own neutral state is only about what it says BEFORE that tap.
+`data/FloatingAvatar.kt`'s `floatingAvatarShowsContent` now always
+returns `true` - App lock never blanks the avatar. Concretely, the
+Overlay's link-coloured badge keeps its real colour (green/amber/red,
+hidden only when everything is fine) while locked, and the Bubble path is
+unaffected either way - it shows nothing beyond what
+`WakeWordService`'s own pre-existing "hey Jarvis" notification already
+showed (attaching bubble metadata to it adds no new content, only a new
+way to tap the same notification). Tapping either always opens
+`MainActivity`, whose own existing App-lock screen - unchanged, not
+duplicated here - decides what is shown next.
 
-Known simplification, said plainly: the rule above reads only
-`Security.appLock` (on or off), not the "Lock again after" relock timer -
-a background service has no reliable feed of `LockSession`'s own
-in-memory clock, which is scoped to `MainActivity`'s lifetime. An owner
-who wants the stricter behaviour turns App lock on; there is no separate
-dial for "neutral only after the relock timer has actually fired" today.
+This reveals no more than the desktop already did: what the avatar can
+show is connectivity and "am I listening right now", never a word Jarvis
+heard, said or is about, never an approval's own text, and there is no
+button on it to act with - the same limits §56 states for the feature as
+a whole, unaffected by this change.
 
 ### 56.6 Verification
 

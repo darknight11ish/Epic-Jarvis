@@ -64,11 +64,11 @@ import kotlinx.coroutines.launch
  * stops it being started some other way (`adb`, a stale PendingIntent).
  *
  * App lock: the same rule the class doc of [floatingAvatarShowsContent]
- * explains - this is this app's own drawn surface, so while the owner has
- * App lock on, the badge goes neutral (no colour, nothing about
- * reachability) rather than disappearing. Tapping it still always opens the
- * real app, whose own lock screen decides what happens next; this service
- * does not duplicate that check, only the little it shows beforehand.
+ * explains - App lock does not change what this badge shows, matching the
+ * desktop's own floating face (owner's decision, 2026-09-27, cross-cutting
+ * audit finding #7). Tapping it still always opens the real app, whose own
+ * lock screen decides what happens next; this service does not duplicate
+ * that check, only the little it shows beforehand.
  */
 class AvatarOverlayService : Service() {
 

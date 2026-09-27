@@ -4613,8 +4613,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # and the crisis check already trust for "is this really what the owner
     # just said"). Counted here, per conversation, so jarvis_second_card can
     # decide - at the end of the turn, never mid-answer - whether to suggest
-    # the bigger model; see _maybe_suggest_bigger_model below.
-    if watch.newest_own_words and looks_like_correction(watch.newest_own_words):
+    # the bigger model; see _maybe_suggest_bigger_model below. Never on a
+    # crisis turn: "Crisis messages are never learned from and never
+    # counted" (CLAUDE.md, 2026-09-27) already covers memory and learning;
+    # extended here to this counter too, the owner's decision after the
+    # backend audit's own "possible, not verified" note (2026-09-27).
+    if (not watch.crisis and watch.newest_own_words
+            and looks_like_correction(watch.newest_own_words)):
         note_correction(conv_id)
     offer: dict = {"short": bool(names) and short_list_on(),
                    "plugins": bool(names) and _plugins_configured(),
@@ -5010,11 +5015,17 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # (check_call, counted in watch.bad by _one_call's `watch.broken`) -
         # "the model's own output came out malformed". Then, whatever this
         # turn counted, give jarvis_second_card one chance to notice and
-        # offer the bigger model - never mid-answer, always last.
-        broken_this_turn = sum(watch.bad.values())
-        if broken_this_turn:
-            note_struggle(conv_id, broken_this_turn)
-        _maybe_suggest_bigger_model(conv_id)
+        # offer the bigger model - never mid-answer, always last. Never on
+        # a crisis turn, and the offer itself is skipped too, not only the
+        # count: raising a "try the bigger model?" card right after a
+        # crisis answer would be its own bad moment, never mind what it
+        # counts (the owner's decision, 2026-09-27, extending "never
+        # counted" to this signal).
+        if not watch.crisis:
+            broken_this_turn = sum(watch.bad.values())
+            if broken_this_turn:
+                note_struggle(conv_id, broken_this_turn)
+            _maybe_suggest_bigger_model(conv_id)
     # The picture's words count as a read (with_picture_text): this PC's
     # record of the turn then marks the conversation as having read outside
     # text (jarvis_chat_log.record_turn reads `tools_ran`).

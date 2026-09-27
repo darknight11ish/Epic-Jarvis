@@ -13,9 +13,20 @@ class OpenChatPhraseTest {
         assertTrue(OpenChatPhrase.matches("open a chat"))
         assertTrue(OpenChatPhrase.matches("Open the chat"))
         assertTrue(OpenChatPhrase.matches("show me the chat"))
-        assertTrue(OpenChatPhrase.matches("show me the chat screen."))
-        assertTrue(OpenChatPhrase.matches("let's chat"))
-        assertTrue(OpenChatPhrase.matches("open jarvis"))
+        assertTrue(OpenChatPhrase.matches("bring up the chat window"))
+    }
+
+    @Test
+    fun `no longer matches what the backend's own grammar never did (bug audit 2026-09-27, finding #7)`() {
+        // These used to be in PHRASES and brought the app to the front here
+        // - but typing or saying the same words as an ordinary chat message
+        // would never have opened anything, since jarvis_quick.py's own
+        // _OPEN_CHAT grammar never matched them either. Removed so the two
+        // can no longer disagree; open-chat-cases.json is the shared proof.
+        assertFalse(OpenChatPhrase.matches("show me the chat screen."))
+        assertFalse(OpenChatPhrase.matches("let's chat"))
+        assertFalse(OpenChatPhrase.matches("open jarvis"))
+        assertFalse(OpenChatPhrase.matches("open the app"))
     }
 
     @Test
