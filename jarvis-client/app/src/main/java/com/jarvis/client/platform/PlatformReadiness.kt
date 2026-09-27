@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
+import com.jarvis.client.data.PhoneAddress
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -49,38 +50,26 @@ data class ReadinessItem(
 object PlatformReadiness {
 
     /**
-     * Hosts the network security config permits in cleartext. Kept in step with
-     * res/xml/network_security_config.xml by hand: there is no API to read the
-     * parsed config back, so a mismatch here is a lie on the readiness screen
-     * rather than a runtime failure.
+     * Mirrors what network_security_config.xml's `<domain>` rows actually
+     * match - `ts.net` and `nord` (with subdomains), the phone itself - and
+     * nothing else. The list and the matching live in one place,
+     * [PhoneAddress.cleartextPermitted], which PhoneAddressTest holds to the
+     * real XML file; this used to keep its own copy "in step by hand".
      *
-     * Two mesh products, same shape: Tailscale's MagicDNS name and NordVPN
-     * Meshnet's Nord Name are both a name the user types at run time, so both
-     * get a suffix entry here exactly like the XML's two `<domain>` rows.
-     */
-    private val CLEARTEXT_EXACT = setOf("ts.net", "nord", "localhost", "127.0.0.1")
-    private val CLEARTEXT_SUFFIXES = listOf(".ts.net", ".nord")
-
-    /**
-     * Mirrors what `<domain includeSubdomains="true">ts.net</domain>` (and the
-     * `nord` row beside it) actually match: the domain itself and labels
-     * beneath it, and nothing else.
-     *
-     * The previous predicate held a bare `"ts.net"` and tested it with `endsWith`,
-     * so `notmyts.net` and `evilts.net` — registrable public domains that have
-     * nothing to do with Tailscale — reported "permitted" on the one screen whose
-     * whole job is to make this policy legible. It failed in the safe direction,
-     * because the platform would still refuse the connection, but the same shape of
-     * bug in the other app sent a bearer token to a public host in the clear.
+     * The copy before that held a bare `"ts.net"` and tested it with
+     * `endsWith`, so `notmyts.net` and `evilts.net` - registrable public
+     * domains that have nothing to do with Tailscale - reported "permitted"
+     * on the one screen whose whole job is to make this policy legible. It
+     * failed in the safe direction, because the platform would still refuse
+     * the connection, but the same shape of bug in the other app sent a
+     * bearer token to a public host in the clear.
      */
     fun cleartextPermitted(host: String): Boolean {
         val url = parsed(host) ?: return false
         // https is not cleartext at all, so the policy simply does not apply and
         // warning about it would be a false alarm.
         if (!url.isHttp) return true
-        val h = url.host
-        if (h in CLEARTEXT_EXACT) return true
-        return CLEARTEXT_SUFFIXES.any { h.endsWith(it) }
+        return PhoneAddress.cleartextPermitted(url.host)
     }
 
     /**
@@ -193,14 +182,17 @@ object PlatformReadiness {
                 "Android will let this app connect to $host."
             } else {
                 "Android will block $host. Use the desktop's name on your private " +
-                    "network instead of its number: its Tailscale name (ends in " +
-                    ".ts.net) or its NordVPN Meshnet name (ends in .nord)."
+                    "network instead of a number or a home-network name: its " +
+                    "Tailscale name (ends in .ts.net) or its NordVPN Meshnet name " +
+                    "(ends in .nord)."
             },
             technical = "Cleartext HTTP. The desktop serves plain HTTP over the private " +
                 "network, and Android refuses plain HTTP except to names listed in " +
                 "res/xml/network_security_config.xml: *.ts.net (Tailscale MagicDNS) " +
                 "and *.nord (Meshnet Nord Name). The config can list a name but " +
-                "cannot express an IP range, so a 100.x address is refused.",
+                "cannot express an IP range, so a 100.x or 192.168.x address is " +
+                "refused; .local and other home-network names are left off on " +
+                "purpose (docs/ARCHITECTURE.md section 2).",
             state = if (host.isNotBlank() && cleartextPermitted(host)) {
                 ReadinessItem.State.OK
             } else {

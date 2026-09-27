@@ -38,7 +38,8 @@ object OwnNetwork {
      * this phone can connect to: network_security_config.xml allows plain
      * http:// only to .ts.net and .nord names (and the phone itself), so a
      * home-network address that passes [problem] still cannot be reached
-     * (ease-of-use audit 2026-09-27, #1e; PlatformReadiness says so for one).
+     * (ease-of-use audit 2026-09-27, #1e) - and is refused, in its own
+     * sentence, by [PhoneAddress], which the app asks instead of this alone.
      */
     const val MESSAGE =
         "Jarvis's address {address} is not on your own networks, so this app will not " +
