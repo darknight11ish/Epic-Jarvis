@@ -42,6 +42,7 @@ import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
+import { validToFromText } from "./valid-to.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -1454,24 +1455,24 @@ function dismissSleepOffer() {
  * `undefined` if the owner cancelled. `undefined` is a distinct answer from
  * `null` on purpose: the caller must abort the whole action on a cancel,
  * not quietly fall back to "just now" for a date the owner never confirmed.
+ *
+ * An answer that is not a usable date ("last week", a day next month) asks
+ * again, with the reason above the question and the typed words kept. It
+ * used to show an error and return `undefined` - so a Forget the owner had
+ * already confirmed was dropped without a word (play tester, 2026-09-27).
+ * What counts as a date is `validToFromText` (valid-to.js).
  */
 function promptValidTo(message) {
-  const raw = window.prompt(message, "");
-  if (raw === null) return undefined;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  // A bare YYYY-MM-DD is parsed as local midnight, not Date.parse's UTC
-  // midnight - west of Greenwich that shift lands the timestamp on the
-  // previous calendar day, the same trap the "as of" picker above avoids.
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-  const ts = dateOnly
-    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])).getTime()
-    : Date.parse(trimmed);
-  if (Number.isNaN(ts)) {
-    window.alert(`"${trimmed}" is not a date I understand. Try YYYY-MM-DD.`);
-    return undefined;
+  let typed = "";
+  let problem = "";
+  for (;;) {
+    const raw = window.prompt(problem ? `${problem}\n\n${message}` : message, typed);
+    if (raw === null) return undefined;
+    const answer = validToFromText(raw);
+    if (!("error" in answer)) return answer.seconds;
+    typed = raw;
+    problem = answer.error;
   }
-  return ts / 1000;
 }
 
 /** Dates before this are refused by "What did you know on…". The server
@@ -2164,7 +2165,12 @@ function renderFacts() {
               "if it stopped being true a while ago and you are only telling " +
               "Jarvis about it now."
             );
-            if (validTo === undefined) return; // the date prompt was cancelled
+            if (validTo === undefined) {
+              // Cancel on the date box after "yes, forget it": say so, so
+              // the owner is not left thinking the fact is gone.
+              toast("Nothing was forgotten.");
+              return;
+            }
             const args = { id: Number(f.id) };
             if (validTo !== null) args.valid_to = validTo;
             await memoryWrite("brain_memory_forget", args, FORGOTTEN);
