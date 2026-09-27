@@ -64,10 +64,10 @@ stop, lets you swap its brain from your phone, and still asks first.
 | 1.6–4.8 | Iris. The real Jarvis bar: the step line ticks "asking the model" → "using web_search" → "web_search done" → "writing the answer", then the answer. | **It looks it up.** You ▸ How do sourdough starters work? · Example answer |
 | 4.8–8.0 | The same answer with "Where this came from" open; a beam round "not found in what Jarvis read". | **It shows its sources.** And flags quotes it can't find. |
 | 8.0–11.2 | Iris. The reactor listening; the owner's voice drawn as sound, which settles into words. | **First: is it you?** → **Then the words.** You ▸ Hey Jarvis… · After voice setup |
-| 11.2–14.4 | The real Jarvis bar speaking; "Stop." freezes it; a dip, then silence. | You ▸ **Stop.** It stops talking. · After voice setup |
-| 14.4–17.6 | Iris. The phone's Brain screen, Model list: a tap on "Use", then "Waiting for your approval". | **Swap its brain.** Qwen3 8B by default |
-| 17.6–20.8 | The approval card rises; a beam round "Nothing runs until you decide."; a tap on Approve. | **You say yes.** |
-| 20.8–25.6 | Iris. Particles settle into the reactor; it shrinks beside the name. | **Your PC. Your AI. Your rules.** Jarvis · Windows PC · 8 GB NVIDIA graphics card · Android · Free |
+| 11.2–14.4 | The real Jarvis bar speaking; "Stop." freezes it; a dip, then silence. | You ▸ **Stop.** It stops talking. · After voice setup · Example answer |
+| 14.4–17.6 | Iris. The phone's Brain screen, Model list: a tap on "Use", then "Waiting for your approval" at the top of the list. | **Swap its brain.** Qwen3 8B by default |
+| 17.6–20.8 | A tap on "Open the card →"; the card opens on its own (the app shows it on Home); a beam round "Nothing runs until you decide."; a tap on Approve. | **You say yes.** |
+| 20.8–25.6 | Iris. Particles settle into the reactor, which stays above the line. | **Your PC. Your AI. Your rules.** Jarvis · Windows PC · 8 GB NVIDIA graphics card · Android · Free |
 
 The upright cut (13.6 s): the hook, "Swap its brain.", "You say yes.",
 "Stop.", and the end card.
@@ -90,7 +90,7 @@ repository. **Nothing has run on the owner's PC yet.**
 | Stop. It stops talking. | today, after voice setup | Talking over a reply: it stops for the owner's voice, and for the word "stop" said by anyone; not for the TV or its own voice; never transcribed (`backend/jarvis_voice_flow.py:12-37`). On by default on the PC (`jarvis-desktop/src/barge-in.js:14-17`); listening must be on. |
 | Swap its brain (from the phone) | today | The phone's Brain › Model and PC › Model list with "Active" and "Use" (`jarvis-client/.../ui/screens/BrainScreen.kt:583-587, 937-940`); `JarvisRuntime.switchModel` (`jarvis-client/.../JarvisRuntime.kt:1224`). Allowed by the owner on 2026-09-18 (`CLAUDE.md`). |
 | "Waiting for your approval … Nothing changes until you do." | today | `BrainScreen.kt:1020-1033`, with `Approvals.WHERE` (`net/Approvals.kt:17`). |
-| You say yes (the approval card) | today | "Needs your OK", "Deny", "Approve" (`net/CardWords.kt:29, 32`); the title (`backend/jarvis_card_words.py:99`); "Nothing runs until you decide." (`ui/approval/ApprovalCard.kt:545`). A model switch is a plain tap: the phone asks for a fingerprint only on risky cards by default (`data/Security.kt`). The switch is never shown finishing. |
+| You say yes (the approval card) | today | "Needs your OK", "Deny", "Approve" (`net/CardWords.kt:29, 32`); the title (`backend/jarvis_card_words.py:99`); "Nothing runs until you decide." (`ui/approval/ApprovalCard.kt:545`). By default the phone asks for a fingerprint or PIN only on risky cards (`data/Security.kt:29, 58-60`); whether this card counts as risky is decided on the PC, so the video ends on the Approve press and shows neither. The switch is never shown finishing. |
 | Windows PC · 8 GB NVIDIA graphics card · Android · Free | today | `README.md:3-8` ("Free and non-commercial"); sized for an 8 GB NVIDIA card (`docs/MODEL-TOPOLOGY.md:3`). |
 | The reactor | today | The app's own drawing code (`jarvis-desktop/src/faces.html`), extracted by `tools/extract-reactor.mjs`; its states are the app's own state names. |
 
@@ -102,6 +102,15 @@ repository. **Nothing has run on the owner's PC yet.**
 | Web search sends only the search words out | today | `jarvis-desktop/src/web-search.js:61`. |
 | The phone connects only on your own networks | today | `jarvis-client/.../data/OwnNetwork.kt:5-30` (the owner allowed this item in the post text only). |
 | Ready for a second graphics card: longer conversations, pictures, one bigger model | ready | `backend/jarvis_second_card.py`; off until a second card is found and the owner approves. |
+
+## After the final outside check
+
+An outside reviewer checked the finished render against the code. Fixed:
+
+- the phone's approval card was drawn rising over the Brain page, where the app never shows it; it now opens from "Open the card →", on its own;
+- the made-up reply in the Stop scene now carries "Example answer";
+- the card's label, title colour and Deny button now match `ApprovalCard.kt`, and the waiting box sits at the top of the Model plate;
+- two slow lines got more time, the small labels were enlarged, the sources show two different sites, and the scrolled window no longer shows a half-cut header.
 
 ## Left out on purpose
 
@@ -126,5 +135,6 @@ repository. **Nothing has run on the owner's PC yet.**
 - **The phone is drawn**, because the Android app cannot be rendered here.
   Every word on it is the app's own (cited above). No sizes, speeds or badges
   are drawn, because they come from data the example does not have.
+- **The sources are two web pages from an example search** (en.wikipedia.org and simple.wikipedia.org); the list and the quote warning were produced by running the backend's own `jarvis_sources.py` on that made-up result.
 - **The answer and the question are examples.** Nothing here was run on the
   owner's PC.

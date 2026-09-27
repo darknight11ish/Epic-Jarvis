@@ -50,11 +50,14 @@ HEAD = '''<!doctype html>
 # theme colours from Themes.kt. Every string is the app's own:
 #   "Brain" (BrainScreen.kt:260), "Model and PC" (:583), section "Model" (:587),
 #   a row = the model's ref (machine type) + family (:909-926), "Active" / "Use"
-#   (:937, :940); the waiting box (:1020-1036) with Approvals.WHERE
+#   (:937, :940); the waiting box, at the top of the Model plate (:878-881,
+#   :1020-1036) with Approvals.WHERE
 #   (net/Approvals.kt:17); the card: CardWords.KICKER "Needs your OK",
 #   the title from backend/jarvis_card_words.py:99 via title_for("switch_model"),
 #   CardWords.BUTTONS "Deny" "Approve", and "Nothing runs until you decide."
-#   (ui/approval/ApprovalCard.kt:545). No sizes, speeds or badges are drawn:
+#   (ui/approval/ApprovalCard.kt:545); the label in textMid and the title in
+#   warnInk (:332-342). The card opens from "Open the card →" (it is shown on
+#   Home, not over the Brain page), so it is drawn on its own. No sizes, speeds or badges are drawn:
 #   those come from data the example does not have, or from the owner's PC.
 PHONE = '''          <div class="phone-host" style="{host}">
             <div class="phone" id="phone" style="width: 500px; height: 980px">
@@ -65,13 +68,13 @@ PHONE = '''          <div class="phone-host" style="{host}">
                   <div class="grp">Model and PC</div>
                   <div class="sec">Model</div>
                   <div class="plate">
+                    <div class="wait" id="wait">
+                      <div class="wt">Waiting for your approval</div>
+                      <div class="wb">Switching to llama3.1:8b is waiting for your approval. Approve it on your PC or on this phone's Home screen. Nothing changes until you do.</div>
+                      <div class="wl"><span id="open-card">Open the card →</span></div>
+                    </div>
                     <div class="row"><div class="nm"><div class="ref">jarvis-primary</div><div class="meta">qwen3</div></div><span class="pill">Active</span></div>
                     <div class="row"><div class="nm"><div class="ref">llama3.1:8b</div><div class="meta">llama</div></div><span class="quiet" id="use">Use</span></div>
-                  </div>
-                  <div class="wait" id="wait">
-                    <div class="wt">Waiting for your approval</div>
-                    <div class="wb">Switching to llama3.1:8b is waiting for your approval. Approve it on your PC or on this phone's Home screen. Nothing changes until you do.</div>
-                    <div class="wl">Open the card →</div>
                   </div>
                 </div>
                 <div class="card" id="card">
@@ -82,6 +85,7 @@ PHONE = '''          <div class="phone-host" style="{host}">
                   <svg class="beam" id="beam7"><rect class="rest" rx="10" /><rect class="trace" rx="10" /></svg>
                 </div>
                 <div class="touch" id="touch-use"></div>
+                <div class="touch" id="touch-open"></div>
                 <div class="touch" id="touch-ok"></div>
               </div>
             </div>
@@ -131,6 +135,7 @@ def landscape():
     s += '          <div class="head sub" id="h5b" style="left: 110px; top: 278px">It stops talking.</div>\n'
     s += slab("slab4", "left: 640px; top: 300px; width: 1180px", [("r3", "r3-speaking.png")])
     s += '          <div class="chip" id="chip5" style="left: 110px; top: 960px">After voice setup</div>\n'
+    s += '          <div class="chip" id="ex5" style="left: 640px; top: 960px">Example answer</div>\n'
     s += '        </section>\n'
     s += '        <section class="scene" id="s5">\n'
     s += '          <div class="head" id="h6" style="left: 150px; top: 400px">Swap its brain.</div>\n'
@@ -162,6 +167,7 @@ def vertical():
     s += '          <div class="head sub" id="h5b" style="left: 90px; top: 490px">It stops talking.</div>\n'
     s += slab("slab4", "left: 50px; top: 640px; width: 980px", [("r3", "r3-speaking.png")])
     s += '          <div class="chip" id="chip5" style="left: 90px; top: 1500px">After voice setup</div>\n'
+    s += '          <div class="chip" id="ex5" style="left: 50px; top: 1250px">Example answer</div>\n'
     s += '        </section>\n'
     s += '        <section class="scene" id="s6">\n'
     s += '          <div class="end-line" id="endl" style="top: 860px; line-height: 1.08">Your PC.<br />Your AI.<br /><i>Your rules.</i></div>\n'
@@ -216,11 +222,12 @@ SCRIPT = r'''      (function () {
               var sh = $("slab2-shots"), inner = $("slab2-inner"), cur = 0;
               for (var q = 0; q < seq.length; q++) if (t >= seq[q][0]) cur = q;
               function hOf(id) { var im = $(id); return im.naturalHeight ? im.naturalHeight * sh.offsetWidth / im.naturalWidth : 0; }
-              var MAXH = 740, hNow = Math.min(MAXH, hOf(seq[cur][1])), hPrev = cur > 0 ? Math.min(MAXH, hOf(seq[cur - 1][1])) : hNow;
-              var hk = g.prog(t, seq[cur][0], 0.18, g.E.out3);
-              sh.style.height = (hPrev + (hNow - hPrev) * hk).toFixed(1) + "px";
-              var over = Math.max(0, hOf("r2") - MAXH);
-              inner.style.transform = "translateY(" + (-over * g.prog(t, H.b3 + 0.35, 0.5, g.E.io)).toFixed(1) + "px)";
+              // r2 is shown scrolled past its header row (to the divider at 21 % of its height).
+              var SCROLL = 0.212 * hOf("r2"), sk = g.prog(t, H.b3 + 0.3, 0.45, g.E.io);
+              function vis(i) { return seq[i][1] === "r2" ? hOf("r2") - SCROLL * (i === cur ? sk : 1) : hOf(seq[i][1]); }
+              var hNow = vis(cur), hPrev = cur > 0 ? vis(cur - 1) : hNow, hk = g.prog(t, seq[cur][0], 0.18, g.E.out3);
+              sh.style.height = (seq[cur][1] === "r2" ? Math.min(hNow, hPrev + (hNow - hPrev) * hk) : hPrev + (hNow - hPrev) * hk).toFixed(1) + "px";
+              inner.style.transform = "translateY(" + (seq[cur][1] === "r2" ? -SCROLL * sk : 0).toFixed(1) + "px)";
               A($("ex"), t, H.answer, {});
               R($("h3a"), t, H.b3HeadA, {});
               R($("h3b"), t, H.b3HeadB, {});
@@ -250,6 +257,7 @@ SCRIPT = r'''      (function () {
             R($("h5"), t, H.stopHead, { d: 0.12 });
             R($("h5b"), t, H.stopHeadB, {});
             A($("chip5"), t, H.b5 + 0.1, { dy: 0 });
+            A($("ex5"), t, H.b5 + 0.1, { dy: 0 });
             // B6 and B7: swap its brain; you say yes.
             if ($("phone")) {
               A($("phone"), t, H.b6, { d: 0.3, dy: 40 });
@@ -260,12 +268,17 @@ SCRIPT = r'''      (function () {
               tu.style.left = (use.offsetLeft + use.offsetWidth / 2 + use.offsetParent.offsetLeft) + "px";
               tu.style.top = (use.offsetTop + use.offsetHeight / 2 + use.offsetParent.offsetTop + $("pg").offsetTop) + "px";
               g.tap(tu, t, H.tapUse);
-              A($("wait"), t, H.waiting, { dy: 10 });
-              // The card rises over the Brain page, the way it does on the phone.
-              var ck = g.prog(t, H.b7, 0.3, g.E.out3);
+              // The waiting box appears at the top of the Model plate, as the app draws it.
+              $("wait").style.display = t >= H.waiting ? "block" : "none";
+              A($("wait"), t, H.waiting, { dy: 0, d: 0.2 });
+              // "Open the card →" is tapped; the card opens on its own (the app shows it on Home).
+              var oc = $("open-card"), tc = $("touch-open"), sc = $("pg").parentNode, r1 = oc.getBoundingClientRect(), r0 = sc.getBoundingClientRect(), zs = r0.width / sc.offsetWidth;
+              tc.style.left = ((r1.left - r0.left + r1.width / 2) / zs) + "px"; tc.style.top = ((r1.top - r0.top + r1.height / 2) / zs) + "px";
+              g.tap(tc, t, H.b7 - 0.25);
+              var ck = g.prog(t, H.b7, 0.25, g.E.out3);
               $("card").style.opacity = t < H.b7 ? "0" : ck.toFixed(3);
-              $("card").style.transform = "translateY(" + (120 * (1 - ck)).toFixed(1) + "px)";
-              $("pg").style.opacity = t < H.b7 ? "1" : (1 - 0.75 * ck).toFixed(3);
+              $("card").style.transform = "translateY(" + (60 * (1 - ck)).toFixed(1) + "px)";
+              $("pg").style.opacity = t < H.b7 ? "1" : (1 - ck).toFixed(3);
               var ok = $("ok"), to = $("touch-ok"), card = $("card");
               to.style.left = (card.offsetLeft + ok.offsetLeft + ok.offsetWidth / 2) + "px";
               to.style.top = (card.offsetTop + ok.offsetTop + ok.offsetHeight / 2) + "px";
@@ -298,8 +311,7 @@ def build(kind):
                      [H["b4"], 560, 580, 2.0, 1, 0.6, 1, 0],
                      [H["b5"], 600, 700, 1.4, 1, 0.5, 1, 0],
                      [H["b6"], 1430, 540, 1.9, 0.9, 0.55, 1, 0],
-                     [H["end"], 960, 400, 1.6, 1, 0.7, 1.2, 0],
-                     [H["name"], 790, 862, 0.42, 1, 0.35, 1.2, 0.6]],
+                     [H["end"], 960, 400, 1.6, 1, 0.7, 1.2, 0]],
             "scenes": [{"id": "s1", "a": 0, "b": H["b2"]}, {"id": "s2", "a": H["b2"], "b": H["b4"]},
                        {"id": "s3", "a": H["b4"], "b": H["b5"]}, {"id": "s4", "a": H["b5"], "b": H["b6"]},
                        {"id": "s5", "a": H["b6"], "b": H["end"]}, {"id": "s6", "a": H["end"], "b": t["dur"] + 1}],
@@ -317,8 +329,7 @@ def build(kind):
             "core": [[0, 540, 760, 1.7, 1, 0.75, 1.2, 0],
                      [H["b6"], 540, 1000, 2.2, 0.9, 0.55, 1, 0],
                      [H["b5"], 160, 900, 1.3, 1, 0.5, 1, 0],
-                     [H["end"], 540, 600, 1.6, 1, 0.7, 1.2, 0],
-                     [H["name"], 360, 1362, 0.42, 1, 0.35, 1.2, 0.6]],
+                     [H["end"], 540, 600, 1.6, 1, 0.7, 1.2, 0]],
             "scenes": [{"id": "s1", "a": 0, "b": H["b6"]}, {"id": "s5", "a": H["b6"], "b": H["b5"]},
                        {"id": "s4", "a": H["b5"], "b": H["end"]}, {"id": "s6", "a": H["end"], "b": t["dur"] + 1}],
             "irises": [{"scene": "s5", "at": H["b6"], "x": 540, "y": 1000}, {"scene": "s6", "at": H["end"], "x": 540, "y": 600}],
