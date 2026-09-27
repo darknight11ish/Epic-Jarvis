@@ -475,7 +475,8 @@ def set_speaker(body) -> tuple:
 #
 # What wins, in order: a custom voice the owner chose (speak() above, which
 # never reads this); then the face's voice; then the owner's own built-in
-# choice (speaker()). The owner's speaking speed still applies ON TOP of the
+# choice (speaker()). A chosen custom voice that cannot be used right now
+# falls back to the built-in voice, and so to the face's voice. The owner's speaking speed still applies ON TOP of the
 # animal's pace, so "Faster" makes the owl faster too.
 #
 # A switch, ON by default (the owner picked "voice follows the face"), set
@@ -554,21 +555,34 @@ def face_voice_view() -> dict:
     on = face_voice_on()
     face = appearance_face()
     row = FACE_VOICES.get(face)
-    active = _read_state()["active"]
+    st = _read_state()
+    # A recorded voice that cannot be used right now falls back to the
+    # built-in voice - which is then the animal's. _predict() is what
+    # status() already uses to say which engine the next sentence gets.
+    try:
+        engine, _why = _predict(st, list_voices())
+    except Exception:
+        engine = "kokoro" if st["active"] == BUILTIN else ""
+    builtin_speaks = st["active"] == BUILTIN or engine == "kokoro"
     if not on:
         line = "Off: the built-in voice stays the same whatever the face."
     elif row is None:
-        line = ("Choose the Red Panda, Pygmy Owl or Sea Otter face to hear its voice."
-                if face else
-                "No face is saved on this PC yet, so there is no animal voice to use.")
-    elif active != BUILTIN:
+        if (_config_dir() / "appearance.json").is_file():
+            line = ("The face showing has no voice of its own. Choose the Red Panda, "
+                    "Pygmy Owl or Sea Otter face to hear one.")
+        else:
+            line = "No face is saved on this PC yet, so there is no animal voice to use."
+    elif not builtin_speaks:
         line = (f"The {row['name']} face is showing, but a voice you recorded is chosen, "
                 f"so that voice speaks.")
+    elif st["active"] != BUILTIN:
+        line = (f"The voice you recorded cannot be used right now, so the {row['name']} "
+                f"speaks instead.")
     else:
         line = (f"Speaking as the {row['name']}: "
                 f"{SPEAKER_LABEL[row['speaker']].split(' - ')[-1]}, a little higher.")
     return {"enabled": on, "default": FACE_VOICE_DEFAULT, "face": face,
-            "speaking": bool(on and row is not None and active == BUILTIN),
+            "speaking": bool(on and row is not None and builtin_speaks),
             "name": row["name"] if row else "", "line": line,
             "title": FACE_VOICE_TITLE, "detail": FACE_VOICE_DETAIL}
 

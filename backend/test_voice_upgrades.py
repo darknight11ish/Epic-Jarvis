@@ -426,6 +426,31 @@ def t_a_recorded_voice_still_wins():
           not view["speaking"] and "recorded" in view["line"], view)
     check("(the recorded voice is the one speak() uses; it never reads the face)",
           V._read_state()["active"] == "grandpa" and voices_dir.is_dir())
+    V._write_state(active="ghost")
+    view = V.face_voice_view()
+    check("a chosen recorded voice that cannot be used falls back to the animal - "
+          "and the line says so, rather than claiming the recorded voice speaks",
+          view["speaking"] and "cannot be used right now" in view["line"]
+          and S.tts_voice() == (4, 1.15, 3.0), (view, S.tts_voice()))
+
+
+def t_the_voice_is_read_once_per_sentence():
+    d = reset()
+    _show_face(d, "pygmyowl")
+    calls = []
+    real = V.builtin_voice
+    V.builtin_voice = lambda: calls.append(1) or real()
+    try:
+        S._tts_cache = FakeKokoro()
+        S.say("Of course. I have added the dentist to Tuesday at ten.")
+    finally:
+        V.builtin_voice = real
+    check("one sentence reads the built-in voice once, so a face change halfway "
+          "cannot mix two animals", len(calls) == 1, calls)
+    check("... and speaks the owl", S._tts_cache.sids == [2])
+    _show_face(d, None)
+    check("a saved face with no voice of its own is said plainly, not \"no face saved\"",
+          "no voice of its own" in V.face_voice_view()["line"], V.face_voice_view())
 
 
 def t_the_face_switch_asks_nothing_and_says_so():

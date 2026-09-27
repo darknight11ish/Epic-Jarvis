@@ -324,16 +324,22 @@ def _reference_sources() -> list:
         except Exception:
             size = -1
         if size > 0:
-            # The owner's built-in-voice choice (one source: jarvis_speech.tts_speaker).
-            sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
-                  else int(S._cfg("tts_speaker_id", 0) or 0))
-            # The owner's speaking speed (one source: jarvis_speech.tts_speed).
-            speed = (S.tts_speed() if hasattr(S, "tts_speed")
-                     else float(S._cfg("tts_speed", 1.0) or 1.0))
-            # An animal face's pitch rise ("Voice follows the face"; 0 else),
-            # so talking over the red panda is checked against the panda's
-            # voice, not an unshifted one it no longer sounds like.
-            semis = S.tts_pitch() if hasattr(S, "tts_pitch") else 0.0
+            if hasattr(S, "tts_voice"):
+                # The built-in voice, read once (jarvis_speech.tts_voice):
+                # the owner's choice or an animal face's voice, its speed,
+                # and the face's pitch rise ("Voice follows the face"; 0
+                # else) - so talking over the red panda is checked against
+                # the panda's voice, not an unshifted one it no longer
+                # sounds like.
+                sid, speed, semis = S.tts_voice()
+            else:
+                # The owner's built-in-voice choice (one source: jarvis_speech.tts_speaker).
+                sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
+                      else int(S._cfg("tts_speaker_id", 0) or 0))
+                # The owner's speaking speed (one source: jarvis_speech.tts_speed).
+                speed = (S.tts_speed() if hasattr(S, "tts_speed")
+                         else float(S._cfg("tts_speed", 1.0) or 1.0))
+                semis = 0.0
 
             def load_builtin(S=S, sid=sid, speed=speed, semis=semis):
                 engine = S._tts_engine()
@@ -671,14 +677,17 @@ def moment_key() -> tuple:
             parts.append("unreadable")
     S = _speech()
     if S is not None:
-        sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
-              else S._cfg("tts_speaker_id", 0) or 0)
-        speed = (S.tts_speed() if hasattr(S, "tts_speed")
-                 else S._cfg("tts_speed", 1.0) or 1.0)
+        if hasattr(S, "tts_voice"):
+            sid, speed, semis = S.tts_voice()     # read once, like the clip itself
+        else:
+            sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
+                  else S._cfg("tts_speaker_id", 0) or 0)
+            speed = (S.tts_speed() if hasattr(S, "tts_speed")
+                     else S._cfg("tts_speed", 1.0) or 1.0)
+            semis = 0.0
         parts += [str(sid), str(speed)]
         # An animal face's pitch rise ("Voice follows the face"). Added only
         # when there is one, so every key made before this stays the same.
-        semis = S.tts_pitch() if hasattr(S, "tts_pitch") else 0.0
         if semis:
             parts.append(f"pitch {semis:g}")
         try:

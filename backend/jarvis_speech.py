@@ -1787,6 +1787,20 @@ def _voices_mod(voices_module=None):
         return None
 
 
+def tts_voice(voices_module=None) -> tuple:
+    """(Kokoro voice number, speed, pitch rise) for the built-in voice, read
+    ONCE - so one sentence never mixes two faces' settings if the face
+    changes halfway through reading them. Never raises."""
+    V = _voices_mod(voices_module)
+    if V is not None and hasattr(V, "builtin_voice"):
+        try:
+            sid, speed, semis, _face = V.builtin_voice()
+            return int(sid), float(speed), max(0.0, min(4.0, float(semis)))
+        except Exception:
+            pass
+    return tts_speaker(V), tts_speed(V), 0.0
+
+
 def tts_pitch(voices_module=None) -> float:
     """How many semitones higher the built-in voice speaks: 0, except while
     "Voice follows the face" speaks for an animal face (jarvis_voices.
@@ -1917,8 +1931,7 @@ def _synthesise(text: str, *, start_better: bool = True) -> tuple:
     try:
         # The animal's pitch rise (tts_pitch) is 0 unless "Voice follows the
         # face" speaks for an animal face.
-        audio = kokoro_speak(engine, text, tts_speaker(jarvis_voices),
-                             tts_speed(jarvis_voices), tts_pitch(jarvis_voices))
+        audio = kokoro_speak(engine, text, *tts_voice(jarvis_voices))
     except Exception:
         return None, 0, "none", voice, fallback, note, "Kokoro failed"
     if audio is None:
