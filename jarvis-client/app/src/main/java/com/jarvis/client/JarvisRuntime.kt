@@ -561,6 +561,7 @@ object JarvisRuntime {
                     runs = toolRuns,
                     drops = streamOpens,
                     live = _link.value == LinkState.CONNECTED && !_stale.value,
+                    privateRuns = privateToolRuns,
                 )
             },
             // "Say 'One moment' if I'm kept waiting" (Checks), read when a
@@ -993,6 +994,9 @@ object JarvisRuntime {
      * ([com.jarvis.client.voice.PrivateAloud.Watch]). Counters only.
      */
     @Volatile private var toolRuns = 0L
+
+    /** Of [toolRuns], the ones whose tool is not on PrivateAloud.READ_ALOUD_TOOLS. */
+    @Volatile private var privateToolRuns = 0L
     @Volatile private var streamOpens = 0L
 
     private suspend fun onOpen(hello: com.jarvis.client.net.HelloPayload?) {
@@ -1159,6 +1163,8 @@ object JarvisRuntime {
                 // Counted for "private answers stay on screen": an answer a
                 // tool helped write is not read aloud (PrivateAloud).
                 if (com.jarvis.client.voice.PrivateAloud.isToolRun(event.data)) toolRuns += 1
+                // ...unless the tool is web search or home status (owner, 2026-09-27).
+                if (com.jarvis.client.voice.PrivateAloud.isPrivateToolRun(event.data)) privateToolRuns += 1
                 // A tool starting during a spoken question: "One moment."
                 // (once per question, before the answer makes a sound).
                 if (com.jarvis.client.voice.VoiceFlow.isToolStart(event.data) && started) {

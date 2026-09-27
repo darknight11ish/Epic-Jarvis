@@ -31,9 +31,15 @@ import kotlinx.serialization.json.doubleOrNull
  *     reply's `sensitive_aloud` is true: the owner's decision of 2026-09-24,
  *     "sensitive saved facts stay on screen", with a voice setting to allow
  *     it (`sensitive_memory` on the Voice check screen);
- *  3. no tool ran while it was being written (the `step` event,
+ *  3. no PRIVATE tool ran while it was being written (the `step` event,
  *     `tool_started` / `tool_finished`) - and that is only known while the
- *     event stream is live, so an unknown counts as "a tool may have run".
+ *     event stream is live, so an unknown counts as "a private tool may
+ *     have run". A tool is private unless its name is on
+ *     [READ_ALOUD_TOOLS]: web search and home status (the owner's decision
+ *     of 2026-09-27; weather is read from home status). Email, calendar,
+ *     notes, files, memory, "unknown", a step with no name and any tool
+ *     added later stay private. Both apps are held to one table,
+ *     `contract/private-aloud-cases.json` (tools/gen_private_aloud_cases.py).
  *
  * Otherwise it says one fixed line, [ON_SCREEN], and the answer stays on
  * the screen as always. The phone's voice answers are spoken sentence by
@@ -87,15 +93,27 @@ object PrivateAloud {
     }
 
     /**
+     * The only tools whose answers may be read aloud to a voice question
+     * (the owner's decision of 2026-09-27: web search, weather and home
+     * status - weather is read with `home_read`, or answered with no tool
+     * at all). Exact names, as the `step` event carries them. The
+     * desktop's `READ_ALOUD_TOOLS` (private-speech.js).
+     */
+    val READ_ALOUD_TOOLS: Set<String> = setOf("home_read", "web_search")
+
+    /**
      * What the phone knows about tools at one moment: how many `step`
-     * events said a tool ran ([runs]), how many times the event stream has
-     * dropped ([drops]), and whether it is live now ([live]). Two of these -
-     * one when the question was asked, one now - say whether a tool ran in
+     * events said a tool ran ([runs]), how many of those were PRIVATE tools
+     * - not on [READ_ALOUD_TOOLS] ([privateRuns]; left out, every run counts
+     * as private), how many times the event stream has dropped ([drops]),
+     * and whether it is live now ([live]). Two of these - one when the
+     * question was asked, one now - say whether a private tool ran in
      * between, and whether the phone could have heard of it.
      */
-    data class Watch(val runs: Long, val drops: Long, val live: Boolean)
+    data class Watch(val runs: Long, val drops: Long, val live: Boolean, val privateRuns: Long = runs)
 
-    fun toolRan(start: Watch, now: Watch): Boolean = now.runs != start.runs
+    /** A PRIVATE tool ran between [start] and [now]. */
+    fun toolRan(start: Watch, now: Watch): Boolean = now.privateRuns != start.privateRuns
 
     /** The stream was live at both moments and did not drop in between. */
     fun toolsKnown(start: Watch, now: Watch): Boolean = start.live && now.live && start.drops == now.drops
@@ -106,6 +124,13 @@ object PrivateAloud {
         return phase == "tool_started" || phase == "tool_finished"
     }
 
+    /** A tool ran, and its answer stays on screen: its name is not on [READ_ALOUD_TOOLS], or it has none. */
+    fun isPrivateToolRun(data: JsonElement?): Boolean {
+        if (!isToolRun(data)) return false
+        val tool = ((data as? JsonObject)?.get("tool") as? JsonPrimitive)?.takeIf { it.isString }?.content
+        return tool == null || tool !in READ_ALOUD_TOOLS
+    }
+
     /**
      * May the answer to a VOICE question be read aloud, sentence by sentence?
      *
@@ -113,7 +138,7 @@ object PrivateAloud {
      * @param questionPrivate the utterance reply's `question_private`
      * @param route the chat answer's header, or null before it has arrived
      *   (then there is nothing to read yet, so nothing is spoken yet either)
-     * @param toolRan a `step` event said a tool ran since the question was asked
+     * @param toolRan a `step` event said a PRIVATE tool ran since the question was asked
      * @param toolsKnown the event stream was live the whole time, so a tool
      *   that ran would have been heard of
      * @param memoryAloud the utterance reply's `memory_aloud` (false when missing)

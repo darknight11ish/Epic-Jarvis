@@ -18,17 +18,25 @@
  *   - the chat reply's `X-Jarvis-Route` has no `gate: "private"`;
  *   - only when `memory_aloud` is not true: it has no `injected_facts`
  *     above 0 (remembered facts went in);
- *   - no tool ran while it was being written - and that is only known
- *     while the event stream is live, so an unknown counts as "a tool may
- *     have run". Exactly the phone's rule (jarvis-client
+ *   - no PRIVATE tool ran while it was being written - and that is only
+ *     known while the event stream is live, so an unknown counts as "a
+ *     private tool may have run". Exactly the phone's rule (jarvis-client
  *     voice/PrivateAloud.kt). A tool that ran is read from the `step`
  *     event (docs/JARVIS-API.md section 2): `phase` `tool_started` or
  *     `tool_finished`, counted from the moment the question was sent to
- *     the moment each sentence is spoken (`createToolWatch`). The chat
- *     stream's `: jarvis-status working` / `approval` still counts too, but
- *     it is not enough on its own: the PC sends it only after 1.5 seconds
- *     (jarvis_agent.STATUS_DELAY_SECONDS), so a quick `calendar_read` or
- *     `email_read` says nothing there. The `step` event has no such delay.
+ *     the moment each sentence is spoken (`createToolWatch`). A tool is
+ *     private unless its name is on `READ_ALOUD_TOOLS` - web search and
+ *     home status (the owner's decision of 2026-09-27; weather is read
+ *     from home status). Email, calendar, notes, files, memory, a step
+ *     with no name, "unknown" and any tool added later stay private. The
+ *     chat stream's `: jarvis-status working` / `approval` carries no
+ *     name, so it counts as private too - unless the `step` events since
+ *     the question show tools ran and every one was on the list (the PC
+ *     sends that status 1.5 s after the tool's `step` event, so by then the
+ *     name is known; `onlyReadAloudToolsBetween`). The status is not
+ *     enough on its own: a quick `calendar_read` says nothing there. The
+ *     table both apps are held to: tests/fixtures/private-aloud-cases.json
+ *     (tools/gen_private_aloud_cases.py).
  *
  * Otherwise Jarvis says one fixed line instead, `PRIVATE_LINE`, once.
  * `private_aloud: true` (the owner chose "voice check is enough", and the
@@ -92,8 +100,26 @@ export function isToolRun(data) {
 }
 
 /**
+ * The only tools whose answers may be read aloud to a voice question (the
+ * owner's decision of 2026-09-27: web search, weather and home status -
+ * weather is read with `home_read`, or answered with no tool at all).
+ * Exact names, as the `step` event carries them. The phone's
+ * `PrivateAloud.READ_ALOUD_TOOLS`.
+ */
+export const READ_ALOUD_TOOLS = Object.freeze(["home_read", "web_search"]);
+
+/** A tool ran, and its answer stays on screen: its name is not on
+ *  `READ_ALOUD_TOOLS`, or it has none. The phone's `isPrivateToolRun`. */
+export function isPrivateToolRun(data) {
+  if (!isToolRun(data)) return false;
+  const tool = data.tool;
+  return typeof tool !== "string" || !READ_ALOUD_TOOLS.includes(tool);
+}
+
+/**
  * What this window knows about tools, as counters: `runs` (`step` events
- * that said a tool ran), `drops` (times the event stream stopped being
+ * that said a tool ran), `privateRuns` (those whose tool is not on
+ * `READ_ALOUD_TOOLS`), `drops` (times the event stream stopped being
  * live, or fell off the back of the server's ring) and `live` (connected
  * and not stale now). Two snapshots - one when the question was sent, one
  * when a sentence is about to be spoken - say whether a tool ran in
@@ -102,6 +128,7 @@ export function isToolRun(data) {
  */
 export function createToolWatch() {
   let runs = 0;
+  let privateRuns = 0;
   let drops = 0;
   let live = false;
   return {
@@ -113,22 +140,39 @@ export function createToolWatch() {
     },
     /** A fanned-out bus frame, `{kind, id, data}`. */
     event(frame) {
-      if (frame && frame.kind === "step" && isToolRun(frame.data)) runs += 1;
+      if (frame && frame.kind === "step" && isToolRun(frame.data)) {
+        runs += 1;
+        if (isPrivateToolRun(frame.data)) privateRuns += 1;
+      }
     },
     /** `jarvis-resync`: events were missed. */
     resync() {
       drops += 1;
     },
     snapshot() {
-      return { runs, drops, live };
+      return { runs, privateRuns, drops, live };
     },
   };
 }
 
-/** A tool ran between two snapshots. */
+/** A PRIVATE tool ran between two snapshots - one not on
+ *  `READ_ALOUD_TOOLS`. A snapshot without `privateRuns` (not one this
+ *  module made) counts every tool that ran as private. */
 export function toolRanBetween(start, now) {
   if (!start || !now) return false;
+  if (Number.isInteger(start.privateRuns) && Number.isInteger(now.privateRuns)) {
+    return now.privateRuns !== start.privateRuns;
+  }
   return now.runs !== start.runs;
+}
+
+/** Tools ran between two snapshots, and every one was on
+ *  `READ_ALOUD_TOOLS`. What lets a nameless `: jarvis-status working` pass:
+ *  the `step` events already said which tools those were. */
+export function onlyReadAloudToolsBetween(start, now) {
+  if (!start || !now) return false;
+  if (!Number.isInteger(start.privateRuns) || !Number.isInteger(now.privateRuns)) return false;
+  return now.runs !== start.runs && now.privateRuns === start.privateRuns;
 }
 
 /** The stream was live at both snapshots and did not drop in between, so a
@@ -142,7 +186,7 @@ export function toolsKnownBetween(start, now) {
  * May this answer be read aloud? `ctx`: `{privateAloud, questionPrivate,
  * memoryAloud, sensitiveAloud}` from the question, `route` (the route
  * line's object: `gate`, `injected_facts`, `injected_sensitive`),
- * `toolRan`, and `toolsKnown` (the event stream was live the whole time;
+ * `toolRan` (a PRIVATE tool ran - `toolRanBetween`), and `toolsKnown` (the event stream was live the whole time;
  * anything but `true` counts as "a tool may have run", as on the phone).
  */
 export function mayReadAloud(ctx) {

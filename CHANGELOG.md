@@ -6,6 +6,14 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Answers from web search and home status are read aloud again when you
+  ask by voice.** Before, any answer where Jarvis used a tool was kept on
+  screen ("It's on your screen."), so a spoken question answered from the
+  web was never spoken. Now only web search and home status (which is
+  where the weather comes from) are read aloud. Email, calendar, notes,
+  files, memory and any other tool still keep the answer on screen, and so
+  does Jarvis not being sure which tool ran. Both apps follow one shared
+  table of cases, so they cannot drift apart.
 - **Fixed: typing the phone's pairing key exactly as the PC shows it.** The
   PC shows the key in groups of four with spaces, to make it easier to read.
   The phone kept those spaces, so the key was refused. The phone now drops

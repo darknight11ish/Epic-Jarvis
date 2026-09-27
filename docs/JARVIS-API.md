@@ -176,7 +176,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voice` | Fanned out verbatim | Ignored (`JarvisRuntime.kt:690`) |
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
-| `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written (`voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
+| `step` | Rendered in Brain → Live (`brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search` or `home_read` (§16; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
 | `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on the phone's Brain screen; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
@@ -2435,7 +2435,7 @@ for a question that came by VOICE and reply `private_aloud: false`:
 1. Show the answer on screen as usual.
 2. Read it aloud only when nothing says it is private: `question_private`
    is false, the chat reply's `X-Jarvis-Route` has no `gate: "private"`,
-   no tool ran while it was being written, and - **only when
+   no **private** tool ran while it was being written, and - **only when
    `memory_aloud` is false** - no `injected_facts` above 0 (both route
    fields §4 describes; the route that fills them is on the PC and was not
    read for this). Otherwise say one fixed line instead, such as "It's on
@@ -2443,9 +2443,27 @@ for a question that came by VOICE and reply `private_aloud: false`:
    "A tool ran" is read from the event stream's `step` events
    (`tool_started` / `tool_finished`) between the question and each
    sentence, and a stream that was stale or dropped in that time counts as
-   "a tool may have run". Both apps do this: `: jarvis-status working`
-   alone arrives only after 1.5 s, so a quick calendar or email lookup was
-   missed (voice audit, 2026-09-24).
+   "a private tool may have run". Both apps do this: `: jarvis-status
+   working` alone arrives only after 1.5 s, so a quick calendar or email
+   lookup was missed (voice audit, 2026-09-24).
+   **Which tools are private** (the owner's decision of 2026-09-27: "Read
+   aloud answers from web search, weather and home status. Email,
+   calendar, notes, memory and any unknown tool still stay on screen"):
+   every tool EXCEPT the two on the read-aloud list, `web_search` and
+   `home_read`, matched exactly against the `step` event's `tool`. Weather
+   has no tool of its own - "what's the weather?" is answered by the quick
+   path with no tool, and the model reads the weather device with
+   `home_read`. So email, calendar, notes and the note writers, documents
+   and folders, memory, the calculator, timers, "unknown", a step with no
+   `tool`, and any tool added later all keep the answer on screen; a turn
+   that ran web search AND a private tool stays on screen. The desktop
+   also still counts `: jarvis-status working` / `approval` (which name
+   no tool) as private, unless the `step` events since the question show
+   that every tool that ran was on the list. Both apps are held to one
+   table, `private-aloud-cases.json` (`tools/gen_private_aloud_cases.py`;
+   the desktop's `tests/private-speech.mjs`, the phone's
+   `PrivateAloudContractTest`, and `backend/test_private_aloud.py`, which
+   checks the list names real tools).
    Both apps ask `/api/voice/say` for the next sentence's sound while the
    current one plays (one ahead, never more). So the rule is asked twice
    per sentence: before its sound is asked for, and **again right before
@@ -2478,7 +2496,13 @@ as private. `X-Jarvis-Route` is sent before the model starts, so it cannot
 know that the model will call the email or calendar tool; the rule above is
 the apps' best information until the chat route says so at the end of the
 answer. `jarvis_voice.may_speak(private, origin)` is the helper that route
-should call when it does.
+should call when it does. Until 2026-09-27 the apps closed that gap the
+blunt way - ANY tool kept the answer on screen, so a spoken "what's the
+news about X?" answered from web search was never read aloud. Now only the
+read-aloud list above is let through, by name; the gap that remains is
+that the list lives in the two apps, not on the PC, and a web-search answer
+could still quote a snippet the owner would rather not hear aloud (it is
+outside text, never the owner's own email, calendar, notes or memory).
 
 ## 17. Interrupting by talking, the delay, and "One moment." (added 2026-09-24)
 
