@@ -768,6 +768,11 @@ class MainActivity : FragmentActivity() {
         // The crisis help line (jarvis_wellbeing.py, 2026-09-27): whether
         // the answer on screen is shown as a calm, plain panel.
         val crisisAnswer by chat.crisis.collectAsState()
+        // "A cloud model could give this one a second look."
+        // (jarvis_router.choose()'s gate "offer", docs/JARVIS-API.md,
+        // "`offer` in `X-Jarvis-Route`") - the lane named on the answer on
+        // screen's route, or null.
+        val cloudOffer by chat.cloudOffer.collectAsState()
         // "Open <a settings section>" by voice or chat
         // (jarvis_settings_registry.py, docs/JARVIS-API.md section 58.1):
         // jump to Settings, at the section the answer named. Pure
@@ -1974,6 +1979,7 @@ class MainActivity : FragmentActivity() {
                             usedIds = usedIds,
                             answerTurnId = answerTurnId,
                             crisisAnswer = crisisAnswer,
+                            cloudOffer = cloudOffer,
                             memoryHidden = privateHidden,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
@@ -2155,6 +2161,14 @@ class MainActivity : FragmentActivity() {
                                 onMarkAnswer = { turnId, mark ->
                                     JarvisRuntime.markAnswerDetached(turnId, mark)
                                 },
+                                // "Try the cloud model": a genuinely new
+                                // turn, the same shape as onSend below, so
+                                // it runs on this composable's own scope
+                                // rather than the runtime's - a rotation
+                                // mid-answer already cancels an ordinary
+                                // question the same way.
+                                onTryCloud = { scope.launch { chat.tryCloudForLast() } },
+                                onDismissCloudOffer = { chat.dismissCloudOffer() },
                                 // backend/note-capture.patch. The runtime reports
                                 // how it ended, in the desktop's own words.
                                 onFileNote = { target, text ->
