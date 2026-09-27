@@ -40,11 +40,11 @@ canvas.layer { width: 100%; height: 100%; }
 .slab::before { content: ""; position: absolute; inset: 0; border-radius: 22px; padding: 1.5px; pointer-events: none;
   background: linear-gradient(120deg, var(--rim), rgba(255,255,255,0.15) 35%, transparent 60%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.9; }
-.slab .shots { position: relative; }
-.slab .shots img { display: block; width: 100%; border-radius: 10px; }
-.slab .shots img + img { position: absolute; left: 0; top: 0; }
+.slab .shots { position: relative; overflow: hidden; border-radius: 10px; }
+.slab .inner { position: relative; }
+.slab .shots img { position: absolute; left: 0; top: 0; display: block; width: 100%; }
 .sheen { position: absolute; top: -20%; bottom: -20%; left: 0; width: 30%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent); opacity: 0; pointer-events: none; }
-svg.beam { position: absolute; left: 14px; top: 14px; overflow: visible; pointer-events: none; opacity: 0; }
+svg.beam { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; opacity: 0; }
 svg.beam .trace { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--rim)) drop-shadow(0 0 3px #fff); }
 svg.beam .rest { fill: rgba(255,255,255,0.06); stroke: var(--rim); stroke-width: 2; rx: 10; filter: drop-shadow(0 0 10px var(--rim)); }
 

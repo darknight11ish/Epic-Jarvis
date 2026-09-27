@@ -27,17 +27,17 @@
           <div class="head sub" id="h3b" style="left: 110px; top: 214px">And flags quotes it can’t find.</div>
           <div class="tag" id="you2" style="left: 112px; top: 232px">You ▸ <b>How do sourdough starters work?</b></div>
           <div class="chip" id="ex" style="left: 110px; top: 960px">Example answer</div>
-          <div class="slab" id="slab2" style="left: 640px; top: 318px; width: 1180px">
-            <div class="shots">
+          <div class="slab" id="slab2" style="left: 640px; top: 300px; width: 1180px">
+            <div class="shots" id="slab2-shots"><div class="inner" id="slab2-inner">
               <img id="r1a" src="assets/ui/r1-step1.png" alt="" />
               <img id="r1b" src="assets/ui/r1-step2.png" alt="" />
               <img id="r1c" src="assets/ui/r1-step3.png" alt="" />
               <img id="r1d" src="assets/ui/r1-step4.png" alt="" />
               <img id="r1e" src="assets/ui/r1-answer.png" alt="" />
               <img id="r2" src="assets/ui/r2-sources.png" alt="" />
-            </div>
+              <svg class="beam" id="slab2-beam"><rect class="rest" rx="10" /><rect class="trace" rx="10" /></svg>
+            </div></div>
             <div class="sheen"></div>
-            <svg class="beam" id="slab2-beam"><rect class="rest" rx="10" /><rect class="trace" rx="10" /></svg>
           </div>
         </section>
         <section class="scene" id="s3">
@@ -51,10 +51,10 @@
           <div class="tag" id="you5" style="left: 112px; top: 118px">You ▸</div>
           <div class="head" id="h5" style="left: 110px; top: 160px">Stop.</div>
           <div class="head sub" id="h5b" style="left: 110px; top: 278px">It stops talking.</div>
-          <div class="slab" id="slab4" style="left: 640px; top: 318px; width: 1180px">
-            <div class="shots">
+          <div class="slab" id="slab4" style="left: 640px; top: 300px; width: 1180px">
+            <div class="shots" id="slab4-shots"><div class="inner" id="slab4-inner">
               <img id="r3" src="assets/ui/r3-speaking.png" alt="" />
-            </div>
+            </div></div>
             <div class="sheen"></div>
           </div>
           <div class="chip" id="chip5" style="left: 110px; top: 960px">After voice setup</div>
@@ -119,7 +119,7 @@
           function L(j) { return p[j] + (k[j] - p[j]) * e; }
           return { x: L(1), y: L(2), s: L(3), a: L(4), glow: L(5), halo: L(6) };
         }
-        var BOX2 = null;
+        var BOX2 = {"x": 0.038, "y": 0.8229, "w": 0.6812, "h": 0.0409};
         GLASS.run({
           id: "jarvis-v6", dur: T.dur, H: H, w: 1920, h: 1080, coreHome: { x: 0, y: 0 },
           hero: C.hero, corePath: corePath, scenes: C.scenes, irises: C.irises, particles: 700,
@@ -132,11 +132,22 @@
               R($("h2"), t, H.b2Head, { out: H.b3HeadA - 0.1, outD: 0.1 });
               A($("you2"), t, H.you, { out: H.b3HeadA - 0.1 });
               g.slab($("slab2"), t, H.b2 + 0.05, { bumps: [H.step2, H.step3, H.step4, H.answer, H.b3] });
-              g.pick(t, [[H.step1 - 0.4, "r1a"], [H.step2, "r1b"], [H.step3, "r1c"], [H.step4, "r1d"], [H.answer, "r1e"], [H.b3, "r2"]]);
+              var seq = [[H.step1 - 0.4, "r1a"], [H.step2, "r1b"], [H.step3, "r1c"], [H.step4, "r1d"], [H.answer, "r1e"], [H.b3, "r2"]];
+              g.pick(t, seq);
+              // The window grows as the answer arrives; then it scrolls to the sources, as the real one does.
+              var sh = $("slab2-shots"), inner = $("slab2-inner"), cur = 0;
+              for (var q = 0; q < seq.length; q++) if (t >= seq[q][0]) cur = q;
+              function hOf(id) { var im = $(id); return im.naturalHeight ? im.naturalHeight * sh.offsetWidth / im.naturalWidth : 0; }
+              var MAXH = 740, hNow = Math.min(MAXH, hOf(seq[cur][1])), hPrev = cur > 0 ? Math.min(MAXH, hOf(seq[cur - 1][1])) : hNow;
+              var hk = g.prog(t, seq[cur][0], 0.18, g.E.out3);
+              sh.style.height = (hPrev + (hNow - hPrev) * hk).toFixed(1) + "px";
+              var over = Math.max(0, hOf("r2") - MAXH);
+              inner.style.transform = "translateY(" + (-over * g.prog(t, H.b3 + 0.35, 0.5, g.E.io)).toFixed(1) + "px)";
               A($("ex"), t, H.answer, {});
               R($("h3a"), t, H.b3HeadA, {});
               R($("h3b"), t, H.b3HeadB, {});
               if (BOX2) g.beam($("slab2-beam"), t, H.warn, BOX2, $("r2"));
+              $("slab2-beam").style.left = "0px"; $("slab2-beam").style.top = "0px";
             }
             // B4: first, is it you? Then the words.
             if ($("s3")) {
@@ -156,6 +167,7 @@
             }
             // B5: stop.
             g.slab($("slab4"), t, H.b5 + 0.02, {});
+            if ($("slab4-shots")) { var r3 = $("r3"); if (r3.naturalHeight) $("slab4-shots").style.height = (r3.naturalHeight * r3.offsetWidth / r3.naturalWidth).toFixed(1) + "px"; }
             A($("you5"), t, H.stopHead - 0.05, { dy: 0, d: 0.1 });
             R($("h5"), t, H.stopHead, { d: 0.12 });
             R($("h5b"), t, H.stopHeadB, {});

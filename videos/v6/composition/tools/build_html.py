@@ -90,12 +90,12 @@ PHONE = '''          <div class="phone-host" style="{host}">
 
 
 def slab(sid, style, imgs, beam=False):
-    s = f'          <div class="slab" id="{sid}" style="{style}">\n            <div class="shots">\n'
+    s = f'          <div class="slab" id="{sid}" style="{style}">\n            <div class="shots" id="{sid}-shots"><div class="inner" id="{sid}-inner">\n'
     for i, src in imgs:
         s += f'              <img id="{i}" src="assets/ui/{src}" alt="" />\n'
-    s += '            </div>\n            <div class="sheen"></div>\n'
     if beam:
-        s += f'            <svg class="beam" id="{sid}-beam"><rect class="rest" rx="10" /><rect class="trace" rx="10" /></svg>\n'
+        s += f'              <svg class="beam" id="{sid}-beam"><rect class="rest" rx="10" /><rect class="trace" rx="10" /></svg>\n'
+    s += '            </div></div>\n            <div class="sheen"></div>\n'
     return s + "          </div>\n"
 
 
@@ -114,7 +114,7 @@ def landscape():
     s += '          <div class="head sub" id="h3b" style="left: 110px; top: 214px">And flags quotes it can’t find.</div>\n'
     s += '          <div class="tag" id="you2" style="left: 112px; top: 232px">You ▸ <b>How do sourdough starters work?</b></div>\n'
     s += '          <div class="chip" id="ex" style="left: 110px; top: 960px">Example answer</div>\n'
-    s += slab("slab2", "left: 640px; top: 318px; width: 1180px",
+    s += slab("slab2", "left: 640px; top: 300px; width: 1180px",
               [("r1a", "r1-step1.png"), ("r1b", "r1-step2.png"), ("r1c", "r1-step3.png"), ("r1d", "r1-step4.png"),
                ("r1e", "r1-answer.png"), ("r2", "r2-sources.png")], beam=True)
     s += '        </section>\n'
@@ -129,7 +129,7 @@ def landscape():
     s += '          <div class="tag" id="you5" style="left: 112px; top: 118px">You ▸</div>\n'
     s += '          <div class="head" id="h5" style="left: 110px; top: 160px">Stop.</div>\n'
     s += '          <div class="head sub" id="h5b" style="left: 110px; top: 278px">It stops talking.</div>\n'
-    s += slab("slab4", "left: 640px; top: 318px; width: 1180px", [("r3", "r3-speaking.png")])
+    s += slab("slab4", "left: 640px; top: 300px; width: 1180px", [("r3", "r3-speaking.png")])
     s += '          <div class="chip" id="chip5" style="left: 110px; top: 960px">After voice setup</div>\n'
     s += '        </section>\n'
     s += '        <section class="scene" id="s5">\n'
@@ -164,9 +164,9 @@ def vertical():
     s += '          <div class="chip" id="chip5" style="left: 90px; top: 1500px">After voice setup</div>\n'
     s += '        </section>\n'
     s += '        <section class="scene" id="s6">\n'
-    s += '          <div class="end-line" id="endl" style="top: 1000px; line-height: 1.08">Your PC.<br />Your AI.<br /><i>Your rules.</i></div>\n'
-    s += '          <div class="name" id="name" style="left: 0; right: 0; text-align: center; top: 1420px">Jarvis</div>\n'
-    s += '          <div class="small" id="small" style="top: 1500px">Windows PC · 8 GB NVIDIA graphics card<br />Android</div>\n'
+    s += '          <div class="end-line" id="endl" style="top: 860px; line-height: 1.08">Your PC.<br />Your AI.<br /><i>Your rules.</i></div>\n'
+    s += '          <div class="name" id="name" style="left: 0; right: 0; text-align: center; top: 1330px">Jarvis</div>\n'
+    s += '          <div class="small" id="small" style="top: 1418px">Windows PC · 8 GB NVIDIA graphics card<br />Android</div>\n'
     s += '        </section>\n'
     return s
 
@@ -210,11 +210,22 @@ SCRIPT = r'''      (function () {
               R($("h2"), t, H.b2Head, { out: H.b3HeadA - 0.1, outD: 0.1 });
               A($("you2"), t, H.you, { out: H.b3HeadA - 0.1 });
               g.slab($("slab2"), t, H.b2 + 0.05, { bumps: [H.step2, H.step3, H.step4, H.answer, H.b3] });
-              g.pick(t, [[H.step1 - 0.4, "r1a"], [H.step2, "r1b"], [H.step3, "r1c"], [H.step4, "r1d"], [H.answer, "r1e"], [H.b3, "r2"]]);
+              var seq = [[H.step1 - 0.4, "r1a"], [H.step2, "r1b"], [H.step3, "r1c"], [H.step4, "r1d"], [H.answer, "r1e"], [H.b3, "r2"]];
+              g.pick(t, seq);
+              // The window grows as the answer arrives; then it scrolls to the sources, as the real one does.
+              var sh = $("slab2-shots"), inner = $("slab2-inner"), cur = 0;
+              for (var q = 0; q < seq.length; q++) if (t >= seq[q][0]) cur = q;
+              function hOf(id) { var im = $(id); return im.naturalHeight ? im.naturalHeight * sh.offsetWidth / im.naturalWidth : 0; }
+              var MAXH = 740, hNow = Math.min(MAXH, hOf(seq[cur][1])), hPrev = cur > 0 ? Math.min(MAXH, hOf(seq[cur - 1][1])) : hNow;
+              var hk = g.prog(t, seq[cur][0], 0.18, g.E.out3);
+              sh.style.height = (hPrev + (hNow - hPrev) * hk).toFixed(1) + "px";
+              var over = Math.max(0, hOf("r2") - MAXH);
+              inner.style.transform = "translateY(" + (-over * g.prog(t, H.b3 + 0.35, 0.5, g.E.io)).toFixed(1) + "px)";
               A($("ex"), t, H.answer, {});
               R($("h3a"), t, H.b3HeadA, {});
               R($("h3b"), t, H.b3HeadB, {});
               if (BOX2) g.beam($("slab2-beam"), t, H.warn, BOX2, $("r2"));
+              $("slab2-beam").style.left = "0px"; $("slab2-beam").style.top = "0px";
             }
             // B4: first, is it you? Then the words.
             if ($("s3")) {
@@ -234,6 +245,7 @@ SCRIPT = r'''      (function () {
             }
             // B5: stop.
             g.slab($("slab4"), t, H.b5 + 0.02, {});
+            if ($("slab4-shots")) { var r3 = $("r3"); if (r3.naturalHeight) $("slab4-shots").style.height = (r3.naturalHeight * r3.offsetWidth / r3.naturalWidth).toFixed(1) + "px"; }
             A($("you5"), t, H.stopHead - 0.05, { dy: 0, d: 0.1 });
             R($("h5"), t, H.stopHead, { d: 0.12 });
             R($("h5b"), t, H.stopHeadB, {});
@@ -305,16 +317,16 @@ def build(kind):
             "core": [[0, 540, 760, 1.7, 1, 0.75, 1.2, 0],
                      [H["b6"], 540, 1000, 2.2, 0.9, 0.55, 1, 0],
                      [H["b5"], 160, 900, 1.3, 1, 0.5, 1, 0],
-                     [H["end"], 540, 700, 1.6, 1, 0.7, 1.2, 0],
-                     [H["name"], 330, 1452, 0.42, 1, 0.35, 1.2, 0.6]],
+                     [H["end"], 540, 600, 1.6, 1, 0.7, 1.2, 0],
+                     [H["name"], 360, 1362, 0.42, 1, 0.35, 1.2, 0.6]],
             "scenes": [{"id": "s1", "a": 0, "b": H["b6"]}, {"id": "s5", "a": H["b6"], "b": H["b5"]},
                        {"id": "s4", "a": H["b5"], "b": H["end"]}, {"id": "s6", "a": H["end"], "b": t["dur"] + 1}],
-            "irises": [{"scene": "s5", "at": H["b6"], "x": 540, "y": 1000}, {"scene": "s6", "at": H["end"], "x": 540, "y": 700}],
+            "irises": [{"scene": "s5", "at": H["b6"], "x": 540, "y": 1000}, {"scene": "s6", "at": H["end"], "x": 540, "y": 600}],
         }
         n = 600
         extra = '    <link rel="stylesheet" href="assets/glass-tall.css" />\n'
     script = (SCRIPT.replace("__CFG__", json.dumps(cfg)).replace("__CID__", cid).replace("__W__", str(w)).replace("__H__", str(h))
-              .replace("__N__", str(n)).replace("__BOX2__", json.dumps(box("r2-sources", "warning"))))
+              .replace("__N__", str(n)).replace("__BOX2__", json.dumps(box("r2-sources", "warning_line"))))
     html = HEAD.format(w=w, h=h, title="Jarvis v6: Your AI" + ("" if kind == "landscape" else " (upright)"),
                        timing="timing" if kind == "landscape" else "timing-vertical",
                        audio="audio-data" if kind == "landscape" else "audio-data-vertical",

@@ -1,0 +1,31 @@
+{
+  "image_px": [
+    1500,
+    1101
+  ],
+  "window": {
+    "x": 0.0,
+    "y": 0.0,
+    "w": 1.0,
+    "h": 0.782
+  },
+  "answer_text": {
+    "x": 0.038,
+    "y": 0.3787,
+    "w": 0.8642,
+    "h": 0.1753
+  },
+  "step_line": {
+    "x": 0.038,
+    "y": 0.2588,
+    "w": 0.1484,
+    "h": 0.0409
+  },
+  "on_screen": {
+    "status": "COMPLETE",
+    "answer": "A sourdough starter is flour and water that wild yeast and bacteria slowly ferment. Bakers say to “feed it like a pet, every single day”: throw some out, add fresh flour and water, and keep it warm.",
+    "sources": "Where this came from",
+    "prompt": "",
+    "voice": null
+  }
+}

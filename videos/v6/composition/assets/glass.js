@@ -86,6 +86,7 @@
     var w = host.offsetWidth, h = host.offsetHeight, pad = 10;
     var x = box.x * w - pad, y = box.y * h - pad, bw = box.w * w + 2 * pad, bh = box.h * h + 2 * pad;
     el.style.opacity = "1";
+    el.style.width = w + "px"; el.style.height = h + "px";
     el.setAttribute("viewBox", "0 0 " + w + " " + h);
     var r = el.querySelector(".trace"), f = el.querySelector(".rest");
     [r, f].forEach(function (n) { n.setAttribute("x", x.toFixed(1)); n.setAttribute("y", y.toFixed(1)); n.setAttribute("width", bw.toFixed(1)); n.setAttribute("height", bh.toFixed(1)); });
