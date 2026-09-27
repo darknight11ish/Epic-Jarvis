@@ -107,9 +107,12 @@ await check("the faces are painted once they are on screen", async () => {
   // every card on screen has drawn (up to 10 s a step), and a card counts as
   // painted the first time any pixel of it is seen - so a card that stops
   // animating once it scrolls away still counts.
+  // Every face the spec lists, read from the spec: this was a literal 20,
+  // and the red panda made it 21.
+  const faces = JSON.parse(read("src/jarvis-visual-spec.json")).faces.length;
   const page = await open();
-  await page.waitForFunction(() => document.querySelectorAll("#grid canvas").length >= 20,
-    null, { timeout: 30000 });
+  await page.waitForFunction((n) => document.querySelectorAll("#grid canvas").length >= n,
+    faces, { timeout: 30000 });
   const got = await page.evaluate(async () => {
     const canvases = [...document.querySelectorAll("#grid canvas")];
     const seen = new Set();
@@ -144,7 +147,7 @@ await check("the faces are painted once they are on screen", async () => {
     };
   });
   await page.close();
-  assert.equal(got.n, 20,
+  assert.equal(got.n, faces,
     `${got.n} of ${got.total} canvases drew anything (never painted: #${got.missing.join(", #")})`);
 });
 
@@ -454,6 +457,77 @@ await check("Membrane no longer draws the outer rim circle", async () => {
   for (const src of [read("src/faces.html"), read("../docs/reference/jarvis-reactor-kit.html")]) {
     assert.ok(!src.includes("this.rim("), "a call to the removed rim() method is still present");
     assert.ok(!/\brim\(g, w, h, mid,/.test(src), "the removed rim() method definition is still present");
+  }
+});
+
+/* ── The red panda, the first animal face ────────────────────────────────── */
+
+await check("the panda's generated shader, phone copy and pose fixture are up to date", async () => {
+  // One .sksl source feeds both apps, and the phone's pose maths is checked
+  // against answers this page's critter-pose.js gave. If this fails, someone
+  // edited a generated file, or changed the source without re-running it.
+  try {
+    execFileSync("python3", [join(ROOT, "..", "tools", "gen_critters.py"), "--check"],
+      { cwd: join(ROOT, ".."), stdio: "pipe" });
+  } catch (e) {
+    assert.fail(String(e.stdout || e.message));
+  }
+});
+
+await check("the panda is handed every real state, not a borrowed movement", async () => {
+  // Most faces have four motion tables and the shell borrows for the other
+  // four states. A character cannot borrow: asleep has to look asleep, not
+  // idle with a grey tint. drawSurface() passes the real state to any face
+  // whose `st` declares it, so the panda must declare all eight.
+  const spec = JSON.parse(read("src/jarvis-visual-spec.json"));
+  const page = await open();
+  await page.waitForTimeout(1000);
+  const got = await page.evaluate(() => {
+    const th = THEME.redpanda;
+    const pose = (st) => CritterPose.uniforms(CritterPose.pose(st, st, 9, 3, 0, {}));
+    return {
+      states: Object.keys(th.st),
+      standbyEyes: pose("standby").uFace.slice(0, 2),
+      idleEyes: pose("idle").uFace.slice(0, 2),
+      approvalPawY: pose("approval").uPawL[1],
+      idlePawY: pose("idle").uPawL[1],
+    };
+  });
+  await page.close();
+  assert.deepEqual(got.states, spec.states.map((s) => s.id));
+  assert.deepEqual(got.standbyEyes, [0, 0], "asleep, but its eyes are open");
+  assert.ok(got.idleEyes[0] > 0.5, "idle, but its eyes are shut");
+  assert.ok(got.approvalPawY > got.idlePawY + 0.4, "waiting on you, but not waving");
+});
+
+await check("without a GPU the panda is still drawn, in every state", async () => {
+  // The flat fallback: what the owner sees on a PC whose WebGL is blocked or
+  // slower than the canvas (the GPU watchdog hands it back). It must draw
+  // something in each state and must not throw.
+  const page = await open();
+  await page.waitForTimeout(1000);
+  const got = await page.evaluate(() => {
+    const th = THEME.redpanda, out = {};
+    const saveOk = GPUOK, saveView = VIEW;
+    GPUOK = false; VIEW = { yaw: 0, pitch: 0, zoom: 1 };
+    try {
+      for (const st of Object.keys(th.st)) {
+        const c = document.createElement("canvas"); c.width = c.height = 160;
+        const g = c.getContext("2d");
+        g.fillStyle = "#000"; g.fillRect(0, 0, 160, 160);
+        try { th.draw(g, 160, 160, 2, st, 0.3); } catch (e) { out[st] = "threw: " + e.message; continue; }
+        const d = g.getImageData(0, 0, 160, 160).data;
+        let lit = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 60) lit++;
+        out[st] = lit;
+      }
+    } finally { GPUOK = saveOk; VIEW = saveView; }
+    return out;
+  });
+  await page.close();
+  for (const [st, lit] of Object.entries(got)) {
+    assert.ok(typeof lit === "number", `${st}: ${lit}`);
+    assert.ok(lit > 160 * 160 * 0.15, `${st}: only ${lit} pixels drawn`);
   }
 });
 

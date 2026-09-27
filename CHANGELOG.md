@@ -4,6 +4,16 @@ Newest first. One version number covers the desktop app, the phone app and
 the backend files (the `VERSION` file). Builds made by GitHub add a build
 number as the last part - `0.2.57` is a build of 0.2.
 
+## Not in a numbered version yet
+
+- **A red panda face** - the first animal among Jarvis's faces, on the
+  desktop and the phone. It sleeps when Jarvis is on standby, perks its ears
+  and tilts its head when listening, gazes into a glowing orb when thinking,
+  talks with Jarvis's voice, waves when an approval is waiting, and scratches
+  its head at an error. The orb is your colour for each state. Drawn in 3D
+  by the graphics card with no model file; see `docs/CRITTERS.md`. The owl
+  and the otter come after you have tried the panda.
+
 ## 0.2.0 - 26 September 2026
 
 The first numbered version. It gathers the work of the last few days.

@@ -1,0 +1,504 @@
+// The red panda, as one signed distance field.
+//
+// SOURCE OF TRUTH for both apps. `tools/gen_critters.py` copies this into
+// the desktop (`jarvis-desktop/src/critters-gen.js`, where a few #defines
+// turn AGSL's type names into GLSL's) and the phone
+// (`jarvis-client/.../face/CritterShaders.kt`, used as-is by
+// android.graphics.RuntimeShader). Edit here, then re-run the generator;
+// `tests/faces.mjs` fails if either copy is stale.
+//
+// There is no mesh and no model file. Every body part is a simple rounded
+// shape - an ellipsoid, a tapered capsule - and they are merged with a
+// smooth minimum, so the cheeks melt into the head and the arms into the
+// body with a soft fillet instead of a seam. That is where the "made of
+// felt" look comes from, and why the panda can bend and squash freely: a
+// pose is just new numbers for where each shape sits.
+//
+// Written in the common subset of GLSL ES 3.0 and AGSL (Android 13): no
+// arrays, no structs, no `out` parameters, loops with constant bounds, and
+// every literal a float. The pose arrives as uniforms, worked out once a
+// frame by `critter-pose.js` / `CritterPose.kt`; nothing here decides WHAT
+// the panda is doing, only how it looks doing it.
+//
+// Coordinates: x to the viewer's right, y up, the panda faces -z.
+// Rotations arrive as the three rows of each INVERSE matrix (world to
+// local), so turning a point into a body part's own frame is three dots.
+
+uniform float3 uBodyPos;
+uniform float3 uBodyR0;
+uniform float3 uBodyR1;
+uniform float3 uBodyR2;
+uniform float uBreath;
+uniform float3 uNeck;
+uniform float3 uHeadR0;
+uniform float3 uHeadR1;
+uniform float3 uHeadR2;
+uniform float3 uEarL0;
+uniform float3 uEarL1;
+uniform float3 uEarL2;
+uniform float3 uEarR0;
+uniform float3 uEarR1;
+uniform float3 uEarR2;
+uniform float4 uFace;      // eye open L, eye open R, brow, mouth open
+uniform float2 uLook;      // where the eyes look, -1..1
+uniform float3 uShL;
+uniform float3 uShR;
+uniform float3 uPawL;
+uniform float3 uPawR;
+uniform float4 uTail0;
+uniform float4 uTail1;
+uniform float4 uTail2;
+uniform float4 uTail3;
+uniform float4 uTail4;
+uniform float4 uTail5;
+uniform float4 uOrb;       // centre, radius
+uniform float uOrbGlow;
+uniform float3 uHot;       // the state's bright colour: the orb, and its light
+uniform float3 uCool;      // the state's structural colour: the rim light
+uniform float uYaw;
+uniform float uPit;
+uniform float uTime;
+uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
+
+const float PI = 3.14159265;
+// The head is modelled at 1 and drawn this much bigger: a cartoon's head is
+// most of the animal.
+const float HEAD_S = 1.14;
+
+// Part ids. Returned beside the distance so the shading knows what it hit.
+const float ID_BODY = 1.0;
+const float ID_LIMB = 2.0;
+const float ID_HEAD = 3.0;
+const float ID_EYE = 4.0;
+const float ID_NOSE = 5.0;
+const float ID_MOUTH = 6.0;
+const float ID_EAR = 7.0;
+const float ID_TAIL = 8.0;
+const float ID_ORB = 9.0;
+
+// Fur colours, already in linear light (sRGB values to the power 2.2) so the
+// lighting sums behave like light. Rust back, cream mask, near-black legs:
+// the red panda's own markings, softened toward a cartoon.
+const float3 RUST = float3(0.560, 0.105, 0.022);
+const float3 RUST_DEEP = float3(0.330, 0.050, 0.010);
+const float3 CREAM = float3(0.930, 0.830, 0.680);
+const float3 DARK = float3(0.034, 0.012, 0.007);
+const float3 INK = float3(0.004, 0.004, 0.006);
+const float3 MOUTH_IN = float3(0.180, 0.018, 0.020);
+const float3 TONGUE = float3(0.700, 0.160, 0.170);
+
+float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
+
+float3 toBody(float3 p) {
+    float3 v = p - uBodyPos;
+    return float3(dot(uBodyR0, v), dot(uBodyR1, v), dot(uBodyR2, v));
+}
+float3 toHead(float3 p) {
+    float3 v = p - uNeck;
+    return float3(dot(uHeadR0, v), dot(uHeadR1, v), dot(uHeadR2, v)) / HEAD_S;
+}
+// Where each eye sits: it drifts a little toward where it is looking.
+float2 eyeAt() { return float2(0.158 + 0.012 * uLook.x, 0.395 + 0.012 * uLook.y); }
+// Ears are placed in the HEAD's frame, so they turn with it.
+float3 toEarL(float3 h) {
+    float3 v = h - float3(-0.265, 0.60, 0.04);
+    return float3(dot(uEarL0, v), dot(uEarL1, v), dot(uEarL2, v));
+}
+float3 toEarR(float3 h) {
+    float3 v = h - float3(0.265, 0.60, 0.04);
+    return float3(dot(uEarR0, v), dot(uEarR1, v), dot(uEarR2, v));
+}
+
+// Inigo Quilez's distance bounds. An ellipsoid has no exact distance
+// formula; this one is close enough near the surface, which is all the
+// march needs.
+float sdEllipsoid(float3 p, float3 r) {
+    float k0 = length(p / r);
+    float k1 = length(p / (r * r));
+    return k0 * (k0 - 1.0) / max(k1, 0.0001);
+}
+
+// A capsule whose radius tapers from r1 at `a` to r2 at `b`.
+float sdRoundCone(float3 p, float3 a, float3 b, float r1, float r2) {
+    float3 ba = b - a;
+    float l2 = max(dot(ba, ba), 0.00001);
+    float rr = r1 - r2;
+    float a2 = l2 - rr * rr;
+    float il2 = 1.0 / l2;
+    float3 pa = p - a;
+    float y = dot(pa, ba);
+    float z = y - l2;
+    float3 xv = pa * l2 - ba * y;
+    float x2 = dot(xv, xv);
+    float y2 = y * y * l2;
+    float z2 = z * z * l2;
+    float k = sign(rr) * rr * rr * x2;
+    if (sign(z) * a2 * z2 > k) return sqrt(x2 + z2) * il2 - r2;
+    if (sign(y) * a2 * y2 < k) return sqrt(x2 + y2) * il2 - r1;
+    return (sqrt(x2 * a2 * il2) + y * rr) * il2 - r1;
+}
+
+// Polynomial smooth minimum: joins two shapes with a fillet of size k.
+float smin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}
+float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// Joins two (distance, id) pairs smoothly; the id is whichever is nearer.
+float2 sjoin(float2 a, float2 b, float k) {
+    float d = smin(a.x, b.x, k);
+    return float2(d, a.x < b.x ? a.y : b.y);
+}
+float2 hjoin(float2 a, float2 b) { return a.x < b.x ? a : b; }
+
+// The head alone, in its own frame. Kept separate because the shading
+// needs to ask "is this point on the mouth or the muzzle" after the hit.
+float headShape(float3 h) {
+    float3 hs = float3(abs(h.x), h.y, h.z);
+    float d = sdEllipsoid(h - float3(0.0, 0.34, 0.0), float3(0.45, 0.37, 0.39));
+    // Big cheek fluff, the red panda's widest point.
+    d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
+    // The muzzle, a soft rounded snout.
+    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205, -0.29), float3(0.155, 0.115, 0.13)), 0.07);
+    // Eyebrow puffs, lifted by `brow`.
+    float by = 0.53 + 0.025 * uFace.z;
+    d = smin(d, sdEllipsoid(hs - float3(0.14, by, -0.27), float3(0.07, 0.04, 0.05)), 0.05);
+    return d;
+}
+float mouthShape(float3 h) {
+    float open = uFace.w;
+    return sdEllipsoid(h - float3(0.0, 0.150 - 0.02 * open, -0.395),
+                       float3(0.055 + 0.01 * open, 0.010 + 0.050 * open, 0.075));
+}
+
+float2 map(float3 p) {
+    // The orb stands apart: it is held, not grown.
+    float2 res = float2(length(p - uOrb.xyz) - uOrb.w, ID_ORB);
+
+    // --- body, legs, arms ---
+    float3 b = toBody(p);
+    float br = uBreath;
+    float2 body = float2(sdEllipsoid(b - float3(0.0, 0.31, 0.02),
+                                     float3(0.38 * br, 0.39 * (0.5 + 0.5 * br), 0.33 * br)), ID_BODY);
+    float3 bs = float3(abs(b.x), b.y, b.z);
+    float legs = sdEllipsoid(bs - float3(0.21, 0.10, -0.14), float3(0.15, 0.13, 0.21));
+    legs = smin(legs, sdEllipsoid(bs - float3(0.20, 0.03, -0.37), float3(0.10, 0.075, 0.12)), 0.05);
+    body = sjoin(body, float2(legs, ID_LIMB), 0.07);
+    float arms = sdRoundCone(p, uShL, uPawL, 0.085, 0.07);
+    arms = min(arms, sdRoundCone(p, uShR, uPawR, 0.085, 0.07));
+    arms = smin(arms, length(p - uPawL) - 0.088, 0.05);
+    arms = smin(arms, length(p - uPawR) - 0.088, 0.05);
+    body = sjoin(body, float2(arms, ID_LIMB), 0.06);
+
+    // --- tail: five tapered segments, blended into one bushy line ---
+    float t = sdRoundCone(p, uTail0.xyz, uTail1.xyz, uTail0.w, uTail1.w);
+    t = smin(t, sdRoundCone(p, uTail1.xyz, uTail2.xyz, uTail1.w, uTail2.w), 0.05);
+    t = smin(t, sdRoundCone(p, uTail2.xyz, uTail3.xyz, uTail2.w, uTail3.w), 0.05);
+    t = smin(t, sdRoundCone(p, uTail3.xyz, uTail4.xyz, uTail3.w, uTail4.w), 0.05);
+    t = smin(t, sdRoundCone(p, uTail4.xyz, uTail5.xyz, uTail4.w, uTail5.w), 0.05);
+    body = sjoin(body, float2(t, ID_TAIL), 0.05);
+
+    // --- head (only worked out near it: the far side of the frame is most
+    // of the pixels, and they have no business paying for a face) ---
+    float3 h = toHead(p);
+    float hb = (length(h - float3(0.0, 0.40, 0.0)) - 0.78) * HEAD_S;
+    if (hb > 0.2) {
+        return hjoin(res, float2(min(body.x, hb), body.y));
+    }
+    float head = headShape(h);
+    head = smax(head, -mouthShape(h), 0.012);
+    float2 hd = float2(head, ID_HEAD);
+    float3 el = toEarL(h);
+    float3 er = toEarR(h);
+    // Ears: a flattened ellipsoid pinched toward the tip.
+    float earL = sdEllipsoid(el - float3(0.0, 0.13, 0.0),
+                             float3(0.13 * (1.0 - 0.30 * clamp(el.y / 0.28, 0.0, 1.0)), 0.17, 0.055));
+    float earR = sdEllipsoid(er - float3(0.0, 0.13, 0.0),
+                             float3(0.13 * (1.0 - 0.30 * clamp(er.y / 0.28, 0.0, 1.0)), 0.17, 0.055));
+    hd = sjoin(hd, float2(min(earL, earR), ID_EAR), 0.05);
+    float nose = sdEllipsoid(h - float3(0.0, 0.285, -0.405), float3(0.062, 0.042, 0.045));
+    hd = sjoin(hd, float2(nose, ID_NOSE), 0.02);
+    // Button eyes. Closing is squashing: a shut eye is a thin dark line,
+    // which is also how a cartoon draws one.
+    float3 hs = float3(abs(h.x), h.y, h.z);
+    float open = h.x < 0.0 ? uFace.x : uFace.y;
+    float2 ea = eyeAt();
+    float3 ep = float3(h.x - sign(h.x) * ea.x, h.y - ea.y, h.z + 0.31);
+    float eye = sdEllipsoid(ep, float3(0.074, max(0.008, 0.084 * open), 0.055));
+    hd = hjoin(hd, float2(eye, ID_EYE));
+    hd.x *= HEAD_S;
+    // The neck: head and body share a thick fillet, so the head can tilt
+    // without a gap opening under the chin.
+    hd = sjoin(hd, body, 0.12);
+    return hjoin(res, hd);
+}
+
+float3 normalAt(float3 p) {
+    float e = 0.0015;
+    float m1 = map(p + float3(e, -e, -e)).x;
+    float m2 = map(p + float3(-e, -e, e)).x;
+    float m3 = map(p + float3(-e, e, -e)).x;
+    float m4 = map(p + float3(e, e, e)).x;
+    return normalize(float3(m1 - m2 - m3 + m4, -m1 - m2 + m3 + m4, -m1 + m2 - m3 + m4));
+}
+
+// Soft shadow toward the key light: how close the march back to the light
+// came to being blocked.
+float softShadow(float3 ro, float3 rd) {
+    float res = 1.0;
+    float t = 0.02;
+    for (int i = 0; i < 18; i++) {
+        float h = map(ro + rd * t).x;
+        res = min(res, 10.0 * h / t);
+        t += clamp(h, 0.02, 0.2);
+        if (res < 0.005 || t > 2.0) break;
+    }
+    return clamp(res, 0.0, 1.0);
+}
+
+float ambientOcclusion(float3 p, float3 n) {
+    float occ = 0.0;
+    float w = 1.0;
+    for (int i = 0; i < 5; i++) {
+        float hr = 0.02 + 0.06 * float(i);
+        occ += (hr - map(p + n * hr).x) * w;
+        w *= 0.7;
+    }
+    return clamp(1.0 - 2.2 * occ, 0.0, 1.0);
+}
+
+// Cheap fixed-pattern variation, standing in for felt: small lumps in the
+// colour, never moving, never flickering.
+float felt(float3 p) {
+    return sin(p.x * 41.0 + sin(p.y * 37.0)) * sin(p.y * 43.0 + sin(p.z * 31.0)) * sin(p.z * 39.0 + p.x * 7.0);
+}
+
+// Where along the tail a point sits, 0 at the base and 1 at the tip - for
+// the rings.
+float tailParam(float3 p) {
+    float best = 100000.0;
+    float par = 0.0;
+    float3 a = uTail0.xyz;
+    float3 b = uTail1.xyz;
+    for (int i = 0; i < 5; i++) {
+        if (i == 1) { a = uTail1.xyz; b = uTail2.xyz; }
+        if (i == 2) { a = uTail2.xyz; b = uTail3.xyz; }
+        if (i == 3) { a = uTail3.xyz; b = uTail4.xyz; }
+        if (i == 4) { a = uTail4.xyz; b = uTail5.xyz; }
+        float3 ba = b - a;
+        float k = clamp(dot(p - a, ba) / max(dot(ba, ba), 0.00001), 0.0, 1.0);
+        float d = length(p - a - ba * k);
+        if (d < best) { best = d; par = (float(i) + k) / 5.0; }
+    }
+    return par;
+}
+
+// Distance from point p to the segment ab, in 2D.
+float seg2(float2 p, float2 a, float2 b) {
+    float2 ba = b - a;
+    float k = clamp(dot(p - a, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(p - a - ba * k);
+}
+
+// The fur colour at a point on the head: rust, with the red panda's cream
+// mask (muzzle, lower cheeks, eyebrow spots) and the rust "tear" lines that
+// run from each eye down toward the mouth.
+float3 headColour(float3 h) {
+    float3 hs = float3(abs(h.x), h.y, h.z);
+    float front = smoothstep(0.02, -0.12, h.z);
+    float muzzle = (1.0 - smoothstep(0.13, 0.20, length((h.xy - float2(0.0, 0.20)) * float2(1.0, 1.25)))) *
+                   smoothstep(-0.12, -0.22, h.z);
+    float cheek = (1.0 - smoothstep(0.12, 0.17, length(hs.xy - float2(0.26, 0.17)))) * front;
+    float brow = 1.0 - smoothstep(0.045, 0.075, length(hs - float3(0.14, 0.535 + 0.025 * uFace.z, -0.28)));
+    float cream = clamp(max(max(muzzle, cheek), brow), 0.0, 1.0);
+    // Tear lines: a thin rust stroke from under each eye toward the cheek.
+    float tear = (1.0 - smoothstep(0.012, 0.022, seg2(hs.xy, float2(0.16, 0.33), float2(0.13, 0.22)))) * front;
+    cream *= 1.0 - 0.85 * tear;
+    float3 fur = mix(RUST, RUST_DEEP, smoothstep(0.1, 0.35, h.z) * 0.6);
+    float3 c = mix(fur, CREAM, cream);
+    // The little mouth line under the nose: down, then out both ways.
+    float ml = min(seg2(hs.xy, float2(0.0, 0.25), float2(0.0, 0.19)),
+                   seg2(hs.xy, float2(0.0, 0.19), float2(0.052, 0.203)));
+    float line = (1.0 - smoothstep(0.004, 0.009, ml)) * smoothstep(-0.30, -0.36, h.z) * (1.0 - uFace.w);
+    return mix(c, DARK * 2.0, line);
+}
+
+// Body: rust back, dark front and belly.
+float3 bodyColour(float3 b) {
+    float belly = smoothstep(-0.05, -0.22, b.z) * (1.0 - smoothstep(0.45, 0.62, b.y));
+    return mix(RUST, DARK * 1.6, belly);
+}
+
+float3 earColour(float3 e) {
+    // Cream rim all round, dark inside on the front face, rust behind.
+    float r = length((e.xy - float2(0.0, 0.12)) / float2(0.12, 0.16));
+    float rim = smoothstep(0.62, 0.80, r);
+    float inside = smoothstep(0.0, -0.02, e.z) * (1.0 - rim);
+    float3 c = mix(RUST, DARK, inside);
+    return mix(c, CREAM, rim);
+}
+
+float3 aces(float3 x) {
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+
+// The whole picture for one ray. `p` is the point on screen, -1..1 across
+// the square the panda is framed in, y up. Returns premultiplied colour and
+// coverage; 0 alpha where there is no panda (and no orb glow) at all.
+float4 critter(float2 p) {
+    float3 hot = toLinear(uHot);
+    float3 cool = toLinear(uCool);
+
+    // Camera: a gentle perspective, orbiting the origin by yaw and pitch
+    // exactly as the other ray-traced face (Nucleus) does.
+    float3 dir = normalize(float3(p / max(uZoom, 0.1), 3.1));
+    float cp = cos(uPit);
+    float sp = sin(uPit);
+    float cy = cos(uYaw);
+    float sy = sin(uYaw);
+    float ry1 = dir.y * cp - dir.z * sp;
+    float rz1 = dir.y * sp + dir.z * cp;
+    float3 rd = float3(dir.x * cy + rz1 * sy, ry1, -dir.x * sy + rz1 * cy);
+    float dist = 3.35;
+    float3 target = float3(0.0, -0.08, 0.0);
+    float3 ro = target + float3(-dist * cp * sy, dist * sp, -dist * cp * cy);
+
+    // The orb's glow reaches past its edge, and past the panda's silhouette,
+    // so it is worked out for every ray: the ray's closest pass by the orb.
+    float3 oc = uOrb.xyz - ro;
+    float tOrb = dot(oc, rd);
+    float orbMiss = length(oc - rd * tOrb);
+    float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
+                 smoothstep(0.55, 0.0, orbMiss);
+
+    // Skip rays that miss the panda's bounding sphere altogether.
+    float3 oc2 = ro - target;
+    float bb = dot(oc2, rd);
+    float cc = dot(oc2, oc2) - 1.35 * 1.35;
+    float disc = bb * bb - cc;
+    float hitT = -1.0;
+    float id = 0.0;
+    if (disc > 0.0) {
+        float sq = sqrt(disc);
+        float t = max(0.0, -bb - sq);
+        float tMax = -bb + sq;
+        for (int i = 0; i < 110; i++) {
+            float2 h = map(ro + rd * t);
+            if (h.x < 0.0008 * t) { hitT = t; id = h.y; break; }
+            t += h.x * 0.9;
+            if (t > tMax) break;
+        }
+    }
+
+    if (hitT < 0.0) {
+        float3 g = aces(hot * halo);
+        g = pow(g, float3(1.0 / 2.2));
+        return float4(g, max(g.r, max(g.g, g.b)));
+    }
+
+    float3 pos = ro + rd * hitT;
+    float3 n = normalAt(pos);
+    float3 v = -rd;
+
+    float3 alb = RUST;
+    float gloss = 0.0;
+    float fuzz = 1.0;
+    float3 h = toHead(pos);
+    if (id == ID_ORB) {
+        // Glassy, lit from inside: bright at the centre where you look
+        // through the most of it, deeper toward the rim, a slow swirl.
+        float facing = clamp(dot(n, v), 0.0, 1.0);
+        float swirl = 0.5 + 0.5 * sin(dot(n, float3(5.0, 7.0, 3.0)) + uTime * 1.3);
+        float3 c = hot * (0.9 + 1.6 * uOrbGlow) * (0.55 + 0.45 * facing) * (0.85 + 0.25 * swirl);
+        c += float3(1.0) * pow(facing, 6.0) * (0.3 + 0.9 * uOrbGlow);
+        float3 r = reflect(rd, n);
+        c += float3(1.0) * pow(max(dot(r, normalize(float3(-0.5, 0.8, -0.6))), 0.0), 40.0) * 0.8;
+        float3 outc = pow(aces(c + hot * halo * 0.3), float3(1.0 / 2.2));
+        return float4(outc, 1.0);
+    } else if (id == ID_EYE) {
+        alb = INK; gloss = 1.0; fuzz = 0.0;
+    } else if (id == ID_NOSE) {
+        alb = INK * 2.0; gloss = 0.6; fuzz = 0.0;
+    } else if (id == ID_HEAD) {
+        float m = mouthShape(h);
+        // Only the carved-out cavity itself: points right on the mouth's
+        // own surface, on the front of the muzzle, while it is open.
+        if (m < 0.012 && h.z < -0.33 && uFace.w > 0.02) {
+            alb = mix(MOUTH_IN, TONGUE, smoothstep(0.14, 0.10, h.y) * 0.8);
+            fuzz = 0.0;
+        } else {
+            alb = headColour(h);
+        }
+    } else if (id == ID_EAR) {
+        float3 e = h.x < 0.0 ? toEarL(h) : toEarR(h);
+        alb = earColour(e);
+    } else if (id == ID_BODY) {
+        alb = bodyColour(toBody(pos));
+    } else if (id == ID_LIMB) {
+        alb = DARK;
+    } else if (id == ID_TAIL) {
+        float k = tailParam(pos);
+        float ring = smoothstep(0.35, 0.65, 0.5 + 0.5 * sin(k * 5.0 * 2.0 * PI));
+        alb = mix(RUST * 1.15, RUST_DEEP * 0.8, ring);
+        alb = mix(alb, RUST_DEEP * 0.5, smoothstep(0.85, 1.0, k));
+    }
+    alb *= 1.0 + 0.06 * fuzz * felt(pos);
+
+    // --- light ---
+    float3 L = normalize(float3(-0.55, 0.75, -0.55));   // key: upper left, in front
+    float3 keyCol = float3(1.00, 0.93, 0.84) * 2.6;
+    float3 skyCol = float3(0.50, 0.58, 0.78) * 0.55;
+    float3 groundCol = float3(0.40, 0.22, 0.13) * 0.30;
+
+    float nl = dot(n, L);
+    // Wrapped diffuse: light bleeds past the terminator, the way it does on
+    // felt and fur, instead of cutting to black.
+    float wrap = clamp((nl + 0.45) / 1.45, 0.0, 1.0);
+    float sh = softShadow(pos + n * 0.01, L);
+    float ao = ambientOcclusion(pos, n);
+    float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
+
+    float3 col = alb * keyCol * wrap * wrap * mix(0.35, 1.0, sh);
+    col += alb * skyCol * (0.6 + 0.4 * n.y) * ao;
+    col += alb * groundCol * (0.5 - 0.5 * n.y) * ao;
+    // A warm glow along the shadow's edge: light scattering through fur.
+    col += alb * float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh;
+
+    // The orb is a real light: whatever colour Jarvis is showing lands on
+    // the panda's paws, chest and chin.
+    float3 ol = uOrb.xyz - pos;
+    float od = length(ol);
+    float orbLight = uOrbGlow * 0.55 / (1.0 + od * od * 14.0);
+    col += alb * hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * ao * 3.0;
+
+    // Rim light in the state's colour, the soft halo round the silhouette.
+    col += cool * fres * (0.55 + 0.45 * fuzz) * ao * 0.9;
+    // Fur sheen.
+    col += keyCol * fres * fres * 0.10 * fuzz * sh;
+
+    // Gloss: the eyes and nose catch the key light and the orb.
+    if (gloss > 0.0) {
+        float3 r = reflect(rd, n);
+        float spec = pow(max(dot(r, L), 0.0), 60.0) * 3.0;
+        spec += pow(max(dot(r, ol / od), 0.0), 90.0) * 2.0 * uOrbGlow;
+        col += gloss * (keyCol * 0.4 * spec + hot * spec * 0.25 * uOrbGlow);
+        col += gloss * cool * fres * 0.4;
+    }
+    if (id == ID_EYE) {
+        // A painted catchlight - the cartoon's sparkle - riding with the gaze.
+        float3 hs = float3(abs(h.x), h.y, h.z);
+        float2 eyeC = eyeAt();
+        float side = h.x < 0.0 ? -1.0 : 1.0;
+        float2 q = float2(h.x - side * eyeC.x, h.y - eyeC.y);
+        float2 sparkAt = float2(-0.024 + 0.014 * uLook.x, 0.028 + 0.010 * uLook.y);
+        float spark = 1.0 - smoothstep(0.012, 0.021, length(q - sparkAt));
+        float spark2 = 1.0 - smoothstep(0.005, 0.009, length(q - sparkAt - float2(0.036, -0.036)));
+        float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y));
+        col += float3(1.6) * max(spark, spark2 * 0.8) * lit * (hs.z < -0.28 ? 1.0 : 0.0);
+    }
+
+    col += hot * halo * 0.25;
+    float3 outc = pow(aces(col), float3(1.0 / 2.2));
+    return float4(outc, 1.0);
+}

@@ -487,6 +487,14 @@ here rather than patched blind:
   without the owner's go-ahead given how carefully this project already
   treats crisis handling.
 
+Decided 2026-09-27, when the owner asked for a 3D animal face (with
+Gemini's notes as input, not instructions):
+- **All three animals - red panda, pygmy owl, sea otter - panda first.**
+  Build the owl and the otter only after asking the owner, once the panda
+  works for them. The panda is a face like the others (picked in the Faces
+  window / Appearance), drawn from one shader source for both apps
+  (`docs/CRITTERS.md`), not a downloaded 3D model.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

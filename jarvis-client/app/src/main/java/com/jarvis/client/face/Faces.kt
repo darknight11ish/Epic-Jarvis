@@ -59,7 +59,8 @@ interface Face {
 }
 
 /**
- * Twenty faces. All of them.
+ * Twenty faces - all of the desktop kit's instruments - and, since 2026-09-27,
+ * the first animal ([RedPanda], in its own file), which is drawn like Nucleus.
  *
  * The brief called porting all twenty the real cost of going fully native,
  * and treated it as a multi-stage undertaking: seventeen from the spec's
@@ -129,7 +130,7 @@ object Faces {
     val all: List<Face> = listOf(
         Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital, Geodesic, Kirkwood,
         Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion, Cascade, Nucleus, Tokamak,
-        Membrane,
+        Membrane, RedPanda,
     )
     val default: Face = Arc
     fun byId(id: String): Face = all.firstOrNull { it.id == id } ?: default

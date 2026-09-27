@@ -790,6 +790,15 @@ data class FaceFrame(
      * function of this frame, rather than carrying last frame's value.
      */
     val prevMotion: FaceState = motion,
+    /**
+     * The STATE before the current one ([state] itself until the first
+     * change). [prevMotion] is not enough for a face that reads the real
+     * state rather than the borrowed movement: standby and idle share a
+     * movement, so waking from standby would look like no change at all and
+     * the red panda would snap awake instead of melting from its sleeping
+     * pose. With [hitchPhase] it is what `CritterPose.pose` blends from.
+     */
+    val prevState: FaceState = state,
 )
 
 /**
@@ -1087,6 +1096,7 @@ class FaceHost {
             t = motionT,
             calm = calm,
             prevMotion = Spec.transformFor(prevState).borrow,
+            prevState = prevState,
         )
     }
 

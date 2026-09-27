@@ -1509,6 +1509,36 @@
     "fit": 0.9
    },
    "archived": false
+  },
+  {
+   "id": "redpanda",
+   "name": "Red Panda",
+   "dim": "3d",
+   "geometry": "sphere-traced soft-body character",
+   "integrates_per_frame": false,
+   "heavy": false,
+   "speed": {
+    "min": 0.05,
+    "max": 6.0,
+    "default": 1.0,
+    "curve": "log",
+    "substeps_max": 1
+   },
+   "render": {
+    "supersample_max": 2.0,
+    "target_fps": 60,
+    "max_px": 1800,
+    "fit": 1.0
+   },
+   "archived": false,
+   "character": {
+    "note": "The first animal face. Unlike the twenty instruments before it, a character needs its own pose for every state, so it receives all eight rather than borrowing four motion tables: asleep for standby, a wave for approval, a head-scratch for error, a doze for banked. The shell's transforms (dim, the approval clock, the error hitch) still apply on top.",
+    "shader": "jarvis-desktop/critters/redpanda.sksl - one source for both apps, generated into each by tools/gen_critters.py",
+    "pose": "jarvis-desktop/src/critter-pose.js and jarvis-client CritterPose.kt, held equal by tools/gen_critters.py's fixture and CritterPoseTest",
+    "colour": "The fur keeps its own colours. The bound hot colour is the orb the panda holds, which lights its paws and chin; the dim colour is the rim light round its fur. Recolouring the whole animal per state would read as a different animal, not the same one changing its mind.",
+    "fallback_desktop": "Without WebGL2, a flat sticker of the same panda in the same pose.",
+    "more_coming": "Pygmy owl and sea otter are designed but not built; the owner asked to see a working panda first."
+   }
   }
  ],
  "frame_rate": {
@@ -1581,6 +1611,12 @@
  "renderer": {
   "note": "Most faces are meshes of a few thousand quads and a CPU rasteriser draws them fine. Three cannot be drawn sharply that way at phone resolution, and are rendered by a shader instead. The distinction is a property of the face, not of the client, so it is recorded here.",
   "gpu_faces": {
+   "redpanda": {
+    "kind": "sdf_raymarch",
+    "why": "A character built from about twenty blended rounded shapes, lit with soft shadows, occlusion and the orb as a point light. Like nucleus, one full lighting solve per pixel.",
+    "web": "WebGL2 fragment shader, one pass, full display resolution; flat canvas sticker as the fallback.",
+    "android": "RuntimeShader (AGSL) on API 33+, from the same source as the desktop's shader."
+   },
    "nucleus": {
     "kind": "sdf_raymarch",
     "why": "One full lighting solve per pixel. On a CPU it can only be computed into a small buffer and stretched, which is what read as low resolution: a 140 px buffer on a 1089 px display is a 7.8x upscale.",
