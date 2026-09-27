@@ -4837,6 +4837,17 @@ pub fn write_clipboard(app: AppHandle, text: String) -> Result<(), String> {
         .map_err(|e| format!("unable to write to the clipboard: {e}"))
 }
 
+/// "Private copy" (feasibility I114): the same copy as [`write_clipboard`],
+/// except the clip is also marked out of Windows Clipboard History and
+/// Cloud Clipboard sync - see `clipboard_privacy.rs` for how and why. The
+/// Jarvis bar's Copy button calls this one, never `write_clipboard`, for an
+/// answer; `write_clipboard` stays as it was for anything that is not an
+/// answer (nothing else calls it today).
+#[tauri::command]
+pub fn write_clipboard_private(text: String) -> Result<(), String> {
+    crate::clipboard_privacy::write_private(&text)
+}
+
 /// Reads text from the Windows clipboard.
 #[tauri::command]
 pub fn read_clipboard(app: AppHandle) -> Result<String, String> {

@@ -123,6 +123,11 @@ SHIPPED = (
     "jarvis_voicebank.py",
     "jarvis_voice_flow.py",
     "jarvis_chat_log.py",
+    # "Paste guard" (feasibility I115): masks a pasted password, PIN or
+    # one-time code before jarvis_chat_log.py writes a message to the
+    # encrypted database - reuses jarvis_sensitive.py's and
+    # jarvis_mail_mask.py's own pattern shapes, its own small variant
+    "jarvis_paste_guard.py",
     "jarvis_auto_learn.py",
     "jarvis_sensitive.py",
     "jarvis_past.py",
@@ -174,6 +179,10 @@ SHIPPED = (
     # news headlines in the morning briefing: RSS/Atom feed addresses the
     # owner adds, headlines only, one card per feed (news.patch)
     "jarvis_news.py",
+    # data health in the preflight: do the databases open, is there disk
+    # space, do the settings files parse - read-only, WARN never fix
+    # (feasibility I97, data-health.patch)
+    "jarvis_data_health.py",
 )
 
 

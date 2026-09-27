@@ -576,6 +576,16 @@ $PATCHES = @(
     # without_shared_in_plain(), with_profile()'s new `manner` argument);
     # with an older copy the routes answer 501 and nothing is filtered.
     'memory-shared.patch'
+    # "Data health in the preflight" (feasibility I97, docs/FEASIBILITY-AUDIT-
+    # 2026-09-26.md: "Small, read-only" / "WARN, never fix"): GET
+    # /api/data-health, read by --preflight's own "Is Jarvis's own data
+    # healthy?" check. Its jarvis_hud.py context is the route-dispatch chain
+    # near /api/reach (original line ~1626), a completely different part of
+    # the file from every patch above it in this list (they all touch the
+    # startup install() block) - so its place in this list is only about
+    # order, not about finding its own anchor text. Needs
+    # jarvis_data_health.py copied in; without it the route answers 503.
+    'data-health.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -638,6 +648,7 @@ $SHIPPED = @(
     'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
     'jarvis_voice_flow.py'       # voice-flow.patch: interrupting by talking, the delay in numbers, the "One moment." clip; jarvis_speech.py calls it
     'jarvis_chat_log.py'         # chat-history.patch: chat history kept on this PC, encrypted
+    'jarvis_paste_guard.py'      # feasibility I115, "Paste guard": masks a pasted password, PIN or one-time code before it is written to the encrypted database
     'jarvis_auto_learn.py'       # auto-learn.patch: facts from the owner's own words saved without a card
     'jarvis_sensitive.py'        # the sensitive-topic check jarvis_auto_learn.py asks: word lists, shapes, the local model
     'jarvis_past.py'             # past-recall.patch: questions about the past also get retired facts, labelled
@@ -698,6 +709,8 @@ $SHIPPED = @(
     # --- "tell me when this page changes" (a source of jarvis_tellme.py, no patch of its own) is IN jarvis_tellme.py above
     # --- news headlines in the morning briefing (2026-09-27, news.patch) ---
     'jarvis_news.py'             # news.patch: RSS/Atom feed addresses the owner adds, headlines only, one card per feed
+    # --- data health in the preflight (feasibility I97, data-health.patch) ---
+    'jarvis_data_health.py'      # do the chat history and memory databases open, is there disk space, do the settings files parse - read-only, WARN never fix
 )
 
 # The settings file. Installed only where none exists; never overwritten.

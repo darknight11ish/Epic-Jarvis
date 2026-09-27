@@ -353,6 +353,7 @@ fn main() {
             "resize_quickbar",
             "set_quickbar_pinned",
             "write_clipboard",
+            "write_clipboard_private",
             "open_external_url",
             // Diagnostics and startup. Settings window only: the log path is
             // a filesystem path and the startup entry is a registry write,

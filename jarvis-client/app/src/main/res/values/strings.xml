@@ -2,6 +2,28 @@
 <resources>
     <string name="app_name">Jarvis</string>
 
+    <!-- App-icon shortcuts (feasibility I125, docs/FEASIBILITY-AUDIT-
+         2026-09-26.md: "Talk, Note, Brief me, What did I miss; still meets
+         App lock"), shown on a long press of the app's own icon on the
+         home screen or app drawer - res/xml/shortcuts.xml. Each reuses an
+         action MainActivity already handles (the widget's own Talk and
+         Note buttons; the briefing notification's own "open the briefing"
+         action), so there is no new behaviour here, only a second way to
+         reach it. All four still open behind App lock like any other
+         launch - MainActivity.kt's own "the app lock outranks everything"
+         composes nothing else until it is unlocked. -->
+    <string name="shortcut_talk_short">Talk</string>
+    <string name="shortcut_talk_long">Talk to Jarvis</string>
+    <string name="shortcut_note_short">Note</string>
+    <string name="shortcut_note_long">Quick note</string>
+    <string name="shortcut_brief_short">Brief me</string>
+    <string name="shortcut_brief_long">Brief me now</string>
+    <!-- Short label kept close to Android's own ~10-character guidance for
+         a shortcut's short label (the long label, shown with more room, is
+         the full question); "Talk"/"Note"/"Brief me" already fit within it. -->
+    <string name="shortcut_missed_short">Missed?</string>
+    <string name="shortcut_missed_long">What did I miss?</string>
+
     <!--
       §3.1(2). specialUse, not dataSync. dataSync is capped at six hours per
       rolling 24h on Android 15; when the budget runs out the system calls

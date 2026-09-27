@@ -65,6 +65,13 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
+ * Feasibility I110, "Slower Approve on risky cards": how long a heavy card's
+ * Approve stays disabled at minimum, matching the desktop's own
+ * `heavy-approve.js` `MIN_DELAY_MS`.
+ */
+private const val HEAVY_APPROVE_DELAY_MS = 2000L
+
+/**
  * One pending approval.
  *
  * The card's job is to make the cost of answering wrongly visible before the
@@ -156,11 +163,31 @@ fun ApprovalCard(
     // nothing else - the same split ExpiryCountdown made, now shared by both.
     val secondsLeft: State<Long>? = if (expiry != null) rememberSecondsLeft(expiry) else null
     val canDecide = blocker == null && !expired
+
+    // Feasibility I110, "Slower Approve on risky cards": a heavy card's
+    // Approve stays disabled for HEAVY_APPROVE_DELAY_MS AND until the card's
+    // whole text has been in view. On this screen `detail` (when there is
+    // one) starts collapsed behind "Show detail" rather than in a scrolling
+    // box - see the toggle further down - so "in view" here means "opened at
+    // least once"; a card with no `detail` at all has nothing hidden, so
+    // that half is satisfied from the start. Deny is never gated by this.
+    val heavy = item.isHeavy
+    var heavyDelayElapsed by remember(item.id) { mutableStateOf(!heavy) }
+    LaunchedEffect(item.id, heavy) {
+        if (!heavy) return@LaunchedEffect
+        delay(HEAVY_APPROVE_DELAY_MS)
+        heavyDelayElapsed = true
+    }
+    var heavyTextSeen by remember(item.id) {
+        mutableStateOf(!heavy || item.detail.isNullOrBlank())
+    }
+    val heavyGateOk = !heavy || (heavyDelayElapsed && heavyTextSeen)
+
     // A proposal with several options needs one named alongside the approval,
     // and the phone's approve route carries none yet (AUTONOMY-PROPOSALS §3b's
     // decide route is not built on any backend). So approving is refused here
     // and the card says where to choose. Denying needs no option and stays.
-    val canApprove = canDecide && !item.needsChoice && !item.pcOnly
+    val canApprove = canDecide && !item.needsChoice && !item.pcOnly && heavyGateOk
 
     // A decision on this screen is felt, not just seen - a swipe is answered
     // with no visual confirmation until the card has already animated off
@@ -393,7 +420,12 @@ fun ApprovalCard(
             Quiet(
                 text = if (showDetail) "Hide detail" else "Show detail",
                 modifier = Modifier.offset(x = (-10).dp),
-                onClick = { showDetail = !showDetail },
+                onClick = {
+                    showDetail = !showDetail
+                    // Feasibility I110: read once, satisfied for good - hiding
+                    // it again afterwards must not re-lock Approve.
+                    if (showDetail) heavyTextSeen = true
+                },
             )
             AnimatedVisibility(showDetail) {
                 Text(
@@ -424,6 +456,21 @@ fun ApprovalCard(
         } else if (secondsLeft != null) {
             Spacer(Modifier.height(10.dp))
             ExpiryCountdown(secondsLeft)
+        }
+
+        // Feasibility I110. Only shown when nothing higher up (`why`) is
+        // already explaining why Approve is off - this is additive, never a
+        // second reason competing for the same line.
+        if (why == null && heavy && !heavyGateOk) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (!heavyTextSeen) "This cannot be undone, leaves this PC, or was pushed up " +
+                    "by outside text - show the detail above before approving."
+                else "Approve unlocks in a moment.",
+                style = MaterialTheme.typography.labelMedium,
+                color = chrome.textMid,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
         }
 
         // A note before the first decision - AUTONOMY-PROPOSALS.md §3b.

@@ -46,6 +46,10 @@ WHAT IS KEPT, per /api/chat request
   - when, which app (`device`, informational only), which model (`lane`),
     and the turn's number in the conversation.
   - A picture: its words only, as `picture_caption`. The picture never.
+A pasted password, PIN or one-time code within a KEPT message's words is
+masked before it is written - see `_mask_for_storage` and
+`jarvis_paste_guard.py` (feasibility I115, 2026-09-27). It reaches the
+model exactly as typed; only the copy on disk is different.
 Not kept: anything from a TEMPORARY chat (`"temporary": true` on the
 request, 2026-09-25) - only the registry's hash of its live message, under
 the provenance "temporary", so automatic learning never saves from it.
@@ -109,6 +113,16 @@ try:
     import jarvis_framework as fw
 except Exception:
     fw = None  # type: ignore
+
+try:
+    # Feasibility I115, "Paste guard": masks a pasted password, PIN or
+    # one-time code before it is written to the database - see
+    # _mask_for_storage. Optional the same way jarvis_framework is above:
+    # without it, chat history still works exactly as it did before this
+    # feature.
+    import jarvis_paste_guard as _paste_guard
+except Exception:
+    _paste_guard = None  # type: ignore
 
 try:
     from cryptography.exceptions import InvalidTag
@@ -755,7 +769,13 @@ class ChatLog:
         aead, why = self._recording()
         if aead is None:
             return {"recorded": False, "why": why}
-        rows = [(text, prov, None if vc is None else json.dumps(vc, sort_keys=True))
+        # Feasibility I115, "Paste guard": masked HERE, after _note_live above
+        # already hashed the ORIGINAL words (so live_turn()'s exact-hash
+        # lookup for automatic learning still matches what the model was
+        # actually shown this turn), and only now, right before the words
+        # are written to the encrypted database for good.
+        rows = [(self._mask_for_storage(text), prov,
+                 None if vc is None else json.dumps(vc, sort_keys=True))
                 for text, prov, vc in rows]
         if not rows:
             return {"recorded": False, "why": "no words in the user message"}
@@ -787,6 +807,24 @@ class ChatLog:
                 continue
             rows.append((text, prov, voice_check))
         return rows
+
+    def _mask_for_storage(self, text: str) -> str:
+        """Feasibility I115, "Paste guard": a pasted password, PIN or
+        one-time code, masked before these words are written to the
+        encrypted database - never before now. By the time this runs, the
+        model has already answered this turn on the ORIGINAL words (`turn`
+        is what it returned), and _note_live above has already hashed the
+        ORIGINAL words too, so this changes only what is kept, never what
+        was seen. Without jarvis_paste_guard.py, or on any error inside it
+        (which itself never raises - this is only for a missing module),
+        the words are stored exactly as they were before this feature."""
+        if _paste_guard is None:
+            return text
+        try:
+            masked, _changed = _paste_guard.guard(text)
+            return masked
+        except Exception:
+            return text
 
     def _write_turn(self, aead, cid, rows, device, lane, read_outside, answer_kept,
                     answer, at, now) -> dict:

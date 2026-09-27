@@ -389,6 +389,24 @@ approve_ok   false   — always
    composes its own summary from `detail` has reopened the hole, on the one
    surface where it is least recoverable.
 
+4. **A `weight: "heavy"` card's Approve stays disabled for a moment, and
+   until the card has been read** (feasibility I110, 2026-09-27: "stops
+   rubber-stamping"). Two conditions, both required: about two seconds have
+   passed since the card appeared, AND the card's whole text has been in
+   view - scrolled to the bottom of `#approval-preview` on the desktop
+   (`jarvis-desktop/src/heavy-approve.js`), or, on the phone's collapsed
+   `detail` (`ApprovalCard.kt`), opened at least once; a card with no hidden
+   text to open satisfies that half immediately. **Stricter only**: a
+   `"normal"` card, or a row with no `notice` at all (an older backend), is
+   unaffected. Deny is never gated by this - refusing something unread costs
+   a retry, approving it is the thing this whole rule exists to prevent. The
+   desktop's widget, whose card clamps `detail` to two lines on purpose
+   ("a decision surface, not a reading one"), cannot honestly satisfy "the
+   whole card has been in view" at all, so a heavy card's Approve there
+   redirects to the Jarvis bar instead of trying to gate a summary view - the
+   same redirect App lock and an email already use, for a different reason
+   each.
+
 `raised` travels as a **boolean**, here as everywhere. `raised.quote` is text
 an attacker wrote to make a reader hurry; its home is inside the app, in
 quotation marks, next to its source, where the point is to slow the reader
@@ -1358,6 +1376,11 @@ backend routes, in both directions; the rest are listed here only.
 | Setting up a plug-in program (MCP): the `[mcp]` lines and `py -3 jarvis_mcp.py inspect` (2026-09-26) | Written with the feature. A plug-in program is a program ON the PC, listed by full path in the PC's settings file - deep config editing, which stays off the phone (`CLAUDE.md`), and the desktop has no screen for it either. Using one is the same from both apps' chats: its start card and every call's card reach both apps like any other card, and both apps show its row on "What Jarvis can reach" and its two rows on "What asks first". |
 
 | The first-run walkthrough (`onboarding.html`, three screens over the tray icon, the shortcut and a first message) | The UI audit (2026-09-26, item 16) set the phone's whole onboarding budget at **one** picture and one sentence, not a tour: `PairingScreen.kt` is the first thing a new phone shows, before anything is paired, and a multi-screen walkthrough stacked in front of a form asking for a host and a secret token is friction the desktop's walkthrough does not have to fight (the desktop opens its tour once the app itself is already reachable). The phone gets the still image and welcoming sentence instead (ease-of-use audit #17, 2026-09-27), above the pairing form itself, shown only on a genuine first pairing - a re-pair (`onCancel` set) is a returning owner changing an address, not someone meeting Jarvis for the first time. |
+| "Data health in the preflight" (`GET /api/data-health`; feasibility I97, 2026-09-27) | Written with the feature. It exists for `backend/selftest.py --preflight`'s own PowerShell output, not for a screen in either app - a diagnostic the owner pastes back, the same audience as every other preflight check (JARVIS-API §49). Neither app calls the route today. |
+| The restart-with-a-cap watchdog (`sidecar.rs`'s `spawn_watchdog`) and hang/crash notes (`crash_notes.rs`, Settings -> More options -> "Hang and crash notes"; feasibility I98/I99, 2026-09-27) | Both are about a process on the PC: the Rust desktop app supervising the Python backend it started, on this machine. There is nothing on a phone to watch or restart, and a panic in this process is this process's own. The phone has its own separate crash reporting question, not raised by this work. |
+| "Private copy" (feasibility I114, 2026-09-27) - keeping a copied answer out of what each platform remembers or syncs on its own | Genuinely different mechanisms, not one file shared two ways: the desktop excludes the clip from Windows Clipboard History and Cloud Clipboard sync (`clipboard_privacy.rs`, two registered clipboard formats set to 0 in the same open/close sequence as the text); the phone marks the clip `ClipDescription.EXTRA_IS_SENSITIVE` so Android's own copy toast shows no preview (`PrivateClipboard.kt`) - Android has no clipboard history or cross-device sync feature to opt out of at all. `docs/JARVIS-API.md` §51 has both. |
+
+| App-icon shortcuts (feasibility I125, `res/xml/shortcuts.xml`, 2026-09-27) | Phone only - a long press of an app's own icon on the home screen or app drawer is an Android launcher convention with no Windows equivalent this app has any reason to add (the desktop already has its own quickbar hotkeys, Settings -> Shortcuts). Every shortcut reuses an action `MainActivity.kt` already had (the widget's Talk/Note buttons, the briefing notification's tap) - no new backend route, no new navigation logic. `docs/JARVIS-API.md` §52. |
 
 **On the phone, kept off the desktop:**
 

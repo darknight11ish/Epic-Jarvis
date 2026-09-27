@@ -88,6 +88,15 @@ windows-sys = { version = "0.59", features = [
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_Registry",
+  # OpenClipboard / EmptyClipboard / SetClipboardData / RegisterClipboardFormatW
+  # / CloseClipboard - "Private copy" (feasibility I114, clipboard_privacy.rs):
+  # excluding one clip from Windows Clipboard History and Cloud Clipboard
+  # needs the raw Win32 clipboard sequence, which
+  # tauri-plugin-clipboard-manager's write_text has no hook to extend.
+  "Win32_System_DataExchange",
+  # GlobalAlloc / GlobalLock / GlobalUnlock / GlobalFree: the moveable global
+  # memory SetClipboardData itself requires. Same module, clipboard_privacy.rs.
+  "Win32_System_Memory",
 ] }
 # The higher-level `windows` crate, not another windows-sys binding - not a
 # new dependency either: Tauri's own graph already resolves 0.61.3 for other

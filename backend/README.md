@@ -135,6 +135,7 @@ on a throwaway copy instead.
 | `media.patch` | `jarvis_hud.py` | **Music and video control, no card** (the owner's decision of 2026-09-27, feasibility I91: "no card, only from the owner's own words"). One call at start-up, `jarvis_media.install(Handler, ...)`, answers `GET /api/media` ("what's playing") and `POST /api/media/control` ({"action": "play"\|"pause"\|"next"\|"previous"}) - never a card, never `jarvis_gate`, for either route; the fast path itself (`jarvis_quick.py`'s `_run_media`) is not part of this patch. Last in the list; its context is `backup.patch`'s own install block (merged in after it, 2026-09-27). Needs `jarvis_media.py` - without it, or on any error, the banner says so and the routes answer 503. See "Music and video control", at the very end. |
 | `news.patch` | `jarvis_hud.py` | **News headlines in the morning briefing** (the owner's decision of 2026-09-27, feasibility I49: "one card per address the owner adds, read-only, never follows links elsewhere, never acts on what it reads"). One call at start-up, `jarvis_news.install(Handler, ...)`, answers `GET /api/news`, `POST /api/news/add` (ONE approval card, `change_own_config`, from either app) and `/api/news/remove` (at once) - though neither app's settings screen calls these yet: a feed is added and removed by the owner's own words instead (`jarvis_quick.py`'s `_run_news_add`/`_run_news_remove`, which call the same functions). Last in the list; its context is `media.patch`'s banner lines. Needs `jarvis_news.py` - without it, or on any error, the banner says so and the routes answer 503. See "News headlines", at the very end. |
 | `memory-shared.patch` | `jarvis_hud.py` | **"Between us"** (the owner's decision, 2026-09-27). Adds `GET` and `POST /api/memory/shared` - tag or untag ONE fact as a shared joke or nickname (`meta.kind = "shared"`), the owner's own tap, no card, like Pin. Last in the list, after `news.patch`, whose install block it sits beside. The work is in the shipped `rebuilt/jarvis_memory.py` (`shared()`, `is_shared()`, `shared_facts()`, `without_shared_in_plain()`, `with_profile()`'s new `manner` argument) - with an older copy the routes answer 501 and nothing is filtered. See "Between us", at the very end. |
+| `data-health.patch` | `jarvis_hud.py` | **"Data health in the preflight"** (feasibility I97, `docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Small, read-only." / "WARN, never fix."). Adds `GET /api/data-health` - fixed shape, not a setting, **no approval card either way**, the same shape as `sayable.patch` and `reach.patch`. Checks (never fixes) whether the chat history and memory databases open, whether there is disk space where Jarvis writes its data, and whether the settings files parse; every row is `ok` or `warn`, never a failure. Read by `backend/selftest.py --preflight`'s own "Is Jarvis's own data healthy?" check. Its context is `sayable.patch`'s own new route block, unaffected by the patches above it in this table (including `memory-shared.patch`), which touch a different, unrelated part of `jarvis_hud.py`; last in the list. Needs `jarvis_data_health.py`. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -12617,6 +12618,7 @@ patches wrote and reverses.
   anyone runs it on the owner's PC.
 - **No dedicated transport-control widget in either app.** A deliberate
   choice for this round, not an oversight: see "In plain words" above.
+
 # "Between us": `rebuilt/jarvis_memory.py`, `memory-shared.patch` (2026-09-27)
 
 **What it is for.** The owner's decision: "Inside jokes: yes, a 'between
@@ -12676,7 +12678,7 @@ files it owns rather than editing `memory-profile.patch` - a foundational
 patch several other features' context lines also depend on.
 
 **Routes.** `GET`/`POST /api/memory/shared` - see `docs/JARVIS-API.md`
-section 44 and its §6 table rows. No approval card and no confirm for
+section 48 and its §6 table rows. No approval card and no confirm for
 tagging or untagging (the owner's own tap on a fact they can already see,
 like Pin); Forget on a shared fact is the ordinary Forget every fact has
 (retiring, never erasing).
@@ -12708,3 +12710,75 @@ against the whole stack.
   `memory_search` tool.
 - **The phone code was re-read by hand, not compiled here.** There is no
   local Android build in this container; CI is the proof.
+
+---
+
+# Paste guard: `jarvis_paste_guard.py` (feasibility I115, 2026-09-27)
+
+`docs/FEASIBILITY-AUDIT-2026-09-26.md`, small-safety-items batch: "Keeps
+pasted passwords out of stored history." / "Reuse `jarvis_sensitive`/
+`jarvis_mail_mask` patterns." A pasted password, PIN or one-time code is
+masked before it reaches the encrypted chat-history database, with one
+fixed line standing in for it; the local model still saw the real words
+this turn, since masking happens only when the words are written to
+storage - after the model has already answered.
+
+No patch: `jarvis_chat_log.py` (already shipped whole) calls
+`jarvis_paste_guard.guard()` on a user message's words right before
+`_write_turn` seals them, never before - see `_mask_for_storage`. The
+LIVE-TURN REGISTRY that `jarvis_auto_learn.py` reads (`live_turn`) is
+written from the ORIGINAL, unmasked words a step earlier in the same
+method, so the exact-hash lookup automatic learning depends on still
+matches what the model actually saw.
+
+## What the code does
+
+- `jarvis_paste_guard.py` (new, shipped) - `guard(text)` returns
+  `(masked_text, changed)`. Masks a credential word (password, PIN,
+  passcode, OTP, 2FA/MFA, or a named "...code" - one-time, verification,
+  security, access, login, sign-in, confirmation, authentication,
+  recovery, or a lock's own door/alarm/gate/safe/garage/entry/Wi-Fi/
+  building/SIM/voicemail/screen-lock code) next to a value, in either
+  order, with any separator shape (`:` `=` `-` `#` or "is"/"are"/"was"/
+  "were"/"will be"); and a bare one-time-code shape (4-8 digits,
+  `123-456`, `ABC-123456`, a short letters-and-digits mix) within 40
+  characters of one of those same words, even with no separator at all.
+  Deliberately leaves bare "code" alone with no kind named - too much of a
+  developer's own everyday chat says "the code" without meaning a secret
+  - and a small stoplist (`_NOT_A_VALUE`) keeps "password is fine/wrong/
+  the same/..." from being masked as if the filler word were the secret.
+  Never raises: on any internal error the text comes back UNCHANGED,
+  masking nothing - the opposite choice from `jarvis_mail_mask.py`'s
+  WITHHELD, and the module's own docstring says why.
+- `jarvis_chat_log.py` - the optional import (falls back to storing words
+  unmasked, exactly as before this feature, without the module) and
+  `_mask_for_storage`, called from `record_turn` only on the rows that go
+  to `_write_turn`, after `_note_live` has already hashed the original
+  words.
+
+## Test it
+
+```
+python3 backend/test_paste_guard.py
+python3 backend/test_chat_log.py
+```
+
+53 checks in the first: every credential shape masked, 19 ordinary
+sentences (including the false positive an earlier draft of this module
+had, and plain talk about source code) kept byte-for-byte, a marker never
+masked a second time, no exception on any bad input, and a full
+`record_turn` round trip proving the STORED row is masked while the
+LIVE-TURN REGISTRY still matches on the original words. `test_chat_log.py`
+(177 checks) is unaffected - this feature changes only what is written to
+disk, never the shape of a request or a read.
+
+## Not checked, said plainly
+
+- **A pattern list never catches everything** - the module's own "WHAT IT
+  CANNOT CATCH" says so: a secret with no label word anywhere near it, one
+  written in words or split across two messages, or one inside a picture.
+- **Not run against a real Windows Credential Manager key.** The masking
+  itself needs no key at all (it runs on the plain-text message before
+  `jarvis_chat_log.py` ever calls `_seal`); the encryption it then goes
+  through is the same, already-tested path every other stored message
+  uses.

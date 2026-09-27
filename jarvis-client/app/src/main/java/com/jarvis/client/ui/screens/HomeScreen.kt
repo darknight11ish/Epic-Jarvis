@@ -81,7 +81,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -92,7 +91,6 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -112,6 +110,7 @@ import com.jarvis.client.net.Attention
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
+import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.approval.ApprovalCard
 import com.jarvis.client.ui.parts.AppearanceIcon
 import com.jarvis.client.ui.parts.Dot
@@ -1969,7 +1968,6 @@ private fun Reply(
 ) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
-    val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val text = reply()
     AnimatedVisibility(
@@ -2087,7 +2085,12 @@ private fun Reply(
                 Gap(8)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Quiet("Copy", color = chrome.textMid) {
-                        clipboard.setText(AnnotatedString(text))
+                        // Feasibility I114, "Private copy": marks the clip
+                        // sensitive so Android's own copy toast shows no
+                        // preview of the answer - see PrivateClipboard's own
+                        // doc comment for why this is the phone's whole half
+                        // of a feature the desktop does differently.
+                        PrivateClipboard.copy(context, text)
                     }
                     Quiet("Share", color = chrome.textMid) {
                         val intent = Intent(Intent.ACTION_SEND).apply {

@@ -1,0 +1,32 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1626,6 +1626,29 @@
+                 # The exception's NAME only: its message could quote a setting.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+
++        if path == "/api/data-health":
++            # data-health.patch - "Data health in the preflight" (feasibility
++            # I97, docs/FEASIBILITY-AUDIT-2026-09-26.md: "Small, read-only" /
++            # "WARN, never fix"): does the chat history database open, does
++            # the memory database open, is there room on the disk Jarvis
++            # writes its data to, and do the settings files parse. Read-only
++            # and never fixes anything - every row jarvis_data_health.py can
++            # raise is "ok" or "warn", never a failure. Fixed shape, not a
++            # setting - like reach.patch and manner.patch, no approval card
++            # either way. --preflight's own "Is Jarvis's own data healthy?"
++            # check reads this route.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_data_health
++                code, out = jarvis_data_health.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote a setting.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+         if path == "/api/reach":
+             # reach.patch - "What Jarvis can reach" (jarvis_reach.py; the Muse
+             # audit, 2026-09-25): every way Jarvis can reach something outside

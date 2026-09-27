@@ -7538,3 +7538,299 @@ lists and chat history", the same as "Always keep in mind".
   "Remember: ..." sentence's own words - that would be a model or a
   fixed-phrase guess about meaning, which this project avoids making
   without the owner's own explicit action (the tap).
+## 49. Data health in the preflight (added 2026-09-27)
+
+Feasibility idea I97 (`docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Small,
+read-only." / "WARN, never fix."), from the small-safety-items batch the
+owner queued alongside I98-I99, I110, I114-I115 and I125. `backend/
+jarvis_data_health.py` (shipped whole), `backend/data-health.patch` (one
+read-only route, same shape as §41's `sayable.patch`). Read by
+`backend/selftest.py --preflight`'s own new check, "Is Jarvis's own data
+healthy?" (§ "Build order", `docs/FEASIBILITY-AUDIT-2026-09-26.md`).
+
+### 49.1 What it checks, and why each is read-only
+
+- **The chat history database** (`chat-history.db`, §29) and **the memory
+  database** (`memory.db`) each open `mode=ro` (never created, never
+  written to) and pass SQLite's own `PRAGMA integrity_check`. A file that
+  does not exist yet - history off, or nothing learned yet - is `ok`, never
+  a warning.
+- **Free disk space** where those two databases (and the locked backup
+  file, when it exists) live: `warn` under 1 GiB free.
+- **Every `*.json` settings file** directly in that same folder parses as
+  JSON (never a subfolder such as `voice/` or `notes/`, which hold real
+  data, not settings). A damaged one is named, never deleted or rewritten -
+  every module's own settings reader already falls back to its default
+  when its file will not parse, so this is the only place the owner would
+  otherwise learn that happened.
+
+**The guardrail, twice over**: every row is `ok` or `warn`. Nothing here is
+ever read as a failure, and nothing here writes to, moves, deletes or
+repairs anything it finds wrong - fixing a damaged file is the owner's
+call.
+
+### 49.2 The route
+
+No settings, no approval card either way - the same shape as `jarvis_reach.py`
+and §41's `jarvis_sayable.py`. Needs the pairing token and passes the
+origin check.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/data-health` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_data_health.py` | Read-only: creates, writes to, moves or deletes nothing. |
+
+```
+{"available": true,
+ "title": "Data health",
+ "warn": <count of "warn" rows>,
+ "checks": [{"status": "ok" | "warn", "what": <one sentence>, "detail": <or "">}, ...],
+ "written_by": "code"}
+```
+
+### 49.3 In `--preflight`
+
+`pf_data_health` (`backend/selftest.py`) reads this route and turns each
+`ok`/`warn` row into the preflight's own PASS/WARN - **never FAIL**, which
+is the same guardrail enforced a second time at the reader. Without
+`data-health.patch` installed, the route answers 404 and the check is a
+single WARN naming `apply-patches.ps1`, the same fallback shape as §35's
+`pf_folders` without `documents.patch`.
+
+### 49.4 Known gaps, said plainly
+
+- **PC only.** Both apps' Brain/diagnostics screens show nothing from this
+  route today - it exists for the owner's own PowerShell paste of
+  `--preflight`'s output, not for either app's UI. See `docs/
+  ARCHITECTURE.md` §8, "One-sided on purpose."
+- **Does not check `approvals.db`, `holds.db` or `feedback.db`.** Only the
+  two databases and the settings files named above; a real incident with
+  one of those is the trigger to add its own check, per `CLAUDE.md`'s
+  "ADD ONE CHECK PER REAL INCIDENT."
+
+## 50. Paste guard (added 2026-09-27)
+
+Feasibility idea I115 (`docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Keeps
+pasted passwords out of stored history." / "Reuse jarvis_sensitive/
+jarvis_mail_mask patterns."), from the same small-safety-items batch as
+§49. `backend/jarvis_paste_guard.py` (shipped whole). No new route, and no
+patch: `jarvis_chat_log.py` (§29, already shipped whole) calls it directly.
+
+### 50.1 What is masked, and when
+
+A pasted (or typed) password, PIN or one-time code, right before a user
+message's words are written to the encrypted chat-history database - never
+before: the local model has already answered the turn on the real words
+(`jarvis_chat_log.record_turn` is called with what `jarvis_agent.
+run_local_turn` returned), and the LIVE-TURN REGISTRY automatic learning
+depends on (`jarvis_auto_learn.py`) is written from the ORIGINAL words a
+step earlier in the same method - only the copy that reaches disk is
+masked.
+
+Masked: a credential word (password, PIN, passcode, OTP, 2FA/MFA, or a
+named "...code" - one-time, verification, security, access, login,
+sign-in, confirmation, authentication, recovery, or a lock's own door,
+alarm, gate, safe, garage, entry, Wi-Fi, building, SIM, voicemail or
+screen-lock code) next to a value, in either order, with any separator
+(`:` `=` `-` `#`, or "is"/"are"/"was"/"were"/"will be"); and a bare
+one-time-code shape (4-8 digits, `123-456`, `ABC-123456`, a short
+letters-and-digits mix) within 40 characters of one of those same words,
+with no separator at all. The masked value is replaced by one fixed line,
+`jarvis_paste_guard.MASK`: `"[a password, PIN or code - kept out of the
+saved history]"` - the same text every time, so it doubles as the "one
+fixed line saying so" the idea asks for; nothing else about the message is
+changed.
+
+**Not masked**, on purpose: bare "code" with no kind named ("the code has
+a bug"), a credential word with no value near it ("I changed my password
+today"), and a small stoplist of the words that follow "is/are/was/were"
+without being a secret ("password is fine/wrong/the same/..."). The
+module's own docstring documents this precision choice: a developer's own
+chat says "the code" constantly, and almost none of those mentions are a
+secret.
+
+### 50.2 Why not the same code as jarvis_sensitive.py or jarvis_mail_mask.py
+
+Both already exist and neither fits this job (the module's own docstring
+has the full reasoning):
+
+- `jarvis_sensitive.py` classifies a whole FACT for automatic learning's
+  own "ask first?" decision - not spans, and its patterns are underscore-
+  prefixed module details, not a contract to import.
+- `jarvis_mail_mask.py` masks EMAIL text - untrusted, outside text, where
+  withholding a whole message on any doubt is the safe default. A pasted
+  password in the owner's OWN chat is the opposite: keep the rest of the
+  message, remove only the secret.
+
+So this is a third, deliberately small variant of the same pattern family,
+in the spirit `jarvis-desktop/src-tauri/src/crash_notes.rs`'s own `scrub()`
+already set (§49's neighbour in this queue, built the same day): a fresh,
+purpose-built pass, never an import of another module's private details.
+
+### 50.3 Never raises, and never withholds
+
+Unlike `jarvis_mail_mask.hide()`, which withholds an entire email text on
+any internal error, `jarvis_paste_guard.guard()` returns the text
+UNCHANGED on error - masking nothing rather than risking an unreadable
+chat entry for no security gain the database's own encryption at rest was
+not already providing. Without `jarvis_paste_guard.py` on the PC at all,
+`jarvis_chat_log.py`'s optional import falls back the same way: messages
+are stored exactly as they were before this feature existed.
+
+### 50.4 Known gaps, said plainly
+
+- **A pattern list never catches everything.** A secret with no label word
+  anywhere near it, one written in words or split across two separate
+  messages, or one inside a picture, is not caught.
+- **PC only**, the same as §49: no route, nothing either app's UI shows or
+  changes - the masking happens inside the PC's own storage write, with
+  nothing for an app to call.
+
+## 51. Private copy (added 2026-09-27)
+
+Feasibility idea I114 (`docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Windows
+clipboard sync can carry a copied answer off the PC." / "Needs a small
+Rust command (Devil); hide preview on the phone."), the last of the same
+small-safety-items batch as §49 and §50. No backend route: both halves are
+entirely local to the app that copies the answer.
+
+### 51.1 Desktop: excluded from Clipboard History and Cloud Clipboard
+
+`jarvis-desktop/src-tauri/src/clipboard_privacy.rs` (new). The Jarvis
+bar's answer Copy button now calls a new Tauri command,
+`write_clipboard_private`, instead of the older `write_clipboard`
+(`main.js` falls back to `write_clipboard` if the newer command is ever
+unavailable, so an answer is still copied either way).
+
+`write_clipboard_private` talks to the Win32 clipboard directly - one
+`OpenClipboard`/`EmptyClipboard`/`CloseClipboard` sequence that sets the
+ordinary `CF_UNICODETEXT` text AND, in the SAME sequence, two of Windows'
+own registered clipboard formats, each holding a `DWORD` value of `0`
+(Microsoft's documented opt-out shape):
+
+- `CanIncludeInClipboardHistory` - keeps the clip out of Win+V's history.
+- `CanUploadToCloudClipboard` - keeps it from syncing to the owner's other
+  Microsoft-account-linked Windows PCs.
+
+`tauri-plugin-clipboard-manager`'s own `write_text` (still used by the
+plain `write_clipboard` command, and by `read_clipboard`, both untouched)
+opens and closes the clipboard in one step with no hook to add a second
+format to that same sequence - which is why this needed its own command
+rather than a flag on the existing one; the module's own doc comment has
+the full reasoning.
+
+**What changes, and does not**: only the ONE clip this command writes.
+The copied text itself is unchanged - any app can still read and paste it
+normally, on this PC, right now. What is turned off is Windows
+remembering it for later or copying it to another of the owner's own
+devices.
+
+### 51.2 Phone: no preview in Android's own copy toast
+
+`jarvis-client/app/src/main/java/com/jarvis/client/platform/
+PrivateClipboard.kt` (new). Android has no clipboard history or
+cross-device clipboard sync feature for an app to opt out of - there is
+nothing to mirror `clipboard_privacy.rs` with. What Android DOES have,
+since API 33 (this app's own `minSdk`): a small system toast previewing
+the copied text on screen for a moment. `ClipDescription.
+EXTRA_IS_SENSITIVE` on the `ClipData` - set by `PrivateClipboard.copy` -
+tells Android to show a plain "Content copied" toast instead, with the
+words themselves never shown.
+
+`HomeScreen.kt`'s own answer Copy button calls `PrivateClipboard.copy`
+instead of Compose's plain `LocalClipboardManager.setText` - the phone's
+direct parity with the desktop's answer Copy button. `CrashScreen.kt`'s
+own Copy (a crash report meant to be pasted into a bug report, not an
+answer) is untouched on purpose - the idea's own wording ("hide preview on
+the phone") is about an answer, and a bug report is written to be read.
+
+### 51.3 Known gaps, said plainly
+
+- **The two halves are genuinely different mechanisms**, not a shared
+  route or a shared file - `docs/ARCHITECTURE.md` §8 has the one-line
+  version. Each is the right answer for what its own platform actually
+  offers to opt out of.
+- **Not run on Windows or a real Android 13+ phone.** The Win32 clipboard
+  sequence is read against Microsoft's own documented shape for these two
+  formats, not tried; the Android half against the documented behaviour
+  of `EXTRA_IS_SENSITIVE`, not seen on a device. Both are checked by
+  reading (`cargo check`/`clippy` for the Rust; by hand for the Kotlin,
+  same as every phone change here - `CLAUDE.md`, "How the Android apps get
+  built").
+- **A rare failure mode, said plainly:** if `write_clipboard_private`'s
+  ordinary text write succeeds but setting EITHER privacy format then
+  fails (`RegisterClipboardFormatW`/`SetClipboardData` on a well-known
+  format name essentially never fails on a real Windows 10/11 machine,
+  but "essentially never" is not "never"), `main.js`'s `catch` falls back
+  to the plain `write_clipboard` - which shows "Copied" with no warning
+  that the exclusion did not take. Accepted rather than built around: the
+  text was never going to leave the PC over Jarvis's own network either
+  way, so this is a best-effort convenience feature, not a boundary the
+  rest of the app treats as load-bearing.
+- **`read_clipboard` is unaffected.** Reading back whatever is already on
+  the clipboard has nothing to do with what Windows remembers or syncs
+  going forward.
+
+## 52. App-icon shortcuts (added 2026-09-27)
+
+Feasibility idea I125 (`docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Long-press
+shortcuts on the phone's app icon. Talk, Note, Brief me, What did I miss;
+still meets App lock. No `shortcuts.xml` exists today."). Phone only - no
+backend route, and nothing for the desktop to mirror (see `docs/
+ARCHITECTURE.md` §8).
+
+### 52.1 What was added
+
+`jarvis-client/app/src/main/res/xml/shortcuts.xml` (new): four STATIC
+shortcuts (fixed at build time, never `ShortcutManager` at runtime - all
+four are always-available actions with no per-owner data to keep in
+step), registered on `MainActivity` via `<meta-data android:name=
+"android.app.shortcuts">` in `AndroidManifest.xml`. A long press of the
+app's icon on the home screen or in the app drawer shows all four.
+
+| Shortcut | Fires | Reuses |
+|---|---|---|
+| Talk | `com.jarvis.client.action.START_VOICE` | The home-screen widget's own Talk button (`QuickLinkWidget.kt`) |
+| Note | `com.jarvis.client.action.QUICK_NOTE` | The same widget's own Note button |
+| Brief me | `com.jarvis.client.action.OPEN_BRIEFING` | The morning-briefing notification's own tap |
+| What did I miss? | `com.jarvis.client.action.OPEN_BRIEFING` | The same destination as "Brief me" - see 51.2 |
+
+Every one of the four fires an `Intent` action `MainActivity.kt` already
+handles for something else - no new navigation or fetch logic exists
+anywhere because of this feature; it is a second way to reach an action
+that was already one tap away inside the app, never a new one.
+
+### 52.2 Why "Brief me" and "What did I miss?" open the same place
+
+`BriefingPlate.kt`'s own "Brief me now" and "What did I miss?" are already
+two buttons on ONE shared section (`BriefingSection`), not two screens -
+there is nowhere else for a "What did I miss?" shortcut to open TO. Kept
+as its own shortcut anyway, rather than folded into "Brief me", because
+the idea names it separately, and because seeing "What did I miss?" in the
+long-press menu tells an owner that question exists at all, without first
+opening the app to find the button.
+
+### 52.3 App lock
+
+Unaffected: every shortcut's `<intent>` targets `MainActivity`, and
+`MainActivity.kt`'s own rule - "the app lock outranks everything ...
+nothing behind it is composed" - runs before any of the three actions
+above are acted on, exactly as it already does when the SAME actions
+arrive from the home-screen widget or the briefing notification. The
+`LaunchedEffect`s that read `startVoiceRequested`/`quickNoteOpen`/
+`openBriefingRequested` are declared before the lock check in `App()`, so
+a shortcut tapped while locked updates that state but shows nothing until
+the owner unlocks - the target screen is what they land on the moment
+they do.
+
+### 52.4 Known gaps, said plainly
+
+- **Not seen on a real device or launcher.** Static shortcuts are
+  declarative XML, checked here by reading against Android's own
+  documented `<shortcuts>`/`<intent>` schema, not by running - `CLAUDE.md`,
+  "How the Android apps get built" (no local Android build in this
+  container; GitHub Actions is the only compiler available).
+- **All four use the app's own launcher icon** (`@mipmap/ic_launcher`),
+  not a bespoke icon per shortcut - this repository has no per-action
+  icon set today (`res/drawable/` holds exactly one, the notification's
+  own single-colour mask, wrong shape for a shortcut icon). A later pass
+  can add four small icons without touching anything in this section.
