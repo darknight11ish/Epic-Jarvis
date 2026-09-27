@@ -59,6 +59,7 @@ uniform float uYaw;
 uniform float uPit;
 uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
+uniform float uPx;        // one pixel, in the same units as critter()'s `p`
 
 const float PI = 3.14159265;
 // The head is modelled at 1 and drawn this much bigger: a cartoon's head is
@@ -379,6 +380,16 @@ float4 critter(float2 p) {
     float disc = bb * bb - cc;
     float hitT = -1.0;
     float id = 0.0;
+    // A soft outline. A ray either hits or misses, so without this the edge
+    // is a staircase - most visible on the phone, which draws the panda at
+    // lower resolution and enlarges it. While marching, remember where the
+    // ray passed closest to the surface, measured in pixels; a ray that
+    // misses by less than a pixel is shaded at that point anyway and drawn
+    // partly see-through, by how close it came.
+    float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
+    float bestR = 1000.0;
+    float bestT = 0.0;
+    float bestId = 0.0;
     if (disc > 0.0) {
         float sq = sqrt(disc);
         float t = max(0.0, -bb - sq);
@@ -386,15 +397,25 @@ float4 critter(float2 p) {
         for (int i = 0; i < 110; i++) {
             float2 h = map(ro + rd * t);
             if (h.x < 0.0008 * t) { hitT = t; id = h.y; break; }
+            float r = h.x / max(t * fp, 0.000001);
+            if (r < bestR) { bestR = r; bestT = t; bestId = h.y; }
             t += h.x * 0.9;
             if (t > tMax) break;
         }
     }
+    float cover = 1.0;
+    // A pixel and a half of feathering: one pixel alone still showed steps
+    // once the phone's half-resolution picture was enlarged.
+    if (hitT < 0.0 && bestR < 1.5) {
+        hitT = bestT;
+        id = bestId;
+        cover = 0.75 * (1.0 - bestR / 1.5);
+    }
 
+    float3 haloCol = pow(aces(hot * halo), float3(1.0 / 2.2));
+    float haloA = max(haloCol.r, max(haloCol.g, haloCol.b));
     if (hitT < 0.0) {
-        float3 g = aces(hot * halo);
-        g = pow(g, float3(1.0 / 2.2));
-        return float4(g, max(g.r, max(g.g, g.b)));
+        return float4(haloCol, haloA);
     }
 
     float3 pos = ro + rd * hitT;
@@ -415,7 +436,7 @@ float4 critter(float2 p) {
         float3 r = reflect(rd, n);
         c += float3(1.0) * pow(max(dot(r, normalize(float3(-0.5, 0.8, -0.6))), 0.0), 40.0) * 0.8;
         float3 outc = pow(aces(c + hot * halo * 0.3), float3(1.0 / 2.2));
-        return float4(outc, 1.0);
+        return float4(outc * cover + haloCol * (1.0 - cover), cover + haloA * (1.0 - cover));
     } else if (id == ID_EYE) {
         alb = INK; gloss = 1.0; fuzz = 0.0;
     } else if (id == ID_NOSE) {
@@ -500,5 +521,7 @@ float4 critter(float2 p) {
 
     col += hot * halo * 0.25;
     float3 outc = pow(aces(col), float3(1.0 / 2.2));
-    return float4(outc, 1.0);
+    // Premultiplied: a partly covered edge pixel lets the orb's glow (or,
+    // with none, the background) show through by the uncovered share.
+    return float4(outc * cover + haloCol * (1.0 - cover), cover + haloA * (1.0 - cover));
 }

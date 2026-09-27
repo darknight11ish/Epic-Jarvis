@@ -2989,6 +2989,9 @@ const THEMES = [
       G.uniform1f(L.uPit, VIEW.pitch);
       G.uniform1f(L.uZoom, VIEW.zoom || 1);
       G.uniform1f(L.uTime, PHASE);
+      // One pixel in the shader's own units (it spans -1..1 across rw), for
+      // its soft outline.
+      G.uniform1f(L.uPx, 2 / rw);
     });
     if(!out) return false;
     g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";

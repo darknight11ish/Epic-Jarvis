@@ -87,7 +87,7 @@ class CritterPoseTest {
         // phone, in front of the owner. Cheaper to find it here.
         val names = CritterPose.uniforms(
             CritterPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),
-        ).keys + setOf("uHot", "uCool", "uYaw", "uPit", "uTime", "uZoom", "uCenter", "uR")
+        ).keys + setOf("uHot", "uCool", "uYaw", "uPit", "uTime", "uZoom", "uCenter", "uR", "uPx")
         for (n in names) {
             assertTrue(
                 "CritterShaders.RED_PANDA has no uniform named $n",

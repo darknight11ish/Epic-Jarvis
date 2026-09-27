@@ -126,13 +126,28 @@ Sketchfab). Four reasons:
   Jarvis settings folder, copy the new one over too - otherwise choosing the
   panda on one device will not reach the other, and the desktop's start-up
   check will report that its copy and the backend's differ.
-- **Cost.** The panda is the most expensive face to draw, a little more than
-  Nucleus. On the desktop the Faces window's own speed check covers it. On
-  the phone it has not been measured on a real device yet. The phone's own
-  frame-cost check (`FaceQuality`, with "Auto adjust" on by default) steps
-  it down the same way as any face that runs slow - fewer frames a second,
-  no glow - but it does not lower the pixel count for shader faces. If the
-  panda makes the phone warm, say so and it can get a lower-resolution mode.
+- **Cost.** The panda is by far the most expensive face to draw: measured
+  through Skia (the engine Android draws with), **10 to 12 times Nucleus's
+  work per pixel**. (An earlier version of this page said "a little more
+  than Nucleus" - that was a guess, and wrong.) Most of it (about 80%) is
+  finding the panda's surface for each pixel; the shadows are the rest.
+  - **On the phone it is drawn at lower resolution and enlarged**: half the
+    width and height at the High quality tier - a quarter of the pixels,
+    measured at 3.9 times less work - and less again when Auto adjust steps
+    down to Medium (0.4) or Low (about 0.31). Max, chosen by hand, uses 0.75.
+    Because the panda is soft and rounded, the enlarged picture differs from
+    the sharp one by about 1 part in 255 on average; the shader feathers its
+    outline so the enlarging does not show as steps. A software canvas (a
+    bitmap snapshot) still draws it at full size.
+  - **On the desktop** it is drawn at full resolution; the Faces window's own
+    speed check switches to the flat version if the graphics card cannot
+    keep up.
+  - **Not yet measured on a real phone.** Rough arithmetic for a Pixel 9 at
+    the Large size said full resolution would have been choppy while
+    listening, thinking and speaking; a quarter of the work should bring it
+    within reach, but only the phone itself can confirm that. If it still
+    stutters or gets warm, say so - the next steps are a lower scale or a
+    simpler shadow.
 - **The phone makes about 90 small throwaway objects a frame** for the
   panda (its pose maths builds fresh number lists). Nucleus makes none. It
   is not measurable as slowness on its own, but it is more garbage than
