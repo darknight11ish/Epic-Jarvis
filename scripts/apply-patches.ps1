@@ -905,7 +905,9 @@ if (-not (Test-Path -LiteralPath $BackendPath)) {
 }
 if (-not (Test-Path -LiteralPath (Join-Path $BackendPath 'jarvis_hud.py'))) {
     Bad "That folder exists but has no jarvis_hud.py in it: $BackendPath"
-    Say "  This needs the OpenJarvis backend folder, not this repository." Yellow
+    Say "  Point it at your own Jarvis backend folder - the one with jarvis_hud.py in it -" Yellow
+    Say "  not at this repository, and not at OpenJarvis (an unrelated project with a similar name)." Yellow
+    Say "  docs\INSTALL.md, step 1.3, says where the backend files come from." Yellow
     exit 1
 }
 

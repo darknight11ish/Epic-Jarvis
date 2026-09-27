@@ -4,6 +4,22 @@ Newest first. One version number covers the desktop app, the phone app and
 the backend files (the `VERSION` file). Builds made by GitHub add a build
 number as the last part - `0.2.57` is a build of 0.2.
 
+## Not in a numbered version yet
+
+- **Fixed: typing the phone's pairing key exactly as the PC shows it.** The
+  PC shows the key in groups of four with spaces, to make it easier to read.
+  The phone kept those spaces, so the key was refused. The phone now drops
+  them as you type, and the PC says to leave them out.
+- **Fixed: "Tell me when this page changes" alerting when nothing visible
+  changed.** It compared the whole page, including hidden codes that change
+  on every visit. It now compares only the words you can see. Watches set up
+  before this record the new kind once, quietly, instead of alerting.
+- **Fixed: "Start with Windows" said on when Task Manager had it off.**
+  Settings now reads Task Manager's Startup switch too, and turning it on in
+  Jarvis turns that switch back on.
+- **Clearer message** when the patch script is pointed at the wrong folder:
+  it no longer sends you looking for "OpenJarvis", an unrelated project.
+
 ## 0.2.0 - 26 September 2026
 
 The first numbered version. It gathers the work of the last few days.

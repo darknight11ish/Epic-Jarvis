@@ -939,13 +939,88 @@ class _PageRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+#: What a page's fingerprint is taken over. "t1": the page's VISIBLE words
+#: (see _visible_text). Before 2026-09-27 it was the raw bytes of the page,
+#: with no prefix - and most pages change a few hidden bytes on every load
+#: (security tokens, ad ids, script timestamps), so a page nobody changed
+#: could match on every look. A fingerprint in the old form is re-recorded
+#: once, silently, rather than compared (see _look_page).
+PAGE_PRINT = "t1:"
+
+#: Elements whose contents a reader never sees. Their text is left out of
+#: the fingerprint (the same list changedetection.io strips before it
+#: compares a page - the approach, not its code).
+_UNSEEN_TAGS = frozenset({"head", "script", "style", "noscript", "template",
+                          "svg", "iframe", "object", "canvas"})
+
+
+def _visible_text(body: bytes, content_type: str = "") -> str:
+    """The words a person would see on the page, as one line with single
+    spaces. HTML is read with the standard library's own parser - one fresh
+    parser per call, so the watch threads never share one. Anything that is
+    not HTML is taken as plain text. Used only to take the fingerprint: the
+    words are never kept, returned to a caller outside this module, or shown."""
+    import html.parser
+    charset = "utf-8"
+    m = re.search(r"charset=([\w.-]+)", content_type or "", re.I)
+    if m:
+        charset = m.group(1)
+    try:
+        text = body.decode(charset, errors="replace")
+    except LookupError:
+        text = body.decode("utf-8", errors="replace")
+    looks_html = ("html" in (content_type or "").lower()
+                  or re.search(r"<\s*(html|body|div|p|span|head)\b", text[:4096], re.I))
+    if not looks_html:
+        return " ".join(text.split())
+
+    class _Words(html.parser.HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.hidden = 0
+            self.words = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag in _UNSEEN_TAGS:
+                self.hidden += 1
+
+        def handle_startendtag(self, tag, attrs):
+            pass  # <br/>, <img/>: nothing is opened, so nothing to close
+
+        def handle_endtag(self, tag):
+            if tag in _UNSEEN_TAGS and self.hidden:
+                self.hidden -= 1
+
+        def handle_data(self, data):
+            if not self.hidden:
+                self.words.append(data)
+
+    p = _Words()
+    try:
+        p.feed(text)
+        p.close()
+    except Exception:
+        # A page too broken to read as HTML: its plain text still gives a
+        # steadier fingerprint than its bytes.
+        return " ".join(re.sub(r"<[^>]*>", " ", text).split())
+    return " ".join(" ".join(p.words).split())
+
+
+def _page_print(body: bytes, content_type: str = "") -> str:
+    """The fingerprint _look_page compares: PAGE_PRINT plus a hash of the
+    page's visible words."""
+    import hashlib
+    words = _visible_text(body[:PAGE_MAX_BYTES], content_type)
+    return PAGE_PRINT + hashlib.sha256(words.encode("utf-8")).hexdigest()
+
+
 def _default_page_fetch(url: str) -> str:
     """ONE GET, through jarvis_local_http.public_urlopen (never a proxy, and
     the private-address check made again on the connection itself), a
     redirect followed only where the check above would allow it,
-    the body capped at PAGE_MAX_BYTES and hashed. Returns a hex digest of
-    the bytes read; the bytes themselves are never kept or returned."""
-    import hashlib
+    the body capped at PAGE_MAX_BYTES. Returns the fingerprint of the page's
+    visible words (_page_print); the bytes and the words themselves are never
+    kept or returned."""
     import jarvis_local_http as LH
     req = urllib.request.Request(url, headers={"User-Agent": "Jarvis (tell me when this page "
                                                               "changes)"})
@@ -954,7 +1029,13 @@ def _default_page_fetch(url: str) -> str:
     # connect - the security/privacy audit of 2026-09-27).
     with LH.public_urlopen(req, PAGE_TIMEOUT, _PageRedirect()) as resp:
         body = resp.read(PAGE_MAX_BYTES + 1)
-    return hashlib.sha256(body[:PAGE_MAX_BYTES]).hexdigest()
+        content_type = resp.headers.get("Content-Type", "") if resp.headers else ""
+    return _page_print(body, content_type)
+
+
+def _print_kind(digest: str) -> str:
+    """"t1:" for a fingerprint of the visible words; "" for the old kind."""
+    return digest[:3] if isinstance(digest, str) and digest.startswith(PAGE_PRINT) else ""
 
 
 def _look_page(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
@@ -982,6 +1063,12 @@ def _look_page(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
     before = st.get("last_state")
     _save(job_id, sched, last_state=digest)
     if before is None:
+        return 0, ""
+    if _print_kind(before) != _print_kind(digest):
+        # Recorded by an older Jarvis, over the page's raw bytes: the two
+        # cannot be compared, so this look only records the new kind - a
+        # page nobody changed must not match once just because Jarvis was
+        # updated.
         return 0, ""
     return (1 if digest != before else 0), ""
 

@@ -31,6 +31,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.R
+import com.jarvis.client.data.PairingKey
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.parts.Primary
@@ -198,7 +199,9 @@ fun PairingScreen(
         Spacer(Modifier.height(14.dp))
         TextInput(
             value = token,
-            onValueChange = { token = it },
+            // The PC shows the token in groups of four; the spaces are for
+            // reading only and are dropped as they are typed (PairingKey).
+            onValueChange = { token = PairingKey.clean(it) },
             password = true,
             label = if (hasToken) "Replace token" else "Pairing token",
             placeholder = "On the PC: Settings, Show the token for my phone",
