@@ -235,6 +235,53 @@ await check("CONTROL: there is no catalogue - no list of models that could be in
   assert.equal(lists, 0);
 });
 
+/* ── Models: no "Use" on a model that cannot chat ────────────────────────── */
+
+// Play tester, 2026-09-27: "Use" was offered on nomic-embed-text, a model
+// that only turns text into numbers for memory search. Switching to it would
+// leave Jarvis unable to answer anything.
+const modelRow = (page, ref) =>
+  page.locator("#models .row-item").filter({ has: page.locator(".row-title", { hasText: ref }) });
+
+await check("an embedding model has no Use, and says why", async () => {
+  const page = await tab("faculties", {});
+  const embed = modelRow(page, "nomic-embed-text");
+  const embedButtons = await embed.locator("button").allInnerTexts();
+  const embedText = await embed.innerText();
+  const chatButtons = await modelRow(page, "llama3.1:8b").locator("button").allInnerTexts();
+  await page.close();
+  assert.deepEqual(embedButtons, [], "Use offered on an embedding model");
+  assert.match(embedText, /for memory search only - it cannot chat/);
+  assert.deepEqual(chatButtons, ["Use"], "a chat model lost its Use");
+});
+
+await check("...in the real route's shape too: bare names, no family", async () => {
+  // gpu-offload.patch: `installed` is MM.installed(), a list of names.
+  const models = { available: true, current: "qwen3:8b",
+    installed: ["qwen3:8b", "llama3.1:8b", "mxbai-embed-large", "all-minilm", "bge-m3"] };
+  const page = await tab("faculties", { models });
+  const uses = {};
+  for (const ref of models.installed.slice(1)) {
+    uses[ref] = (await modelRow(page, ref).locator("button").allInnerTexts()).includes("Use");
+  }
+  await page.close();
+  assert.deepEqual(uses, { "llama3.1:8b": true, "mxbai-embed-large": false,
+    "all-minilm": false, "bge-m3": false });
+});
+
+await check("Ollama's own capabilities list wins over the name", async () => {
+  const models = { available: true, current: "qwen3:8b", installed: [
+    { ref: "qwen3:8b", capabilities: ["completion", "tools"] },
+    { ref: "my-embedder", capabilities: ["embedding"] },
+    { ref: "embed-chat-tuned", capabilities: ["completion"] }] };
+  const page = await tab("faculties", { models });
+  const a = await modelRow(page, "my-embedder").locator("button").allInnerTexts();
+  const b = await modelRow(page, "embed-chat-tuned").locator("button").allInnerTexts();
+  await page.close();
+  assert.deepEqual(a, []);
+  assert.deepEqual(b, ["Use"]);
+});
+
 /* ── Rush latch: `quote` as well as `phrase` ─────────────────────────────── */
 
 await check("a rush latch whose words come as `quote` shows them", async () => {

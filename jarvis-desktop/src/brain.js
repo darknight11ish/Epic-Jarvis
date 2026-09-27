@@ -857,6 +857,27 @@ function renderCounts() {
    Faculties
    ========================================================================== */
 
+/** Why a model has no "Use" button. */
+const CANNOT_CHAT = "for memory search only - it cannot chat";
+
+/**
+ * Can this installed model hold a conversation? An embedding model such as
+ * nomic-embed-text only turns text into numbers for memory search; switching
+ * to it would leave Jarvis unable to answer anything (play tester,
+ * 2026-09-27: Brain › Model offered "Use" on it).
+ *
+ * The real `/api/models` sends `installed` as bare names (gpu-offload.patch),
+ * so the name is usually all there is. When a row does carry Ollama's own
+ * `capabilities` list, that wins: no "completion" means no chat. Otherwise
+ * a BERT-family model or "embed" / "minilm" / "bge" in the name is an
+ * embedding model - the ones Ollama's library offers are named that way.
+ */
+function canChat(m, ref) {
+  if (Array.isArray(m.capabilities)) return m.capabilities.includes("completion");
+  if (/bert/i.test(String(m.family || ""))) return false;
+  return !/embed|minilm|(^|[^a-z])bge/i.test(ref);
+}
+
 function renderModels() {
   const body = state.data.models || {};
   const why = unavailable("models");
@@ -878,8 +899,9 @@ function renderModels() {
     (m) => {
       const ref = String(m.ref || m.name || m.model || "");
       const isCurrent = ref && ref === current;
+      const chats = canChat(m, ref);
       const actions = [];
-      if (ref && !isCurrent) {
+      if (ref && !isCurrent && chats) {
         actions.push(
           button("Use", () => modelAction("switch", ref), {
             title: `Ask to switch to this model. You approve it ${APPROVE_WHERE}.`,
@@ -895,6 +917,8 @@ function renderModels() {
           m.size ? bytes(m.size) : "",
           m.family || "",
           ref && ref === previous ? "the previous model" : "",
+          // Said rather than a greyed-out button: why there is no "Use".
+          chats ? "" : CANNOT_CHAT,
         ],
         actions,
       });
