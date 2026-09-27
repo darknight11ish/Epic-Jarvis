@@ -1248,8 +1248,14 @@ private fun StatusLine(
             }
         }
 
-        // Shown only while there is something to retry.
-        if (!linked) {
+        // Shown only while there is something to retry: offline, and also
+        // "Catching up…" (phone walk-through, 2026-09-27). A link that is up
+        // but has gone quiet - often a half-dead socket after the phone slept
+        // - used to offer nothing to tap, and could sit there until a 90
+        // second read timeout noticed. Retry is the same forced reconnect as
+        // offline; it approves nothing, and acting stays blocked until the
+        // link is trusted again (rule 4).
+        if (!linked || state.stale) {
             Quiet("Retry", onClick = actions.onReconnect)
         }
 

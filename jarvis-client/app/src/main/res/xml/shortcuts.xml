@@ -8,12 +8,11 @@
   because all four are fixed, always-available actions - never per-owner
   data, so there is nothing dynamic to register or update at runtime.
 
-  Every one of the four reuses an action MainActivity.kt already handles for
-  something else (the home-screen widget's own Talk and Note buttons; the
-  briefing notification's own "open the briefing" tap) - see each shortcut's
-  own comment below for which. No new navigation or fetch logic exists
-  anywhere because of this file: it is a second way to reach an action that
-  was already one tap away, never a new one.
+  Talk and Note reuse the home-screen widget's own actions. "Brief me" and
+  "What did I miss?" ask their fixed sentence on Home through the chat box's
+  own send (AppShortcuts.kt) - both are on the "Things you can say" list and
+  answered by the PC without the AI model, and both only read. See each
+  shortcut's own comment below.
 
   App lock: unaffected by any of this. android:targetClass below always
   launches MainActivity, and MainActivity.kt's own "the app lock outranks
@@ -54,10 +53,12 @@
             android:targetClass="com.jarvis.client.MainActivity" />
     </shortcut>
 
-    <!-- Same action the morning-briefing notification's own tap fires
-         (MainActivity.kt's readBriefingIntent) - opens Brain, where the
-         latest briefing and its own "Brief me now" / "What did I miss?"
-         buttons live side by side (BriefingPlate.kt). -->
+    <!-- Asks "Brief me now." on Home, as if typed into the box and sent
+         (AppShortcuts.kt, MainActivity.kt's readShortcutQuestionIntent).
+         It used to open Brain at the top, with the briefing somewhere below
+         the fold (phone walk-through, 2026-09-27). A read-only sentence the
+         PC answers without the AI model; nothing is sent until App lock is
+         unlocked. -->
     <shortcut
         android:shortcutId="brief_me"
         android:enabled="true"
@@ -65,19 +66,15 @@
         android:shortcutShortLabel="@string/shortcut_brief_short"
         android:shortcutLongLabel="@string/shortcut_brief_long">
         <intent
-            android:action="com.jarvis.client.action.OPEN_BRIEFING"
+            android:action="com.jarvis.client.action.ASK_BRIEF_ME"
             android:targetPackage="com.jarvis.client"
             android:targetClass="com.jarvis.client.MainActivity" />
     </shortcut>
 
-    <!-- The SAME destination as "brief_me" above, on purpose - see
-         BriefingPlate.kt's own doc comment: "Brief me now" and "What did I
-         miss?" are already two buttons on one shared section, not two
-         screens, so there is nowhere else for this one to open TO. Kept as
-         its own shortcut (rather than folded into "brief_me") because the
-         idea names it separately, and because seeing "What did I miss?" in
-         the long-press menu tells an owner that question exists at all,
-         without first opening the app to find the button. -->
+    <!-- Asks "What did I miss?" on Home, the same way as "brief_me" above
+         (AppShortcuts.kt). Also read-only and answered without the AI
+         model. It used to open the same place as "brief_me" - Brain, at
+         the top - so the two shortcuts did the same thing. -->
     <shortcut
         android:shortcutId="what_did_i_miss"
         android:enabled="true"
@@ -85,7 +82,7 @@
         android:shortcutShortLabel="@string/shortcut_missed_short"
         android:shortcutLongLabel="@string/shortcut_missed_long">
         <intent
-            android:action="com.jarvis.client.action.OPEN_BRIEFING"
+            android:action="com.jarvis.client.action.ASK_WHAT_DID_I_MISS"
             android:targetPackage="com.jarvis.client"
             android:targetClass="com.jarvis.client.MainActivity" />
     </shortcut>

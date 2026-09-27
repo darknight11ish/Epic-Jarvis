@@ -73,6 +73,7 @@ import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.WakeRules
 import com.jarvis.client.ui.NavBackHandler
 import com.jarvis.client.ui.NavScreens
+import com.jarvis.client.ui.OpenPlace
 import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.approval.BiometricGate
 import com.jarvis.client.ui.approval.CardWaitingLine
@@ -155,6 +156,13 @@ class MainActivity : FragmentActivity() {
 
     /** The briefing notification was tapped - see [readBriefingIntent]. Consumed once. */
     private val openBriefingRequested = mutableStateOf(false)
+
+    /**
+     * The sentence an app-icon shortcut asks ("Brief me now." or "What did I
+     * miss?" - [AppShortcuts]), waiting to be sent from Home. See
+     * [readShortcutQuestionIntent]. Consumed once.
+     */
+    private val shortcutQuestion = mutableStateOf<String?>(null)
 
     /** Set when the runtime itself failed to start. Shown instead of the app. */
     private val startupError = mutableStateOf<String?>(null)
@@ -326,6 +334,12 @@ class MainActivity : FragmentActivity() {
         readVoiceIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        // Only on a fresh start. A rotation (or a restore after Android
+        // reclaimed the process) builds this activity again from the SAME
+        // launch intent, and the other readers above only navigate, so
+        // re-reading them is harmless - but this one sends a question, and
+        // must not ask it again every time the phone turns.
+        if (savedInstanceState == null) readShortcutQuestionIntent(intent)
 
         setContent { App() }
 
@@ -351,6 +365,7 @@ class MainActivity : FragmentActivity() {
         readVoiceIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        readShortcutQuestionIntent(intent)
     }
 
     /**
@@ -360,6 +375,16 @@ class MainActivity : FragmentActivity() {
     private fun readBriefingIntent(intent: Intent?) {
         if (intent?.action != ACTION_OPEN_BRIEFING) return
         openBriefingRequested.value = true
+    }
+
+    /**
+     * The "Brief me now" and "What did I miss?" app-icon shortcuts
+     * (res/xml/shortcuts.xml, [AppShortcuts]): Home, asking that sentence.
+     * `singleTask`, so the `onNewIntent` half is needed too.
+     */
+    private fun readShortcutQuestionIntent(intent: Intent?) {
+        val question = AppShortcuts.questionFor(intent?.action) ?: return
+        shortcutQuestion.value = question
     }
 
     /**
@@ -780,17 +805,43 @@ class MainActivity : FragmentActivity() {
         // had been acted on, so a rotation (or any other activity rebuild)
         // saw the same target again and jumped back into Settings on its
         // own. Treated as a one-time request instead: the target is copied
-        // into `pendingSettingsSection` (kept across a rebuild by
+        // into `pendingSection` (kept across a rebuild by
         // `rememberSaveable`, just long enough for `SettingsScreen` to
         // scroll once) and immediately consumed on the `ChatSession` side,
         // so a fresh composition with the same underlying answer sees null
         // and does nothing.
+        //
+        // Phone walk-through, 2026-09-27: not every section lives on the
+        // phone's Settings screen. "Open help", "connection", "morning
+        // briefing", "about" or "Jarvis's voices" all used to land at the top
+        // of Settings, which has none of them. OpenPlace now decides, per
+        // section id, the phone's own screen and the item on it - or, for a
+        // place only the PC app has (keyboard shortcuts, accounts, ...), a
+        // plain notice saying so instead of a screen without it.
+        //
+        // `pendingSectionScreen` names the ONE screen the section is for, and
+        // only that screen is handed it: during the fade between screens the
+        // old and the new one are both composed, and a screen that was not
+        // the target would otherwise "consume" the section first.
         val openSettingsTarget by chat.openSettings.collectAsState()
-        var pendingSettingsSection by rememberSaveable { mutableStateOf<String?>(null) }
+        var pendingSection by rememberSaveable { mutableStateOf<String?>(null) }
+        var pendingSectionScreen by rememberSaveable { mutableStateOf<String?>(null) }
+        fun sectionFor(screen: Screen): String? =
+            if (pendingSectionScreen == screen.name) pendingSection else null
+        val sectionConsumed: () -> Unit = {
+            pendingSection = null
+            pendingSectionScreen = null
+        }
         LaunchedEffect(openSettingsTarget) {
             val target = openSettingsTarget ?: return@LaunchedEffect
-            pendingSettingsSection = target
-            nav.go(Screen.SETTINGS)
+            when (val where = OpenPlace.whereFor(target)) {
+                is OpenPlace.Where.Go -> {
+                    pendingSection = where.section
+                    pendingSectionScreen = where.screen.name
+                    nav.go(where.screen)
+                }
+                is OpenPlace.Where.OnPc -> JarvisRuntime.setNotice(where.notice)
+            }
             chat.consumeOpenSettings()
         }
         val answerMark by JarvisRuntime.answerMark.collectAsState()
@@ -1021,6 +1072,29 @@ class MainActivity : FragmentActivity() {
             openBriefingRequested.value = false
             nav.resetTo(Screen.HOME)
             nav.go(Screen.BRAIN)
+        }
+
+        // The "Brief me now" and "What did I miss?" app-icon shortcuts
+        // (AppShortcuts): Home, with the fixed sentence asked as a typed
+        // question through `chat.send` - the composer's own path, so the
+        // answer appears where every answer does. Both are read-only
+        // sentences the PC answers without the AI model.
+        //
+        // Behind the app lock nothing is sent until it is unlocked (keyed on
+        // `locked`, like focusApproval above): the answer is the owner's
+        // private briefing. A phone that is not paired, or is re-pairing,
+        // sends nothing - there is no desktop to ask yet, and the pairing
+        // screen is what Home shows. The send runs on `scope`, not in this
+        // effect: clearing `shortcutQuestion` changes this effect's key, and
+        // that would cancel a send made in here halfway through its answer.
+        LaunchedEffect(shortcutQuestion.value, locked) {
+            val question = shortcutQuestion.value ?: return@LaunchedEffect
+            if (locked) return@LaunchedEffect
+            shortcutQuestion.value = null
+            nav.resetTo(Screen.HOME)
+            if (paired && !repairing) {
+                scope.launch { chat.send(question, provenance = Provenance.TYPED) }
+            }
         }
 
         JarvisTheme(
@@ -1424,6 +1498,10 @@ class MainActivity : FragmentActivity() {
                             // The phone's own Settings screen (ease-of-use
                             // audit row 16, 2026-09-27).
                             onOpenSettings = { nav.go(Screen.SETTINGS) },
+                            // "Open connection" / "open updates" by voice or
+                            // chat (OpenPlace).
+                            initialSection = sectionFor(Screen.CHECKS),
+                            onSectionConsumed = sectionConsumed,
                         )
                     }
 
@@ -1751,6 +1829,10 @@ class MainActivity : FragmentActivity() {
                             // audit row 16, 2026-09-27), where the old
                             // "Settings" group moved to.
                             onOpenSettings = { nav.go(Screen.SETTINGS) },
+                            // "Open the morning briefing", "hardware", ... by
+                            // voice or chat (OpenPlace).
+                            initialSection = sectionFor(Screen.BRAIN),
+                            onSectionConsumed = sectionConsumed,
                         )
                     }
 
@@ -1768,6 +1850,9 @@ class MainActivity : FragmentActivity() {
                     Screen.FAQ -> FaqScreen(
                         onBack = { nav.back() },
                         modifier = root,
+                        // "Open about" by voice or chat (OpenPlace).
+                        initialSection = sectionFor(Screen.FAQ),
+                        onSectionConsumed = sectionConsumed,
                     )
 
                     Screen.SECURITY -> {
@@ -1798,12 +1883,12 @@ class MainActivity : FragmentActivity() {
                         stale = stale,
                         onBack = { nav.back() },
                         modifier = root,
-                        initialSection = pendingSettingsSection,
+                        initialSection = sectionFor(Screen.SETTINGS),
                         // Bug audit 2026-09-27, finding #4: cleared once the
                         // screen has scrolled to it (or found no row for
                         // it), so a later manual visit to Settings does not
                         // scroll anywhere on its own.
-                        onSectionConsumed = { pendingSettingsSection = null },
+                        onSectionConsumed = sectionConsumed,
                         // Same three ternaries as Screen.CHECKS above: null
                         // until this phone is paired.
                         onTrainVoice = if (paired) {
@@ -2430,6 +2515,27 @@ class MainActivity : FragmentActivity() {
         if (JarvisRuntime.isPaired()) {
             // Cheap, and safe to call on resume — the doc says so explicitly.
             lifecycleScope.launch { JarvisRuntime.refreshStatus() }
+            // Coming back to a link that is "Catching up…" reconnects at
+            // once, the same forced reconnect as Home's Retry (phone
+            // walk-through, 2026-09-27). After the phone slept the socket is
+            // often half-dead, and nothing used to replace it until a 90
+            // second read timeout noticed - so the owner opened Jarvis to an
+            // approval they could not act on and no sign anything was being
+            // done. Only for that state (LinkWords.reconnectOnReturn): the
+            // stream is already running in this process, so no service start
+            // is needed, and after the forced restart the link reads
+            // "reconnecting", so returning from a permission prompt a moment
+            // later does not force a second one. Approves nothing; acting
+            // stays blocked until the link is trusted (rule 4).
+            if (JarvisRuntime.isInitialized &&
+                LinkWords.reconnectOnReturn(
+                    link = JarvisRuntime.link.value,
+                    stale = JarvisRuntime.stale.value,
+                    reason = JarvisRuntime.linkDetail.value,
+                )
+            ) {
+                JarvisRuntime.startStream(force = true)
+            }
         }
     }
 

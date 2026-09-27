@@ -2597,9 +2597,10 @@ object JarvisRuntime {
      * lives, gated on `approve` in a way this shared function cannot be).
      */
     fun decisionBlocker(item: PendingItem, nowMs: Long = System.currentTimeMillis()): String? {
-        if (_stale.value || _link.value != LinkState.CONNECTED) {
-            return "Not connected to the desktop, so this decision cannot be delivered."
-        }
+        // Two states, two sentences (LinkWords): "not connected" only when
+        // the PC really is out of reach, "catching up" when the link is up
+        // but not trusted yet. Both still refuse - rule 4.
+        LinkWords.decisionBlocked(_link.value, _stale.value)?.let { return it }
         if (item.id in _deciding.value) {
             // A double-tap on Approve sent two POSTs: both taps reached here
             // before the first reply came back, and the test below reads
@@ -3897,8 +3898,7 @@ object JarvisRuntime {
      * approval are different queues with different lifetimes.
      */
     suspend fun decideMemory(id: Long, accept: Boolean): ApiResult<Unit> {
-        if (_stale.value || _link.value != LinkState.CONNECTED) {
-            val blocker = "Not connected to the desktop, so this decision cannot be delivered."
+        LinkWords.decisionBlocked(_link.value, _stale.value)?.let { blocker ->
             _notice.value = blocker
             return ApiResult.Failed(ApiError.Unreachable(blocker))
         }
@@ -3924,8 +3924,7 @@ object JarvisRuntime {
      * owner is told in one plain sentence.
      */
     suspend fun keepBothMemory(id: Long): ApiResult<Unit> {
-        if (_stale.value || _link.value != LinkState.CONNECTED) {
-            val blocker = "Not connected to the desktop, so this decision cannot be delivered."
+        LinkWords.decisionBlocked(_link.value, _stale.value)?.let { blocker ->
             _notice.value = blocker
             return ApiResult.Failed(ApiError.Unreachable(blocker))
         }
@@ -4022,8 +4021,7 @@ object JarvisRuntime {
      * connection this queue is.
      */
     suspend fun setSleepTime(enabled: Boolean? = null, remind: Boolean? = null): ApiResult<Unit> {
-        if (_stale.value || _link.value != LinkState.CONNECTED) {
-            val blocker = "Not connected to the desktop, so this decision cannot be delivered."
+        LinkWords.decisionBlocked(_link.value, _stale.value)?.let { blocker ->
             _notice.value = blocker
             return ApiResult.Failed(ApiError.Unreachable(blocker))
         }

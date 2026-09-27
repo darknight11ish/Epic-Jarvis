@@ -117,10 +117,12 @@ fun SettingsScreen(
      * "Open <a settings section>" by voice or chat
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
      * section id `MainActivity` read off `ChatSession.openSettings`, or
-     * null. A new (distinct) value scrolls to that item once; an id this
-     * screen has no row for (any desktop-only section) is a harmless no-op -
-     * the screen still opened, and the answer already named the place in
-     * words. Voice, Security and Appearance (above) are real
+     * null. A new (distinct) value scrolls to that item once. Since the
+     * phone walk-through of 2026-09-27 only ids with a row here arrive -
+     * [com.jarvis.client.ui.OpenPlace] sends the rest to Help, Checks,
+     * Brain or "Jarvis's voice", or says the place is only on the PC - but
+     * an unknown id (one newer than this app) is still a harmless no-op
+     * here. Voice, Security and Appearance (above) are real
      * `item(key = ...)` rows too, with their own entries in
      * [SETTINGS_ITEM_INDEX], so an id naming one of them scrolls to it like
      * any other section - it does not fall into that no-op case.
