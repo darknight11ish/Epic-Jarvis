@@ -246,6 +246,9 @@ const dom = {
   answerUsedLine: $("answer-used-line"),
   answerUsedList: $("answer-used-list"),
   answerMemoryNote: $("answer-memory-note"),
+  answerSources: $("answer-sources"),
+  answerSourcesLine: $("answer-sources-line"),
+  answerSourcesList: $("answer-sources-list"),
   approvalOptionsWhy: $("approval-options-why"),
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
@@ -540,6 +543,13 @@ const answerMemory = createAnswerMemory({
   confirm: (question) => window.confirm(question),
   announce,
   onChange: () => syncWindowHeight(),
+  // "Where this came from" (feasibility I42/I132): the notes, wiki pages,
+  // web results and files this answer actually read, plus the quote check.
+  sources: {
+    box: dom.answerSources,
+    lineButton: dom.answerSourcesLine,
+    list: dom.answerSourcesList,
+  },
 });
 
 /** Tools that ran (`step` events) and drops of the event stream, for the

@@ -730,7 +730,10 @@ route line carries the ids as `memory_ids`, commands.rs
 "the thing you asked for happened". There is no `tool_calls` field on the
 response. `docs/API-DISAGREEMENTS.md` §10 records the consequence: the quick-
 capture widget used to say "Appended to Logseq." on any 200, and now reports
-only what Jarvis itself said it did.
+only what Jarvis itself said it did. Checked again 2026-09-27: still true of
+`/api/chat` itself - **§54 adds a narrower receipt, on a separate route, for
+the four READING tools only** (notes, wiki pages, web results, files): what
+each one's own result named, by reference, never a claim of what was done.
 
 **Tool calls and outside text** (`jarvis_agent.py`, 2026-09-24). One thing
 here changes which tools need a card - note writes after outside text, the
@@ -1095,6 +1098,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/memory/profile` | GET | `brain_memory_profile` (`brain/profile.rs`; hidden with the other memory lists under Windows Hello) | `JarvisApi.memoryProfile` / `JarvisRuntime.memoryProfile` (hidden under "Hide memory lists and chat history") | **"Always keep in mind"** (the owner's decision, 2026-09-24; `memory-profile.patch`, `rebuilt/jarvis_memory.py`). Token + origin. The facts the owner pinned, which every local chat question reads word for word (§4): `{"facts": [{"id", "text", "added"}], "chars", "limit"}`, oldest pin first. `chars` is how many characters the listed facts' words use; `limit` is 1,200 (`PROFILE_LIMIT`). Only facts still current are listed: a pinned fact that is forgotten, corrected, runs out or is erased leaves the list by itself. Both apps show "N of 1,200 characters used". `501` from a PC whose `jarvis_memory.py` is older (both apps then say the list is not there yet), `503` memory not running. |
 | `/api/memory/shared` | GET | `brain_memory_shared` (Brain, "Between us"; hidden with the other memory lists under Windows Hello) | `JarvisApi.memoryShared` / `JarvisRuntime.memoryShared` (Brain, "Between us"; hidden under "Hide memory lists and chat history") | **"Between us"** (§44; the owner's decision, 2026-09-27; `memory-shared.patch`, `rebuilt/jarvis_memory.py`). Token + origin. The facts the owner tagged as a shared joke or nickname: `{"facts": [<full fact rows>]}`, newest first, current only - the same drop-off rule as "Always keep in mind" (forgotten, corrected or erased leaves the list). `501` from an older `jarvis_memory.py`, `503` memory not running. |
 | `/api/memory/used?ids=` | GET | `memory_used` (`brain/used.rs`; the quickbar's "Used 2 memories", the Brain's "Jarvis remembered N things" and, since memory wave 3, its "About <name>"; facts taken out in Rust while Windows Hello hides the memory lists) | `JarvisApi.memoryUsed` / `JarvisRuntime.memoryUsed` (Home's "Used 2 memories", the Brain's "Jarvis remembered N things"; hidden under "Hide memory lists and chat history") | **"Used in this answer"** (the owner's decision, 2026-09-25; `temporary-chat.patch`, `rebuilt/jarvis_memory.py` `used_view()`). Token + origin, like every memory read. `ids` is 1 to 100 comma-separated whole numbers above 0 (`"mem:12"` is read as 12); anything else - `fact:3`, a name, a fraction - is a `400` in words. `200 {"facts": [{"id", "text", "current", "pinned", "created", "valid_to", "erased_at"}], "missing": [id, ...]}`, in the order asked. `current` is the usual rule (`valid_to` empty or ahead) and false for an erased fact; a fact that is no longer current still has its words (an answer about the past may have used it); an **erased** fact never has words - `text` is `""`, never the `[erased]` marker. An id with no fact at all is in `missing`. `501` from an older `jarvis_memory.py` (both apps then say they cannot show which facts these were yet), `503` memory not running. A read: nothing here acts on memory. |
+| `/api/chat/sources?turn_id=` | GET | `chat_sources` (`brain/sources.rs`; the quickbar's "Where this came from") | `JarvisApi.chatSources` / `JarvisRuntime.chatSources` (Home's "Where this came from") | **"Where this came from"** (feasibility I42/I132) - see **§54**, not a memory route (nothing here is a saved fact), listed beside `/api/memory/used` because it is read by the exact same `turn_id` and hidden the same way. |
 | `/api/memory/entities` | GET | `routes.rs` (`memory_entities`; hidden with the other memory lists under Windows Hello, `lock/rules.rs` PRIVATE_LISTS) | **no - by rule** (the memory graph stays off the phone; ARCHITECTURE.md section 8) | **"Who is my sister?"** (memory wave 3, 2026-09-25; `memory-entities.patch`, `rebuilt/jarvis_memory.py` `entities_view()`). Token + origin. The people, pets, places and things saved facts are linked to: `{"entities": [{"id", "name", "kind", "also": [other names joined to it], "aliases": ["sister"], "fact_ids": [newest first], "facts": n}], "count", "limit"}` - one entry per group (a merge is followed), only entries with at least one current, unerased fact, most facts first, at most 500. Names and aliases exactly as the facts wrote them (aliases lower-cased); no fact's words and no summary. `kind` is `person`, `pet`, `place`, `organisation`, `project`, `thing` or null. An app reads the facts' words by id with `/api/memory/used`. The desktop draws the names under each fact in "Saved automatically" and "What Jarvis knows about you", each opening "About <name>" - that entry's facts, word for word (`brain.js` `paintAbout`, `memory-entities.js`). `501` on a PC whose `jarvis_memory.py` predates it. |
 | `/api/history/conversation?id=` | GET | `brain_history_open` | `JarvisApi.historyConversation` | `chat-history.patch` - **§18**. One kept conversation, read-only: `{id, title, tainted, turns: [{role, text, at, provenance, read_outside, answer_kept} or {role: "assistant", text, at}]}`. `404` if there is no such conversation, `400` for a malformed id, `503` if it cannot be opened (the reason in words). |
 
@@ -8066,3 +8070,107 @@ something the owner does from their phone - the same reasoning that keeps
 the model catalogue and deep config editing off the phone (`CLAUDE.md`).
 `docs/ARCHITECTURE.md` §8 has the row. `tools/check_parity.py` classifies
 both routes `deliberate`.
+
+## 54. "Where this came from", and the quote check (added 2026-09-27)
+
+Feasibility items I42 and I132 (`docs/FEASIBILITY-AUDIT-2026-09-26.md`
+section 2), one feature, the exact spec being detail 1 of
+`docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md`. `backend/jarvis_sources.py`
+(shipped whole), `answer-sources.patch`.
+
+**What was missing.** §4 already said it plainly: "No tool receipt." Only
+saved MEMORY facts were ever listed under an answer ("Used in this answer",
+§4/§6, `GET /api/memory/used`). A note, a wiki page, a web result or a file
+the model read was not listed anywhere at all - checked again for this
+section, and still true of `/api/chat` itself (§4).
+
+**What this is.** The PC records, per answer, each of the four reading
+tools' (`notes_search`, `web_search`, `my_files`, `file_read`) own result -
+built from what the tool actually returned, never from what the model
+claims it read - by REFERENCE only: a note's `ref` (the same field
+`jarvis_notes._search_vault` already returns; a page under `Jarvis Wiki/`
+is labelled `"wiki"` rather than `"note"`, still the same field), a web
+result's `url`, a file's `path`. Never a note's or a file's full text, and
+never a web page's body. Alongside it, a plain word-for-word check: does
+each quoted phrase (three words or more) in the model's finished answer
+appear - spacing and case ignored - in what was really read this turn? A
+quote that is not found is reported as **"not found in what Jarvis
+read"**. This is a pure text comparison in code, never a model call; it
+only ever warns, it never blocks, rewrites or delays the answer that
+already streamed, and it never makes outside text more trusted than it
+already was. When nothing was read this turn, no quote is ever checked -
+an ordinary quote in an ordinary conversation ("she said 'no way'") means
+nothing to check it against, so it is left alone.
+
+**Why a separate route, and why the SAME `turn_id`.** `X-Jarvis-Route`
+already carries `turn_id` (§4, `feedback.patch`) - but that header is sent
+to the app BEFORE `run_local_turn` even starts, because streaming means the
+headers go out first, and a tool's result (which is what a source is built
+from) is only known once the tool loop finishes. So this could never ride
+in that header; it is read back afterwards, by the same id:
+
+| Route | Method | Answers |
+|---|---|---|
+| `GET /api/chat/sources?turn_id=<32-character hex id>` | GET | **200** `{"sources": [{"kind": "note"\|"wiki"\|"web"\|"file", "ref"?, "url"?, "path"?, "title"?}], "unverified_quotes": [str]}` - both `[]` for a turn_id this process never saw, or one with nothing to show (never a `404`: "nothing yet" and "gone since a restart" look the same from here, and neither is an error). `400` `{"error"}` for anything that is not a real 32-character hex id - the same shape `handle_used_get` gives for a bad `ids=`. Token + origin, like every memory-shaped read. |
+
+`kind` is exactly one of the four; a source of any other kind, or with none
+of `ref`/`url`/`path`, was already dropped by `jarvis_sources.py` before it
+was ever recorded. Kept **in memory, not a database** (a bounded,
+per-process dict, capped both per turn and across turns): a source's
+reference is a by-product of one answer, not a fact the owner chose to
+keep the way a saved memory or a kept chat-history row is, so a backend
+restart clears it and nothing here is written to disk.
+
+**Where it plugs into `run_local_turn`.** `jarvis_agent._TurnWatch.took_in`
+- which already runs for every reading tool's result, to build the
+planted-instruction check (§4, "Outside text in the tool loop") - now also
+calls `jarvis_sources.from_tool_result(name, result)` there, before the
+result is cleaned for the model, and collects what it returns onto
+`watch.sources` (deduplicated, capped at `jarvis_sources.MAX_PER_TURN`).
+`run_local_turn`'s own return dict gains two fields: `tool_sources` (that
+list) and `unverified_quotes` (the quote check's own list, computed once,
+at the very end, against the finished answer text and everything
+`watch.outside` collected - the same raw text the outside-text check
+already scans, never read a second time from anywhere). `answer-sources.patch`
+then hands both to `jarvis_sources.record(turn_id, ...)` right after
+`jarvis_agent.run_local_turn` returns, under the SAME `turn_id`
+`feedback.patch` already put in the header before the loop ran.
+
+**Both apps.** A web source is shown as plain text with its HOST only
+(never the full link, never a title a website chose) - the full address
+reaches the owner only once they tap it, as a real navigation in the real
+browser, never a preview Jarvis fetches. Note and wiki titles are private,
+so the whole list hides under the exact same gate the existing memory list
+already uses - **reused, not a second one**: Windows Hello / "Hide memory
+lists and chat history" on the desktop (`brain/sources.rs redact_sources`,
+the same shape as `brain/used.rs redact_used` - every reference taken out,
+the count kept), the phone's own "Hide memory lists and chat history"
+toggle checked client-side before ever fetching (the same gate
+`UsedFactsList`'s `privateHidden` already checks, before its own `load()`
+call).
+
+- **Desktop** (`jarvis-desktop/src/memory-used.js` extended -
+  `readSources`, `sourceLine`, `hostOf`, `isOpenable`, the new constants -
+  and `answer-memory.js`'s `createAnswerMemory` extended with an optional
+  `sources` param, never a second module). There is no cheap COUNT the way
+  `memory_ids` gives "Used 2 memories" one - a tool's result is only known
+  once the tool loop finishes, long after the header (which carries
+  `turn_id`) was sent - so the quickbar fetches once, quietly, right when
+  an answer finishes (`answerMemory.finish`), and shows the "Where this
+  came from" line only if there is something to show. `commands.rs`
+  `route_line_from_header` now also passes `turn_id` on (an id, no
+  different from passing on `lane` or `gate`); `brain/sources.rs`
+  `chat_sources` is the new Tauri command, gated by its own capability set
+  (`chat-sources`, quickbar only).
+- **Phone** (`net/ChatSources.kt`, new, pure Kotlin like `MemoryUsed.kt`;
+  `UsedMemoriesPlate.kt`'s new `ChatSourcesList` composable). Reuses
+  `ChatSession.turnId` - already tracked for the right/wrong mark
+  (`Feedback.turnIdFromRouteHeader`) - so no new state flow was needed.
+  Fetched once when the id is known and the list is not hidden
+  (`JarvisRuntime.chatSources`); a web source opens through
+  `LocalUriHandler.openUri`, the same pattern `AnswerFormat.kt` already
+  uses for a linkified answer.
+
+**No new way out of the PC** (`docs/ARCHITECTURE.md` §4). This only reads
+what a tool ALREADY fetched this turn, by reference; it adds no fetch of
+anything, on either app.

@@ -242,6 +242,20 @@ permissions = [
   "allow-brain-memory-erase",
 ]
 
+# "Where this came from" (feasibility I42/I132, answer-sources.patch): the
+# notes, wiki pages, web results and files a reading tool actually returned
+# for one answer, by reference, plus the quote check - by the SAME turn_id
+# "Used in this answer" and the right/wrong mark already use. Read-only, and
+# held back like every memory list while "Windows Hello for memory lists and
+# chat history" hides them (brain/sources.rs redact_sources) - the exact same
+# gate as memory-used above, not a second one.
+[[set]]
+identifier = "chat-sources"
+description = "Read this answer's own reading-tool receipts (a note, a wiki page, a web result, a file) and its quote check, by turn_id. Read-only."
+permissions = [
+  "allow-chat-sources",
+]
+
 # ---------------------------------------------------------------------------
 # The desktop widget: its own geometry, its preferences, and quick capture.
 # `prefill_quickbar` is here because the widget's capture row hands a note to

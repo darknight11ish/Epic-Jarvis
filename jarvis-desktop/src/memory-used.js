@@ -179,3 +179,109 @@ export function rowActions(f) {
     erase: Boolean(f && !f.erasedAt),
   };
 }
+
+/* ==========================================================================
+ * "Where this came from", and the quote check (feasibility I42/I132,
+ * docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md detail 1;
+ * docs/JARVIS-API.md section 54)
+ *
+ * Only saved facts were ever listed under an answer ("Used in this answer",
+ * above). A note, a wiki page, a web result or a file the model read was
+ * not listed anywhere ("No tool receipt", JARVIS-API.md section 4). This
+ * reads GET /api/chat/sources?turn_id=<id> - by the SAME id "Used in this
+ * answer" and the right/wrong mark already use - and lists what a reading
+ * tool actually returned this turn, by reference only (never a note's or a
+ * file's full text, never a web page fetched to preview it), plus which
+ * quoted phrases in the answer were not found in any of them.
+ *
+ * There is no cheap COUNT for this the way `memory_ids` gives "Used in this
+ * answer" one: a tool's result is only known once the tool loop finishes,
+ * long after X-Jarvis-Route (which carries `turn_id`) was already sent. So
+ * `answer-memory.js` fetches this once, quietly, right when an answer
+ * finishes, and shows the line only if there is something to show - never
+ * a guessed count first, the way "Used 2 memories" can.
+ * ========================================================================== */
+
+/** The list's title under an answer. */
+export const SOURCES_TITLE = "Where this came from";
+/** The quiet line under an answer - a label, not a count (see above). */
+export const SOURCES_LINE = "Where this came from";
+export const SOURCES_LINE_TITLE = "Show what Jarvis actually read for this answer.";
+
+/** A PC without the read route (Rust answers `{available: false}`). */
+export const SOURCES_MISSING =
+  "Your PC's Jarvis cannot show where this answer came from yet - run apply-patches.ps1 on " +
+  "the PC to update it.";
+
+/** Beside a quoted phrase the PC could not find in what it read this turn -
+ *  a warning only: it changes nothing about the answer already shown. */
+export const QUOTE_WARNING_TITLE =
+  "Jarvis quoted this, but it is not in what Jarvis actually read this turn - it may have " +
+  "the quote wrong.";
+export const QUOTE_WARNING_LABEL = "not found in what Jarvis read";
+
+/** The plain-English label for each kind `jarvis_sources.py` gives out. */
+export const SOURCE_KIND_LABEL = { note: "Note", wiki: "Wiki page", web: "Web", file: "File" };
+
+/** A web source's host only - Jarvis never fetches the page to preview it,
+ *  and neither does this app: the full link shows only once the owner taps
+ *  it (a real navigation, `data-external`, opened in the real browser). */
+export function hostOf(url) {
+  try {
+    return new URL(url).host || String(url || "");
+  } catch {
+    return String(url || "");
+  }
+}
+
+const KNOWN_SOURCE_KINDS = ["note", "wiki", "web", "file"];
+
+/**
+ * `chat_sources`'s answer, read.
+ *
+ * `{sources: [{kind, ref?, url?, path?, title?}], unverified_quotes: [str]}`
+ * from the PC; `available: false` (with `why`) from an older one; `hidden:
+ * true` with `hidden_count` while Windows Hello hides the memory lists
+ * (Rust took every reference out - see brain/sources.rs `redact_sources`).
+ * A source of an unknown kind, or with none of `ref`/`url`/`path`, is
+ * dropped, never guessed at.
+ */
+export function readSources(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  const available = a.available !== false && Array.isArray(a.sources);
+  const sources = (available ? a.sources : [])
+    .filter((s) => s && KNOWN_SOURCE_KINDS.includes(s.kind))
+    .map((s) => ({ kind: s.kind, ref: text(s.ref), url: text(s.url), path: text(s.path),
+      title: text(s.title) }))
+    .filter((s) => s.ref || s.url || s.path);
+  const quotes = (available && Array.isArray(a.unverified_quotes) ? a.unverified_quotes : [])
+    .filter((q) => typeof q === "string" && q.trim());
+  return {
+    available,
+    why: available ? "" : text(a.why) || SOURCES_MISSING,
+    hidden: available && a.hidden === true,
+    hiddenCount: num(a.hidden_count) ?? 0,
+    sources,
+    quotes,
+  };
+}
+
+/**
+ * One source's plain line: the kind, then whatever it is safe to show. A
+ * web source shows its HOST only (never the full link, never a title a
+ * website chose); a note, wiki page or file shows its title when there is
+ * one, else its reference.
+ */
+export function sourceLine(s) {
+  const label = (s && SOURCE_KIND_LABEL[s.kind]) || "Source";
+  if (!s) return label;
+  if (s.kind === "web") return `${label}: ${hostOf(s.url)}`;
+  const shown = s.title || s.ref || s.path || "";
+  return shown ? `${label}: ${shown}` : label;
+}
+
+/** True only for a web source with something that looks like a real link -
+ *  the one kind an app may ever turn into a clickable, real navigation. */
+export function isOpenable(s) {
+  return Boolean(s && s.kind === "web" && /^https?:\/\//i.test(s.url || ""));
+}

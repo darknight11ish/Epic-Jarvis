@@ -186,6 +186,10 @@ SHIPPED = (
     # "Check for tool updates": outdated Python packages, Rust crates and
     # pinned GitHub tools, report only, one card ever (tool-updates.patch)
     "jarvis_tool_updates.py",
+    # "Where this came from" and the quote check: each reading tool's own
+    # result this turn, by reference; GET /api/chat/sources
+    # (feasibility I42/I132, answer-sources.patch)
+    "jarvis_sources.py",
 )
 
 

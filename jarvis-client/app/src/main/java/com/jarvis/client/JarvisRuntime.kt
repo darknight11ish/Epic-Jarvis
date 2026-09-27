@@ -3140,6 +3140,27 @@ object JarvisRuntime {
             }
         }
 
+    // ----------------------------- "Where this came from" (I42/I132, 2026-09-27) ----
+    // See [com.jarvis.client.net.ChatSources]: this answer's own reading-tool
+    // receipts and its quote check, read by turn_id when the owner opens the
+    // line. Fetched once, quietly, as soon as the answer finishes - there is
+    // no cheap count to gate it on first (see that object's own docstring).
+
+    /** `GET /api/chat/sources?turn_id=` - a read: never held. */
+    suspend fun chatSources(turnId: String?): com.jarvis.client.net.ChatSources.Read =
+        when (val r = api.chatSources(turnId)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatSources.parse(r.value)
+                ?.let { com.jarvis.client.net.ChatSources.Read.Shown(it) }
+                ?: com.jarvis.client.net.ChatSources.Read.Failed(
+                    "The desktop sent something this app could not read.",
+                )
+            is ApiResult.Failed -> if (com.jarvis.client.net.ChatSources.missing(r.error)) {
+                com.jarvis.client.net.ChatSources.Read.Missing
+            } else {
+                com.jarvis.client.net.ChatSources.Read.Failed(describe(r.error))
+            }
+        }
+
     /**
      * Turns a temporary chat on or off on the chat both Home and the voice
      * loop send through ([com.jarvis.client.net.ChatSession.setTemporary]).

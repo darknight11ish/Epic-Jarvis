@@ -1230,6 +1230,30 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return out;
           }
+          // "Where this came from" (brain/sources.rs chat_sources,
+          // feasibility I42/I132): the sources and unverified quotes a
+          // scenario puts in window.__chatSources (by turn_id, or a single
+          // object used for every turn_id when the scenario does not key
+          // it); unset id/PC is window.__sourcesMissingRoute (an older PC).
+          case "chat_sources": {
+            (window.__sourcesReads = window.__sourcesReads || []).push(args.turnId);
+            if (window.__sourcesMissingRoute) {
+              return { available: false,
+                       why: "Your PC's Jarvis cannot show where this answer came from yet - " +
+                            "run apply-patches.ps1 on the PC to update it." };
+            }
+            const table = window.__chatSources || {};
+            const found = table[args.turnId] || table.default || { sources: [], unverified_quotes: [] };
+            const out = { sources: JSON.parse(JSON.stringify(found.sources || [])),
+                          unverified_quotes: [...(found.unverified_quotes || [])] };
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              out.hidden = true;
+              out.hidden_count = out.sources.length;
+              out.sources = [];
+            }
+            return out;
+          }
           case "brain_memory_profile": {
             const p = window.__profile;
             if (!p) return null;

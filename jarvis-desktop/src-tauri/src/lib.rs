@@ -806,6 +806,7 @@ pub fn run() {
             brain::briefing::stop_briefing,
             brain::briefing::set_briefing_senders,
             brain::used::memory_used,
+            brain::sources::chat_sources,
             brain::history::brain_history_list,
             brain::history::brain_history_open,
             brain::history::brain_history_delete,

@@ -1,0 +1,50 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2520,6 +2520,21 @@
+     except Exception as exc:
+         print(f"  tool-updates NOT ON ({type(exc).__name__}) - Check for tool updates is off")
+         print("             until jarvis_tool_updates.py is back: run apply-patches.ps1 again")
++    # answer-sources.patch ("Where this came from", feasibility I42/I132,
++    # docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md detail 1): GET
++    # /api/chat/sources?turn_id=<32-character hex id> - the notes, wiki pages, web
++    # results and files a reading tool actually returned this turn, by
++    # reference, plus which quoted phrases in the answer were not found in
++    # any of them. Read-only, behind the token like every other memory-
++    # shaped route. Wrapped round Handler here, before anything listens,
++    # like tool-updates above; the rules are all in jarvis_sources.py.
++    try:
++        import jarvis_sources
++        print(jarvis_sources.install(Handler, origin_ok=_origin_ok,
++                                     token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  sources    NOT ON ({type(exc).__name__}) - \"Where this came from\" is off")
++        print("             until jarvis_sources.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
+@@ -3060,7 +3074,25 @@
+                     _turn = _turn or {}
+                     # chat-history.patch: the answer and the tools that ran,
+                     # for this PC's record of the turn (in `finally`, below).
+                     _history["turn"] = _turn
++                    # answer-sources.patch: this answer's own tool receipts
++                    # (I42) and its quote check (I132), kept under the SAME
++                    # turn_id feedback.patch already put in X-Jarvis-Route -
++                    # sent to the app before this loop ever ran, so no
++                    # header could ever carry these two lists. An app reads
++                    # them back with that id: GET /api/chat/sources. Off a
++                    # try, like every other piece of bookkeeping here: it
++                    # must never be the reason an answered turn reports an
++                    # error, and without jarvis_sources.py nothing is kept
++                    # and chat works exactly as before this patch.
++                    try:
++                        import jarvis_sources
++                        jarvis_sources.record(
++                            route_header.get("turn_id"),
++                            _turn.get("tool_sources") or [],
++                            _turn.get("unverified_quotes") or [])
++                    except Exception:
++                        pass
+                     if (_speed is not None and _turn.get("finish_reason")
+                             and not _turn.get("client_gone")):
+                         _speed.finish(lane, tools=int(_turn.get("rounds") or 1) > 1)

@@ -67,6 +67,23 @@ def _cfg(section: str, key: str, default=None):
 # lanes are never handed memory in the first place, so even a topic missing
 # from this list can't leak your stored facts, only your literal typed words."
 # Anything that relies on this list being complete is designed wrong.
+
+
+def _crisis_terms() -> tuple:
+    """The plain-English crisis phrases `jarvis_wellbeing.py` already checks
+    (CRISIS_PHRASES_EN), reused here rather than duplicated (cutting-edge
+    round 4, "Keep distress off the cloud offer"). Each entry there is
+    already a regex fragment with its own word shape, so it drops straight
+    into this list's own `"|".join(...)`. () when jarvis_wellbeing.py is not
+    on this PC, or on any error: the plain mood/mental-health words below
+    still keep a distress message off the cloud offer on their own."""
+    try:
+        import jarvis_wellbeing
+        return tuple(str(p) for p in jarvis_wellbeing.CRISIS_PHRASES_EN)
+    except Exception:
+        return ()
+
+
 _PRIVATE_TERMS = [
     r"\bpassword\b", r"\bpassphrase\b", r"\bapi[ _-]?key\b", r"\bsecret\b",
     r"\btoken\b", r"\bcredential\b", r"\bprivate key\b", r"\bseed phrase\b",
@@ -100,7 +117,17 @@ _PRIVATE_TERMS = [
     # count only as the owner's own: "my" or "our", with at most one word
     # between ("my Obsidian vault", "my meeting notes", "my bullet journal").
     r"\b(?:my|our)\s+(?:[\w'-]+\s+)?(?:vaults?|wikis?|notes?|journals?)\b",
-]
+    # Mood, mental health and crisis words (cutting-edge round 4, "Keep
+    # distress off the cloud offer" - CLAUDE.md, 2026-09-27): missing here
+    # entirely before this. A long distress message could otherwise reach
+    # gate 6's "ask a cloud model?" offer - the wrong moment to ask, and
+    # health is private under rule 1 regardless of whether jarvis_wellbeing's
+    # own crisis() check also fires. Broad on purpose, as this list's own
+    # comment already says: a false match here only keeps a question local,
+    # which is the safe direction to err in.
+    r"\bdepress\w*\b", r"\banxiet\w*\b", r"\bpanic attack\w*\b", r"\btherap\w*\b",
+    r"\bself[- ]harm\w*\b", r"\bsuicid\w*\b",
+] + list(_crisis_terms())
 
 
 def _term_pattern(term: str) -> str:
