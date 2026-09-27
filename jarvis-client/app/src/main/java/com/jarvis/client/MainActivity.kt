@@ -1896,6 +1896,7 @@ class MainActivity : FragmentActivity() {
                             updateLine = updateState.newerLine.takeIf { updateChecks },
                             temporary = temporaryChat,
                             usedIds = usedIds,
+                            answerTurnId = answerTurnId,
                             crisisAnswer = crisisAnswer,
                             memoryHidden = privateHidden,
                             showPrivateBusy = ownerCheckBusy.value,
@@ -1994,6 +1995,7 @@ class MainActivity : FragmentActivity() {
                                 // on one fact after the confirm, held on a stale link.
                                 onLoadUsed = { ids -> JarvisRuntime.memoryUsed(ids) },
                                 onForgetUsed = { id -> JarvisRuntime.forgetAutoFact(id) },
+                                onLoadSources = { tid -> JarvisRuntime.chatSources(tid) },
                                 onShowPrivate = ::showPrivateLists,
                                 // A fingerprint instead of a tap for anything that
                                 // leaves the machine, cannot be undone, or arrived

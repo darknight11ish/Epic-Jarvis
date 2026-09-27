@@ -1468,6 +1468,14 @@ html[data-state="error"] .pulse {
 .answer-used-actions { display: flex; gap: 10px; margin-left: auto; }
 .answer-used-empty, .answer-used-done { margin: 4px 0 0; color: var(--text-faint); }
 .answer-used-empty.failed { color: var(--bad); }
+/* "Where this came from" (feasibility I42/I132): a web source is the one
+ * kind that is a real link (main.js's a[data-external] handler opens it,
+ * never this file); a quote the PC could not find in what it read is a
+ * warning, the same tone failed reads already use elsewhere on this page. */
+.answer-used-text[href] { color: var(--accent); text-decoration: none; }
+.answer-used-text[href]:hover { text-decoration: underline; }
+.answer-used-empty.warn { color: var(--warn); }
+.answer-used-quote { font-style: italic; }
 
 .approval-hints {
   flex: 1 1 auto;

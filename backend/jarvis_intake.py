@@ -714,6 +714,23 @@ def date_rule(when: float) -> str:
             f"Friday\" into the real date, worked out from {_iso(d)}.")
 
 
+def mood_rule() -> str:
+    """Wellbeing round 4 section 6, "Passing moods are not facts" (CLAUDE.md,
+    2026-09-27): "I'm exhausted today" or "I feel hopeless" is how the owner
+    feels right now, not something true about them a week from now - unlike
+    an ordinary fact, which the date rule above assumes stays true until
+    corrected. Left to the model's own judgement, a mood is exactly the kind
+    of health-shaped sentence jarvis_sensitive.py's word lists already treat
+    as sensitive, so proposing it would put a "remember this?" card in the
+    owner's review queue - possibly minutes after a hard moment. This rule
+    stops the proposal from ever being generated, which is a different,
+    earlier thing than a crisis turn being skipped by owner_turns() below
+    (that keeps the words out of the learner's prompt at all; this tells the
+    model, when they do reach it in an ordinary turn, never to propose one)."""
+    return ("3. Moods. How the owner feels today, or a passing mood, is not "
+            "a fact. Do not propose it.")
+
+
 # --------------------------------------------------------------------------
 #   4. Corrections point at the old fact by number
 # --------------------------------------------------------------------------
@@ -806,6 +823,7 @@ def addendum(when: float, cands: Optional[list]) -> str:
     rule = correction_rule(cands)
     if rule:
         parts.append(rule)
+    parts.append(mood_rule())
     return ("\n\n---\nMore rules. Where anything above disagrees with them, "
             "these win.\n\n" + "\n\n".join(parts) + "\n")
 

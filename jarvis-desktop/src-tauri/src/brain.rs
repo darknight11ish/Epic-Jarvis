@@ -43,6 +43,7 @@ pub mod profile;
 mod routes;
 pub mod schedule;
 pub mod shared;
+pub mod sources;
 pub mod used;
 use routes::{first_line, route_for};
 

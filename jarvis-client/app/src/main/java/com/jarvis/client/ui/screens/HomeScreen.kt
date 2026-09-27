@@ -398,8 +398,17 @@ data class HomeState(
      */
     val usedIds: List<Long> = emptyList(),
     /**
+     * The answer on screen's own id ([com.jarvis.client.net.Feedback];
+     * already read for the right/wrong mark) - also what "Where this came
+     * from" fetches by, feasibility I42/I132
+     * ([com.jarvis.client.net.ChatSources]). Null for an older PC, or
+     * before recording failed.
+     */
+    val answerTurnId: String? = null,
+    /**
      * Security's "Hide memory lists and chat history" is hiding the memory
-     * lists now - the facts under "Used 2 memories" are one of them.
+     * lists now - the facts under "Used 2 memories" are one of them, and so
+     * is "Where this came from" (the same gate, not a second one).
      */
     val memoryHidden: Boolean = false,
     /** The Show under a hidden list is asking the phone's lock now. */
@@ -535,6 +544,13 @@ data class HomeActions(
         { com.jarvis.client.net.MemoryUsed.Read.Missing },
     /** Forget ONE fact, after the confirm ([com.jarvis.client.JarvisRuntime.forgetAutoFact]). */
     val onForgetUsed: suspend (Long) -> Pair<Boolean, String> = { false to "" },
+    /**
+     * "Where this came from" (feasibility I42/I132): this answer's own
+     * reading-tool receipts and its quote check, by turn_id
+     * ([com.jarvis.client.JarvisRuntime.chatSources]).
+     */
+    val onLoadSources: suspend (String?) -> com.jarvis.client.net.ChatSources.Read =
+        { com.jarvis.client.net.ChatSources.Read.Missing },
     /** Show a hidden memory list, after the phone's lock says it is the owner. */
     val onShowPrivate: () -> Unit = {},
     /** "Try again" under a failed question: ask the same question again. */
@@ -1071,6 +1087,11 @@ private fun ConversationList(
                     onShow = actions.onShowPrivate,
                     load = actions.onLoadUsed,
                     forget = actions.onForgetUsed,
+                ),
+                sources = SourcesAnswer(
+                    turnId = state.answerTurnId,
+                    hidden = state.memoryHidden,
+                    load = actions.onLoadSources,
                 ),
             )
         }
@@ -1960,6 +1981,10 @@ private fun Reply(
     waiting: String? = null,
     note: String? = null,
     used: UsedAnswer? = null,
+    // "Where this came from" (feasibility I42/I132): null when the caller
+    // gave no turn_id at all - the same "nothing to show" the line below
+    // already treats an empty `used.ids` as.
+    sources: SourcesAnswer? = null,
     // The crisis help line (jarvis_wellbeing.py, 2026-09-27): draws this
     // answer as a calm, plain panel instead of an ordinary bubble. Wording,
     // the word check and never learning from it all happen on the PC;
@@ -2082,6 +2107,34 @@ private fun Reply(
                         )
                     }
                 }
+                // "Where this came from" (feasibility I42/I132): fetched
+                // once, quietly, as soon as this answer's turn_id is known
+                // - there is no cheap count the way "Used 2 memories" has
+                // one (a tool's result is only known once the tool loop
+                // finishes, unlike a recalled fact). Never even asked for
+                // while Security's "Hide memory lists and chat history" is
+                // hiding the memory lists - the same gate as above, not a
+                // second one - so nothing is shown at all in that case
+                // rather than a line that cannot be opened yet.
+                if (sources != null && sources.turnId != null && !sources.hidden) {
+                    var srcOpen by remember(sources.turnId) { mutableStateOf(false) }
+                    var srcRead by remember(sources.turnId) {
+                        mutableStateOf<com.jarvis.client.net.ChatSources.Read?>(null)
+                    }
+                    LaunchedEffect(sources.turnId) { srcRead = sources.load(sources.turnId) }
+                    val shown = srcRead as? com.jarvis.client.net.ChatSources.Read.Shown
+                    if (shown != null && (shown.view.sources.isNotEmpty() || shown.view.quotes.isNotEmpty())) {
+                        Gap(4)
+                        Quiet(
+                            com.jarvis.client.net.ChatSources.TITLE,
+                            color = chrome.textMid,
+                            onClick = { srcOpen = !srcOpen },
+                        )
+                        if (srcOpen) {
+                            ChatSourcesList(shown.view)
+                        }
+                    }
+                }
                 Gap(8)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Quiet("Copy", color = chrome.textMid) {
@@ -2138,6 +2191,17 @@ internal data class UsedAnswer(
     val onShow: () -> Unit,
     val load: suspend (List<Long>) -> com.jarvis.client.net.MemoryUsed.Read,
     val forget: suspend (Long) -> Pair<Boolean, String>,
+)
+
+/** What "Where this came from" under the answer needs (feasibility
+ *  I42/I132) - see [ChatSourcesList]. `hidden` is the SAME "Hide memory
+ *  lists and chat history" flag [UsedAnswer.hidden] reads, not a second
+ *  gate. */
+@Immutable
+internal data class SourcesAnswer(
+    val turnId: String?,
+    val hidden: Boolean,
+    val load: suspend (String?) -> com.jarvis.client.net.ChatSources.Read,
 )
 
 /**

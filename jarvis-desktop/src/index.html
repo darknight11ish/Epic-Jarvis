@@ -631,6 +631,15 @@
                       aria-expanded="false" aria-controls="answer-used-list"></button>
               <div class="answer-used-list" id="answer-used-list" hidden></div>
             </div>
+            <!-- "Where this came from" (feasibility I42/I132): the notes,
+                 wiki pages, web results and files this answer actually
+                 read, by reference, plus the quote check - fetched by
+                 turn_id once the answer finishes (answer-memory.js). -->
+            <div class="answer-used" id="answer-sources" hidden>
+              <button class="text-button answer-used-line" type="button" id="answer-sources-line"
+                      aria-expanded="false" aria-controls="answer-sources-list"></button>
+              <div class="answer-used-list" id="answer-sources-list" hidden></div>
+            </div>
           </div>
 
           <footer class="card-foot">

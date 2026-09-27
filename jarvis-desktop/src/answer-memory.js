@@ -20,14 +20,22 @@
  */
 import {
   hiddenLine,
+  isOpenable,
   missingLine,
   NOT_CURRENT_MARK,
   NOT_CURRENT_TITLE,
   PINNED_MARK,
   PINNED_MARK_TITLE,
+  QUOTE_WARNING_LABEL,
+  QUOTE_WARNING_TITLE,
+  readSources,
   readUsed,
   REMEMBER_OFF,
   rowActions,
+  SOURCES_LINE,
+  SOURCES_LINE_TITLE,
+  SOURCES_TITLE,
+  sourceLine,
   TEMPORARY_ENDED,
   TEMPORARY_LINE,
   TEMPORARY_NOT_CONFIRMED,
@@ -65,6 +73,11 @@ const errorText = (e) => String((e && e.message) || e || "It did not work.");
 
 /** Forget and Erase while the event stream is stale (rule 4). */
 export const STALE_TITLE = "The event stream is stale, so this cannot be confirmed live.";
+
+/** The shape every `turn_id` is - `jarvis_feedback._TURN` on the PC,
+ *  `commands::valid_turn_id` in Rust. Checked here too so a malformed or
+ *  missing id never even tries the round trip. */
+const TURN_ID_RX = /^[0-9a-f]{32}$/;
 
 /**
  * The temporary-chat toggle and the marker strip.
@@ -143,10 +156,12 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
  *
  * `invoke(command, args)` rejects on failure (main.js invokeStrict);
  * `isStale()` is the event stream's staleness; `confirm(question)` is the
- * window's own confirm.
+ * window's own confirm. `sources` (optional; feasibility I42/I132, "Where
+ * this came from") is `{box, lineButton, list}`, the same three-part shape
+ * as the memory ones above - omit it and this behaves exactly as before.
  */
 export function createAnswerMemory({ box, lineButton, list, note, invoke, isStale, confirm,
-  announce, onChange }) {
+  announce, onChange, sources }) {
   const a = {
     ids: [],
     count: 0,
@@ -159,7 +174,18 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     notice: "",
     loading: false,
     buttons: new Set(),
+    // "Where this came from" (I42/I132): fetched once, quietly, as soon as
+    // the answer finishes - there is no cheap count to show first (see
+    // memory-used.js's own note on why). `srcOpen` only controls whether
+    // the LIST is expanded; the line itself appears as soon as `srcView`
+    // has something to show.
+    turnId: null,
+    srcView: null,
+    srcError: "",
+    srcLoading: false,
+    srcOpen: false,
   };
+  const src = sources || {};
 
   function clear() {
     a.ids = [];
@@ -177,6 +203,17 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     note.hidden = true;
     note.textContent = "";
     lineButton.setAttribute("aria-expanded", "false");
+    a.turnId = null;
+    a.srcView = null;
+    a.srcError = "";
+    a.srcLoading = false;
+    a.srcOpen = false;
+    if (src.box) src.box.hidden = true;
+    if (src.list) {
+      src.list.hidden = true;
+      src.list.replaceChildren();
+    }
+    if (src.lineButton) src.lineButton.setAttribute("aria-expanded", "false");
   }
 
   function paintNote() {
@@ -338,6 +375,113 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     else paintList();
   });
 
+  /* ------------------------------------------------------------------------
+   * "Where this came from" (I42), and the quote check (I132). No-ops when
+   * the caller did not pass `sources` - so an older page that has not added
+   * the three elements yet keeps working exactly as before.
+   * ------------------------------------------------------------------------ */
+
+  function paintSourcesLine() {
+    if (!src.box) return;
+    const v = a.srcView;
+    const has = a.srcLoading
+      || Boolean(v && (v.available === false || v.sources.length || v.quotes.length || v.hidden));
+    // Never on a temporary answer: nothing was recorded for one to read
+    // back (jarvis_sources.record is never reached - jarvis_agent's own
+    // tool loop still ran, but a temporary chat's turn_id is not kept).
+    const show = a.done && !a.sentTemporary && has;
+    src.box.hidden = !show;
+    if (!show) return;
+    if (src.lineButton) {
+      src.lineButton.textContent = SOURCES_LINE;
+      src.lineButton.title = SOURCES_LINE_TITLE;
+      src.lineButton.setAttribute("aria-expanded", String(a.srcOpen));
+    }
+  }
+
+  function sourceRow(s) {
+    const item = el("li", "answer-used-item");
+    if (isOpenable(s)) {
+      const a2 = document.createElement("a");
+      a2.className = "answer-used-text";
+      a2.href = s.url;
+      a2.dataset.external = "true";
+      // The host only, never the full link and never a title the website
+      // chose - the full address shows only once the owner actually taps
+      // it, as a real navigation in the real browser (see main.js's
+      // `a[data-external]` handler; this element opts into it by attribute
+      // alone, nothing here opens or fetches anything itself).
+      a2.textContent = sourceLine(s);
+      a2.title = s.url;
+      item.append(a2);
+    } else {
+      item.append(el("span", "answer-used-text", sourceLine(s)));
+    }
+    return item;
+  }
+
+  function paintSourcesList() {
+    if (!src.list) return;
+    src.list.replaceChildren();
+    src.list.hidden = !a.srcOpen;
+    if (!a.srcOpen) return onChange();
+    src.list.append(el("p", "answer-used-title", SOURCES_TITLE));
+    const v = a.srcView;
+    if (a.srcLoading && !v) {
+      src.list.append(el("p", "answer-used-empty", "Reading…"));
+    } else if (!v) {
+      src.list.append(el("p", "answer-used-empty failed",
+        `Could not read this: ${a.srcError || "no answer"}`));
+    } else if (!v.available) {
+      src.list.append(el("p", "answer-used-empty", v.why));
+    } else if (v.hidden) {
+      src.list.append(el("p", "answer-used-empty", hiddenLine(v.hiddenCount || v.sources.length)));
+    } else {
+      if (v.sources.length) {
+        const ul = el("ul", "answer-used-rows");
+        for (const s of v.sources) ul.append(sourceRow(s));
+        src.list.append(ul);
+      } else {
+        src.list.append(el("p", "answer-used-empty", "Nothing was read for this answer."));
+      }
+      for (const q of v.quotes) {
+        const p = el("p", "answer-used-empty warn");
+        p.title = QUOTE_WARNING_TITLE;
+        p.append(el("span", "answer-used-quote", `“${q}”`), document.createTextNode(" — "),
+          el("span", null, QUOTE_WARNING_LABEL));
+        src.list.append(p);
+      }
+      if (a.srcError) src.list.append(el("p", "answer-used-empty failed", a.srcError));
+    }
+    onChange();
+  }
+
+  async function loadSources() {
+    if (!TURN_ID_RX.test(a.turnId || "") || a.srcLoading) return;
+    a.srcLoading = true;
+    a.srcError = "";
+    paintSourcesLine();
+    if (a.srcOpen) paintSourcesList();
+    try {
+      a.srcView = readSources(await invoke("chat_sources", { turnId: a.turnId }));
+    } catch (error) {
+      a.srcView = null;
+      a.srcError = errorText(error);
+    } finally {
+      a.srcLoading = false;
+    }
+    paintSourcesLine();
+    if (a.srcOpen) paintSourcesList();
+  }
+
+  if (src.lineButton) {
+    src.lineButton.addEventListener("click", () => {
+      a.srcOpen = !a.srcOpen;
+      if (src.lineButton) src.lineButton.setAttribute("aria-expanded", String(a.srcOpen));
+      paintSourcesList();
+    });
+  }
+
   return {
     begin(sentTemporary) {
       clear();
@@ -349,6 +493,11 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
       // The facts the line opens: the ones with an id. (A fact from the
       // older word list over the jsonl has none, and cannot be listed.)
       a.count = a.ids.length;
+      // "Where this came from" (I42): the SAME id the right/wrong mark
+      // already uses (commands.rs route_line_from_header now passes it
+      // on, validated there too - a bad or missing one is simply null).
+      const t = a.route && typeof a.route.turn_id === "string" ? a.route.turn_id : "";
+      a.turnId = TURN_ID_RX.test(t) ? t : null;
       paintNote();
       paintLine();
     },
@@ -356,6 +505,11 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
       a.done = Boolean(done);
       paintNote();
       paintLine();
+      // Fetched once, quietly, right as the answer finishes - there is no
+      // cheap count to gate this on first (see memory-used.js). Never on a
+      // temporary answer: nothing was recorded to read back for one.
+      if (a.done && a.turnId && !a.sentTemporary) loadSources();
+      else paintSourcesLine();
       onChange();
     },
     clear() {
@@ -368,7 +522,8 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     },
     /** For tests and main.js: what is shown. */
     get state() {
-      return { ids: [...a.ids], open: a.open, sentTemporary: a.sentTemporary };
+      return { ids: [...a.ids], open: a.open, sentTemporary: a.sentTemporary,
+        turnId: a.turnId, srcOpen: a.srcOpen };
     },
   };
 }

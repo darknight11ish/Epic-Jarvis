@@ -840,6 +840,25 @@ def t_remember_through_the_learner():
             sys.modules["jarvis_extract"] = real_x
 
 
+def t_moods_are_not_facts():
+    """Wellbeing round 4 section 6, "Passing moods are not facts" (CLAUDE.md,
+    2026-09-27): the learner's own prompt tells the model, in every turn,
+    that how the owner feels today is not a fact to propose."""
+    check("mood_rule() says plainly a mood is not a fact",
+          "is not a fact" in I.mood_rule() and "Do not propose it" in I.mood_rule())
+    s = fresh()
+    seen = []
+    llm = lambda p: seen.append(p) or '{"facts": []}'
+    w = I.prepare_llm(llm, [{"role": "user", "content": "I'm exhausted today"}],
+                      when=WED, store=s)
+    w("ORIGINAL PROMPT")
+    p = seen[0] if seen else ""
+    check("the mood rule reaches the learner's own prompt", I.mood_rule() in p, p[-800:])
+    # It is rule 3, after the date rule (1) and the correction rule (2) -
+    # numbered so the model can tell them apart, never renumbered away.
+    check("it is numbered 3, after dates and corrections", "\n3. Moods." in p, p[-800:])
+
+
 def t_the_keep_both_route_is_wired():
     if not _needs_hud("POST /api/memory/keep_both"):
         return
@@ -876,6 +895,7 @@ if __name__ == "__main__":
                t_pending_rows_carry_the_card_fields,
                t_the_learner_needs_the_backend_to_say_owner,
                t_remember_through_the_learner,
+               t_moods_are_not_facts,
                t_the_keep_both_route_is_wired):
         print(f"\n--- {fn.__name__} ---")
         try:

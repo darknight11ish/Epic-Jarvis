@@ -328,7 +328,11 @@ def _run_file_read(args: dict) -> dict:
         return {"ok": False, "error": str(exc)}
     truncated = len(raw) > _MAX_FILE_READ_BYTES
     content = raw[:_MAX_FILE_READ_BYTES].decode("utf-8", errors="replace")
-    return {"ok": True, "content": content, "truncated": truncated}
+    # "Where this came from" (I42, jarvis_sources.py): the REAL resolved
+    # path this call actually opened - never the model's own `path` argument
+    # verbatim, which a symlink or a `..` could make different from what was
+    # really read.
+    return {"ok": True, "content": content, "truncated": truncated, "path": path}
 
 
 #: What an approved shell command may inherit beyond jarvis_child_env's
@@ -2836,6 +2840,11 @@ class _TurnWatch:
         self.cards = 0               # approval cards this turn (CARDS_PER_TURN)
         self.file_parts = 0          # document parts read this turn (FILES_PARTS_PER_TURN)
         self.secrets: list = []      # KINDS of password or key read, never values
+        # "Where this came from" (I42, jarvis_sources.py): each reading
+        # tool's own result, by reference only - a note's ref, a wiki page's
+        # path, a web result's url, a file's path. Built in took_in(), from
+        # the tool's RESULT, never from what the model later claims it read.
+        self.sources: list = []
         # Groups `more_tools` opened after this turn read outside text, or in
         # a tainted conversation (the short tool list): the next card says so.
         self.opened_after_outside: list = []
@@ -2938,6 +2947,17 @@ class _TurnWatch:
                 for code, why in outside_flags(piece).items():
                     self.flags.setdefault(code, why)
             self._note_secrets(pieces)
+            # "Where this came from" (I42): from `result` itself, before it
+            # is cleaned - see jarvis_sources.py. Off a try, like the secret
+            # check above: a missing or older jarvis_sources.py must never
+            # be the reason a tool result is refused.
+            try:
+                import jarvis_sources
+                for s in jarvis_sources.from_tool_result(name, result):
+                    if s not in self.sources and len(self.sources) < jarvis_sources.MAX_PER_TURN:
+                        self.sources.append(s)
+            except Exception:
+                pass
         clean = _cleaned(result)
         clean.pop(OUTSIDE_FIELD, None)
         return {OUTSIDE_FIELD: OUTSIDE_LABEL, **clean}
@@ -4254,7 +4274,17 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     that really ran (chat-history.patch keeps both in the PC's own record).
     `outside_flags` lists the codes of any planted-instruction signs found in
     what the tools returned (see "Outside text in the tool loop") - codes
-    only, never the text.
+    only, never the text. `tool_sources` lists, by reference only, each
+    reading tool's own result this turn - a note's ref, a wiki page's path,
+    a web result's url, a file's path (I42, jarvis_sources.py). `unverified_quotes`
+    lists any quoted phrase in the answer that was not found - word for
+    word, spacing and case ignored - in what was really read this turn
+    (I132), or [] when nothing was read. Both are returned here, rather than
+    added to `route_header`, because that header carries this turn's
+    `turn_id` and is already sent before this function even starts
+    (streaming) - so the caller records these two under that same id
+    afterwards (`jarvis_sources.record`), for a later `GET
+    /api/chat/sources` to read back.
 
     When the turn is over, `record_chain(steps)` gets the list of tools this
     turn asked for, as `{"tool", "ran", "ok", "outcome"}` dicts in order.
@@ -4730,11 +4760,23 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     ran = [s["tool"] for s in steps if s.get("ran")]
     if picture_text is not None and picture_text.get("read"):
         ran = [PICTURE_TEXT_TOOL] + ran
+    final_answer = "".join(answer)
+    # The quote check (I132): only when something was really read this turn
+    # - an ordinary quote in an ordinary conversation has nothing here to
+    # check it against, and is never flagged. Off a try: a missing or older
+    # jarvis_sources.py must never be the reason an answer fails.
+    try:
+        import jarvis_sources
+        unverified = jarvis_sources.unverified_quotes(final_answer, watch.outside) if watch.read else []
+    except Exception:
+        unverified = []
     return {"finish_reason": finish, "client_gone": out.gone, "rounds": rounds,
-            "answer": "".join(answer),
+            "answer": final_answer,
             "tools_ran": ran,
             "outside_flags": sorted(watch.flags),
             "crisis": watch.crisis,
+            "tool_sources": watch.sources,
+            "unverified_quotes": unverified,
             "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}
 
 

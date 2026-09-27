@@ -137,6 +137,7 @@ on a throwaway copy instead.
 | `memory-shared.patch` | `jarvis_hud.py` | **"Between us"** (the owner's decision, 2026-09-27). Adds `GET` and `POST /api/memory/shared` - tag or untag ONE fact as a shared joke or nickname (`meta.kind = "shared"`), the owner's own tap, no card, like Pin. Its jarvis_hud.py context is the route-dispatch chain right after `/api/memory/status` (original line ~1964) - a different part of the file from the startup install() block every backup/media/news-shaped patch touches, so its place in this list is only about order, not about finding its own anchor text. The work is in the shipped `rebuilt/jarvis_memory.py` (`shared()`, `is_shared()`, `shared_facts()`, `without_shared_in_plain()`, `with_profile()`'s new `manner` argument) - with an older copy the routes answer 501 and nothing is filtered. See "Between us", at the very end. |
 | `data-health.patch` | `jarvis_hud.py` | **"Data health in the preflight"** (feasibility I97, `docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Small, read-only." / "WARN, never fix."). Adds `GET /api/data-health` - fixed shape, not a setting, **no approval card either way**, the same shape as `sayable.patch` and `reach.patch`. Checks (never fixes) whether the chat history and memory databases open, whether there is disk space where Jarvis writes its data, and whether the settings files parse; every row is `ok` or `warn`, never a failure. Read by `backend/selftest.py --preflight`'s own "Is Jarvis's own data healthy?" check. Its context is `sayable.patch`'s own new route block, unaffected by the patches above it in this table (including `memory-shared.patch`), which touch a different, unrelated part of `jarvis_hud.py`; last in the list. Needs `jarvis_data_health.py`. |
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
+| `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -13272,3 +13273,139 @@ in this repository; and the toml's own fence already protects honesty and
 willingness to disagree, agreeing with the character block, but says
 nothing about humour or claimed feelings - a named, open gap, not a found
 conflict.
+
+# Where this came from: `jarvis_sources.py`, `answer-sources.patch` (2026-09-27)
+
+Feasibility items I42 and I132 (queued list, `docs/FEASIBILITY-AUDIT-2026-09-26.md`
+section 2), one feature - the exact spec is detail 1 of
+`docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md`. `docs/JARVIS-API.md`
+section 55 has the route; `docs/ARCHITECTURE.md` §4 has the "adds no lane"
+paragraph.
+
+## The real gap this closes
+
+Only saved MEMORY facts were ever listed under an answer ("Used in this
+answer", `docs/JARVIS-API.md` §4/§6, `GET /api/memory/used`, `injected_ids`).
+A note, a wiki page, a web result or a file the model read was not listed
+anywhere at all - §4 already said so plainly ("No tool receipt"), and it is
+still true of `/api/chat` itself after this: the receipt lives on a
+separate route, for the four reading tools only.
+
+## In plain words
+
+- **By reference, never the text.** `jarvis_sources.from_tool_result(name,
+  result)` reads a note's `ref` (`jarvis_notes.py`'s own field, reused, not
+  reinvented; a page under `Jarvis Wiki/` is tagged `"wiki"` instead of
+  `"note"`), a web result's `url`, a file's `path` - built from the RESULT a
+  tool actually returned, never from what the model later says it read. It
+  is called from inside `jarvis_agent._TurnWatch.took_in`, which already ran
+  for every reading tool's result to build the planted-instruction check
+  (§4's "Outside text in the tool loop") - so this reaches into the tool
+  loop nowhere it was not already reaching.
+- **The quote check.** When the model's finished answer quotes something
+  (three words or more, in straight or curly double quotes),
+  `jarvis_sources.unverified_quotes(answer, watch.outside)` checks it -
+  spacing and case folded away - against everything the turn actually read
+  (`watch.outside`, the SAME raw text the outside-text check already
+  scans). A quote not found is reported, never corrected: a plain word
+  match, never a model call, and it only ever warns. Nothing is checked
+  when nothing was read this turn.
+- **Kept in memory, not a database.** A bounded, per-process dict, keyed by
+  `turn_id`, capped both per turn (`MAX_PER_TURN`) and across turns
+  (`MAX_TURNS`) - the same kind of cache `jarvis_agent.py` already keeps for
+  other per-process, non-durable things (`_CTX_CACHE`, `_TOOLS_CACHE`). A
+  source's reference is a by-product of one answer, not a fact the owner
+  chose to keep, so a restart clears it and nothing here touches disk.
+- **The SAME `turn_id`, a separate route, and why it has to be.**
+  `X-Jarvis-Route` already carries `turn_id` (`feedback.patch`) - but that
+  header is sent to the app BEFORE `run_local_turn` even starts (streaming
+  sends headers first), and a tool's result is only known once the tool
+  loop finishes. So `GET /api/chat/sources?turn_id=` (`answer-sources.patch`,
+  `jarvis_sources.install`, the same `jarvis_news.py`/`jarvis_media.py`
+  wrap-`do_GET` pattern) is a genuinely separate read, by the id an app
+  already has for the right/wrong mark and for "Used in this answer" -
+  "the same feature, extended to more sources," never a new mechanism.
+- **No new way out of the PC.** This only reads what a tool ALREADY fetched
+  this turn. It opens no socket of its own, follows no link, and never
+  fetches a web page to preview it - the apps show a web source as text
+  with its host, and open the real link only once the owner taps it.
+- **Hidden under the exact gate "Used in this answer" already uses**, not a
+  second one: Windows Hello / "Hide memory lists and chat history" on the
+  desktop (`brain/sources.rs` `redact_sources`, the same shape as
+  `brain/used.rs` `redact_used`), the phone's own toggle checked
+  client-side before ever fetching (the same check `UsedFactsList`'s
+  `privateHidden` already makes).
+
+## What changed
+
+- `jarvis_sources.py` - new module (shipped whole, no patch needed for the
+  module itself): `from_tool_result`, `unverified_quotes`, `record`/
+  `sources_of` (the in-memory store), `handle_get`, `install()`.
+- `jarvis_agent.py` (shipped whole - `tool-calling-wiring.patch`'s own
+  entry in `$SHIPPED` already covers it, so no patch needed here either):
+  `_TurnWatch.sources`, `took_in()` now also collects sources;
+  `_run_file_read` now returns the REAL resolved `path` it opened (needed
+  so a file source is built from what was really read, not the model's own
+  argument); `run_local_turn`'s return dict gains `tool_sources` and
+  `unverified_quotes`.
+- `answer-sources.patch` - new patch against `jarvis_hud.py`. Two hunks:
+  the startup `install()` block (context: `tool-updates.patch`'s own, so it
+  goes after it, last like every new patch), and the hunk right after
+  `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in
+  the stack touches `_turn`) that calls `jarvis_sources.record(...)` with
+  `_turn.get("tool_sources")`/`_turn.get("unverified_quotes")` under the
+  turn_id already in scope. Needs `jarvis_sources.py`; without it, or on
+  any error, the banner says so and the route answers 503, and an ordinary
+  chat turn is unaffected either way.
+- `scripts/apply-patches.ps1`, `backend/_where.py` - `answer-sources.patch`
+  added to `$PATCHES` (last), `jarvis_sources.py` added to `$SHIPPED`.
+- `rebuilt/jarvis_router.py` - unrelated to the route above, but the same
+  piece of work (cutting-edge round 4 §2, "Keep distress off the cloud
+  offer"): `_PRIVATE_TERMS` gained `depress`, `anxiet`, `panic attack`,
+  `therap`, `self[- ]harm`, `suicid` (deliberately broad - a false match
+  only keeps a question local) plus `jarvis_wellbeing.CRISIS_PHRASES_EN`,
+  reused through a new `_crisis_terms()` rather than duplicated. No patch:
+  `jarvis_router.py` is one of the ten rebuilt modules, shipped whole.
+- `jarvis_intake.py` - unrelated to the route too, but the same piece of
+  work (round 4 §6, "Passing moods are not facts"): a new `mood_rule()`
+  ("How the owner feels today, or a passing mood, is not a fact. Do not
+  propose it."), added to `addendum()`'s rules the learner's prompt
+  carries. The other half of that item - a crisis turn skipped by
+  `owner_turns()` - was already built (`wellbeing_skip`, CLAUDE.md
+  2026-09-27); this only adds the missing rule about ORDINARY moods, which
+  that skip does not cover (an ordinary "I'm exhausted today" is not a
+  crisis phrase, and was never skipped). No patch: `jarvis_intake.py` is
+  shipped whole (`memory-intake.patch`'s `$SHIPPED` entry already covers
+  it - **correcting `docs/CUTTING-EDGE-2026-09-26-round4-wellbeing.md`
+  section 6, which said this file "lives only on the owner's PC": checked
+  against this repository on 2026-09-27, that claim is stale - the file has
+  been shipped whole here since `memory-intake.patch` needed it**).
+- `test_sources.py`, `test_router_private_terms.py` (a new
+  `t_distress_and_crisis_words_stay_local`), `test_memory_intake.py` (a new
+  `t_moods_are_not_facts`) - new/extended test coverage, run by
+  `run_suites.py` automatically.
+- `jarvis-desktop/src/memory-used.js`, `answer-memory.js`, `index.html`,
+  `style.css` - extended, not duplicated (see "In plain words" above).
+- `jarvis-desktop/src-tauri/src/brain/sources.rs` (new), `brain.rs` (`pub
+  mod sources;`), `commands.rs` (`route_line_from_header` now also passes
+  `turn_id`; `valid_turn_id` made `pub(crate)` so both share it),
+  `lib.rs` (`brain::sources::chat_sources` registered),
+  `permissions/surfaces.toml` + `permissions/autogenerated/chat_sources.toml`
+  + `capabilities/quickbar.json` (a new `chat-sources` set, quickbar only -
+  the Brain window does not show per-answer chat UI, so it gets no grant it
+  would never use).
+- `jarvis-desktop/tests/sources.mjs` (new), `tests/uikit.mjs` (a
+  `chat_sources` mock case, the same shape as its `memory_used` one).
+- `jarvis-client/app/src/main/java/com/jarvis/client/net/ChatSources.kt`
+  (new, pure Kotlin, mirrors `MemoryUsed.kt`), `JarvisApi.kt`
+  (`chatSources`), `JarvisRuntime.kt` (`chatSources`), `HomeScreen.kt`
+  (`SourcesAnswer`, `HomeState.answerTurnId`, `HomeActions.onLoadSources`),
+  `UsedMemoriesPlate.kt` (`ChatSourcesList`), `MainActivity.kt` (wired -
+  `chat.turnId` was already collected for the right/wrong mark, so no new
+  state flow was needed).
+- `jarvis-client/app/src/test/java/com/jarvis/client/ChatSourcesTest.kt` -
+  new JVM unit test, the same pattern as `MemoryUsedTest.kt`. **Not run
+  here**: this container has no Android SDK and `dl.google.com` is
+  blocked (`CLAUDE.md`), so this - like every Kotlin change - is hand-
+  verified against the patterns `MemoryUsed.kt`/`UsedMemoriesPlate.kt`
+  already use, and proven for real only by CI.

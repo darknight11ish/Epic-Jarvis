@@ -689,6 +689,23 @@ that (DNS rebinding). A headline or a changed-page notification is treated
 as outside text exactly like a calendar title: never learned as a fact,
 and it marks the conversation that reads it.
 
+**"Where this came from" adds no lane** (feasibility I42/I132, 2026-09-27;
+`jarvis_sources.py`, JARVIS-API §55). It reads back, by reference, exactly
+what the four reading tools above (`notes_search`, `web_search`, `my_files`,
+`file_read`) already fetched THIS turn - it opens no socket of its own,
+follows no link, and never fetches a web page to preview it. A web source is
+shown as text with its host only; the full address reaches the owner's real
+browser only when they tap it, through the same `open_external_url`/
+`data-external` path every other outside link in the desktop already uses
+(never a fetch Jarvis makes). The quote check beside it (a quoted phrase in
+the answer checked against what was read this turn) is a plain word match on
+the PC (`jarvis_sources.py`), never a model call and never a fetch either;
+both apps only ever display its already-computed result. GET
+`/api/chat/sources` is itself a read of this PC, behind the pairing token
+like every other memory-shaped route - not a new destination, and gated by
+the exact "Hide memory lists and chat history" check `/api/memory/used`
+already uses, not a second one.
+
 The **local model is also egress** if `OLLAMA_URL` does not point at this
 machine, or if the "local" model is one of Ollama's cloud models (`-cloud` /
 `:cloud`: reached through the Ollama on this PC, answered on ollama.com). The

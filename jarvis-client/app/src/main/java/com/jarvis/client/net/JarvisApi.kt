@@ -767,6 +767,19 @@ class JarvisApi(
     }
 
     /**
+     * `GET /api/chat/sources?turn_id=`: this answer's own reading-tool
+     * receipts (a note, a wiki page, a web result, a file - by reference
+     * only) and its quote check - feasibility I42/I132, the same `turn_id`
+     * [Feedback] and [MemoryUsed] already use. [ChatSources.parse] reads
+     * it. A read.
+     */
+    suspend fun chatSources(turnId: String?): ApiResult<JsonObject> {
+        val path = ChatSources.path(turnId)
+            ?: return ApiResult.Failed(ApiError.Malformed("no answer id to read"))
+        return probe(path)
+    }
+
+    /**
      * `POST /api/memory/profile`: pin or unpin ONE fact (the owner's
      * decision, 2026-09-24). The status and body come back whole
      * ([MemoryProfile.Reply]), like [eraseFact]: a 404 that says "no such

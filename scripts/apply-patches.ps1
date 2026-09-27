@@ -602,6 +602,21 @@ $PATCHES = @(
     # the three, or on any error, the banner says so and the routes answer
     # 503 or say plainly what could not be read.
     'tool-updates.patch'
+    # "Where this came from" and the quote check (feasibility I42/I132,
+    # docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md detail 1): GET
+    # /api/chat/sources?turn_id=<id> - each reading tool's own result this
+    # turn, by reference (a note's ref, a wiki page's path, a web result's
+    # url, a file's path), plus which quoted phrases in the answer were not
+    # found in any of them. Two hunks: its startup install() block, whose
+    # context is tool-updates.patch's own (so it goes after it, like every
+    # new patch); and its jarvis_hud.py hunk right after chat-history.patch's
+    # `_history["turn"] = _turn` line (nothing later in this list touches
+    # `_turn`), where `route_header["turn_id"]` - set before this loop ever
+    # ran, since the header goes out before jarvis_agent even starts - is
+    # already in scope. Needs jarvis_sources.py copied in; without it, or on
+    # any error, the banner says so and the route answers 503, and nothing
+    # about an ordinary chat turn changes.
+    'answer-sources.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -731,6 +746,8 @@ $SHIPPED = @(
     'jarvis_tool_updates.py'     # tool-updates.patch: reports outdated Python packages, Rust crates and pinned GitHub tools; one card ever, never installs anything
     # --- "Who are you?" fixed answers (feasibility I131, 2026-09-27) ---
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
+    # --- "Where this came from" and the quote check (answer-sources.patch) ---
+    'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
 )
 
 # The settings file. Installed only where none exists; never overwritten.

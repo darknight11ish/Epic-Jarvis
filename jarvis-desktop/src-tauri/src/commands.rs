@@ -1825,6 +1825,21 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
     if !ids.is_empty() {
         out.insert("memory_ids".to_string(), serde_json::json!(ids));
     }
+    // "Where this came from" (answer-sources.patch): the SAME id the
+    // right/wrong mark already uses (mark_answer, turn_id_from_route,
+    // above) - an id, never a word of what it names, so passing it on here
+    // is no different from passing on `lane` or `gate`. The quickbar asks
+    // for the sources only when the owner opens that list
+    // (brain/sources.rs), and Rust holds them back there too while the
+    // memory lists are hidden.
+    if let Some(id) = route.get("turn_id").and_then(|v| v.as_str()) {
+        if valid_turn_id(id) {
+            out.insert(
+                "turn_id".to_string(),
+                serde_json::Value::String(id.to_string()),
+            );
+        }
+    }
     (!out.is_empty()).then(|| serde_json::Value::Object(out).to_string())
 }
 
@@ -1900,7 +1915,10 @@ pub(crate) fn valid_conversation_id(id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
-fn valid_turn_id(id: &str) -> bool {
+/// Also what [`crate::brain::sources::sources_query`] checks before putting
+/// one in a URL, and what [`route_line_from_header`] checks before passing
+/// `turn_id` on to a window that has no direct read of the response header.
+pub(crate) fn valid_turn_id(id: &str) -> bool {
     id.len() == 32
         && id
             .bytes()
