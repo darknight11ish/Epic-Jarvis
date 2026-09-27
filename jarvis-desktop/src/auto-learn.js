@@ -221,10 +221,16 @@ export function eraseQuestion(f) {
  * hold one - so the words differ, but the choice and its effect are the
  * same. Answering "Cancel" here still erases the fact's words; it only
  * skips deleting the chat too.
+ *
+ * The first and last lines say so in so many words (play tester,
+ * 2026-09-27): owners read this dialog's Cancel as "cancel the erase",
+ * because a Windows dialog cannot rename its OK and Cancel buttons.
  */
 export const ERASE_ALSO_CHAT_CONFIRM =
+  "The fact's words will be erased either way.\n\n" +
   "Also delete the chat this fact came from? That whole conversation will be deleted " +
-  "from History too, on this PC. This cannot be undone either.";
+  "from History too, on this PC. This cannot be undone either.\n\n" +
+  "OK: delete that chat too.\nCancel: keep the chat.";
 
 /** Said after an erase went through. */
 export const ERASED = "Erased.";
