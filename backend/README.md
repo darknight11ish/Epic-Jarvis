@@ -13494,3 +13494,52 @@ separate route, for the four reading tools only.
   blocked (`CLAUDE.md`), so this - like every Kotlin change - is hand-
   verified against the patterns `MemoryUsed.kt`/`UsedMemoriesPlate.kt`
   already use, and proven for real only by CI.
+
+# The floating face, and "open a chat" (2026-09-27)
+
+`docs/JARVIS-API.md` section 57 has the full write-up. **No new route, no
+new patch**: the desktop's small always-on-top window (Rust/webview only,
+nothing on the wire) is not this file's concern; the one line that touches
+the backend is the phrase that brings it forward, and `jarvis_quick.py`
+(already shipped) answers it from the existing fast path, the same shape
+as "who are you?" (`jarvis_identity.py`, above) and "what can you do?"
+(`jarvis_sayable.py`).
+
+## In plain words
+
+"Open a chat", "open the chat window", "show me the chat", "bring up the
+chat", and the same three shapes for "the Jarvis bar" - whole sentences
+only, like every other fast-path match in this file: "open a chat about my
+day" goes to the model. Answered with a short fixed reply
+(`Result("Here you go.", "open_chat")`) and no state change here at all -
+`route_fields()` simply carries the intent's own name into
+`X-Jarvis-Route`'s existing `quick` field, unchanged, the same as every
+other fast-path answer already does. This file does not know or care what
+a client does with it; today the desktop's `commands.rs` (`stream_chat`)
+reads `quick == "open_chat"` and shows/focuses its own Jarvis bar.
+
+## What changed
+
+- `backend/jarvis_quick.py`: `_OPEN_CHAT` pattern, the `open_chat`
+  dispatch in `run()` - no new helper module, no new `Result` field, since
+  `route_fields()` already carries every intent's name.
+- `backend/test_open_chat.py` (new).
+- `docs/JARVIS-API.md` section 57.
+
+## Test it
+
+```
+python3 backend/test_open_chat.py
+python3 backend/run_suites.py
+```
+
+## Not checked, said plainly
+
+- The desktop half (the window itself, the hotkey, the tray item, the
+  Settings toggle, and `commands.rs` reading `quick == "open_chat"`) is
+  Rust/JavaScript with nothing for this backend's own test suite to run
+  against; it is verified in `jarvis-desktop/` (`cargo check`/`clippy`
+  against the Windows target - see that project's own `CLAUDE.md`).
+- Whether Android gets its own floating face is a separate piece of work,
+  not decided here; this backend change does not depend on it and does not
+  block it - any client can react to `quick: "open_chat"` the same way.

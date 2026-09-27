@@ -99,6 +99,15 @@ pub const ACTIONS: &[Action] = &[
         default: "Alt+Shift+X",
         hint: "Stops Jarvis talking and anything it is doing on the screen or the phone, at once. Asks nothing first; approves nothing.",
     },
+    Action {
+        id: "toggle_floating",
+        label: "Show or hide the floating face",
+        // Same family as the rest ("Windows has no Alt+Shift+letter of its
+        // own", above) - F for "floating", and free: nothing else here
+        // uses it.
+        default: "Alt+Shift+F",
+        hint: "The small always-on-top window with just Jarvis's face - no chat box. Off by default.",
+    },
 ];
 
 fn action(id: &str) -> Option<&'static Action> {

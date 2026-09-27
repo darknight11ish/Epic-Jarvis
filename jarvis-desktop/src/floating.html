@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jarvis</title>
+    <!--
+      The floating face - a small, always-on-top window with just Jarvis's
+      animated face on it. No text, no buttons, no title bar.
+
+      Why this file exists rather than pointing the window straight at
+      `faces.html?mode=display`: that page's own "display mode" is already
+      used this way TWICE - the Widget's tray and the HUD both embed it as
+      an IFRAME with `&feed=parent`, and drive it by postMessage, rather
+      than letting the face itself hold any Tauri permission
+      (`capabilities/faces.json`'s own reasoning: "it is the largest body
+      of third-party-shaped drawing code in the app... holds no event
+      permission at all"). Loading that same page AS the top-level window
+      instead would have to grant IT the jarvis-link and event-listen
+      permissions this window needs (faces.html's non-iframe branch reads
+      them directly) - putting that access back into the one file this
+      app deliberately keeps free of it. This page holds the (read-only)
+      permissions instead (`capabilities/floating.json`) and drives the
+      SAME embedded face the Widget already does, unchanged.
+    -->
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      /* The whole window is the drag handle - there is no titlebar, and
+         nothing here is clickable. */
+      #drag {
+        width: 100%;
+        height: 100%;
+      }
+      #face-frame {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: transparent;
+        /* The face has nothing to click - display mode's canvas takes no
+           pointer input at all (unlike the editor's grid, which drags to
+           orbit). Letting clicks fall straight through to `#drag` behind
+           it is what makes the whole window draggable: an iframe is a
+           separate document, so a `data-tauri-drag-region` on this page
+           could never fire for a mousedown the iframe consumed first. */
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="drag" data-tauri-drag-region>
+      <iframe
+        id="face-frame"
+        title="Jarvis"
+        tabindex="-1"
+        aria-hidden="true"
+        src="faces.html?mode=display&feed=parent"
+      ></iframe>
+    </div>
+    <script type="module" src="floating.js"></script>
+  </body>
+</html>

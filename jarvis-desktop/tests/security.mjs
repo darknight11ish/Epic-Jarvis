@@ -374,7 +374,7 @@ await check("CONTROL: only Settings may change these, only the Brain may Show, a
     .filter((m) => m[0].includes(`"${perm}"`)).map((m) => m[1]);
   assert.deepEqual(holders("allow-set-security-settings"), ["settings-surface"]);
   assert.deepEqual(holders("allow-reveal-private-answers"), ["private-reveal"]);
-  const caps = ["brain", "faces", "hud", "onboarding", "quickbar", "settings", "widget"]
+  const caps = ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "settings", "widget"]
     .map((c) => [c, JSON.parse(read(`src-tauri/capabilities/${c}.json`)).permissions]);
   for (const [name, perms] of caps) {
     assert.ok(!perms.some((p) => String(p).startsWith("store:")), `${name} can write the store`);
@@ -389,7 +389,7 @@ await check("no window can send events to the others (apps security audit M1)", 
   // (`voice-heard` with isOwner, the approval queue), so a script in any
   // window could have faked the owner's checked voice or an approval card.
   // Every window lists its core permissions by hand instead, without emit.
-  const caps = ["brain", "faces", "hud", "onboarding", "quickbar", "settings", "widget"]
+  const caps = ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "settings", "widget"]
     .map((c) => [c, JSON.parse(read(`src-tauri/capabilities/${c}.json`)).permissions.map(String)]);
   for (const [name, perms] of caps) {
     for (const banned of ["core:default", "core:event:default", "core:event:allow-emit", "core:event:allow-emit-to"]) {

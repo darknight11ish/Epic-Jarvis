@@ -649,7 +649,7 @@ await check("CONTROL: toasts on fired only, words by id, lock-screen words while
   }
   const caps = JSON.parse(read("src-tauri/capabilities/brain.json")).permissions;
   assert.ok(caps.includes("brain-schedule"));
-  for (const other of ["quickbar", "widget", "hud", "settings", "faces", "onboarding"]) {
+  for (const other of ["quickbar", "widget", "hud", "settings", "faces", "floating", "onboarding"]) {
     const c = read(`src-tauri/capabilities/${other}.json`);
     assert.ok(!c.includes("brain-schedule"), `${other} holds brain-schedule`);
   }

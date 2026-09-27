@@ -1314,9 +1314,9 @@ are architectural rather than configuration:
 
 ## 8. The clients
 
-**Desktop** (`jarvis-desktop/`): Tauri 2, seven windows (quickbar, widget,
-HUD, Brain, Faces, onboarding, Settings - one capability file each in
-`src-tauri/capabilities/`), per-window ACL capabilities. The Rust commands are the real API — buttons are a courtesy, and
+**Desktop** (`jarvis-desktop/`): Tauri 2, eight windows (quickbar, widget,
+HUD, Brain, Faces, onboarding, Settings, the floating face - one capability
+file each in `src-tauri/capabilities/`), per-window ACL capabilities. The Rust commands are the real API — buttons are a courtesy, and
 any window holding the capability can call them, so a check that lives only in
 the webview is not a check. `decide_approval` consults link staleness in Rust
 for exactly that reason.
@@ -1354,7 +1354,11 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   note to a running task or a card, and `inject_task_note` and
   `amend_approval` refuse the widget in Rust - notes are added in the
   Jarvis bar, which asks Windows Hello first. Stop everything (the hotkey
-  and the tray row) is never behind App lock.
+  and the tray row) is never behind App lock. **The floating face**
+  (2026-09-27) is not covered either, for a shorter reason than the
+  widget's: it shows no approval card at all, ever - not even a title -
+  only which of eight states Jarvis is in, the same information the tray
+  icon already shows to anyone at the keyboard.
 - **Phone:** the whole app - including Home's "Stop everything" button,
   which is behind App lock like the rest of the app (JARVIS-API §28); the
   PC's hotkey and tray row are not. The home-screen widget only ever shows the
@@ -1529,7 +1533,26 @@ backend routes, in both directions; the rest are listed here only.
 | **A haptic tick on letting go of the talk button** (UI audit "do first" item 7, 2026-09-26) | A PC has no vibration motor. The desktop's own half of "Caught it" is a short reactor "inhale" instead - the same contraction-and-spring the moment gets on the phone (`jarvis-desktop/src/style.css` `reactor-inhale`, called from `main.js`'s `stopPushToTalk`, never on a cancel) - so both apps mark the same instant, each in the one channel its hardware actually has. |
 | **Refusing a home-network desktop address up front** ("...this phone can only reach your PC by its Tailscale name ... or its NordVPN Meshnet name ...", `PhoneAddress.kt`; 2026-09-27) | Written with the change (§2, "Which addresses the phone can use"). It makes the phone's own judgment agree with Android's per-app list of names that may get plain http:// (`network_security_config.xml`), which Android enforces through OkHttp on every request. Windows has no such per-app list, and the desktop's requests to Jarvis are made by its Rust code (`reqwest`), which has none either - an address the shared rule accepts is one the desktop can actually use (usually Jarvis on the same PC) - so it keeps the shared own-networks rule alone, with the shared sentence. Both apps still apply that rule, from the one table (`tools/gen_own_network_cases.py`). |
 | **"Findings" (Brain → Findings, `BrainScreen.kt`'s `Probed("Findings", brain.initiative, ...)`, "What Jarvis noticed on its own")** | Written down 2026-09-27, on the ease-of-use audit's parity check (#17). `GET /api/initiative` is read on both apps - the desktop's HUD window polls it too (`jarvis_hud.html`) - but only as transient cards the owner dismisses while the HUD happens to be open; the desktop's Brain window has no section that keeps them. The phone's Brain gives the same feed a persistent, browsable place instead, with the honest empty state from `initiativeNote()` ("Jarvis doesn't watch anything on its own yet") for when the initiative engine's check list is still empty. Nothing here is phone-only data; it is a phone-only place to read it back. |
-| **"Floating Jarvis" (Settings -> This app, `data/FloatingAvatar.kt`; the owner's request, 2026-09-27; `docs/JARVIS-API.md` §56)** | Built for the phone in THIS piece of work, using two Android platform APIs - a chat-bubble notification (`Notification.BubbleMetadata`, API 30+) and a `TYPE_APPLICATION_OVERLAY` window - neither of which has a Windows equivalent. No backend route is involved either way - see JARVIS-API §56 for what it reuses instead (the existing "hey Jarvis" listening notification, and `Heard.text`, the words the desktop already transcribes). **Not claimed as one-sided by decision**: the owner's brief for this task said a separate session may be building a Windows half of the same feature at the same time, in its own worktree, which this session never read. If that work has landed, this row is stale the moment the two are merged and should be corrected then rather than trusted as still true - see `docs/ARCHITECTURE.md`'s own "Talking to the other branch" section on why a claim like this must be checked against the other side's actual code, not assumed. |
+**The picture-in-picture idea landed on both apps, on 2026-09-27, by two
+different sessions working at the same time - not one shared mechanism,
+because neither platform's own way of drawing something on top of other
+apps has an equivalent on the other.** On the phone, "Floating Jarvis"
+(Settings -> This app, `data/FloatingAvatar.kt`, `docs/JARVIS-API.md` §56)
+is a three-state setting between Android's own chat-bubble notification
+(`Notification.BubbleMetadata`, API 30+) and a `TYPE_APPLICATION_OVERLAY`
+window. On the desktop, "the floating face" (Settings -> Appearance, the
+tray, or `Alt+Shift+F`; `docs/JARVIS-API.md` §57) is a small always-on-top
+Tauri window showing only the animated face. Both are voice only, both
+expand into the real chat surface on "open a chat" (or a close phrasing) or
+a tap, and both went through this row's own honest hedge while only one
+side existed - correcting a claim once the other side's code could actually
+be read, per this file's own "Talking to the other branch" section, rather
+than trusting either session's guess about the other. Neither reuses a
+backend route: the phone's phrase match runs entirely on words the desktop
+already transcribes (`Heard.text`); the desktop's runs through the existing
+`jarvis_quick.py` fast path and the `X-Jarvis-Route` header every fast-path
+answer already carries. Not a `tools/check_parity.py` entry either way -
+no route on either side for it to see.
 
 **The voice flow is in both apps since 2026-09-25** (`docs/JARVIS-API.md`
 §17 part 5; it was backend-only until then): interrupting Jarvis by talking

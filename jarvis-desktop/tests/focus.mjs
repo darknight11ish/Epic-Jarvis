@@ -154,7 +154,7 @@ await check("CONTROL: Rust holds what makes Jarvis watch, fetches the line as so
   const caps = (w) => JSON.parse(read(`src-tauri/capabilities/${w}.json`)).permissions;
   assert.ok(caps("brain").includes("focus") && caps("brain").includes("focus-start"));
   assert.ok(caps("widget").includes("focus") && !caps("widget").includes("focus-start"));
-  for (const other of ["quickbar", "hud", "settings", "faces", "onboarding"]) {
+  for (const other of ["quickbar", "hud", "settings", "faces", "floating", "onboarding"]) {
     assert.ok(!caps(other).some((c) => c.startsWith("focus")), `${other} holds a focus set`);
   }
 });

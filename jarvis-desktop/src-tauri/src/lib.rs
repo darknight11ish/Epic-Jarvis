@@ -5,8 +5,8 @@
 //!
 //! * plugin registration — global shortcut, clipboard manager, notifications;
 //! * the global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`,
-//!   `Alt+Shift+N`, `Alt+Shift+W`, and "Stop everything" on `Alt+Shift+X`;
-//!   all rebindable, [`hotkeys`]);
+//!   `Alt+Shift+N`, `Alt+Shift+W`, "Stop everything" on `Alt+Shift+X`, and
+//!   the floating face on `Alt+Shift+F`; all rebindable, [`hotkeys`]);
 //! * the notification-area tray icon ([`tray::create_tray`]);
 //! * window vibrancy and focus-loss auto-hide ([`windows::setup_windows`]).
 //!
@@ -429,16 +429,18 @@ fn spawn_telemetry_loop(app: AppHandle) {
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
 
-            // A drag is persisted even while the widget is collapsed or hidden.
-            // `flush` writes a file, so it goes to the blocking pool too.
+            // A drag is persisted even while the widget is collapsed or
+            // hidden - and the same for the floating face. `flush` writes a
+            // file, so both go to the blocking pool too.
             {
                 let handle = app.clone();
                 if let Err(err) = tokio::task::spawn_blocking(move || {
                     handle.state::<windows::WidgetState>().flush(&handle);
+                    handle.state::<windows::FloatingState>().flush(&handle);
                 })
                 .await
                 {
-                    eprintln!("[jarvis] widget preference flush failed: {err}");
+                    eprintln!("[jarvis] widget/floating preference flush failed: {err}");
                 }
             }
 
@@ -708,6 +710,7 @@ pub fn run() {
         .manage(tray::Painted::default())
         .manage(tray::TrayFlashGovernor::default())
         .manage(windows::WidgetState::default())
+        .manage(windows::FloatingState::default())
         .manage(RouteState::default())
         // Registered here with every other managed type, not inside setup: the
         // shortcut handler reads it and would panic on an unregistered state
@@ -887,6 +890,8 @@ pub fn run() {
             commands::set_widget_always_on_top,
             commands::save_widget_position,
             commands::get_widget_prefs,
+            commands::get_floating,
+            commands::set_floating,
             commands::prefill_quickbar,
             commands::capture_note,
             commands::capture_note_status,
@@ -991,6 +996,11 @@ pub fn run() {
                         "toggle_widget" => {
                             if let Err(err) = windows::toggle_widget(app) {
                                 eprintln!("[jarvis] widget toggle failed: {err}");
+                            }
+                        }
+                        "toggle_floating" => {
+                            if let Err(err) = windows::toggle_floating(app) {
+                                eprintln!("[jarvis] floating face toggle failed: {err}");
                             }
                         }
                         // Never held: not by a stale link, not by App lock,
@@ -1106,6 +1116,21 @@ pub fn run() {
             if let Err(err) = windows::setup_widget(&handle, &widget_prefs) {
                 eprintln!("[jarvis] widget setup reported: {err}");
             }
+
+            // The floating face - off by default (windows::FloatingPrefs),
+            // built on demand like Faces, Settings and the Brain rather than
+            // declared in `tauri.conf.json`. Reopened here only if the owner
+            // had turned it on and never turned it off since.
+            let floating_prefs = windows::load_floating_prefs(&handle);
+            handle
+                .state::<windows::FloatingState>()
+                .update(|prefs| *prefs = floating_prefs.clone());
+            if floating_prefs.enabled {
+                if let Err(err) = windows::show_floating(&handle) {
+                    eprintln!("[jarvis] the floating face could not be reopened: {err}");
+                }
+            }
+
             spawn_telemetry_loop(handle.clone());
 
             // Notification-area icon and context menu. Built before the

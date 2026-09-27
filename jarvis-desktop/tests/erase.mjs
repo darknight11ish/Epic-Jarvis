@@ -203,7 +203,7 @@ await check("CONTROL: brain_memory_erase is held on a stale link, sends one id, 
   // under an answer (the quickbar) and under "Jarvis remembered N things".
   // Held on a stale link in Rust either way; no other window has it.
   assert.deepEqual(holders, ["memory-used", "brain-memory"]);
-  const windows = ["brain", "quickbar", "hud", "widget", "settings", "faces", "onboarding"]
+  const windows = ["brain", "quickbar", "hud", "widget", "settings", "faces", "floating", "onboarding"]
     .filter((w) => read(`src-tauri/capabilities/${w}.json`).includes('"memory-used"'));
   assert.deepEqual(windows, ["brain", "quickbar"]);
   assert.match(read("src-tauri/src/brain/routes.rs"), /"\/api\/memory\/erase",/,

@@ -279,7 +279,7 @@ await check("CONTROL: only the settings window can reveal the token", async () =
   const holders = sets.filter((s) => s.includes('"allow-reveal-pairing-token"'))
     .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
   assert.deepEqual(holders, ["settings-surface"]);
-  const caps = ["brain", "faces", "hud", "onboarding", "quickbar", "widget"];
+  const caps = ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "widget"];
   for (const c of caps) {
     const json = read(`src-tauri/capabilities/${c}.json`);
     assert.ok(!json.includes("settings-surface"), `${c} holds settings-surface`);

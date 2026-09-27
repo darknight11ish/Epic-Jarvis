@@ -1743,7 +1743,7 @@ pub async fn stream_chat(
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
     // lands before this future is polled still wins the race.
     let outcome = tokio::select! {
-        result = pump_chat(base, headers, payload, &on_event) => result,
+        result = pump_chat(&app, base, headers, payload, &on_event) => result,
         _ = cancel.notified() => Ok(()),
     };
 
@@ -1841,6 +1841,21 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
         }
     }
     (!out.is_empty()).then(|| serde_json::Value::Object(out).to_string())
+}
+
+/// `X-Jarvis-Route`'s `quick` field — the fast-path intent's own name
+/// (jarvis_quick.py `route_fields`), when this turn was answered without the
+/// model at all. `None` for a model answer, which carries no `quick` field.
+///
+/// The one caller today, in [`stream_chat`], checks this for `"open_chat"`
+/// (the floating face, 2026-09-27: "open a chat" and close phrasings) and
+/// brings the Jarvis bar forward — the same shape [`turn_id_from_route`] and
+/// [`route_line_from_header`] already use to read one field off this header,
+/// kept separate from both because this one is acted on in Rust, never sent
+/// to a page.
+pub fn quick_intent_from_route(header: &str) -> Option<String> {
+    let route: serde_json::Value = serde_json::from_str(header).ok()?;
+    route.get("quick")?.as_str().map(str::to_string)
 }
 
 /// The fact ids in `X-Jarvis-Route`'s `injected_ids`: each `"mem:<id>"`
@@ -2003,6 +2018,7 @@ pub fn cancel_chat(state: State<'_, ChatState>) {
 
 /// Drives one request to completion, forwarding whole lines as they arrive.
 async fn pump_chat(
+    app: &AppHandle,
     base: String,
     headers: reqwest::header::HeaderMap,
     payload: serde_json::Value,
@@ -2075,6 +2091,30 @@ async fn pump_chat(
         .and_then(turn_id_from_route)
     {
         let _ = on_event.send(format!("{TURN_LINE_PREFIX}{turn}"));
+    }
+
+    // "Open a chat" (the floating face, 2026-09-27): jarvis_quick.py answered
+    // this turn without the model, and its own intent name IS the signal -
+    // no new event kind, no page involved. Acted on here, in Rust, rather
+    // than passed to whichever window happens to be running this call: a
+    // voice turn heard while floating runs through main.js in the QUICKBAR
+    // page (it is only hidden, never destroyed - see `hide_quickbar`), so
+    // the window this brings forward is the very one already driving the
+    // call. `show_quickbar` goes through the app lock like every other way
+    // to it, so a locked PC still asks Windows Hello first.
+    if response
+        .headers()
+        .get("X-Jarvis-Route")
+        .and_then(|v| v.to_str().ok())
+        .and_then(quick_intent_from_route)
+        .as_deref()
+        == Some("open_chat")
+    {
+        if let Err(err) = crate::windows::show_quickbar(app) {
+            eprintln!("[jarvis] \"open a chat\": the Jarvis bar could not be shown: {err}");
+        } else {
+            crate::emit_quickbar(app, crate::events::FOCUS_INPUT, ());
+        }
     }
 
     // Lines are cut from raw bytes so a multi-byte character split across two
@@ -2982,6 +3022,37 @@ pub fn save_widget_position(app: AppHandle, x: Option<f64>, y: Option<f64>) -> R
 #[tauri::command]
 pub fn get_widget_prefs(app: AppHandle) -> windows::WidgetPrefs {
     app.state::<windows::WidgetState>().snapshot()
+}
+
+// ---------------------------------------------------------------------------
+// Floating face
+// ---------------------------------------------------------------------------
+
+/// Whether the floating face is on, and where it last sat. Settings'
+/// "Floating face" toggle reads this to paint itself correctly on load.
+#[tauri::command]
+pub fn get_floating(app: AppHandle) -> windows::FloatingPrefs {
+    app.state::<windows::FloatingState>().snapshot()
+}
+
+/// Turns the floating face on or off. Off by default, like every new surface
+/// in this app; on, it opens at once with no approval card — it changes
+/// nothing Jarvis does, asks or remembers, only how its own state is shown
+/// on screen, so `asks_first.rs`'s list of things that ask first does not
+/// apply here.
+#[tauri::command]
+pub fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String> {
+    if enabled {
+        windows::show_floating(&app)?;
+    } else if windows::floating_is_open(&app) {
+        // Already off is not an error: the checkbox and the tray's toggle
+        // can both reach this, and the second one to run must not fail
+        // just because the first already did the work.
+        windows::hide_floating(&app)?;
+    }
+    app.state::<windows::FloatingState>()
+        .update(|prefs| prefs.enabled = enabled);
+    Ok(enabled)
 }
 
 /// Whether App lock is on - all the widget needs to know to show an approval

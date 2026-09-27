@@ -515,6 +515,12 @@ permissions = [
   # once per Rust crate NAME) and returns at once, never blocking on it.
   "allow-get-tool-updates",
   "allow-check-tool-updates",
+  # The floating face: whether it is on, and turning it on or off (windows.rs
+  # `show_floating`/`hide_floating`). Here, not with the widget's own geometry
+  # commands below: this is a Settings toggle, and the floating window itself
+  # holds no command capability at all - it has no button to call one from.
+  "allow-get-floating",
+  "allow-set-floating",
 ]
 
 # ---------------------------------------------------------------------------
