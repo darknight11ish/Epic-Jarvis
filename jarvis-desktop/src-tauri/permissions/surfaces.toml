@@ -486,6 +486,15 @@ permissions = [
   # anything is loosened, so even this window cannot lower one silently.
   "allow-get-security-settings",
   "allow-set-security-settings",
+  # "Check for tool updates" (backend/jarvis_tool_updates.py, tool-updates.patch,
+  # the owner's own request): read-only, and it never installs or changes
+  # anything - only the exact command to run yourself. Not held on a stale
+  # link, like backup_now: the ONE approval card, if it is ever needed, is
+  # decided by the normal approval flow, not by this command; this command
+  # only starts the check (which can take a few minutes - crates.io is asked
+  # once per Rust crate NAME) and returns at once, never blocking on it.
+  "allow-get-tool-updates",
+  "allow-check-tool-updates",
 ]
 
 # ---------------------------------------------------------------------------

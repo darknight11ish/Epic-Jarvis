@@ -182,6 +182,30 @@ def t_the_web_search_row_tells_the_truth():
         AF._tier, AF._search_asks_every_time, AF._file_tiers = keep_t, keep_e, keep_f
 
 
+def t_the_tool_updates_row_tells_the_truth():
+    """"Check for tool updates" is the only MUST_ASK row that really asks
+    only ONCE, ever - every other row in that group asks every time - so it
+    needs its own words (SAYS_ONCE/NOTE_TOOL_UPDATES), and they must say
+    that ONLY while the tier is really "ask" (a bug caught here: the first
+    version showed "asks once" even for a tier of "never")."""
+    keep = AF._tier
+    try:
+        AF._tier = lambda a: "ask"
+        r = AF._row("check_tool_updates", here=True)
+        check("tier ask: 'asks the first time only, then never again'",
+              r["says"] == AF.SAYS_ONCE and r["note"] == AF.NOTE_TOOL_UPDATES, r)
+        AF._tier = lambda a: "never"
+        r = AF._row("check_tool_updates", here=True)
+        check("tier never: switched off - NOT 'asks once' (the bug this guards)",
+              r["says"] == AF.SAYS["never"], r)
+        AF._tier = lambda a: "auto"
+        r = AF._row("check_tool_updates", here=True)
+        check("set looser in the file: refused, like every other MUST_ASK row",
+              r["says"] == AF.SAYS_REFUSED, r)
+    finally:
+        AF._tier = keep
+
+
 def t_the_safe_list_never_meets_the_hard_limits():
     s = set(AF.SWITCHABLE)
     check("the short safe list is the owner's: reads and note writes",

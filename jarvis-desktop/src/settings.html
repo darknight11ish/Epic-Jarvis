@@ -1365,6 +1365,37 @@
         </details>
       </section>
 
+      <!-- ── Check for tool updates ─────────────────────────────────────────
+           The owner's own request, made directly (not from the feasibility
+           backlog): "a feature that allows me to run it on request that
+           looks for updates of current tools that are integrated into
+           Jarvis already (through GitHub)." A DIFFERENT thing from
+           "Updates" above, which is Jarvis Desktop's own version - this
+           checks the Python packages, Rust building blocks and any pinned
+           GitHub tool Jarvis is BUILT FROM. Report only: it never installs
+           or changes a file itself, only shows the exact command to run
+           yourself. The first press ever asks once, with a card; every
+           later press just checks, in the background (it can take a few
+           minutes). tool-updates-settings.js; tool_updates.rs
+           get_tool_updates, check_tool_updates; backend
+           jarvis_tool_updates.py. Desktop only (docs/ARCHITECTURE.md
+           section 8): checking dependency versions is developer/
+           maintenance tooling, the same reason deep config editing stays
+           off the phone. -->
+      <section class="card" id="tool-updates">
+        <h2>Check for tool updates</h2>
+        <p class="note" id="tu-detail"></p>
+        <p class="state" id="tu-state" role="status">Asking Jarvis…</p>
+        <div id="tu-body" hidden>
+          <div class="row">
+            <button class="btn" id="tu-check" type="button">Check for tool updates</button>
+            <span class="status" id="tu-status" role="status"></span>
+          </div>
+          <p class="note" id="tu-summary" hidden></p>
+          <div id="tu-groups"></div>
+        </div>
+      </section>
+
       <!-- ── More options ──────────────────────────────────────────────────
            Closed every visit, the phone's pattern. Nothing here is needed
            day to day, and none of it hides whether Jarvis is connected -
@@ -1652,6 +1683,7 @@
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
     <script type="module" src="backup-settings.js"></script>
+    <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
   </body>
 </html>

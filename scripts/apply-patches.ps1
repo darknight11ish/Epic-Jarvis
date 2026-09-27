@@ -569,9 +569,11 @@ $PATCHES = @(
     # /api/memory/shared - tag or untag ONE fact as a shared joke or
     # nickname (meta.kind = "shared"), the owner's own tap only, no approval
     # card, the same shape as memory-profile.patch. Its jarvis_hud.py
-    # context is news.patch's own install block, so it goes after it - last,
-    # like every new patch (it does not touch the same lines any later patch
-    # here does). The work is in the shipped
+    # context is the route-dispatch chain right after /api/memory/status
+    # (original line ~1964) - a different part of the file from the
+    # startup install() block every backup/media/news-shaped patch touches,
+    # so its place in this list is only about order, not about finding its
+    # own anchor text. The work is in the shipped
     # rebuilt\jarvis_memory.py (shared(), is_shared(), shared_facts(),
     # without_shared_in_plain(), with_profile()'s new `manner` argument);
     # with an older copy the routes answer 501 and nothing is filtered.
@@ -586,6 +588,20 @@ $PATCHES = @(
     # order, not about finding its own anchor text. Needs
     # jarvis_data_health.py copied in; without it the route answers 503.
     'data-health.patch'
+    # "Check for tool updates" (the owner's request, made directly): GET
+    # /api/tool_updates (the report, read-only) and POST
+    # /api/tool_updates/check (ONE approval card, ever - then never again;
+    # it never installs or changes a file itself). Its jarvis_hud.py
+    # context is news.patch's own install block, so it goes after it -
+    # last, like every new patch. memory-shared.patch and
+    # data-health.patch, above it in this list, both touch a different,
+    # unrelated part of the file (the route-dispatch chain, not this
+    # startup install() block), so neither changes what this patch's own
+    # hunk actually finds. Needs jarvis_tool_updates.py copied in, and the two files step 3b
+    # below copies (requirements.lock, rust-crates.lock); without any of
+    # the three, or on any error, the banner says so and the routes answer
+    # 503 or say plainly what could not be read.
+    'tool-updates.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -711,6 +727,8 @@ $SHIPPED = @(
     'jarvis_news.py'             # news.patch: RSS/Atom feed addresses the owner adds, headlines only, one card per feed
     # --- data health in the preflight (feasibility I97, data-health.patch) ---
     'jarvis_data_health.py'      # do the chat history and memory databases open, is there disk space, do the settings files parse - read-only, WARN never fix
+    # --- "Check for tool updates" (tool-updates.patch) ---
+    'jarvis_tool_updates.py'     # tool-updates.patch: reports outdated Python packages, Rust crates and pinned GitHub tools; one card ever, never installs anything
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -1544,6 +1562,50 @@ try {
     # in %TEMP% after every run is the kind of litter nobody notices until a
     # disk is full.
     Remove-Item -LiteralPath $LfDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# --- 3b. the two files "Check for tool updates" reads -----------------------
+#
+# jarvis_tool_updates.py has no other way to reach backend\requirements.lock
+# or jarvis-desktop\src-tauri\Cargo.lock on the owner's PC - the real backend
+# folder is not this checkout. Copied by content, every run, the same
+# "already matches: leave it; an older one: back it up first" rule step 3
+# uses for the modules themselves - NOT part of $SHIPPED, because neither
+# file is Python (test_shipped_modules.py parses every $SHIPPED entry as a
+# module's source). Cargo.lock lands under a different name (rust-crates.lock)
+# so it is never mistaken for an active Rust project sitting in a Python
+# backend folder.
+Say ""
+$toolManifests = @(
+    @{ Src = (Join-Path $PatchDir 'requirements.lock'); Dst = 'requirements.lock' }
+    @{ Src = (Join-Path $RepoRoot 'jarvis-desktop\src-tauri\Cargo.lock'); Dst = 'rust-crates.lock' }
+)
+$manifestsCopied = 0
+$manifestsAbsent = @()
+foreach ($m in $toolManifests) {
+    if (-not (Test-Path -LiteralPath $m.Src)) { $manifestsAbsent += $m.Src; continue }
+    $dst = Join-Path $BackendPath $m.Dst
+    $had = Test-Path -LiteralPath $dst
+    if ($had -and (Get-FileHash -LiteralPath $dst).Hash -eq (Get-FileHash -LiteralPath $m.Src).Hash) {
+        continue
+    }
+    if ($had) {
+        if (-not (Test-Path -LiteralPath $backup)) {
+            New-Item -ItemType Directory -Path $backup -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $dst -Destination (Join-Path $backup $m.Dst) -Force
+    }
+    Copy-Item -LiteralPath $m.Src -Destination $dst -Force
+    $manifestsCopied++
+    if ($had) { Ok "$($m.Dst) - replaced an older copy (the old one is in $backup)" }
+    else      { Ok "$($m.Dst) - copied in (Check for tool updates was off until now)" }
+}
+if ($manifestsAbsent.Count -gt 0) {
+    Bad "$($manifestsAbsent.Count) file(s) 'Check for tool updates' reads are missing from this repository:"
+    foreach ($a in $manifestsAbsent) { Say "          $a" Red }
+    Say "        Get a fresh copy of the repository (git pull) and run this again." Cyan
+} elseif ($manifestsCopied -eq 0) {
+    Ok "requirements.lock and rust-crates.lock (for 'Check for tool updates') are there and up to date."
 }
 
 # The real Python, or $null. Needed by steps 4 to 6.

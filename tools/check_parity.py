@@ -194,6 +194,8 @@ CLASSIFICATION = {
     "/api/task/pause": ("ported", ""),
     "/api/task/resume": ("ported", ""),
     "/api/task/stop": ("ported", ""),
+    "/api/tool_updates": ("deliberate", "\"Check for tool updates\" (the owner's own request, made directly; backend/jarvis_tool_updates.py, tool-updates.patch; JARVIS-API.md section 48): whether the owner has ever approved a check, whether one is running now, the last card's outcome, and the last finished report of outdated Python packages, Rust crates and pinned GitHub tools. PC-only (ARCHITECTURE.md section 8): checking dependency versions is developer/maintenance tooling, the same reasoning that keeps deep config editing and the model catalogue off the phone. Desktop: Settings, \"Check for tool updates\" (tool_updates.rs get_tool_updates, settings window only)."),
+    "/api/tool_updates/check": ("deliberate", "Starts the check (or raises the one-time approval card) and returns at once - never blocks on the check itself, which can take a few minutes. Report only: it never installs, upgrades or changes a file - only the exact command to run yourself. Desktop-only for the same reason as the row above (tool_updates.rs check_tool_updates)."),
     "/api/stop_all": ("ported", "\"Stop everything\" (2026-09-25, backend/jarvis_stop_all.py). Desktop: the Alt+Shift+X hotkey (commands.rs stop_everything_now), which stops the desktop's speech first. Phone: Home's \"Stop everything\" button, shown while Jarvis is busy, which stops the phone's speech first. Neither is held on a stale link."),
     "/api/undo": ("ported", ""),
     "/api/undo/revert": ("ported", ""),

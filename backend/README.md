@@ -134,8 +134,9 @@ on a throwaway copy instead.
 | `backup.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Backups: one locked file, a recovery code shown once** (the owner's decision, 2026-09-27). Adds `GET /api/backup`, `/api/backup/list`, `POST /api/backup/folder` (this PC only, ONE approval card, `change_own_config`), `/api/backup/now` (this PC only, no card), `/api/backup/restore/preview` and `/api/backup/restore` (this PC only, ONE approval card, `restore_backup` - always Windows Hello, via `jarvis_owner_check.PC_ONLY_ACTIONS`). `jarvis_gate.py` gains `restore_backup` on `_NO_RULE_FROM_DENIAL` and `_RISK`, right beside `enable_reading_tool`'s own lines. Desktop only, apart from one read-only "Last backup: ..." line on the phone. Last in the list; its `jarvis_hud.py` context is `watch-notifications.patch`'s own install block, and its `jarvis_gate.py` context is `tools-enable.patch`'s two additions. Needs `jarvis_backup.py` - without it, or on any error, the banner says so and the routes are not there. See "Backups", at the very end. |
 | `media.patch` | `jarvis_hud.py` | **Music and video control, no card** (the owner's decision of 2026-09-27, feasibility I91: "no card, only from the owner's own words"). One call at start-up, `jarvis_media.install(Handler, ...)`, answers `GET /api/media` ("what's playing") and `POST /api/media/control` ({"action": "play"\|"pause"\|"next"\|"previous"}) - never a card, never `jarvis_gate`, for either route; the fast path itself (`jarvis_quick.py`'s `_run_media`) is not part of this patch. Last in the list; its context is `backup.patch`'s own install block (merged in after it, 2026-09-27). Needs `jarvis_media.py` - without it, or on any error, the banner says so and the routes answer 503. See "Music and video control", at the very end. |
 | `news.patch` | `jarvis_hud.py` | **News headlines in the morning briefing** (the owner's decision of 2026-09-27, feasibility I49: "one card per address the owner adds, read-only, never follows links elsewhere, never acts on what it reads"). One call at start-up, `jarvis_news.install(Handler, ...)`, answers `GET /api/news`, `POST /api/news/add` (ONE approval card, `change_own_config`, from either app) and `/api/news/remove` (at once) - though neither app's settings screen calls these yet: a feed is added and removed by the owner's own words instead (`jarvis_quick.py`'s `_run_news_add`/`_run_news_remove`, which call the same functions). Last in the list; its context is `media.patch`'s banner lines. Needs `jarvis_news.py` - without it, or on any error, the banner says so and the routes answer 503. See "News headlines", at the very end. |
-| `memory-shared.patch` | `jarvis_hud.py` | **"Between us"** (the owner's decision, 2026-09-27). Adds `GET` and `POST /api/memory/shared` - tag or untag ONE fact as a shared joke or nickname (`meta.kind = "shared"`), the owner's own tap, no card, like Pin. Last in the list, after `news.patch`, whose install block it sits beside. The work is in the shipped `rebuilt/jarvis_memory.py` (`shared()`, `is_shared()`, `shared_facts()`, `without_shared_in_plain()`, `with_profile()`'s new `manner` argument) - with an older copy the routes answer 501 and nothing is filtered. See "Between us", at the very end. |
+| `memory-shared.patch` | `jarvis_hud.py` | **"Between us"** (the owner's decision, 2026-09-27). Adds `GET` and `POST /api/memory/shared` - tag or untag ONE fact as a shared joke or nickname (`meta.kind = "shared"`), the owner's own tap, no card, like Pin. Its jarvis_hud.py context is the route-dispatch chain right after `/api/memory/status` (original line ~1964) - a different part of the file from the startup install() block every backup/media/news-shaped patch touches, so its place in this list is only about order, not about finding its own anchor text. The work is in the shipped `rebuilt/jarvis_memory.py` (`shared()`, `is_shared()`, `shared_facts()`, `without_shared_in_plain()`, `with_profile()`'s new `manner` argument) - with an older copy the routes answer 501 and nothing is filtered. See "Between us", at the very end. |
 | `data-health.patch` | `jarvis_hud.py` | **"Data health in the preflight"** (feasibility I97, `docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Small, read-only." / "WARN, never fix."). Adds `GET /api/data-health` - fixed shape, not a setting, **no approval card either way**, the same shape as `sayable.patch` and `reach.patch`. Checks (never fixes) whether the chat history and memory databases open, whether there is disk space where Jarvis writes its data, and whether the settings files parse; every row is `ok` or `warn`, never a failure. Read by `backend/selftest.py --preflight`'s own "Is Jarvis's own data healthy?" check. Its context is `sayable.patch`'s own new route block, unaffected by the patches above it in this table (including `memory-shared.patch`), which touch a different, unrelated part of `jarvis_hud.py`; last in the list. Needs `jarvis_data_health.py`. |
+| `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -12782,3 +12783,184 @@ disk, never the shape of a request or a read.
   `jarvis_chat_log.py` ever calls `_seal`); the encryption it then goes
   through is the same, already-tested path every other stored message
   uses.
+
+# Checking for tool updates: `jarvis_tool_updates.py`, `tool-updates.patch` (2026-09-27)
+
+The owner's own request, made directly, not from the feasibility backlog:
+"a feature that allows me to run it on request that looks for updates of
+current tools that are integrated into Jarvis already (through GitHub)."
+`docs/JARVIS-API.md` section 53 has the routes; `docs/ARCHITECTURE.md`
+section 4 has the new egress row and section 8 has why it is desktop only.
+
+## The real gap this closes
+
+Nothing in this backend could tell the owner whether the Python packages,
+the Rust building blocks in Jarvis Desktop, or any hand-installed
+GitHub-hosted tool, were still current. `tools/check_python_advisories.py`
+already asks "does any pinned Python release have a known security
+advisory?" - a DIFFERENT question. This asks "is a newer version simply
+out?", and the owner presses a button to find out, on request, never on a
+timer.
+
+## In plain words
+
+- **Report only, never an update itself** - the house rule the feasibility
+  audit's I92 already wrote down for Windows' own `winget` updates, not
+  built yet: "Updating stays a line the owner runs; never 'update all'".
+  This never runs `pip install`, `cargo update`, or anything that changes a
+  file - it lists what is outdated and the exact command
+  (`py -3 -m pip install --upgrade <name>`, `cargo update -p <name>`) and
+  stops. It never says "vulnerable" or anything about safety - that is
+  `tools/check_python_advisories.py`'s different, already-built job.
+- **ONE approval card, ever - then never again.** The first time this is
+  ever run, it asks (action `check_tool_updates`, tier `ask` only,
+  `rebuilt/jarvis-framework.toml`) because it means reaching PyPI, crates.io
+  and GitHub over the internet - a new named way out of the PC
+  (`docs/ARCHITECTURE.md` section 4). Only "approved" writes
+  `tool_updates.json` in the Jarvis settings folder (`{"approved": true,
+  "changed": epoch}`); a damaged or missing file reads as not-yet-approved
+  (fails closed). Every later press skips the card entirely.
+- **Never blocks on the check itself.** A real check asks crates.io once
+  per Rust crate NAME in `Cargo.lock` - 576 of them in this project alone
+  today - plus PyPI once per Python package, one request at a time; on a
+  slow connection that can genuinely take a few minutes. So neither
+  `request_check` nor the Rust command that calls it ever waits for it:
+  pressing the button starts the check on its own background thread and
+  answers 202 (`"checking": true`) at once, and the settings page polls
+  `GET /api/tool_updates` until a fresh report shows up - the same
+  "start it, poll for it" shape `hardware-panel.js` already uses for
+  measuring the graphics cards.
+- **What is checked, and against what**: Python packages from
+  `backend/requirements.lock` (copied beside `jarvis_hud.py` by
+  `apply-patches.ps1`'s new step 3b, for this module to read), compared
+  against PyPI's `info.version` - the version really checked is the one
+  installed in THIS Python process (`importlib.metadata.version`), not
+  merely the lock file's own pin, because `apply-patches.ps1` installs from
+  `requirements.txt` (`>=`), not the hash-locked file, so the two can
+  already disagree (see "Python packages pinned with hashes",
+  `docs/DEPS-TESTS-CI-AUDIT-2026-09-26.md`); Rust crates from
+  `jarvis-desktop/src-tauri/Cargo.lock` (copied as `rust-crates.lock`, the
+  same step 3b - NOT `Cargo.toml`, so the versions checked are the ones
+  really resolved and built), compared against crates.io's
+  `max_stable_version`; and any hand-installed, GitHub-released tool pinned
+  to a fixed version, against `GET /repos/<owner>/<repo>/releases/latest`
+  (unauthenticated, 60 an hour - a 403/429 becomes one plain line, never a
+  crash).
+- **The GitHub tools list is empty today, and says so plainly**
+  (`jarvis_tool_updates.GITHUB_TOOLS`, `GITHUB_TOOLS_NOTE`). Both of the
+  brief's own candidates were checked against this project's real docs
+  before anything was written, and neither survived: Everything (`es.exe`,
+  voidtools) is not actually integrated into Jarvis at all - this same file
+  and `docs/JARVIS-API.md` section 35.6 already say so plainly, in the
+  documents feature's own "Owner steps" and "Known gaps" - it is
+  feasibility idea I39, queued, not built. colibri (`JustVugg/colibri`) IS
+  integrated, but `docs/BIG-MODEL.md` tells the owner to install "the
+  newest release" every time, by design, so there is no pinned version to
+  compare against - it is always current by construction. livekit-wakeword
+  (`livekit/livekit-wakeword`, the optional "hey Jarvis" retraining step)
+  IS integrated and IS pinned, but to a COMMIT, not a release; GitHub's
+  "latest release" tells you nothing honest about whether a commit pin is
+  behind, so it was left out rather than compared against something it
+  cannot honestly be compared against. sherpa-onnx's, openWakeWord's,
+  Pocket TTS's and ZipVoice's own model-weight downloads (also GitHub
+  releases) are deliberately not here either: sherpa-onnx is already a pip
+  package (covered by the Python group), and the rest are SHA-256
+  hash-pinned data files whose whole point is that they do NOT quietly
+  follow "the latest" - the owner's voice upgrades are "each measured
+  before it replaces anything" (`CLAUDE.md`, 2026-09-26); a plain
+  version-bump suggestion for one of these would be actively wrong advice.
+  Adding a real one later is one `GithubTool(name, "owner/repo", pinned,
+  where)` tuple entry; nothing else changes.
+- **Desktop only** (`docs/ARCHITECTURE.md` section 8): checking dependency
+  versions is developer/maintenance tooling, the same reasoning that keeps
+  the model catalogue and deep config editing off the phone (`CLAUDE.md`'s
+  standing rule). Settings, "Check for tool updates" (a different section
+  from "Updates" above it, which is Jarvis Desktop's own version) -
+  `tool-updates-settings.js`; `tool_updates.rs` `get_tool_updates`,
+  `check_tool_updates`.
+
+## What changed
+
+- `jarvis_tool_updates.py` - new module: `parse_python_lock`/
+  `parse_cargo_lock` (the two manifests), `run_check` (the whole report:
+  Python packages, Rust crates, GitHub tools - each ecosystem's own
+  `_python_group`/`_rust_group`/`_github_group`), `approved`/`_set_approved`
+  (the one persisted flag), `request_check`/`_decide`/`_run_in_background`
+  (the one-time card, then the never-blocking background check), `view`,
+  `install()` (the same wrapper shape as `jarvis_news.install`/
+  `jarvis_media.install`).
+- `jarvis_card_words.py` - a plain title for `check_tool_updates`.
+- `jarvis_asks_first.py` - `check_tool_updates` on the "What asks first"
+  page (`SAYS_ONCE`/`NOTE_TOOL_UPDATES`: "Asks the first time only, then
+  never again" - the only row on that whole page that says that, since
+  every other `MUST_ASK` row really does ask every time).
+- `rebuilt/jarvis-framework.toml` - `check_tool_updates = "ask"`.
+- `scripts/apply-patches.ps1` - `jarvis_tool_updates.py` added to
+  `$SHIPPED`; a new step 3b copies `backend/requirements.lock` and
+  `jarvis-desktop/src-tauri/Cargo.lock` (as `rust-crates.lock`) beside
+  `jarvis_hud.py`, the only way this module can read either file on the
+  owner's PC (neither is Python, so neither belongs in `$SHIPPED` itself -
+  `test_shipped_modules.py` parses every `$SHIPPED` entry as a module's
+  source).
+- `backend/_where.py` - `jarvis_tool_updates.py` added to `SHIPPED`, to
+  match.
+- `jarvis-desktop/src-tauri/src/tool_updates.rs` - new file: `get_tool_updates`,
+  `check_tool_updates` (both settings-window only,
+  `permissions/surfaces.toml` `settings-surface`).
+- `jarvis-desktop/src/tool-updates-settings.js`, `settings.html` - the
+  Settings section: a button, the summary sentence, and each ecosystem's
+  outdated/current/unreachable items, polling while a card or a check is
+  in progress (`hardware-panel.js`'s own "start it, poll for it" shape).
+- `docs/JARVIS-API.md` section 53, `docs/ARCHITECTURE.md` section 4 (the
+  new egress row) and section 8 (desktop only), `tools/check_parity.py`
+  (`/api/tool_updates` and `/api/tool_updates/check`, both `deliberate`).
+
+## Test it
+
+```
+python3 backend/test_tool_updates.py
+python3 tools/check_parity.py
+```
+
+`test_tool_updates.py` mocks every PyPI, crates.io and GitHub call - no
+real network anywhere in the suite. It proves: the two manifests parse
+correctly (a local, sourceless Rust package is skipped; a package pinned
+twice for two Python versions still gives one report row; crates.io is
+asked once per crate NAME, never once per pinned version); an outdated
+item carries the exact command and an up-to-date one carries none; a
+network failure lands in "unreachable", never raises; a missing manifest
+says so plainly rather than reporting zero tools; a GitHub 403 becomes one
+WARN line; the empty `GITHUB_TOOLS` list says why in `GITHUB_TOOLS_NOTE`;
+the one-time card (denied/timed out/approved), that an already-approved
+run never asks the gate again, that a check already running is not started
+a second time, and that a bug in the check itself still clears the
+"checking" flag so the button can never wedge off; that the module never
+imports `subprocess`/`os.system`/`os.popen` and never says "vulnerable" in
+anything the owner reads; `install()`'s routing; and `tool-updates.patch`'s
+own apply/reverse.
+
+## Not checked, said plainly
+
+- **Not run against the real PyPI, crates.io or GitHub APIs** - every test
+  here injects a fake fetch function. The shapes those three JSON APIs
+  return today (`info.version`, `crate.max_stable_version`, `tag_name`)
+  come from their own published API documentation, read directly, not from
+  a real call.
+- **Not measured for real timing.** How long a real run against all 576
+  Rust crates and every Python package actually takes on the owner's own
+  connection has not been timed; `POLL_FOR_MS` (10 minutes) in
+  `tool-updates-settings.js` is a judgement call, not a measurement.
+- **The version comparison is digits-only, not a real SemVer/PEP 440
+  parser** (`_version_key`): adding a library for that would break the
+  stdlib-only rule this module follows (matching
+  `tools/check_python_advisories.py`'s own house style) for a friendly "is
+  it current" hint that is not security-critical. A pre-release suffix
+  (`1.2.0rc1`) is not ordered correctly against `1.2.0`; in practice this
+  makes the check slightly more likely to say "outdated" a release early,
+  never to miss one.
+- **`backend/patch-history` for `media.patch` (commit `13d23ad`) is out of
+  date** - found while verifying this feature
+  (`python3 tools/build_patch_history.py --check`), unrelated to anything
+  here: `tool-updates.patch` is not in its own "differs" output at all.
+  `media.patch` belongs to an already-merged feature this work did not
+  touch, so it is written down here rather than fixed in passing.
