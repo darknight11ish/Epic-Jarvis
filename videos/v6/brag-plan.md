@@ -3,7 +3,7 @@
 Two cuts from one project:
 
 - `jarvis-launch-v6.mp4`: 1920×1080, 25.6 s, for the README and GitHub.
-- `jarvis-launch-v6-vertical.mp4`: 1080×1920, 12.8 s, made upright for a phone.
+- `jarvis-launch-v6-vertical.mp4`: 1080×1920, 13.6 s, made upright for a phone.
 
 ## How this plan was made
 
@@ -69,7 +69,7 @@ stop, lets you swap its brain from your phone, and still asks first.
 | 17.6–20.8 | The approval card rises; a beam round "Nothing runs until you decide."; a tap on Approve. | **You say yes.** |
 | 20.8–25.6 | Iris. Particles settle into the reactor; it shrinks beside the name. | **Your PC. Your AI. Your rules.** Jarvis · Windows PC · 8 GB NVIDIA graphics card · Android · Free |
 
-The upright cut (12.8 s): the hook, "Swap its brain.", "You say yes.",
+The upright cut (13.6 s): the hook, "Swap its brain.", "You say yes.",
 "Stop.", and the end card.
 
 ## Evidence for every claim

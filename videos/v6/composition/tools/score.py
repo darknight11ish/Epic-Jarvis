@@ -13,7 +13,7 @@ THE STYLE - "clean machine"
     - pad: a wavetable that slowly morphs from a pure sine to a vowel-like "formant" tone;
     - drums: a short tight kick (55 Hz, ~0.13 s), a snare made of a noise snap plus a 1.8 kHz
       ping, and metallic hats made by multiplying sines together (ring modulation), kept to
-      6-11.5 kHz so they sparkle without fizzing;
+      6-13 kHz so they sparkle without fizzing;
     - a glassy FM arpeggio in the loudest two sections;
     - interface sounds, which own the 2-6 kHz band (the music dips 3 dB under each one):
       a tool "tick" (3 ms click + a 45 ms FM blip, one scale step higher per step), a soft glass
@@ -61,8 +61,9 @@ WHAT IT READS AND WRITES
   audio-data*.js set  window.AUDIO_DATA = {fps, low, rms, hi, think, events}:
     low    0..1 per frame, everything below 160 Hz (kick, bass), 150 ms release - for the glow;
     rms    0..1 per frame, overall level;
-    hi     0..1 per frame, the interface sounds only (2-6 kHz band), fast release;
-    think  0..1 per frame, the level of the thinking cloud;
+    hi     0..1 per frame, the interface sounds only (2-6 kHz band), held for 0.1 s (so the two
+           chime notes read as one flash), then a fast 120 ms release;
+    think  0..1 per frame, the level of the thinking cloud (no release: it drops to 0 on `answer`);
     events [{t, kind}] - exact times of hits, ticks, ping, stop, chime, ... for flashes.
   All envelopes are 0 during the silences. The hats never drive any of them.
 
@@ -231,10 +232,10 @@ LEVELS = {"look": [1, 1], "sources": [2, 2], "listen": [0, 2], "speak": [3], "re
           "swap": [3, 3], "approve": [4, 4]}
 LEVELS_VERT = {"swap": [2, 3]}          # the upright cut starts its groove one step lower
 # music-bus level (dB) at the start and end of each section: the arc
-SEC_DB = {"ignite": (0.0, -4.0), "look": (-7.5, -6.0), "sources": (-5.0, -4.0),
-          "listen": (-6.0, -4.0), "speak": (-2.5, -1.5), "resume": (-8.0, -6.0),
+SEC_DB = {"ignite": (0.0, -5.0), "look": (-10.0, -8.5), "sources": (-7.0, -6.0),
+          "listen": (-8.0, -5.5), "speak": (-3.0, -2.0), "resume": (-10.0, -8.0),
           "swap": (-3.0, -1.5), "approve": (-0.5, 0.0), "end": (0.0, 0.0)}
-SEC_DB_VERT = {"swap": (-5.0, -2.0)}
+SEC_DB_VERT = {"swap": (-11.0, -3.0)}
 SECTION_HITS = [("ignite", "ignite"), ("b2", "look"), ("b3", "sources"), ("b4", "listen"),
                 ("b5", "speak"), ("b6", "swap"), ("b7", "approve"), ("end", "end")]
 
@@ -307,14 +308,14 @@ class Plan:
 
 
 # ============================================================ instruments (all synthesised)
-def fm_bass(f, gate, vel, rel=0.03, snap=0.022, idx=2.6, lp=2200):
+def fm_bass(f, gate, vel, rel=0.03, snap=0.022, idx=2.6, lp=2200, att=0.0012):
     """2-operator FM: the index snaps from bright to round in ~20 ms - a tight 'dwip'."""
     n = int((gate + rel) * SR)
     t = t2x(n)
     ph = 2 * np.pi * f * t
     I = idx * np.exp(-t / snap) + 0.55
     y = np.sin(ph + I * np.sin(ph) + 0.35 * np.exp(-t / 0.05) * np.sin(2 * ph))
-    env = np.minimum(1, t / 0.0012) * (0.6 + 0.4 * np.exp(-t / 0.1)) * rel_env(t, gate, rel)
+    env = np.minimum(1, t / att) * (0.6 + 0.4 * np.exp(-t / 0.1)) * rel_env(t, gate, rel)
     return band(dec2(y * env), None, lp, 2) * vel
 
 
@@ -334,9 +335,9 @@ def kick(rng, vel):
     t = np.arange(n) / SR
     f = 55 + 110 * np.exp(-t / 0.016)
     ph = 2 * np.pi * np.cumsum(f) / SR
-    body = np.sin(ph) * np.exp(-t / 0.07) + 0.32 * np.sin(2 * ph) * np.exp(-t / 0.02)
+    body = 0.8 * np.sin(ph) * np.exp(-t / 0.065) + 0.42 * np.sin(2 * ph + 0.6) * np.exp(-t / 0.022)
     click = band(rng.standard_normal(n), 1200, 6000) * np.exp(-t / 0.0012) * 0.3
-    y = np.tanh(1.8 * body) / np.tanh(1.8) + click
+    y = np.tanh(1.3 * body) / np.tanh(1.3) + click
     return fade_edges(y, 0.0006, 0.025) * vel
 
 
@@ -344,8 +345,8 @@ def snare(rng, vel):
     """Noise snap plus a resonant 1.8 kHz ping and a short 190 Hz body."""
     n = int(0.24 * SR)
     t = np.arange(n) / SR
-    noise = band(rng.standard_normal(n), 1500, 9000) * np.exp(-t / 0.05) * 0.45
-    snap = band(rng.standard_normal(n), 3000, 10000) * np.exp(-t / 0.004) * 0.35
+    noise = band(rng.standard_normal(n), 1500, 11000) * np.exp(-t / 0.05) * 0.45
+    snap = band(rng.standard_normal(n), 3000, 13000) * np.exp(-t / 0.004) * 0.35
     ping = np.sin(2 * np.pi * 1800 * t * (1 - 0.01 * np.exp(-t / 0.01))) * np.exp(-t / 0.035) * 0.4
     body = np.sin(2 * np.pi * 190 * t) * np.exp(-t / 0.045) * 0.55
     return fade_edges(noise + snap + ping + body, 0.0006, 0.03) * vel
@@ -353,17 +354,18 @@ def snare(rng, vel):
 
 def hat_voice(rng, decay, length):
     """Metallic hat: pairs of sines multiplied together (ring modulation), band-limited to
-    6-11.5 kHz, plus a breath of noise. Rendered at 2x."""
+    6-13 kHz, plus a breath of noise. Rendered at 2x."""
     n = int(length * SR)
     t = t2x(n)
     y = np.zeros(2 * n)
-    for a, b in ((3310, 2870), (4130, 3470), (4710, 2390), (5230, 3910), (3770, 4990), (2910, 5570)):
+    for a, b in ((3310, 2870), (4130, 3470), (4710, 2390), (5230, 3910), (3770, 4990), (2910, 5570),
+                 (6130, 4870), (6620, 5410)):
         a *= rng.uniform(0.985, 1.015)
         b *= rng.uniform(0.985, 1.015)
         y += np.sin(2 * np.pi * a * t + rng.uniform(0, 6.3)) * np.sin(2 * np.pi * b * t + rng.uniform(0, 6.3))
     y += 0.9 * rng.standard_normal(2 * n)
     y *= np.exp(-t / decay) * np.minimum(1, t / 0.0004)
-    y = band(dec2(y), 6000, 11500, 4)
+    y = band(dec2(y), 6000, 13000, 4)
     y = fade_edges(y, 0.0003, 0.01)
     return y / np.abs(y).max()
 
@@ -395,8 +397,8 @@ def pad_seg(E, rng, midis, dur, att, rel, t_abs, morph):
                 sa += A[k - 1] * s
                 sb += Bt[k - 1] * s
             v = (1 - m) * sa + m * sb
-            out[side] += 0.9 * v
-            out[1 - side] += 0.1 * v
+            out[side] += 0.88 * v
+            out[1 - side] += 0.12 * v
     env = np.minimum(1, t / att) ** 2 * rel_env(t, dur - rel, rel)
     return out * env / len(midis)
 
@@ -562,8 +564,8 @@ BASS = {   # step: (length in 16ths, velocity, degree: R root, O octave, 5 fifth
         {0: (3, 0.95, "R"), 3: (1, 0.5, "O"), 6: (2, 0.65, "R"), 8: (2, 0.6, "O"), 10: (4, 0.85, "R"), 14: (2, 0.65, "A")}],
 }
 TICK_NOTES = [99, 101, 102, 104]         # D#7 E#7 F#7 G#7: one Lydian step higher per tool step
-GAIN = dict(kick=0.62, snare=0.34, hat=0.11, bass=0.36, sub=0.26, pad=0.5, arp=0.12,
-            tick=0.30, ping=0.26, chime=0.30, hum=0.42, think=0.11, swell=0.16, sparkle=0.16, hit=0.7)
+GAIN = dict(kick=0.56, snare=0.38, hat=0.13, bass=0.36, sub=0.2, pad=0.5, arp=0.12,
+            tick=0.30, ping=0.2, chime=0.30, hum=0.42, think=0.14, swell=0.16, sparkle=0.16, hit=0.55)
 
 
 def render(timing, kind, win):
@@ -577,7 +579,7 @@ def render(timing, kind, win):
     N = E.N
     ta = np.arange(N) / SR
     ir = E.make_ir()
-    bus = {k: E.bus() for k in ("kick", "snare", "hat", "bass", "sub", "pad", "arp", "hit", "ui", "hum", "think", "swell")}
+    bus = {k: E.bus() for k in ("kick", "snare", "hat", "bass", "sub", "pad", "arp", "hit", "hitkick", "ui", "hum", "think", "swell")}
     kicks, ducks = [], []                                     # kick times; (time, length) of UI ducks
     gap = (float(H["stop"]), float(H["silenceEnd"])) if "stop" in H and "silenceEnd" in H else None
     hit_times = [float(H[h]) for h in ("ignite", "stop", "end") if h in H]
@@ -592,10 +594,11 @@ def render(timing, kind, win):
         lvl = P.level_at(at)
         if lvl is None or any(abs(at - h) < 1e-6 for h in hit_times):
             continue
+        clear = any(0 < h - at <= 0.3 + 1e-6 for h in hit_times)      # room for the hit that follows
         step, var = i % 16, (i // 16) % 2
         if lvl >= 1:
             v = KICK[lvl][var].get(step)
-            if v:
+            if v and not clear:
                 kicks.append(at)
                 E.place(bus["kick"], kick(r_dr, v * r_dr.uniform(0.95, 1.02)), at)
             v = SNARE.get(lvl, [{}, {}])[var].get(step)
@@ -614,7 +617,7 @@ def render(timing, kind, win):
                 vo = "open" if (lvl == 4 and step == 14 and var) else ("a" if step % 4 else "b")
                 E.place(bus["hat"], E.pan(hats[vo] * hv * r_dr.uniform(0.85, 1.1), 0.35 if step % 2 else -0.3), at)
         pat = BASS.get(lvl)
-        if pat and step in pat[var]:
+        if pat and step in pat[var] and not clear:
             ln, v, deg = pat[var][step]
             ch = P.chord_at(at)
             r = bass_midi(CH[ch][0])
@@ -630,14 +633,14 @@ def render(timing, kind, win):
                 m = r
             g = ln * S16 - 0.012
             _, b_end, _ = P.sec_at(at)
-            g = min(g, b_end - at - 0.02)
+            g = min(g, b_end - at - 0.02, min([h - at - 0.3 for h in hit_times if h > at] or [9.0]))
             E.place(bus["bass"], fm_bass(mtof(m), g, v * r_b.uniform(0.95, 1.03), idx=2.2 + 0.4 * (lvl >= 3)), at)
 
     # ---------------------------------------------------- pad and sub: one segment per chord
     r_p = E.rng("pad")
     for k, (a, b, ch, sec) in enumerate(P.segs):
         fresh = k == 0 or P.segs[k - 1][1] < a - 1e-6 or sec in ("end",) or a in hit_times
-        att = 0.006 if (a in hit_times) else (0.06 if fresh else 0.12)
+        att = 0.03 if (a in hit_times) else (0.06 if fresh else 0.12)     # at a hit the kick owns the transient
         start = a if fresh else a - 0.06
         rel = 0.35 if sec != "end" else 0.5
         length = (b - start) + (rel if b < dur - 1e-6 else 0.0)
@@ -652,7 +655,7 @@ def render(timing, kind, win):
         lv = P.level_at(a)
         pg = {None: 1.0, -1: 1.0, 0: 0.9, 1: 0.9, 2: 0.8, 3: 0.72, 4: 0.72}.get(lv, 0.8)
         if sec == "ignite":
-            pg = 0.9
+            pg = 0.7
         if sec == "end":
             pg = 0.6
         E.place(bus["pad"], seg * pg, start, anchor=a)
@@ -661,7 +664,8 @@ def render(timing, kind, win):
             f = sub_freq(bass_midi(CH[ch][0]))
             if sec in ("ignite", "end"):
                 continue                                     # the hits play their own sub
-            E.place(bus["sub"], sub_note(f, b - a - 0.02, 0.9 if lv and lv >= 1 else 0.75), a)
+            gate = b - a - (0.3 if any(abs(b - h) < 1e-6 for h in hit_times) else 0.02)
+            E.place(bus["sub"], sub_note(f, gate, 0.9 if lv and lv >= 1 else 0.75), a)
 
     # ---------------------------------------------------- glass arpeggio at levels 3 (8ths) and 4 (16ths)
     r_a = E.rng("arp")
@@ -681,36 +685,37 @@ def render(timing, kind, win):
     if "ignite" in H:
         t0 = float(H["ignite"])
         kicks.append(t0)
-        E.place(bus["hit"], kick(r_h, 1.0), t0, GAIN["kick"])
-        E.place(bus["hit"], E.pan(dwip(mtof(42), 0.55), 0.0), t0)
-        E.place(bus["hit"], sub_note(mtof(30), 1.5, 0.55, att=0.002, rel=0.1, decay=0.9), t0)
-        E.place(bus["hit"], fm_bass(mtof(42), 1.3, 0.5, rel=0.2, idx=3.0), t0)
+        E.place(bus["hitkick"], kick(r_h, 0.9), t0)
+        E.place(bus["hit"], E.pan(dwip(mtof(42), 0.45), 0.0), t0)
+        E.place(bus["hit"], sub_note(mtof(30), 1.5, 0.35, att=0.03, rel=0.1, decay=0.9), t0)
         for j, m in enumerate(CH["Fs_lyd"][1]):
-            E.place(bus["hit"], E.pan(chime_note(mtof(m + 12), 0.15, dur=1.5, idx=0.6, decay=0.5), -0.45 + 0.3 * j), t0)
-        E.place(bus["hit"], sparkle(r_h, 1.4, 90, decay=0.35) * GAIN["sparkle"] / 0.16 * 0.16, t0)
+            E.place(bus["hit"], E.pan(chime_note(mtof(m + 12), 0.11, dur=1.5, idx=0.6, decay=0.5), -0.45 + 0.3 * j), t0 + 0.003)
+        E.place(bus["hit"], sparkle(r_h, 1.4, 90, decay=0.35), t0, GAIN["sparkle"])
     if "stop" in H:
         t0 = float(H["stop"])
         ch = P.chord_at(t0 - 0.01)
         kicks.append(t0)
-        E.place(bus["hit"], kick(r_h, 1.0), t0, GAIN["kick"])
-        E.place(bus["hit"], E.pan(snare(r_h, 0.9), 0.08), t0, GAIN["snare"])
-        E.place(bus["hit"], fm_bass(mtof(bass_midi(CH[ch][0])), 0.3, 0.7, idx=3.2), t0)
-        E.place(bus["hit"], sub_note(sub_freq(bass_midi(CH[ch][0])), 0.3, 0.6, att=0.002), t0)
+        E.place(bus["hitkick"], kick(r_h, 0.85), t0)
+        E.place(bus["hit"], E.pan(snare(r_h, 0.8), 0.08), t0, GAIN["snare"])
+        E.place(bus["hit"], fm_bass(mtof(bass_midi(CH[ch][0])), 0.3, 0.5, idx=3.2, att=0.01), t0)
+        E.place(bus["hit"], sub_note(sub_freq(bass_midi(CH[ch][0])), 0.3, 0.35, att=0.03), t0)
         for j, m in enumerate(CH[ch][1]):
-            E.place(bus["hit"], E.pan(chime_note(mtof(m + 12), 0.14, dur=0.4, idx=0.8), -0.45 + 0.3 * j), t0)
+            E.place(bus["hit"], E.pan(chime_note(mtof(m + 12), 0.14, dur=0.4, idx=0.8), -0.45 + 0.3 * j), t0 + 0.003)
     if "end" in H:
         t0 = float(H["end"])
         kicks.append(t0)
         L = dur - t0
-        E.place(bus["hit"], kick(r_h, 1.0), t0, GAIN["kick"])
-        E.place(bus["hit"], sub_note(mtof(30), L - 0.3, 0.5, att=0.002, rel=0.3, decay=0.9), t0)
-        E.place(bus["hit"], fm_bass(mtof(42), L - 0.3, 0.4, rel=0.3, idx=2.4, snap=0.03) * np.exp(-np.arange(int(L * SR)) / SR / 1.2), t0)
+        # The upright cut's end lands right after the reversed swell and the pad's return, so its
+        # kick is a little softer to keep the limiter under 3 dB.
+        E.place(bus["hitkick"], kick(r_h, 0.9 if kind == "landscape" else 0.75), t0)
+        E.place(bus["hit"], sub_note(mtof(30), L - 0.3, 0.32, att=0.04, rel=0.3, decay=0.9), t0)
+        E.place(bus["hit"], fm_bass(mtof(42), L - 0.3, 0.4, rel=0.3, idx=2.4, snap=0.03, att=0.04) * np.exp(-np.arange(int(L * SR)) / SR / 1.2), t0)
         for j, m in enumerate([66, 73, 78, 85]):                  # F#4 C#5 F#5 C#6: the open fifth, in glass
-            E.place(bus["hit"], E.pan(chime_note(mtof(m), 0.2 - 0.02 * j, dur=min(3.0, L), idx=0.5, decay=0.9), -0.4 + 0.27 * j), t0)
-        E.place(bus["hit"], sparkle(r_h, min(2.0, L), 70, decay=0.5, settle=True), t0, GAIN["sparkle"] / 0.16 * 0.8)
+            E.place(bus["hit"], E.pan(chime_note(mtof(m), 0.14 - 0.015 * j, dur=min(3.0, L), idx=0.5, decay=0.9), -0.4 + 0.27 * j), t0 + 0.003)
+        E.place(bus["hit"], sparkle(r_h, min(2.0, L), 70, decay=0.5, settle=True), t0, GAIN["sparkle"])
     if "name" in H:                                              # the soft accent under the name
         t0 = float(H["name"])
-        for m, v, p in ((85, 0.13, -0.2), (90, 0.09, 0.2)):     # C#6, F#6
+        for m, v, p in ((90, 0.26, -0.15), (97, 0.16, 0.15)):   # F#6, C#7
             E.place(bus["hit"], E.pan(chime_note(mtof(m), v, dur=2.0, idx=0.35, decay=0.7), p), t0)
         E.place(bus["hit"], sub_note(mtof(42), 0.5, 0.18, att=0.003, rel=0.3, decay=0.4), t0)
 
@@ -738,12 +743,12 @@ def render(timing, kind, win):
         ducks.append((t0, 0.15))
     if "warn" in H:
         t0 = float(H["warn"])
-        E.place(bus["ui"], E.pan(glass_ping(mtof(92), 1.0), 0.1), t0)       # G#6
+        E.place(bus["ui"], E.pan(glass_ping(mtof(92), GAIN["ping"] / GAIN["tick"]), 0.1), t0)       # G#6
         ducks.append((t0, 0.15))
     if "approve" in H:
         t0 = float(H["approve"])
-        E.place(bus["ui"], E.pan(chime_note(mtof(78), 1.0, dur=0.9), -0.12), t0)          # F#5
-        E.place(bus["ui"], E.pan(chime_note(mtof(85), 1.0, dur=1.1), 0.12), t0 + S16)     # C#6
+        E.place(bus["ui"], E.pan(chime_note(mtof(78), GAIN["chime"] / GAIN["tick"] * 0.9, dur=0.9), -0.12), t0)          # F#5
+        E.place(bus["ui"], E.pan(chime_note(mtof(85), GAIN["chime"] / GAIN["tick"], dur=1.1), 0.12), t0 + S16)     # C#6
         ducks.append((t0, 0.45))
     if "b2" in H and "answer" in H:
         t0, t1 = float(H["b2"]), float(H["answer"])
@@ -770,20 +775,22 @@ def render(timing, kind, win):
 
     pump = env_from([(t,) for t in kicks], 0.005, 0.1 / 3)        # sidechain: 5 ms attack, ~100 ms release
     duck = 1 - (1 - dbg(-3)) * env_from(ducks, 0.005, 0.05)       # UI sounds: -3 dB on the music
+    ticks = [(t0 - 0.03, 0.12) for t0, _ in ducks]
+    think = bus["think"] * GAIN["think"] * (1 - (1 - dbg(-10)) * env_from(ticks, 0.02, 0.04))  # the cloud clears for each tick
     lows = (bus["bass"] * GAIN["bass"] + bus["sub"] * GAIN["sub"]) * (1 - (1 - dbg(-8)) * pump)
     pad = bus["pad"] * GAIN["pad"] * (1 - (1 - dbg(-5)) * pump)
     pad = band(pad, 150, None, 2)
-    pad = np.vstack([pad[0] * 1.15 - pad[1] * 0.15, pad[1] * 1.15 - pad[0] * 0.15])   # a little wider
     music = (bus["kick"] * GAIN["kick"] + bus["snare"] * GAIN["snare"] + bus["hat"] * GAIN["hat"]
              + lows + pad + bus["arp"] * GAIN["arp"]) * arc * duck
     ui = bus["ui"]
     fx = bus["hit"] * GAIN["hit"] + bus["swell"] * GAIN["swell"]
-    voice = bus["hum"] * GAIN["hum"] * arc + bus["think"] * GAIN["think"]
+    hitkick = bus["hitkick"] * GAIN["kick"]
+    voice = bus["hum"] * GAIN["hum"] * arc + think
     uig = ui * GAIN["tick"]                                       # the tick gain is the UI bus gain
     send = (pad * 0.35 + bus["snare"] * GAIN["snare"] * arc * 0.12 + bus["arp"] * GAIN["arp"] * arc * 0.5
-            + uig * 0.3 + fx * 0.25 + voice * 0.3)
+            + uig * 0.3 + fx * 0.25 + bus["hum"] * GAIN["hum"] * arc * 0.3)
     wet = E.conv(band(send, 250, 8000, 2), ir)
-    mix = music + fx + uig + voice + 0.3 * wet
+    mix = music + hitkick + fx + uig + voice + 0.3 * wet
 
     # clean below 30 Hz, mono below 120 Hz, a gentle roll-off above 17 kHz
     f = np.fft.rfftfreq(N, 1 / SR) + 1e-3
@@ -793,7 +800,7 @@ def render(timing, kind, win):
     S *= top / np.sqrt(1 + (120 / f) ** 8)
     m_, s_ = np.fft.irfft(M, N), np.fft.irfft(S, N)
     mix = np.vstack([m_ + s_, m_ - s_])
-    stems = {"ui": uig, "think": bus["think"] * GAIN["think"]}
+    stems = {"ui": uig, "think": think}
     return mix, stems
 
 
@@ -813,13 +820,14 @@ def tape_stop(x, t0, D):
 
 
 def stutter(x, t_cut, S32, reps=4):
-    """Buffer stutter: the 1/32 note that starts `reps` slices before the cut is repeated into it."""
+    """Buffer stutter: the 1/32 note that starts `reps` slices before the cut is repeated into it,
+    with the low end taken out, so the downbeat after it lands on a clear floor."""
     l = int(round(S32 * SR))
     a = int(round(t_cut * SR)) - reps * l
     if a < 0:
         return x
     t = np.arange(l) / SR
-    sl = x[:, a:a + l] * np.minimum(1, t / 0.001) * np.clip((t[-1] - t) / 0.002, 0, 1)
+    sl = band(x[:, a:a + l], 200, None, 2) * np.minimum(1, t / 0.001) * np.clip((t[-1] - t) / 0.002, 0, 1)
     for k in range(reps):
         x[:, a + k * l:a + (k + 1) * l] = sl * (0.85 + 0.15 * k / max(1, reps - 1))
     return x
@@ -875,6 +883,7 @@ def master(mix, zero, fade):
         if abs(I + 14) < 0.05 and TP <= -1.0:
             break
         gain *= dbg(-14 - I)
+    print(f"   limiter works hardest at {int(np.argmin(gr)) / SR:.3f} s")
     return y, (I, TP, LRA, 20 * np.log10(gr.min()))
 
 
@@ -903,9 +912,11 @@ def audio_data(y, stems, dur, zero, path, H):
     hop = SR // FPS
     m = y.mean(0)
 
-    def env(x, release=None, norm="p98"):
+    def env(x, release=None, norm="p98", hold=0):
         v = np.array([np.sqrt(np.mean(x[i * hop:(i + 1) * hop] ** 2)) if i * hop < len(x) else 0.0
                       for i in range(frames)])
+        if hold:                                               # peak-hold for `hold` frames
+            v = np.array([v[max(0, i - hold):i + 1].max() for i in range(len(v))])
         if release:
             k = np.exp(-1 / (release * FPS))
             s = 0.0
@@ -921,7 +932,7 @@ def audio_data(y, stems, dur, zero, path, H):
     low = band(m, None, 160, 4)
     hi = band(stems["ui"].mean(0), 2000, 6000, 4)
     data = {"fps": FPS, "low": env(low, 0.15).tolist(), "rms": env(m).tolist(),
-            "hi": env(hi, 0.06, "max").tolist(), "think": env(stems["think"].mean(0), 0.05, "max").tolist(),
+            "hi": env(hi, 0.12, "max", hold=3).tolist(), "think": env(stems["think"].mean(0), None, "max").tolist(),
             "events": [{"t": round(float(H[h]), 3), "kind": k} for h, k in
                        sorted(EVENT_KIND.items(), key=lambda kv: H.get(kv[0], 1e9)) if h in H]}
     with open(path, "w") as fh:
@@ -950,8 +961,8 @@ def onset(x, t, lo, hi):
     e = seg[:len(seg) // h * h].reshape(-1, h)
     db = 10 * np.log10(np.convolve(np.mean(e ** 2, 1), np.ones(4) / 4, mode="same") + 1e-14)
     c = int(0.3 * 2000)                                         # the index of t
-    pre = np.median(db[c - 120:c - 30])
     peak = db[c - 10:c + 60].max()
+    pre = max(np.median(db[c - 120:c - 30]), peak - 40)
     thr = pre + 0.5 * (peak - pre)
     idx = np.nonzero(db[c - 60:c + 60] >= thr)[0]
     if not len(idx):
@@ -983,7 +994,7 @@ def checks(path, H, dur, zero, gr):
         print(f"   silence {z0:.2f}-{z1:.2f} s: peak {20 * np.log10(pk + 1e-12):.1f} dBFS over the whole gap, "
               f"{20 * np.log10(inner + 1e-12):.1f} dBFS from 30 ms in (mp3 smears a few ms)")
     bad = []
-    for h, lo, hi, what in CUES:
+    for h, lo, hi, what in sorted(CUES, key=lambda c: H.get(c[0], 1e9)):
         if h not in H:
             continue
         t = float(H[h])
