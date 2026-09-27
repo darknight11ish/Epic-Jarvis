@@ -331,6 +331,21 @@ await check("turning a switch OFF is immediate", async () => {
   assert.match(s.status, /"Longer conversations" is off\./);
 });
 
+await check("pressing Space on a switch keeps keyboard focus in place (bug audit 2026-09-27 #5)", async () => {
+  // Disabling the focused checkbox before the request (`scToggle`) blurs it
+  // to <body> at once in Chromium; the redraw's focus-restore must not rely
+  // on reading `document.activeElement` again after that has happened.
+  const page = await open({ status: SC.running_long_context });
+  await page.locator("#sc-switch-long_context").focus();
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(300);
+  const focused = await page.evaluate(() => document.activeElement.id);
+  const s = await section(page);
+  await page.close();
+  assert.equal(row(s, "long_context").checked, false, "the switch itself did not toggle");
+  assert.equal(focused, "sc-switch-long_context", "focus landed on <body> instead of staying on the switch");
+});
+
 /* ── "When to suggest the bigger model" (2026-09-27) ──────────────────────── */
 
 await check("both suggestion signals show, on by default, with the backend's own words", async () => {
@@ -360,6 +375,18 @@ await check("turning a suggestion signal off sends one request, no card, and sta
   assert.equal(suggestRow(s, "struggle").checked, false);
   assert.equal(suggestRow(s, "correction").checked, true, "the other signal was touched");
   assert.match(said, /Jarvis will not offer this on its own\./);
+});
+
+await check("pressing Space on a suggestion switch keeps keyboard focus in place (bug audit 2026-09-27 #5)", async () => {
+  const page = await open({ status: SC.capable_off });
+  await page.locator("#sc-suggest-struggle").focus();
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(300);
+  const focused = await page.evaluate(() => document.activeElement.id);
+  const s = await section(page);
+  await page.close();
+  assert.equal(suggestRow(s, "struggle").checked, false, "the switch itself did not toggle");
+  assert.equal(focused, "sc-suggest-struggle", "focus landed on <body> instead of staying on the switch");
 });
 
 await check("an older backend that sends no 'suggest' hides the whole subsection", async () => {
