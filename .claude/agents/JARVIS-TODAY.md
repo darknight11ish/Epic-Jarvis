@@ -30,10 +30,13 @@ it, say so in your report.
 ## Built (by area, with where to look)
 
 **Brain and routing** - Ollama, `jarvis-primary` (Qwen 3 8B, Modelfile in
-`backend/`). `jarvis_router.py`: local by default; **cloud lanes through
-official APIs exist, one question at a time after the owner's yes**
-(ARCHITECTURE §11; "Try the cloud model" in both apps on the continuation
-branch). A cloud turn carries only the owner's newest words, never private,
+`backend/`). `jarvis_router.py`: local by default. **Cloud lanes exist in
+the code, one question at a time after the owner's yes** (ARCHITECTURE §11;
+"Try the cloud model" in both apps on the continuation branch) - **but no
+lane is configured on the owner's PC**: the lane list comes from
+`litellm-proxy.yaml`, which `backend/README.md` (~line 2339) says does not
+exist there, so every turn is local. Talking to an outside AI through its
+API is designed in `docs/CHATBOT-DRIVER-DESIGN.md`, not built. A cloud turn carries only the owner's newest words, never private,
 tainted or picture turns (ARCHITECTURE §4). Big-model switch across both
 cards (`jarvis_big_model.py`). Simple commands answered without the model
 (`jarvis_quick.py`). Short tool list with more on request; MCP bridge for
