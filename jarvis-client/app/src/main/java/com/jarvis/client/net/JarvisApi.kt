@@ -955,6 +955,29 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    /**
+     * "When to suggest the bigger model" - one signal on or off. NO approval
+     * card either way (see [SecondCard.Suggest]'s own doc): re-read
+     * [secondCard] to show the new state, the same as [setSecondCard].
+     */
+    suspend fun setSecondCardSuggest(signal: String, enabled: Boolean): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(SecondCard.SUGGEST_PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = SecondCard.postSuggestBody(signal, enabled)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    SecondCard.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     // --------------------------------------------------------- hardware ----
 
     /**

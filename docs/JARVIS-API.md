@@ -1764,6 +1764,76 @@ router, and the phone's `ChatPictureContractTest` builds the same bodies with
 its own encoder. Under the answer the phone says "Answered on the second
 graphics card (<model>)" when `second_card` is in the route header.
 
+### 12.1 Suggesting the bigger model (added 2026-09-27)
+
+`combined_lane()` still has no automatic caller (§12's `combined` is still
+only ever switched on by the owner) - but the owner asked directly for
+Jarvis to notice on its own when a conversation could use it, and OFFER,
+never switch it on itself (CLAUDE.md's standing "never auto-approve" rule,
+and their own answer: "Both but with a setting to adjust this"). Two
+signs, each counted per conversation, in memory only on this PC, never
+written anywhere:
+
+| Sign | Counted when | Setting (default) |
+|---|---|---|
+| **Struggle** | `jarvis_agent.py`'s tool loop had to work around a tool call this turn - Ollama could not read it at all (`_ToolCallUnreadable`, the one existing re-ask), or the call's own arguments were broken (`check_call`) | "When Jarvis is visibly struggling" (on) |
+| **Correction** | the owner directly corrected an answer in this conversation - a "wrong" mark (`jarvis_feedback.mark`, when the app sends `conversation_id` alongside it - see below) or the owner's own newest words matching a narrow, tested phrase check ("that's wrong", "no, that's not right", "try again" - never a scan for the bare word "no") | "When you correct an answer more than once" (on) |
+
+Once either count reaches its threshold (`STRUGGLE_THRESHOLD` 3,
+`CORRECTION_THRESHOLD` 2 - each explained in `jarvis_second_card.py`'s own
+comment) AND its setting is on, `jarvis_second_card.maybe_suggest_combined`
+(called once at the end of every turn, never mid-answer) checks, in order:
+a genuinely capable second card is here RIGHT NOW (`_combined_capable` -
+the SAME hard gate §12's `combined` itself needs, never a looser one); no
+card for `combined` is already waiting; and `jarvis_backoff.may_offer`
+(kind `second_card_combined_offer`) says an offer may be made right now
+(not mid-chat, a few at most, a recent "no" heard). If every gate says yes,
+it raises the EXACT SAME approval card `POST /api/second-card
+{"feature": "combined", "enabled": true}` already raises
+(`second_card_combined_enable`, tier `ask`), with one added sentence
+saying what Jarvis noticed - e.g. "Jarvis had to ask the model to try a
+tool call again 3 times in this conversation. A bigger model may do
+better with this." **There is no separate "just this once" switch: the
+offer's own "yes" IS the card's "yes"** - accepting turns combined mode on
+for real, and a "no" only ever means "not now" (`jarvis_backoff.declined`,
+the same 1/7/30-day quiet every other offer gets, never permanent). Either
+answer also resets this conversation's counts, as does combined mode
+already being on.
+
+**Settings - folded into `GET /api/second-card`'s own `"suggest"` key, and
+their own route for changing them:**
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/second-card` | - | (unchanged shape, plus) `"suggest": {"available": true, "title", "detail", "signals": [{"id": "struggle"\|"correction", "label", "why", "enabled": bool, "default": true}]}` | Same poll both apps already do for the Hardware screen. |
+| `POST /api/second-card/suggest` | `{"signal": "struggle"\|"correction", "enabled": bool}` | 200 `{"ok": true, ...suggest_settings()}`; 400 a bad body | **No card either way** (like `jarvis_manner.py`'s humour switch): this only changes whether Jarvis may OFFER "combined" on its own, never what it may do without a person's yes. Both signals default ON. |
+
+The offer's kind, `second_card_combined_offer`, is declared in
+`jarvis_backoff.OFFERS` asking only `suggest_bigger_model` ("to raise the
+same approval card that already exists for turning on \"One bigger model
+on both cards\" - nothing changes until you say yes on that card") -
+`test_backoff_rule.py` checks it, like every offer, against rule 4 (an
+offer never asks for more).
+
+**Both apps** show the two settings on the same Hardware screen as
+`combined`'s own switch (§12's "Both apps show it in the same place"): the
+desktop's Settings → "Second graphics card" → "When to suggest the bigger
+model", the phone's Brain screen's own row. The offer rides the pending
+approval queue exactly like every other card (§3) - no new UI concept: it
+is `second_card_combined_enable`'s ordinary card, just raised by Jarvis
+instead of by the owner tapping the switch, and its text says so.
+
+**A "wrong" mark reaching this** (§ "Marking an answer",
+`backend/jarvis_feedback.py`): that module deliberately keeps no
+conversation id (see its own docstring - "the simplest way to keep it
+out"), so `POST /api/feedback/mark` now ALSO accepts an optional
+`conversation_id` alongside `turn_id`/`mark`; when present and `mark` is
+`"wrong"`, the route calls `jarvis_agent.note_correction(conversation_id)`
+- never stored in `feedback.db`, only used to bump this in-memory counter.
+Omitting it (an older client) works exactly as before; the phrase check
+above needs no such wiring at all, since it reads the turn it is already
+answering.
+
 ---
 
 ## 13. The wiki builder (added 2026-09-24)

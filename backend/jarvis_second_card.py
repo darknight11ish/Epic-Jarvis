@@ -47,6 +47,40 @@ both say so. combined_lane() is lane_for()'s shape for it; nothing yet
 calls it automatically (see docs/JARVIS-API.md's second-card section for
 why that is a deliberate, documented gap, not an oversight).
 
+SUGGESTING "COMBINED" (2026-09-27, the owner's "Both, with a setting"
+answer to being asked directly). `combined_lane()` still has no automatic
+caller (the gap above is still real - nothing SWITCHES combined mode on by
+itself), but jarvis_agent.py now notices two signs, each per conversation
+and in memory only, and asks THIS module to OFFER the existing card:
+
+    struggle    Jarvis visibly having to work around a tool call this turn
+                (jarvis_agent.note_struggle - an unreadable call, or a
+                broken one).
+    correction  the owner directly correcting an answer in this conversation
+                (jarvis_agent.note_correction - a "wrong" mark, or the
+                narrow phrase check, jarvis_agent.looks_like_correction).
+
+`maybe_suggest_combined(conversation_id)`, called once at the end of every
+turn, raises NOTHING by itself: once either count crosses its threshold
+(STRUGGLE_THRESHOLD, CORRECTION_THRESHOLD - each with its own setting, both
+on by default, SUGGEST_SIGNALS), it asks `_combined_capable` for the SAME
+hard gate `combined` itself needs - a capable second card, right now, on
+this PC, never inferred or assumed - and, only if that says yes, asks
+jarvis_backoff whether an offer nobody asked for may be made right now (not
+mid-chat, a few at most, a "no" heard). If every gate says yes, it raises
+the EXACT SAME approval card `request_change("combined", True)` already
+raises from Settings - `second_card_combined_enable`, tier "ask" - with one
+short sentence added saying why Jarvis is asking now. There is no separate
+"just this once" switch and no second on/off concept: accepting the offer
+IS answering that card, so a "yes" turns combined mode on for real and a
+"no" only ever means "not now" (jarvis_backoff.declined, the same 1/7/30-day
+quiet every other offer gets - never a permanent refusal). The two settings
+(`SUGGEST_SIGNALS`, `suggest_settings()`/`handle_suggest_post()`) live on
+the same Hardware screen as the switches above, and change only whether
+Jarvis OFFERS - never what it may do without a person's yes - so, like
+jarvis_manner.py's humour switch, changing either one raises no card either
+way.
+
 THE INTERFACE other modules use - kept exactly:
 
     lane_for(feature) -> Optional[Lane]      Lane(url, model, num_ctx, why)
@@ -55,6 +89,9 @@ THE INTERFACE other modules use - kept exactly:
     request_change(feature, enabled, *, gate=...) -> (http code, dict)
                                              POST /api/second-card
                                              (feature may be "combined")
+    maybe_suggest_combined(conversation_id)  jarvis_agent.py, end of turn
+    suggest_settings() -> dict               GET /api/second-card (folded in)
+    handle_suggest_post(body) -> (code, dict) POST /api/second-card/suggest
 
 lane_for() returns None unless the main switch and that feature are on, a
 capable second card is detected, the second Ollama is running and the model
@@ -298,6 +335,106 @@ COMBINED_MODEL = ("qwen3:14b", 32768, 12.28)
 COMBINED_MIN_TOTAL_MB = 18432
 
 
+# --------------------------------------------------------------------------
+#   Suggesting the bigger model (2026-09-27) - see the module docstring's
+#   own section for the whole design. The settings here only ever change
+#   whether Jarvis OFFERS "combined" on its own; the offer, when made, is
+#   the SAME approval card the switch above already raises.
+# --------------------------------------------------------------------------
+
+#: How many "struggle" signs (jarvis_agent.note_struggle: an unreadable tool
+#: call, or a broken one) in ONE conversation before Jarvis offers the
+#: bigger model, IF the setting for it is on. Low, on purpose: one broken
+#: call happens even with a perfectly capable model (a stray token, a
+#: truncated stream), and asking after every single one would be a nag over
+#: nothing; three in the SAME conversation is a pattern the owner can see
+#: and decline in a moment if the model was only having an off turn.
+STRUGGLE_THRESHOLD = 3
+
+#: How many "correction" signs (jarvis_agent.note_correction: a "wrong"
+#: mark, or the narrow phrase check) in ONE conversation, IF that setting is
+#: on. Lower than STRUGGLE_THRESHOLD: a correction is a more deliberate
+#: signal than a parser hiccup, and correcting Jarvis TWICE in the same
+#: conversation is the earliest point at which "repeated correction"
+#: (CLAUDE.md's own words for this) genuinely applies - a single correction
+#: is just as likely to be the owner catching an ordinary slip.
+CORRECTION_THRESHOLD = 2
+
+#: The offer's kind, declared in jarvis_backoff.OFFERS with what it asks for
+#: (rule 4: an offer never asks for more). It only ever asks to raise the
+#: SAME card the switch already has; nothing here is a second yes.
+SUGGEST_OFFER_KIND = "second_card_combined_offer"
+
+#: The words both apps show for the two switches (GET /api/second-card,
+#: folded into status() as "suggest" - the same screen the switches above
+#: are already on).
+SUGGEST_TITLE = "When to suggest the bigger model"
+SUGGEST_DETAIL = ("Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it "
+                  "notices one of these - never switches it on by itself. Accepting the offer "
+                  "raises the exact same approval card as the switch above; saying no only "
+                  "means \"not now\" - Jarvis waits a while before offering again.")
+SUGGEST_LABEL = {
+    "struggle": "When Jarvis is visibly struggling",
+    "correction": "When you correct an answer more than once",
+}
+SUGGEST_WHY = {
+    "struggle": ("Jarvis had to ask the model to try a tool call again more than a couple of "
+                "times in one conversation - a sign it is struggling with what you are asking."),
+    "correction": ("You have told Jarvis it got something wrong more than once in the same "
+                  "conversation."),
+}
+
+
+def suggest_setting(signal: str) -> bool:
+    """Is this suggestion signal switched on? SUGGEST_DEFAULT (True) for a
+    signal this module does not know, or for a missing or damaged state
+    file - see _read_switches for why the two defaults (the switches
+    above, and this one) point opposite ways on purpose."""
+    if signal not in SUGGEST_SIGNALS:
+        return False
+    try:
+        return bool(_read_switches()["suggest"].get(signal, SUGGEST_DEFAULT))
+    except Exception:
+        return SUGGEST_DEFAULT
+
+
+def suggest_settings() -> dict:
+    """`status()`'s own "suggest" key (GET /api/second-card) - there is no
+    separate GET route for this alone; both apps already poll the one
+    route for the Hardware screen, and this rides along in it."""
+    sw = _read_switches()
+    return {
+        "available": True, "title": SUGGEST_TITLE, "detail": SUGGEST_DETAIL,
+        "signals": [{"id": s, "label": SUGGEST_LABEL[s], "why": SUGGEST_WHY[s],
+                    "enabled": bool(sw["suggest"].get(s, SUGGEST_DEFAULT)),
+                    "default": SUGGEST_DEFAULT} for s in SUGGEST_SIGNALS],
+    }
+
+
+def handle_suggest_post(body) -> tuple:
+    """POST /api/second-card/suggest {"signal": "struggle"|"correction",
+    "enabled": true|false} - NO CARD EITHER WAY (see the section above: this
+    only changes whether Jarvis offers, never what it may do without
+    asking, the same reasoning jarvis_manner.py's humour switch already
+    uses). 200 on success, 400 for a bad body."""
+    if not isinstance(body, dict) or set(body) != {"signal", "enabled"}:
+        return 400, {"ok": False,
+                     "error": 'send {"signal": "struggle" or "correction", "enabled": true '
+                              'or false}, and nothing else'}
+    sig = body.get("signal")
+    en = body.get("enabled")
+    if sig not in SUGGEST_SIGNALS:
+        return 400, {"ok": False,
+                     "error": f"signal must be one of: {', '.join(SUGGEST_SIGNALS)}"}
+    if not isinstance(en, bool):
+        return 400, {"ok": False, "error": '"enabled" must be true or false'}
+    err = _write_suggest(sig, en)
+    if err:
+        return 500, {"ok": False, "error": err}
+    _audit("second_card.suggest_setting", {"signal": sig, "enabled": en})
+    return 200, {"ok": True, **suggest_settings()}
+
+
 @dataclass(frozen=True)
 class Lane:
     """Where a feature's model calls go. `url` is always loopback."""
@@ -525,12 +662,28 @@ def _is_loopback_url(url: str) -> bool:
 _STATE_LOCK = threading.RLock()
 
 
+#: The two independent signs "suggest the bigger model" watches - each its
+#: own switch, both on by default (see the "Suggesting the bigger model"
+#: section below). Kept in the SAME state file as the switches above (it is
+#: the same Hardware screen), but never written by `_write_switch` - see
+#: `_write_suggest`.
+SUGGEST_SIGNALS = ("struggle", "correction")
+SUGGEST_DEFAULT = True
+
+
 def _read_switches() -> dict:
-    """{"master": bool, "combined": bool, "features": {id: bool}}. "combined"
-    is the third mode's own switch - a sibling of "master", not one of
-    "features" (it does not compose with them: see the module docstring). A
-    missing or broken file is everything off - the safe reading."""
-    out = {"master": False, "combined": False, "features": {f: False for f in FEATURE_IDS}}
+    """{"master": bool, "combined": bool, "features": {id: bool},
+    "suggest": {"struggle": bool, "correction": bool}}. "combined" is the
+    third mode's own switch - a sibling of "master", not one of "features"
+    (it does not compose with them: see the module docstring). "suggest" is
+    neither: it never starts or stops anything by itself, it only says
+    whether jarvis_second_card may OFFER "combined" on its own (see below).
+    A missing or broken file is everything off, and "suggest" both ON - the
+    safe reading either way: nothing starts without a person's yes, and a
+    missing file offering nothing is the wrong direction to fail an offer
+    in, so the two defaults are opposite on purpose."""
+    out = {"master": False, "combined": False, "features": {f: False for f in FEATURE_IDS},
+           "suggest": {s: SUGGEST_DEFAULT for s in SUGGEST_SIGNALS}}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -543,7 +696,31 @@ def _read_switches() -> dict:
     if isinstance(feats, dict):
         for f in FEATURE_IDS:
             out["features"][f] = feats.get(f) is True
+    sug = raw.get("suggest")
+    if isinstance(sug, dict):
+        for s in SUGGEST_SIGNALS:
+            if s in sug:
+                out["suggest"][s] = sug[s] is True
     return out
+
+
+def _write_state(cur: dict) -> Optional[str]:
+    """The one write to second-card.json, called with the whole state
+    (master/combined/features/suggest) so a write of one never drops
+    another - `_write_switch` and `_write_suggest` both build `cur` from
+    `_read_switches()` first. None on success, else the error in words."""
+    p = _state_path()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"master": cur["master"], "combined": cur["combined"],
+                                   "features": cur["features"], "suggest": cur["suggest"],
+                                   "set_at": int(time.time())}, indent=1),
+                       encoding="utf-8")
+        tmp.replace(p)
+    except OSError as exc:
+        return f"could not save the switch ({type(exc).__name__})"
+    return None
 
 
 def _write_switch(feature: str, enabled: bool) -> Optional[str]:
@@ -554,18 +731,17 @@ def _write_switch(feature: str, enabled: bool) -> Optional[str]:
             cur[feature] = bool(enabled)
         else:
             cur["features"][feature] = bool(enabled)
-        p = _state_path()
-        try:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            tmp = p.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps({"master": cur["master"], "combined": cur["combined"],
-                                       "features": cur["features"],
-                                       "set_at": int(time.time())}, indent=1),
-                           encoding="utf-8")
-            tmp.replace(p)
-        except OSError as exc:
-            return f"could not save the switch ({type(exc).__name__})"
-    return None
+        return _write_state(cur)
+
+
+def _write_suggest(signal: str, enabled: bool) -> Optional[str]:
+    """Sets one "suggest" switch - no card either way (see the "Suggesting
+    the bigger model" section: it only changes whether Jarvis OFFERS to
+    switch, never what it is allowed to do without asking)."""
+    with _STATE_LOCK:
+        cur = _read_switches()
+        cur["suggest"][signal] = bool(enabled)
+        return _write_state(cur)
 
 
 # --------------------------------------------------------------------------
@@ -1846,6 +2022,11 @@ def status() -> dict:
         # apps show it as its own row, next to "features", in the same
         # Hardware screen.
         "combined": _combined_status(sw, det, pending),
+        # "When to suggest the bigger model" (2026-09-27): the two switches
+        # that decide whether Jarvis may OFFER "combined" on its own - never
+        # what it may do without asking. Same screen, folded into this same
+        # poll rather than a route of its own.
+        "suggest": suggest_settings(),
     }
 
 
@@ -2089,12 +2270,51 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
         f"the {p.get('name', 'main card')}.")
 
 
+#: pid -> (backoff fingerprint, conversation_id) for a "combined" card THIS
+#: MODULE raised as a suggestion (maybe_suggest_combined), not one the owner
+#: raised from Settings. Set right when the pid is made (before the card is
+#: even up - see _request_change_combined's `on_pid`), read once by _finish
+#: when that same pid ends, then gone either way. Never touches a card the
+#: owner raised themselves: those never appear here.
+_SUGGEST_FP: dict = {}
+
+
+def _settle_suggestion(fp: str, conversation_id, outcome: str) -> None:
+    """A suggested "combined" card has ended: tell jarvis_backoff (a real
+    "no" is heard, 1/7/30 days, exactly like every other offer; a "yes"
+    wipes the count), and reset this conversation's struggle/correction
+    counts - "declines the offer once" and "combined mode is already on"
+    both end here (item 5 of the brief). Best effort; never raises."""
+    try:
+        import jarvis_backoff
+        bo = jarvis_backoff.get()
+        if outcome == "enabled":
+            bo.accepted(fp)
+        elif outcome == "denied":
+            bo.declined(fp)
+        else:
+            # timed_out / refused / failed / withdrawn: nobody said no, so
+            # this is not counted as a decline - only that the offer is not
+            # waiting for an answer any more (jarvis_backoff's own "waiting"
+            # bookkeeping, same as every other offer's `closed`).
+            bo.closed(fp)
+    except Exception:
+        pass
+    if outcome in ("enabled", "denied"):
+        try:
+            import jarvis_agent
+            jarvis_agent.reset_suggest_counts(conversation_id)
+        except Exception:
+            pass
+
+
 def _finish(feature: str, pid: str, outcome: str, reason: str = "",
             request_id=None) -> None:
     with _PENDING_LOCK:
         if feature in _PENDING and _PENDING[feature]["id"] == pid:
             del _PENDING[feature]
         _WITHDRAWN.discard(pid)
+        suggested = _SUGGEST_FP.pop(pid, None) if feature == "combined" else None
         _LAST[feature] = {"outcome": outcome, "reason": reason[:200]}
         label = ("The second graphics card" if feature == "master"
                  else f"\"{COMBINED_NAME}\"" if feature == "combined"
@@ -2104,6 +2324,8 @@ def _finish(feature: str, pid: str, outcome: str, reason: str = "",
                          why=_last_words(label, outcome, reason[:200]), at=int(time.time()))
     _audit("second_card.decided", {"feature": feature, "outcome": outcome,
                                    **({"request_id": request_id} if request_id else {})})
+    if suggested is not None:
+        _settle_suggestion(suggested[0], suggested[1], outcome)
 
 
 def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
@@ -2164,13 +2386,19 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
     _reconcile(_read_switches(), detect())
 
 
-def _describe_combined(det: dict) -> str:
+def _describe_combined(det: dict, why: str = "") -> str:
     """The approval card for "combined". Every word from here, same as
-    describe_on - what refusing costs is on it (AP-4)."""
+    describe_on - what refusing costs is on it (AP-4). `why`: when this card
+    is a SUGGESTION (maybe_suggest_combined), one short plain sentence
+    saying what Jarvis noticed - "" for the owner's own request from
+    Settings, which needs no such line."""
     prim, second = _combined_rows(det)
     model, ctx, gib = COMBINED_MODEL
+    lede = ("Jarvis noticed something and would like to suggest turning on \"One bigger model "
+           f"on both cards\".\n\n{why}\n\n" if why else
+           "Let Jarvis run one bigger model across BOTH graphics cards at once?\n\n")
     return (
-        f"Let Jarvis run one bigger model across BOTH graphics cards at once?\n\n"
+        f"{lede}"
         f"Which cards: the {prim['name']} and the {second['name']}.\n"
         f"Which model: {model}, with room for {ctx:,} tokens - about {gib:.1f} GB, split "
         f"across both cards' memory by Ollama's own scheduler.\n\n"
@@ -2186,27 +2414,33 @@ def _describe_combined(det: dict) -> str:
         f"second card's other features (Longer conversations, Pictures, Learning in the "
         f"background, Browser control, Wiki builder) - turn those off first, or this stays "
         f"off until you do.\n\n"
-        f"If you did not just ask for this, say no.\n\n"
-        f"If you say no: nothing changes. Everything keeps running the way it does today.")
+        + (f"If this is not something you want right now, say no - Jarvis will wait a while "
+           f"before suggesting it again, and \"When to suggest the bigger model\" in Settings "
+           f"can turn this kind of suggestion off.\n\n"
+           f"If you say no: nothing changes; Jarvis keeps counting, and may ask again later."
+           if why else
+           f"If you did not just ask for this, say no.\n\n"
+           f"If you say no: nothing changes. Everything keeps running the way it does today."))
 
 
-def _decide_combined(pid: str, gate: Callable, tier_of: Callable) -> None:
+def _decide_combined(pid: str, gate: Callable, tier_of: Callable, why: str = "") -> None:
     """_decide's shape, for "combined": raise the card, wait, act. Its own
     function rather than a branch in _decide - the checks and the message
     are different enough (two cards, no "needs" chain, always "nothing
     leaves this PC") that folding it in risked the well-tested generic
-    path more than it saved."""
+    path more than it saved. `why`: see _describe_combined."""
     det = detect()
-    ok, why = _combined_capable(det)
+    ok, cap_why = _combined_capable(det)
     if not ok:
-        return _finish("combined", pid, "refused", why)
-    text = _describe_combined(det)
+        return _finish("combined", pid, "refused", cap_why)
+    text = _describe_combined(det, why)
     prim, second = _combined_rows(det)
     model, ctx, gib = COMBINED_MODEL
     detail = {"text": text, "what": "run one bigger model across both graphics cards",
               "feature": "combined", "cards": [prim["name"], second["name"]],
               "card_ids": [prim["uuid"], second["uuid"]], "model": model, "memory_gib": gib,
-              "listens_on": f"{HOST}:{_port()}", "leaves_this_pc": False}
+              "listens_on": f"{HOST}:{_port()}", "leaves_this_pc": False,
+              **({"why": why} if why else {})}
     try:
         v = gate(COMBINED_ACTION, detail, text)
     except Exception as exc:
@@ -2247,11 +2481,22 @@ def _decide_combined(pid: str, gate: Callable, tier_of: Callable) -> None:
 
 
 def _request_change_combined(enabled: bool, gate: Callable, tier_of: Callable,
-                             spawn: Callable) -> tuple:
+                             spawn: Callable, *, why: str = "",
+                             on_pid: Optional[Callable[[str], None]] = None) -> tuple:
     """request_change's shape, for feature == "combined". OFF: at once, no
     card. ON: refused (409) while any of the five features is genuinely on
     (they cannot share both cards with this mode); otherwise one approval
-    card, action second_card_combined_enable."""
+    card, action second_card_combined_enable.
+
+    `why` and `on_pid` exist only for maybe_suggest_combined below - the
+    owner's own request from Settings (request_change("combined", ...))
+    never passes them, and every check above is exactly the same either
+    way. `why`: see _describe_combined - one plain sentence added to the
+    card saying what Jarvis noticed. `on_pid`: called with this card's pid
+    once it is genuinely the one waiting (never for a pid this function
+    returns 409/503/500 for without raising a card), so the caller can
+    remember which offer this is BEFORE the answer comes back - _finish
+    reads it back by the same pid."""
     label = f"\"{COMBINED_NAME}\""
     if not enabled:
         with _PENDING_LOCK:
@@ -2301,11 +2546,16 @@ def _request_change_combined(enabled: bool, gate: Callable, tier_of: Callable,
         if p is not None and not p.get("withdrawn"):
             return 409, {"error": f"a card to turn on {label} is already waiting"}
         _PENDING["combined"] = {"id": pid, "since": time.time(), "withdrawn": False}
-    _audit("second_card.asked", {"feature": "combined"})
+    if on_pid is not None:
+        try:
+            on_pid(pid)
+        except Exception:
+            pass
+    _audit("second_card.asked", {"feature": "combined", **({"suggested": True} if why else {})})
 
     def work() -> None:
         try:
-            _decide_combined(pid, gate, tier_of)
+            _decide_combined(pid, gate, tier_of, why)
         except Exception:
             _finish("combined", pid, "failed", "unexpected error")
 
@@ -2317,6 +2567,131 @@ def _request_change_combined(enabled: bool, gate: Callable, tier_of: Callable,
     return 200, {"ok": True, "enabled": False, "pending": True,
                  "message": ("Approve the card on your PC or phone to turn it on. "
                              "Nothing changes until you do.")}
+
+
+# --------------------------------------------------------------------------
+#   Noticing on its own - the offer (see the module docstring's own section)
+# --------------------------------------------------------------------------
+
+def _agent_counts(conversation_id) -> tuple:
+    """jarvis_agent.suggest_counts(conversation_id), or (0, 0) without that
+    module (or an older one without the function)."""
+    try:
+        import jarvis_agent
+        return jarvis_agent.suggest_counts(conversation_id)
+    except Exception:
+        return 0, 0
+
+
+def _reset_agent_counts(conversation_id) -> None:
+    try:
+        import jarvis_agent
+        jarvis_agent.reset_suggest_counts(conversation_id)
+    except Exception:
+        pass
+
+
+def _suggestion_reason(struggle: int, correction: int) -> Optional[str]:
+    """One or two plain sentences for the card, saying exactly why Jarvis is
+    asking now - or None when neither signal has crossed its threshold (or
+    its own setting is off). Never invents a reason: only what was actually
+    counted, and only for a signal whose own switch is on."""
+    bits = []
+    if suggest_setting("struggle") and struggle >= STRUGGLE_THRESHOLD:
+        bits.append(f"Jarvis had to ask the model to try a tool call again {struggle} times "
+                    f"in this conversation.")
+    if suggest_setting("correction") and correction >= CORRECTION_THRESHOLD:
+        bits.append(f"You have corrected Jarvis's answers {correction} times in this "
+                    f"conversation.")
+    if not bits:
+        return None
+    return " ".join(bits) + " A bigger model may do better with this."
+
+
+def maybe_suggest_combined(conversation_id, *, gate: Optional[Callable] = None,
+                           tier_of: Optional[Callable[[str], str]] = None,
+                           spawn: Optional[Callable] = None) -> None:
+    """Called once, at the end of a chat turn (jarvis_agent.run_local_turn) -
+    never mid-answer. Offers "One bigger model on both cards" through the
+    SAME approval card the Hardware screen's own switch already raises
+    (second_card_combined_enable) when: the owner has been visibly
+    struggling, or has corrected Jarvis more than once, in THIS conversation
+    (jarvis_agent's own per-conversation counts); the matching setting is
+    on; a genuinely capable second card is here RIGHT NOW
+    (_combined_capable - the same hard gate "combined" itself needs, never
+    a separate or looser one); and jarvis_backoff says this offer may be
+    made right now. Never switches anything on by itself: the same
+    person's-yes card as always decides that. `gate`/`tier_of`/`spawn`:
+    request_change()'s own injection points, for the tests - the real
+    caller never passes them. Never raises."""
+    try:
+        _maybe_suggest_combined(conversation_id, gate, tier_of, spawn)
+    except Exception:
+        pass
+
+
+def _maybe_suggest_combined(conversation_id, gate=None, tier_of=None, spawn=None) -> None:
+    if not isinstance(conversation_id, str) or not conversation_id:
+        return
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    # Cheapest checks first: most conversations never cross either
+    # threshold, and this runs at the end of EVERY turn, so nothing below
+    # this line (a config-file read, detect()'s nvidia-smi call) happens
+    # unless there is genuinely something to consider offering.
+    struggle, correction = _agent_counts(conversation_id)
+    reason = _suggestion_reason(struggle, correction)
+    if reason is None:
+        return
+    sw = _read_switches()
+    if sw.get("combined"):
+        # Already on: item 5 of the brief - nothing left to suggest, and
+        # this conversation's counts stop mattering.
+        _reset_agent_counts(conversation_id)
+        return
+    if _combined_conflict(sw):
+        return
+    with _PENDING_LOCK:
+        p = _PENDING.get("combined")
+        if p is not None and not p.get("withdrawn"):
+            return   # a card - suggested or the owner's own - is already up
+    det = detect()
+    ok, _why = _combined_capable(det)
+    if not ok:
+        return
+    try:
+        import jarvis_backoff
+    except Exception:
+        return
+    fp = jarvis_backoff.fingerprint(SUGGEST_OFFER_KIND)
+    bo = jarvis_backoff.get()
+    try:
+        may, _why2 = bo.may_offer(fp, kind=SUGGEST_OFFER_KIND)
+    except Exception:
+        return
+    if not may:
+        return
+    try:
+        bo.opened(fp)
+    except Exception:
+        return
+
+    def remember(pid: str) -> None:
+        with _PENDING_LOCK:
+            _SUGGEST_FP[pid] = (fp, conversation_id)
+
+    code, body = _request_change_combined(True, gate, tier_of, spawn,
+                                          why=reason, on_pid=remember)
+    if code != 200 or not (isinstance(body, dict) and body.get("pending")):
+        # Refused before a card was even raised (not capable any more since
+        # the fresh detect() inside _request_change_combined, the big model
+        # holds a card, the tier is not "ask", ...): not a "no" from the
+        # owner, so this is not counted as a decline.
+        try:
+            bo.closed(fp)
+        except Exception:
+            pass
 
 
 def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = None,
@@ -2435,6 +2810,7 @@ def _reset_for_tests() -> None:
         _LAST.clear()
         _WITHDRAWN.clear()
         _LAST_ANY.clear()
+        _SUGGEST_FP.clear()
     _TAGS.clear()
     _LEARN.update(failed_at=-1e9, short=False)
     wake()

@@ -45,6 +45,9 @@ import com.jarvis.client.ui.theme.LocalChrome
  * @param busy the switch whose request is in flight, or null.
  * @param canAct false while the link is down or stale (rule 4): nothing is
  *   sent, and every switch is greyed out.
+ * @param onSetSuggest "When to suggest the bigger model"'s one write - a
+ *   signal id ("struggle"/"correction") and on/off. Unlike [onSet], NO
+ *   approval card either way: see [SecondCard.Suggest]'s own doc.
  */
 @Composable
 internal fun SecondCardPlate(
@@ -53,6 +56,7 @@ internal fun SecondCardPlate(
     notice: String?,
     canAct: Boolean,
     onSet: (feature: String, enabled: Boolean) -> Unit,
+    onSetSuggest: (signal: String, enabled: Boolean) -> Unit,
     onRecheck: () -> Unit,
     onOpenApprovals: ((cardId: String?) -> Unit)?,
 ) {
@@ -111,6 +115,24 @@ internal fun SecondCardPlate(
             Gap(8)
             Kicker("One bigger model on both cards", Modifier.semantics { heading() })
             ApprovalSwitchRow(view, busy, canAct, onSet)
+            Rule()
+        }
+
+        // "When to suggest the bigger model" (2026-09-27): whether Jarvis may
+        // OFFER "One bigger model on both cards" on its own - never what it
+        // may do without a person's yes, so NEITHER switch raises a card,
+        // unlike every switch above. Null on an older PC.
+        status.suggest?.let { suggest ->
+            Gap(8)
+            Kicker(suggest.title, Modifier.semantics { heading() })
+            if (suggest.detail.isNotBlank()) {
+                Gap(4)
+                Text(suggest.detail, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            }
+            for (signal in suggest.signals) {
+                Rule()
+                SuggestSwitchRow(signal, busy, canAct, onSetSuggest)
+            }
             Rule()
         }
 
@@ -234,6 +256,43 @@ internal fun ApprovalSwitchRow(
         }
         view.modelLine?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+    }
+}
+
+/**
+ * One "When to suggest the bigger model" switch: unlike [ApprovalSwitchRow],
+ * there is no card, no "waiting" and no "blocked" - either state is simply
+ * what it is right now, so this row is a plain toggle plus the PC's own
+ * "why" line.
+ */
+@Composable
+internal fun SuggestSwitchRow(
+    signal: SecondCard.Signal,
+    busy: String?,
+    canAct: Boolean,
+    onSetSuggest: (signal: String, enabled: Boolean) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                signal.label,
+                style = MaterialTheme.typography.titleSmall,
+                color = chrome.textHi,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Toggle(
+                checked = signal.enabled,
+                onCheckedChange = { want -> onSetSuggest(signal.id, want) },
+                enabled = canAct && busy == null,
+                modifier = Modifier.semantics { contentDescription = signal.label },
+            )
+        }
+        if (signal.why.isNotBlank()) {
+            Gap(4)
+            Text(signal.why, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
     }
 }

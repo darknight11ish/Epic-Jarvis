@@ -2783,7 +2783,11 @@ async function sendMark(mark) {
   dom.markRight.disabled = true;
   dom.markWrong.disabled = true;
   try {
-    const out = await invokeStrict("mark_answer", { turnId, mark: next });
+    const out = await invokeStrict("mark_answer", {
+      turnId,
+      mark: next,
+      conversationId: state.conversationId,
+    });
     if (turnId !== state.turnId) return; // a new answer has started
     if (out && out.available === false) {
       // This backend cannot take marks: hide the control, quietly.

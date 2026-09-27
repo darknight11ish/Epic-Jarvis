@@ -1663,6 +1663,23 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             },
+                            // "When to suggest the bigger model" (2026-09-27):
+                            // no card either way, so this only ever re-reads
+                            // the plate afterwards - never touches approvals.
+                            onSetSecondCardSuggest = { signal, enabled ->
+                                if (secondCardBusy == null) {
+                                    secondCardBusy = signal
+                                    secondCardNotice = null
+                                    scope.launch {
+                                        try {
+                                            secondCardNotice =
+                                                JarvisRuntime.setSecondCardSuggest(signal, enabled)
+                                        } finally {
+                                            secondCardBusy = null
+                                        }
+                                    }
+                                }
+                            },
                             onRecheckSecondCard = {
                                 if (secondCardBusy == null) {
                                     secondCardBusy = ""

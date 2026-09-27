@@ -1787,9 +1787,12 @@ they landed):
   each "no" quiet for 1, then 7, then 30 days by a fingerprint of what is
   offered - and, since 2026-09-25 (a bug the creativity audit found), none
   in Quiet or Standby: the offer is kept for when Jarvis is Active again,
-  never counted as a "no". Applied to the overnight-tidy card and the skill
-  offer. It never approves or acts, and nothing the owner asks for consults
-  it. JARVIS-API §22.6.
+  never counted as a "no". Applied to the overnight-tidy card, the skill
+  offer, and (added 2026-09-27) the second card's "would the bigger model
+  help here?" suggestion - the one offer whose "yes" IS an existing
+  approval card's "yes" (`second_card_combined_enable`), not a card of its
+  own. It never approves or acts, and nothing the owner asks for consults
+  it. JARVIS-API §22.6, §12.1.
 
 - **Web search, with a choice of five providers** (added 2026-09-25, the
   owner's decisions of that day). `jarvis_search.py` (shipped whole):

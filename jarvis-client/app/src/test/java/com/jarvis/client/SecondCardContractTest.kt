@@ -227,6 +227,36 @@ class SecondCardContractTest {
     }
 
     @Test
+    fun `suggest - both signals, on by default, with the PC's own words`() {
+        val s = status("combined_running")
+        val suggest = requireNotNull(s.suggest) { "no 'suggest' from the PC" }
+        assertEquals("When to suggest the bigger model", suggest.title)
+        assertTrue(suggest.detail.contains("never switches it on by itself"))
+        assertEquals(listOf("struggle", "correction"), suggest.signals.map { it.id })
+        suggest.signals.forEach { sig ->
+            assertTrue("${sig.id} is not on by default", sig.enabled)
+            assertTrue(sig.label.isNotBlank())
+            assertTrue(sig.why.isNotBlank())
+        }
+    }
+
+    @Test
+    fun `suggest is absent on an older PC, and the row is simply not shown`() {
+        val obj = cases["capable_off"]!!.jsonObject.toMutableMap()
+        obj.remove("suggest")
+        val s = requireNotNull(SecondCard.parse(JsonObject(obj)))
+        assertNull(s.suggest)
+    }
+
+    @Test
+    fun `postSuggestBody is exactly signal and enabled`() {
+        val body = JarvisJson.parseToJsonElement(SecondCard.postSuggestBody("struggle", false)) as JsonObject
+        assertEquals("struggle", body["signal"]!!.jsonPrimitive.content)
+        assertFalse(body["enabled"]!!.jsonPrimitive.boolean)
+        assertEquals(setOf("signal", "enabled"), body.keys)
+    }
+
+    @Test
     fun `the card has gone - switches stay on, waiting, and can still be turned off`() {
         val s = status("card_missing_but_enabled")
         val long = switch(s, "long_context")

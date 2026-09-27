@@ -3377,6 +3377,151 @@ def _remember_opened(conversation_id, groups) -> None:
             _OPENED.pop(next(iter(_OPENED)))
 
 
+# --------------------------------------------------------------------------
+#   Noticing a conversation could use the bigger model (jarvis_second_card's
+#   "combined" lane, CLAUDE.md 2026-09-27's "Both, with a setting" answer)
+# --------------------------------------------------------------------------
+#
+# Two signs, each counted per conversation, in memory only - the same shape
+# as `_OPENED` above (a plain dict keyed by conversation_id, bounded, gone on
+# restart): never written to disk, never sent anywhere, never used for
+# anything but deciding whether to ask jarvis_second_card.maybe_suggest_combined
+# to raise the one card that already exists for turning the bigger model on
+# (second_card_combined_enable). Nothing here switches anything on: it only
+# counts, and jarvis_second_card.py does the asking, gated by a genuinely
+# capable second card (_combined_capable), the owner's own setting, and
+# jarvis_backoff's own rules for an offer nobody asked for.
+#
+#   struggle    a tool call Ollama could not read at all (_ToolCallUnreadable,
+#               the reask below) or a tool call whose own arguments were
+#               broken (check_call, counted in _TurnWatch.bad) - both are
+#               Jarvis visibly having to work around what the model wrote.
+#   correction  the owner directly correcting an answer, in this turn's own
+#               newest words (`_TurnWatch.newest_own_words` - never a picture
+#               caption, a paste or anything read from outside) - see
+#               `looks_like_correction` below. `note_correction` is also
+#               called from outside this module, by the one other place the
+#               owner marks an answer wrong (never from the model's tool
+#               loop - see docs/JARVIS-API.md's second-card section for
+#               where, and test_feedback.py for why this file must not name
+#               it).
+_SUGGEST_MAX = 200
+_SUGGEST_LOCK = threading.Lock()
+_SUGGEST: "dict[str, dict[str, int]]" = {}     # conversation_id -> {"struggle", "correction"}
+
+
+def _bump_suggest(conversation_id, key: str, n: int = 1) -> int:
+    """One more `key` sign for `conversation_id`; the new count, or 0 for a
+    request with no usable conversation id (it is then never suggested -
+    the same "lasts one turn" choice `opened_groups` makes)."""
+    if not isinstance(conversation_id, str) or not _CID_OK.match(conversation_id) or n <= 0:
+        return 0
+    with _SUGGEST_LOCK:
+        row = _SUGGEST.get(conversation_id)
+        if row is None:
+            _SUGGEST.pop(conversation_id, None)
+            row = {"struggle": 0, "correction": 0}
+            _SUGGEST[conversation_id] = row
+            while len(_SUGGEST) > _SUGGEST_MAX:
+                _SUGGEST.pop(next(iter(_SUGGEST)))
+        row[key] = row.get(key, 0) + n
+        return row[key]
+
+
+def note_struggle(conversation_id, n: int = 1) -> int:
+    """One more sign Jarvis had to work around a tool call this turn (an
+    unreadable one, or a broken one - see the section above). Returns the
+    new count for this conversation; never raises."""
+    try:
+        return _bump_suggest(conversation_id, "struggle", n)
+    except Exception:
+        return 0
+
+
+def note_correction(conversation_id, n: int = 1) -> int:
+    """One more sign the owner corrected an answer in this conversation.
+    Returns the new count; never raises."""
+    try:
+        return _bump_suggest(conversation_id, "correction", n)
+    except Exception:
+        return 0
+
+
+def suggest_counts(conversation_id) -> tuple:
+    """(struggle, correction) for this conversation - (0, 0) for one never
+    seen, or with no usable id. Read-only."""
+    if not isinstance(conversation_id, str) or not _CID_OK.match(conversation_id):
+        return 0, 0
+    with _SUGGEST_LOCK:
+        row = _SUGGEST.get(conversation_id) or {}
+        return int(row.get("struggle", 0)), int(row.get("correction", 0))
+
+
+def reset_suggest_counts(conversation_id) -> None:
+    """Combined mode is already on for this conversation, the owner declined
+    the offer, or (matching `_OPENED`'s own choice) it has simply aged out of
+    the bounded map above: start counting again from zero. Never raises."""
+    if not isinstance(conversation_id, str):
+        return
+    try:
+        with _SUGGEST_LOCK:
+            _SUGGEST.pop(conversation_id, None)
+    except Exception:
+        pass
+
+
+# --------------------------------------------------------------------------
+#   The narrow "you got that wrong" phrase check - correction signal (b)
+# --------------------------------------------------------------------------
+#
+# Deliberately narrow. A scan for the bare word "no" anywhere in the
+# message would fire on ordinary chat ("no thanks", "no worries", "no, not
+# yet", "there's no rush", "no idea") far more often than it would ever
+# catch a real correction - exactly what the owner ruled out when asked.
+# Every pattern here either names WHAT is wrong ("that's wrong", "not
+# correct", "wrong answer") or is the one bare imperative the owner named
+# ("try again", matched only when it is essentially the whole message, so
+# "I'll try again later" and "let's try that again" do not count). See
+# test_second_card_suggest.py for real sentences that must NOT match,
+# alongside the ones that must.
+_CORRECTION_SUBJECT = r"(?:that'?s|that\s+is|this\s+is|you'?re|you\s+are|it'?s|it\s+is)"
+_CORRECTION_JUDGEMENT = r"(?:wrong|incorrect|inaccurate|not\s+(?:right|correct|accurate|true))"
+_CORRECTION = re.compile(
+    rf"\b{_CORRECTION_SUBJECT}\s+{_CORRECTION_JUDGEMENT}\b"
+    r"|\bwrong\s+answer\b"
+    r"|\byou\s+(?:got|have)\s+(?:that|it)\s+wrong\b"
+    r"|\bnot\s+what\s+i\s+(?:asked|meant|said|wanted)\b"
+    r"|^(?:no[,.]?\s+)?(?:please\s+|just\s+|can\s+you\s+|could\s+you\s+)*try\s+again\s*[.!?]*$",
+    re.I)
+
+
+def looks_like_correction(text: str) -> bool:
+    """A DIRECT correction of Jarvis's last answer - "that's wrong", "no,
+    that's not right", "try again" (the owner's own three examples,
+    CLAUDE.md 2026-09-27) - and a small number of close variants, each
+    tested against ordinary chat that must not match. Never raises. Apply
+    this only to the owner's own newest words (`_TurnWatch.newest_own_words`
+    - never a picture caption, a paste or anything read from outside)."""
+    try:
+        return bool(text) and bool(_CORRECTION.search(text.strip()))
+    except Exception:
+        return False
+
+
+def _maybe_suggest_bigger_model(conversation_id) -> None:
+    """jarvis_second_card.maybe_suggest_combined, reached the way every
+    other second-card call from here is (`_second_card_lane`): lazily, and
+    never letting a missing or older module cost the owner their answer."""
+    try:
+        import jarvis_second_card
+    except Exception:
+        return
+    try:
+        jarvis_second_card.maybe_suggest_combined(conversation_id)
+    except Exception:
+        pass
+
+
 def tool_text_tokens(names, *, extra=None) -> int:
     """What a list of tool names costs the model on every round, by
     estimate_tokens - the same count budget() takes off the room."""
@@ -4368,6 +4513,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # holds what each round SHOWS. With the short list off and no plug-in
     # programs, the two are the same list, as before.
     conv_id = req.get("conversation_id")
+    # Correction signal (b) - CLAUDE.md 2026-09-27's "Both, with a setting"
+    # answer. Only the owner's own newest words, never a picture caption, a
+    # paste or anything read from outside (the same field LIGHTS_WITHOUT_CARD
+    # and the crisis check already trust for "is this really what the owner
+    # just said"). Counted here, per conversation, so jarvis_second_card can
+    # decide - at the end of the turn, never mid-answer - whether to suggest
+    # the bigger model; see _maybe_suggest_bigger_model below.
+    if watch.newest_own_words and looks_like_correction(watch.newest_own_words):
+        note_correction(conv_id)
     offer: dict = {"short": bool(names) and short_list_on(),
                    "plugins": bool(names) and _plugins_configured(),
                    "opened": set(opened_groups(conv_id)), "extra": {}, "shown": [],
@@ -4644,6 +4798,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 if watch.reasked or final or not offer["schemas"] or len(answer) != shown:
                     raise
                 watch.reasked = True
+                # Struggle signal (a): Ollama could not read this tool call
+                # at all - see the "Noticing a conversation could use the
+                # bigger model" section above.
+                note_struggle(conv_id)
                 convo.append({"role": "system", "content": REASK_NOTE})
                 rounds += 1
                 say_step("model", round_no=_round + 1)
@@ -4754,6 +4912,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # Numbers only, to the speed record (PROMPT_USAGE). Before
         # jarvis_hud's own speed.finish(), which writes the row.
         _note_prompt_use(prompt_use["prompt"], prompt_use["cached"], rounds)
+        # Struggle signal (a) continued: every broken tool call this turn
+        # (check_call, counted in watch.bad by _one_call's `watch.broken`) -
+        # "the model's own output came out malformed". Then, whatever this
+        # turn counted, give jarvis_second_card one chance to notice and
+        # offer the bigger model - never mid-answer, always last.
+        broken_this_turn = sum(watch.bad.values())
+        if broken_this_turn:
+            note_struggle(conv_id, broken_this_turn)
+        _maybe_suggest_bigger_model(conv_id)
     # The picture's words count as a read (with_picture_text): this PC's
     # record of the turn then marks the conversation as having read outside
     # text (jarvis_chat_log.record_turn reads `tools_ran`).

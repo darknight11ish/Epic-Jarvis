@@ -189,6 +189,12 @@ fun BrainScreen(
      * [com.jarvis.client.JarvisRuntime.setSecondCard]. `"master"` is the main switch.
      */
     onSetSecondCard: (feature: String, enabled: Boolean) -> Unit = { _, _ -> },
+    /**
+     * "When to suggest the bigger model" - one signal on or off, NO
+     * approval card either way -
+     * [com.jarvis.client.JarvisRuntime.setSecondCardSuggest].
+     */
+    onSetSecondCardSuggest: (signal: String, enabled: Boolean) -> Unit = { _, _ -> },
     onRecheckSecondCard: () -> Unit = {},
     /**
      * Re-read the board every this many milliseconds while the screen is
@@ -611,6 +617,7 @@ fun BrainScreen(
                         notice = secondCardNotice,
                         canAct = canAct,
                         onSet = onSetSecondCard,
+                        onSetSuggest = onSetSecondCardSuggest,
                         onRecheck = onRecheckSecondCard,
                         onOpenApprovals = onOpenApprovals,
                     )

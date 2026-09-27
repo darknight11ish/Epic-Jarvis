@@ -138,6 +138,7 @@ on a throwaway copy instead.
 | `data-health.patch` | `jarvis_hud.py` | **"Data health in the preflight"** (feasibility I97, `docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Small, read-only." / "WARN, never fix."). Adds `GET /api/data-health` - fixed shape, not a setting, **no approval card either way**, the same shape as `sayable.patch` and `reach.patch`. Checks (never fixes) whether the chat history and memory databases open, whether there is disk space where Jarvis writes its data, and whether the settings files parse; every row is `ok` or `warn`, never a failure. Read by `backend/selftest.py --preflight`'s own "Is Jarvis's own data healthy?" check. Its context is `sayable.patch`'s own new route block, unaffected by the patches above it in this table (including `memory-shared.patch`), which touch a different, unrelated part of `jarvis_hud.py`; last in the list. Needs `jarvis_data_health.py`. |
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
+| `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -5798,6 +5799,85 @@ started. `jarvis-desktop/tests/fixtures/second-card-cases.json` is the real
 `status()` output in eight named cases (a seventh, `one_card_reads_words`,
 since 2026-09-26; an eighth, `combined_running`, since 2026-09-27), for the
 desktop and phone to build against; the test fails if it is stale.
+
+## Noticing a conversation could use the bigger model
+
+`combined_lane()` above still has no automatic caller - `combined` is still
+only ever switched on by the owner, from Settings or the Brain - but the
+owner asked directly for Jarvis to notice on its own when a conversation
+could use it, and OFFER, never switch it on itself: "Both but with a
+setting to adjust this", their answer when asked which of two signs to
+watch for.
+
+Two signs, each counted per conversation, in memory only (no patch, no new
+file - two small additions to the whole modules `jarvis_agent.py` and
+`jarvis_second_card.py`, both already shipped as whole files):
+
+- **Struggle** - `jarvis_agent.note_struggle`: a tool call Ollama could not
+  read at all (the existing one-retry, `_ToolCallUnreadable`), or one whose
+  own arguments were broken (`check_call`, already counted in
+  `_TurnWatch.bad`).
+- **Correction** - `jarvis_agent.note_correction`: the owner's own newest
+  words matching a narrow, tested phrase check ("that's wrong", "no, that's
+  not right", "try again" - `jarvis_agent.looks_like_correction`, deliberately
+  never a scan for the bare word "no"), or a "wrong" mark that changed
+  (`jarvis_feedback.mark`, reached through the one small hunk
+  `second-card-suggest.patch` adds - see its own row in the table above).
+
+`jarvis_second_card.maybe_suggest_combined(conversation_id)`, called once at
+the end of every turn (`jarvis_agent.run_local_turn`'s own `finally` block -
+never mid-answer), does nothing until one count crosses its own threshold
+(`STRUGGLE_THRESHOLD` 3, `CORRECTION_THRESHOLD` 2 - each justified in a
+comment right beside it) AND that signal's own setting is on. Then it asks
+`_combined_capable` - the SAME hard gate `combined` itself needs, a
+genuinely capable second card, right now, on this PC, never a separate or
+looser check - and, only if that says yes, asks `jarvis_backoff` whether an
+offer nobody asked for may be made right now (not mid-chat, a few at most,
+a recent "no" heard). If every gate says yes, it raises the EXACT SAME
+approval card `request_change("combined", True)` already raises
+(`second_card_combined_enable`, tier `ask`), with one added sentence saying
+why. There is no separate "just this once" switch: accepting the offer IS
+answering that card, so "yes" turns combined mode on for real and "no" only
+ever means "not now" (`jarvis_backoff.declined`, the same 1/7/30-day quiet
+every other offer gets - not a permanent refusal, unlike the skill offer's
+own ledger). Either answer, or combined mode already being on, resets this
+conversation's counts.
+
+The two settings - "When Jarvis is visibly struggling" and "When you
+correct an answer more than once", both on by default - are folded into
+`GET /api/second-card`'s own answer (a new `"suggest"` key,
+`suggest_settings()`) and changed with `POST /api/second-card/suggest
+{"signal", "enabled"}` (`handle_suggest_post`). **No approval card either
+way**, on the same reasoning `jarvis_manner.py`'s Humour switch already
+uses: this only changes whether Jarvis OFFERS to switch, never what it may
+do without a person's yes. Both apps show them on the same Hardware /
+Second graphics card screen the `combined` switch is already on
+(`jarvis-desktop/src/settings.js`'s `scPaintSuggest`/`scSuggestToggle`,
+`src-tauri/src/commands.rs`'s `set_second_card_suggest`; the phone's
+`SecondCardPlate.kt`/`net/SecondCard.kt`).
+
+The offer's kind, `second_card_combined_offer`, is declared in
+`jarvis_backoff.OFFERS` asking only `suggest_bigger_model` - `test_backoff_rule.py`
+checks it against rule 4 like every offer.
+
+### Test it
+
+```
+python3 backend/test_second_card_suggest.py
+```
+
+Runs anywhere: the correction-phrase check's true and false positives (real
+sentences, including the ordinary "no thanks"/"no worries" kind the owner's
+own rule rules out), the counters (bump, read, reset, bounded, a bad
+conversation id is a no-op), and `maybe_suggest_combined` against the same
+`G.World` fake nvidia-smi/Ollama harness `test_second_card.py` uses - never
+offers below the threshold, never without a genuinely capable second card
+however high the counts (the hard gate), never with the matching setting
+off, raises the real card with a reason once both are met, a "yes" turns it
+on and clears the counts, a "no" is heard by `jarvis_backoff` and clears
+them too, and already-on or a card already waiting offers nothing. Plus
+`second-card-suggest.patch` applying to what `feedback.patch` wrote, and
+reversing.
 
 # `wiki.patch` and `jarvis_wiki.py` — the wiki builder, on the second card (or the big model)
 

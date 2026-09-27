@@ -141,7 +141,28 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
-      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama."
+      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "capable_pending": {
       "active": true,
@@ -285,7 +306,28 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
-      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again."
+      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "card_missing_but_enabled": {
       "active": false,
@@ -410,7 +452,28 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": null,
-      "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
+      "pin_note": "Only one graphics card, so there is nothing to keep apart yet.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "combined_running": {
       "active": false,
@@ -552,7 +615,28 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
-      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again."
+      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "not_capable_old_card": {
       "active": false,
@@ -688,7 +772,28 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
-      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama."
+      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "one_card": {
       "active": false,
@@ -813,7 +918,28 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": null,
-      "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
+      "pin_note": "Only one graphics card, so there is nothing to keep apart yet.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "one_card_reads_words": {
       "active": false,
@@ -938,7 +1064,28 @@
         "why": ""
       },
       "pin_command": null,
-      "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
+      "pin_note": "Only one graphics card, so there is nothing to keep apart yet.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "running_long_context": {
       "active": true,
@@ -1080,7 +1227,28 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
-      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again."
+      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     }
   }
 }
