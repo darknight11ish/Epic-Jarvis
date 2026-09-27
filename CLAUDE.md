@@ -487,6 +487,20 @@ here rather than patched blind:
   without the owner's go-ahead given how carefully this project already
   treats crisis handling.
 
+Decided 2026-09-27, the owner's answers after the studio review (play
+testers, scouts and integration scouts; `.claude/agents/`):
+- **Talk-to-type on the PC: one approval card to switch it on**, then no
+  card each time. Hold a key, speak, and Jarvis types what was said into the
+  program in front - speech-to-text on the PC only, as always. Switching it
+  off is immediate. Not on the phone (a client must not do speech-to-text).
+  Not built yet.
+- **Answers that used web search, weather or home status are read aloud**
+  when read-aloud would otherwise apply. Answers that used email, calendar,
+  notes, documents, memory, or any tool not on that short list stay on
+  screen, and every earlier rule (sensitive facts, the stricter hands-free
+  choice) still comes first. This replaces "any tool keeps the answer on
+  screen".
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
@@ -548,8 +562,10 @@ Linux dependency graph pulls `gdk-sys`, and GTK is not installed. For a long
 time that meant every Rust change was pushed unverified and checked by CI five
 minutes later.
 
-**It does not have to be.** The `x86_64-pc-windows-msvc` target is installed,
-and checking against it selects the *Windows* dependency graph, which has no
+**It does not have to be.** Check against the `x86_64-pc-windows-msvc`
+target. It is not always installed in a fresh container (it was missing on
+2026-09-27): if `rustup target list --installed` does not list it, run
+`rustup target add x86_64-pc-windows-msvc` first. Checking against it selects the *Windows* dependency graph, which has no
 GTK in it. Nothing is linked, so no MSVC toolchain is needed:
 
 ```
