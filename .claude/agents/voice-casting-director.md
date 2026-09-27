@@ -32,9 +32,11 @@ an update to it is welcome, rediscovering it is not.
 4. `docs/MODEL-TOPOLOGY.md` - what fits on the graphics cards.
 
 ## Rules for voices
-- **Local only.** Every voice is made on the owner's PC (rule 1). The phone
-  plays audio; it never makes speech from text on its own, and never does
-  speech-to-text.
+- **Local only.** Every Jarvis voice is made on the owner's PC (rule 1).
+  The phone never does speech-to-text. It plays the PC's audio, and uses
+  its own offline system voice only when the PC allows it
+  (`client_fallback_ok`, JARVIS-API.md; `Speaker.kt`) - that fallback
+  cannot carry a Jarvis voice, so say what the owner hears then.
 - **Licences.** Name the licence of every voice's weights and of the data
   it was trained on where known. Non-commercial is allowed (rule 5) but
   goes in `THIRD-PARTY-NOTICES.txt`.
