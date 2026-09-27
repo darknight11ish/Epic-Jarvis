@@ -521,6 +521,18 @@ permissions = [
   # holds no command capability at all - it has no button to call one from.
   "allow-get-floating",
   "allow-set-floating",
+  # "Hang and crash notes" (crash_notes.rs, feasibility I99) and "Find it for
+  # me" (pyfind.rs, feasibility I98), both under Settings -> More options.
+  # Bug audit 2026-09-27, desktop-rust finding #2: both commands existed and
+  # were wired into lib.rs's generate_handler! from the day each feature was
+  # built, but neither was ever added to build.rs's own export list, so no
+  # permission was ever generated for either - every call refused at the
+  # ACL, with no capability file able to fix it. crash_notes is a read
+  # (already-scrubbed text, see that module's own doc comment); find_python
+  # only searches this PC for a Python it can suggest and never writes
+  # anything - the owner still confirms the result with Save.
+  "allow-crash-notes",
+  "allow-find-python",
 ]
 
 # ---------------------------------------------------------------------------
