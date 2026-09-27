@@ -1130,6 +1130,16 @@ def t_a_new_session_during_the_end_keeps_its_timer():
     check("... which is still on the scheduler", w.s.job(second) is not None)
 
 
+def t_both_apps_read_the_current_contract():
+    # The same shape as test_asks_first.py's: nothing else ran this
+    # producer's --check automatically (quality audit 2026-09-27).
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_focus_cases.py"),
+                        "--check"], capture_output=True, text=True, timeout=120,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    check("focus-cases.json (desktop and phone) is what the backend says today "
+          "(python3 tools/gen_focus_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+
+
 def main():
     try:
         for name, fn in list(globals().items()):

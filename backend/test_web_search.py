@@ -1388,6 +1388,16 @@ def t_the_patch():
           and re.search(r'^stop_asking_before_every_web_search\s*=\s*"ask"', toml, re.M))
 
 
+def t_both_apps_read_the_current_contract():
+    # The same shape as test_asks_first.py's: nothing else ran this
+    # producer's --check automatically (quality audit 2026-09-27).
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_web_search_cases.py"),
+                        "--check"], capture_output=True, text=True, timeout=120,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    check("web-search-cases.json (desktop and phone) is what the backend says today "
+          "(python3 tools/gen_web_search_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+
+
 if __name__ == "__main__":
     for fn in (t_the_why_lines, t_both_apps_say_the_same_words,
                t_plan_opens_no_socket_and_refuses_a_secret,
@@ -1402,7 +1412,8 @@ if __name__ == "__main__":
                t_saved_facts_ask_only_when_repeated_or_sensitive, t_when_in_doubt_it_asks,
                t_the_word_comparison, t_recalled_facts_are_read_off_the_block,
                t_the_names_layer_is_read_locally,
-               t_which_search_without_the_model, t_the_patch):
+               t_which_search_without_the_model, t_the_patch,
+               t_both_apps_read_the_current_contract):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

@@ -389,6 +389,10 @@
   ],
   "default": "warm",
   "detail": "Changes only how Jarvis words its answers. It never changes what Jarvis does, what it asks you, or what it remembers.",
+  "humor": false,
+  "humor_default": false,
+  "humor_detail": "Occasional light humour in answers, when it fits. Off by default. Never as part of an approval, an error message, or a serious or sensitive topic.",
+  "humor_title": "Humour",
   "said": {
    "plain": "Jarvis will now answer plainly.",
    "warm": "Jarvis will now answer warmly and briefly."

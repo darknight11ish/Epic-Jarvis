@@ -129,6 +129,14 @@ fix is the same shape as the four protections already there:
    same door for a mode file, the one other thing that writes into the
    prompt Jarvis reads first.
 
+*Correction (quality audit, later on 2026-09-27): the humour setting was
+already built when this was written - `jarvis_manner.py`'s switch, commit
+`1e90874f`, 2026-09-26. And there IS a live conflict, just not with the
+persona modes: the character block's "Humour: a light, dry touch at most"
+line is sent on every turn, so switching humour OFF does not stop it.
+`docs/QUALITY-AUDIT-2026-09-27.md`, finding 1. The paragraph below is kept
+as written.*
+
 Until then: a humour setting (I137, "Later" - not part of this batch) would
 make a third system with an opinion about tone, alongside manner and the
 persona modes, which is the research doc's own reason (section 7) for

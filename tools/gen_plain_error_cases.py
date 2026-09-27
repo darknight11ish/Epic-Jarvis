@@ -51,7 +51,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
-os.environ.setdefault("OPENJARVIS_CONFIG_DIR", tempfile.mkdtemp(prefix="jarvis-plain-"))
+# Always a fresh, empty folder - never the caller's own (quality audit
+# 2026-09-27): with `setdefault`, a run from a shell whose
+# OPENJARVIS_CONFIG_DIR held a manner.json with humour on wrote that into
+# both apps' copies. The other gen_*_cases.py files already did this.
+os.environ["OPENJARVIS_CONFIG_DIR"] = tempfile.mkdtemp(prefix="jarvis-plain-")
 for p in (BACKEND, BACKEND / "rebuilt"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
