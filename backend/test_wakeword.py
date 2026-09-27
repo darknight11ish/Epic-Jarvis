@@ -49,11 +49,12 @@ from _where import require_shipped  # noqa: E402
 
 sys.path.insert(0, str(HERE / "rebuilt"))
 sys.path.insert(0, str(HERE))
-require_shipped("jarvis_wakeword.py", "jarvis_speech.py")
+require_shipped("jarvis_wakeword.py", "jarvis_speech.py", "jarvis_voices.py")
 import numpy as np  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
 import jarvis_speech as S  # noqa: E402
 import jarvis_voice as V  # noqa: E402
+import jarvis_voices as VC  # noqa: E402
 from _voice_test import semantic_voice  # noqa: E402
 
 FAILED, PASSED, SKIPPED = [], [], []
@@ -647,6 +648,23 @@ def t_real_models():
 
     def fake(real):
         return lambda k, d=None: cfg[k] if k in cfg else real(k, d)
+
+    import contextlib
+
+    @contextlib.contextmanager
+    def kokoro_voice(sid):
+        # Two things read which Kokoro voice speaks: jarvis_speech's own
+        # `_cfg("tts_speaker_id")` (mocked below, as before) AND - since
+        # the built-in-voice-choice setting (2026-09-27) - jarvis_voices.
+        # speaker(), which S.tts_speaker() now prefers when jarvis_voices
+        # is importable (as it always is on a real PC). Patching only
+        # `_cfg` would leave every `say()` here speaking in whatever voice
+        # the owner (or nobody) chose, not the `sid` this loop means to
+        # exercise - so both are patched, together.
+        with mock.patch.object(S, "_cfg", lambda k, d=None, sid=sid:
+                               sid if k == "tts_speaker_id" else fake(real_s)(k, d)), \
+             mock.patch.object(VC, "speaker", lambda sid=sid: sid):
+            yield
     with mock.patch.object(S, "_cfg", fake(real_s)), mock.patch.object(W, "_cfg", fake(real_w)):
         S.reload_engines()
         st = S.status()
@@ -659,8 +677,7 @@ def t_real_models():
                                ("Hey Jarvis, turn off the lights.", True),
                                ("Let's move the meeting to Thursday afternoon.", False),
                                ("Hey Jason, are you coming to dinner tonight?", False)):
-                with mock.patch.object(S, "_cfg", lambda k, d=None, sid=sid:
-                                       sid if k == "tts_speaker_id" else fake(real_s)(k, d)):
+                with kokoro_voice(sid):
                     wav = S.say(text)
                 x, sr = S._read_wav(wav)
                 s = W.spot(x, sr)
@@ -683,8 +700,7 @@ def t_real_models():
         # one voice (Kokoro 9), then "hey Jarvis" from it and from two others.
         # None of Kokoro's voices is in the bank (that is Piper's).
         def said(text, sid):
-            with mock.patch.object(S, "_cfg", lambda k, d=None, sid=sid:
-                                   sid if k == "tts_speaker_id" else fake(real_s)(k, d)):
+            with kokoro_voice(sid):
                 return S._read_wav(S.say(text))
         training = ("Hey Jarvis, what's on my calendar today?",
                     "The quick brown fox jumps over the lazy dog.",

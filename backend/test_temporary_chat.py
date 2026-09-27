@@ -389,9 +389,17 @@ def _run_finally(snippet, body, stub):
     real = sys.modules.get("jarvis_chat_log")
     sys.modules["jarvis_chat_log"] = stub
     try:
+        # games-temporary.patch: the snippet now calls _temporary_chat(body)
+        # instead of reading body.get("temporary") directly (so a detected
+        # game is kept out of history and learning too, not only a chat the
+        # app itself marked temporary) - the real module always has that
+        # name in scope; this isolated fragment needs it added to `env`,
+        # same as MEMORY or LEARNER above. Plain flag semantics here on
+        # purpose: game detection itself is test_games_temp_chat.py's job.
         env = {"_activity": lambda *a: None, "MEMORY": True, "jarvis_side_memory": False,
                "LEARNER": types.SimpleNamespace(
                    offer=lambda m, origin="unknown", **kw: offered.append(m)),
+               "_temporary_chat": lambda b: isinstance(b, dict) and b.get("temporary") is True,
                "body": body, "route_header": {"lane": "qwen3:8b"}, "lane": "qwen3:8b",
                "_history": {"turn": {"answer": "hi"}, "at": 1.0}}
         exec(snippet, env)

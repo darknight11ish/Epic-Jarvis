@@ -44,12 +44,13 @@ from _where import REPO, require_shipped  # noqa: E402
 
 sys.path.insert(0, str(HERE / "rebuilt"))
 sys.path.insert(0, str(HERE))
-require_shipped("jarvis_wakeword.py", "jarvis_speech.py", "jarvis_stopword.py")
+require_shipped("jarvis_wakeword.py", "jarvis_speech.py", "jarvis_stopword.py", "jarvis_voices.py")
 import numpy as np  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
 import jarvis_speech as S  # noqa: E402
 import jarvis_stopword as SW  # noqa: E402
 import jarvis_voice as V  # noqa: E402
+import jarvis_voices as VC  # noqa: E402
 
 FAILED, PASSED, SKIPPED = [], [], []
 D = W.EMB_WINDOW * 96
@@ -385,6 +386,23 @@ def t_real_models():
 
     def fake(k, d=None):
         return cfg[k] if k in cfg else real_s(k, d)
+
+    import contextlib
+
+    @contextlib.contextmanager
+    def kokoro_voice(sid):
+        # Two things read which Kokoro voice speaks: jarvis_speech's own
+        # `_cfg("tts_speaker_id")` (mocked below, as before) AND - since
+        # the built-in-voice-choice setting (2026-09-27) - jarvis_voices.
+        # speaker(), which S.tts_speaker() now prefers when jarvis_voices
+        # is importable (as it always is on a real PC). Patching only
+        # `_cfg` would leave every `say()` here speaking in whatever voice
+        # the owner (or nobody) chose, not the `sid` this exercises.
+        with mock.patch.object(S, "_cfg", lambda k, d=None, sid=sid:
+                               sid if k == "tts_speaker_id" else fake(k, d)), \
+             mock.patch.object(VC, "speaker", lambda sid=sid: sid):
+            yield
+
     with mock.patch.object(S, "_cfg", fake), \
             mock.patch.object(W, "_cfg", lambda k, d=None: cfg[k] if k in cfg else real_w(k, d)):
         S.reload_engines()
@@ -394,7 +412,7 @@ def t_real_models():
             return
 
         def said(text, sid):
-            with mock.patch.object(S, "_cfg", lambda k, d=None: sid if k == "tts_speaker_id" else fake(k, d)):
+            with kokoro_voice(sid):
                 return S._read_wav(S.say(text))
         hits = [W.spot_stop(*said(t, sid)) for t in ("Stop.", "Stop!") for sid in (0, 6)]
         check(f"Kokoro saying 'stop' is heard ({[h.score for h in hits]})",
@@ -412,7 +430,7 @@ def t_real_models():
         print(f"note  sound-alike 'Stuff.' (Kokoro 5) scores {weak.score} "
               f"({'fires' if weak.heard else 'does not fire'}) - a known weak spot")
         with Env():
-            with mock.patch.object(S, "_cfg", lambda k, d=None: 6 if k == "tts_speaker_id" else fake(k, d)):
+            with kokoro_voice(6):
                 wav = S.say("Stop.")
             with S._SAYS_LOCK:
                 S._RECENT_SAYS.clear()  # that was the test speaking, not Jarvis

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-tool-updates"
+description = "Enables the check_tool_updates command without any pre-configured scope."
+commands.allow = ["check_tool_updates"]
+
+[[permission]]
+identifier = "deny-check-tool-updates"
+description = "Denies the check_tool_updates command without any pre-configured scope."
+commands.deny = ["check_tool_updates"]

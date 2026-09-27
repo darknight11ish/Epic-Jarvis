@@ -50,10 +50,11 @@ class SecondCardContractTest {
         SecondCard.switches(s).first { it.id == id }
 
     @Test
-    fun `all seven cases are read, with the five features in the PC's order`() {
+    fun `all eight cases are read, with the five features in the PC's order`() {
         // Seven since 2026-09-26: one_card_reads_words (the PC reads the
-        // words in a picture).
-        assertEquals(7, cases.size)
+        // words in a picture). Eight since 2026-09-27: combined_running
+        // ("One bigger model on both cards").
+        assertEquals(8, cases.size)
         for (name in cases.keys) {
             val s = status(name)
             assertEquals(name, listOf("long_context", "vision", "learning", "browser_control", "wiki"),
@@ -198,6 +199,61 @@ class SecondCardContractTest {
         assertTrue(SecondCard.laneLine(s).startsWith("Running: running on 127.0.0.1:11435"))
         // Pictures is off, so chat offers no photo.
         assertFalse(SecondCard.visionAvailable(SecondCard.Read.Loaded(s)))
+    }
+
+    @Test
+    fun `combined - its own row, not one of the five features, working and split`() {
+        val s = status("combined_running")
+        assertEquals(listOf("long_context", "vision", "learning", "browser_control", "wiki"),
+            s.features.map { it.id })
+        val combined = SecondCard.combinedSwitch(s)
+        assertNotNull(combined)
+        assertEquals("combined", combined!!.id)
+        assertTrue(combined.on)
+        assertTrue(combined.line, combined.line.startsWith("Working"))
+        assertTrue(combined.modelLine!!, combined.modelLine!!.contains("qwen3:14b"))
+        assertTrue(combined.modelLine!!, combined.modelLine!!.contains("split across both cards"))
+        assertTrue(combined.canTurnOn.not())  // already on
+        assertNull(combined.blocked)
+    }
+
+    @Test
+    fun `combined is absent on an older PC, and the row is simply not shown`() {
+        val obj = cases["capable_off"]!!.jsonObject.toMutableMap()
+        obj.remove("combined")
+        val s = requireNotNull(SecondCard.parse(JsonObject(obj)))
+        assertNull(s.combined)
+        assertNull(SecondCard.combinedSwitch(s))
+    }
+
+    @Test
+    fun `suggest - both signals, on by default, with the PC's own words`() {
+        val s = status("combined_running")
+        val suggest = requireNotNull(s.suggest) { "no 'suggest' from the PC" }
+        assertEquals("When to suggest the bigger model", suggest.title)
+        assertTrue(suggest.detail.contains("never switches it on by itself"))
+        assertEquals(listOf("struggle", "correction"), suggest.signals.map { it.id })
+        suggest.signals.forEach { sig ->
+            assertTrue("${sig.id} is not on by default", sig.enabled)
+            assertTrue(sig.label.isNotBlank())
+            assertTrue(sig.why.isNotBlank())
+        }
+    }
+
+    @Test
+    fun `suggest is absent on an older PC, and the row is simply not shown`() {
+        val obj = cases["capable_off"]!!.jsonObject.toMutableMap()
+        obj.remove("suggest")
+        val s = requireNotNull(SecondCard.parse(JsonObject(obj)))
+        assertNull(s.suggest)
+    }
+
+    @Test
+    fun `postSuggestBody is exactly signal and enabled`() {
+        val body = JarvisJson.parseToJsonElement(SecondCard.postSuggestBody("struggle", false)) as JsonObject
+        assertEquals("struggle", body["signal"]!!.jsonPrimitive.content)
+        assertFalse(body["enabled"]!!.jsonPrimitive.boolean)
+        assertEquals(setOf("signal", "enabled"), body.keys)
     }
 
     @Test

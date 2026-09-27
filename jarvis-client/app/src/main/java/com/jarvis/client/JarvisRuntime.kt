@@ -15,6 +15,7 @@ import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
+import com.jarvis.client.net.GateHistoryItem
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.SseEvent
@@ -163,6 +164,8 @@ data class InboxRead(
     val digest: SectionRead = SectionRead.Reading,
     val undo: SectionRead = SectionRead.Reading,
     val jobs: SectionRead = SectionRead.Reading,
+    /** "Activity" - past approvals. Its own key: see [pastApprovals]. */
+    val activity: SectionRead = SectionRead.Reading,
     /** When the last read finished. 0 means never, on this run of the app. */
     val fetchedAtMs: Long = 0L,
     val refreshing: Boolean = false,
@@ -431,6 +434,16 @@ object JarvisRuntime {
     private val _jobs = MutableStateFlow<List<JobRecord>>(emptyList())
     val jobs: StateFlow<List<JobRecord>> = _jobs.asStateFlow()
 
+    /**
+     * "Activity" - past approvals, read-only (ease-of-use audit, 2026-09-27,
+     * row 11). Never the same list as [pending]: this is `/api/pending`'s
+     * `history` array, fetched by name ([JarvisApi.gateHistoryRead]), which
+     * is a different call to a different key than the one [refreshPending]
+     * makes - see that function's own comment on why the two must not mix.
+     */
+    private val _pastApprovals = MutableStateFlow<List<GateHistoryItem>>(emptyList())
+    val pastApprovals: StateFlow<List<GateHistoryItem>> = _pastApprovals.asStateFlow()
+
     private val _brain = MutableStateFlow(BrainSnapshot())
 
     /**
@@ -559,6 +572,24 @@ object JarvisRuntime {
             // Where the owner cut a spoken answer off: sent once, with the
             // next question (typed or spoken), as `interrupted`.
             onCutOff = { said -> chatSession.cutOff.cut(said, android.os.SystemClock.elapsedRealtime()) },
+            // "Open a chat" while Floating Jarvis is up (JARVIS-API §56).
+            // Gated here, not in VoiceSession, on the setting being
+            // anything but OFF: the phrase always still reaches the model
+            // like any other sentence (see the constructor param's own
+            // doc) - this only decides whether it ALSO pops the app to the
+            // front, which nobody who never turned Floating Jarvis on
+            // should see happen out of nowhere.
+            onOpenChatPhrase = {
+                if (clientSettings.floatingAvatar.value != com.jarvis.client.data.FloatingAvatarMode.OFF) {
+                    val intent = android.content.Intent(app, MainActivity::class.java)
+                        .setAction(MainActivity.ACTION_START_VOICE)
+                        .addFlags(
+                            android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                                android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                        )
+                    runCatching { app.startActivity(intent) }
+                }
+            },
         ) { text, onRoute, onStatus, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
@@ -1357,6 +1388,24 @@ object JarvisRuntime {
         return SecondCard.replyLine(result)
     }
 
+    /**
+     * "When to suggest the bigger model" (2026-09-27): one signal on or off.
+     * NO approval card either way - it only changes whether Jarvis may
+     * OFFER [SecondCard.COMBINED] on its own, never what it may do without
+     * a person's yes, so there is no [refreshPending] here, unlike
+     * [setSecondCard]. Refused while the link is down or stale
+     * ([actionBlocker], rule 4) all the same.
+     *
+     * @param signal `"struggle"` or `"correction"`.
+     * @return a sentence to show, or null when the plate already says it.
+     */
+    suspend fun setSecondCardSuggest(signal: String, enabled: Boolean): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setSecondCardSuggest(signal, enabled)
+        refreshSecondCard()
+        return SecondCard.replyLine(result)
+    }
+
     // -------------------------------------------------------- big model ----
 
     /**
@@ -1494,6 +1543,15 @@ object JarvisRuntime {
     /** `GET /api/reach`. A read: never held. */
     suspend fun reach(): ApiResult<JsonObject> = api.reach()
 
+    // ------------------------------------------------------------- backups -----
+    // The owner's decision of 2026-09-27 - see [com.jarvis.client.net.Backup]
+    // and ui/screens/BackupPlate.kt. Read-only here on purpose: choosing a
+    // folder, backing up and restoring all happen on the PC, in Jarvis
+    // Desktop's Settings (docs/ARCHITECTURE.md section 8).
+
+    /** `GET /api/backup`. A read: never held. */
+    suspend fun backup(): ApiResult<JsonObject> = api.backup()
+
     // ------------------------------------------------------ what asks first ----
     // The owner's decisions of 2026-09-26 - see [com.jarvis.client.net.AsksFirst]
     // and ui/screens/AsksFirstPlate.kt. Stricter from the phone; looser on
@@ -1611,6 +1669,19 @@ object JarvisRuntime {
         val body = com.jarvis.client.net.Manner.body(manner)
             ?: return "That is not one of the two choices."
         return com.jarvis.client.net.Manner.replyLine(api.mannerPost(body), manner)
+    }
+
+    /**
+     * Humour, on or off (the owner's decision, 2026-09-27): "a switch in
+     * 'How Jarvis talks', off to start." No approval card either way, but
+     * held on a stale link like [setManner] and every other change sent to
+     * the PC ([actionBlocker], rule 4). The SAME `/api/manner` route, so
+     * setting this never resets the manner choice.
+     */
+    suspend fun setHumor(on: Boolean): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.Manner.humorBody(on)
+        return com.jarvis.client.net.Manner.humorReplyLine(api.mannerPost(body), on)
     }
 
     /** Re-reads `/api/deep`. Starts nothing on the PC. */
@@ -1937,6 +2008,16 @@ object JarvisRuntime {
         return postCustomVoice(CustomVoices.SPEED_PATH, CustomVoices.speedBody(id))
     }
 
+    /**
+     * Which of Kokoro's own voices the built-in voice uses - one of the ids
+     * the PC offered. Same shape as [setVoiceSpeed]: no card either way, but
+     * held on a stale link like every change sent to the PC (rule 4).
+     */
+    suspend fun setVoiceSpeaker(id: String): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.SPEAKER_PATH, CustomVoices.speakerBody(id))
+    }
+
     private val _customVoiceNote = MutableStateFlow<String?>(null)
 
     /** The last thing a Voices request came to, in words, for the screen to show. */
@@ -2134,7 +2215,11 @@ object JarvisRuntime {
             val digest = note("digest", api.digest()) { _digest.value = it }
             val undo = note("undo", api.undo()) { _undo.value = it }
             val jobs = note("jobs", api.jobs()) { _jobs.value = it }
-            // Only this function's own three keys. It used to assign the whole set,
+            // "Activity" (past approvals): read alongside the other three,
+            // never merged with them and never with `pending` - it has its
+            // own key on every side of this call.
+            val activity = note("activity", api.gateHistoryRead()) { _pastApprovals.value = it.items }
+            // Only this function's own keys. It used to assign the whole set,
             // so opening the inbox erased the "approvals" flag that refreshPending
             // had set — and the approvals screen went from "there is no approval
             // queue here" to an empty list with no explanation, which the comment
@@ -2145,6 +2230,7 @@ object JarvisRuntime {
                     digest = digest,
                     undo = undo,
                     jobs = jobs,
+                    activity = activity,
                     fetchedAtMs = System.currentTimeMillis(),
                 )
             }
@@ -2962,6 +3048,59 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * Read by every notification builder ([com.jarvis.client.service]) to
+     * decide `.setLocalOnly(...)` - the cached last-known answer from the
+     * PC ([ClientSettings.watchNotifications]), or false (stay on the phone
+     * - the safe direction) if [settings] has not been set up yet, which a
+     * notification built before [initialize] ever ran should not crash
+     * over.
+     */
+    fun watchNotificationsAllowed(): Boolean =
+        if (::settings.isInitialized) settings.watchNotifications.value else false
+
+    // -------------------------------------------- smartwatch notifications ----
+    // docs/JARVIS-API.md; see [com.jarvis.client.net.WatchNotify] and
+    // ui/screens/WatchNotifyPlate.kt. OFF by default, ON is one approval
+    // card. Every successful read or write updates [ClientSettings]'s cache,
+    // which the notification builders read - the only reason this route is
+    // read at all off the settings screen.
+
+    /**
+     * `GET /api/notifications/watch`. Updates the cache on success; leaves
+     * it alone on failure (a stale cache is never worse than no cache, and
+     * an app briefly offline should not flip every notification local
+     * again).
+     */
+    suspend fun watchNotifySettings(): ApiResult<JsonObject> {
+        val r = api.watchNotifySettings()
+        if (r is ApiResult.Ok) {
+            com.jarvis.client.net.WatchNotify.enabled(r.value)?.let { settings.setWatchNotifications(it) }
+        }
+        return r
+    }
+
+    /**
+     * The switch. ON is held on a stale link (rule 4) and raises an
+     * approval card on the PC; OFF is never held. @return the sentence to
+     * show under the switch.
+     */
+    suspend fun setWatchNotify(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setWatchNotify(on) }) {
+            is ApiResult.Ok -> {
+                // Only a real Done (not Waiting) means the PC actually
+                // changed it - an ON that is still waiting for its card
+                // must not flip the cache early.
+                if (r.value is com.jarvis.client.net.DesktopWrite.Outcome.Done) {
+                    settings.setWatchNotifications(on)
+                }
+                com.jarvis.client.net.WatchNotify.said(on, r.value)
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
     // ----------------------------------------------- automatic learning ----
     // docs/JARVIS-API.md section 19 (2026-09-24) - see
     // [com.jarvis.client.net.AutoLearn] and ui/screens/AutoLearnPlate.kt.
@@ -3034,6 +3173,27 @@ object JarvisRuntime {
                 com.jarvis.client.net.MemoryUsed.Read.Missing
             } else {
                 com.jarvis.client.net.MemoryUsed.Read.Failed(describe(r.error))
+            }
+        }
+
+    // ----------------------------- "Where this came from" (I42/I132, 2026-09-27) ----
+    // See [com.jarvis.client.net.ChatSources]: this answer's own reading-tool
+    // receipts and its quote check, read by turn_id when the owner opens the
+    // line. Fetched once, quietly, as soon as the answer finishes - there is
+    // no cheap count to gate it on first (see that object's own docstring).
+
+    /** `GET /api/chat/sources?turn_id=` - a read: never held. */
+    suspend fun chatSources(turnId: String?): com.jarvis.client.net.ChatSources.Read =
+        when (val r = api.chatSources(turnId)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatSources.parse(r.value)
+                ?.let { com.jarvis.client.net.ChatSources.Read.Shown(it) }
+                ?: com.jarvis.client.net.ChatSources.Read.Failed(
+                    "The desktop sent something this app could not read.",
+                )
+            is ApiResult.Failed -> if (com.jarvis.client.net.ChatSources.missing(r.error)) {
+                com.jarvis.client.net.ChatSources.Read.Missing
+            } else {
+                com.jarvis.client.net.ChatSources.Read.Failed(describe(r.error))
             }
         }
 
@@ -3123,12 +3283,17 @@ object JarvisRuntime {
      * PC for good, its dates kept. Held on a stale link (rule 4), exactly
      * like [forgetAutoFact] and the desktop's `brain_memory_erase`: there is
      * no undo at all, and the list it acts on was read over a link that
-     * cannot be confirmed live. @return whether the words are gone now (so
-     * the row leaves the list), and the sentence to show.
+     * cannot be confirmed live.
+     *
+     * `alsoDeleteConversation` (2026-09-27): "Also delete the chat it came
+     * from" - the confirm's own checkbox, off by default.
+     *
+     * @return whether the words are gone now (so the row leaves the list),
+     * and the sentence to show.
      */
-    suspend fun eraseAutoFact(id: Long): Pair<Boolean, String> {
+    suspend fun eraseAutoFact(id: Long, alsoDeleteConversation: Boolean = false): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
-        return when (val r = api.eraseFact(id)) {
+        return when (val r = api.eraseFact(id, alsoDeleteConversation)) {
             is ApiResult.Ok -> com.jarvis.client.net.MemoryErase.said(r.value).also { (gone, _) ->
                 // An erased fact leaves "Always keep in mind" too.
                 if (gone) _profileTick.update { it + 1 }
@@ -3561,6 +3726,57 @@ object JarvisRuntime {
         }
     }
 
+    // ------------------------------------------------------- "Between us" ----
+    // The owner's decision of 2026-09-27 - see
+    // [com.jarvis.client.net.MemoryShared] and ui/screens/SharedPlate.kt.
+
+    private val _sharedTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one whenever the list may have changed from this phone - a
+     * tag, an untag or a Forget - so Brain's "Between us" reads itself
+     * again. There is no event for it (Forget sends none either): the
+     * desktop's change shows on the next read, Refresh.
+     */
+    val sharedTick: StateFlow<Int> = _sharedTick.asStateFlow()
+
+    private val _sharedIds = MutableStateFlow<Set<Long>?>(null)
+
+    /**
+     * The ids on the list at the last read, or null before one (or on a PC
+     * without the list) - what "Saved automatically" reads to say "Between
+     * us" or "Not between us". Ids only: the words stay on the PC and in
+     * the section drawing them.
+     */
+    val sharedIds: StateFlow<Set<Long>?> = _sharedIds.asStateFlow()
+
+    /** `GET /api/memory/shared`. A read: never held. Notes the ids ([sharedIds]). */
+    suspend fun memoryShared(): ApiResult<JsonObject> {
+        val r = api.memoryShared()
+        _sharedIds.value = when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryShared.parse(r.value)?.ids
+            is ApiResult.Failed -> if (com.jarvis.client.net.MemoryShared.missing(r.error)) null else _sharedIds.value
+        }
+        return r
+    }
+
+    /**
+     * Tags (`shared = true`) or untags ONE fact "Between us". No card and
+     * no confirm - the owner's own tap on a fact they can see - but held
+     * on a stale link (rule 4), exactly like [pinFact] and the desktop's
+     * `brain_memory_share`. @return whether the list changed as asked, and
+     * the sentence to show.
+     */
+    suspend fun setShared(id: Long, shared: Boolean): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.setShared(id, shared)) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryShared.said(r.value, shared).also {
+                _sharedTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+    }
+
     // ---------------------------------------------------- chat history ----
     // docs/JARVIS-API.md section 18 (2026-09-24) - see
     // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The
@@ -3909,8 +4125,8 @@ object JarvisRuntime {
      * connection the socket has not noticed; below that a single late frame on
      * a dozing radio would flap the indicator for no reason.
      */
-    /** The three keys refreshInbox owns; it must not touch the rest of the set. */
-    private val INBOX_KEYS = setOf("digest", "undo", "jobs")
+    /** The keys refreshInbox owns; it must not touch the rest of the set. */
+    private val INBOX_KEYS = setOf("digest", "undo", "jobs", "activity")
 
     /** How often the coalesced resume point may reach SharedPreferences. */
     private const val RESUME_WRITE_GAP_MS = 2_000L

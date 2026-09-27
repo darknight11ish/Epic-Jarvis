@@ -92,16 +92,32 @@ email_read                = "auto"
 notes_search              = "auto"
 home_read                 = "auto"
 home_control              = "ask"
+# News headlines in the morning briefing (jarvis_news.py, the owner's
+# decision of 2026-09-27, feasibility I49): reading a feed the owner
+# already approved with its own card. Must be "auto" or "notify" for the
+# briefing to show the section at all - a stricter tier just leaves it out
+# and says why, the same as the reads above; it never blocks adding a feed
+# (that is its own card, action change_own_config, always "ask").
+news_read                 = "auto"
+# "Tell me when this page changes" (a source of jarvis_tellme.py, the
+# owner's decision of 2026-09-27, feasibility I67): fetching the one
+# address the owner already approved with its own card (schedule_repeat).
+# Must be "auto", exactly like email_read/home_read above, or a look every
+# 30 minutes would mean a card every 30 minutes.
+page_read                 = "auto"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval
 # card). "ask" gives a card for every look.
 read_files_readonly       = "auto"
-# Saving an email draft (not built yet; I53, "saving drafts to your Drafts
-# folder"). A draft goes up to the mail provider's servers, so it asks
-# until the owner answers the drafts question (docs/FEASIBILITY-AUDIT-
-# 2026-09-26.md, question 1). It is on the never-loosened list
-# (jarvis_asks_first.HARD_LIMITS): no app can make it "auto".
+# Saving an email draft (jarvis_email_draft.py, draft-email.patch; the
+# owner's decision of 2026-09-27, "a card every time, showing the full
+# draft"; I53). A draft goes up to the mail provider's servers (an IMAP
+# APPEND), so it asks every time. Must stay "ask": anything else and every
+# draft is refused, never saved unasked; "never" switches drafts off. It is
+# on the never-loosened list (jarvis_asks_first.HARD_LIMITS): no app can
+# make it "auto". The model is offered the tool only once "draft_email" is
+# in [tools].enabled.
 draft_email               = "ask"
 # Sending one email (jarvis_email_send.py, the owner's decision of
 # 2026-09-25): ONE approval card per email, showing who it goes to, the
@@ -124,6 +140,20 @@ change_own_config         = "ask"
 # else and loosening from the app is refused. Making a line stricter from
 # either app ("ask") needs no card.
 loosen_what_asks_first    = "ask"
+# enable_reading_tool - offering calendar_read, email_read, notes_search or
+# home_read to the AI model at all (adding it to [tools].enabled, below) from
+# the PC's "What asks first" page. Must stay "ask", like the line above: it
+# is a DIFFERENT thing from loosening whether a tool asks first - jarvis_
+# asks_first.py refuses it unless it comes from this PC, with Windows Hello,
+# whatever this line says.
+enable_reading_tool       = "ask"
+# "Check for tool updates" (jarvis_tool_updates.py, the owner's own
+# request): the FIRST run ever asks PyPI, crates.io and GitHub over the
+# internet, so it needs a person's yes once. Must stay "ask": anything else
+# and the first run is refused rather than treated as a standing yes.
+# Nothing here loosens or tightens it afterwards - jarvis_tool_updates.py
+# remembers the answer itself (tool_updates.json), not this line.
+check_tool_updates        = "ask"
 modify_own_code           = "ask"        # additional gate — see [self_modification]
 post_to_external_service  = "never"
 open_public_tunnel        = "never"      # see [security].allow_public_tunnel
@@ -224,6 +254,13 @@ second_card_enable        = "ask"
 # same as above. A toml without this line treats it as an unknown action
 # ([autonomy] unknown_action_tier, never more than "ask").
 second_card_browser_enable = "ask"
+# "One bigger model on both cards" has its own line too. Off by default; it
+# starts a THIRD copy of Ollama that can see BOTH cards at once (no pin to
+# one) and loads one bigger model, split across both cards by Ollama's own
+# scheduler - never at the same time as any switch above (it needs both
+# cards to itself). Nothing leaves this PC. Must stay "ask", the same reason
+# as above.
+second_card_combined_enable = "ask"
 
 # --- The wiki builder (Brain window or phone: "Add to wiki") -------------
 # Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in
@@ -274,6 +311,21 @@ custom_voice              = "ask"
 # Jarvis speaks in a custom voice. Turning it on is one card; off never
 # asks. Must stay "ask", the same as above.
 better_voice_enable       = "ask"
+# Letting Jarvis's notifications show on a paired smartwatch too, instead of
+# staying on the phone only (the owner's decision, 2026-09-25; reconfirmed
+# 2026-09-27, Q17). Off by default. Turning it on is one card; off never
+# asks. Must stay "ask": jarvis_watch_notify.py refuses any other tier
+# rather than let this line become your yes.
+watch_notifications_enable = "ask"
+
+# --- Backups (jarvis_backup.py, the owner's decision of 2026-09-27) ------
+# Restoring from a locked backup file replaces memory, chat history,
+# settings and notes with what was saved then, so it is ONE card, always
+# with Windows Hello and always from this PC (jarvis_owner_check.
+# PC_ONLY_ACTIONS), whatever this line says. Must stay "ask": anything else
+# and a restore refuses to go ahead. "Back up now" itself asks nothing - the
+# owner already approved the folder it writes into (change_own_config).
+restore_backup            = "ask"
 
 
 # ------------------------------------------------------------------------
@@ -1315,3 +1367,26 @@ star_floor = 25        # ...but never fewer than this many
 # Always reported regardless of the above, because each one changes whether
 # you can use the thing at all: a licence change, being archived, a new
 # release, a changed description.
+
+
+# ------------------------------------------------------------------------
+# TOOLS - which ones the model is offered at all
+# ------------------------------------------------------------------------
+# jarvis_agent.offered_tools() offers the model only a tool named here -
+# see that module's own docstring, and backend/README.md's "What each one
+# needs in jarvis_gate.py and jarvis-framework.toml" for the full list and
+# how to add more. A tool left out of this list still works everywhere
+# else (its settings, its "which search should I use?"-style fast paths),
+# it is simply never put in front of the model. This changes nothing about
+# what asks first - that is still [autonomy.tiers] - only whether the
+# model is offered the tool at all.
+#
+# `web_search` ships ON (the owner's decision of 2026-09-25, "Web search
+# with a choice of providers", reconfirmed 2026-09-27, "Web search ships
+# switched on"): SearXNG was already the chosen default provider, so a
+# fresh install that could not search the web despite that was this file,
+# not the owner, still saying no. Nothing else here is on by that decision
+# - send_email, browser_control, my_files and the rest stay opt-in, each
+# for the reasons its own row of backend/README.md gives.
+[tools]
+enabled = ["web_search"]

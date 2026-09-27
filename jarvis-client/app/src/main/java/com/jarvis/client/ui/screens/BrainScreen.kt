@@ -189,6 +189,12 @@ fun BrainScreen(
      * [com.jarvis.client.JarvisRuntime.setSecondCard]. `"master"` is the main switch.
      */
     onSetSecondCard: (feature: String, enabled: Boolean) -> Unit = { _, _ -> },
+    /**
+     * "When to suggest the bigger model" - one signal on or off, NO
+     * approval card either way -
+     * [com.jarvis.client.JarvisRuntime.setSecondCardSuggest].
+     */
+    onSetSecondCardSuggest: (signal: String, enabled: Boolean) -> Unit = { _, _ -> },
     onRecheckSecondCard: () -> Unit = {},
     /**
      * Re-read the board every this many milliseconds while the screen is
@@ -214,6 +220,13 @@ fun BrainScreen(
      * docs/JARVIS-API.md section 18). Null draws no way in.
      */
     onOpenHistory: (() -> Unit)? = null,
+    /**
+     * Opens the phone's own Settings screen (ease-of-use audit 2026-09-27,
+     * row 16). Null draws no way in - never expected in practice, since
+     * [com.jarvis.client.MainActivity] always supplies it, but a screen this
+     * plate points at should not be assumed.
+     */
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // The same test ModelsPlate always had, now shared by every control on this
@@ -316,6 +329,13 @@ fun BrainScreen(
                 item(key = "notice") { Notice(notice, onDismissNotice) }
             }
 
+            // UI-AUDIT-2026-09-26 item 9: "Now", "Memory", "Model and PC" and
+            // "Settings" group what used to be one long scroll of about 33
+            // sections. The grouping itself is this item's own judgement call
+            // (the audit only suggests the four names) - see the report for
+            // which section went where and why.
+            item(key = "group-now") { GroupHeading("Now") }
+
             item(key = "doing") {
                 Section("Doing") {
                     Plate {
@@ -416,118 +436,6 @@ fun BrainScreen(
                 )
             }
 
-            // "Web search" (the owner's decisions of 2026-09-25): the four
-            // providers with the PC's "why" lines, "Ask before every web
-            // search", the SearXNG address and Test search
-            // (WebSearchPlate.kt) - the desktop's Settings -> Web search.
-            // No key box: keys are typed on the PC only.
-            item(key = "web-search") {
-                WebSearchSection(canAct = canAct)
-            }
-
-            // "What asks first" (the owner's decisions of 2026-09-26): every
-            // action and whether it asks first, in the PC's words, with "Ask
-            // me first" switches that only make things stricter here - the
-            // desktop's Settings -> What asks first, where loosening lives
-            // (AsksFirstPlate.kt) - and "Lights, plugs and fans without a
-            // card" (ON one card, held on a stale link; OFF at once).
-            item(key = "asks-first") {
-                AsksFirstSection(canAct = canAct)
-            }
-
-            // "What Jarvis can reach" (the Muse audit, 2026-09-25): every way
-            // Jarvis can reach something outside itself, whether each is on,
-            // where it goes and whether it asks first - written by the PC
-            // from its settings, never by the model (ReachPlate.kt) - the
-            // desktop's Settings -> What Jarvis can reach. A read: nothing
-            // to hold on a stale link.
-            item(key = "reach") {
-                ReachSection()
-            }
-
-            // "Sending email" (the owner's decision of 2026-09-25): whether
-            // Jarvis can send email, from which address and through which
-            // server, in the PC's words (EmailSendingPlate.kt) - the desktop's
-            // Settings -> Sending email. Each email is its own approval card.
-            item(key = "email-sending") {
-                EmailSendingSection()
-            }
-
-            // "Folders Jarvis may look in" (the owner's decisions of
-            // 2026-09-26): the folders on the PC Jarvis may find, search and
-            // read files in, in the PC's words, with Remove at once
-            // (FoldersPlate.kt) - the desktop's Settings -> Folders Jarvis may
-            // look in. Adding a folder and the Notion import are the PC's.
-            item(key = "folders") {
-                FoldersSection()
-            }
-
-            // "How Jarvis talks" (the owner's decision of 2026-09-25): warm
-            // and brief, or plain, with the PC's words (MannerPlate.kt) - the
-            // desktop's Settings -> How Jarvis talks. No card either way.
-            item(key = "manner") {
-                MannerSection(canAct = canAct)
-            }
-
-            if (models != null) {
-                item(key = "models") {
-                    Section("Model") {
-                        ModelsPlate(
-                            models = models,
-                            busy = modelBusy,
-                            canAct = canAct,
-                            onSwitch = onSwitchModel,
-                            onRollback = onRollbackModel,
-                            onInstall = onInstallModel,
-                            request = brain.modelRequest,
-                            onOpenApprovals = onOpenApprovals,
-                        )
-                    }
-                }
-            }
-
-            // backend/hardware.patch (docs/HARDWARE-PROFILES.md 4.6, "Phone"):
-            // the cards and the three setups, above the second card's own
-            // switches. Reads and acts through JarvisRuntime directly
-            // (HardwarePlate.kt), so this is its only line.
-            item(key = "hardware") {
-                HardwareSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
-            }
-
-            // backend/second-card.patch. Right under Model, because a feature
-            // whose model is missing is installed with the box above.
-            item(key = "second-card") {
-                Section("Second graphics card") {
-                    SecondCardPlate(
-                        read = secondCard,
-                        busy = secondCardBusy,
-                        notice = secondCardNotice,
-                        canAct = canAct,
-                        onSet = onSetSecondCard,
-                        onRecheck = onRecheckSecondCard,
-                        onOpenApprovals = onOpenApprovals,
-                    )
-                }
-            }
-
-            // backend/big-model.patch - next to the second card: the other
-            // way to run a model the main card cannot. Both plates read and
-            // act through JarvisRuntime directly (BigModelPlate.kt), so these
-            // are their only lines.
-            item(key = "big-model") {
-                BigModelSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
-            }
-            // The questions and answers are the owner's own words: hidden with
-            // the memory lists and chat history, like the wiki (the desktop's
-            // get_deep takes them out in Rust the same way).
-            if (privateHidden) {
-                item(key = "deep-questions-hidden") {
-                    HiddenSection("Deep questions", busy = showPrivateBusy, onShow = onShowPrivate)
-                }
-            } else {
-                item(key = "deep-questions") { DeepQuestionsSection(canAct = canAct) }
-            }
-
             item(key = "attention") {
                 Section("Attention budget") { AttentionPlate(attention) }
             }
@@ -542,11 +450,23 @@ fun BrainScreen(
                 }
             }
 
-            // 4. The endpoints whose shape the contract does not fix. Rendered
-            // from whatever actually came back — see JarvisApi.probe.
-            item(key = "compute") {
-                Probed("Compute", brain.compute, "GPU and VRAM plan", brain.computeRead, retry)
+            // The GitHub watch list (WatchPlate.kt) - it reads and acts
+            // through JarvisRuntime directly, so this is its only line.
+            item(key = "watch") { WatchSection(canAct = canAct) }
+
+            item(key = "initiative") {
+                Probed(
+                    "Findings",
+                    brain.initiative,
+                    "What Jarvis noticed on its own",
+                    brain.initiativeRead,
+                    retry,
+                    emptyNote = remember(brain.initiative) { initiativeNote(brain.initiative) },
+                )
             }
+
+            item(key = "group-memory") { GroupHeading("Memory") }
+
             // How much Jarvis remembers, and whether it is learning - the
             // desktop's Memory pane numbers, read-only (MemoryCountsPlate.kt).
             item(key = "memory-counts") {
@@ -583,6 +503,18 @@ fun BrainScreen(
             // to the item after itself, which must stay "Saved automatically".
             item(key = "memory-profile") {
                 AlwaysKeepInMindSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+            // "Between us" (the owner's decision, 2026-09-27): shared jokes
+            // and nicknames, tagged from the list above, each with "Not
+            // between us" and Forget (SharedPlate.kt). Right after "Always
+            // keep in mind", the other fact label with its own section.
+            item(key = "memory-shared") {
+                BetweenUsSection(
                     canAct = canAct,
                     privateHidden = privateHidden,
                     showPrivateBusy = showPrivateBusy,
@@ -634,9 +566,6 @@ fun BrainScreen(
             } else {
                 item(key = "wiki") { WikiSection(canAct = canAct) }
             }
-            // The GitHub watch list (WatchPlate.kt) - it reads and acts
-            // through JarvisRuntime directly, so this is its only line.
-            item(key = "watch") { WatchSection(canAct = canAct) }
             if (privateHidden) {
                 item(key = "memory-as-of-hidden") {
                     HiddenSection("What did I believe on this date?", busy = showPrivateBusy, onShow = onShowPrivate)
@@ -650,15 +579,73 @@ fun BrainScreen(
                     )
                 }
             }
-            item(key = "initiative") {
-                Probed(
-                    "Findings",
-                    brain.initiative,
-                    "What Jarvis noticed on its own",
-                    brain.initiativeRead,
-                    retry,
-                    emptyNote = remember(brain.initiative) { initiativeNote(brain.initiative) },
-                )
+
+            item(key = "group-model-pc") { GroupHeading("Model and PC") }
+
+            if (models != null) {
+                item(key = "models") {
+                    Section("Model") {
+                        ModelsPlate(
+                            models = models,
+                            busy = modelBusy,
+                            canAct = canAct,
+                            onSwitch = onSwitchModel,
+                            onRollback = onRollbackModel,
+                            onInstall = onInstallModel,
+                            request = brain.modelRequest,
+                            onOpenApprovals = onOpenApprovals,
+                        )
+                    }
+                }
+            }
+
+            // backend/hardware.patch (docs/HARDWARE-PROFILES.md 4.6, "Phone"):
+            // the cards and the three setups, above the second card's own
+            // switches. Reads and acts through JarvisRuntime directly
+            // (HardwarePlate.kt), so this is its only line.
+            item(key = "hardware") {
+                HardwareSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
+            }
+
+            // backend/second-card.patch. Right under Model, because a feature
+            // whose model is missing is installed with the box above.
+            item(key = "second-card") {
+                Section("Second graphics card") {
+                    SecondCardPlate(
+                        read = secondCard,
+                        busy = secondCardBusy,
+                        notice = secondCardNotice,
+                        canAct = canAct,
+                        onSet = onSetSecondCard,
+                        onSetSuggest = onSetSecondCardSuggest,
+                        onRecheck = onRecheckSecondCard,
+                        onOpenApprovals = onOpenApprovals,
+                    )
+                }
+            }
+
+            // backend/big-model.patch - next to the second card: the other
+            // way to run a model the main card cannot. Both plates read and
+            // act through JarvisRuntime directly (BigModelPlate.kt), so these
+            // are their only lines.
+            item(key = "big-model") {
+                BigModelSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
+            }
+            // The questions and answers are the owner's own words: hidden with
+            // the memory lists and chat history, like the wiki (the desktop's
+            // get_deep takes them out in Rust the same way).
+            if (privateHidden) {
+                item(key = "deep-questions-hidden") {
+                    HiddenSection("Deep questions", busy = showPrivateBusy, onShow = onShowPrivate)
+                }
+            } else {
+                item(key = "deep-questions") { DeepQuestionsSection(canAct = canAct) }
+            }
+
+            // 4. The endpoints whose shape the contract does not fix. Rendered
+            // from whatever actually came back — see JarvisApi.probe.
+            item(key = "compute") {
+                Probed("Compute", brain.compute, "GPU and VRAM plan", brain.computeRead, retry)
             }
             item(key = "ledger") {
                 Probed(
@@ -734,6 +721,18 @@ fun BrainScreen(
                         }
                     }
                 }
+            }
+
+            // The "Settings" group used to live here in full - "How Jarvis
+            // talks", web search, "What asks first", "What Jarvis can
+            // reach", "Sending email", "Folders Jarvis may look in" and the
+            // smartwatch notification setting. The ease-of-use audit's row
+            // 16 (2026-09-27) moved all seven, whole, into their own
+            // Settings screen (SettingsScreen.kt), alongside voice, security
+            // and appearance - see that file's own doc comment for exactly
+            // what moved and what stayed a separate, only-linked screen.
+            if (onOpenSettings != null) {
+                item(key = "settings-entry") { SettingsEntrySection(onOpen = onOpenSettings) }
             }
 
             item(key = "tail") { Gap(24) }
@@ -1056,12 +1055,21 @@ private fun AttentionPlate(attention: Attention) {
     Plate {
         val limit = attention.limit
         if (limit > 0) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // UI-AUDIT-2026-09-26 item 8: the count itself in the phone's big
+            // "display" size - defined but never used before this - the rest
+            // of the sentence stays a caption beside it.
+            Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    "${attention.remaining} of $limit spoken interruptions left today",
-                    style = MaterialTheme.typography.bodyLarge,
+                    "${attention.remaining}",
+                    style = MaterialTheme.typography.displaySmall,
                     color = chrome.textHi,
-                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "of $limit spoken interruptions left today",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = chrome.textMid,
+                    modifier = Modifier.weight(1f).padding(bottom = 3.dp),
                 )
             }
             Gap(8)
@@ -1709,6 +1717,56 @@ private fun FlowChips(items: Collection<String>, muted: Boolean = false) {
     }
 }
 
+/**
+ * Brain's way into the new Settings screen (ease-of-use audit row 16,
+ * 2026-09-27) - the same shape as [HistoryEntrySection]'s way into History:
+ * one plate, one line saying what moved, one button.
+ */
+@Composable
+private fun SettingsEntrySection(onOpen: () -> Unit) {
+    val chrome = LocalChrome.current
+    Section("Settings") {
+        Plate {
+            Text(
+                "How Jarvis talks, web search, what asks first, what Jarvis can reach, " +
+                    "sending email, folders it may look in, the smartwatch setting - and, " +
+                    "with voice, security and appearance, everything else that changes how " +
+                    "Jarvis behaves or looks.",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            Gap(8)
+            Quiet("Open Settings", onClick = onOpen)
+        }
+    }
+}
+
+/**
+ * A group heading above several [Section]s - "Now", "Memory", "Model and
+ * PC", "Settings" (UI-AUDIT-2026-09-26 item 9: this screen was one long
+ * scroll of about 33 sections, still called "Mind" when that item was
+ * written - the rename to "Brain" had already landed everywhere the owner
+ * sees it by the time this item was picked up; only the grouping was left).
+ * "Settings" itself moved into its own screen (ease-of-use audit row 16,
+ * 2026-09-27); the other three group headings are unchanged.
+ *
+ * Bigger and heavier than a [Section]'s own [Kicker], on purpose - item 8
+ * asks for section titles made "stronger by size and weight, never by the
+ * accent colour", because the accent stays reserved for focus and
+ * selection. This is the phone's own headline size, defined in
+ * [com.jarvis.client.ui.theme.JarvisType] but never used anywhere before
+ * this and [TopBar]'s title picked it up too.
+ */
+@Composable
+private fun GroupHeading(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.headlineSmall,
+        color = LocalChrome.current.textHi,
+        modifier = Modifier.semantics { heading() },
+    )
+}
+
 @Composable
 fun TopBar(
     title: String,
@@ -1737,7 +1795,10 @@ fun TopBar(
             // that uses TopBar.
             Text(
                 title,
-                style = MaterialTheme.typography.titleMedium,
+                // UI-AUDIT-2026-09-26 item 8: the phone's own headline size,
+                // defined but never used before this - a screen title is
+                // exactly what it was written for.
+                style = MaterialTheme.typography.headlineSmall,
                 color = chrome.textHi,
                 modifier = Modifier.semantics { heading() },
             )

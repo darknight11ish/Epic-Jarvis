@@ -38,6 +38,14 @@ object SecondCard {
     /** The main switch's id in `POST` and in `pending`. */
     const val MASTER = "master"
 
+    /**
+     * "One bigger model on both cards" (the third mode, 2026-09-26): its own
+     * id in `POST` and in `pending`, a sibling of [MASTER] - it does not
+     * compose with [MASTER] or the features below (it needs both cards to
+     * itself), so it is never in [Status.features].
+     */
+    const val COMBINED = "combined"
+
     /** The Pictures feature: the only one the phone's chat looks at. */
     const val VISION = "vision"
 
@@ -91,7 +99,7 @@ object SecondCard {
         /** The main switch. */
         val enabled: Boolean,
         val active: Boolean,
-        /** Switches with a card waiting, "master" included. */
+        /** Switches with a card waiting, "master" and "combined" included. */
         val pending: List<String>,
         /** "off", "starting", "running" or "failed". */
         val laneState: String,
@@ -110,9 +118,51 @@ object SecondCard {
          * app only decides whether to offer the Photo button.
          */
         val pictureText: PictureText? = null,
+        /**
+         * "One bigger model on both cards" (2026-09-26) - null from an older
+         * PC. Not one of [features]: it ties up both cards, so it cannot run
+         * at the same time as any of them, and it gets its own row.
+         */
+        val combined: Combined? = null,
+        /**
+         * "When to suggest the bigger model" (2026-09-27) - null from an
+         * older PC, which then shows neither switch. Whether Jarvis may
+         * OFFER [combined] on its own; never what it may do without a
+         * person's yes, so unlike every switch above, changing one of
+         * these raises NO approval card either way.
+         */
+        val suggest: Suggest? = null,
     ) {
         fun feature(id: String): Feature? = features.firstOrNull { it.id == id }
     }
+
+    /** `status()["suggest"]`: the two "suggest the bigger model" switches. */
+    data class Suggest(val title: String, val detail: String, val signals: List<Signal>)
+
+    /** One suggestion signal: [id] is `"struggle"` or `"correction"`. */
+    data class Signal(val id: String, val label: String, val why: String, val enabled: Boolean)
+
+    /**
+     * `status()["combined"]`: the third mode. [capable] is about the TWO
+     * cards this needs (Turing or newer, big enough together) - a
+     * different question from [Status.capable], which is only about the
+     * second card alone. [conflict] is true while a switch in [features]
+     * is genuinely on, which this cannot share both cards with.
+     */
+    data class Combined(
+        val name: String,
+        val what: String,
+        val enabled: Boolean,
+        val capable: Boolean,
+        val capableWhy: String,
+        val conflict: Boolean,
+        val active: Boolean,
+        val available: Boolean,
+        val model: String?,
+        val context: Int?,
+        val memoryGib: Double?,
+        val why: String,
+    )
 
     /**
      * `status()["last"]` (AP-6, since 2026-09-24): the most recent approval
@@ -178,6 +228,39 @@ object SecondCard {
             last = lastCard(obj),
             pictureText = (obj["picture_text"] as? JsonObject)?.let {
                 PictureText(available = it.bool("available") == true, why = it.str("why").orEmpty())
+            },
+            combined = (obj["combined"] as? JsonObject)?.let { c ->
+                Combined(
+                    name = c.str("name") ?: "One bigger model on both cards",
+                    what = c.str("what").orEmpty(),
+                    enabled = c.bool("enabled") ?: false,
+                    capable = c.bool("capable") ?: false,
+                    capableWhy = c.str("capable_why").orEmpty(),
+                    conflict = c.bool("conflict") ?: false,
+                    active = c.bool("active") ?: false,
+                    available = c.bool("available") ?: false,
+                    model = c.str("model"),
+                    context = c.int("context"),
+                    memoryGib = (c["memory_gib"] as? JsonPrimitive)?.doubleOrNull,
+                    why = c.str("why").orEmpty(),
+                )
+            },
+            suggest = (obj["suggest"] as? JsonObject)?.let { sug ->
+                val signals = (sug["signals"] as? JsonArray).orEmpty().mapNotNull { el ->
+                    val sig = el as? JsonObject ?: return@mapNotNull null
+                    val id = sig.str("id") ?: return@mapNotNull null
+                    Signal(
+                        id = id,
+                        label = sig.str("label") ?: id,
+                        why = sig.str("why").orEmpty(),
+                        enabled = sig.bool("enabled") ?: true,
+                    )
+                }
+                Suggest(
+                    title = sug.str("title") ?: "When to suggest the bigger model",
+                    detail = sug.str("detail").orEmpty(),
+                    signals = signals,
+                )
             },
             features = features.mapNotNull { el ->
                 val f = el as? JsonObject ?: return@mapNotNull null
@@ -290,6 +373,43 @@ object SecondCard {
     }
 
     fun switches(s: Status): List<SwitchView> = s.features.map { f -> view(s, f) }
+
+    /**
+     * "One bigger model on both cards" (the third mode), the same
+     * [SwitchView] shape as [master] and [view] - null on an older PC that
+     * sends no `combined`. Not one of [switches]: it ties up both cards, so
+     * it cannot compose with them, and it never needs [MASTER] on first.
+     */
+    fun combinedSwitch(s: Status): SwitchView? {
+        val c = s.combined ?: return null
+        val waiting = COMBINED in s.pending
+        return SwitchView(
+            id = COMBINED,
+            name = c.name,
+            what = c.what,
+            on = c.enabled,
+            waiting = waiting,
+            line = if (waiting) WAITING else c.why,
+            blocked = when {
+                !c.capable -> "Needs two capable graphics cards: ${c.capableWhy}."
+                c.conflict -> "Turn off the switches above first - this needs both cards to itself."
+                else -> null
+            },
+            modelLine = combinedModelLine(c),
+            needsLine = null,
+            lastLine = lastLine(s.last, COMBINED, c.name, on = c.enabled, waiting = waiting),
+        )
+    }
+
+    /** [modelLine]'s shape for [Combined]: also says the room it has and that it is split. */
+    fun combinedModelLine(c: Combined): String? {
+        val model = c.model ?: return null
+        val ctx = c.context?.let { " Room for ${"%,d".format(java.util.Locale.ROOT, it)} tokens." }.orEmpty()
+        val size = c.memoryGib?.let {
+            " Uses about ${"%.1f".format(java.util.Locale.ROOT, it)} GB, split across both cards."
+        }.orEmpty()
+        return "Model: $model.$ctx$size"
+    }
 
     fun view(s: Status, f: Feature): SwitchView {
         val waiting = f.id in s.pending
@@ -404,6 +524,25 @@ object SecondCard {
     /** `{"feature": "...", "enabled": true|false}` - built as JSON, never glued. */
     fun postBody(feature: String, enabled: Boolean): String = buildJsonObject {
         put("feature", feature)
+        put("enabled", enabled)
+    }.toString()
+
+    /**
+     * The path for "When to suggest the bigger model"'s one write - spelled
+     * out literally, not built from [PATH] by concatenation, so
+     * `tools/check_parity.py` (which finds a route by its literal
+     * `/api/...` text in the source) sees it as the distinct route it is.
+     */
+    const val SUGGEST_PATH = "/api/second-card/suggest"
+
+    /**
+     * `{"signal": "struggle"|"correction", "enabled": true|false}` for
+     * [SUGGEST_PATH] - NO approval card either way (`jarvis_second_card.py`'s
+     * own docstring: this only changes whether Jarvis may offer [combined]
+     * on its own, never what it may do without a person's yes).
+     */
+    fun postSuggestBody(signal: String, enabled: Boolean): String = buildJsonObject {
+        put("signal", signal)
         put("enabled", enabled)
     }.toString()
 

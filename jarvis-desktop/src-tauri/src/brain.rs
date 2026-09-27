@@ -42,6 +42,8 @@ pub mod history;
 pub mod profile;
 mod routes;
 pub mod schedule;
+pub mod shared;
+pub mod sources;
 pub mod used;
 use routes::{first_line, route_for};
 
@@ -345,15 +347,29 @@ pub async fn brain_memory_forget(
 /// words from the PC for good and keeps only its dates, so the history shows
 /// that something was erased there. Works on a forgotten fact too.
 ///
-/// One integer id and nothing else - the server refuses any other key, so
-/// there is no list form. Like forget there is no approval card, and the
-/// page asks "are you sure?" first; there is no undo at all.
+/// One integer id, an optional `also_delete_conversation`, and nothing else -
+/// the server refuses any other key, so there is no list form. Like forget
+/// there is no approval card, and the page asks "are you sure?" first; there
+/// is no undo at all.
+///
+/// `also_delete_conversation` (the owner's decision, 2026-09-27): "Also
+/// delete the chat it came from" - a second yes/no the page asks right after
+/// the first, since there is no checkbox in `window.confirm`. Omitted (the
+/// default), the server behaves exactly as before.
 #[tauri::command]
-pub async fn brain_memory_erase(app: AppHandle, id: i64) -> Result<serde_json::Value, String> {
+pub async fn brain_memory_erase(
+    app: AppHandle,
+    id: i64,
+    also_delete_conversation: Option<bool>,
+) -> Result<serde_json::Value, String> {
     // Held on a stale link, like forget: it acts on a fact the window drew
     // from a read that may be stale, and nothing brings the words back.
     require_link_live(&app)?;
-    post(&app, "/api/memory/erase", serde_json::json!({ "id": id }))
+    let mut body = serde_json::json!({ "id": id });
+    if let Some(also) = also_delete_conversation {
+        body["also_delete_conversation"] = serde_json::json!(also);
+    }
+    post(&app, "/api/memory/erase", body)
         .await
         .map_err(erase_refusal)
 }

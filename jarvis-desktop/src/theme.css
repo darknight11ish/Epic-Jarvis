@@ -218,6 +218,25 @@
   --font-mono: "Cascadia Code", "IBM Plex Mono", "JetBrains Mono", Consolas,
     "SF Mono", monospace;
 
+  /* ---- Type scale ---------------------------------------------------------
+     Five sizes, standing in for about twenty near-duplicates that had drifted
+     across style.css, widget.css, settings.css and brain.css (10, 10.5, 11,
+     11.5, 12, 12.5, 13, 13.5px all meant "small label" or "compact body text"
+     somewhere) - item 8, UI-AUDIT-2026-09-26.md. `--text-sm` is also the
+     floor: nothing that protects or warns the owner is set below it.
+
+     Left OUTSIDE this scale, deliberately: the prompt textarea and Brain's
+     big stat number (each a one-off display size, not body text), the
+     voice-training sentence in settings.css (already commented as "the
+     biggest thing in the box, so it can be read from a normal sitting
+     distance"), and the markdown h1-h4 heading ramp in style.css - a real,
+     already-consistent four-step hierarchy of its own, not loose drift. */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 14px;
+  --text-lg: 17px;
+
   /* ---- Motion -----------------------------------------------------------
      Durations and easings are tokens so a theme can be calmer or sharper, and
      so `prefers-reduced-motion` has one place to collapse them. */
@@ -228,10 +247,14 @@
   --dur-settle: 260ms;
 
   /* ---- Depth -------------------------------------------------------------
-     Self-drawn, because the OS cannot help: `window-vibrancy`'s acrylic
-     discards the tint above Windows build 22523, so an acrylic backdrop is
-     not available on a current machine. These shadows are the whole depth
-     model. */
+     Self-drawn. Acrylic (`window-vibrancy`, windows.rs) genuinely blurs what
+     is behind the quickbar, widget and HUD on a current Windows 11 machine -
+     only its TINT colour is ignored above build 22523, where DWM takes over
+     with its own transient backdrop colour instead (windows.rs
+     `apply_quickbar_effects` has the detail). Brain, Settings and onboarding
+     get no vibrancy at all: those windows are built opaque on purpose (the
+     UI audit turned down a Mica backdrop for them, 2026-09-26), so `--shadow-pane`
+     is their whole depth model, with nothing behind it to blur. */
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.45);
   --shadow-pane: 0 24px 64px rgba(0, 0, 0, 0.55);
   --glow-accent: 0 0 0 1px var(--accent-dim), 0 0 22px rgba(56, 240, 255, 0.18);

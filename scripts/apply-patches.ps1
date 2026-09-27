@@ -469,6 +469,163 @@ $PATCHES = @(
     # every new patch. Needs jarvis_documents.py copied in; without it the
     # banner says so and the routes are not there.
     'documents.patch'
+    # The crisis help line's ONE cosmetic flag (the owner's decision of
+    # 2026-09-27): route_header["wellbeing"] = "crisis", so both apps can
+    # draw a calm panel instead of an ordinary chat bubble. The safety
+    # behaviour itself - no tools on a crisis turn, the note to the model,
+    # the help message appended or sent alone on failure, never learned -
+    # is complete without this patch, in jarvis_agent.py and
+    # jarvis_intake.py below, which this script always copies in. UNLIKE
+    # every other patch here, this one was written with no real
+    # jarvis_hud.py to check it against (see backend/README.md's own
+    # section, "The crisis help line", for exactly what that means and
+    # why); if the rehearsal above says it will not apply, that almost
+    # certainly means this file has moved since it was written - send the
+    # reason back rather than editing it by hand.
+    'wellbeing.patch'
+    # Games and role-play run in a temporary chat automatically (the
+    # owner's decision, 2026-09-27, CLAUDE.md / Q19): a game or made-up
+    # scenario, once started by the owner's own words, is put through
+    # _temporary_chat() too, so it recalls no facts, is never kept and is
+    # never learned from - the same as a manually-started temporary chat.
+    # Its context is temporary-chat's _temporary_chat() function and the
+    # two lines in the chat turn's `finally` block that check
+    # body.get("temporary") directly, so it goes after temporary-chat -
+    # last, like every new patch. The detection itself is in the shipped
+    # jarvis_intake.py (game_or_roleplay()); without that module, or on any
+    # error, nothing is detected and chat works exactly as before.
+    'games-temporary.patch'
+    # Smartwatch notifications (the owner's decision, 2026-09-25;
+    # reconfirmed 2026-09-27, Q17): GET and POST /api/notifications/watch -
+    # off by default (every notification stays on the phone), ON is one
+    # approval card (watch_notifications_enable), OFF is instant. Wrapped
+    # round the server's handler at start-up like folders. Its context is
+    # documents's banner lines, so it goes after it - last, like every new
+    # patch. Needs jarvis_watch_notify.py copied in; without it the banner
+    # says so and the route is not there.
+    'watch-notifications.patch'
+    # Email drafts (the owner's decision, 2026-09-27, "a card every time,
+    # showing the full draft"): GET /api/email/drafting (the Settings line,
+    # same shape as email-send's), and in jarvis_gate.py the words for
+    # draft_email, draft_email in _TOOL_ACTIONS, and "a no proposes no
+    # memory rule" for it - all right beside send_email's own lines. Its
+    # jarvis_hud.py context is web-search's route block (the same one
+    # email-send.patch built on); its jarvis_gate.py context is
+    # email-send.patch's three blocks, so it goes after email-send - last,
+    # like every new patch. Needs jarvis_email_draft.py copied in; without
+    # it, or on any error, the route says so.
+    'draft-email.patch'
+    # "Things you can say" (already approved as feasibility I116; the
+    # ease-of-use audit's do-first table, row 4, 2026-09-27): GET
+    # /api/sayable - the fixed list of real sentences Jarvis answers
+    # without the model, read by the empty Jarvis bar/Home screen, the
+    # walkthrough and Help in both apps. Fixed text, not a setting, so no
+    # approval card either way, the same shape as reach.patch and
+    # manner.patch. Its context is draft-email's own new route block, so it
+    # goes after it - last, like every new patch. Needs jarvis_sayable.py
+    # copied in; without it, or on any error, the route says so.
+    'sayable.patch'
+    # Offering a reading tool to the AI model at all, from the PC (the
+    # owner's answer, 2026-09-27): POST /api/asks_first/tools - a DIFFERENT
+    # thing from asks-first.patch's /api/asks_first/tier (whether a tool is
+    # offered at all, [tools].enabled, never whether it asks first). Its
+    # jarvis_hud.py context is asks-first.patch's own tier/lights route
+    # block, so it goes after asks-first.patch; its jarvis_gate.py context
+    # is asks-first.patch's two blocks too. Needs jarvis_asks_first.py -
+    # already needed by asks-first.patch, so nothing new to copy in.
+    'tools-enable.patch'
+    # Backups (the owner's decision, 2026-09-27): GET /api/backup and
+    # /api/backup/list, POST /api/backup/folder ("Back up into this folder?",
+    # one approval card, change_own_config - jarvis_documents.check_folder's
+    # own refusal list), /api/backup/now (this PC only, no card),
+    # /api/backup/restore/preview and /api/backup/restore (this PC only, ONE
+    # approval card that always needs Windows Hello - a new jarvis_gate.py
+    # _RISK entry and jarvis_owner_check.PC_ONLY_ACTIONS). Its jarvis_hud.py
+    # context is watch-notifications.patch's own install block, and its
+    # jarvis_gate.py context is tools-enable.patch's two blocks, so it goes
+    # after both - last, like every new patch. Needs jarvis_backup.py copied
+    # in; without it, or on any error, the routes say so.
+    'backup.patch'
+    # Music and video control on this PC (the owner's decision, 2026-09-27,
+    # feasibility I91: "no card, only from the owner's own words"): GET
+    # /api/media ("what's playing") and POST /api/media/control - never a
+    # card, never jarvis_gate, for either route; the fast path itself is in
+    # the shipped jarvis_quick.py, not this patch. Its jarvis_hud.py context
+    # is backup.patch's own install block (merged in after it, 2026-09-27),
+    # so it goes after it - last, like every new patch. Needs
+    # jarvis_media.py copied in; without it, or on any error, the banner
+    # says so and the routes answer 503.
+    'media.patch'
+    # News headlines in the morning briefing (the owner's decision,
+    # 2026-09-27, feasibility I49: "one card per address the owner adds,
+    # read-only, never follows links elsewhere, never acts on what it
+    # reads"): GET /api/news, POST /api/news/add (ONE approval card, from
+    # either app) and /api/news/remove (at once). Its context is media's
+    # own banner block, so it goes after it - last, like every new patch.
+    # Needs jarvis_news.py copied in; without it, or on any error, the
+    # banner says so and the routes answer 503.
+    'news.patch'
+    # "Between us" (the owner's decision, 2026-09-27): GET and POST
+    # /api/memory/shared - tag or untag ONE fact as a shared joke or
+    # nickname (meta.kind = "shared"), the owner's own tap only, no approval
+    # card, the same shape as memory-profile.patch. Its jarvis_hud.py
+    # context is the route-dispatch chain right after /api/memory/status
+    # (original line ~1964) - a different part of the file from the
+    # startup install() block every backup/media/news-shaped patch touches,
+    # so its place in this list is only about order, not about finding its
+    # own anchor text. The work is in the shipped
+    # rebuilt\jarvis_memory.py (shared(), is_shared(), shared_facts(),
+    # without_shared_in_plain(), with_profile()'s new `manner` argument);
+    # with an older copy the routes answer 501 and nothing is filtered.
+    'memory-shared.patch'
+    # "Data health in the preflight" (feasibility I97, docs/FEASIBILITY-AUDIT-
+    # 2026-09-26.md: "Small, read-only" / "WARN, never fix"): GET
+    # /api/data-health, read by --preflight's own "Is Jarvis's own data
+    # healthy?" check. Its jarvis_hud.py context is the route-dispatch chain
+    # near /api/reach (original line ~1626), a completely different part of
+    # the file from every patch above it in this list (they all touch the
+    # startup install() block) - so its place in this list is only about
+    # order, not about finding its own anchor text. Needs
+    # jarvis_data_health.py copied in; without it the route answers 503.
+    'data-health.patch'
+    # "Check for tool updates" (the owner's request, made directly): GET
+    # /api/tool_updates (the report, read-only) and POST
+    # /api/tool_updates/check (ONE approval card, ever - then never again;
+    # it never installs or changes a file itself). Its jarvis_hud.py
+    # context is news.patch's own install block, so it goes after it -
+    # last, like every new patch. memory-shared.patch and
+    # data-health.patch, above it in this list, both touch a different,
+    # unrelated part of the file (the route-dispatch chain, not this
+    # startup install() block), so neither changes what this patch's own
+    # hunk actually finds. Needs jarvis_tool_updates.py copied in, and the two files step 3b
+    # below copies (requirements.lock, rust-crates.lock); without any of
+    # the three, or on any error, the banner says so and the routes answer
+    # 503 or say plainly what could not be read.
+    'tool-updates.patch'
+    # "Where this came from" and the quote check (feasibility I42/I132,
+    # docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md detail 1): GET
+    # /api/chat/sources?turn_id=<id> - each reading tool's own result this
+    # turn, by reference (a note's ref, a wiki page's path, a web result's
+    # url, a file's path), plus which quoted phrases in the answer were not
+    # found in any of them. Two hunks: its startup install() block, whose
+    # context is tool-updates.patch's own (so it goes after it, like every
+    # new patch); and its jarvis_hud.py hunk right after chat-history.patch's
+    # `_history["turn"] = _turn` line (nothing later in this list touches
+    # `_turn`), where `route_header["turn_id"]` - set before this loop ever
+    # ran, since the header goes out before jarvis_agent even starts - is
+    # already in scope. Needs jarvis_sources.py copied in; without it, or on
+    # any error, the banner says so and the route answers 503, and nothing
+    # about an ordinary chat turn changes.
+    'answer-sources.patch'
+    # Noticing a conversation could use the bigger model (CLAUDE.md
+    # 2026-09-27's "Both, with a setting" answer): one small hunk, right
+    # after feedback.patch's own POST /api/feedback/mark block (so it goes
+    # after it, like every new patch), passing an optional
+    # `conversation_id` on to jarvis_second_card.py's per-conversation
+    # correction count. jarvis_agent.py and jarvis_second_card.py carry the
+    # rest of this feature as ordinary code, needing no patch (they are
+    # whole shipped modules, copied in like every other one in this list).
+    'second-card-suggest.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -531,6 +688,7 @@ $SHIPPED = @(
     'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
     'jarvis_voice_flow.py'       # voice-flow.patch: interrupting by talking, the delay in numbers, the "One moment." clip; jarvis_speech.py calls it
     'jarvis_chat_log.py'         # chat-history.patch: chat history kept on this PC, encrypted
+    'jarvis_paste_guard.py'      # feasibility I115, "Paste guard": masks a pasted password, PIN or one-time code before it is written to the encrypted database
     'jarvis_auto_learn.py'       # auto-learn.patch: facts from the owner's own words saved without a card
     'jarvis_sensitive.py'        # the sensitive-topic check jarvis_auto_learn.py asks: word lists, shapes, the local model
     'jarvis_past.py'             # past-recall.patch: questions about the past also get retired facts, labelled
@@ -540,6 +698,7 @@ $SHIPPED = @(
     'jarvis_scrub.py'            # log-scrub.patch: passwords, keys and the token kept out of backend.log
     'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
     'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
+    'jarvis_settings_registry.py' # "open"/"adjust" any setting by voice or chat, 2026-09-27; jarvis_quick.py (above) calls it, no patch of its own
     'jarvis_standby_schedule.py' # the standby schedule ("standby from 01:00 to 07:00"): a kind of job on the one scheduler, no patch
     'jarvis_backoff.py'          # briefing.patch: offers nobody asked for - a few at most, not mid-chat, a "no" heard
     'jarvis_briefing.py'         # briefing.patch: the morning briefing, a kind of job on the one scheduler
@@ -561,6 +720,7 @@ $SHIPPED = @(
     'jarvis_email.py'            # tool "email_check"
     'jarvis_mail_mask.py'        # hides one-time codes and sign-in links in everything jarvis_email.py reads
     'jarvis_email_send.py'       # tool "send_email": ONE email per approval card; email-send.patch
+    'jarvis_email_draft.py'      # tool "draft_email": ONE draft per approval card, saved to Drafts only, never sent; draft-email.patch
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch
@@ -577,6 +737,27 @@ $SHIPPED = @(
     'jarvis_ocr.py'              # reads the words in a picture with Windows' own text recognition, on this PC; jarvis_agent.py marks them as outside text; no patch
     # --- plug-in programs (MCP), reached only through more_tools("plugins") ---
     'jarvis_mcp.py'              # read-only tools from programs on this PC you list under [mcp]; stdio only; every call asks
+    # --- the crisis help line (2026-09-27) ---
+    'jarvis_wellbeing.py'        # the word check, the fixed US help message, the note to the model; jarvis_agent.py and jarvis_intake.py call it, no patch needed for the safety behaviour itself
+    # --- the smartwatch notifications setting (2026-09-27) ---
+    'jarvis_watch_notify.py'     # off by default; ON is one approval card, watch_notifications_enable; OFF is instant
+    # --- "Things you can say" (2026-09-27, sayable.patch) ---
+    'jarvis_sayable.py'          # sayable.patch: the fixed list of real sentences Jarvis answers without the model
+    # --- Backups (2026-09-27, backup.patch) ---
+    'jarvis_backup.py'           # one locked backup file with a recovery code shown once; restore is one card plus Windows Hello
+    # --- music and video control (2026-09-27, media.patch) ---
+    'jarvis_media.py'            # media.patch: play/pause/next/previous and "what's playing", no card, no model tool
+    # --- "tell me when this page changes" (a source of jarvis_tellme.py, no patch of its own) is IN jarvis_tellme.py above
+    # --- news headlines in the morning briefing (2026-09-27, news.patch) ---
+    'jarvis_news.py'             # news.patch: RSS/Atom feed addresses the owner adds, headlines only, one card per feed
+    # --- data health in the preflight (feasibility I97, data-health.patch) ---
+    'jarvis_data_health.py'      # do the chat history and memory databases open, is there disk space, do the settings files parse - read-only, WARN never fix
+    # --- "Check for tool updates" (tool-updates.patch) ---
+    'jarvis_tool_updates.py'     # tool-updates.patch: reports outdated Python packages, Rust crates and pinned GitHub tools; one card ever, never installs anything
+    # --- "Who are you?" fixed answers (feasibility I131, 2026-09-27) ---
+    'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
+    # --- "Where this came from" and the quote check (answer-sources.patch) ---
+    'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -1410,6 +1591,50 @@ try {
     # in %TEMP% after every run is the kind of litter nobody notices until a
     # disk is full.
     Remove-Item -LiteralPath $LfDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# --- 3b. the two files "Check for tool updates" reads -----------------------
+#
+# jarvis_tool_updates.py has no other way to reach backend\requirements.lock
+# or jarvis-desktop\src-tauri\Cargo.lock on the owner's PC - the real backend
+# folder is not this checkout. Copied by content, every run, the same
+# "already matches: leave it; an older one: back it up first" rule step 3
+# uses for the modules themselves - NOT part of $SHIPPED, because neither
+# file is Python (test_shipped_modules.py parses every $SHIPPED entry as a
+# module's source). Cargo.lock lands under a different name (rust-crates.lock)
+# so it is never mistaken for an active Rust project sitting in a Python
+# backend folder.
+Say ""
+$toolManifests = @(
+    @{ Src = (Join-Path $PatchDir 'requirements.lock'); Dst = 'requirements.lock' }
+    @{ Src = (Join-Path $RepoRoot 'jarvis-desktop\src-tauri\Cargo.lock'); Dst = 'rust-crates.lock' }
+)
+$manifestsCopied = 0
+$manifestsAbsent = @()
+foreach ($m in $toolManifests) {
+    if (-not (Test-Path -LiteralPath $m.Src)) { $manifestsAbsent += $m.Src; continue }
+    $dst = Join-Path $BackendPath $m.Dst
+    $had = Test-Path -LiteralPath $dst
+    if ($had -and (Get-FileHash -LiteralPath $dst).Hash -eq (Get-FileHash -LiteralPath $m.Src).Hash) {
+        continue
+    }
+    if ($had) {
+        if (-not (Test-Path -LiteralPath $backup)) {
+            New-Item -ItemType Directory -Path $backup -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $dst -Destination (Join-Path $backup $m.Dst) -Force
+    }
+    Copy-Item -LiteralPath $m.Src -Destination $dst -Force
+    $manifestsCopied++
+    if ($had) { Ok "$($m.Dst) - replaced an older copy (the old one is in $backup)" }
+    else      { Ok "$($m.Dst) - copied in (Check for tool updates was off until now)" }
+}
+if ($manifestsAbsent.Count -gt 0) {
+    Bad "$($manifestsAbsent.Count) file(s) 'Check for tool updates' reads are missing from this repository:"
+    foreach ($a in $manifestsAbsent) { Say "          $a" Red }
+    Say "        Get a fresh copy of the repository (git pull) and run this again." Cyan
+} elseif ($manifestsCopied -eq 0) {
+    Ok "requirements.lock and rust-crates.lock (for 'Check for tool updates') are there and up to date."
 }
 
 # The real Python, or $null. Needed by steps 4 to 6.

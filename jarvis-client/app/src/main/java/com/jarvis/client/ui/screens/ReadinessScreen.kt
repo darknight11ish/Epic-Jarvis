@@ -157,6 +157,15 @@ fun ReadinessScreen(
     onUpdateChecks: (Boolean) -> Unit = {},
     /** Opens the release page in the browser. */
     onOpenRelease: () -> Unit = {},
+    /**
+     * Opens the phone's own Settings screen (ease-of-use audit 2026-09-27,
+     * row 16), where "How Jarvis talks", web search and the other settings
+     * that used to sit under Brain's "Settings" group now live, alongside
+     * voice, security and appearance. Null draws no way in. Nothing already
+     * on this screen moved - the voice and Security cards below still work
+     * exactly as they did.
+     */
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // Split rather than re-sorted, so within each group the order stays the
@@ -209,6 +218,9 @@ fun ReadinessScreen(
                         onChangeDesktop = onChangeDesktop,
                     )
                 }
+            }
+            if (onOpenSettings != null) {
+                item(key = "settings-pointer") { SettingsPointerCard(onOpenSettings) }
             }
             items(warnings, key = { it.title }) { ReadinessCard(it, fixFor(it)) }
             if (voiceStatus != null) {
@@ -886,6 +898,32 @@ private fun ago(ms: Long): String {
         s < 60L -> "$s s ago"
         s < 3_600L -> "${s / 60L} min ago"
         else -> "${s / 3_600L} h ago"
+    }
+}
+
+/**
+ * One line pointing at the phone's own Settings screen (ease-of-use audit
+ * row 16, 2026-09-27) - the same [Plate]/[Secondary] shape as [SecurityCard]
+ * just below it. Purely additive: nothing already on this screen moved.
+ */
+@Composable
+private fun SettingsPointerCard(onOpen: () -> Unit) {
+    val chrome = LocalChrome.current
+    Plate {
+        Text("Settings", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+        Gap(6)
+        Text(
+            "How Jarvis talks, web search, security, appearance, voice and more, in one place.",
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid,
+        )
+        Gap(12)
+        Secondary(
+            text = "Open Settings",
+            color = chrome.textMid,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onOpen,
+        )
     }
 }
 

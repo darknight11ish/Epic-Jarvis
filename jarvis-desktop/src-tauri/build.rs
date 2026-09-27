@@ -90,6 +90,11 @@ fn main() {
             // facts, and pin or unpin ONE fact. Brain only.
             "brain_memory_profile",
             "brain_memory_pin",
+            // "Between us" (JARVIS-API.md section 44, the owner's decision,
+            // 2026-09-27): the shared-joke facts, and tag or untag ONE fact.
+            // Brain only.
+            "brain_memory_shared",
+            "brain_memory_share",
             // "Used in this answer" / "Jarvis remembered N things" (the
             // owner's decision, 2026-09-25): the words of a few facts, by id.
             // A read. The quickbar and the Brain.
@@ -142,6 +147,10 @@ fn main() {
             "get_backend_capabilities",
             "get_second_card",
             "set_second_card",
+            // "When to suggest the bigger model" (2026-09-27): no approval
+            // card either way, folded into the same Settings section. read
+            // is folded into get_second_card's own answer.
+            "set_second_card_suggest",
             // Settings' "Big model (slow)" (backend/big-model.patch): read
             // what was found and the three switches, and turn ONE switch on
             // or off. ON only raises an approval card. Settings window only.
@@ -167,6 +176,14 @@ fn main() {
             "test_web_search",
             "save_search_key",
             "forget_search_key",
+            // Settings' "Accounts" (ease-of-use audit row 15): the IMAP
+            // username and password, the private calendar link, and the
+            // Home Assistant token, written straight into Credential
+            // Manager on this PC - never sent over HTTP, never shown again.
+            // Settings window only.
+            "get_account_secrets",
+            "save_account_secret",
+            "forget_account_secret",
             // Settings' "What Jarvis can reach" (backend/reach.patch): every
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.
@@ -175,11 +192,14 @@ fn main() {
             // action and whether it asks, in the PC's words; "Ask me first"
             // on ONE action of the short safe list (stricter at once, never
             // held; looser is one card plus Windows Hello on the PC, held on
-            // a stale link); and "Lights, plugs and fans without a card" (ON
-            // is one card, held; OFF at once). Settings window only.
+            // a stale link); "Lights, plugs and fans without a card" (ON
+            // is one card, held; OFF at once); and (2026-09-27) "Offer this
+            // to the AI model" on the four reading tools (ON one card, held;
+            // OFF at once). Settings window only.
             "get_asks_first",
             "set_asks_first",
             "set_lights_without_card",
+            "set_tool_enabled",
             // Settings' "Sending email" (backend/email-send.patch): whether
             // sending is set up - from which address, through which server -
             // in the PC's own words. A read; never the password. Settings
@@ -196,11 +216,27 @@ fn main() {
             "add_folder",
             "remove_folder",
             "import_notion",
+            // Settings' "Backups" (backend/jarvis_backup.py, backup.patch;
+            // the owner's decision of 2026-09-27): one locked backup file
+            // with a recovery code shown once. Setting the folder reuses
+            // the Windows folder picker above (one approval card, held on
+            // a stale link); "Back up now" and listing need no card;
+            // restoring is one card that always needs Windows Hello, held
+            // on a stale link. Settings window only.
+            "get_backup",
+            "list_backups",
+            "set_backup_folder",
+            "backup_now",
+            "preview_restore",
+            "restore_backup",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
             // way (it changes wording only). Settings window only.
             "get_manner",
             "set_manner",
+            // Humour, the same screen's second switch (the owner's decision,
+            // 2026-09-27): off to start, no card either way.
+            "set_humor",
             // The quickbar's error fix buttons ("Check the connection
             // settings", "Choose a model"): open Settings or the Brain,
             // nothing else (plain_errors.rs).
@@ -239,6 +275,7 @@ fn main() {
             "delete_custom_voice",
             "set_better_voice",
             "set_voice_speed",
+            "set_voice_speaker",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",
@@ -265,6 +302,30 @@ fn main() {
             "set_widget_always_on_top",
             "save_widget_position",
             "get_widget_prefs",
+            // The floating face (Settings -> Appearance): whether it is on,
+            // and turning it on or off. Settings window only - the window
+            // itself has no button to call either from.
+            "get_floating",
+            "set_floating",
+            // Bug audit 2026-09-27, desktop-rust finding #2: crash_notes and
+            // find_python were added to generate_handler! in lib.rs but
+            // never added here, so no permission file ever existed for
+            // either one - the crash-notes list (More options) and "Find it
+            // for me" (the Python search) refused every call at the ACL,
+            // not a bug in either command itself.
+            "crash_notes",
+            "find_python",
+            // Same finding: get_tool_updates, check_tool_updates and
+            // chat_sources are also in generate_handler! but not here. These
+            // three were not a break like crash_notes/find_python - someone
+            // had already hand-written matching permission files in
+            // permissions/autogenerated/ to work around it - but a hand-kept
+            // copy of a "DO NOT EDIT!" generated file is exactly the kind of
+            // drift that goes stale silently. Adding them here makes the
+            // build regenerate those files itself, like every other command.
+            "get_tool_updates",
+            "check_tool_updates",
+            "chat_sources",
             "prefill_quickbar",
             "capture_note",
             // How a filed note ended: waiting for approval, filed, or not.
@@ -320,6 +381,7 @@ fn main() {
             "resize_quickbar",
             "set_quickbar_pinned",
             "write_clipboard",
+            "write_clipboard_private",
             "open_external_url",
             // Diagnostics and startup. Settings window only: the log path is
             // a filesystem path and the startup entry is a registry write,

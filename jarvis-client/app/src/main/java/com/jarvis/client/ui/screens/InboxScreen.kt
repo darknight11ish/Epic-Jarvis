@@ -26,6 +26,7 @@ import com.jarvis.client.LinkState
 import com.jarvis.client.SectionRead
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
+import com.jarvis.client.net.GateHistoryItem
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.ui.parts.Freshness
@@ -34,6 +35,7 @@ import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Toggle
+import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalChrome
 
@@ -87,6 +89,12 @@ fun InboxScreen(
     onDismissNotice: () -> Unit = {},
     /** Re-reads the Inbox after a failed read. Null draws no Retry. */
     onRetry: (() -> Unit)? = null,
+    /**
+     * "Activity" - past approvals, read-only (ease-of-use audit, 2026-09-27,
+     * row 11): title, Approved/Denied/Timed out, when, and which device.
+     * Never the same list as a waiting card - see `JarvisApi.gateHistoryRead`.
+     */
+    pastApprovals: List<GateHistoryItem> = emptyList(),
 ) {
     val chrome = LocalChrome.current
     // Rule 4, on this screen: Revert and Cancel are actions, so a stream we
@@ -100,10 +108,11 @@ fun InboxScreen(
     val showDigest = digest.isNotEmpty() && read?.digest != SectionRead.Absent
     val showJobs = jobs.isNotEmpty() && read?.jobs != SectionRead.Absent
     val showUndo = undo.isNotEmpty() && read?.undo != SectionRead.Absent
+    val showActivity = pastApprovals.isNotEmpty() && read?.activity != SectionRead.Absent
     // "Nothing waiting" is a claim that every list was read and came back
     // empty. Before the first read, or after a read that failed, the phone
     // does not know that - and this screen used to say it anyway.
-    val reads = read?.let { listOf(it.digest, it.undo, it.jobs) }
+    val reads = read?.let { listOf(it.digest, it.undo, it.jobs, it.activity) }
     val allAnswered = reads == null || (
         reads.all { it == SectionRead.Read || it == SectionRead.Absent } &&
             reads.any { it == SectionRead.Read }
@@ -151,13 +160,15 @@ fun InboxScreen(
                     Triple("digest", "Today's brief", read.digest),
                     Triple("jobs", "Running jobs", read.jobs),
                     Triple("undo", "The undo shelf", read.undo),
+                    Triple("activity", "Activity", read.activity),
                 )
                 problems.forEach { (key, name, state) ->
                     if (state is SectionRead.Failed || state == SectionRead.Absent) {
                         val showingOld = when (key) {
                             "digest" -> showDigest
                             "jobs" -> showJobs
-                            else -> showUndo
+                            "undo" -> showUndo
+                            else -> showActivity
                         }
                         item(key = "read-$key") {
                             ReadProblem(
@@ -357,7 +368,51 @@ fun InboxScreen(
                 }
             }
 
-            if (allAnswered && !showDigest && !showUndo && !showJobs) {
+            if (showActivity) {
+                item(key = "activity-label") {
+                    Text(
+                        "ACTIVITY",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                }
+                // Newest decision first - the same order the chat history list
+                // uses. Read-only: there is nothing to tap here, on purpose -
+                // this answers "did I turn that on?", it does not undo it.
+                val sorted = pastApprovals.sortedByDescending { it.whenAt }
+                items(sorted, key = { "a-" + it.id }) { entry ->
+                    Plate {
+                        Text(
+                            entry.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = chrome.textHi,
+                        )
+                        Gap(4)
+                        Text(
+                            buildString {
+                                append(entry.outcomeLabel)
+                                if (entry.whenAt > 0) {
+                                    append(" · ")
+                                    append(ageText(System.currentTimeMillis() - (entry.whenAt * 1000).toLong()))
+                                }
+                                entry.device?.let {
+                                    append(" · ")
+                                    append(it)
+                                }
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = when (entry.outcomeLabel) {
+                                "Approved" -> chrome.okInk
+                                "Denied" -> chrome.badInk
+                                else -> chrome.textMid
+                            },
+                        )
+                    }
+                }
+            }
+
+            if (allAnswered && !showDigest && !showUndo && !showJobs && !showActivity) {
                 item(key = "empty") {
                     Text(
                         "Nothing waiting.",

@@ -96,8 +96,10 @@ def t_no_current_offer_breaks_the_rule():
            if not v or any(a not in BO.MAY_ASK or a in BO.NEVER_ASKS for a in v)}
     check("every offer made today asks only for what MAY_ASK lists", not bad, bad)
     check("MAY_ASK and NEVER_ASKS share nothing", not set(BO.MAY_ASK) & set(BO.NEVER_ASKS))
-    check("today's offers are the overnight tidy and the skill offer",
-          set(BO.OFFERS) == {"sleep_time_offer", "skill_offer"}, sorted(BO.OFFERS))
+    check("today's offers are the overnight tidy, the skill offer and the "
+          "bigger-model suggestion",
+          set(BO.OFFERS) == {"sleep_time_offer", "skill_offer", "second_card_combined_offer"},
+          sorted(BO.OFFERS))
 
 
 class _Catch(logging.Handler):

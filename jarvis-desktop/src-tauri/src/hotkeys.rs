@@ -99,6 +99,15 @@ pub const ACTIONS: &[Action] = &[
         default: "Alt+Shift+X",
         hint: "Stops Jarvis talking and anything it is doing on the screen or the phone, at once. Asks nothing first; approves nothing.",
     },
+    Action {
+        id: "toggle_floating",
+        label: "Show or hide the floating face",
+        // Same family as the rest ("Windows has no Alt+Shift+letter of its
+        // own", above) - F for "floating", and free: nothing else here
+        // uses it.
+        default: "Alt+Shift+F",
+        hint: "The small always-on-top window with just Jarvis's face - no chat box. Off by default.",
+    },
 ];
 
 fn action(id: &str) -> Option<&'static Action> {
@@ -163,6 +172,18 @@ pub fn parse(accelerator: &str) -> Result<Shortcut, String> {
 /// The bindings as configured: the store's values where present, defaults
 /// where not, and defaults again for anything the store holds that no longer
 /// parses.
+///
+/// When a build ships a NEW action whose default lands on a key the owner
+/// already saved, by hand, for something else, that something else keeps the
+/// key: this new, never-chosen action comes back empty (unbound) instead.
+/// The owner made a real choice for the old action; nobody chose the new
+/// default yet, so it is not the new action's place to fight for it. Without
+/// this, `set_hotkeys` (which starts from this map) would see the same
+/// collision on every save and refuse ALL of them - not just the one that
+/// actually clashes - until the owner noticed and moved one by hand (bug
+/// audit 2026-09-27, desktop-rust finding #7). A default never fights another
+/// default, though: two untouched defaults landing on the same key is a build
+/// mistake, and stays a loud `validate` error like any other duplicate.
 pub fn configured(app: &AppHandle) -> BTreeMap<String, String> {
     let stored = app
         .store(commands::SETTINGS_STORE)
@@ -170,6 +191,7 @@ pub fn configured(app: &AppHandle) -> BTreeMap<String, String> {
         .and_then(|store| store.get(STORE_KEY));
 
     let mut out = BTreeMap::new();
+    let mut on_default: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for spec in ACTIONS {
         let saved = stored
             .as_ref()
@@ -181,11 +203,40 @@ pub fn configured(app: &AppHandle) -> BTreeMap<String, String> {
         // strand someone with a dead shortcut and no way to see why.
         let accel = match saved {
             Some(text) if parse(&text).is_ok() => text,
-            _ => spec.default.to_string(),
+            _ => {
+                on_default.insert(spec.id.to_string());
+                spec.default.to_string()
+            }
         };
         out.insert(spec.id.to_string(), accel);
     }
+
+    resolve_default_clashes(&mut out, &on_default);
     out
+}
+
+/// Blanks a DEFAULTED id's entry when it collides with another id's own
+/// explicitly-saved entry. Two ids that are both defaulted are left to
+/// collide loudly if they do - that is a build mistake, not this to paper
+/// over, and `validate` already reports it. Pulled out of [`configured`] so
+/// the resolution itself can be tested without an `AppHandle`.
+fn resolve_default_clashes(
+    bindings: &mut BTreeMap<String, String>,
+    on_default: &std::collections::BTreeSet<String>,
+) {
+    for id in on_default {
+        let Some(Ok(shortcut)) = bindings.get(id).map(|a| parse(a)) else {
+            continue;
+        };
+        let clash = bindings.iter().any(|(other_id, accel)| {
+            other_id != id
+                && !on_default.contains(other_id)
+                && parse(accel).is_ok_and(|s| s == shortcut)
+        });
+        if clash {
+            bindings.insert(id.clone(), String::new());
+        }
+    }
 }
 
 /// Writes the bindings, having already checked they are sane.
@@ -211,6 +262,13 @@ fn persist(app: &AppHandle, bindings: &BTreeMap<String, String>) -> Result<(), S
 fn validate(bindings: &BTreeMap<String, String>) -> Result<(), String> {
     let mut seen: BTreeMap<String, &str> = BTreeMap::new();
     for (id, accel) in bindings {
+        // Blank means `configured` already left this one unbound because its
+        // default lost to another action's own saved key (finding #7) - not
+        // a real gap to reject. Nothing else in this build can produce a
+        // blank entry: the recording UI only ever writes a real combination.
+        if accel.is_empty() {
+            continue;
+        }
         parse(accel)
             .map_err(|e| format!("{}: {e}", action(id).map_or(id.as_str(), |a| a.label)))?;
         // Compare the parsed form, so `Alt+Space` and `alt+space` collide as
@@ -249,6 +307,40 @@ pub fn apply(app: &AppHandle) -> Vec<Bound> {
             .get(spec.id)
             .cloned()
             .unwrap_or_else(|| spec.default.to_string());
+
+        // `configured` already left this one blank because its default lost
+        // to another action's own saved key. Registering it anyway would
+        // just be refused by the OS, and the notification in lib.rs would
+        // wrongly blame "another application" for a fight Jarvis itself
+        // caused (finding #7) - so this never reaches `manager.register`.
+        if accel.is_empty() {
+            let holder = ACTIONS.iter().find(|other| {
+                other.id != spec.id
+                    && bindings
+                        .get(other.id)
+                        .and_then(|a| parse(a).ok())
+                        .zip(parse(spec.default).ok())
+                        .is_some_and(|(a, b)| a == b)
+            });
+            let reason = match holder {
+                Some(other) => format!(
+                    "`{}` is already {}'s own key. Give this one a different one in Settings.",
+                    spec.default, other.label
+                ),
+                None => format!("`{}` is already used elsewhere.", spec.default),
+            };
+            out.push(Bound {
+                id: spec.id.to_string(),
+                label: spec.label.to_string(),
+                hint: spec.hint.to_string(),
+                accelerator: String::new(),
+                default: spec.default.to_string(),
+                registered: false,
+                error: Some(reason),
+            });
+            continue;
+        }
+
         let (registered, error) = match parse(&accel) {
             Ok(shortcut) => match manager.register(shortcut) {
                 Ok(()) => {
@@ -394,6 +486,62 @@ mod tests {
             .map(|a| (a.id.to_string(), a.default.to_string()))
             .collect();
         validate(&defaults).expect("the shipped defaults conflict with each other");
+    }
+
+    /// Bug audit 2026-09-27, finding #7: a build-shipped default must not
+    /// fight a key the owner already saved for something else, and must
+    /// not stop EVERY other save while it does.
+    #[test]
+    fn a_new_default_loses_to_an_old_saved_key() {
+        let mut bindings: BTreeMap<String, String> = ACTIONS
+            .iter()
+            .map(|a| (a.id.to_string(), a.default.to_string()))
+            .collect();
+        // The owner long ago moved "Quick note" onto what is now
+        // "toggle_floating"'s shipped default.
+        bindings.insert("quick_note".into(), "Alt+Shift+F".into());
+        let on_default: std::collections::BTreeSet<String> =
+            ["toggle_floating".to_string()].into_iter().collect();
+
+        resolve_default_clashes(&mut bindings, &on_default);
+
+        assert_eq!(bindings["toggle_floating"], "");
+        assert_eq!(bindings["quick_note"], "Alt+Shift+F");
+        // The clash is gone, so the whole set - not just these two ids -
+        // validates: every other action's own save is no longer refused.
+        validate(&bindings).expect("a resolved clash must not block other saves");
+    }
+
+    #[test]
+    fn two_untouched_defaults_still_collide_loudly() {
+        // Neither side was ever chosen by the owner, so there is no "keep
+        // the owner's real choice" case to apply - this is just a build
+        // mistake, and it must still be reported, not silently resolved.
+        let mut bindings: BTreeMap<String, String> = ACTIONS
+            .iter()
+            .map(|a| (a.id.to_string(), a.default.to_string()))
+            .collect();
+        bindings.insert("quick_note".into(), "Alt+Shift+F".into());
+        let on_default: std::collections::BTreeSet<String> =
+            ["toggle_floating".to_string(), "quick_note".to_string()]
+                .into_iter()
+                .collect();
+
+        resolve_default_clashes(&mut bindings, &on_default);
+
+        assert_eq!(bindings["toggle_floating"], "Alt+Shift+F");
+        assert_eq!(bindings["quick_note"], "Alt+Shift+F");
+        assert!(validate(&bindings).is_err());
+    }
+
+    #[test]
+    fn validate_accepts_a_blank_entry_as_left_unbound_on_purpose() {
+        let mut bindings: BTreeMap<String, String> = ACTIONS
+            .iter()
+            .map(|a| (a.id.to_string(), a.default.to_string()))
+            .collect();
+        bindings.insert("toggle_floating".into(), String::new());
+        validate(&bindings).expect("a blank, resolved entry must not read as \"no keys\"");
     }
 
     #[test]

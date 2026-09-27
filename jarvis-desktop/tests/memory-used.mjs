@@ -41,6 +41,7 @@ import {
   usedIds,
   usedLine,
 } from "../src/memory-used.js";
+import { ERASE_ALSO_CHAT_CONFIRM } from "../src/auto-learn.js";
 import * as K from "./uikit.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -245,11 +246,12 @@ await check("Forget and Erase: asked first, ONE fact per call, and the list says
   const afterErase = await page.locator(".answer-used-item").innerText();
   const writes = await page.evaluate(() => window.__memoryWrites);
   await page.close();
-  assert.equal(asked.length, 2);
+  assert.equal(asked.length, 3, "Erase asks twice: are you sure, then also delete the chat");
   assert.match(asked[0], /^Stop recalling this\?\n\nOwner is vegetarian/);
   assert.match(asked[1], /^Erase the words of this fact from your PC for good\?/);
+  assert.equal(asked[2], ERASE_ALSO_CHAT_CONFIRM);
   assert.deepEqual(writes, [{ cmd: "brain_memory_forget", id: 12 },
-    { cmd: "brain_memory_erase", id: 12 }]);
+    { cmd: "brain_memory_erase", id: 12, also_delete_conversation: true }]);
   assert.match(afterForget, /no longer in use/);
   assert.doesNotMatch(afterForget, /Forget/);
   assert.match(afterErase, /^Erased on /);

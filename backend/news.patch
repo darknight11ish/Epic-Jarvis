@@ -1,0 +1,23 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2492,6 +2492,20 @@
+     except Exception as exc:
+         print(f"  media      NOT ON ({type(exc).__name__}) - Music and video control is off")
+         print("             until jarvis_media.py is back: run apply-patches.ps1 again")
++    # news.patch (the owner's decision, 2026-09-27, feasibility I49: "one
++    # card per address the owner adds, read-only, never follows links
++    # elsewhere, never acts on what it reads"): GET /api/news, POST
++    # /api/news/add (ONE approval card, from either app) and
++    # /api/news/remove (at once). Wrapped round Handler here, before
++    # anything listens, like media above; the rules are all in
++    # jarvis_news.py.
++    try:
++        import jarvis_news
++        print(jarvis_news.install(Handler, origin_ok=_origin_ok,
++                                  token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  news       NOT ON ({type(exc).__name__}) - News feeds are off")
++        print("             until jarvis_news.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

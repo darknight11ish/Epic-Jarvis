@@ -41,13 +41,32 @@ class MemoryEraseTest {
     @Test
     fun oneIdPerRequestAndNothingElse() {
         assertEquals("/api/memory/erase", MemoryErase.PATH)
-        assertEquals("{\"id\":42}", MemoryErase.body(42))
+        assertEquals("{\"id\":42,\"also_delete_conversation\":false}", MemoryErase.body(42))
+        assertEquals("{\"id\":42,\"also_delete_conversation\":true}", MemoryErase.body(42, alsoDeleteConversation = true))
+    }
+
+    @Test
+    fun alsoDeleteTheChatItCameFrom() {
+        // The owner's decision, 2026-09-27: a checkbox on the erase confirm,
+        // off by default; the desktop's equivalent is auto-learn.js's
+        // ERASE_ALSO_CHAT_CONFIRM (a second window.confirm there, since it
+        // has no checkbox).
+        assertEquals("Also delete the chat it came from", MemoryErase.ALSO_CHAT_LABEL)
+        val chatGone = MemoryErase.Reply(200, obj("""{"ok":true,"id":5,"erased_at":1790000000.5,
+            "already_erased":false,"retired_now":true,"file_clean":true,"copies":1,
+            "chat_deleted":true,"note":"Erased. The chat it came from has also been deleted."}"""))
+        assertEquals(true to MemoryErase.ERASED_AND_CHAT_DELETED, MemoryErase.said(chatGone))
+        val chatKept = MemoryErase.Reply(200, obj("""{"ok":true,"id":5,"erased_at":1790000000.5,
+            "already_erased":false,"retired_now":true,"file_clean":true,"copies":1,
+            "chat_deleted":false,"note":"Erased."}"""))
+        assertEquals(true to MemoryErase.ERASED, MemoryErase.said(chatKept))
     }
 
     @Test
     fun whatThePcAnsweredReadsRight() {
         val ok = MemoryErase.Reply(200, obj("""{"ok":true,"id":5,"erased_at":1790000000.5,
-            "already_erased":false,"retired_now":true,"file_clean":true,"copies":1,"note":"Erased."}"""))
+            "already_erased":false,"retired_now":true,"file_clean":true,"copies":1,
+            "chat_deleted":false,"note":"Erased."}"""))
         assertEquals(true to "Erased.", MemoryErase.said(ok))
         // No such fact: nothing left, so it counts as gone.
         val gone = MemoryErase.Reply(404, obj("""{"ok":false,"reason":"no_such_fact","error":"no fact with that id"}"""))
@@ -97,7 +116,10 @@ class MemoryEraseTest {
         val main = "jarvis-client/app/src/main/java/com/jarvis/client"
         val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()
         assertTrue(plate.contains("Text(MemoryErase.CONFIRM"))
-        assertTrue(plate.contains("JarvisRuntime.eraseAutoFact(fact.id)"))
+        assertTrue(plate.contains("JarvisRuntime.eraseAutoFact(fact.id, alsoChat)"))
+        // "Also delete the chat it came from": a real checkbox, unchecked by default.
+        assertTrue(plate.contains("Checkbox(checked = alsoDeleteChat"))
+        assertTrue(plate.contains("Text(MemoryErase.ALSO_CHAT_LABEL"))
         assertTrue(plate.contains("if (busyId == fact.id && erasing) MemoryErase.BUSY else MemoryErase.LABEL"))
         // Greyed on a stale link, the same guard as Forget's.
         val erase = plate.substring(plate.indexOf("MemoryErase.BUSY else MemoryErase.LABEL"))
@@ -107,7 +129,9 @@ class MemoryEraseTest {
         val body = fn.substring(0, fn.indexOf("\n    }\n"))
         assertTrue(body, body.indexOf("actionBlocker()") in 0 until body.indexOf("api.eraseFact("))
         val api = repoFile("$main/net/JarvisApi.kt").readText()
-        assertTrue(api.contains("suspend fun eraseFact(id: Long): ApiResult<MemoryErase.Reply>"))
+        assertTrue(api.contains(
+            "suspend fun eraseFact(id: Long, alsoDeleteConversation: Boolean = false): ApiResult<MemoryErase.Reply>",
+        ))
         val brain = repoFile("$main/ui/screens/BrainScreen.kt").readText()
         assertTrue(brain.contains("com.jarvis.client.net.MemoryErase.erasedLine("))
     }

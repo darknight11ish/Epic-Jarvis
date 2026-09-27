@@ -13,7 +13,9 @@
  * switch: ON a card, OFF at once. A recording that sounds like the owner
  * is refused - Jarvis speaking in the owner's voice could pass its own "is
  * it the owner?" check. How fast every voice speaks (Slower / Normal /
- * Faster) is the PC's `speed` block: no card either way.
+ * Faster) is the PC's `speed` block: no card either way. Which of Kokoro's
+ * own voices the built-in one uses is the PC's `speaker` block, the same
+ * shape: no card either way.
  *
  * The server's sentences (`why`, `error`, `fallback`) are written for the
  * owner and are shown as they are, first letter raised.
@@ -64,6 +66,28 @@ export function speedView(status) {
     title: String(sp.title || "How fast Jarvis speaks"),
     detail: String(sp.detail || ""),
     note: String(sp.note || ""),
+  };
+}
+
+/**
+ * "Jarvis's built-in voice": which of Kokoro's own voices - the same
+ * shape as speedView, from the PC's `speaker` block. No card either way.
+ */
+export function speakerView(status) {
+  const sk = obj(obj(status).speaker);
+  const choices = (Array.isArray(sk.choices) ? sk.choices : [])
+    .filter((c) => c && typeof c.id === "string" && c.id && typeof c.label === "string" && c.label)
+    .map((c) => ({ id: c.id, label: c.label }));
+  if (!choices.length) {
+    return { show: false, choice: "", choices: [], title: "", detail: "", note: "" };
+  }
+  return {
+    show: true,
+    choice: typeof sk.choice === "string" ? sk.choice : "",
+    choices,
+    title: String(sk.title || "Jarvis's built-in voice"),
+    detail: String(sk.detail || ""),
+    note: String(sk.note || ""),
   };
 }
 

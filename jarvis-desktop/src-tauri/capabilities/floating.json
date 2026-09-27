@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "floating",
+  "description": "The floating face - a small always-on-top window with only Jarvis's animated face on it, no chat box, no approve/deny, no settings. Its page is floating.html (NOT faces.html itself): it embeds the same faces.html?mode=display&feed=parent frame the Widget's tray already runs, driven by postMessage, so the face - the largest body of third-party-shaped drawing code in the app, and deliberately held to zero event permission everywhere else it appears (capabilities/faces.json) - never holds a Tauri permission of its own. This window's own page needs the read-only state it relays into that frame: jarvis-link (which face state to show) and appearance-read (which face, which colours). It reads jarvis-link.js the same way the widget does, so its own memory - never the face frame's - also carries the full approval queue the module fetches for every surface, an email's whole text included (bug audit 2026-09-27, desktop-rust finding #4); nothing on screen shows any of it, and release builds have no developer tools (Cargo.toml's `devtools` feature) to read that memory from outside this app's own code. Drag-region needs core:window:allow-start-dragging: there is no OS titlebar, so the whole page is what the owner grabs (the face frame sits over it with pointer-events:none, so a click reaches this page, not the iframe). No approvals, task-control, widget-surface or focus set: the widget can act on what it shows; this window has no button to act with at all.",
+  "windows": [
+    "floating"
+  ],
+  "permissions": [
+    "core:app:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:path:default",
+    "core:webview:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-set-webview-zoom",
+    "jarvis-link",
+    "appearance-read"
+  ]
+}

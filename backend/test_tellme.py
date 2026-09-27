@@ -492,6 +492,50 @@ def t_past_its_end_it_does_not_look_again():
           r == {"ok": False, "why": "ended"} and w.s.job(j3["id"])["state"] == "fired", r)
 
 
+def t_matched_since_real_matches_only():
+    """"What did I miss?"'s "'tell me when' matches" (ease-of-use audit row
+    12) reads `matched_since()`, never `fired_since()`: an idle look, and a
+    watch that simply ran out, are both left out - only a real match is
+    "something I missed"."""
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    w = World(now, name="matchedsince")
+    # An idle watch: several looks, nothing matches.
+    idle = TM.add(dict(EMAIL, sender="Nobody"))
+    w.s.tick()
+    for i in range(1, 4):
+        w.clock.t = now + 300 * i
+        w.s.tick()
+    check("idle looks: no rows at all",
+          TM.matched_since(now - 60, w.clock.t, sched=w.s) == [])
+    # A real match.
+    matching = TM.add(dict(EMAIL, sender="Alex"))
+    w.s.tick()
+    w.mail.add(1, "Alex <alex@example.test>")
+    w.clock.t += 300
+    w.s.tick()
+    matched_at = w.clock.t
+    rows = TM.matched_since(now - 60, w.clock.t + 1, sched=w.s)
+    check("a real match: one row, the same sentence the notification says",
+          len(rows) == 1 and rows[0]["id"] == matching["id"]
+          and rows[0]["alert"] == "An email from Alex arrived."
+          and rows[0]["matched_at"] == matched_at and rows[0]["urgent"] is False, rows)
+    check("... and the idle watch is still not one of them",
+          idle["id"] not in [r["id"] for r in rows], rows)
+    check("... outside the window: not found",
+          TM.matched_since(matched_at + 1, w.clock.t + 3600, sched=w.s) == [])
+    check("... 'what did I miss?' itself lists none of it under 'went off'",
+          w.s.fired_since(now - 60, w.clock.t + 1) == [])
+    # A watch that ran out without ever matching: still not a match.
+    ran_out = TM.add(dict(EMAIL, sender="Sam"), ends=w.clock.t + 3600)
+    w.s.tick()
+    w.clock.t += 4000
+    w.s.tick()
+    check("a watch that ran out with no match: not in matched_since either",
+          ran_out["id"] not in [r["id"] for r in
+                                TM.matched_since(now - 60, w.clock.t, sched=w.s)])
+
+
 def t_sender_matching():
     m = TM.sender_matches
     check("a name matches a display name, whole words", m("Alex", b"From: Alex Smith <a@x.test>"))
@@ -1132,6 +1176,168 @@ def t_the_imap_lines():
 # --------------------------------------------------------------------------
 #   Shipped, loaded, and both apps carry the words
 # --------------------------------------------------------------------------
+#   "Tell me when this page changes" (I67, 2026-09-27): the "page" source
+# --------------------------------------------------------------------------
+
+PAGE = {"source": "page", "url": "https://example.com/product"}
+
+
+def t_page_check_and_rule_floors():
+    check("check_watch accepts a plain https address",
+          TM.check_watch(PAGE) == {"source": "page", "url": PAGE["url"], "urgent": False,
+                                   "once": True})
+    for bad in ({"source": "page", "url": ""}, {"source": "page", "url": "ftp://x"},
+               {"source": "page", "url": "not a url"}, {"source": "page"}):
+        check(f"check_watch refuses {bad!r}", _raises(lambda: TM.check_watch(bad), ValueError))
+    now = local(2026, 9, 25, 12, 0)
+    r = TM.check_rule({"every": "minutes", "watch": PAGE}, now)
+    check("default minutes is PAGE_MINUTES, not the email/home floor",
+          r["minutes"] == TM.PAGE_MINUTES and TM.PAGE_MINUTES != TM.EMAIL_MINUTES)
+    check("under the floor is refused",
+          _raises(lambda: TM.check_rule({"every": "minutes", "minutes": TM.PAGE_MINUTES - 1,
+                                        "watch": PAGE}, now), ValueError))
+    check("a page watch may look once a day - past the shared email/home ceiling",
+          TM.check_rule({"every": "minutes", "minutes": TM.MAX_MINUTES + 1, "watch": PAGE},
+                       now)["minutes"] == TM.MAX_MINUTES + 1)
+    check("past the page's OWN ceiling is still refused",
+          _raises(lambda: TM.check_rule({"every": "minutes",
+                                        "minutes": TM.PAGE_MAX_MINUTES + 1, "watch": PAGE},
+                                       now), ValueError))
+
+
+def t_page_readiness_and_words():
+    check("readiness needs no account: only the tier",
+          TM.readiness("page", TM.Deps(tier_of=lambda a: "auto")) == "")
+    why = TM.readiness("page", TM.Deps(tier_of=lambda a: "ask"))
+    check("tier 'ask': refused, with a reason", "yes each time" in why)
+    check("what_words names the address", TM.what_words(PAGE) == f"{PAGE['url']} changes")
+    check("alert_words never quotes the page, only the address the owner gave",
+          TM.alert_words(PAGE) == f"The page you're watching changed: {PAGE['url']}")
+    card_text = TM.card({"watch": TM.check_watch(PAGE), "minutes": 60,
+                        "ends": local(2026, 10, 25, 12, 0)},
+                        "", local(2026, 9, 25, 12, 0))
+    check("the card names the address in full and says headlines/text are never shown",
+          PAGE["url"] in card_text and "never shown, kept, or sent" in card_text
+          and "fingerprint" in card_text)
+
+
+def t_page_add_refuses_a_private_address_before_any_card():
+    w = World(local(2026, 9, 25, 12, 0), read_tier="auto")
+    try:
+        check("a loopback address is refused before a card is ever raised",
+              _raises(lambda: TM.add({"source": "page", "url": "http://127.0.0.1:9/x"},
+                                    sched=w.s), ValueError)
+              and w.cards == [])
+        ok = TM.add({"source": "page", "url": "https://example.com/x"}, sched=w.s)
+        check("a public address gets its one card", len(w.cards) == 1
+              and w.cards[0][0] == "schedule_repeat" and "example.com" in w.cards[0][2])
+    finally:
+        S._SCHED = None
+
+
+def t_page_max_watches():
+    w = World(local(2026, 9, 25, 12, 0), read_tier="auto")
+    try:
+        for i in range(TM.MAX_PAGE_WATCHES):
+            TM.add({"source": "page", "url": f"https://example.com/{i}"}, sched=w.s)
+        check(f"{TM.MAX_PAGE_WATCHES} page watches fit", len(w.cards) == TM.MAX_PAGE_WATCHES)
+        check("one more page watch is refused",
+              _raises(lambda: TM.add({"source": "page", "url": "https://example.com/one-more"},
+                                    sched=w.s), OverflowError))
+    finally:
+        S._SCHED = None
+
+
+def t_page_a_look_matches_on_the_fingerprint_changing_only():
+    w = World(local(2026, 9, 25, 12, 0), read_tier="auto")
+    pages = {"url": "https://example.com/product", "body": b"price: 10"}
+    TM.DEPS.page_fetch = lambda url: __import__("hashlib").sha256(pages["body"]).hexdigest()
+    try:
+        j = TM.add({"source": "page", "url": pages["url"]}, sched=w.s)
+        job_id = j["id"]
+        out = TM.look(job_id, deps=TM.DEPS, sched=w.s)
+        check("the first look only records the fingerprint - not a match",
+              out["ok"] is True and out.get("matched", 0) == 0 and w.matched() == [])
+        out2 = TM.look(job_id, deps=TM.DEPS, sched=w.s)
+        check("unchanged: still not a match", out2["matched"] == 0 and w.matched() == [])
+        pages["body"] = b"price: 8"
+        out3 = TM.look(job_id, deps=TM.DEPS, sched=w.s)
+        check("the fingerprint changed: ONE match, and it only notifies",
+              out3["matched"] == 1 and len(w.matched()) == 1
+              and w.matched()[0]["kind"] == "tellme")
+        check("the notification names the address, never the page's words",
+              pages["url"] in TM.alert_words(TM.check_watch({"source": "page",
+                                                            "url": pages["url"]})))
+    finally:
+        TM.DEPS.page_fetch = None
+        S._SCHED = None
+
+
+def t_page_a_look_refuses_a_page_that_moved_to_a_private_address():
+    w = World(local(2026, 9, 25, 12, 0), read_tier="auto")
+    TM.DEPS.page_fetch = lambda url: "irrelevant - never called"
+    try:
+        j = TM.add({"source": "page", "url": "https://example.com/product"}, sched=w.s)
+        job_id = j["id"]
+        TM.look(job_id, deps=TM.DEPS, sched=w.s)   # a normal first look
+        import jarvis_local_http as LH
+        real = LH.private_fetch_problem
+        LH.private_fetch_problem = lambda url: "faked as private for this test"
+        try:
+            out = TM.look(job_id, deps=TM.DEPS, sched=w.s)
+            check("re-checked on every look, not only at setup: this look is refused",
+                  out["ok"] is True and out.get("matched", 0) == 0)
+            row, rule, watch = TM._watch_of(job_id, w.s)
+            st = TM._state(job_id, w.s)
+            check("the row under Coming up says why, in plain words",
+                  "faked as private" in st.get("look_said", ""))
+        finally:
+            LH.private_fetch_problem = real
+    finally:
+        TM.DEPS.page_fetch = None
+        S._SCHED = None
+
+
+def t_page_redirect_handler_refuses_a_private_target():
+    """_PageRedirect - the piece _look_page's own private-address check
+    cannot see: a page that answers with a 30x pointing somewhere the
+    initial address's own check never covered."""
+    import urllib.error
+    import urllib.request
+    import jarvis_local_http as LH
+    h = TM._PageRedirect()
+    req = urllib.request.Request("https://example.com/product")
+    real = LH.private_fetch_problem
+    LH.private_fetch_problem = (
+        lambda url: "faked as private" if url == "http://127.0.0.1/evil" else "")
+    try:
+        try:
+            h.redirect_request(req, None, 302, "Found", {}, "http://127.0.0.1/evil")
+            check("refuses a redirect to a private target", False)
+        except urllib.error.HTTPError as exc:
+            check("refuses a redirect to a private target", "faked as private" in str(exc))
+        out = h.redirect_request(req, None, 302, "Found", {}, "https://example.com/next")
+        check("allows and follows a redirect to a public target",
+              isinstance(out, urllib.request.Request)
+              and out.full_url == "https://example.com/next")
+    finally:
+        LH.private_fetch_problem = real
+
+
+def t_page_read_needs_tier_auto_not_notify():
+    """Unlike the briefing's weather/calendar, "notify" is refused here too
+    (see jarvis_tellme.py's own reasoning: a look every 30 minutes at
+    "notify" would be a notification every 30 minutes)."""
+    w = World(local(2026, 9, 25, 12, 0), read_tier="notify")
+    TM.DEPS.page_fetch = lambda url: "x"
+    try:
+        j = TM.add({"source": "page", "url": "https://example.com/x"}, sched=w.s)
+    except OverflowError:
+        j = None
+    check("adding is refused outright when the tier is 'notify'", j is None)
+    TM.DEPS.page_fetch = None
+    S._SCHED = None
+
 
 def t_shipped_loaded_and_worded():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")

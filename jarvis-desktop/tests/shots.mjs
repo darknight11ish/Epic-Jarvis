@@ -27,23 +27,16 @@ const SCENES = [
                     error: "could not reach the Jarvis server at http://127.0.0.1:4719" } } },
 
   { id: "03-quickbar-answer", file: "index.html", vp: { width: 750, height: 620 },
-    data: { pending: [], attention: K.ATTENTION_CLEAR, answer: K.ANSWER_MD },
+    data: { pending: [], attention: K.ATTENTION_CLEAR, chatReplies: [K.ANSWER_MD] },
     async drive(page) {
-      // Push a finished answer through the card's own render path.
-      await page.evaluate(() => {
-        const md = window.__answer;
-        document.getElementById("card").hidden = false;
-        document.documentElement.dataset.state = "done";
-        document.getElementById("card-status-text").textContent = "Answered";
-        document.getElementById("answer").innerHTML = "";
-        return md;
-      });
+      // Send a real prompt through the mocked `stream_chat` and let the
+      // card's own render path paint the reply - the same route
+      // tests/conversation.mjs drives, not a `__render` event nothing in
+      // the app ever listened for (which is why this scene was always
+      // blank).
       await page.fill("#prompt", "what changed in the reactor spec this week?");
-      await page.evaluate((md) => {
-        // Use the page's own markdown renderer so this is the real output.
-        const ev = new CustomEvent("__render", { detail: md });
-        window.dispatchEvent(ev);
-      }, K.ANSWER_MD);
+      await page.locator("#prompt").press("Enter");
+      await page.waitForTimeout(300);
     } },
 
   { id: "04-quickbar-approval", file: "index.html", vp: { width: 750, height: 480 },

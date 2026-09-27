@@ -349,6 +349,24 @@
        "says": "Never - your settings file switches it off",
        "tier": "never",
        "title": "Open this PC to the internet"
+      },
+      {
+       "action": "news_read",
+       "fixed": false,
+       "id": "news_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a news feed you added"
+      },
+      {
+       "action": "page_read",
+       "fixed": false,
+       "id": "page_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch a web page you're watching"
       }
      ],
      "title": "The internet"
@@ -492,6 +510,15 @@
        "title": "Turn on browser control, which works real web pages"
       },
       {
+       "action": "second_card_combined_enable",
+       "fixed": false,
+       "id": "second_card_combined_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run one bigger model across both graphics cards"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -596,6 +623,15 @@
        "title": "Turn on the better custom voice"
       },
       {
+       "action": "watch_notifications_enable",
+       "fixed": false,
+       "id": "watch_notifications_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let your notifications show on a smartwatch too"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -612,6 +648,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let one action go ahead without asking you first"
+      },
+      {
+       "action": "enable_reading_tool",
+       "fixed": false,
+       "id": "enable_reading_tool",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer a reading tool to the AI model"
+      },
+      {
+       "action": "restore_backup",
+       "fixed": false,
+       "id": "restore_backup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Restore from a backup, replacing what it knows now"
+      },
+      {
+       "action": "check_tool_updates",
+       "fixed": false,
+       "id": "check_tool_updates",
+       "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
+       "says": "Asks the first time only, then never again",
+       "tier": "ask",
+       "title": "Check PyPI, crates.io and GitHub for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -678,6 +741,41 @@
     "create_joplin_note"
    ],
    "title": "What asks first",
+   "tools": {
+    "can_enable": true,
+    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "items": [
+     {
+      "id": "calendar_read",
+      "last": null,
+      "on": false,
+      "title": "Read your calendar",
+      "waiting": false
+     },
+     {
+      "id": "email_read",
+      "last": null,
+      "on": false,
+      "title": "Read your email",
+      "waiting": false
+     },
+     {
+      "id": "notes_search",
+      "last": null,
+      "on": false,
+      "title": "Search your notes",
+      "waiting": false
+     },
+     {
+      "id": "home_read",
+      "last": null,
+      "on": false,
+      "title": "Check your smart home",
+      "waiting": false
+     }
+    ],
+    "label": "Offer this to the AI model"
+   },
    "waiting": null
   },
   "pc_stricter_lights_on": {
@@ -1024,6 +1122,24 @@
        "says": "Never - your settings file switches it off",
        "tier": "never",
        "title": "Open this PC to the internet"
+      },
+      {
+       "action": "news_read",
+       "fixed": false,
+       "id": "news_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a news feed you added"
+      },
+      {
+       "action": "page_read",
+       "fixed": false,
+       "id": "page_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch a web page you're watching"
       }
      ],
      "title": "The internet"
@@ -1167,6 +1283,15 @@
        "title": "Turn on browser control, which works real web pages"
       },
       {
+       "action": "second_card_combined_enable",
+       "fixed": false,
+       "id": "second_card_combined_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run one bigger model across both graphics cards"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -1271,6 +1396,15 @@
        "title": "Turn on the better custom voice"
       },
       {
+       "action": "watch_notifications_enable",
+       "fixed": false,
+       "id": "watch_notifications_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let your notifications show on a smartwatch too"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -1287,6 +1421,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let one action go ahead without asking you first"
+      },
+      {
+       "action": "enable_reading_tool",
+       "fixed": false,
+       "id": "enable_reading_tool",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer a reading tool to the AI model"
+      },
+      {
+       "action": "restore_backup",
+       "fixed": false,
+       "id": "restore_backup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Restore from a backup, replacing what it knows now"
+      },
+      {
+       "action": "check_tool_updates",
+       "fixed": false,
+       "id": "check_tool_updates",
+       "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
+       "says": "Asks the first time only, then never again",
+       "tier": "ask",
+       "title": "Check PyPI, crates.io and GitHub for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -1353,6 +1514,41 @@
     "create_joplin_note"
    ],
    "title": "What asks first",
+   "tools": {
+    "can_enable": true,
+    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "items": [
+     {
+      "id": "calendar_read",
+      "last": null,
+      "on": true,
+      "title": "Read your calendar",
+      "waiting": false
+     },
+     {
+      "id": "email_read",
+      "last": null,
+      "on": false,
+      "title": "Read your email",
+      "waiting": false
+     },
+     {
+      "id": "notes_search",
+      "last": null,
+      "on": false,
+      "title": "Search your notes",
+      "waiting": false
+     },
+     {
+      "id": "home_read",
+      "last": null,
+      "on": false,
+      "title": "Check your smart home",
+      "waiting": false
+     }
+    ],
+    "label": "Offer this to the AI model"
+   },
    "waiting": null
   },
   "phone_cards_waiting": {
@@ -1699,6 +1895,24 @@
        "says": "Never - your settings file switches it off",
        "tier": "never",
        "title": "Open this PC to the internet"
+      },
+      {
+       "action": "news_read",
+       "fixed": false,
+       "id": "news_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a news feed you added"
+      },
+      {
+       "action": "page_read",
+       "fixed": false,
+       "id": "page_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch a web page you're watching"
       }
      ],
      "title": "The internet"
@@ -1842,6 +2056,15 @@
        "title": "Turn on browser control, which works real web pages"
       },
       {
+       "action": "second_card_combined_enable",
+       "fixed": false,
+       "id": "second_card_combined_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run one bigger model across both graphics cards"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -1946,6 +2169,15 @@
        "title": "Turn on the better custom voice"
       },
       {
+       "action": "watch_notifications_enable",
+       "fixed": false,
+       "id": "watch_notifications_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let your notifications show on a smartwatch too"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -1962,6 +2194,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let one action go ahead without asking you first"
+      },
+      {
+       "action": "enable_reading_tool",
+       "fixed": false,
+       "id": "enable_reading_tool",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer a reading tool to the AI model"
+      },
+      {
+       "action": "restore_backup",
+       "fixed": false,
+       "id": "restore_backup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Restore from a backup, replacing what it knows now"
+      },
+      {
+       "action": "check_tool_updates",
+       "fixed": false,
+       "id": "check_tool_updates",
+       "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
+       "says": "Asks the first time only, then never again",
+       "tier": "ask",
+       "title": "Check PyPI, crates.io and GitHub for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -2028,6 +2287,41 @@
     "create_joplin_note"
    ],
    "title": "What asks first",
+   "tools": {
+    "can_enable": false,
+    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "items": [
+     {
+      "id": "calendar_read",
+      "last": null,
+      "on": false,
+      "title": "Read your calendar",
+      "waiting": false
+     },
+     {
+      "id": "email_read",
+      "last": null,
+      "on": false,
+      "title": "Read your email",
+      "waiting": true
+     },
+     {
+      "id": "notes_search",
+      "last": null,
+      "on": false,
+      "title": "Search your notes",
+      "waiting": false
+     },
+     {
+      "id": "home_read",
+      "last": null,
+      "on": false,
+      "title": "Check your smart home",
+      "waiting": false
+     }
+    ],
+    "label": "Offer this to the AI model"
+   },
    "waiting": {
     "action": "calendar_read",
     "said": "Waiting for your yes on the approval card, and Windows Hello, on your PC.",
@@ -2383,6 +2677,24 @@
        "says": "Never - your settings file switches it off",
        "tier": "never",
        "title": "Open this PC to the internet"
+      },
+      {
+       "action": "news_read",
+       "fixed": false,
+       "id": "news_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a news feed you added"
+      },
+      {
+       "action": "page_read",
+       "fixed": false,
+       "id": "page_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch a web page you're watching"
       }
      ],
      "title": "The internet"
@@ -2526,6 +2838,15 @@
        "title": "Turn on browser control, which works real web pages"
       },
       {
+       "action": "second_card_combined_enable",
+       "fixed": false,
+       "id": "second_card_combined_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run one bigger model across both graphics cards"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -2630,6 +2951,15 @@
        "title": "Turn on the better custom voice"
       },
       {
+       "action": "watch_notifications_enable",
+       "fixed": false,
+       "id": "watch_notifications_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let your notifications show on a smartwatch too"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -2646,6 +2976,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let one action go ahead without asking you first"
+      },
+      {
+       "action": "enable_reading_tool",
+       "fixed": false,
+       "id": "enable_reading_tool",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer a reading tool to the AI model"
+      },
+      {
+       "action": "restore_backup",
+       "fixed": false,
+       "id": "restore_backup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Restore from a backup, replacing what it knows now"
+      },
+      {
+       "action": "check_tool_updates",
+       "fixed": false,
+       "id": "check_tool_updates",
+       "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
+       "says": "Asks the first time only, then never again",
+       "tier": "ask",
+       "title": "Check PyPI, crates.io and GitHub for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -2712,6 +3069,41 @@
     "create_joplin_note"
    ],
    "title": "What asks first",
+   "tools": {
+    "can_enable": false,
+    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "items": [
+     {
+      "id": "calendar_read",
+      "last": null,
+      "on": false,
+      "title": "Read your calendar",
+      "waiting": false
+     },
+     {
+      "id": "email_read",
+      "last": null,
+      "on": false,
+      "title": "Read your email",
+      "waiting": false
+     },
+     {
+      "id": "notes_search",
+      "last": null,
+      "on": false,
+      "title": "Search your notes",
+      "waiting": false
+     },
+     {
+      "id": "home_read",
+      "last": null,
+      "on": false,
+      "title": "Check your smart home",
+      "waiting": false
+     }
+    ],
+    "label": "Offer this to the AI model"
+   },
    "waiting": null
   }
  },
@@ -2733,6 +3125,12 @@
   "append_logseq_journal",
   "create_joplin_note"
  ],
+ "tools_switchable": [
+  "calendar_read",
+  "email_read",
+  "notes_search",
+  "home_read"
+ ],
  "words": {
   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
   "lights_detail": "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis switches it without an approval card. Locks, doors, alarms, covers and garage doors always ask, each with a card of its own, and so does everything after Jarvis has read outside text in the chat. Turning this on shows you an approval card first; turning it off happens at once.",
@@ -2751,6 +3149,10 @@
   "says_search": "Asks only when something private could slip in",
   "switch_label": "Ask me first",
   "title": "What asks first",
+  "tools_detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+  "tools_label": "Offer this to the AI model",
+  "tools_not_on_list": "Only reading your calendar, email, notes and home status can be offered to the AI model from an app. Every other tool changes only in your settings file (jarvis-framework.toml, [tools].enabled).",
+  "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes an approval card and Windows Hello.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
  }
 }

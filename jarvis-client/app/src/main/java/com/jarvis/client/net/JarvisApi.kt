@@ -324,6 +324,21 @@ class JarvisApi(
         get("/api/pending", ListSerializer(JsonElement.serializer()), PENDING_KEYS)
             .map { decodePendingRows(it) }
 
+    /**
+     * Past approvals - "Activity" (ease-of-use audit, 2026-09-27, row 11):
+     * the SAME `/api/pending` response's `history` array, asked for BY NAME
+     * rather than found by the positional fallback [parseListBody] uses for
+     * `pending` - the exact thing [ALREADY_HANDLED_KEYS] exists to refuse
+     * when a caller has not named the key it wants. This one has.
+     *
+     * Read-only, and never merged into [pending]: a decided card and a
+     * waiting one must never share a list (see [ALREADY_HANDLED_KEYS]'s own
+     * comment for why that specific mistake is worse than an empty queue).
+     */
+    suspend fun gateHistoryRead(): ApiResult<GateHistoryRead> =
+        get("/api/pending", ListSerializer(JsonElement.serializer()), listOf("history"))
+            .map { decodeGateHistoryRows(it) }
+
     suspend fun attention(): ApiResult<Attention> =
         get("/api/attention", AttentionResponse.serializer()).map { it.flatten() }
 
@@ -545,6 +560,19 @@ class JarvisApi(
     suspend fun autoFacts(before: Double? = null, limit: Int = AutoLearn.PAGE): ApiResult<JsonObject> =
         probeKeeping503(AutoLearn.listPath(before, limit))
 
+    // ------------------------------------------------- smartwatch notifications ----
+    // docs/JARVIS-API.md; see [WatchNotify] for the shapes and words.
+
+    /** `GET /api/notifications/watch`: `{"enabled", "waiting", "last", "why"}`. */
+    suspend fun watchNotifySettings(): ApiResult<JsonObject> = probe(WatchNotify.PATH)
+
+    /**
+     * The switch. ON answers 202 waiting while its approval card is up; OFF
+     * is immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setWatchNotify(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(WatchNotify.PATH, WatchNotify.enabledBody(on))
+
     /**
      * [probe], except that a 503 keeps its body: `ApiError.Server(503, body)`
      * instead of [ApiError.NotAvailable], so the PC's own `error` ("automatic
@@ -586,17 +614,20 @@ class JarvisApi(
     /**
      * `POST /api/memory/erase`: "Erase the words" of ONE fact - its words
      * wiped from the PC for good, its dates kept (the owner's decision,
-     * 2026-09-24). The status and body come back whole ([MemoryErase.Reply]):
+     * 2026-09-24). `alsoDeleteConversation` (2026-09-27): "Also delete the
+     * chat it came from" - off unless the owner checks the box. The status
+     * and body come back whole ([MemoryErase.Reply]):
      * a 404 that says "no such fact" and a 404 from a PC without the route
      * must read differently, and [postForJob] would make both [ApiError.NotFound].
      * [MemoryErase.said] reads it.
      */
-    suspend fun eraseFact(id: Long): ApiResult<MemoryErase.Reply> =
+    suspend fun eraseFact(id: Long, alsoDeleteConversation: Boolean = false): ApiResult<MemoryErase.Reply> =
         withContext(Dispatchers.IO) {
             val target = url(MemoryErase.PATH) ?: return@withContext ApiResult.Failed(
                 noAddress(),
             )
-            val body = MemoryErase.body(id).toRequestBody("application/json".toMediaType())
+            val body = MemoryErase.body(id, alsoDeleteConversation)
+                .toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
                 shortCall.newCall(req).execute().use { resp ->
@@ -619,6 +650,13 @@ class JarvisApi(
      * ([MemoryProfile.missing]).
      */
     suspend fun memoryProfile(): ApiResult<JsonObject> = probe(MemoryProfile.PATH)
+
+    /**
+     * `GET /api/memory/shared`: "Between us" - the facts the owner tagged
+     * as a shared joke or nickname ([MemoryShared.parse]). A 404 or 501 is
+     * a PC without the list ([MemoryShared.missing]).
+     */
+    suspend fun memoryShared(): ApiResult<JsonObject> = probe(MemoryShared.PATH)
 
     /**
      * `GET /api/schedule`: "Coming up" - the timers, alarms, reminders and
@@ -729,6 +767,19 @@ class JarvisApi(
     }
 
     /**
+     * `GET /api/chat/sources?turn_id=`: this answer's own reading-tool
+     * receipts (a note, a wiki page, a web result, a file - by reference
+     * only) and its quote check - feasibility I42/I132, the same `turn_id`
+     * [Feedback] and [MemoryUsed] already use. [ChatSources.parse] reads
+     * it. A read.
+     */
+    suspend fun chatSources(turnId: String?): ApiResult<JsonObject> {
+        val path = ChatSources.path(turnId)
+            ?: return ApiResult.Failed(ApiError.Malformed("no answer id to read"))
+        return probe(path)
+    }
+
+    /**
      * `POST /api/memory/profile`: pin or unpin ONE fact (the owner's
      * decision, 2026-09-24). The status and body come back whole
      * ([MemoryProfile.Reply]), like [eraseFact]: a 404 that says "no such
@@ -751,6 +802,34 @@ class JarvisApi(
                         ApiResult.Failed(ApiError.BadToken)
                     } else {
                         ApiResult.Ok(MemoryProfile.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `POST /api/memory/shared`: tag or untag ONE fact "Between us" (the
+     * owner's decision, 2026-09-27). The status and body come back whole
+     * ([MemoryShared.Reply]), like [pinFact]: a 404 that says "no such
+     * fact" and a 404 from a PC without the route must read differently, and
+     * a 409 carries the PC's own sentence. [MemoryShared.said] reads it.
+     */
+    suspend fun setShared(id: Long, shared: Boolean): ApiResult<MemoryShared.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(MemoryShared.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = MemoryShared.body(id, shared).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(MemoryShared.Reply(resp.code, obj))
                     }
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
@@ -876,6 +955,29 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    /**
+     * "When to suggest the bigger model" - one signal on or off. NO approval
+     * card either way (see [SecondCard.Suggest]'s own doc): re-read
+     * [secondCard] to show the new state, the same as [setSecondCard].
+     */
+    suspend fun setSecondCardSuggest(signal: String, enabled: Boolean): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(SecondCard.SUGGEST_PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = SecondCard.postSuggestBody(signal, enabled)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    SecondCard.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     // --------------------------------------------------------- hardware ----
 
     /**
@@ -891,6 +993,14 @@ class JarvisApi(
      * ([Reach.parse]). A read. A 404 is an older backend ([Reach.missing]).
      */
     suspend fun reach(): ApiResult<JsonObject> = probe(Reach.PATH)
+
+    /**
+     * `GET /api/backup` - "Backups": read-only on the phone
+     * ([Backup.parse]); the full flow (choosing a folder, backing up,
+     * restoring) is the PC's alone. A read. A 404 is an older backend
+     * ([Backup.missing]).
+     */
+    suspend fun backup(): ApiResult<JsonObject> = probe(Backup.PATH)
 
     /**
      * `GET /api/asks_first` - "What asks first": every action and whether it

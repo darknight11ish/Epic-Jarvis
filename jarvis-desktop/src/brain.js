@@ -40,6 +40,8 @@ import {
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
+import { fallbackTitle } from "./card-words.js";
+import { stepText } from "./step-words.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -124,9 +126,11 @@ import {
   CANCEL_LABEL,
   CANCEL_TITLE,
   EMPTY as AUTO_EMPTY,
+  ERASE_ALSO_CHAT_CONFIRM,
   ERASE_LABEL,
   ERASE_TITLE,
   ERASED,
+  ERASED_AND_CHAT_DELETED,
   erasedAt,
   erasedLine,
   eraseQuestion,
@@ -167,6 +171,18 @@ import {
   UNPINNED,
   usedLine,
 } from "./memory-profile.js";
+import {
+  isShared,
+  readShared,
+  SHARE_LABEL,
+  SHARE_TITLE,
+  SHARED,
+  SHARED_EMPTY,
+  SHARED_MISSING,
+  UNSHARE_LABEL,
+  UNSHARE_TITLE,
+  UNSHARED,
+} from "./memory-shared.js";
 import {
   missingLine,
   NOT_CURRENT_MARK,
@@ -243,7 +259,11 @@ const VIEW_SECTIONS = {
   memory: ["memory_facts", "memory_pending", "memory_entities"],
   // Read through its own commands (brain/history.rs), not brain_read.
   history: [],
-  work: ["jobs", "undo"],
+  // "Activity" (past approvals, read-only): the same `/api/pending` the
+  // stream already polls for the live queue, read again here for its
+  // `history` half - see brain/routes.rs's own comment on why one more GET
+  // to that route is the right way to reach it.
+  work: ["jobs", "undo", "gate_history"],
   trust: ["content_risk", "ledger"],
   watch: ["watch", "watch_report"],
 };
@@ -304,11 +324,13 @@ const dom = {
   memoryAutoList: $("memory-auto-list"),
   memorySavedLine: $("memory-saved-line"),
   memoryProfile: $("memory-profile"),
+  memoryShared: $("memory-shared"),
   memoryAboutCard: $("memory-about-card"),
   memoryAboutTitle: $("memory-about-title"),
   memoryAbout: $("memory-about"),
   jobs: $("jobs"),
   undo: $("undo"),
+  activity: $("activity"),
   focus: $("focus"),
   focusForm: $("focus-form"),
   focusMinutes: $("focus-minutes"),
@@ -681,6 +703,7 @@ function render(name) {
     case "memory":
       renderLearning();
       renderProfile();
+      renderShared();
       renderAuto();
       renderProposals();
       renderFacts();
@@ -696,6 +719,7 @@ function render(name) {
       renderBriefing();
       renderJobs();
       renderUndo();
+      renderActivity();
       break;
     case "trust":
       renderContentRisk();
@@ -1490,7 +1514,7 @@ async function refreshMemory() {
   // (brain/auto_learn.rs), next to the pane's sections: a Forget or a
   // decision changes it too.
   await Promise.all([load(VIEW_SECTIONS.memory, { quiet: true }), loadAuto(), loadProfile(),
-    loadSavedFacts()]);
+    loadShared(), loadSavedFacts()]);
   render("memory");
 }
 
@@ -2149,7 +2173,10 @@ function renderFacts() {
       }
       // "Always keep in mind": Pin / Unpin on a fact still in use, first -
       // before the buttons that cannot be undone, as in Saved automatically.
+      // "Between us" sits right beside it, same reasoning.
       if (current && !past && erased === null) {
+        const share = shareButton(f);
+        if (share) actions.unshift(share);
         const pin = pinButton(f);
         if (pin) actions.unshift(pin);
       }
@@ -2724,8 +2751,22 @@ function paintHistoryList() {
       : "No conversations kept. Chat history is off."));
     return;
   }
+  // The search box (ease-of-use audit row 20; the owner's answer of
+  // 2026-09-27: "shown on screen only; nothing saved, nothing handed to the
+  // AI"): the list already loaded, by its title only - nothing is asked of
+  // the PC and nothing reaches the model. The same shape as "What Jarvis
+  // knows about you"'s filter (renderFacts).
+  const needle = ($("history-filter")?.value || "").trim().toLowerCase();
+  const shown = needle
+    ? chats.rows.filter((c) => String(c.title || "").toLowerCase().includes(needle))
+    : chats.rows;
+  if (needle && !shown.length) {
+    box.append(el("p", "empty", chats.more
+      ? "No loaded conversations match that search. \"Load older\" may bring in more to search."
+      : "No conversations match that search."));
+  }
   const list = el("div", "rows history-rows");
-  for (const c of chats.rows) {
+  for (const c of shown) {
     const open = chats.openId === c.id;
     const device = deviceTag(c.device);
     const item = row({
@@ -2935,10 +2976,20 @@ async function setAutoSwitch(which, on) {
 /** "Erase the words" on one fact, from either list: asks first, then one
  *  brain_memory_erase for that id (held on a stale link in Rust, like
  *  Forget). An erased fact is no longer current, so it leaves "Saved
- *  automatically" too. */
+ *  automatically" too.
+ *
+ *  "Also delete the chat it came from" (the owner's decision, 2026-09-27):
+ *  a second yes/no, asked right after the first - `window.confirm` has no
+ *  room for a checkbox, so the option is its own confirm. Cancelling it
+ *  still erases the fact; it only skips deleting the chat too. */
 async function eraseFact(f) {
   if (!window.confirm(eraseQuestion(f))) return;
-  const out = await memoryWrite("brain_memory_erase", { id: Number(f.id) }, ERASED);
+  const alsoChat = window.confirm(ERASE_ALSO_CHAT_CONFIRM);
+  const out = await memoryWrite(
+    "brain_memory_erase",
+    { id: Number(f.id), also_delete_conversation: alsoChat },
+    (reply) => (reply && reply.chat_deleted ? ERASED_AND_CHAT_DELETED : ERASED),
+  );
   if (out && out.ok !== false) {
     autoL.rows = autoL.rows.filter((r) => r.id !== Number(f.id));
     paintAuto();
@@ -3292,6 +3343,7 @@ function paintAutoList() {
       // Nothing is changed while the pane shows a past moment (memoryWrite).
       actions: past ? [] : [
         ...[pinButton(f)].filter(Boolean),
+        ...[shareButton(f)].filter(Boolean),
         button("Forget", () => forgetAuto(f),
           { danger: true, live: true, title: "Stop this being recalled. There is no undo." }),
         button(ERASE_LABEL, () => eraseFact(f),
@@ -3464,6 +3516,143 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   };
   TAURI.event.listen("security-changed", rereadProfile);
   TAURI.event.listen("private-hidden", rereadProfile);
+}
+
+/* ==========================================================================
+   "Between us" (the owner's decision, 2026-09-27; memory-shared.js)
+
+   Facts the owner tagged as a shared joke or nickname - a label on an
+   ordinary fact, meta.kind = "shared" - which Jarvis may bring up when it
+   fits, in Warm manner only (never Plain). Its own section, with a "Between
+   us" toggle on every fact still in use in "Saved automatically" and "What
+   Jarvis knows about you". One fact per call (brain_memory_share), no card
+   - the owner's own tap, like Pin - held on a stale link in Rust and greyed
+   here. No event: the list is read again after every memory write, and
+   when the Memory tab is shown.
+   ========================================================================== */
+
+const sharedL = {
+  /** readShared() of the last read, or null before the first. */
+  view: null,
+  error: "",
+  loading: false,
+  again: false,
+  at: 0,
+};
+const SHARED_READ_MS = 15000;
+
+async function loadShared() {
+  if (!IS_TAURI) return;
+  if (sharedL.loading) {
+    sharedL.again = true;
+    return;
+  }
+  sharedL.loading = true;
+  try {
+    sharedL.view = readShared(await invoke("brain_memory_shared"));
+    sharedL.error = "";
+  } catch (error) {
+    sharedL.error = errorText(error);
+  } finally {
+    sharedL.loading = false;
+    sharedL.at = Date.now();
+  }
+  if (sharedL.again) {
+    sharedL.again = false;
+    await loadShared();
+    return;
+  }
+  if (state.view === "memory") {
+    // The "Between us" toggle on the fact lists follows the list.
+    paintShared();
+    paintAutoList();
+    renderFacts();
+  }
+}
+
+/** "Between us" / "Not between us" for one fact, by what the PC last said -
+ *  or nothing while that is not known (not read yet, an older PC, or the
+ *  list hidden). */
+function shareButton(f) {
+  const v = sharedL.view;
+  if (!v || !v.available || v.hidden || !Number.isInteger(Number(f.id))) return null;
+  const on = isShared(v, f.id);
+  return button(on ? UNSHARE_LABEL : SHARE_LABEL, () => setShared(f, !on),
+    { live: true, title: on ? UNSHARE_TITLE : SHARE_TITLE });
+}
+
+/** One fact on or off "Between us". memoryWrite shows the PC's refusal in
+ *  its own words and reads the pane again, this list included. */
+async function setShared(f, on) {
+  return memoryWrite("brain_memory_share", { id: Number(f.id), shared: on },
+    on ? SHARED : UNSHARED);
+}
+
+function paintShared() {
+  const box = dom.memoryShared;
+  if (!box) return;
+  box.replaceChildren();
+  const v = sharedL.view;
+  if (!v) {
+    const line = el("p", "empty", sharedL.error
+      ? `Could not read the list: ${sharedL.error}` : "Reading…");
+    if (sharedL.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadShared));
+    }
+    box.append(line);
+    return;
+  }
+  if (!v.available) {
+    box.append(el("p", "empty", v.why || SHARED_MISSING));
+    return;
+  }
+  if (v.hidden) {
+    box.append(hiddenNode(v.hiddenCount, "facts"));
+    return;
+  }
+  if (sharedL.error) {
+    box.append(el("p", "empty failed", `Could not read it again: ${sharedL.error}`));
+  }
+  if (!v.facts.length) {
+    box.append(el("p", "empty", SHARED_EMPTY));
+    return;
+  }
+  // Nothing is changed while the pane shows a past moment (memoryWrite).
+  const past = memoryAsOf !== null;
+  const list = el("div", "rows shared-rows");
+  for (const f of v.facts) {
+    const item = row({
+      tag: "shared",
+      state: "ok",
+      title: f.text || "(no text)",
+      meta: [f.created ? whenTrue(f) : ""],
+      actions: past ? [] : [
+        button(UNSHARE_LABEL, () => setShared(f, false), { live: true, title: UNSHARE_TITLE }),
+        button("Forget", () => forgetAuto(f), { live: true,
+          title: "Stop this being recalled. There is no undo." }),
+      ],
+    });
+    item.dataset.id = String(f.id);
+    list.append(item);
+  }
+  box.append(list);
+}
+
+function renderShared() {
+  paintShared();
+  if (IS_TAURI && !sharedL.loading && Date.now() - sharedL.at > SHARED_READ_MS) loadShared();
+}
+
+// Private answers turned on or off, or a Show ran out: read it again - Rust
+// decides whether it comes back hidden.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  const rereadShared = () => {
+    sharedL.at = 0;
+    if (state.view === "memory") loadShared();
+  };
+  TAURI.event.listen("security-changed", rereadShared);
+  TAURI.event.listen("private-hidden", rereadShared);
 }
 
 /**
@@ -4308,6 +4497,80 @@ function renderUndo() {
   );
 }
 
+/**
+ * "Activity" - past approvals, read-only (ease-of-use audit, 2026-09-27,
+ * row 11): title, Approved/Denied/Timed out, when, and which device. Next
+ * to the Undo shelf, on purpose, and never sharing a list with a WAITING
+ * card - this reads `gate_history`, its own section (brain/routes.rs), which
+ * is the SAME `/api/pending` the stream already polls for the live queue,
+ * asked for again so this pane can show the `history` half of that answer -
+ * the half the stream's own polling loop reads and discards, because an
+ * already-decided row must never be mistaken for one still waiting.
+ *
+ * What each row shows, and what could and could not be confirmed against
+ * this repository (`jarvis_gate.py` itself is not in it - see the module
+ * note on this file's `history` handling, and JARVIS-API.md section 3):
+ *
+ * - title: `notice.title`, else the same action-name fallback a live card
+ *   with no notice uses ([fallbackTitle], card-words.js) - confirmed safe
+ *   for a lock screen either way, since neither reads `detail` or `prompt`.
+ * - outcome: the row's `state` (confirmed values: `approved`, `denied`,
+ *   `expired` - backend/test_gate_outcome.py's docstring) or `outcome`
+ *   (`timed_out`, the Verdict-level name for the same event); anything else
+ *   reads as "Not reported" rather than a guess.
+ * - device: `decided_by` (a real column - backend/gate-outcome.patch reads
+ *   `row["decided_by"]`), else `device`, else `by`; ASSUMED to be "this PC"
+ *   or "another device", the two words every other approval-adjacent route
+ *   in this codebase already sends (focus.patch, power-mode.patch,
+ *   task-control.patch, note-capture.patch) - not confirmed for the gate's
+ *   own history rows. A row with none of the three says nothing about a
+ *   device rather than inventing one.
+ */
+function renderActivity() {
+  const body = state.data.gate_history || {};
+  const why = unavailable("gate_history");
+  if (why) return rows(dom.activity, [], null, whyNode("gate_history"));
+  const history = Array.isArray(body.history) ? body.history : [];
+  const sorted = [...history].sort((a, b) => activityWhen(b) - activityWhen(a));
+
+  rows(
+    dom.activity,
+    sorted,
+    (h) => {
+      const outcome = activityOutcome(h);
+      const device = String(h.decided_by || h.device || h.by || "");
+      const when = activityWhen(h);
+      return row({
+        tag: outcome.toLowerCase(),
+        state: outcome === "Approved" ? "ok" : outcome === "Denied" ? "bad" : "warn",
+        title: (h.notice && h.notice.title) || fallbackTitle(h.action),
+        meta: [outcome, [device, when ? ago(when) : ""].filter(Boolean).join(" · ")],
+      });
+    },
+    "Nothing decided yet."
+  );
+}
+
+/** `approved` / `denied` / `expired` (approvals.state) or `timed_out`
+ * (Verdict.outcome) - both accepted, since which one `history()` rows
+ * actually carry could not be confirmed. Anything else: "Not reported",
+ * never a guess. */
+function activityOutcome(h) {
+  const state = String(h.state || h.outcome || "").toLowerCase();
+  if (state === "approved") return "Approved";
+  if (state === "denied") return "Denied";
+  if (state === "expired" || state === "timed_out") return "Timed out";
+  return "Not reported";
+}
+
+/** When to show: the decision time if the row has one, else when it was raised. */
+function activityWhen(h) {
+  const decided = Number(h.decided_at);
+  if (Number.isFinite(decided) && decided > 0) return decided;
+  const created = Number(h.created);
+  return Number.isFinite(created) && created > 0 ? created : 0;
+}
+
 /* ==========================================================================
    Trust
    ========================================================================== */
@@ -4509,7 +4772,7 @@ function renderWatchReport() {
             f.stars !== undefined ? `★ ${f.stars}` : "",
             f.topic ? `topic: ${f.topic}` : "",
             f.archived ? "archived" : "",
-            stated ? "" : "no licence stated — no permission to use it",
+            stated ? "" : "no licence stated - no permission to use it",
           ]
             .filter(Boolean)
             .join(" · "),
@@ -4643,34 +4906,8 @@ function pushTrace(frame) {
   dom.trace.scrollTop = dom.trace.scrollHeight;
 }
 
-/**
- * One step of a turn (`step` events, jarvis_agent.py `_step_event`), in plain
- * words. Every field is from the backend's own vocabulary - a tool NAME from
- * its table, never an argument, a result or the model's text - so this can
- * only ever say which tool, not what it saw.
- */
-function stepText(data) {
-  const tool = typeof data.tool === "string" && data.tool ? data.tool : "a tool";
-  const shown = tool === "unknown" ? "a tool Jarvis does not have" : tool;
-  switch (data.phase) {
-    case "model":
-      return Number.isInteger(data.round) && data.round > 1
-        ? `asking the model again (round ${data.round})`
-        : "asking the model";
-    case "tool_started":
-      return `using ${shown}`;
-    case "tool_finished":
-      return data.ok === false ? `${shown} failed` : `${shown} done`;
-    case "tool_refused":
-      return tool === "unknown"
-        ? "the model asked for a tool Jarvis does not have"
-        : `${shown} not allowed`;
-    case "answer":
-      return "writing the answer";
-    default:
-      return "working";
-  }
-}
+// stepText now lives in step-words.js, shared with the Jarvis bar
+// (item 10, UI-AUDIT-2026-09-26.md).
 
 function repaintTrace() {
   dom.trace.replaceChildren();
@@ -5577,6 +5814,7 @@ dom.graphRefit.addEventListener("click", () => {
 dom.inspectorClose.addEventListener("click", () => select(null));
 
 dom.memoryFactsFilter?.addEventListener("input", () => renderFacts());
+$("history-filter")?.addEventListener("input", () => paintHistoryList());
 
 dom.graphSearch.addEventListener("input", () => {
   const q = dom.graphSearch.value.trim().toLowerCase();

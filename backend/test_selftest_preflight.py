@@ -20,7 +20,11 @@ made from the whole patch stack (backend/_stack.py). What is proved:
   * READ-ONLY: in a whole run the only POSTs are the one chat question and
     Test search - never an approval, a denial, a power or model change, or
     Stop everything - and Ollama is asked one question with no size and no
-    unload;
+    unload, plus one read of jarvis-primary's stored rules (POST /api/show,
+    which reads and loads nothing);
+  * jarvis-primary running an older copy of its rules (I134, 2026-09-27) is
+    a WARN, with the `ollama create` line to fix it - never a FAIL, since the
+    model still answers;
   * the pairing token is sent, and never printed;
   * each check FAILs (or WARNs) on the thing it is there for: Jarvis down,
     no token, a token nobody accepts, a request with no token accepted, a
@@ -49,9 +53,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import SHIPPED, require_shipped  # noqa: E402
 
-require_shipped("jarvis_token_store.py")
+require_shipped("jarvis_token_store.py", "jarvis_agent.py")
 
 import _stack  # noqa: E402
+import jarvis_agent as AG  # noqa: E402
 import selftest as S  # noqa: E402
 
 PASSED, FAILED = [], []
@@ -152,8 +157,11 @@ class FakeJarvis:
 
 
 class FakeOllama:
-    def __init__(self):
+    def __init__(self, system=None):
         self.gets, self.posts = [], []
+        # The rules /api/show reports for jarvis-primary; None means "today's",
+        # so a normal run never warns (I134, 2026-09-27).
+        self.system = system
 
     def fetch(self, url):
         self.gets.append(url)
@@ -165,6 +173,8 @@ class FakeOllama:
 
     def post(self, url, body):
         self.posts.append((url, body))
+        if url.endswith("/api/show"):
+            return {"system": self.system if self.system is not None else AG.LANE_SYSTEM}
         return {"message": {"content": "ready"}, "done": True}
 
 
@@ -215,7 +225,7 @@ def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
     want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
             "gate", "stop_all", "scheduler", "folders", "instant_email", "events", "voice",
-            "reach", "home", "sleep", "credentials"]
+            "reach", "home", "sleep", "data_health", "credentials"]
     check("every check the owner asked for is registered, in order", keys == want, keys)
     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
     try:
@@ -269,13 +279,50 @@ def t_read_only():
           body.get("temporary") is True, body)
     check("and it is the one fixed question",
           body.get("messages") == [{"role": "user", "content": S.READY_QUESTION}], body)
-    check("Ollama: three reads and one question",
-          len(ollama.gets) == 3 and len(ollama.posts) == 1, (ollama.gets, ollama.posts))
-    url, sent = ollama.posts[0]
-    opts = sent.get("options") or {}
+    check("Ollama: three reads, the one question, and the rules read (I134)",
+          len(ollama.gets) == 3 and len(ollama.posts) == 2, (ollama.gets, ollama.posts))
+    kinds = {url.rsplit("/", 1)[-1] for url, _sent in ollama.posts}
+    check("the two POSTs are /api/chat and /api/show, nothing else",
+          kinds == {"chat", "show"}, ollama.posts)
+    chat_sent = next(sent for url, sent in ollama.posts if url.endswith("/api/chat"))
+    opts = chat_sent.get("options") or {}
     check("the question sends no size (nothing reloads) and no unload",
-          "num_ctx" not in opts and "keep_alive" not in sent, sent)
-    check("and offers the model no tools", "tools" not in sent, sent)
+          "num_ctx" not in opts and "keep_alive" not in chat_sent, chat_sent)
+    check("and offers the model no tools", "tools" not in chat_sent, chat_sent)
+    show_sent = next(sent for url, sent in ollama.posts if url.endswith("/api/show"))
+    check("the rules read asks only for the model's name - nothing generated, nothing unloaded",
+          show_sent == {"model": MODEL}, show_sent)
+
+
+def t_model_rules_freshness():
+    """I134 (2026-09-27): jarvis-primary running an older copy of its rules
+    is a WARN with the ollama create fix line, not a FAIL - the model still
+    answered. A model already running today's rules never warns for this."""
+    # only={"model"} skips "backend"/"handshake", which is where live.status
+    # would normally be filled in from a real /api/status - so it is given
+    # directly, the same shape pf_model reads it in.
+    live, fake, ollama = _live(FakeJarvis(), FakeOllama(system="You are Jarvis (an old draft)."))
+    live.status = {"lane": "local", "model": MODEL}
+    _, _, _, _, rows, _ = _run(live, only={"model"})
+    model_rows = _rows(rows, "model")
+    check("a stale rules block: WARN with the fix line",
+          any(st == S.WARN and "older copy of Jarvis's rules" in what
+              and "ollama create jarvis-primary" in d for st, what, d in model_rows), model_rows)
+    check("never a FAIL for this on its own", not any(st == S.FAIL for st, _w, _d in model_rows))
+
+    live, fake, ollama = _live(FakeJarvis(), FakeOllama(system=AG.LANE_SYSTEM))
+    live.status = {"lane": "local", "model": MODEL}
+    _, _, _, _, rows, _ = _run(live, only={"model"})
+    check("today's rules, word for word: no warning about them",
+          not any("older copy of Jarvis's rules" in what for _st, what, _d in _rows(rows, "model")))
+
+    live, fake, ollama = _live(FakeJarvis(), FakeOllama())
+    live.status = {"lane": "local", "model": MODEL}
+    check("FakeOllama's own default is today's rules (so every other test stays quiet)",
+          ollama.system is None)
+    _, _, _, _, rows, _ = _run(live, only={"model"})
+    check("... and it really is quiet",
+          not any("older copy of Jarvis's rules" in what for _st, what, _d in _rows(rows, "model")))
 
 
 def t_jarvis_down():
@@ -504,6 +551,37 @@ def t_folders_and_instant_email():
     live, _f, _o = _live(fake)
     _p, f, _w, _s, rows, _t = _run(live, only={"backend", "instant_email"})
     check("connected: PASS", _rows(rows, "instant_email")[0][0] == S.PASS)
+
+
+def t_data_health():
+    """data-health.patch and jarvis_data_health.py (feasibility I97): the
+    check turns the route's own "ok"/"warn" rows into PASS/WARN, never
+    FAIL - and without the route at all (no data-health.patch), it says so
+    with a WARN, not a FAIL, exactly like pf_folders without documents.patch."""
+    fake = FakeJarvis()
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "data_health"})
+    dh = _rows(rows, "data_health")
+    check("no data-health.patch: a WARN saying how, never a FAIL",
+          dh[0][0] == S.WARN and "apply-patches.ps1" in dh[0][2] and f == 0, dh)
+    fake.routes[("GET", "/api/data-health")] = (200, {"available": True, "warn": 1, "checks": [
+        {"status": "ok", "what": "the chat history database opens and checks out", "detail": ""},
+        {"status": "warn", "what": "the memory store database may be damaged",
+         "detail": "DatabaseError: file is not a database"},
+    ]})
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "data_health"})
+    dh = _rows(rows, "data_health")
+    check("an ok row: PASS, never FAIL", dh[0] == (S.PASS,
+          "the chat history database opens and checks out", ""), dh)
+    check("a warn row: WARN, never FAIL", dh[1][0] == S.WARN
+          and "may be damaged" in dh[1][1], dh)
+    check("still no FAIL anywhere in this check (WARN, never fix, never fail)", f == 0, dh)
+    fake.routes[("GET", "/api/data-health")] = (404, {"error": "no such route"})
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "data_health"})
+    check("a 404 (module not installed): WARN, not FAIL", _rows(rows, "data_health")[0][0]
+          == S.WARN and f == 0)
 
 
 def t_chat_waits_for_tools():

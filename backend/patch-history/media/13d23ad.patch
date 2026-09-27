@@ -1,0 +1,22 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2478,6 +2478,19 @@
+     except Exception as exc:
+         print(f"  watch      NOT ON ({type(exc).__name__}) - Smartwatch notifications setting is off")
+         print("             until jarvis_watch_notify.py is back: run apply-patches.ps1 again")
++    # media.patch (the owner's decision, 2026-09-27, feasibility I91: "no
++    # card, only from the owner's own words"): GET /api/media ("what's
++    # playing") and POST /api/media/control ({"action": "play"|"pause"|
++    # "next"|"previous"}) - never a card, never jarvis_gate, for either
++    # route. Wrapped round Handler here, before anything listens, like
++    # watch-notifications above; the rules are all in jarvis_media.py.
++    try:
++        import jarvis_media
++        print(jarvis_media.install(Handler, origin_ok=_origin_ok,
++                                   token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  media      NOT ON ({type(exc).__name__}) - Music and video control is off")
++        print("             until jarvis_media.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

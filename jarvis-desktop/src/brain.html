@@ -333,6 +333,14 @@
               <p class="note" id="memory-profile-note">Jarvis reads these with every question, word for word. Keep it short.</p>
               <div id="memory-profile"></div>
             </div>
+            <div class="card card-wide" id="memory-shared-card">
+              <!-- "Between us" (memory-shared.js): SHARED_TITLE and
+                   SHARED_DETAIL, word for word. Right under "Always keep in
+                   mind". -->
+              <h2>Between us</h2>
+              <p class="note" id="memory-shared-note">Shared jokes and nicknames. Jarvis may bring one up when it fits - never in Plain manner.</p>
+              <div id="memory-shared"></div>
+            </div>
             <!-- "About <name>" (memory-entities.js): the facts Jarvis has linked
                  to one person or thing, word for word, opened from a name under a
                  fact. Hidden until one is opened. No summary. -->
@@ -423,6 +431,14 @@
                 everything": delete them one at a time, or choose above how
                 long they are kept.
               </p>
+              <!-- Filters the list already loaded, by title (ease-of-use
+                   audit row 20; the owner's answer of 2026-09-27: "shown on
+                   screen only; nothing saved, nothing handed to the AI").
+                   Asks the PC nothing - the same shape as "What Jarvis knows
+                   about you"'s filter above. -->
+              <input class="field search history-filter" id="history-filter" type="search"
+                     placeholder="Search this list…" spellcheck="false" autocomplete="off"
+                     aria-label="Search your chat history" />
               <div id="history-list"></div>
             </div>
           </div>
@@ -507,6 +523,16 @@
                 the reason.
               </p>
               <div id="undo"></div>
+            </div>
+            <div class="card card-wide">
+              <h2>Activity</h2>
+              <p class="note">
+                Past approval cards, read-only: what each one was, whether it
+                was approved, denied or timed out, when, and which device
+                decided it. Nothing here can be undone or reopened from this
+                list.
+              </p>
+              <div id="activity"></div>
             </div>
           </div>
         </section>

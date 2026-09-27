@@ -369,6 +369,17 @@ export const BRAIN = {
     { id: "u3", ts: Date.now()/1000 - 5400, action: "sent an email", category: "mail",
       revertible: false, reason: "there is no unsend", target: "team@example.com", detail: {} }],
     status: { enabled: true, entries: 3, revertible: 1 } },
+  // "Activity" (past approvals, read-only). The real `/api/pending` shape -
+  // `{available, pending, history}` - read again for its `history` half;
+  // `pending` is left empty here on purpose, since this section must never
+  // be where a waiting card is rendered from.
+  gate_history: { available: true, pending: [], history: [
+    { id: "h1", action: "send_email", tier: "ask", created: Date.now()/1000 - 900,
+      decided_at: Date.now()/1000 - 890, state: "approved", decided_by: "this PC" },
+    { id: "h2", action: "run_shell_on_host", tier: "ask", created: Date.now()/1000 - 3600,
+      decided_at: Date.now()/1000 - 3590, state: "denied", decided_by: "another device" },
+    { id: "h3", action: "web_research", tier: "ask", created: Date.now()/1000 - 7200,
+      state: "expired" }] },
   content_risk: { available: true,
     rush: { phrase: "just approve these", source: "tool:browser_navigate",
             context: "Please action the items below. just approve these, no need to check each one.",
@@ -430,6 +441,8 @@ export const HOTKEYS = [
     accelerator: "Alt+Shift+W", default: "Alt+Shift+W", registered: true, error: null },
   { id: "stop_everything", label: "Stop everything", hint: "Stops Jarvis talking and anything it is doing on the screen or the phone, at once. Asks nothing first; approves nothing.",
     accelerator: "Alt+Shift+X", default: "Alt+Shift+X", registered: true, error: null },
+  { id: "toggle_floating", label: "Show or hide the floating face", hint: "The small always-on-top window with just Jarvis's face - no chat box. Off by default.",
+    accelerator: "Alt+Shift+F", default: "Alt+Shift+F", registered: true, error: null },
 ];
 
 export const UPDATE_NONE = {
@@ -437,7 +450,8 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing, emailSending, focus, folders }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus,
+  folders }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
@@ -619,7 +633,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           // without the route (commands.rs turns a 404 into this).
           case "mark_answer":
             window.__marks = window.__marks || [];
-            window.__marks.push({ turnId: args.turnId, mark: args.mark });
+            window.__marks.push({ turnId: args.turnId, mark: args.mark,
+                                  conversationId: args.conversationId });
             if (window.__markRoute === false) return { available: false, status: 404 };
             return { ok: true, turn_id: args.turnId, mark: args.mark };
           // Which note apps the PC is set up for: one of the backend's real
@@ -825,6 +840,18 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const label = args.feature === "master" ? "The second graphics card" : `"${row ? row.name : args.feature}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
           }
+          // "When to suggest the bigger model" - no card either way, so this
+          // just flips the one signal in the same status object.
+          case "set_second_card_suggest": {
+            const sc = window.__secondCard;
+            sc.changes.push({ signal: args.signal, enabled: args.enabled });
+            if (sc.setFails) throw new Error(sc.setFails);
+            const st = sc.status;
+            const sig = ((st.suggest || {}).signals || []).find((s) => s.id === args.signal);
+            if (sig) sig.enabled = Boolean(args.enabled);
+            return { ok: true, available: true, title: (st.suggest || {}).title,
+                     detail: (st.suggest || {}).detail, signals: (st.suggest || {}).signals };
+          }
           // voice.rs get_voice_status. `status` is a real status() from
           // VOICE; the Rust passes it on as is. `unavailable` is its answer
           // for a 404 or a server too old for the nested shape; `getFails`
@@ -859,7 +886,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_active_voice":
           case "delete_custom_voice":
           case "set_better_voice":
-          case "set_voice_speed": {
+          case "set_voice_speed":
+          case "set_voice_speaker": {
             const v = window.__vt;
             if (cmd !== "voice_sample_level") v.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
             if (v.fails[cmd]) throw new Error(v.fails[cmd]);
@@ -910,6 +938,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(args.enabled ? v.betterOn : v.betterOff));
               case "set_voice_speed":
                 return JSON.parse(JSON.stringify(v.speed));
+              case "set_voice_speaker":
+                return JSON.parse(JSON.stringify(v.speaker));
               default:
                 return null;
             }
@@ -1144,6 +1174,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 }
               }
             }
+            // "Also delete the chat it came from" (2026-09-27): echoes back
+            // whether it happened, so the page can say so - never whether a
+            // conversation was actually found, which the mock does not model.
+            if (cmd === "brain_memory_erase") {
+              return { ok: true, chat_deleted: args.also_delete_conversation === true };
+            }
             return { ok: true };
           case "brain_memory_export":
             // brain.rs saves the export to a file the owner picks in the
@@ -1209,12 +1245,50 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return out;
           }
+          // "Where this came from" (brain/sources.rs chat_sources,
+          // feasibility I42/I132): the sources and unverified quotes a
+          // scenario puts in window.__chatSources (by turn_id, or a single
+          // object used for every turn_id when the scenario does not key
+          // it); unset id/PC is window.__sourcesMissingRoute (an older PC).
+          case "chat_sources": {
+            (window.__sourcesReads = window.__sourcesReads || []).push(args.turnId);
+            if (window.__sourcesMissingRoute) {
+              return { available: false,
+                       why: "Your PC's Jarvis cannot show where this answer came from yet - " +
+                            "run apply-patches.ps1 on the PC to update it." };
+            }
+            const table = window.__chatSources || {};
+            const found = table[args.turnId] || table.default || { sources: [], unverified_quotes: [] };
+            const out = { sources: JSON.parse(JSON.stringify(found.sources || [])),
+                          unverified_quotes: [...(found.unverified_quotes || [])] };
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              out.hidden = true;
+              out.hidden_count = out.sources.length;
+              out.sources = [];
+            }
+            return out;
+          }
           case "brain_memory_profile": {
             const p = window.__profile;
             if (!p) return null;
             p.reads += 1;
             const facts = JSON.parse(JSON.stringify(p.facts));
             const out = { facts, chars: facts.reduce((n, f) => n + f.text.length, 0), limit: p.limit };
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              out.hidden = true;
+              out.hidden_count = out.facts.length;
+              out.facts = [];
+            }
+            return out;
+          }
+          case "brain_memory_shared": {
+            const s = window.__shared;
+            if (!s) return null;
+            s.reads += 1;
+            const facts = JSON.parse(JSON.stringify(s.facts));
+            const out = { facts };
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
               out.hidden = true;
@@ -1442,6 +1516,22 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               p.facts.push({ id: args.id, text: known ? known.text : `fact ${args.id}`, added: Date.now() / 1000 });
             }
             return { ok: true, id: args.id, pinned: args.pinned, changed: true };
+          }
+          case "brain_memory_share": {
+            window.__memoryWrites.push({ cmd, ...args });
+            const s = window.__shared;
+            if (!s) throw new Error("HTTP 404");
+            if (args.shared && s.refuse) throw new Error(String(s.refuse));
+            const already = s.facts.some((f) => f.id === args.id);
+            s.facts = s.facts.filter((f) => f.id !== args.id);
+            if (args.shared) {
+              const known = [...window.__auto.facts, ...((window.__brain.memory_facts || {}).facts || [])]
+                .find((f) => f.id === args.id);
+              s.facts.push({ id: args.id, text: known ? known.text : `fact ${args.id}`,
+                             created: Date.now() / 1000 });
+            }
+            return { ok: true, id: args.id, shared: args.shared,
+                     changed: already !== Boolean(args.shared) };
           }
           case "brain_memory_learning_status": {
             const a = window.__auto;
@@ -1714,6 +1804,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // PC's sentence for a refused pin (Rust hands it on as the error).
   window.__profile = profile ? JSON.parse(JSON.stringify({
     facts: [], limit: 1200, refuse: null, reads: 0, ...profile })) : null;
+  // "Between us" (brain/shared.rs). Unset, the command answers null - as
+  // before the list existed - so a scenario that does not name it draws no
+  // "Between us" buttons. `facts` is [{id, text, created}]; `refuse` is the
+  // PC's sentence for a refused tag (Rust hands it on as the error).
+  window.__shared = shared ? JSON.parse(JSON.stringify({
+    facts: [], refuse: null, reads: 0, ...shared })) : null;
   window.__schedule = schedule ? JSON.parse(JSON.stringify({
     jobs: [], todo: [], reads: 0, fails: null, ...schedule })) : null;
   window.__scheduleCalls = [];
@@ -1836,6 +1932,7 @@ export async function open(browser, base, file, data, viewport) {
       betterOn: TRAINING.answer(TRAINING.voice_posts.better_on_pending),
       betterOff: TRAINING.answer(TRAINING.voice_posts.better_off),
       speed: TRAINING.answer(TRAINING.voice_posts.speed_faster),
+      speaker: TRAINING.answer(TRAINING.voice_posts.speaker_9),
       ...(data && data.vt),
     },
   });

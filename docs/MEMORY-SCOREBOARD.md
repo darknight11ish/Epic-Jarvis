@@ -22,6 +22,12 @@ Open PowerShell in this repository's folder (the one with `backend` and
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\eval_memory.py --learner-model qwen3:8b; explorer "$env:USERPROFILE\jarvis-memory-eval"
 ```
 
+**Run `apply-patches.ps1` first** (docs/INSTALL.md), if you have not since
+you last updated this folder. The test measures the memory code that is in
+your Jarvis folder (the one `JARVIS_BACKEND` names), not the copy in this
+repository, so an older copy there gives older numbers
+(`backend/eval_memory.py`, `_load_memory`).
+
 It takes about 5-15 minutes. The first run downloads the re-ranker model once
 (about 80 MB). None of your data is sent anywhere. When it finishes, it opens
 the `jarvis-memory-eval` folder in your home folder
@@ -41,6 +47,12 @@ the PC run above.
 | 2026-09-26 | Ideas 1-4 (re-ranker as a stand-in, "said again", "true from" dates) | build machine, words only | 78.7% | 6/10 | 9/10 (0 wrong) | +12/12 "said again", +8/8 "true from" |
 | - | Ideas 1-4, real models | **the PC - not run yet** | - | - | - | - |
 | 2026-09-27 | The memory review's fixes (docs/MEMORY-REVIEW-2026-09-27.md: bugs B1-B15 and B17; improvements I1, I3-I7, I12, I13 kept, I2 not kept) | build machine, words only | **80.9%** (79.8-77.7% at 171-1,071 facts) | **7/10** | **10/10 (0 wrong)** - wrong now also counts a newer fact handed over unlabelled: 3 before the fixes | **80/80** (27 new cases; 60/80 before the fixes) |
+| 2026-09-27 | Re-run after the later learning and memory changes: "passing moods are not facts" in the learner's instructions (I154), crisis messages never learned (I151), "Between us" and the "From now on" / humour settings (docs/QUALITY-AUDIT-2026-09-27.md, section 8) | build machine, words only | 80.9% (unchanged) | 7/10 (unchanged) | 10/10, 0 wrong (unchanged) | 80/80 (unchanged) |
+
+The last row says only that nothing measurable here got worse. It **cannot**
+say whether I154 helps: that change is to the words the real learner model
+reads, and on the build machine the learner is a stand-in that never reads
+them. Only the PC run with `--learner-model` measures it.
 
 The 2026-09-27 row in words: "my boss" and "my GP" are now found (recall@5
 +2.2 points at every size); "What phone did I have in June?" is found (time

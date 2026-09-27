@@ -201,6 +201,11 @@ permissions = [
   "allow-resize-quickbar",
   "allow-set-quickbar-pinned",
   "allow-write-clipboard",
+  # "Private copy" (feasibility I114): the answer card's Copy button calls
+  # this one - clipboard_privacy.rs. allow-write-clipboard above stays for
+  # completeness (an older build's fallback path), though nothing calls it
+  # for an answer any more.
+  "allow-write-clipboard-private",
   "allow-open-external-url",
   # The right/wrong mark on the answer on screen - one answer, one mark.
   # Changes no memory by itself; see commands.rs mark_answer.
@@ -235,6 +240,20 @@ permissions = [
   "allow-memory-used",
   "allow-brain-memory-forget",
   "allow-brain-memory-erase",
+]
+
+# "Where this came from" (feasibility I42/I132, answer-sources.patch): the
+# notes, wiki pages, web results and files a reading tool actually returned
+# for one answer, by reference, plus the quote check - by the SAME turn_id
+# "Used in this answer" and the right/wrong mark already use. Read-only, and
+# held back like every memory list while "Windows Hello for memory lists and
+# chat history" hides them (brain/sources.rs redact_sources) - the exact same
+# gate as memory-used above, not a second one.
+[[set]]
+identifier = "chat-sources"
+description = "Read this answer's own reading-tool receipts (a note, a wiki page, a web result, a file) and its quote check, by turn_id. Read-only."
+permissions = [
+  "allow-chat-sources",
 ]
 
 # ---------------------------------------------------------------------------
@@ -313,6 +332,12 @@ permissions = [
   "allow-get-backend-capabilities",
   "allow-get-second-card",
   "allow-set-second-card",
+  # "When to suggest the bigger model": the two settings that decide
+  # whether Jarvis may OFFER "One bigger model on both cards" on its own
+  # (2026-09-27). No card either way - it only changes whether Jarvis
+  # offers, never what it may do without a person's yes - so it sits here
+  # with manner/humour, not with the switch above.
+  "allow-set-second-card-suggest",
   # "Big model (slow)": what was found (colibri, Python, memory, the models
   # and their drives) and one switch at a time. Turning a switch ON lets
   # Jarvis start colibri on this PC for background jobs once its approval
@@ -356,6 +381,15 @@ permissions = [
   "allow-test-web-search",
   "allow-save-search-key",
   "allow-forget-search-key",
+  # "Accounts" (ease-of-use audit row 15): the IMAP username and password,
+  # the private calendar link, and the Home Assistant token, written
+  # straight into Credential Manager on this PC by save_account_secret -
+  # never sent to the backend or the phone, never read back to a page. The
+  # matching environment variable, if the owner already has one, keeps
+  # winning on the backend either way. Settings window only - rule 3.
+  "allow-get-account-secrets",
+  "allow-save-account-secret",
+  "allow-forget-account-secret",
   # "What Jarvis can reach": every way Jarvis can reach something outside
   # itself, whether each is on, where it goes (a host only) and whether it
   # asks first - written by the PC from its settings, never by the model.
@@ -370,6 +404,12 @@ permissions = [
   "allow-get-asks-first",
   "allow-set-asks-first",
   "allow-set-lights-without-card",
+  # Offering a reading tool to the AI model at all (the owner's answer of
+  # 2026-09-27) - a DIFFERENT thing from "Ask me first" above. ON is one
+  # approval card that needs Windows Hello on the PC, held on a stale link in
+  # Rust; OFF is at once. Rust refuses any tool off the short list before
+  # sending; so does the PC. Desktop only.
+  "allow-set-tool-enabled",
   # "Sending email": whether it is set up, from which address and through
   # which server (GET /api/email/sending). A read: it sends nothing and
   # never carries the password. Each email is its own approval card.
@@ -384,10 +424,24 @@ permissions = [
   "allow-add-folder",
   "allow-remove-folder",
   "allow-import-notion",
-  # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain.
-  # Wording only; no card either way; held on a stale link in Rust.
+  # "Backups" (backend/jarvis_backup.py, backup.patch, the owner's decision
+  # of 2026-09-27): one locked backup file with a recovery code shown once.
+  # Setting the folder reuses the Windows folder picker above and raises
+  # one approval card, held on a stale link; "Back up now" and listing are
+  # reads/no-card actions; restoring is one card that always needs Windows
+  # Hello, held on a stale link.
+  "allow-get-backup",
+  "allow-list-backups",
+  "allow-set-backup-folder",
+  "allow-backup-now",
+  "allow-preview-restore",
+  "allow-restore-backup",
+  # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain, and
+  # the Humour switch beside it (the owner's decision, 2026-09-27). Wording
+  # only; no card either way; held on a stale link in Rust.
   "allow-get-manner",
   "allow-set-manner",
+  "allow-set-humor",
   # "Voice": what the PC says about listening to the owner - whether each
   # microphone's voice print is trained, which voice check is installed, the
   # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:
@@ -427,6 +481,9 @@ permissions = [
   # How fast every voice speaks (Slower / Normal / Faster): no card either
   # way; held on a stale link in Rust, like the manner setting.
   "allow-set-voice-speed",
+  # Which of Kokoro's own voices the built-in voice uses: the same shape,
+  # no card either way.
+  "allow-set-voice-speaker",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",
@@ -449,6 +506,33 @@ permissions = [
   # anything is loosened, so even this window cannot lower one silently.
   "allow-get-security-settings",
   "allow-set-security-settings",
+  # "Check for tool updates" (backend/jarvis_tool_updates.py, tool-updates.patch,
+  # the owner's own request): read-only, and it never installs or changes
+  # anything - only the exact command to run yourself. Not held on a stale
+  # link, like backup_now: the ONE approval card, if it is ever needed, is
+  # decided by the normal approval flow, not by this command; this command
+  # only starts the check (which can take a few minutes - crates.io is asked
+  # once per Rust crate NAME) and returns at once, never blocking on it.
+  "allow-get-tool-updates",
+  "allow-check-tool-updates",
+  # The floating face: whether it is on, and turning it on or off (windows.rs
+  # `show_floating`/`hide_floating`). Here, not with the widget's own geometry
+  # commands below: this is a Settings toggle, and the floating window itself
+  # holds no command capability at all - it has no button to call one from.
+  "allow-get-floating",
+  "allow-set-floating",
+  # "Hang and crash notes" (crash_notes.rs, feasibility I99) and "Find it for
+  # me" (pyfind.rs, feasibility I98), both under Settings -> More options.
+  # Bug audit 2026-09-27, desktop-rust finding #2: both commands existed and
+  # were wired into lib.rs's generate_handler! from the day each feature was
+  # built, but neither was ever added to build.rs's own export list, so no
+  # permission was ever generated for either - every call refused at the
+  # ACL, with no capability file able to fix it. crash_notes is a read
+  # (already-scrubbed text, see that module's own doc comment); find_python
+  # only searches this PC for a Python it can suggest and never writes
+  # anything - the owner still confirms the result with Save.
+  "allow-crash-notes",
+  "allow-find-python",
 ]
 
 # ---------------------------------------------------------------------------
@@ -509,7 +593,7 @@ permissions = ["allow-brain-remove-skill", "allow-brain-model"]
 # every other item here.
 [[set]]
 identifier = "brain-memory"
-description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off, and pin or unpin a fact on \"Always keep in mind\". One fact per decision; there is no bulk form."
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off, pin or unpin a fact on \"Always keep in mind\", and tag or untag a fact for \"Between us\". One fact per decision; there is no bulk form."
 permissions = [
   "allow-brain-memory-decide",
   "allow-brain-memory-forget",
@@ -547,6 +631,13 @@ permissions = [
   # tap, like Forget), held while the event stream is stale.
   "allow-brain-memory-profile",
   "allow-brain-memory-pin",
+  # "Between us" (brain/shared.rs; the owner's decision, 2026-09-27): the
+  # shared-joke facts - a read, held back like the other memory lists while
+  # "Windows Hello for memory lists and chat history" hides them - and tag
+  # or untag ONE fact per call. No approval card (the owner's own tap, like
+  # Pin), held while the event stream is stale.
+  "allow-brain-memory-shared",
+  "allow-brain-memory-share",
 ]
 
 # Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).

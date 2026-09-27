@@ -3,6 +3,21 @@
   "cases": {
     "capable_off": {
       "active": false,
+      "combined": {
+        "active": false,
+        "available": false,
+        "capable": true,
+        "capable_why": "",
+        "conflict": false,
+        "context": 32768,
+        "enabled": false,
+        "id": "combined",
+        "memory_gib": 12.28,
+        "model": "qwen3:14b",
+        "name": "One bigger model on both cards",
+        "what": "Loads one bigger model than either card holds alone, split across both at once by Ollama's own scheduler. Ties up both cards: the second card's other features cannot run while this does.",
+        "why": "Off."
+      },
       "detected": {
         "capable": true,
         "cards": [
@@ -126,10 +141,46 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
-      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama."
+      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "capable_pending": {
       "active": true,
+      "combined": {
+        "active": false,
+        "available": false,
+        "capable": true,
+        "capable_why": "",
+        "conflict": false,
+        "context": 32768,
+        "enabled": false,
+        "id": "combined",
+        "memory_gib": 12.28,
+        "model": "qwen3:14b",
+        "name": "One bigger model on both cards",
+        "what": "Loads one bigger model than either card holds alone, split across both at once by Ollama's own scheduler. Ties up both cards: the second card's other features cannot run while this does.",
+        "why": "Off."
+      },
       "detected": {
         "capable": true,
         "cards": [
@@ -255,10 +306,46 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
-      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again."
+      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "card_missing_but_enabled": {
       "active": false,
+      "combined": {
+        "active": false,
+        "available": false,
+        "capable": false,
+        "capable_why": "needs two graphics cards; only one is here",
+        "conflict": true,
+        "context": 32768,
+        "enabled": false,
+        "id": "combined",
+        "memory_gib": 12.28,
+        "model": "qwen3:14b",
+        "name": "One bigger model on both cards",
+        "what": "Loads one bigger model than either card holds alone, split across both at once by Ollama's own scheduler. Ties up both cards: the second card's other features cannot run while this does.",
+        "why": "Needs two capable graphics cards: needs two graphics cards; only one is here."
+      },
       "detected": {
         "capable": false,
         "cards": [
@@ -365,10 +452,209 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": null,
-      "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
+      "pin_note": "Only one graphics card, so there is nothing to keep apart yet.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
+    },
+    "combined_running": {
+      "active": false,
+      "combined": {
+        "active": true,
+        "available": true,
+        "capable": true,
+        "capable_why": "",
+        "conflict": false,
+        "context": 32768,
+        "enabled": true,
+        "id": "combined",
+        "memory_gib": 12.28,
+        "model": "qwen3:14b",
+        "name": "One bigger model on both cards",
+        "what": "Loads one bigger model than either card holds alone, split across both at once by Ollama's own scheduler. Ties up both cards: the second card's other features cannot run while this does.",
+        "why": "Working: qwen3:14b split across the NVIDIA GeForce RTX 2080 SUPER and the NVIDIA GeForce RTX 2060, with room for 32,768 tokens. Runs at the slower card's pace - not measured on your hardware yet."
+      },
+      "detected": {
+        "capable": true,
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display_active": true,
+            "free_mb": 6120,
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "role": "primary",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+            "why": "everyday chat runs here: a monitor is plugged into it"
+          },
+          {
+            "compute_cap": 7.5,
+            "display_active": false,
+            "free_mb": 12030,
+            "index": 1,
+            "name": "NVIDIA GeForce RTX 2060",
+            "role": "second",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+            "why": "the second-card features would run here"
+          }
+        ],
+        "primary": {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+        },
+        "second": {
+          "compute_cap": 7.5,
+          "index": 1,
+          "name": "NVIDIA GeForce RTX 2060",
+          "total_mb": 12288,
+          "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+        },
+        "why": "the NVIDIA GeForce RTX 2060 (12 GB) can take the second-card features; everyday chat stays on the NVIDIA GeForce RTX 2080 SUPER"
+      },
+      "enabled": false,
+      "features": [
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "long_context",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
+          "model_installed": true,
+          "name": "Longer conversations",
+          "needs": [],
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "vision",
+          "memory_gib": 7.15,
+          "model": "qwen2.5vl:7b",
+          "model_installed": false,
+          "name": "Pictures",
+          "needs": [],
+          "what": "A message with a picture goes to a picture-reading model on the second card, on this PC, so Jarvis can see what you attached.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "learning",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
+          "model_installed": true,
+          "name": "Learning in the background",
+          "needs": [],
+          "what": "Jarvis learns from your conversations on the second card, so it never slows the main card down and does not wait long for a pause.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "browser_control",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
+          "model_installed": true,
+          "name": "Browser control",
+          "needs": [
+            "long_context"
+          ],
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
+          "why": "Off. Needs Longer conversations on first."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
+          "model_installed": true,
+          "name": "Wiki builder",
+          "needs": [],
+          "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
+          "why": "Off."
+        }
+      ],
+      "lane": {
+        "state": "off",
+        "why": "nothing on the second card is switched on"
+      },
+      "last": null,
+      "main_ollama_pinned": true,
+      "pending": [],
+      "picture_text": {
+        "available": false,
+        "engine": "Windows' own text recognition",
+        "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
+      },
+      "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
+      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "not_capable_old_card": {
       "active": false,
+      "combined": {
+        "active": false,
+        "available": false,
+        "capable": false,
+        "capable_why": "needs two graphics cards; only one is here",
+        "conflict": false,
+        "context": 32768,
+        "enabled": false,
+        "id": "combined",
+        "memory_gib": 12.28,
+        "model": "qwen3:14b",
+        "name": "One bigger model on both cards",
+        "what": "Loads one bigger model than either card holds alone, split across both at once by Ollama's own scheduler. Ties up both cards: the second card's other features cannot run while this does.",
+        "why": "Needs two capable graphics cards: needs two graphics cards; only one is here."
+      },
       "detected": {
         "capable": false,
         "cards": [
@@ -486,10 +772,46 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
-      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama."
+      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "one_card": {
       "active": false,
+      "combined": {
+        "active": false,
+        "available": false,
+        "capable": false,
+        "capable_why": "needs two graphics cards; only one is here",
+        "conflict": false,
+        "context": 32768,
+        "enabled": false,
+        "id": "combined",
+        "memory_gib": 12.28,
+        "model": "qwen3:14b",
+        "name": "One bigger model on both cards",
+        "what": "Loads one bigger model than either card holds alone, split across both at once by Ollama's own scheduler. Ties up both cards: the second card's other features cannot run while this does.",
+        "why": "Needs two capable graphics cards: needs two graphics cards; only one is here."
+      },
       "detected": {
         "capable": false,
         "cards": [
@@ -596,10 +918,46 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": null,
-      "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
+      "pin_note": "Only one graphics card, so there is nothing to keep apart yet.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "one_card_reads_words": {
       "active": false,
+      "combined": {
+        "active": false,
+        "available": false,
+        "capable": false,
+        "capable_why": "needs two graphics cards; only one is here",
+        "conflict": false,
+        "context": 32768,
+        "enabled": false,
+        "id": "combined",
+        "memory_gib": 12.28,
+        "model": "qwen3:14b",
+        "name": "One bigger model on both cards",
+        "what": "Loads one bigger model than either card holds alone, split across both at once by Ollama's own scheduler. Ties up both cards: the second card's other features cannot run while this does.",
+        "why": "Needs two capable graphics cards: needs two graphics cards; only one is here."
+      },
       "detected": {
         "capable": false,
         "cards": [
@@ -706,10 +1064,46 @@
         "why": ""
       },
       "pin_command": null,
-      "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
+      "pin_note": "Only one graphics card, so there is nothing to keep apart yet.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     },
     "running_long_context": {
       "active": true,
+      "combined": {
+        "active": false,
+        "available": false,
+        "capable": true,
+        "capable_why": "",
+        "conflict": true,
+        "context": 32768,
+        "enabled": false,
+        "id": "combined",
+        "memory_gib": 12.28,
+        "model": "qwen3:14b",
+        "name": "One bigger model on both cards",
+        "what": "Loads one bigger model than either card holds alone, split across both at once by Ollama's own scheduler. Ties up both cards: the second card's other features cannot run while this does.",
+        "why": "Off."
+      },
       "detected": {
         "capable": true,
         "cards": [
@@ -833,7 +1227,28 @@
         "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
       },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
-      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again."
+      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      }
     }
   }
 }

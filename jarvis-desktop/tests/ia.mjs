@@ -27,65 +27,89 @@ const OFFLINE = { connected: false, error: "connection refused. Is jarvis_hud.py
 /* ── The primer: the window says what it can do before you use it ────────── */
 
 await check("a first run shows what the bar can do", async () => {
+  // Since the ease-of-use audit's do-first table, row 4 ("Things you can
+  // say"), the primer's own kbd chips are gone - Settings -> Shortcuts
+  // teaches those, live (see the three checks below) - but the note-app
+  // prefixes are not keyboard shortcuts, so they stay here: this is still
+  // their only in-app explanation.
   const page = await K.open(browser, base, "index.html", {});
   assert.equal(await page.locator("#primer").isVisible(), true,
     "the window opens with nothing on screen at all");
   const text = await page.locator("#primer").innerText();
-  for (const key of ["Alt", "Space", "#log", "#joplin"]) {
+  for (const key of ["Set a timer for 10 minutes.", "What did I miss?", "right-click the "
+    + "Jarvis icon", "#log", "#joplin"]) {
     assert.ok(text.includes(key), `the primer never mentions ${key}`);
   }
   await page.close();
 });
 
-await check("the primer names the hotkeys Rust actually binds", async () => {
-  // The first version of this list said Alt+Shift+N attached the clipboard.
-  // `hotkeys.rs` binds that to the Logseq note and Super+Shift+J to the
-  // clipboard, so the primer built to stop the app lying was lying — and no
-  // test could have caught it, because it checked the copy against itself.
-  // This checks it against the action table instead.
+await check("tapping a sayable line fills the box and never sends", async () => {
+  const page = await K.open(browser, base, "index.html", {});
+  const items = page.locator(".sayable-item");
+  const first = await items.first().textContent();
+  await items.first().click();
+  const value = await page.locator("#prompt").inputValue();
+  assert.equal(value, first, "the tap did not fill the box with its own sentence");
+  const calls = await page.evaluate(() => window.__calls.map((c) => c[0]));
+  assert.ok(!calls.includes("stream_chat"),
+    "tapping a sayable line sent a turn instead of only filling the box");
+  await page.close();
+});
+
+await check("Settings -> Shortcuts names the hotkeys Rust actually binds", async () => {
+  // The first version of the bar's own primer said Alt+Shift+N attached the
+  // clipboard. `hotkeys.rs` binds that to the Logseq note and Super+Shift+J
+  // to the clipboard, so the primer built to stop the app lying was lying -
+  // and no test could have caught it, because it checked the copy against
+  // itself. This checks Settings -> Shortcuts (where the live list moved
+  // to, row 4 above) against the action table instead.
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hotkeys.rs"), "utf8");
   const defaults = [...rust.matchAll(/default:\s*"([^"]+)"/g)]
-    .map((m) => m[1].replace(/\bSuper\b/, "Win").replace(/\bControl\b/, "Ctrl"));
+    .map((m) => m[1].replace(/\bSuper\b/, "Win").replace(/\bControl\b/, "Ctrl")
+      .split("+").map((p) => p.trim()).join(" + "));
   assert.ok(defaults.length >= 5, `only found ${defaults.length} default bindings`);
 
-  const page = await K.open(browser, base, "index.html", {});
+  const page = await K.open(browser, base, "settings.html", {});
   const shown = await page.evaluate(() =>
-    [...document.querySelectorAll("#primer .primer-keys")]
-      .map((k) => [...k.querySelectorAll("kbd")].map((b) => b.textContent.trim()).join("+"))
-      .filter(Boolean));
+    [...document.querySelectorAll("#hotkey-rows .hotkey-key")]
+      .map((k) => k.textContent.trim()));
   await page.close();
 
   for (const combo of defaults) {
     assert.ok(shown.includes(combo),
-      `${combo} is a shipped binding and the primer does not list it (it lists ${shown.join(", ")})`);
+      `${combo} is a shipped binding and Shortcuts does not list it (it lists ${shown.join(", ")})`);
   }
 });
 
-await check("the primer follows a rebind instead of hardcoding one", async () => {
-  // The bindings are configurable now, so a fixed list in the markup would be
-  // wrong from the first change — the same failure this block was added to fix.
-  const page = await K.open(browser, base, "index.html", {
+await check("Settings -> Shortcuts follows a rebind instead of hardcoding one", async () => {
+  // The bindings are configurable, so a fixed list in the markup would be
+  // wrong from the first change - the same failure this page was built to fix.
+  const page = await K.open(browser, base, "settings.html", {
     hotkeys: K.HOTKEYS.map((h) =>
       h.id === "toggle_quickbar" ? { ...h, accelerator: "Control+Alt+Backquote" } : h),
   });
   await page.waitForTimeout(400);
   const shown = await page.evaluate(() =>
-    document.querySelector('[data-hotkey="toggle_quickbar"]').textContent.replace(/\s+/g, ""));
+    [...document.querySelectorAll("#hotkey-rows .hotkey")]
+      .find((row) => row.querySelector(".hotkey-name")?.textContent === "Show or hide the "
+        + "Jarvis bar")?.querySelector(".hotkey-key")?.textContent);
   await page.close();
-  assert.equal(shown, "Ctrl+Alt+Backquote", `the primer still shows "${shown}"`);
+  assert.equal(shown, "Ctrl + Alt + Backquote", `Shortcuts still shows "${shown}"`);
 });
 
-await check("a refused binding is marked in the primer, in words", async () => {
-  const page = await K.open(browser, base, "index.html", {
+await check("a refused binding is marked in Settings -> Shortcuts, in words", async () => {
+  const page = await K.open(browser, base, "settings.html", {
     hotkeys: K.HOTKEYS.map((h) =>
       h.id === "toggle_quickbar" ? { ...h, registered: false, error: "taken" } : h),
   });
   await page.waitForTimeout(400);
   const text = await page.evaluate(() =>
-    document.querySelector('[data-hotkey="toggle_quickbar"]').textContent);
+    [...document.querySelectorAll("#hotkey-rows .hotkey")]
+      .find((row) => row.querySelector(".hotkey-name")?.textContent === "Show or hide the "
+        + "Jarvis bar")?.querySelector(".hotkey-state")?.textContent);
   await page.close();
-  // A key chip that looks like the working ones and does nothing is worse than
-  // no chip at all.
+  // A state word that looks like the working ones and does nothing is worse
+  // than no state word at all.
   assert.match(text, /in use/i, `said "${text}"`);
 });
 

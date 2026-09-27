@@ -39,6 +39,7 @@ CI runs that test.
 """
 import argparse
 import filecmp
+import re
 import shutil
 import subprocess
 import sys
@@ -48,6 +49,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 HISTORY = BACKEND / "patch-history"
+
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
+import _stack  # noqa: E402
+
+_TARGET_RE = re.compile(r"^\+\+\+ b/(\S+)", re.MULTILINE)
 
 INDEX_HEADER = (
     "# Every earlier committed version of each patch, newest first per patch.\n"
@@ -94,6 +101,41 @@ def current_patches() -> list:
     return out
 
 
+def well_formed(text: bytes) -> bool:
+    """False when some hunk in `text` will not apply even to a pre-image
+    built purely from its own context/removed lines - `_stack`'s own test
+    for a corrupt patch (an `@@` header whose line counts do not match the
+    lines that actually follow it; `git apply` rejects this before it even
+    looks at a real file). A text that fails this could never have gone onto
+    anyone's real backend, so it must never be archived as an "earlier
+    version" the owner's PC might carry: `versions()` calls this so a text
+    like that is skipped, not written to backend/patch-history, where it
+    would make `git apply --reverse` fail for good, on a version that was
+    never really installable anywhere (found the hard way: a crisis-help-line
+    patch's own header claimed 20 new lines and had 24, 2026-09-27).
+
+    Without git on PATH, nothing here can be checked - returns True rather
+    than block the whole run on an environment gap unrelated to any patch."""
+    git_bin = shutil.which("git")
+    if not git_bin:
+        return True
+    decoded = text.decode("utf-8", errors="replace")
+    targets = sorted(set(_TARGET_RE.findall(decoded)))
+    if not targets:
+        return True  # no "+++ b/..." line at all - not a file patch this script reads
+    d = Path(tempfile.mkdtemp(prefix="jarvis-patch-check-"))
+    try:
+        for target in targets:
+            f = d / target
+            for hunk, pre in _stack.hunks(decoded, target):
+                f.write_text("\n".join(pre) + ("\n" if pre else ""), encoding="utf-8", newline="\n")
+                if not _stack._apply(git_bin, d, target, hunk):
+                    return False
+        return True
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def log_versions(rel: str) -> list:
     """[(commit, date, subject)] newest first: every commit that changed `rel`.
 
@@ -122,6 +164,11 @@ def versions(key: str, path: Path) -> list:
     [(first_commit, date, subject, bytes)]: the commit that INTRODUCED the text
     (its oldest appearance), ordered by the text's NEWEST appearance - so a
     text that was current until yesterday is tried before one from last week.
+
+    A text that fails `well_formed()` (a corrupt hunk header) is left out
+    entirely, and printed to stderr so an out-of-date `--check` failure is
+    not the only sign of it - it was never really installable anywhere, so
+    there is no backend it could need to be recognised on.
     """
     rel = path.relative_to(ROOT).as_posix()
     current = lf(path.read_bytes())
@@ -133,6 +180,11 @@ def versions(key: str, path: Path) -> list:
         except RuntimeError:
             continue  # the commit deleted it
         if text == current:
+            continue
+        if not well_formed(text):
+            print(f"{key}: leaving out the version from {sha[:7]} - a hunk header's "
+                  f"line counts do not match its own lines (corrupt; could never "
+                  f"have applied to any real backend)", file=sys.stderr)
             continue
         if text not in seen:
             order.append(text)

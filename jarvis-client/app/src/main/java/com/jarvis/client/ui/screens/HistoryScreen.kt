@@ -37,6 +37,7 @@ import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalChrome
@@ -56,6 +57,11 @@ import java.time.ZoneId
  *   A choice that deletes something now asks first.
  * - The list, newest first, with "Load older". Open one to read it; delete
  *   one after a confirm. There is no "delete all" - not here, not on the PC.
+ * - A search box over the list already loaded, by title only (ease-of-use
+ *   audit row 20; the owner's answer of 2026-09-27: "shown on screen only;
+ *   nothing saved, nothing handed to the AI"). Pure client-side filtering
+ *   ([ChatLog.filtered]) - no new route, and the desktop's History does the
+ *   same (brain.js `paintHistoryList`).
  *
  * Everything is read from the PC when the screen opens and dropped when it
  * is left. The phone keeps no history of its own.
@@ -90,6 +96,9 @@ fun HistoryScreen(
     // The conversation open for reading. Saveable, so a rotation keeps it open.
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     var listSaid by remember { mutableStateOf<String?>(null) }
+    // The search box: filters the list already loaded, by title only.
+    // Nothing is sent to the PC and nothing reaches the AI.
+    var search by rememberSaveable { mutableStateOf("") }
 
     val queue by JarvisRuntime.pending.collectAsState()
     val cardInQueue = ChatLog.cardWaiting(queue.map { it.action })
@@ -270,10 +279,21 @@ fun HistoryScreen(
             } else {
                 val shown = rows
                 val err = readError
+                // The search box narrows `shown` for display only - paging
+                // ("Load older") still works from the full, unfiltered list.
+                val visible = if (shown != null) ChatLog.filtered(shown, search) else null
                 item(key = "list-head") {
                     Column(Modifier.fillMaxWidth()) {
                         Kicker("Conversations")
                         Gap(6)
+                        if (shown != null && shown.isNotEmpty()) {
+                            TextInput(
+                                value = search,
+                                onValueChange = { search = it },
+                                placeholder = ChatLog.SEARCH_PLACEHOLDER,
+                            )
+                            Gap(8)
+                        }
                         when {
                             shown == null -> Text(
                                 if (err != null) "Couldn't read your chat history: $err" else "Reading…",
@@ -282,6 +302,11 @@ fun HistoryScreen(
                             )
                             shown.isEmpty() -> Text(
                                 ChatLog.EMPTY,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid,
+                            )
+                            visible != null && visible.isEmpty() -> Text(
+                                ChatLog.NO_MATCH,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = chrome.textMid,
                             )
@@ -303,11 +328,11 @@ fun HistoryScreen(
                         }
                     }
                 }
-                if (shown != null) {
-                    items(shown, key = { "c-" + it.id }) { row ->
+                if (visible != null) {
+                    items(visible, key = { "c-" + it.id }) { row ->
                         ConversationRow(row, onOpen = { openId = row.id })
                     }
-                    if (mayHaveOlder && shown.isNotEmpty()) {
+                    if (mayHaveOlder && shown != null && shown.isNotEmpty()) {
                         item(key = "older") {
                             Quiet(
                                 if (loadingOlder) "Loading…" else "Load older",

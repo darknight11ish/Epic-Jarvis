@@ -29,6 +29,7 @@ import {
   lightsView,
   MISSING,
   NOT_HERE,
+  ONE_AT_A_TIME,
   PHONE_LOOSEN,
   readAsksFirst,
   rowLine,
@@ -36,6 +37,10 @@ import {
   SWITCHABLE,
   switchView,
   TITLE,
+  TOOLS_LABEL,
+  TOOLS_PC_ONLY,
+  TOOLS_SWITCHABLE,
+  toolSwitchView,
   WAITING,
 } from "../src/asks-first.js";
 import * as K from "./uikit.mjs";
@@ -65,6 +70,9 @@ await check("the words are the PC's own, and the phone says the same", async () 
   assert.equal(LIGHTS_DETAIL, Wd.lights_detail);
   assert.equal(LIGHTS_WAITING, Wd.lights_waiting);
   assert.deepEqual([...SWITCHABLE], CASES.switchable);
+  assert.deepEqual([...TOOLS_SWITCHABLE], CASES.tools_switchable);
+  assert.equal(TOOLS_LABEL, Wd.tools_label);
+  assert.equal(TOOLS_PC_ONLY, Wd.tools_pc_only);
   const html = read("src/settings.html");
   assert.ok(html.includes(`<h2>${TITLE}</h2>`), "the heading");
   assert.ok(html.includes(DETAIL), "the note under the heading");
@@ -118,6 +126,36 @@ await check("the switch: stricter always, looser only from the PC, live, one car
   assert.ok(rowLine(send).startsWith("Send an email - "));
 });
 
+await check("the tool switch: ON held on a stale link and off the PC, OFF never, one at a time", async () => {
+  const shipped = readAsksFirst(C.pc_shipped);
+  const cal = shipped.tools.items.find((i) => i.id === "calendar_read");
+  assert.deepEqual(toolSwitchView(cal, shipped.tools, true),
+    { checked: false, disabled: false, lines: [] }, "shipped: not offered, may turn it on");
+  assert.equal(toolSwitchView(cal, shipped.tools, false).disabled, true,
+    "turning it ON is held on a stale link");
+  const onPc = readAsksFirst(C.pc_stricter_lights_on);
+  const calOn = onPc.tools.items.find((i) => i.id === "calendar_read");
+  assert.equal(calOn.on, true);
+  assert.equal(toolSwitchView(calOn, onPc.tools, false).disabled, false,
+    "already offered: turning it OFF is never held");
+  const phone = readAsksFirst(C.phone_cards_waiting);
+  const calPhone = phone.tools.items.find((i) => i.id === "calendar_read");
+  assert.equal(toolSwitchView(calPhone, phone.tools, true).disabled, true,
+    "not from the PC: cannot turn it on");
+  assert.ok(toolSwitchView(calPhone, phone.tools, true).lines.includes(TOOLS_PC_ONLY));
+  const emailWaiting = phone.tools.items.find((i) => i.id === "email_read");
+  const w = toolSwitchView(emailWaiting, phone.tools, true);
+  assert.deepEqual(w, { checked: true, disabled: true, lines: [WAITING] }, "its own card waits");
+  // On the PC, live link, but a DIFFERENT tool's card is already waiting.
+  const oneAtATime = { canEnable: true, items: [
+    { id: "calendar_read", title: "Read your calendar", on: false, waiting: false, last: "", lastOutcome: "" },
+    { id: "email_read", title: "Read your email", on: false, waiting: true, last: "", lastOutcome: "" },
+  ] };
+  const other = toolSwitchView(oneAtATime.items[0], oneAtATime, true);
+  assert.equal(other.disabled, true, "another tool's card waits: one at a time");
+  assert.ok(other.lines.includes(ONE_AT_A_TIME));
+});
+
 await check("the lights switch: ON held on a stale link, OFF never, waiting said", async () => {
   const off = readAsksFirst(C.pc_shipped).lights;
   assert.deepEqual(lightsView(off, true), { show: true, checked: false, canChange: true, lines: [] });
@@ -144,7 +182,8 @@ function asksBridge(view) {
       window.__asksCalls.push({ cmd });
       return JSON.parse(JSON.stringify(window.__asksView));
     }
-    if (cmd === "set_asks_first" || cmd === "set_lights_without_card") {
+    if (cmd === "set_asks_first" || cmd === "set_lights_without_card"
+        || cmd === "set_tool_enabled") {
       window.__asksCalls.push({ cmd, ...args });
       return { ok: true, message: "Done." };
     }
@@ -173,7 +212,8 @@ await check("Settings: every group and row in the PC's words and order", async (
     assert.ok(text.includes(g.title), g.title);
     for (const r of g.rows) assert.ok(text.includes(`${r.title} - ${r.says}`), r.id);
   }
-  assert.deepEqual(boxes.sort(), [...CASES.switchable.map((a) => `af-${a}`), "af-lights"].sort());
+  assert.deepEqual(boxes.sort(), [...CASES.switchable.map((a) => `af-${a}`),
+    ...CASES.tools_switchable.map((a) => `af-tool-${a}`), "af-lights"].sort());
   assert.ok(text.includes(LIGHTS_LABEL));
   assert.deepEqual(errors, []);
 });
@@ -225,6 +265,23 @@ await check("Settings: the lights setting - ON held on a stale link, OFF goes", 
   assert.deepEqual(calls, [{ cmd: "set_lights_without_card", enabled: false }]);
 });
 
+await check("Settings: offering a tool - ON held on a stale link, OFF goes", async () => {
+  let page = await settings(C.pc_shipped, { link: { stale: true } });
+  const held = await page.locator("#af-tool-calendar_read").isDisabled();
+  await page.close();
+  assert.equal(held, true, "turning it ON is held on a stale link");
+  page = await settings(C.pc_stricter_lights_on, { link: { stale: true } });
+  const offHeld = await page.locator("#af-tool-calendar_read").isDisabled();
+  await page.close();
+  assert.equal(offHeld, false, "already offered: turning it OFF is never held");
+  page = await settings(C.pc_stricter_lights_on, { link: { stale: true } });
+  await page.locator("#af-tool-calendar_read").click();
+  await page.waitForTimeout(300);
+  const calls = await page.evaluate(() => window.__asksCalls.filter((c) => c.cmd !== "get_asks_first"));
+  await page.close();
+  assert.deepEqual(calls, [{ cmd: "set_tool_enabled", tool: "calendar_read", enabled: false }]);
+});
+
 await check("Settings: a PC without it says what to do", async () => {
   const page = await settings({ available: false, why: MISSING });
   const state = await page.locator("#af-state").innerText();
@@ -243,16 +300,19 @@ await check("CONTROL: Settings only; Rust refuses an action off the list; no app
   const toml = read("src-tauri/permissions/surfaces.toml");
   const sets = toml.split("[[set]]");
   const settingsSet = sets.find((s) => s.includes('identifier = "settings-surface"'));
-  for (const p of ["allow-get-asks-first", "allow-set-asks-first", "allow-set-lights-without-card"]) {
+  for (const p of ["allow-get-asks-first", "allow-set-asks-first", "allow-set-lights-without-card",
+    "allow-set-tool-enabled"]) {
     assert.ok(settingsSet.includes(`"${p}"`), p);
     assert.equal(sets.filter((s) => s.includes(`"${p}"`)).length, 1, `${p} in one set only`);
   }
   const build = read("src-tauri/build.rs");
-  for (const c of ["get_asks_first", "set_asks_first", "set_lights_without_card"]) {
+  for (const c of ["get_asks_first", "set_asks_first", "set_lights_without_card",
+    "set_tool_enabled"]) {
     assert.ok(build.includes(`"${c}"`), c);
   }
   const rs = read("src-tauri/src/asks_first.rs");
   assert.match(rs, /if !SWITCHABLE\.contains\(&action\)/);
+  assert.match(rs, /if !TOOLS_SWITCHABLE\.contains\(&tool\)/);
   assert.match(rs, /held_on_stale\(!ask\) && stale\(&app\)/);
   assert.doesNotMatch(rs, /api\/approve/);
   const js = read("src/asks-first-settings.js");

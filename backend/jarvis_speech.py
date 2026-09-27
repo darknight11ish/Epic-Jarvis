@@ -1799,6 +1799,29 @@ def tts_speed(voices_module=None) -> float:
     return v if 0.5 <= v <= 2.0 else 1.0
 
 
+def tts_speaker(voices_module=None) -> int:
+    """Which of Kokoro's own voices the built-in voice uses: the owner's
+    voice-choice setting (jarvis_voices.speaker(), both apps' "Jarvis's
+    built-in voice"), or - with an older jarvis_voices.py, or none -
+    `[voice] tts_speaker_id`, as before (ease-of-use audit row 13)."""
+    V = voices_module
+    if V is None:
+        try:
+            import jarvis_voices as V
+        except Exception:
+            V = None
+    if V is not None and hasattr(V, "speaker"):
+        try:
+            return int(V.speaker())
+        except Exception:
+            pass
+    try:
+        v = int(_cfg("tts_speaker_id", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+    return v if v >= 0 else 0
+
+
 def _synthesise(text: str, *, start_better: bool = True) -> tuple:
     """The sound for `text`, and nothing else - no timing row, nothing
     remembered: (samples | None, sample_rate, engine, voice, fallback, note,
@@ -1836,7 +1859,7 @@ def _synthesise(text: str, *, start_better: bool = True) -> tuple:
     try:
         audio = engine.generate(
             text,
-            sid=int(_cfg("tts_speaker_id", 0) or 0),
+            sid=tts_speaker(jarvis_voices),
             speed=tts_speed(jarvis_voices),
         )
     except Exception:

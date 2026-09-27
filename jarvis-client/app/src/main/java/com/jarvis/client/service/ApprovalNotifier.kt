@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.net.PendingItem
@@ -262,9 +263,10 @@ object ApprovalNotifier {
         val channel = if (item.shouldInterrupt) CHANNEL_ID else QUIET_CHANNEL_ID
 
         return NotificationCompat.Builder(context, channel)
-            // Never copied to a paired watch or other device (Android bridges
-            // notifications by default): what Jarvis says stays on this phone.
-            .setLocalOnly(true)
+            // Stays on this phone unless the owner turned on "Show
+            // notifications on a compatible watch" (Brain, off by default) -
+            // Android bridges notifications to a paired device otherwise.
+            .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body.lineSequence().first())
@@ -323,9 +325,10 @@ object ApprovalNotifier {
 
     private fun redacted(context: Context): Notification =
         NotificationCompat.Builder(context, CHANNEL_ID)
-            // Never copied to a paired watch or other device (Android bridges
-            // notifications by default): what Jarvis says stays on this phone.
-            .setLocalOnly(true)
+            // Stays on this phone unless the owner turned on "Show
+            // notifications on a compatible watch" (Brain, off by default) -
+            // Android bridges notifications to a paired device otherwise.
+            .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.approval_locked))
@@ -334,9 +337,10 @@ object ApprovalNotifier {
 
     private fun summary(context: Context, count: Int, loud: Boolean): Notification =
         NotificationCompat.Builder(context, if (loud) CHANNEL_ID else QUIET_CHANNEL_ID)
-            // Never copied to a paired watch or other device (Android bridges
-            // notifications by default): what Jarvis says stays on this phone.
-            .setLocalOnly(true)
+            // Stays on this phone unless the owner turned on "Show
+            // notifications on a compatible watch" (Brain, off by default) -
+            // Android bridges notifications to a paired device otherwise.
+            .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.approvals_waiting, count))

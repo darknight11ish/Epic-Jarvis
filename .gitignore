@@ -53,3 +53,8 @@ tools/tool_eval/tool_eval_results.json
 # and committed there. node_modules/ above keeps npm installs out.
 brag-output/
 brag-output-*/
+
+# Local git worktrees used for parallel background builders (each is a full
+# checkout on its own branch, never meant to be committed - see the
+# handoff's "at most 3-4 builders at once" note).
+.claude/worktrees/

@@ -553,7 +553,7 @@ def vpost(fn, body, g=None, spawn=run_now, check=not_owner):
     kw = {"gate": g or gate(), "tier_of": ask, "spawn": spawn}
     if fn in (VS.create, VS.switch):
         kw["check"] = check
-    if fn in (VS.delete, VS.set_speed):
+    if fn in (VS.delete, VS.set_speed, VS.set_speaker):
         return fn(body)
     return fn(body, **kw)
 
@@ -608,6 +608,10 @@ def voices_cases():
         status["speed_faster"] = scrub(VS.status(), w)
         answers["speed_bad"] = scrub(answer(vpost(VS.set_speed, {"speed": "warp"})), w)
         answers["speed_normal"] = scrub(answer(vpost(VS.set_speed, {"speed": "normal"})), w)
+        # Which of Kokoro's own voices speaks: the same shape, no card either way.
+        answers["speaker_9"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "9"})), w)
+        status["speaker_9"] = scrub(VS.status(), w)
+        answers["speaker_bad"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "99"})), w)
 
     with VoicesWorld(zipvoice=False) as w:
         vpost(VS.create, create_body())

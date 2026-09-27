@@ -105,6 +105,7 @@ const dom = {
   revealToken: $("reveal-token"),
   pairingShown: $("pairing-shown"),
   pairingToken: $("pairing-token"),
+  pairingTokenDisplay: $("pairing-token-display"),
   hideToken: $("hide-token"),
   connectionStatus: $("connection-status"),
   linkState: $("link-state"),
@@ -124,12 +125,18 @@ const dom = {
   backendState: $("backend-state"),
   backendTech: $("backend-tech"),
   backendDetail: $("backend-detail"),
+  findPython: $("find-python"),
+  findPythonStatus: $("find-python-status"),
 
   autostart: $("autostart"),
   autostartNote: $("autostart-note"),
   openLogs: $("open-logs"),
   logsStatus: $("logs-status"),
   logsState: $("logs-state"),
+
+  crashNotesList: $("crash-notes-list"),
+  crashNotesState: $("crash-notes-state"),
+  refreshCrashNotes: $("refresh-crash-notes"),
 
   updateAuto: $("update-auto"),
   updateState: $("update-state"),
@@ -269,9 +276,21 @@ dom.clearToken.addEventListener("click", () =>
 /* Showing the token for the phone. Hidden again after a minute. */
 let hideTimer = null;
 
+// Ease-of-use audit #18: shown in groups of 4 so a long random key is
+// easier to read back and type correctly. Display only - the real
+// `dom.pairingToken.value` (read by nothing else in this file, since there
+// is deliberately no Copy button, CONN-6 above) always keeps the raw,
+// unspaced key Jarvis issued.
+function groupInFours(value) {
+  const groups = [];
+  for (let i = 0; i < value.length; i += 4) groups.push(value.slice(i, i + 4));
+  return groups.join(" ");
+}
+
 function hidePairingToken() {
   clearTimeout(hideTimer);
   dom.pairingToken.value = "";
+  dom.pairingTokenDisplay.textContent = "";
   dom.pairingShown.hidden = true;
   dom.revealToken.hidden = false;
 }
@@ -280,10 +299,13 @@ dom.revealToken.addEventListener("click", () =>
   act(dom.revealToken, dom.connectionStatus, async () => {
     const token = await invoke("reveal_pairing_token");
     dom.pairingToken.value = token;
+    dom.pairingTokenDisplay.textContent = groupInFours(token);
     dom.pairingShown.hidden = false;
     dom.revealToken.hidden = true;
     // Focused so a screen reader reads it, and NOT selected: a selected
-    // token is one Ctrl+C away from Windows' clipboard history.
+    // token is one Ctrl+C away from Windows' clipboard history. The
+    // screen reader gets the real (off-screen) field, not the grouped
+    // display, so it reads the exact characters to type.
     dom.pairingToken.focus();
     clearTimeout(hideTimer);
     hideTimer = setTimeout(hidePairingToken, 60_000);
@@ -395,6 +417,23 @@ dom.startBackend.addEventListener("click", () =>
 
 dom.stopBackend.addEventListener("click", () =>
   act(dom.stopBackend, dom.backendStatus, () => invoke("stop_backend"))
+);
+
+// "Find it for me" (ease-of-use audit row 19). Read-only: it never saves
+// anything and never touches the on/off switch above - the owner still
+// checks the box and presses Save, same as if they had typed the path
+// themselves. Filling the field here is safe against the 5-second poll:
+// paintBackend() only overwrites the fields on the page's first load
+// (`fields: true` at boot, above), never on its later ticks.
+dom.findPython.addEventListener("click", () =>
+  act(dom.findPython, dom.findPythonStatus, async () => {
+    const result = await invoke("find_python");
+    if (result.found) {
+      dom.program.value = result.path;
+      return `Found Python ${result.version}, from ${result.source}. Check it, then press Save.`;
+    }
+    return result.hint || "Couldn't find a working Python on this PC.";
+  })
 );
 
 /* ==========================================================================
@@ -655,6 +694,46 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) paintShared();
 });
 
+/* Floating face: a small, always-on-top window with just Jarvis's face -
+   no chat box, voice only (2026-09-27). Off by default; read and written
+   through get_floating/set_floating (windows::FloatingState, Rust side). */
+const floatingEnabled = $("floating-enabled");
+
+async function paintFloating() {
+  if (!floatingEnabled || !IS_TAURI) return;
+  try {
+    const prefs = await invoke("get_floating");
+    floatingEnabled.checked = Boolean(prefs && prefs.enabled);
+  } catch (error) {
+    console.error("[settings] could not read the floating face setting:", error);
+  }
+}
+paintFloating();
+
+if (floatingEnabled) {
+  floatingEnabled.addEventListener("change", async () => {
+    const want = floatingEnabled.checked;
+    try {
+      await invoke("set_floating", { enabled: want });
+    } catch (error) {
+      // The checkbox is the only record of intent here - put it back so it
+      // never claims a state the window is not actually in.
+      floatingEnabled.checked = !want;
+      console.error("[settings] could not change the floating face:", error);
+    }
+  });
+}
+
+// The tray, the hotkey and closing the floating window itself all change
+// the same on/off state without going through this checkbox - without this,
+// the box could disagree with the screen until it was clicked once, itself
+// sending the wrong state (bug audit 2026-09-27, desktop-rust finding #5).
+if (IS_TAURI) {
+  TAURI.event.listen("floating-changed", (event) => {
+    if (floatingEnabled) floatingEnabled.checked = Boolean(event.payload);
+  });
+}
+
 $("open-faces").addEventListener("click", async () => {
   try {
     await invoke("open_faces");
@@ -665,10 +744,14 @@ $("open-faces").addEventListener("click", async () => {
 });
 
 /**
- * "Show me where" (plain-errors.js): the quickbar left a place under
- * SETTINGS_PLACE_KEY. Taken once, and only while fresh; "More options" is
- * opened and the place scrolled to. Nothing is changed - the owner still
- * presses Start themselves.
+ * "Show me where" (plain-errors.js), and, since 2026-09-27, "open <a
+ * settings section>" by voice or chat (jarvis_settings_registry.py,
+ * main.js's own openSettingsFromRoute): the quickbar left a place under
+ * SETTINGS_PLACE_KEY - any element id this page has, not only
+ * START_PLACE's "Starting Jarvis for you". Taken once, and only while
+ * fresh; a closed <details> ancestor (only "More options" folds a card
+ * away) is opened first, then the place is scrolled to. Nothing is
+ * changed - the owner still makes the change, or presses Start, themselves.
  */
 function goToPlace() {
   let left = null;
@@ -678,18 +761,25 @@ function goToPlace() {
   } catch {
     return;
   }
-  if (!left || left.place !== START_PLACE) return;
+  if (!left || !left.place) return;
   if (!(Date.now() - Number(left.at) < PLACE_FRESH_MS)) return;
-  const more = $("more-options");
-  const card = $("start-jarvis");
-  if (!more || !card) return;
-  more.open = true;
+  const target = $(left.place);
+  if (!target) return;
+  const details = target.closest("details");
+  if (details && !details.open) details.open = true;
   // After the page has loaded and laid out: a scroll made earlier is undone
   // by the browser putting the page back where it was.
   const go = () => requestAnimationFrame(() => {
-    card.scrollIntoView({ block: "start" });
-    const first = dom.startBackend && !dom.startBackend.disabled ? dom.startBackend : dom.supervise;
-    if (first) first.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start" });
+    if (left.place === START_PLACE) {
+      // "Starting Jarvis for you": land on its own first useful control,
+      // as before "open <a section>" existed for anywhere else.
+      const first = dom.startBackend && !dom.startBackend.disabled ? dom.startBackend : dom.supervise;
+      if (first) first.focus({ preventScroll: true });
+    } else if (typeof target.focus === "function") {
+      if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+      target.focus({ preventScroll: true });
+    }
   });
   if (document.readyState === "complete") go();
   else window.addEventListener("load", go, { once: true });
@@ -766,6 +856,57 @@ async function paintLogs() {
     `${info.dir} · this app ${size(info.app?.bytes)} · backend ${size(info.backend?.bytes)}`;
 }
 
+/** `2026-09-15 14:03` from a Unix-seconds timestamp, in the viewer's own
+ * time zone - the notes are for the owner reading this screen, not a log
+ * file another machine will parse. */
+function crashNoteWhen(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n <= 0) return "unknown time";
+  const d = new Date(n * 1000);
+  if (Number.isNaN(d.getTime())) return "unknown time";
+  return d.toLocaleString();
+}
+
+const CRASH_NOTE_SOURCE_WORDS = { desktop: "This app", backend: "Jarvis (the backend)" };
+const CRASH_NOTE_KIND_WORDS = { panic: "panicked", crash: "crashed", hang: "stopped answering" };
+
+/** Feasibility I99: the newest hang/crash notes, newest last (the same order
+ * `crash_notes()` serves them in, which is oldest-first - see its own doc
+ * comment), so the list reads top-to-bottom as oldest-to-newest and a fresh
+ * one appears at the bottom, the same direction the log files grow in. */
+async function paintCrashNotes() {
+  let notes;
+  try {
+    notes = await invoke("crash_notes");
+  } catch (error) {
+    dom.crashNotesState.textContent = String((error && error.message) || error);
+    dom.crashNotesList.replaceChildren();
+    return;
+  }
+  dom.crashNotesList.replaceChildren();
+  if (!Array.isArray(notes) || notes.length === 0) {
+    dom.crashNotesState.textContent = "None yet.";
+    return;
+  }
+  dom.crashNotesState.textContent = `${notes.length} of the newest ${notes.length === 1 ? "one" : notes.length}.`;
+  for (const note of notes) {
+    const li = document.createElement("li");
+    li.className = "crash-note";
+    const who = CRASH_NOTE_SOURCE_WORDS[note?.source] || String(note?.source || "Something");
+    const what = CRASH_NOTE_KIND_WORDS[note?.kind] || String(note?.kind || "had a problem");
+    const when = document.createElement("span");
+    when.className = "crash-note-when";
+    when.textContent = crashNoteWhen(note?.when);
+    const detail = document.createElement("span");
+    detail.className = "crash-note-detail";
+    detail.textContent = `${who} ${what}: ${String(note?.detail || "").trim() || "(no detail)"}`;
+    li.append(when, detail);
+    dom.crashNotesList.append(li);
+  }
+}
+
+dom.refreshCrashNotes.addEventListener("click", () => paintCrashNotes());
+
 async function paintAutostart() {
   let info;
   try {
@@ -829,6 +970,7 @@ dom.openLogs.addEventListener("click", async () => {
   await paintBackend({ fields: true });
   await paintAutostart();
   await paintLogs();
+  await paintCrashNotes();
   // Cheap, and only while the window is actually on screen — a settings page
   // nobody is looking at has no reason to poll.
   let timer = null;
@@ -953,10 +1095,17 @@ function renderHotkeys() {
 
     const state = document.createElement("div");
     state.className = "hotkey-state";
+    // A blank `row.accelerator` with an error is Jarvis's OWN doing (its
+    // default lost to another action's saved key, hotkeys.rs's own
+    // `apply`) - "in use by another app" would blame the wrong thing here,
+    // the exact wrong blame bug audit 2026-09-27 finding #7 already fixed
+    // in the startup toast but missed on this row (Opus 5.5 re-check,
+    // 2026-09-27). A real OS-level refusal still names "another app",
+    // since that one really is one.
     state.textContent = row.registered
       ? "working"
       : row.error
-        ? "in use by another app"
+        ? row.accelerator ? "in use by another app" : "needs a different key"
         : "not bound";
     if (!row.registered && row.error) state.title = row.error;
 
@@ -1381,6 +1530,12 @@ const sc = {
   pinCommand: $("sc-pin-command"),
   pinCopy: $("sc-pin-copy"),
   pinStatus: $("sc-pin-status"),
+  combined: $("sc-combined"),
+  combinedStatus: $("sc-combined-status"),
+  suggestTitle: $("sc-suggest-title"),
+  suggestDetail: $("sc-suggest-detail"),
+  suggestSignals: $("sc-suggest-signals"),
+  suggestStatus: $("sc-suggest-status"),
 };
 
 /** The same words the Brain's model install uses while its card waits. */
@@ -1408,6 +1563,12 @@ let scLast = null;
 let scReadSeq = 0;
 let scBusy = false;
 let scPollTimer = null;
+/** The switch id a toggle function is mid-request for, captured before it
+ * disables the checkbox - disabling it blurs it to <body> at once in
+ * Chromium, so by the time the repaint after the request runs,
+ * `document.activeElement` is already <body> and cannot say what to
+ * refocus. Read once by the next repaint's focus-restore, then cleared. */
+let scRestoreFocusId = null;
 /** When the gentle re-reading stops; 0 while no card waits. */
 let scPollUntil = 0;
 /** Switches with a card waiting at the last read, to say how each ended. */
@@ -1637,6 +1798,170 @@ function scMasterSwitch(status) {
   return { ...SC_MASTER, enabled: status.enabled === true, pending, needs: [], why };
 }
 
+/**
+ * "One bigger model on both cards" - the third mode (2026-09-26). Not one of
+ * `status.features`: it does not compose with them (it ties up both cards),
+ * so it gets its own row and its own toggle, right in this same section,
+ * reading `status.combined` (the same shape jarvis_second_card.status()
+ * gives each feature, plus `capable`/`capable_why`/`conflict`).
+ */
+function scCombinedHeld(status) {
+  const c = status.combined || {};
+  if (c.pending) return SC_WAITING;
+  if (c.enabled) return "";
+  if (c.capable !== true) {
+    return `Can't be turned on yet: ${scClause(c.capable_why) || "needs two capable graphics cards."}`;
+  }
+  if (c.conflict) return "Turn off the switches above first.";
+  return "";
+}
+
+function scCombinedRow(status) {
+  const c = status.combined || {};
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = "combined";
+  row.dataset.state = c.pending ? "waiting" : c.enabled ? "on" : "off";
+
+  const label = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = "sc-switch-combined";
+  input.checked = Boolean(c.enabled);
+  const held = scCombinedHeld(status);
+  input.disabled = Boolean(held);
+  const text = scNode("span", "", c.name || "One bigger model on both cards");
+  text.append(scNode("span", "toggle-detail", c.what || ""));
+  label.append(input, text);
+  row.append(label);
+
+  const lines = scNode("div", "sc-lines");
+  const describedBy = [];
+  const addLine = (className, words) => {
+    if (!words) return;
+    const line = scNode("p", className, words);
+    line.id = `sc-combined-${className.split(" ").pop()}`;
+    describedBy.push(line.id);
+    lines.append(line);
+  };
+  addLine("sc-why", c.why);
+  if (c.pending) addLine("sc-held sc-waiting", SC_WAITING);
+  else if (held) addLine("sc-held", held);
+  addLine("sc-model", scModelLine(c));
+  addLine("sc-memory", scMemoryLine(c));
+  if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));
+  row.append(lines);
+
+  input.addEventListener("change", () => scCombinedToggle(input));
+  return row;
+}
+
+/** One request, the same shape as scToggle, for the single "combined" switch. */
+async function scCombinedToggle(input) {
+  const turnOn = input.checked;
+  if (scBusy) {
+    input.checked = !turnOn;
+    return;
+  }
+  scBusy = true;
+  // Before disabling blurs it: see `scRestoreFocusId`.
+  scRestoreFocusId = input.id;
+  input.disabled = true;
+  const label = "\"One bigger model on both cards\"";
+  report(sc.combinedStatus, turnOn ? `Asking to turn on ${label}…` : `Turning off ${label}…`);
+  try {
+    const out = await invoke("set_second_card", { feature: "combined", enabled: turnOn });
+    if (turnOn && out && out.pending === true) {
+      report(sc.combinedStatus, SC_WAITING, "ok");
+      announce(`${label}: ${SC_WAITING}`);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(sc.combinedStatus, out.message, "ok");
+    } else {
+      report(sc.combinedStatus, turnOn ? `${label} is on.` : `${label} is off.`, "ok");
+    }
+  } catch (error) {
+    report(sc.combinedStatus, scProblemWords(error), "bad");
+    announce(sc.combinedStatus.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  await loadSecondCard();
+}
+
+/**
+ * "When to suggest the bigger model" (2026-09-27): whether Jarvis may OFFER
+ * "One bigger model on both cards" on its own - never what it may do
+ * without a person's yes, so NEITHER switch here raises an approval card,
+ * exactly like Humour on the "How Jarvis talks" screen. Reads
+ * `status.suggest` (folded into the same GET /api/second-card poll as
+ * everything else in this section); an older backend sends none, and the
+ * whole subsection hides itself.
+ */
+function scSuggestRow(sig) {
+  const row = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = `sc-suggest-${sig.id}`;
+  input.checked = Boolean(sig.enabled);
+  input.dataset.signal = sig.id;
+  const text = scNode("span", "", sig.label || sig.id);
+  text.append(scNode("span", "toggle-detail", sig.why || ""));
+  row.append(input, text);
+  input.addEventListener("change", () => scSuggestToggle(input));
+  return row;
+}
+
+function scPaintSuggest(status) {
+  if (!sc.suggestSignals) return;
+  const suggest = status.suggest;
+  const have = suggest && suggest.available === true && Array.isArray(suggest.signals);
+  if (sc.suggestTitle) sc.suggestTitle.hidden = !have;
+  if (sc.suggestDetail) {
+    sc.suggestDetail.hidden = !have;
+    sc.suggestDetail.textContent = have ? scSentence(suggest.detail) || "" : "";
+  }
+  sc.suggestSignals.hidden = !have;
+  if (!have) {
+    sc.suggestSignals.replaceChildren();
+    return;
+  }
+  const focused = scRestoreFocusId || (document.activeElement && document.activeElement.id);
+  sc.suggestSignals.replaceChildren(...suggest.signals.map(scSuggestRow));
+  if (focused && focused.startsWith("sc-suggest-")) {
+    const again = document.getElementById(focused);
+    if (again) again.focus();
+  }
+}
+
+/** One switch, no card either way (set_second_card_suggest, held on a stale
+ * link by the Rust side like every other change sent to the PC). */
+async function scSuggestToggle(input) {
+  const signal = input.dataset.signal;
+  const turnOn = input.checked;
+  if (scBusy) {
+    input.checked = !turnOn;
+    return;
+  }
+  scBusy = true;
+  // Before disabling blurs it: see `scRestoreFocusId`.
+  scRestoreFocusId = input.id;
+  input.disabled = true;
+  try {
+    await invoke("set_second_card_suggest", { signal, enabled: turnOn });
+    report(sc.suggestStatus, turnOn ? "Jarvis may now offer this on its own." :
+      "Jarvis will not offer this on its own.", "ok");
+  } catch (error) {
+    report(sc.suggestStatus, scProblemWords(error), "bad");
+    announce(sc.suggestStatus.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  // Re-read, the same as every other switch here: the checkbox above shows
+  // what the PC now reports, not just what was tapped (scCombinedToggle's
+  // own pattern) - so a refusal puts it back without this function having
+  // to know the old value.
+  await loadSecondCard();
+}
+
 function scShowProblem(words) {
   scLast = null;
   sc.body.hidden = true;
@@ -1644,6 +1969,13 @@ function scShowProblem(words) {
   sc.state.dataset.tone = "bad";
   sc.state.textContent = words;
   scStopPoll();
+  // One-shot, the same as scPaint's own consumption of it (Opus 5.5
+  // re-check, 2026-09-27): a toggle sets this just before its re-read, and
+  // if that re-read lands here instead of in scPaint, leaving it set means
+  // the NEXT successful repaint - a poll, an approval signal, the window
+  // coming back into view - yanks keyboard focus back to that switch from
+  // wherever the owner is by then.
+  scRestoreFocusId = null;
 }
 
 function scPaint(status) {
@@ -1678,12 +2010,27 @@ function scPaint(status) {
     needs: Array.isArray(f.needs) ? f.needs : [],
   })));
   // Keep the keyboard where it was across a repaint.
-  const focused = document.activeElement && document.activeElement.id;
+  const focused = scRestoreFocusId || (document.activeElement && document.activeElement.id);
   sc.switches.replaceChildren(...rows.map((sw) => scSwitchRow(sw, status, names)));
   if (focused && focused.startsWith("sc-switch-")) {
     const again = document.getElementById(focused);
     if (again) again.focus();
   }
+
+  // "One bigger model on both cards": its own row, its own toggle.
+  if (sc.combined) {
+    const focusedCombined = scRestoreFocusId || (document.activeElement && document.activeElement.id);
+    sc.combined.replaceChildren(scCombinedRow(status));
+    if (focusedCombined === "sc-switch-combined") {
+      const again = document.getElementById("sc-switch-combined");
+      if (again) again.focus();
+    }
+  }
+
+  // "When to suggest the bigger model": its own subsection, no card either way.
+  scPaintSuggest(status);
+  // One-shot: consumed by whichever block above matched it.
+  scRestoreFocusId = null;
 
   // The second Ollama.
   const lane = status.lane || {};
@@ -1704,8 +2051,13 @@ function scPaint(status) {
   if (previous) {
     for (const id of scWaiting) {
       if (pending.has(id)) continue;
-      const name = id === "master" ? SC_MASTER.name : names.byId[id] || id;
-      const on = id === "master" ? status.enabled === true : names.enabled.has(id);
+      const combined = status.combined || {};
+      const name = id === "master" ? SC_MASTER.name
+        : id === "combined" ? (combined.name || "One bigger model on both cards")
+        : names.byId[id] || id;
+      const on = id === "master" ? status.enabled === true
+        : id === "combined" ? combined.enabled === true
+        : names.enabled.has(id);
       report(sc.status, cardEndedWords(name, on, cardLast(status, id, scWaitingSince.get(id))),
         on ? "ok" : null);
       announce(sc.status.textContent);
@@ -1769,6 +2121,8 @@ async function scToggle(sw, input) {
     return;
   }
   scBusy = true;
+  // Before disabling blurs it: see `scRestoreFocusId`.
+  scRestoreFocusId = input.id;
   input.disabled = true;
   report(sc.status, turnOn ? `Asking to turn on "${sw.name}"…` : `Turning off "${sw.name}"…`);
   try {

@@ -9,7 +9,14 @@ Run before and after the token refactor; the second number is the deliverable.
 """
 import re, sys, pathlib
 
-FILES = ["style.css", "widget.css", "settings.css", "brain.css", "theme.css"]
+FILES = ["style.css", "widget.css", "settings.css", "brain.css", "theme.css",
+         # 2026-09-27 (UI audit item 11, Q6): the one page here that is not a
+         # plain stylesheet. `only_style_block` below keeps this check to its
+         # `<style>` element and blanks out the rest of the page, so a colour
+         # fallback in its own JS (`tk("--edge", "#356f8c")`, for when a
+         # custom property somehow fails to resolve) is not mistaken for a
+         # literal CSS declaration.
+         "jarvis_hud.html"]
 # Beside this script (jarvis-desktop/scripts/ -> jarvis-desktop/src), unless a
 # folder is given. It used to default to one machine's absolute path, so on CI
 # every file printed "(missing)" and the check passed having checked nothing.
@@ -73,6 +80,27 @@ def strip_comments(src):
     return "".join(out)
 
 
+def only_style_block(src):
+    """For a page with its CSS and JS in the same file (`jarvis_hud.html`):
+    keep the `<style>...</style>` text and blank out everything before and
+    after it, the same way `strip_comments` blanks out comments - so offsets
+    and reported line numbers still point at the real line. Without this, a
+    colour fallback string in the page's own JS reads as a literal CSS
+    declaration the theme cannot reach, when it is neither CSS nor literal."""
+    start = src.find("<style>")
+    end = src.find("</style>")
+    if start < 0 or end < 0:
+        return src
+    out = list(src)
+    for j in range(0, start + len("<style>")):
+        if out[j] != "\n":
+            out[j] = " "
+    for j in range(end, len(src)):
+        if out[j] != "\n":
+            out[j] = " "
+    return "".join(out)
+
+
 def blocks(src):
     out = []
     for m in DEFINING.finditer(src):
@@ -96,7 +124,10 @@ for name in FILES:
         print(f"{name:<14} MISSING - looked for {path}")
         missing += 1
         continue
-    src = strip_comments(path.read_text())
+    src = path.read_text()
+    if name.endswith(".html"):
+        src = only_style_block(src)
+    src = strip_comments(src)
     spans = blocks(src)
     hits = []
     for at, text in colours(src):

@@ -43,7 +43,7 @@ await check("every bindable action is listed", async () => {
   const page = await open();
   const list = await rows(page);
   await page.close();
-  assert.equal(list.length, 6, `${list.length} rows, expected 6`);
+  assert.equal(list.length, 7, `${list.length} rows, expected 7`);
   assert.equal(list[0].name, "Show or hide the Jarvis bar");
   assert.equal(list[0].key, "Alt + Space");
   // "Stop everything" (2026-09-25): listed like the others, so it can be
@@ -66,8 +66,9 @@ await check("Stop everything is in the tray menu too, the same command, never gr
   // And Settings' promise about the tray is true of what it names.
   const html = read("src/settings.html");
   assert.doesNotMatch(html, /Everything here is also in the tray menu/);
-  assert.match(html.replace(/\s+/g, " "), /The Jarvis bar, the widget and Stop everything are also in the tray menu\./);
-  for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything"]) {
+  assert.match(html.replace(/\s+/g, " "),
+    /The Jarvis bar, the widget, the floating face and Stop everything are also in the tray menu\./);
+  for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything", "toggle_floating"]) {
     assert.match(tray, new RegExp(`accel\\(app, "${id}"\\)`), `${id} has no tray row`);
   }
 });
@@ -128,6 +129,29 @@ await check("a refused binding says so, and does not say working", async () => {
   assert.equal(summon.bound, "false");
   assert.match(summon.state, /in use/i, `said "${summon.state}"`);
   assert.doesNotMatch(summon.state, /working/i);
+});
+
+await check("a row Jarvis itself blanked does not blame another app for it (Opus 5.5 re-check, 2026-09-27)", async () => {
+  // hotkeys.rs's own `apply()` blanks a default that lost a clash to
+  // another action's saved key - `toggle_floating`'s real shipped case,
+  // since the owner long ago moved Quick note onto that same combination.
+  // The startup toast already stopped blaming "another application" for
+  // this (finding #7); this row had not been touched and still said "in
+  // use by another app", which is Jarvis's OWN doing, not another
+  // program's.
+  const page = await open({
+    hotkeys: K.HOTKEYS.map((h) =>
+      h.id === "toggle_floating"
+        ? { ...h, accelerator: "", registered: false,
+            error: "`Alt+Shift+F` is already Quick note's own key. Give this one a different one in Settings." }
+        : h),
+  });
+  const list = await rows(page);
+  await page.close();
+  const face = list.find((r) => r.name === "Show or hide the floating face");
+  assert.equal(face.bound, "false");
+  assert.doesNotMatch(face.state, /another app/i, `said "${face.state}"`);
+  assert.match(face.state, /different key/i, `said "${face.state}"`);
 });
 
 await check("saving a combination the OS refuses does not report success", async () => {

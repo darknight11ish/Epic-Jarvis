@@ -70,8 +70,18 @@ import kotlinx.coroutines.CancellationException
  * test) and `VOICES` (custom voices) are opened from the voice card on
  * `CHECKS`. `HISTORY` is chat history on the PC (docs/JARVIS-API.md
  * section 18), opened from Mind. Last again, for the same reason.
+ *
+ * `SETTINGS` (ease-of-use audit 2026-09-27, row 16) is the phone's own
+ * Settings screen: voice, security and appearance are only linked from it
+ * (their own screens above are unchanged), while the small settings that
+ * used to sit under Brain's "Settings" group render there directly. Reachable
+ * from Brain and from `CHECKS`, and - like `CHECKS`, `FAQ` and `SECURITY` -
+ * exempt from the pairing screen taking over, so it stays reachable mid-pair.
+ * Last, for the same reason as the others above.
  */
-enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY, VOICE_CHECK, VOICES, HISTORY }
+enum class Screen {
+    HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY, VOICE_CHECK, VOICES, HISTORY, SETTINGS
+}
 
 /**
  * A back stack, because there was not one.

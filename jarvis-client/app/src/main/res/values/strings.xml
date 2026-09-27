@@ -2,6 +2,28 @@
 <resources>
     <string name="app_name">Jarvis</string>
 
+    <!-- App-icon shortcuts (feasibility I125, docs/FEASIBILITY-AUDIT-
+         2026-09-26.md: "Talk, Note, Brief me, What did I miss; still meets
+         App lock"), shown on a long press of the app's own icon on the
+         home screen or app drawer - res/xml/shortcuts.xml. Each reuses an
+         action MainActivity already handles (the widget's own Talk and
+         Note buttons; the briefing notification's own "open the briefing"
+         action), so there is no new behaviour here, only a second way to
+         reach it. All four still open behind App lock like any other
+         launch - MainActivity.kt's own "the app lock outranks everything"
+         composes nothing else until it is unlocked. -->
+    <string name="shortcut_talk_short">Talk</string>
+    <string name="shortcut_talk_long">Talk to Jarvis</string>
+    <string name="shortcut_note_short">Note</string>
+    <string name="shortcut_note_long">Quick note</string>
+    <string name="shortcut_brief_short">Brief me</string>
+    <string name="shortcut_brief_long">Brief me now</string>
+    <!-- Short label kept close to Android's own ~10-character guidance for
+         a shortcut's short label (the long label, shown with more room, is
+         the full question); "Talk"/"Note"/"Brief me" already fit within it. -->
+    <string name="shortcut_missed_short">Missed?</string>
+    <string name="shortcut_missed_long">What did I miss?</string>
+
     <!--
       §3.1(2). specialUse, not dataSync. dataSync is capped at six hours per
       rolling 24h on Android 15; when the budget runs out the system calls
@@ -52,4 +74,16 @@
     <string name="widget_quicklink_name">Jarvis quick link</string>
     <string name="widget_quicklink_desc">The link status, and a one-tap Talk button that opens the
         app with the hold-to-talk mic ready - it does not record from the widget itself.</string>
+
+    <!-- "Floating Jarvis": Overlay (data/FloatingAvatar.kt, service/AvatarOverlayService.kt). -->
+    <string name="fgs_avatar_overlay_reason">Draws the small "Floating Jarvis" avatar
+        the owner turned on, over other apps, so it stays reachable by voice
+        without switching back to Jarvis.</string>
+    <string name="channel_avatar_name">Floating Jarvis</string>
+    <string name="channel_avatar_desc">Shown for as long as the floating avatar is on
+        screen.</string>
+    <string name="avatar_overlay_title">Floating Jarvis</string>
+    <string name="avatar_overlay_text">The small avatar is on your screen. Tap "Turn off"
+        below, or turn "Floating Jarvis" off in Settings.</string>
+    <string name="avatar_overlay_stop">Turn off</string>
 </resources>

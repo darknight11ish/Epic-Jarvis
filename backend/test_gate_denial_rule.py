@@ -30,13 +30,16 @@ import _stack  # noqa: E402
 FAILED, PASSED = [], []
 PATCH = "gate-outcome.patch"
 #: The actions the audit named, each checked below against its module.
-LISTED = ("second_card_enable", "second_card_browser_enable", "big_model_enable",
+LISTED = ("second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
+          "big_model_enable",
           "learning_enable", "history_enable", "learning_auto_enable",
           "learning_sensitive_enable", "wiki_update", "change_own_config",
           "custom_voice", "better_voice_enable",
           "power_manage", "append_obsidian_daily", "download_model", "switch_model",
           # email-send.patch: each email is its own card, sent only on "ask".
-          "send_email")
+          "send_email",
+          # draft-email.patch: each draft is its own card, saved only on "ask".
+          "draft_email")
 
 
 def check(name, cond, detail=""):

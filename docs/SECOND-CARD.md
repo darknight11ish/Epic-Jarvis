@@ -52,6 +52,62 @@ waits, and its status line says which model to install. Install it the usual
 way: Brain window, Model, Models (the Install box), or `ollama pull <name>` in a terminal (for example
 `ollama pull qwen3:8b`).
 
+## One bigger model on both cards (a sixth switch, off by default)
+
+The five switches above each run a small model (7-8B). This one is
+different: instead of picking one card for a small model, it uses **both
+cards at once for one bigger model** - `qwen3:14b`, with room for 32,768
+tokens (double the everyday model's room). Off by default, and not
+something the five switches above can share: turning this on needs both
+cards to itself, so it refuses to turn on while any of them is genuinely
+on, and turning any of them on is refused while this is on. Turn one side
+off first.
+
+**Why bother**, if it needs both cards? Because 14B is a noticeably smarter
+model than the 7-8B models everything else in this file uses, and neither
+card alone has room for it at a useful context size - together they do.
+
+**How fast is it?** Slower than either card would be on its own, and here
+is the honest reason why, checked in Ollama's and llama.cpp's own code
+(not guessed): Ollama splits the model between the two cards **by how much
+free memory each one has right now, not by how fast it is**. Your planned
+pair has an RTX 2060 with more memory than the RTX 2080 Super, but the
+2060's memory is the *slower* of the two - so most of the model lands on
+the slower card, and answers come out at roughly its pace. **Real speed has
+not been measured yet**, because the second card is not installed. Once it
+is, the desktop's Hardware screen "Measure" button (or asking Jarvis one
+question and timing it) tells the truth about it.
+
+**Turning it on**: Settings → "Second graphics card" (desktop) or Brain
+(phone), the same place as the five switches, a new "One bigger model on
+both cards" toggle underneath them. It asks with one approval card first
+(`second_card_combined_enable`), the same as any other switch here.
+
+## Jarvis noticing you might want the bigger model
+
+Jarvis can also notice, on its own, that this conversation could use the
+bigger model above - and OFFER to turn it on. It never turns it on by
+itself; the offer is the exact same approval card the switch above already
+raises, just raised by Jarvis instead of by your own tap, with one added
+line saying what it noticed.
+
+Two things Jarvis watches for, each its own switch under "When to suggest
+the bigger model" (same screen, both on to start):
+
+- **When Jarvis is visibly struggling** - it had to ask the model to try a
+  tool call again more than a couple of times in one conversation.
+- **When you correct an answer more than once** - you told Jarvis it got
+  something wrong more than once in the same conversation (a "wrong" mark,
+  or saying something like "that's wrong" or "try again").
+
+It only ever offers when a genuinely capable second card is actually there
+right now - the exact same check the switch above needs, never a looser
+one - and it will not nag: at most a few offers wait for an answer at any
+time, never while you are mid-conversation, and a "no" keeps it quiet for a
+day, then a week, then a month. Turning either switch off just means Jarvis
+never asks that way; it never stops you turning the switch above on
+yourself, any time.
+
 ## What happens when a switch is on
 
 Jarvis starts a **second copy of Ollama** (the program that runs the models)

@@ -144,7 +144,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::{jarvis_base, jarvis_client, jarvis_headers};
 use crate::events::{
-    VOICE_BARGE_ONSET, VOICE_BARGE_VERDICT, VOICE_HEARD, VOICE_LISTENING, VOICE_SPEECH_STARTED,
+    VOICE_BARGE_ONSET, VOICE_BARGE_VERDICT, VOICE_HEARD, VOICE_LEVEL, VOICE_LISTENING,
+    VOICE_SPEECH_STARTED,
 };
 
 /// Total round-trip budget for one utterance: speaker verification plus a
@@ -655,6 +656,12 @@ struct ActiveCapture {
     join: JoinHandle<()>,
 }
 
+/// How often push-to-talk re-reads the tail of the buffer for the face's
+/// mic-level meter - the same cadence [`VAD_POLL_INTERVAL`] uses for the
+/// same reason: often enough that a syllable is not averaged away, cheap
+/// enough that it is one small IPC message, never the audio.
+const LEVEL_POLL_INTERVAL: Duration = Duration::from_millis(30);
+
 /// The HUD's mic button: bring up the quickbar with its push-to-talk ready.
 ///
 /// Opens NO microphone and records nothing. It shows the quickbar and tells
@@ -676,6 +683,7 @@ pub fn summon_push_to_talk(app: AppHandle) -> Result<(), String> {
 /// Refuses while automatic listening already owns the microphone.
 #[tauri::command]
 pub fn start_voice_capture(
+    app: AppHandle,
     state: State<VoiceCaptureState>,
     auto: State<AutoListenState>,
     training: State<crate::voice_training::SampleState>,
@@ -702,11 +710,29 @@ pub fn start_voice_capture(
         Arc::clone(&samples),
         ready_tx,
         stop_rx,
-        |_samples, _spec, stop_rx| {
-            // Push-to-talk just holds the stream open until told to stop -
-            // `_samples` fills itself via the callback captured inside
-            // `open_input_stream`; there is nothing else to do here.
-            let _ = stop_rx.recv();
+        move |samples, _spec, stop_rx| {
+            // Push-to-talk holds the stream open until told to stop - the
+            // buffer fills itself via the callback captured inside
+            // `open_input_stream`. The only thing left to do here is the
+            // face's mic-level meter (item 1, UI-AUDIT-2026-09-26.md): the
+            // same poll-and-emit shape `run_vad_loop` already uses for the
+            // wake-word trigger, one number per tick, never the audio.
+            let mut read_to = 0usize;
+            loop {
+                match stop_rx.recv_timeout(LEVEL_POLL_INTERVAL) {
+                    Ok(()) => return,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                }
+                let buf = samples.lock().unwrap_or_else(|p| p.into_inner());
+                if buf.len() <= read_to {
+                    continue; // nothing new since the last tick
+                }
+                let level = rms(&buf[read_to..]);
+                read_to = buf.len();
+                drop(buf);
+                crate::emit_quickbar(&app, VOICE_LEVEL, level_from_rms(level));
+            }
         },
     );
 
@@ -1186,6 +1212,15 @@ pub(crate) fn rms(samples: &[i16]) -> f32 {
     ((sum_sq / samples.len() as f64).sqrt()) as f32
 }
 
+/// `rms()` above sits low even for a loud voice - the same reason
+/// `voice.js`'s own `attachAnalyser` scales its Web Audio reading by 3.2
+/// before it reaches `setLevel()`. Used so the two sources (this file, and a
+/// browser AnalyserNode, if one is ever wired here too) land on the same
+/// scale before either reaches the face.
+pub(crate) fn level_from_rms(rms: f32) -> f32 {
+    (rms * 3.2).clamp(0.0, 1.0)
+}
+
 fn busy_error(auto: bool, manual: bool) -> Option<String> {
     if auto {
         return Some("already listening".to_string());
@@ -1474,6 +1509,10 @@ fn run_vad_loop(
             continue; // nothing new since the last tick
         }
         let level = rms(&buf[read_to..]);
+        // The face's mic-level meter (item 1, UI-AUDIT-2026-09-26.md): this
+        // loop already computed `level` for the wake-word trigger below and
+        // used to throw it away once it had. One number, never the audio.
+        crate::emit_quickbar(app, VOICE_LEVEL, level_from_rms(level));
         let now = Instant::now();
         let voiced = level >= start_threshold(floor);
         // How much audio this tick looked at: the new samples, as time.

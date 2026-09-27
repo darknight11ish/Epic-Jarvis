@@ -261,10 +261,215 @@ def t_no_call_site_goes_back_to_plain_urllib():
                   uses and not bad, f"plain calls: {bad}")
 
 
+# --------------------------------------------------------------------------
+# private_fetch_problem (I49/I67, 2026-09-27): the OPPOSITE question from
+# plain_http_problem above - "does this address the owner typed, meant to
+# be on the open internet, actually lead somewhere private?" - used by a
+# news feed and "tell me when this page changes" before every fetch.
+# --------------------------------------------------------------------------
+
+def _fake_resolver(answers: dict):
+    """Monkeypatches socket.getaddrinfo so a test never does a real DNS
+    lookup. `answers`: {host: [ip, ...]} or {host: OSError} for NXDOMAIN."""
+    import socket as _socket
+    original = _socket.getaddrinfo
+
+    def fake(host, *a, **kw):
+        ans = answers.get(host)
+        if ans is None:
+            raise OSError("no such host (fake resolver)")
+        if isinstance(ans, Exception):
+            raise ans
+        return [(_socket.AF_INET if "." in ip and ":" not in ip else _socket.AF_INET6,
+                _socket.SOCK_STREAM, 6, "", (ip, 0)) for ip in ans]
+
+    _socket.getaddrinfo = fake
+    return original
+
+
+def t_private_fetch_problem():
+    import socket as _socket
+    original = _socket.getaddrinfo
+    try:
+        check("a bare loopback address is refused",
+              LH.private_fetch_problem("http://127.0.0.1/feed") != "")
+        check("a home-network address is refused",
+              LH.private_fetch_problem("http://192.168.1.5/feed") != "")
+        check("a link-local address is refused",
+              LH.private_fetch_problem("http://169.254.1.1/feed") != "")
+        check("a public IPv4 literal is allowed",
+              LH.private_fetch_problem("http://93.184.216.34/feed") == "")
+        check("ftp:// is refused (not http/https)",
+              LH.private_fetch_problem("ftp://example.com/feed") != "")
+        check("no host at all is refused",
+              LH.private_fetch_problem("http:///feed") != "")
+        _fake_resolver({"feeds.example.com": ["93.184.216.34"]})
+        check("a public-looking NAME that resolves to a public address is allowed",
+              LH.private_fetch_problem("https://feeds.example.com/rss") == "")
+        _fake_resolver({"feeds.example.com": ["10.0.0.5"]})
+        check("the SAME name is refused once its DNS answer becomes private (SSRF/rebinding)",
+              LH.private_fetch_problem("https://feeds.example.com/rss") != "")
+        _fake_resolver({})
+        check("a name that will not resolve at all is refused, not silently allowed",
+              LH.private_fetch_problem("https://no-such-host.invalid/rss") != "")
+    finally:
+        _socket.getaddrinfo = original
+
+
+def t_private_fetch_problem_checks_every_resolved_address():
+    import socket as _socket
+    original = _socket.getaddrinfo
+    try:
+        # Multi-A-record: even one private address among several public
+        # ones is enough to refuse the whole address.
+        _fake_resolver({"mixed.example.com": ["93.184.216.34", "10.1.2.3"]})
+        check("one private address among several public ones is still refused",
+              LH.private_fetch_problem("https://mixed.example.com/rss") != "")
+    finally:
+        _socket.getaddrinfo = original
+
+
+def t_an_ipv4_mapped_dns_answer_is_judged_as_ipv4():
+    """Security/privacy audit, 2026-09-27: a literal [::ffff:127.0.0.1] was
+    refused, but the same address given as a DNS answer passed."""
+    import socket as _socket
+    original = _socket.getaddrinfo
+    try:
+        _fake_resolver({"mapped.example.com": ["::ffff:127.0.0.1"],
+                        "mapped-home.example.com": ["::ffff:192.168.1.1"],
+                        "mapped-public.example.com": ["::ffff:93.184.216.34"]})
+        check("a DNS answer ::ffff:127.0.0.1 is refused (judged as 127.0.0.1)",
+              "127.0.0.1" in LH.private_fetch_problem("https://mapped.example.com/rss"))
+        check("... and ::ffff:192.168.1.1 too",
+              LH.private_fetch_problem("https://mapped-home.example.com/rss") != "")
+        check("... while a mapped PUBLIC address is still allowed",
+              LH.private_fetch_problem("https://mapped-public.example.com/rss") == "")
+    finally:
+        _socket.getaddrinfo = original
+
+
+class _Rebinding:
+    """A resolver whose answer for one name changes on every lookup: a
+    public address first, then this PC - the fast DNS rebinding the
+    connection-time check exists for."""
+
+    def __init__(self, name, answers):
+        import socket as _socket
+        self.name, self.answers, self.calls = name, list(answers), 0
+        self.original = _socket.getaddrinfo
+
+    def __call__(self, host, *a, **kw):
+        import socket as _socket
+        if host != self.name:
+            return self.original(host, *a, **kw)
+        ip = self.answers[min(self.calls, len(self.answers) - 1)]
+        self.calls += 1
+        port = a[0] if a and isinstance(a[0], int) else 0
+        return [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", (ip, port))]
+
+
+def t_public_urlopen_checks_the_address_it_connects_to():
+    """The check and the connection used to do two separate lookups: an
+    answer that changed in between reached this PC. public_urlopen's
+    connection looks up once, checks, and connects to what it checked."""
+    import socket as _socket
+    import urllib.error
+    import urllib.request
+    before = len(SVC.seen)
+    port = SVC.base.rsplit(":", 1)[1]
+    for scheme in ("http", "https"):
+        fake = _Rebinding("feed.rebind.example", ["93.184.216.34", "127.0.0.1"])
+        _socket.getaddrinfo = fake
+        try:
+            check(f"{scheme}: the early check passes (the first answer is public)",
+                  LH.private_fetch_problem(f"{scheme}://feed.rebind.example:{port}/rss") == "")
+            try:
+                LH.public_urlopen(urllib.request.Request(
+                    f"{scheme}://feed.rebind.example:{port}/rss"), 5)
+                got = "fetched"
+            except urllib.error.URLError as exc:
+                got = str(exc.reason)
+            except Exception as exc:
+                got = f"{type(exc).__name__}: {exc}"
+        finally:
+            _socket.getaddrinfo = fake.original
+        check(f"{scheme}: the connection's own lookup, now 127.0.0.1, is refused",
+              "127.0.0.1" in got and "private network" in got, got)
+    check("... and this PC's service received nothing", len(SVC.seen) == before,
+          SVC.seen[before:])
+    # CONTROL: the plain opener, given the same rebinding name, does reach this PC.
+    fake = _Rebinding("feed.rebind.example", ["93.184.216.34", "127.0.0.1"])
+    _socket.getaddrinfo = fake
+    try:
+        LH.private_fetch_problem(f"http://feed.rebind.example:{port}/control-rebind")
+        try:
+            LH.urlopen(urllib.request.Request(
+                f"http://feed.rebind.example:{port}/control-rebind"), 5).read()
+        except Exception:
+            pass
+    finally:
+        _socket.getaddrinfo = fake.original
+    check("CONTROL: the old path (check, then a plain connect) did reach this PC",
+          any("/control-rebind" in s for s in SVC.seen[before:]), SVC.seen[before:])
+
+
+def t_public_urlopen_connects_to_the_checked_address():
+    """When the answer is allowed, the connection goes to exactly the
+    address that was checked - looked up once, not twice."""
+    import socket as _socket
+    import urllib.request
+    port = SVC.base.rsplit(":", 1)[1]
+    fake = _Rebinding("feed.ok.example", ["127.0.0.1", "10.9.9.9"])
+    real_private = LH._is_private
+    # Loopback stands in for "a public address" here, since a test cannot
+    # reach the internet; the second answer would be private.
+    LH._is_private = lambda ip: str(ip) != "127.0.0.1"
+    _socket.getaddrinfo = fake
+    before = len(SVC.seen)
+    try:
+        with LH.public_urlopen(urllib.request.Request(
+                f"http://feed.ok.example:{port}/checked"), 5) as r:
+            r.read()
+        got = "fetched"
+    except Exception as exc:
+        got = f"{type(exc).__name__}: {exc}"
+    finally:
+        _socket.getaddrinfo = fake.original
+        LH._is_private = real_private
+    check("an allowed answer is fetched", got == "fetched", got)
+    check("... from the address that was checked", any("/checked" in s
+                                                      for s in SVC.seen[before:]))
+    check("... with ONE lookup for the connection", fake.calls == 1, fake.calls)
+    opener = LH.public_opener()
+    check("public_opener has no proxy handler",
+          not any(isinstance(h, urllib.request.ProxyHandler) for h in opener.handlers))
+
+
+def t_news_and_page_watch_fetch_through_public_urlopen():
+    """Read from the source, like SITES above: the two fetches of an address
+    the owner typed must use the connection-time check."""
+    for fname, fn in (("jarvis_news.py", "_default_fetch"),
+                      ("jarvis_tellme.py", "_default_page_fetch")):
+        tree = ast.parse((BACKEND / fname).read_text(encoding="utf-8"))
+        node = next((n for n in ast.walk(tree)
+                     if isinstance(n, ast.FunctionDef) and n.name == fn), None)
+        calls = [ast.unparse(c.func) for c in ast.walk(node or ast.Module(body=[]))
+                 if isinstance(c, ast.Call)]
+        check(f"{fname} {fn}() opens through LH.public_urlopen, and nothing else",
+              "LH.public_urlopen" in calls
+              and not any(c.endswith(("urlopen", "build_opener")) and c != "LH.public_urlopen"
+                          for c in calls), calls)
+
+
 if __name__ == "__main__":
     for fn in (t_the_trap_is_real, t_every_call_site_skips_the_proxy,
                t_the_redirect_refusal_survived, t_the_helper_itself,
-               t_no_call_site_goes_back_to_plain_urllib):
+               t_no_call_site_goes_back_to_plain_urllib,
+               t_private_fetch_problem, t_private_fetch_problem_checks_every_resolved_address,
+               t_an_ipv4_mapped_dns_answer_is_judged_as_ipv4,
+               t_public_urlopen_checks_the_address_it_connects_to,
+               t_public_urlopen_connects_to_the_checked_address,
+               t_news_and_page_watch_fetch_through_public_urlopen):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

@@ -359,7 +359,7 @@ private fun CheckPlates(
                 val result = tested
                 when {
                     testing -> Text(
-                        "Checking on your PC...",
+                        "Checking on your PC…",
                         style = MaterialTheme.typography.bodyMedium,
                         color = chrome.textMid,
                     )
@@ -481,7 +481,7 @@ private fun SettingPlate(
         }
         if (busy == setting) {
             Gap(8)
-            Text("Asking your PC...", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            Text("Asking your PC…", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
         note?.let {
             Gap(8)

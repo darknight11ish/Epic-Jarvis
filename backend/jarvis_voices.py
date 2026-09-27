@@ -28,7 +28,9 @@ REPLACE ZipVoice if the owner's bake-off (jarvis_bakeoff.py) says so -
 never a third engine beside it (PROCESSOR_ENGINE).
 
 How fast every voice speaks - the built-in one too - is the owner's
-speaking-speed setting (speed(), below): three choices, no card.
+speaking-speed setting (speed(), below): three choices, no card. Which of
+Kokoro's own voices the built-in one uses is the same shape (speaker(),
+below): eleven choices, no card either.
 
 THE ROUTES (voices.patch):
 
@@ -38,6 +40,7 @@ THE ROUTES (voices.patch):
     POST /api/voice/voices/delete    {"voice": "<id>"}
     POST /api/voice/voices/better    {"enabled": true | false}
     POST /api/voice/voices/speed     {"speed": "slower" | "normal" | "faster"}
+    POST /api/voice/voices/speaker   {"speaker": "0" .. "10"} - which Kokoro voice
 
 THE PERMISSION MODEL (docs/ARCHITECTURE.md section 3). Creating a voice and
 switching Jarvis to one each raise ONE approval card through jarvis_gate,
@@ -46,9 +49,9 @@ answer; only "ask" + "approved" does anything). Switching back to the
 built-in voice and deleting a voice are immediate: both only narrow what
 Jarvis does. The better-voice switch is its own action,
 `better_voice_enable`, the same shape as the second card's switches: ON is a
-card, OFF is immediate. The speaking speed is no action at all - it trusts
-nothing more, so neither direction asks (like the manner setting). Nothing
-here auto-approves (rule 4).
+card, OFF is immediate. The speaking speed, and which built-in voice speaks,
+are no action at all - they trust nothing more, so neither direction asks
+(like the manner setting). Nothing here auto-approves (rule 4).
 
 WHERE THE AUDIO GOES (rule 1). Nowhere. The uploaded clip is held in this
 process's memory until the card is answered; approved, it is written to
@@ -350,6 +353,105 @@ def set_speed(body) -> tuple:
     return 200, {"ok": True, "message": SPEED_SAID[choice], "speed": speed_view()}
 
 
+# --------------------------------------------------------------------------
+#   Which built-in voice speaks (the voice-choice setting, 2026-09-27)
+# --------------------------------------------------------------------------
+#
+# Ease-of-use audit row 13: speaking speed already had this shape (above);
+# WHICH of Kokoro's own voices speaks did not - `[voice] tts_speaker_id` in
+# jarvis-framework.toml (file-only, a bare number) was the only way to
+# change it. Same shape as speed, reusing the SAME UI pattern in both
+# apps, right beside it: set from either app (POST
+# /api/voice/voices/speaker), kept in voices/state.json, NO CARD EITHER
+# WAY - manner.patch's shape: a voice is cosmetic, it never changes what
+# Jarvis does, asks or remembers.
+#
+# THE LIST, AND WHAT IS ACTUALLY CONFIRMED. Kokoro ships several voices
+# baked into one file (voice-models/tts/voices.bin); `sid` below (Kokoro's
+# own word) just indexes into it. The installed sherpa-onnx (checked: this
+# repository's Python has sherpa_onnx 1.13.8) exposes only a COUNT for
+# this - `OfflineTts.num_speakers` - never names; and status() stays cheap
+# on purpose (no model is loaded to answer GET /api/voice/voices), so this
+# is a fixed table, exactly like SPEEDS above, not read from the model at
+# answer time. Only TWO entries are confirmed against this repository:
+# index 0 and index 9, from jarvis-framework.toml's own commented-out
+# example ("0 = American female; 9 = British male (bm_george)"). The rest
+# is Kokoro's own published American+British English voice pack
+# (kokoro-en-v0_19) - not read from any file here - kept only because it
+# is internally consistent with those two confirmed points (index 9 lands
+# on the British male voice named bm_george either way). Choosing a voice
+# beyond what a particular PC's installed model really has is no worse
+# than setting tts_speaker_id to a number too high by hand today - it is
+# Kokoro's own behaviour for that, untouched by this setting.
+KOKORO_VOICES = (
+    ("0", "American (female)"),
+    ("1", "American (female) - Bella"),
+    ("2", "American (female) - Nicole"),
+    ("3", "American (female) - Sarah"),
+    ("4", "American (female) - Sky"),
+    ("5", "American (male) - Adam"),
+    ("6", "American (male) - Michael"),
+    ("7", "British (female) - Emma"),
+    ("8", "British (female) - Isabella"),
+    ("9", "British (male) - George"),
+    ("10", "British (male) - Lewis"),
+)
+SPEAKER_LABEL = dict(KOKORO_VOICES)
+SPEAKER_DEFAULT = "0"
+SPEAKER_TITLE = "Jarvis's built-in voice"
+SPEAKER_DETAIL = ("Which of Kokoro's voices Jarvis's built-in voice uses - never a voice "
+                  "you recorded, which stays under \"Voices\" above.")
+
+
+def speaker() -> int:
+    """The built-in voice's number (Kokoro's `sid`): the owner's choice,
+    else `[voice] tts_speaker_id` (a whole number, default 0). Never
+    raises."""
+    choice = _read_state().get("speaker")
+    if choice in SPEAKER_LABEL:
+        return int(choice)
+    try:
+        v = int(_cfg("tts_speaker_id", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+    return v if v >= 0 else 0
+
+
+def speaker_view() -> dict:
+    """GET /api/voice/voices `speaker`: the choice, and every word the
+    apps show - the same shape `speed` uses above, so both apps reuse ONE
+    row of UI for it."""
+    choice = _read_state().get("speaker")
+    value = speaker()
+    note = ""
+    if choice not in SPEAKER_LABEL:
+        choice = str(value) if str(value) in SPEAKER_LABEL else "custom"
+        if choice == "custom":
+            note = (f"Set by hand on your PC to voice {value} ([voice] tts_speaker_id in "
+                    f"jarvis-framework.toml), which is not one of the named voices below. "
+                    f"Choosing one here replaces it.")
+    return {"choice": choice, "value": value, "default": SPEAKER_DEFAULT,
+            "title": SPEAKER_TITLE, "detail": SPEAKER_DETAIL, "note": note,
+            "choices": [{"id": k, "label": v} for k, v in KOKORO_VOICES]}
+
+
+def set_speaker(body) -> tuple:
+    """POST /api/voice/voices/speaker {"speaker": "0" .. "10"}: at once, no
+    card either way (see above)."""
+    if not isinstance(body, dict) or set(body) != {"speaker"} \
+            or not isinstance(body["speaker"], str) or body["speaker"] not in SPEAKER_LABEL:
+        return 400, {"ok": False, "error": "choose one of the listed voices"}
+    choice = body["speaker"]
+    err = _write_state(speaker=choice)
+    if err:
+        return 500, {"ok": False, "error": err}
+    _audit("voices.speaker", {"speaker": choice})
+    _publish({"what": "speaker", "outcome": "set"})
+    return 200, {"ok": True,
+                "message": f"Jarvis's built-in voice is now {SPEAKER_LABEL[choice]}.",
+                "speaker": speaker_view()}
+
+
 def _audit(event: str, detail: dict) -> None:
     """Counts, ids and outcomes only - never audio, a transcript or text."""
     try:
@@ -394,10 +496,11 @@ _STATE_LOCK = threading.RLock()
 
 
 def _read_state() -> dict:
-    """{"active": id, "better_voice": bool, "speed": choice or None}. Missing
-    or broken is the built-in voice, the better voice off and no speed chosen
-    - the safe reading."""
-    out = {"active": BUILTIN, "better_voice": False, "speed": None}
+    """{"active": id, "better_voice": bool, "speed": choice or None,
+    "speaker": choice or None}. Missing or broken is the built-in voice,
+    the better voice off and no speed or built-in-voice choice made - the
+    safe reading."""
+    out = {"active": BUILTIN, "better_voice": False, "speed": None, "speaker": None}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -411,6 +514,9 @@ def _read_state() -> dict:
     sp = raw.get("speed")
     if isinstance(sp, str) and sp in SPEED_VALUE:
         out["speed"] = sp
+    sk = raw.get("speaker")
+    if isinstance(sk, str) and sk in SPEAKER_LABEL:
+        out["speaker"] = sk
     return out
 
 
@@ -1929,6 +2035,7 @@ def status() -> dict:
         },
         "better_voice": _better_row(st),
         "speed": speed_view(),
+        "speaker": speaker_view(),
         "pending": pending,
         "last": last,
         "timings": _timings(),
@@ -2454,7 +2561,7 @@ def _decide_better(pid: str, gate: Callable) -> None:
 
 ROUTES = {"/api/voice/voices/create": create, "/api/voice/voices/active": switch,
           "/api/voice/voices/delete": delete, "/api/voice/voices/better": set_better,
-          "/api/voice/voices/speed": set_speed}
+          "/api/voice/voices/speed": set_speed, "/api/voice/voices/speaker": set_speaker}
 
 
 def handle_post(route: str, body) -> tuple:

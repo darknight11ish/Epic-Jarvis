@@ -68,6 +68,20 @@ items 6 and 7):
   * "What did I miss?": jarvis_briefing.build_missed - since the owner's
     previous message to Jarvis from either app (answer_turn notes the time
     of every one, jarvis_briefing.touch).
+"WHAT CAN YOU DO?" (jarvis_sayable.py; the ease-of-use audit's "Things you
+can say", 2026-09-27, feasibility I116) is here too: "what can you do?",
+"what can I say?", "what can I ask you?" and close phrasings are answered
+from jarvis_sayable.py's own fixed list - the same one both apps show in
+place of the Jarvis bar's old shortcut rows. No model, no state read.
+
+"FROM NOW ON ..." (jarvis_manner.py, 2026-09-27) is here too: "from now on,
+be more plain", "from now on be warmer" and close phrasings change the
+manner setting at once - no card either way, like a tap in Settings - and
+say "Done: ... . You can undo this in Settings." A temporary chat's change
+stays in that chat only, in memory, never in manner.json. A tail that does
+not map to the one real dial (warm/plain) says so plainly rather than
+pretending to change something that does not exist yet.
+
 "TELL ME WHEN ..." (jarvis_tellme.py, 2026-09-25) is here too: "tell me
 when an email from Alex arrives", "let me know when the washing machine
 finishes", "urgently tell me when the front door opens", "tell me every
@@ -743,6 +757,19 @@ def _match(text, now: float) -> Optional[Intent]:
     if _WEATHER.fullmatch(s):
         return Intent("weather_now")
 
+    # --- "read me the news" (jarvis_news.py, I49) -------------------------------
+    if _NEWS_ASK.fullmatch(s):
+        return Intent("news_read")
+    m = _NEWS_ADD.fullmatch(s)
+    if m:
+        url = m.group("url") or m.group("url2") or m.group("url3")
+        return Intent("news_add", {"url": _restore(text, url)})
+    m = _NEWS_REMOVE.fullmatch(s)
+    if m:
+        return Intent("news_remove", {"url": _restore(text, m.group("url"))})
+    if _NEWS_LIST.fullmatch(s):
+        return Intent("news_list")
+
     # --- the morning briefing (jarvis_briefing.py) ------------------------------
     got = _briefing(s, now)
     if got is not None:
@@ -753,9 +780,48 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "from now on ..." (jarvis_manner.py, 2026-09-27) -----------------------
+    got = _from_now_on(s)
+    if got is not None:
+        return got
+
+    # --- "what can you do?" (jarvis_sayable.py) --------------------------------------
+    if _SAYABLE.fullmatch(s):
+        return Intent("sayable_help")
+
     # --- "what can you reach?" (jarvis_reach.py) -----------------------------------
     if _REACH.fullmatch(s):
         return Intent("reach_list")
+
+    # --- "who are you?" (jarvis_identity.py, feasibility I131) ---------------------
+    if _WHO_ARE_YOU.fullmatch(s):
+        return Intent("identity_help")
+
+    # --- "open a chat" (the floating face, 2026-09-27) --------------------------
+    if _OPEN_CHAT.fullmatch(s):
+        return Intent("open_chat")
+
+    # --- "open <a settings section>", and "turn on/off <a setting>" ------------
+    # (jarvis_settings_registry.py, 2026-09-27) - see that module's own header.
+    # Checked AFTER the older, more specific fast paths just above (bug audit
+    # 2026-09-27, finding #8): the "reach" section's own aliases ("what
+    # jarvis can reach/access") are word-for-word what _REACH already
+    # matches for a different, established purpose - reading the list
+    # aloud, not opening Settings to it - and checking this block first
+    # made that older phrase silently unreachable. This block still runs
+    # before everything below it, so it wins every case that does not
+    # collide with something that came before it.
+    got = _settings_open(s)
+    if got is not None:
+        return got
+    got = _settings_adjust(s)
+    if got is not None:
+        return got
+
+    # --- music and video control on this PC (jarvis_media.py, I91) -------------------
+    got = _media(s)
+    if got is not None:
+        return got
 
     # --- "tell me when ..." (jarvis_tellme.py) ------------------------------------------
     got = _tellme(s, text, now)
@@ -1178,6 +1244,10 @@ _DEV = re.compile(r"(?:the\s+|my\s+|our\s+)?(?P<dev>[a-z0-9][a-z0-9 ._'-]{0,59}?
                   + "|".join(f"(?:{p})" for p, _ in _DEV_VERBS) + r")")
 _ENTITY_STATE = re.compile(r"(?P<dev>[a-z0-9_]+\.[a-z0-9_]+)\s+(?:is|becomes|reaches|goes\s+to"
                            r"|changes\s+to|turns|is\s+now)\s+(?P<st>[a-z0-9_]{1,30})")
+#: "Tell me when this page changes" (jarvis_tellme.py "page" source, I67):
+#: only a literal address the owner typed - "tell me when it changes" (no
+#: address) goes to the model, since Jarvis has no page in mind for "it".
+_PAGE_CHANGE = re.compile(r"(?P<url>https?://\S+?)\s+changes?")
 #: Not a device - and not a sender: "tell me when it's done" is the model's.
 _NOT_A_THING = frozenset(("it", "this", "that", "they", "you", "he", "she", "we", "something",
                           "timer", "alarm", "reminder", "everything", "anything", "one",
@@ -1286,6 +1356,9 @@ def _tellme(s: str, original, now: float) -> Optional[Intent]:
             if who in _ANYONE or not who:
                 return Intent("tellme_help", {"why": "who"})
             return Intent("tellme_email", dict(f, who=_restore(original, who)))
+    mm = _PAGE_CHANGE.fullmatch(what)
+    if mm:
+        return Intent("tellme_page", dict(f, url=_restore(original, mm.group("url"))))
     mm = _ENTITY_STATE.fullmatch(what)
     if mm:
         return Intent("tellme_home", dict(f, entity=mm.group("dev"), name="",
@@ -1344,6 +1417,8 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
     if n == "tellme_email":
         watch = {"source": "email", "sender": f["who"], "urgent": f["urgent"],
                  "once": f["once"]}
+    elif n == "tellme_page":
+        watch = {"source": "page", "url": f["url"], "urgent": f["urgent"], "once": f["once"]}
     else:
         entity, name = f.get("entity") or "", f.get("name") or ""
         if not entity:
@@ -1400,6 +1475,32 @@ _WEATHER = re.compile(
     + _WWHEN
     + r"|(?:give|tell)\s+me\s+the\s+" + _WFOR + _WWHEN
     + r"|(?:the\s+)?" + _WFOR + r"(?:\s+(?:today|now|please|tomorrow))?")
+
+#: "Read me the news" (jarvis_news.py, I49, 2026-09-27): answered from the
+#: owner's own listed feeds, without the model. Whole sentences only:
+#: "what's new with you" goes to the model.
+_NEWS_ASK = re.compile(
+    r"(?:read\s+me\s+|give\s+me\s+|tell\s+me\s+)?(?:the\s+|my\s+|today'?s\s+)?news"
+    r"(?:\s+headlines)?(?:\s+please)?"
+    r"|what'?s\s+(?:in\s+|going\s+on\s+in\s+)?the\s+news(?:\s+today)?"
+    r"|any\s+news(?:\s+today)?")
+
+#: "Add this feed: <url>" (jarvis_news.py, I49) - a literal address, exactly
+#: like "tell me when <url> changes": the owner names it, one card. Whole
+#: sentences only.
+_NEWS_ADD = re.compile(
+    r"add\s+(?:this\s+|a\s+|the\s+)?(?:news\s+)?feed[:\s]+(?P<url>https?://\S+)"
+    r"|(?:follow|watch|subscribe\s+to)\s+(?:this\s+|the\s+)?(?:news\s+)?feed[:\s]+"
+    r"(?P<url2>https?://\S+)"
+    r"|add\s+(?P<url3>https?://\S+)\s+as\s+a\s+news\s+feed")
+#: "Remove/stop that feed: <url>" - at once, no card, like "tell me when"'s remove.
+_NEWS_REMOVE = re.compile(
+    r"(?:remove|delete|stop|unfollow)\s+(?:this\s+|that\s+|the\s+)?(?:news\s+)?feed[:\s]+"
+    r"(?P<url>https?://\S+)")
+#: "What news feeds do I have?" / "list my news feeds".
+_NEWS_LIST = re.compile(
+    r"(?:what|which)\s+news\s+feeds\s+(?:do\s+i\s+have|are\s+there|are\s+listed)"
+    r"|(?:list|show)\s+(?:me\s+)?(?:my\s+)?news\s+feeds")
 
 #: "the briefing", "my morning briefing", "today's briefing", "briefing".
 _BRIEF = r"(?:(?:my|the|a|today'?s|this\s+morning'?s)\s+)?(?:morning\s+|daily\s+)?briefing"
@@ -1485,8 +1586,156 @@ def _web_search(s: str) -> Optional[Intent]:
     return None
 
 
+# --- "from now on ..." (the owner's decision, 2026-09-27) -------------------
+#
+# "Jarvis changes a style dial immediately, replying 'Done: shorter answers
+# from now on. You can undo this in Brain.'" (docs/CUTTING-EDGE-2026-09-26-
+# round4-growth.md section 4). Scope, as CLAUDE.md narrows it: the MECHANISM
+# only - detect the phrase, apply a change at once, offer Undo - wired to the
+# one real dial this backend has today (jarvis_manner.py: warm and brief, or
+# plain), not the growth doc's bigger multi-dial system (its section 1),
+# which is not built. A tail that does not map to that one dial says so
+# honestly, rather than pretending to change something that is not there.
+#
+# Only ever reached from the owner's own live words (newest_own_words(),
+# above, already refuses a system message, a shared/clipboard turn, and a
+# picture) - never from an email, a web page, a note or a game. A temporary
+# chat's change stays in that chat only (jarvis_manner.set_temporary): it is
+# never written to manner.json, because a temporary chat makes no memory.
+_FROM_NOW_ON = re.compile(r"from\s+now\s+on,?\s+(?:please\s+)?(.+)")
+
+#: The only tails that map to a REAL dial today. Anything "from now on ..."
+#: outside these two is recognised as the phrase, but not acted on - see
+#: _run_from_now_on's honest reply.
+_TO_PLAIN = re.compile(
+    r"(?:be|stay|answer|talk|keep\s+it)\s+(?:more\s+)?(?:plain(?:er|ly)?|formal(?:er|ly)?|"
+    r"businesslike|neutral(?:ly)?|direct(?:er|ly)?)"
+    r"|(?:be|stop\s+being)\s+less\s+(?:warm|chatty|friendly|gushy)"
+    r"|cut\s+the\s+small\s+talk|no\s+more\s+small\s+talk|less\s+small\s+talk")
+_TO_WARM = re.compile(
+    r"(?:be|stay|answer|talk|keep\s+it)\s+(?:more\s+)?(?:warm(?:er|ly)?|friendl(?:y|ier|ily)|"
+    r"nicer|chattier|less\s+formal(?:ly)?)"
+    r"|(?:be|stop\s+being)\s+less\s+(?:plain(?:ly)?|formal(?:ly)?|cold|robotic)")
+
+
+def _from_now_on(s: str) -> Optional[Intent]:
+    """"From now on, be more plain" / "... be warmer" and close phrasings -
+    the mechanism, wired to jarvis_manner.py's one real dial. Whole
+    sentences only, like the rest of this grammar."""
+    m = _FROM_NOW_ON.fullmatch(s)
+    if not m:
+        return None
+    tail = m.group(1)
+    if _TO_PLAIN.fullmatch(tail):
+        return Intent("manner_from_now_on", {"manner": "plain"})
+    if _TO_WARM.fullmatch(tail):
+        return Intent("manner_from_now_on", {"manner": "warm"})
+    return Intent("manner_from_now_on", {"manner": None})
+
+
+# --------------------------------------------------------------------------
+#   Any setting, by name (jarvis_settings_registry.py, the owner's decision
+#   of 2026-09-27): "open <a settings section>" is pure navigation; "turn
+#   on/off <a setting>" calls straight into the exact function the matching
+#   toggle in Settings already calls - see that module's own header for
+#   what is and is not covered, and why.
+# --------------------------------------------------------------------------
+
+#: "open web search", "show me the security settings", "go to accounts",
+#: "take me to what asks first" - an exact alias only (jarvis_settings_
+#: registry.find_section): a tail this does not name a section jumps
+#: nowhere and falls through, so "open the door" is still the model's.
+_OPEN_SETTINGS = re.compile(
+    r"(?:open|show(?:\s+me)?|go\s+to|jump\s+to|take\s+me\s+to)\s+(?:the\s+)?(.+?)"
+    r"(?:\s+(?:settings|section|screen|page))?")
+
+
+def _settings_open(s: str) -> Optional[Intent]:
+    m = _OPEN_SETTINGS.fullmatch(s)
+    if not m:
+        return None
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    section = R.find_section(m.group(1))
+    if section is None:
+        return None
+    return Intent("settings_open", {"id": section.id})
+
+
+#: The plain on/off settings (jarvis_settings_registry.BOOL_SETTINGS): "turn
+#: on background learning", "switch off lights without asking", "enable
+#: smartwatch notifications", "disable senders in my briefing".
+_ADJUST_ONOFF = re.compile(
+    r"(?:turn|switch)\s+(on|off)\s+(.+)"
+    r"|(enable)\s+(.+)"
+    r"|(disable)\s+(.+)")
+
+#: "What asks first" (jarvis_asks_first.LOOSE): stricter (ask again) or
+#: looser (stop asking - the PC only, one card plus Windows Hello). An
+#: optional "jarvis reads/accesses/checks/writes" is taken off first, so
+#: "stop asking before jarvis reads my calendar" and "stop asking before my
+#: calendar" both name the same target.
+_ASKS_FIRST_STRICTER = re.compile(
+    r"(?:ask\s+me\s+(?:first\s+)?before\s+|ask\s+first\s+before\s+|make\s+jarvis\s+ask\s+"
+    r"(?:me\s+)?before\s+)(?:jarvis\s+(?:reads?|accesses?|checks?|writes?)\s+)?(.+)")
+_ASKS_FIRST_LOOSER = re.compile(
+    r"stop\s+asking\s+(?:me\s+)?before\s+(?:jarvis\s+(?:reads?|accesses?|checks?|writes?)\s+)?"
+    r"(.+)")
+
+#: Offering a reading tool to the AI model at all (jarvis_asks_first.
+#: TOOLS_SWITCHABLE) - a DIFFERENT thing from the above (see that module's
+#: own header): "let the AI model read my calendar" / "don't let the AI
+#: model read my email".
+_TOOL_ON = re.compile(r"let\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
+_TOOL_OFF = re.compile(
+    r"(?:don'?t\s+let|stop\s+letting)\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
+
+
+def _settings_adjust(s: str) -> Optional[Intent]:
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    m = _TOOL_ON.fullmatch(s) or _TOOL_OFF.fullmatch(s)
+    if m:
+        tool = R.find_tool_target(m.group(1))
+        if tool is not None:
+            return Intent("settings_tool", {"tool": tool, "on": bool(_TOOL_ON.fullmatch(s))})
+    m = _ASKS_FIRST_LOOSER.fullmatch(s) or _ASKS_FIRST_STRICTER.fullmatch(s)
+    if m:
+        action = R.find_asks_first_target(m.group(1))
+        if action is not None:
+            return Intent("settings_asks_first",
+                          {"action": action, "ask": bool(_ASKS_FIRST_STRICTER.fullmatch(s))})
+    m = _ADJUST_ONOFF.fullmatch(s)
+    if m:
+        g = m.groups()
+        if g[0] is not None:            # "turn/switch on|off <name>"
+            on, name = g[0] == "on", g[1]
+        elif g[2] is not None:          # "enable <name>"
+            on, name = True, g[3]
+        else:                           # "disable <name>"
+            on, name = False, g[5]
+        setting = R.find_bool_setting(name)
+        if setting is not None:
+            return Intent("settings_bool", {"key": setting.key, "on": on})
+    return None
+
+
 SEARCH_MISSING = ("Your PC's Jarvis does not have web search yet - run apply-patches.ps1 "
                   "on the PC.")
+
+#: "What can you do?" and close phrasings (jarvis_sayable.py, the ease-of-use
+#: audit's "Things you can say", 2026-09-27). Whole sentences only: "what can
+#: you do about the weather" goes to the model.
+_SAYABLE = re.compile(
+    r"what\s+can\s+(?:you|i|jarvis)\s+(?:do|say|ask(?:\s+you)?|tell\s+you)(?:\s+here)?"
+    r"|what\s+(?:should|do)\s+i\s+(?:say|ask|type)(?:\s+to\s+you)?"
+    r"|what\s+(?:are|were)\s+(?:your|jarvis'?s?)\s+commands"
+    r"|(?:show|list|tell)\s+me\s+what\s+(?:i\s+can\s+say|you\s+can\s+do)"
+    r"|help(?:\s+me)?")
 
 #: "What can you reach?" and close phrasings (the Muse audit, 2026-09-25):
 #: answered from jarvis_reach.py's list - the PC's settings, not the model.
@@ -1510,6 +1759,63 @@ _REACH = re.compile(
 REACH_MISSING = ("Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 "
                  "on the PC.")
 
+SAYABLE_MISSING = ("Your PC's Jarvis cannot list things you can say yet - run "
+                   "apply-patches.ps1 on the PC.")
+
+#: "Who are you?" and close phrasings (jarvis_identity.py, feasibility I131,
+#: 2026-09-27): answered fixed, with no model, so the model never
+#: improvises its own nature. Whole sentences only - "who are you calling"
+#: goes to the model, like everything else here.
+_WHO_ARE_YOU = re.compile(
+    r"who\s+(?:are|r)\s+you"
+    r"|what\s+are\s+you"
+    r"|are\s+you\s+(?:an?\s+)?(?:ai|a\s+robot|human|a\s+real\s+person|real|conscious|sentient"
+    r"|alive)"
+    r"|are\s+you\s+(?:the\s+)?jarvis\s+from\s+iron\s+man"
+    r"|are\s+you\s+j\.?\s*a\.?\s*r\.?\s*v\.?\s*i\.?\s*s\.?"
+    r"|do\s+you\s+have\s+feelings"
+    r"|do\s+you\s+(?:love|miss)\s+me"
+    r"|are\s+you\s+(?:my\s+)?(?:girlfriend|boyfriend|(?:best\s+)?friend)"
+    # normalise() reads a leading "will you" as a command lead-in (like
+    # "will you set a timer"), so "will you be my friend" arrives here as
+    # "be my friend" - matched directly rather than with "will you" still on.
+    r"|be\s+my\s+friend"
+    r"|are\s+you\s+lonely"
+    r"|what\s+(?:model|ai|llm)\s+(?:are\s+you(?:\s+running)?|do\s+you\s+use|is\s+this)")
+
+IDENTITY_MISSING = ("Your PC's Jarvis cannot answer that without apply-patches.ps1 - run it "
+                    "on the PC.")
+
+#: "Open a chat" and close phrasings (the floating face, 2026-09-27): the
+#: desktop's small always-on-top window that shows only Jarvis's animated
+#: face - no text box, voice only - and this is how it expands into the real
+#: window. Answered here, with no model, for the same reason every other
+#: fixed line in this file is: it must work even while the model is slow,
+#: unloaded or asleep, which is exactly when a hands-free owner most wants
+#: the real window to check on something. `X-Jarvis-Route`'s "quick" field
+#: (route_fields, below) carries this intent's name to the desktop unchanged;
+#: `jarvis-desktop/src-tauri/src/commands.rs`'s `stream_chat` is what acts on
+#: it. Whole sentences only, like everywhere else here: "open a chat about
+#: my day" goes to the model.
+_OPEN_CHAT = re.compile(
+    r"open\s+(?:a|the)\s+chat(?:\s+window)?"
+    r"|show\s+me\s+(?:a|the)\s+chat(?:\s+window)?"
+    r"|show\s+(?:the\s+)?chat(?:\s+window)?"
+    r"|bring\s+up\s+(?:a|the)\s+chat(?:\s+window)?"
+    r"|open\s+(?:the\s+)?jarvis\s+bar"
+    r"|show\s+(?:me\s+)?(?:the\s+)?jarvis\s+bar"
+    r"|bring\s+up\s+(?:the\s+)?jarvis\s+bar")
+
+
+def _run_sayable(intent: Intent) -> Result:
+    """"Things you can say" (jarvis_sayable.py), said in one answer for "what
+    can you do?" and close phrasings. No model, reads no state."""
+    try:
+        import jarvis_sayable
+        return Result(jarvis_sayable.sentence(), intent.name)
+    except Exception:
+        return Result(SAYABLE_MISSING, intent.name)
+
 
 def _run_reach(intent: Intent) -> Result:
     """The list both apps show under "What Jarvis can reach", said in one
@@ -1519,6 +1825,75 @@ def _run_reach(intent: Intent) -> Result:
         return Result(jarvis_reach.sentence(), intent.name)
     except Exception:
         return Result(REACH_MISSING, intent.name)
+
+
+def _run_identity(intent: Intent) -> Result:
+    """"Who are you?" and close phrasings (jarvis_identity.py): fixed text,
+    no model, no romance. Reads no state, changes nothing."""
+    try:
+        import jarvis_identity
+        return Result(jarvis_identity.sentence(), intent.name)
+    except Exception:
+        return Result(IDENTITY_MISSING, intent.name)
+
+
+# --------------------------------------------------------------------------
+#   Music and video control on this PC (jarvis_media.py, feasibility I91,
+#   the owner's decision of 2026-09-27: "no card, only from the owner's own
+#   words") - play, pause, next, previous and "what's playing", never a
+#   model tool: the AI model cannot ask for this on its own initiative, and
+#   it never appears from outside text (a web page, an email). Whole
+#   sentences only, and each requires the media word ("pause", bare, is the
+#   focus session's while one is running, checked above this in _match).
+# --------------------------------------------------------------------------
+
+_MEDIA_OBJ = r"(?:this\s+|the\s+)?(?:music|song|track|video|media|playback)"
+_MEDIA_PAUSE = re.compile(r"pause\s+" + _MEDIA_OBJ)
+_MEDIA_PLAY = re.compile(r"(?:play|resume|unpause|continue)\s+" + _MEDIA_OBJ)
+_MEDIA_NEXT = re.compile(r"(?:skip|next)\s+(?:this\s+|the\s+)?(?:song|track|video)"
+                         r"|skip\s+(?:it|this|that)|play\s+the\s+next\s+(?:song|track)"
+                         r"|next\s+(?:song|track)\s+please")
+_MEDIA_PREV = re.compile(r"(?:previous|last|go\s+back\s+a)\s+(?:song|track|video)"
+                         r"|play\s+the\s+previous\s+(?:song|track)")
+_MEDIA_NOW = re.compile(r"(?:what'?s|what\s+is)\s+playing(?:\s+(?:right\s+)?now)?"
+                        r"|now\s+playing|what\s+(?:song|track)\s+is\s+(?:this|playing|on)")
+
+
+def _media(s: str) -> Optional[Intent]:
+    if _MEDIA_PAUSE.fullmatch(s):
+        return Intent("media_pause")
+    if _MEDIA_PLAY.fullmatch(s):
+        return Intent("media_play")
+    if _MEDIA_NEXT.fullmatch(s):
+        return Intent("media_next")
+    if _MEDIA_PREV.fullmatch(s):
+        return Intent("media_previous")
+    if _MEDIA_NOW.fullmatch(s):
+        return Intent("media_now")
+    return None
+
+
+MEDIA_MISSING = ("Your PC's Jarvis cannot control music or video yet - run apply-patches.ps1 "
+                 "on the PC.")
+
+
+def _run_media(intent: Intent) -> Result:
+    """Play/pause/next/previous act at once, no card (the owner's own
+    words are the only permission this needs); "what's playing" says the
+    title and artist, which are OUTSIDE TEXT - whatever app is playing put
+    them there, not the owner - so `read` marks them, exactly as a
+    briefing's calendar titles do."""
+    n = intent.name
+    try:
+        import jarvis_media as MEDIA
+    except Exception:
+        return Result(MEDIA_MISSING, n)
+    if n == "media_now":
+        out = MEDIA.now_playing()
+        return Result(str(out.get("said") or ""), n, read=list(out.get("read") or []))
+    out = MEDIA.control({"media_play": "play", "media_pause": "pause", "media_next": "next",
+                         "media_previous": "previous"}[n])
+    return Result(str(out.get("said") or ""), n)
 
 
 def _run_search(intent: Intent) -> Result:
@@ -1534,6 +1909,57 @@ def _run_search(intent: Intent) -> Result:
         return Result(WS.explain(which), n)
     # WS.use says a left-out one's reason instead of choosing it.
     return Result(WS.use(which), n)
+
+
+#: "From now on ..." for a tail that does not map to a real dial (only
+#: warm/plain exist today) - said plainly rather than pretended.
+FROM_NOW_ON_UNMAPPED = (
+    "Jarvis can only change between warm-and-brief and plain right now, not that. Try "
+    "\"from now on, be more plain\" or \"from now on, be warmer.\"")
+
+#: Said when a temporary chat asks for a change but this request carries no
+#: usable conversation id to keep it in - so there is no chat to keep it in.
+FROM_NOW_ON_NO_CONVERSATION = (
+    "Jarvis could not tell which chat this is, so it cannot change that for just this one. "
+    "Try again in a moment.")
+
+
+def _from_now_on_said(manner: str, temporary: bool) -> str:
+    said = "plainer answers" if manner == "plain" else "warmer, friendlier answers"
+    if temporary:
+        return f"Done: {said} for this chat. Say it again, or start a new chat, to change back."
+    return f"Done: {said} from now on. You can undo this in Settings."
+
+
+def _run_from_now_on(f: dict, conversation: Optional[str], temporary: bool) -> Result:
+    """"From now on, be more plain" / "... be warmer" (the owner's decision,
+    2026-09-27): applies at once, no card either way - jarvis_manner.py
+    already raises none for a manner change. A temporary chat's change is
+    kept in memory, for that conversation only (jarvis_manner.set_temporary);
+    an ordinary chat's is saved as the PC's setting
+    (jarvis_manner.handle_set), exactly as a tap in Settings would."""
+    n = "manner_from_now_on"
+    manner = f.get("manner")
+    if manner is None:
+        return Result(FROM_NOW_ON_UNMAPPED, n)
+    try:
+        import jarvis_manner
+    except Exception:
+        return Result("Your PC's Jarvis does not have manners yet - run apply-patches.ps1 "
+                      "on the PC.", n)
+    before = jarvis_manner.current(conversation if temporary else None)
+    if before == manner:
+        word = "plainly" if manner == "plain" else "warmly and briefly"
+        return Result(f"Jarvis already answers {word}.", n)
+    if temporary:
+        if not conversation:
+            return Result(FROM_NOW_ON_NO_CONVERSATION, n)
+        jarvis_manner.set_temporary(conversation, manner)
+    else:
+        code, out = jarvis_manner.handle_set({"manner": manner})
+        if code != 200 or not out.get("ok"):
+            return Result("Jarvis could not change that setting just now.", n)
+    return Result(_from_now_on_said(manner, temporary), n)
 
 
 def is_command(text) -> bool:
@@ -1566,6 +1992,10 @@ class Result:
     made: list = field(default_factory=list)
     what: str = ""
     nouns: tuple = ()
+    # "open <a settings section>" (jarvis_settings_registry.py, 2026-09-27):
+    # the section id both apps already use for their own settings screen, so
+    # they can jump there. None for every other answer made here.
+    open_settings: Optional[str] = None
 
 
 def _join(items: list) -> str:
@@ -1603,14 +2033,64 @@ def _pick_timer(timers: list, f: dict):
     return pool[0], None
 
 
+SETTINGS_MISSING = ("Your PC's Jarvis does not have the settings registry yet - run "
+                    "apply-patches.ps1 on the PC.")
+
+
+def _run_settings_open(f: dict) -> Result:
+    """"Open <a settings section>": pure navigation, nothing changed. The
+    reply names the section in the owner's own words, so a voice answer
+    that gets cut off still says where Jarvis went."""
+    import jarvis_settings_registry as R
+    section = R.section_by_id(f["id"])
+    name = section.names[0] if section else f["id"]
+    return Result(f"Opening {name} in Settings.", "settings_open", open_settings=f["id"])
+
+
+def _run_settings_bool(f: dict, peer, local) -> Result:
+    import jarvis_settings_registry as R
+    setting = next((b for b in R.BOOL_SETTINGS if b.key == f["key"]), None)
+    if setting is None:
+        return Result(SETTINGS_MISSING, "settings_bool")
+    out = setting.set(f["on"], peer=peer, local=local)
+    return Result(out.said, "settings_bool")
+
+
+def _run_settings_asks_first(f: dict, peer, local) -> Result:
+    import jarvis_settings_registry as R
+    out = R.set_asks_first(f["action"], f["ask"], peer=peer, local=local)
+    return Result(out.said, "settings_asks_first")
+
+
+def _run_settings_tool(f: dict, peer, local) -> Result:
+    import jarvis_settings_registry as R
+    out = R.set_reading_tool(f["tool"], f["on"], peer=peer, local=local)
+    return Result(out.said, "settings_tool")
+
+
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
-        seen: Optional[float] = None) -> Optional[Result]:
+        seen: Optional[float] = None, temporary: bool = False,
+        peer=None, local=None) -> Optional[Result]:
     """Do it. None hands the sentence to the model after all.
     `conversation`: the request's conversation_id ("cancel that" works only
     within one). `seen`: when the owner last talked to Jarvis before this
-    turn ("what did I miss?")."""
+    turn ("what did I miss?"). `temporary`: a temporary chat, for "from now
+    on ..." (2026-09-27). `peer`/`local`: the request's own address, read the
+    same way owner-check.patch's do_POST wrapper reads it - so a setting on
+    jarvis_owner_check.PC_ONLY_ACTIONS can refuse a request that did not
+    truly come from this PC (jarvis_settings_registry.py, 2026-09-27)."""
     import jarvis_schedule as S
     n, f = intent.name, intent.f
+    if n == "settings_open":
+        return _run_settings_open(f)
+    if n == "settings_bool":
+        return _run_settings_bool(f, peer, local)
+    if n == "settings_asks_first":
+        return _run_settings_asks_first(f, peer, local)
+    if n == "settings_tool":
+        return _run_settings_tool(f, peer, local)
+    if n == "manner_from_now_on":
+        return _run_from_now_on(f, conversation, temporary)
     if n == "bulk":
         return Result("Jarvis does not clear everything at once. Delete them one at a time, "
                       "here or under Coming up.", n)
@@ -1626,10 +2106,31 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_briefing(intent, sched, now)
     if n == "weather_now":
         return _run_weather(now)
+    if n == "news_read":
+        return _run_news()
+    if n == "news_add":
+        return _run_news_add(f["url"])
+    if n == "news_remove":
+        return _run_news_remove(f["url"])
+    if n == "news_list":
+        return _run_news_list()
     if n.startswith("search_"):
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n == "sayable_help":
+        return _run_sayable(intent)
+    if n == "identity_help":
+        return _run_identity(intent)
+    if n == "open_chat":
+        # Nothing state-changing happens here - a client reads this reply's
+        # own `quick` field (route_fields, below) and brings its own chat
+        # surface to the front itself. The desktop does that today
+        # (commands.rs, stream_chat, for its floating face); this file does
+        # not know or care which app asked.
+        return Result("Here you go.", n)
+    if n.startswith("media_"):
+        return _run_media(intent)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
     if n.startswith("focus_"):
@@ -2049,6 +2550,70 @@ def _run_weather(now: float) -> Optional[Result]:
     return Result(str(got.get("text") or ""), "weather_now", read=list(got.get("read") or []))
 
 
+def _run_news() -> Optional[Result]:
+    """"Read me the news" - the owner's own listed feeds
+    (jarvis_news.sentence), no model. Headlines are outside text, so `read`
+    marks the conversation as having read a news feed."""
+    try:
+        import jarvis_news as NEWS
+    except Exception:
+        return None
+    try:
+        got = NEWS.sentence()
+    except Exception:
+        return None
+    return Result(str(got.get("said") or ""), "news_read", read=list(got.get("read") or []))
+
+
+NEWS_MISSING = "Your PC's Jarvis cannot show news feeds yet - run apply-patches.ps1 on the PC."
+
+
+def _run_news_add(url: str) -> Optional[Result]:
+    """"Add this feed: <url>" - ONE approval card (jarvis_news.request_add),
+    the same shape as "tell me when" setting up a watch. Only the owner's
+    own words: a pasted or shared address still raises this same one card,
+    since news feeds are never learned from outside text either way."""
+    try:
+        import jarvis_news as NEWS
+    except Exception:
+        return Result(NEWS_MISSING, "news_add")
+    try:
+        code, out = NEWS.request_add({"url": url})
+    except Exception as exc:
+        return Result(f"Jarvis could not add that feed ({type(exc).__name__}).", "news_add")
+    if code == 200:
+        return Result(str(out.get("message") or "That feed is already listed."), "news_add")
+    if code in (400, 409, 503):
+        return Result(str(out.get("error") or "That address could not be added."), "news_add")
+    return Result("That needs your yes on the approval card, which shows the address in full. "
+                  "Then your morning briefing (and \"read me the news\") can show its "
+                  "headlines - never the article text.", "news_add")
+
+
+def _run_news_remove(url: str) -> Optional[Result]:
+    """"Remove that feed: <url>" - at once, no card."""
+    try:
+        import jarvis_news as NEWS
+    except Exception:
+        return Result(NEWS_MISSING, "news_remove")
+    try:
+        _code, out = NEWS.request_remove({"url": url})
+    except Exception as exc:
+        return Result(f"Jarvis could not remove that feed ({type(exc).__name__}).", "news_remove")
+    return Result(str(out.get("message") or ""), "news_remove")
+
+
+def _run_news_list() -> Optional[Result]:
+    try:
+        import jarvis_news as NEWS
+    except Exception:
+        return Result(NEWS_MISSING, "news_list")
+    listed = NEWS.feeds()
+    if not listed:
+        return Result(NEWS.EMPTY, "news_list")
+    return Result("\n".join(f"- {u}" for u in listed), "news_list")
+
+
 def _run_briefing(intent: Intent, sched, now: float) -> Result:
     """The morning briefing: put one together now (reads only - no card), set
     one up (a repeat: the scheduler's ONE card; once: no card), stop ONE, or
@@ -2109,10 +2674,14 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
 
 
 def answer(text, *, sched=None, now: Optional[float] = None,
-           conversation: Optional[str] = None, seen: Optional[float] = None) -> Optional[Result]:
+           conversation: Optional[str] = None, seen: Optional[float] = None,
+           temporary: bool = False, peer=None, local=None) -> Optional[Result]:
     """Match and act. None: not ours - ask the model. `conversation`: the
     request's conversation_id, so "cancel that" takes back only what was set
-    in it; `seen`: when the owner last talked to Jarvis before this turn."""
+    in it; `seen`: when the owner last talked to Jarvis before this turn;
+    `temporary`: a temporary chat (2026-09-27's "from now on ..."); `peer`/
+    `local`: the request's own address, for a setting on jarvis_owner_check.
+    PC_ONLY_ACTIONS (jarvis_settings_registry.py, 2026-09-27)."""
     now = time.time() if now is None else now
     intent = match(text, now)
     if intent is None:
@@ -2120,7 +2689,8 @@ def answer(text, *, sched=None, now: Optional[float] = None,
     if sched is None:
         import jarvis_schedule
         sched = jarvis_schedule.get()
-    res = run(intent, sched, now, conversation=conversation, seen=seen)
+    res = run(intent, sched, now, conversation=conversation, seen=seen, temporary=temporary,
+             peer=peer, local=local)
     if res is not None:
         try:
             sched.mark_command(text)
@@ -2260,22 +2830,49 @@ def _touch(now: Optional[float]) -> Optional[float]:
         return None
 
 
-def answer_turn(body, *, sched=None, now: Optional[float] = None) -> Optional[Result]:
+def answer_turn(body, *, sched=None, now: Optional[float] = None,
+                peer=None, local=None) -> Optional[Result]:
     """For /api/chat: the fast path's answer to this turn, or None. Every
     chat request counts as the owner being here ("what did I miss?" asks
-    since the one before), whoever's words it carries."""
+    since the one before), whoever's words it carries. `peer`/`local`: the
+    request's own address (schedule.patch's do_POST reads it the same way
+    owner-check.patch's own wrapper does) - passed all the way down so a
+    setting on jarvis_owner_check.PC_ONLY_ACTIONS can tell this PC's own
+    chat from the phone's, exactly as its REST route already does
+    (jarvis_settings_registry.py, 2026-09-27). This function never invents
+    either value: it hands whatever it was given straight to
+    jarvis_owner_check.from_this_pc, unchanged - the SAME function, and the
+    SAME "cannot be placed counts as this PC" rule, every other caller of
+    that function already lives with. schedule.patch always supplies the
+    real address; a caller that omits it (an older test, a script) gets
+    that function's own default, not a stricter or looser one made up
+    here."""
     seen = _touch(now) if isinstance(body, dict) and body.get("messages") else None
     conversation = conversation_of(body)
+    # "temporary": true (temporary-chat.patch) - the same one-line check
+    # jarvis_hud.py's own _temporary_chat(body) makes; needed here for
+    # "from now on ..." (2026-09-27), which keeps a temporary chat's style
+    # change in that chat only, never written to manner.json.
+    temporary = isinstance(body, dict) and body.get("temporary") is True
     text = newest_own_words(body)
     res = None if text is None else answer(text, sched=sched, now=now,
-                                           conversation=conversation, seen=seen)
+                                           conversation=conversation, seen=seen,
+                                           temporary=temporary, peer=peer, local=local)
     if res is None and conversation:
         # The model answers this turn: "cancel that" after it is about the
         # model's answer, never about a reminder set before it.
         _forget_set(sched, conversation)
     if res is not None:
-        # Wording only (jarvis_manner.py): the same facts, the owner's manner.
-        res.reply = in_manner(res.reply)
+        # Wording only (jarvis_manner.py): the same facts, the owner's
+        # manner - this conversation's own "from now on ..." override when
+        # it is a temporary chat that has one, else the PC's saved setting.
+        manner = None
+        try:
+            import jarvis_manner
+            manner = jarvis_manner.current(conversation if temporary else None)
+        except Exception:
+            pass
+        res.reply = in_manner(res.reply, manner)
     return res
 
 
@@ -2300,6 +2897,13 @@ def route_fields(res: Result) -> dict:
            "injected_sensitive": 0}
     if res.private:
         out["gate"] = "private"
+    if res.open_settings:
+        # "open <a settings section>" (jarvis_settings_registry.py,
+        # 2026-09-27): the section id both apps' Settings screens already
+        # use, so either one can jump straight there. Additive only - every
+        # existing reader of X-Jarvis-Route that does not look for this key
+        # is unaffected, exactly like `gate` above.
+        out["open_settings"] = res.open_settings
     return out
 
 

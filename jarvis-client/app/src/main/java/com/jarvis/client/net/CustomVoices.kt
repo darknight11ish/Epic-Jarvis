@@ -29,6 +29,9 @@ import java.util.Locale
  * - HOW FAST JARVIS SPEAKS: Slower, Normal or Faster - the PC's own choices
  *   and words (`speed`), no card either way; like every change sent to the
  *   PC, held on a stale link.
+ * - JARVIS'S BUILT-IN VOICE: which of Kokoro's own voices - the PC's own
+ *   choices and words (`speaker`), the same shape as speed, right next to
+ *   it, no card either way.
  *
  * Every card-raising request is held on a stale link (rule 4); the ones
  * that only narrow (built-in voice, delete, better voice off) always go.
@@ -46,9 +49,13 @@ object CustomVoices {
     const val DELETE_PATH = "/api/voice/voices/delete"
     const val BETTER_PATH = "/api/voice/voices/better"
     const val SPEED_PATH = "/api/voice/voices/speed"
+    const val SPEAKER_PATH = "/api/voice/voices/speaker"
 
     /** The speed plate's heading when the PC sends none - the desktop's words. */
     const val SPEED_TITLE = "How fast Jarvis speaks"
+
+    /** The voice-choice plate's heading when the PC sends none - the desktop's words. */
+    const val SPEAKER_TITLE = "Jarvis's built-in voice"
 
     const val BUILTIN = "builtin"
 
@@ -87,6 +94,22 @@ object CustomVoices {
         val choice: String = "",
         val choices: List<SpeedChoice> = emptyList(),
         val title: String = SPEED_TITLE,
+        val detail: String = "",
+        val note: String = "",
+    )
+
+    /** One built-in voice the PC offers: its id, and the word shown. */
+    data class SpeakerChoice(val id: String, val label: String)
+
+    /**
+     * "Jarvis's built-in voice": which of Kokoro's own voices - the PC's own
+     * choices and words (a new choice needs no phone release), the same
+     * shape as [Speed]. [note] is the PC's extra line, or "".
+     */
+    data class Speaker(
+        val choice: String = "",
+        val choices: List<SpeakerChoice> = emptyList(),
+        val title: String = SPEAKER_TITLE,
         val detail: String = "",
         val note: String = "",
     )
@@ -133,6 +156,8 @@ object CustomVoices {
         val limits: Limits = Limits(),
         /** Null on a PC too old to have the speaking-speed setting: nothing is shown. */
         val speed: Speed? = null,
+        /** Null on a PC too old to have the voice-choice setting: nothing is shown. */
+        val speaker: Speaker? = null,
     ) {
         val custom: List<Voice> get() = voices.filter { !it.builtin }
     }
@@ -237,6 +262,7 @@ object CustomVoices {
                 )
             },
             speed = o.obj("speed")?.let { parseSpeed(it) },
+            speaker = o.obj("speaker")?.let { parseSpeaker(it) },
         )
     }
 
@@ -255,6 +281,24 @@ object CustomVoices {
             title = sp.str("title").ifBlank { SPEED_TITLE },
             detail = sp.str("detail"),
             note = sp.str("note"),
+        )
+    }
+
+    /** The `speaker` block, or null when it offers no choice this phone can show. */
+    private fun parseSpeaker(sk: JsonObject): Speaker? {
+        val choices = (sk["choices"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val c = e as? JsonObject ?: return@mapNotNull null
+            val id = c.str("id").ifBlank { return@mapNotNull null }
+            val label = c.str("label").ifBlank { return@mapNotNull null }
+            SpeakerChoice(id, label)
+        }
+        if (choices.isEmpty()) return null
+        return Speaker(
+            choice = sk.str("choice"),
+            choices = choices,
+            title = sk.str("title").ifBlank { SPEAKER_TITLE },
+            detail = sk.str("detail"),
+            note = sk.str("note"),
         )
     }
 
@@ -302,6 +346,9 @@ object CustomVoices {
 
     /** `{"speed": "<id>"}` - one of the ids the PC offered. */
     fun speedBody(id: String): String = "{\"speed\":" + JarvisApi.quote(id) + "}"
+
+    /** `{"speaker": "<id>"}` - one of the ids the PC offered. */
+    fun speakerBody(id: String): String = "{\"speaker\":" + JarvisApi.quote(id) + "}"
 
     // ------------------------------------------------------------ answers --
 

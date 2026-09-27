@@ -182,6 +182,48 @@ class ChatSession(
      */
     val usedIds: StateFlow<List<Long>> = _usedIds.asStateFlow()
 
+    private val _crisis = MutableStateFlow(false)
+
+    /**
+     * The crisis help line (`jarvis_wellbeing.py`, the owner's decision of
+     * 2026-09-27; docs/JARVIS-API.md section 38): true only while the
+     * answer on screen is the one Jarvis is showing after the owner
+     * mentioned wanting to hurt themselves - so Home can draw it as a
+     * calm, plain panel. The word check, the help message and never
+     * learning from it all run on the PC regardless of this flag; it only
+     * changes how the words already on screen are drawn. Read off the same
+     * `X-Jarvis-Route` header as [usedIds] ([Wellbeing.crisisFromHeader]);
+     * cleared with the answer, like it.
+     */
+    val crisis: StateFlow<Boolean> = _crisis.asStateFlow()
+
+    private val _openSettings = MutableStateFlow<String?>(null)
+
+    /**
+     * "Open <a settings section>" by voice or chat
+     * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
+     * section id the answer on screen named, or null. Read off the same
+     * `X-Jarvis-Route` header as [usedIds]/[crisis]
+     * ([Schedule.openSettingsFromRoute]); cleared with the answer, like
+     * them, so a manual reopen of Settings later does not jump anywhere on
+     * its own. Pure navigation - nothing here changes a setting;
+     * MainActivity is the only reader, and hands it on to `SettingsScreen`'s
+     * own `initialSection`.
+     */
+    val openSettings: StateFlow<String?> = _openSettings.asStateFlow()
+
+    /**
+     * Marks the current [openSettings] target as done. Bug audit
+     * 2026-09-27, finding #4: without this, nothing ever cleared the
+     * target once `MainActivity` had acted on it, so a rotation (or any
+     * other activity rebuild) saw the same non-null value again and jumped
+     * back into Settings on its own. `MainActivity` calls this right after
+     * navigating, once, so the same answer never fires a second time.
+     */
+    fun consumeOpenSettings() {
+        _openSettings.value = null
+    }
+
     /**
      * Turns a temporary chat on or off, and starts a new conversation
      * either way ([newConversation]) - so nothing said in one kind of chat
@@ -267,6 +309,8 @@ class ChatSession(
         _waiting.value = null
         _answerNote.value = null
         _usedIds.value = emptyList()
+        _crisis.value = false
+        _openSettings.value = null
         // A temporary question goes only to a PC that says it can hold one -
         // asked again now, since the PC may have changed since it was turned on.
         val asTemporary = _temporary.value
@@ -418,6 +462,16 @@ class ChatSession(
                     // said about a temporary question (TemporaryChat.notes).
                     if (call === c) {
                         _usedIds.value = if (asTemporary) emptyList() else MemoryUsed.idsFromRouteHeader(routeHeader)
+                        // The crisis help line (jarvis_wellbeing.py): the
+                        // one flag that says whether the answer arriving is
+                        // shown as a calm, plain panel. Not confirmed sent
+                        // by every backend yet (see Wellbeing.kt); false
+                        // just means an ordinary bubble, as before.
+                        _crisis.value = Wellbeing.crisisFromHeader(routeHeader)
+                        // "Open <a settings section>" (jarvis_settings_
+                        // registry.py, docs/JARVIS-API.md section 58.1):
+                        // pure navigation, read the same way.
+                        _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
                     }
                     val temporaryNotes = TemporaryChat.notes(asTemporary, routeHeader)
                     // Decoded as CHARACTERS, not as whatever bytes happened
@@ -672,6 +726,8 @@ class ChatSession(
         _waiting.value = null
         _answerNote.value = null
         _usedIds.value = emptyList()
+        _crisis.value = false
+        _openSettings.value = null
     }
 
     /**

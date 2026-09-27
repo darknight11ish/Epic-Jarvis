@@ -56,17 +56,18 @@ SHIPPED = {
     "power_manage": "auto", "second_card_enable": "ask", "second_card_browser_enable": "ask",
     "wiki_update": "ask", "big_model_enable": "ask", "learning_enable": "ask",
     "history_enable": "ask", "learning_auto_enable": "ask", "learning_sensitive_enable": "ask",
-    "custom_voice": "ask", "better_voice_enable": "ask",
+    "custom_voice": "ask", "better_voice_enable": "ask", "enable_reading_tool": "ask",
 }
 
 
 def _with(tiers: dict, *, lights=False, lights_waiting=False, loosen_waiting=None,
-          search_every=False):
+          search_every=False, tools_enabled=(), tool_waiting=None):
     AF._reset_for_tests()
     AF._tier = lambda a: tiers.get(a, "ask")
     AF._search_asks_every_time = lambda: search_every
     AF._file_tiers = lambda: dict(tiers)
     AF._config_dir = lambda: _TMP
+    AF.tools_enabled_set = lambda: set(tools_enabled)
     f = _TMP / "asks_first.json"
     if lights:
         f.write_text(json.dumps({"lights": True, "changed": 0}), encoding="utf-8")
@@ -76,6 +77,8 @@ def _with(tiers: dict, *, lights=False, lights_waiting=False, loosen_waiting=Non
         AF._LS_STATE["pending"].update(id="l1", since=0)
     if loosen_waiting:
         AF._L_STATE["pending"].update(id="p1", action=loosen_waiting, since=0)
+    if tool_waiting:
+        AF._T_STATE["pending"].update(id="t1", tool=tool_waiting, since=0)
 
 
 def cases() -> dict:
@@ -85,15 +88,17 @@ def cases() -> dict:
     out["phone_shipped"] = AF.view(here=False)
     stricter = dict(SHIPPED, calendar_read="ask", create_joplin_note="ask",
                     email_read="never", send_email="auto")
-    _with(stricter, lights=True, search_every=True)
+    _with(stricter, lights=True, search_every=True, tools_enabled=["calendar_read"])
     out["pc_stricter_lights_on"] = AF.view(here=True)
-    _with(stricter, lights_waiting=True, loosen_waiting="calendar_read")
+    _with(stricter, lights_waiting=True, loosen_waiting="calendar_read",
+          tool_waiting="email_read")
     out["phone_cards_waiting"] = AF.view(here=False)
     AF._reset_for_tests()
     return {
         "cases": out,
         "switchable": list(AF.SWITCHABLE),
         "loose": dict(AF.LOOSE),
+        "tools_switchable": list(AF.TOOLS_SWITCHABLE),
         "words": {
             "title": AF.TITLE, "detail": AF.DETAIL, "missing": AF.MISSING,
             "switch_label": AF.SWITCH_LABEL, "phone_loosen": AF.PHONE_LOOSEN,
@@ -101,6 +106,8 @@ def cases() -> dict:
             "lights_label": AF.LIGHTS_LABEL, "lights_detail": AF.LIGHTS_DETAIL,
             "lights_waiting": AF.LIGHTS_WAITING, "says": dict(AF.SAYS),
             "says_search": AF.SAYS_SEARCH,
+            "tools_label": AF.TOOLS_LABEL, "tools_detail": AF.TOOLS_DETAIL,
+            "tools_pc_only": AF.TOOLS_PC_ONLY, "tools_not_on_list": AF.TOOLS_NOT_ON_LIST,
         },
     }
 

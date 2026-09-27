@@ -102,8 +102,11 @@ from email.policy import SMTP as _SMTP
 from email.utils import formatdate, make_msgid
 from typing import Callable, Optional
 
-#: The account is the one jarvis_email.py reads with - one place for the names.
-from jarvis_email import HOST_ENV as IMAP_HOST_ENV, PASSWORD_ENV, USER_ENV
+#: The account is the one jarvis_email.py reads with - one place for the names
+#: and the two functions (env var, else Windows Credential Manager - ease-of-
+#: use audit row 15) that resolve the username and password.
+from jarvis_email import (HOST_ENV as IMAP_HOST_ENV, PASSWORD_ENV, USER_ENV,
+                          imap_password, imap_user)
 
 SMTP_HOST_ENV = "JARVIS_SMTP_HOST"
 SMTP_PORT_ENV = "JARVIS_SMTP_PORT"
@@ -219,10 +222,11 @@ class Settings:
 
 
 def settings() -> Settings:
-    """How an email would leave, from the environment. Never the password -
+    """How an email would leave, from the environment or Windows Credential
+    Manager (jarvis_email.imap_user/imap_password). Never the password -
     only whether one is set. Opens nothing."""
-    sender = os.environ.get(USER_ENV, "").strip()
-    has_password = bool(os.environ.get(PASSWORD_ENV, ""))
+    sender = imap_user()
+    has_password = bool(imap_password())
     host = os.environ.get(SMTP_HOST_ENV, "").strip().lower().rstrip(".")
     guessed = False
     if not host:
@@ -251,13 +255,15 @@ def settings() -> Settings:
         return Settings(sender, host, port, tls, guessed, problem)
 
     if not sender:
-        return s(f"{USER_ENV} is not set - sending uses the same account as reading "
-                 f"email, and there is none")
+        return s(f"{USER_ENV} is not set, and nothing is saved in Windows Credential "
+                 f"Manager either - sending uses the same account as reading email, "
+                 f"and there is none")
     if not valid_address(sender):
         return s(f"{USER_ENV} is not an email address, so Jarvis cannot tell which "
                  f"address to send from")
     if not has_password:
-        return s(f"{PASSWORD_ENV} is not set, so the mail server would refuse the login")
+        return s(f"{PASSWORD_ENV} is not set, and nothing is saved in Windows "
+                 f"Credential Manager either, so the mail server would refuse the login")
     if port_problem:
         return s(port_problem)
     if not host:
@@ -544,7 +550,7 @@ def view(*, tools_enabled: Optional[Callable[[], set]] = None,
         "port": st.port,
         "encryption": st.tls,
         "server_guessed": st.host_guessed,
-        "password_set": bool(os.environ.get(PASSWORD_ENV, "")),
+        "password_set": bool(imap_password()),
         "tool_enabled": on,
         "said": said,
         "limits": {"recipients": MAX_RECIPIENTS, "subject_chars": MAX_SUBJECT_CHARS,
@@ -692,9 +698,11 @@ def run(p: Plan, *, approved: bool = False,
                 "error": "not sent: the account or the mail server settings changed after "
                          "the card was shown, so this is not what was approved. Nothing "
                          "was sent."}
-    password = os.environ.get(PASSWORD_ENV, "")
+    password = imap_password()
     if not password:
-        return {"ok": False, "sent": False, "error": f"not sent: {PASSWORD_ENV} is not set."}
+        return {"ok": False, "sent": False,
+                "error": f"not sent: {PASSWORD_ENV} is not set, and nothing is saved in "
+                         f"Windows Credential Manager either."}
     _register_with_scrubber(p.sender, password)
     data = message(p).as_bytes(policy=SMTP_POLICY)
     phase = ["start"]

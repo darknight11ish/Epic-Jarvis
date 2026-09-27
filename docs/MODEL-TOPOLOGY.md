@@ -371,8 +371,17 @@ be the **bigger or longer-context lane, not the fast one**.
   `backend/jarvis_browser_control.py` says it is waiting for, and for any
   other long-context job. Browser control still stays switched off until that
   lane is actually running and has been measured.
-- Do not split one model across both cards by default. It works, but it ties
-  up both cards and runs at the slower card's pace for its share.
+- Splitting one model across both cards stays **off by default** - but since
+  2026-09-27 it is a real, built choice, not merely "it works": "One bigger
+  model on both cards" in `backend/jarvis_second_card.py`
+  (`docs/JARVIS-API.md` §12). Turning it on ties up both cards (it cannot
+  run beside the lanes above) and loads `qwen3:14b` at 32K - genuinely
+  bigger than anything else in this file. Read from Ollama's and llama.cpp's
+  actual source (§12 quotes it): the split is **by each card's free memory,
+  not by its speed**, so with this pair most of the model lands on the
+  bigger-but-slower 2060, and generation runs close to *its* pace, not
+  merely "the slower card's pace for its share" as this line used to say.
+  Not measured: the second card is not installed.
 
 **The alternative: an RTX 2080 Ti 11 GB.** Also Turing, compute capability
 7.5, so everything above about drivers and the `q8_0` cache applies. Its
@@ -467,6 +476,12 @@ inferred:
 - Modelfile `SYSTEM` suppression — [ollama/server/routes.go](https://github.com/ollama/ollama/blob/main/server/routes.go)
 - system-message re-collection on truncation — [ollama/server/prompt.go](https://github.com/ollama/ollama/blob/main/server/prompt.go)
 - `GGML_CUDA_CC_TURING` — [llama.cpp/ggml/src/ggml-cuda/common.cuh](https://github.com/ggml-org/llama.cpp/blob/master/ggml/src/ggml-cuda/common.cuh)
+- *2026-09-27, "One bigger model on both cards" (`docs/JARVIS-API.md` §12
+  has the full quotes):* `selectLlamaServerPlacement`, `bestSingleGPUFit` —
+  [ollama/server/sched.go](https://github.com/ollama/ollama/blob/main/server/sched.go);
+  `appendMainGPUArgs` — [ollama/llm/llama_server.go](https://github.com/ollama/ollama/blob/main/llm/llama_server.go);
+  `load_tensors`'s free-memory split — [llama.cpp/src/llama-model.cpp](https://github.com/ggml-org/llama.cpp/blob/master/src/llama-model.cpp),
+  read at Ollama `16b4376a` (2026-09-26) / llama.cpp `b11081` = `161755f`.
 
 The VRAM figures are arithmetic from published model geometry, shown above so
 it can be checked. The one measured performance anchor — 59.8 tok/s for Llama

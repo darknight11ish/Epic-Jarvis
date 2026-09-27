@@ -51,6 +51,10 @@
       "title": "Jarvis wants to change one of its settings"
     },
     {
+      "action": "check_tool_updates",
+      "title": "Jarvis wants to check PyPI, crates.io and GitHub for tool updates"
+    },
+    {
       "action": "control_browser",
       "title": "Jarvis wants to work a web page for you in a browser"
     },
@@ -115,6 +119,10 @@
       "title": "Jarvis wants to read your email"
     },
     {
+      "action": "enable_reading_tool",
+      "title": "Jarvis wants to offer a reading tool to the AI model"
+    },
+    {
       "action": "execute_pending_actions",
       "title": "Jarvis wants to run actions it has lined up"
     },
@@ -159,12 +167,20 @@
       "title": "Jarvis wants to change its own code"
     },
     {
+      "action": "news_read",
+      "title": "Jarvis wants to read a news feed you added"
+    },
+    {
       "action": "notes_search",
       "title": "Jarvis wants to search your notes"
     },
     {
       "action": "open_public_tunnel",
       "title": "Jarvis wants to open this PC to the internet"
+    },
+    {
+      "action": "page_read",
+      "title": "Jarvis wants to fetch a web page you're watching"
     },
     {
       "action": "post_to_external_service",
@@ -195,6 +211,10 @@
       "title": "Jarvis wants to search GitHub signed in as you"
     },
     {
+      "action": "restore_backup",
+      "title": "Jarvis wants to restore from a backup, replacing what it knows now"
+    },
+    {
       "action": "rollback_model",
       "title": "Jarvis wants to go back to the AI model you had before"
     },
@@ -213,6 +233,10 @@
     {
       "action": "second_card_browser_enable",
       "title": "Jarvis wants to turn on browser control, which works real web pages"
+    },
+    {
+      "action": "second_card_combined_enable",
+      "title": "Jarvis wants to run one bigger model across both graphics cards"
     },
     {
       "action": "second_card_enable",
@@ -241,6 +265,10 @@
     {
       "action": "user_profile_manage",
       "title": "Jarvis wants to change your profile"
+    },
+    {
+      "action": "watch_notifications_enable",
+      "title": "Jarvis wants to let your notifications show on a smartwatch too"
     },
     {
       "action": "web_research",

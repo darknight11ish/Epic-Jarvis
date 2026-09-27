@@ -86,6 +86,43 @@ class ClientSettings(context: Context) {
         _heardSound.value = value
     }
 
+    private val _watchNotifications = MutableStateFlow(prefs.getBoolean(KEY_WATCH_NOTIFICATIONS, false))
+
+    /**
+     * A CACHE of the PC's own smartwatch-notifications switch
+     * ([com.jarvis.client.net.WatchNotify]), off by default - the same
+     * direction every notification builder already defaults to
+     * (`.setLocalOnly(true)`). This is not the setting's only copy: the PC
+     * decides it, behind an approval card to turn it on; this is only what
+     * the phone last heard, kept so a notification can be built without a
+     * network round trip. [JarvisRuntime] writes it whenever it reads or
+     * changes the real setting. Unknown or stale reads as OFF, on purpose -
+     * staying on the phone leaks nothing, showing on a watch that never
+     * asked would.
+     */
+    val watchNotifications: StateFlow<Boolean> = _watchNotifications.asStateFlow()
+
+    fun setWatchNotifications(value: Boolean) {
+        prefs.edit { putBoolean(KEY_WATCH_NOTIFICATIONS, value) }
+        _watchNotifications.value = value
+    }
+
+    private val _floatingAvatar = MutableStateFlow(
+        FloatingAvatarMode.fromWire(prefs.getString(KEY_FLOATING_AVATAR, null)),
+    )
+
+    /**
+     * "Floating Jarvis" (Settings -> This app, [FloatingAvatarMode]): off,
+     * Bubble or Overlay. Off by default, like every new setting. Saved on
+     * this phone only - nothing about it reaches the PC.
+     */
+    val floatingAvatar: StateFlow<FloatingAvatarMode> = _floatingAvatar.asStateFlow()
+
+    fun setFloatingAvatar(mode: FloatingAvatarMode) {
+        prefs.edit { putString(KEY_FLOATING_AVATAR, mode.wire) }
+        _floatingAvatar.value = mode
+    }
+
     private val _security = MutableStateFlow(SecurityRules.fromStored { prefs.getString(it, null) })
 
     /**
@@ -144,14 +181,18 @@ class ClientSettings(context: Context) {
      *
      * Null, too, for an address off the owner's own networks ([OwnNetwork],
      * CLAUDE.md 2026-09-26) - one an older version saved included - so
-     * nothing, the token above all, is ever sent there. Not silently:
-     * [baseProblem] says why, and every request and the event stream show
-     * that sentence where they would show any other connection failure.
+     * nothing, the token above all, is ever sent there. And null for one on
+     * the owner's own networks that Android will not let this app reach in
+     * plain http:// (a home-network number, a `.local` name, a raw 100.x
+     * mesh number - [PhoneAddress]), which used to be accepted and then fail
+     * every request as "the connection dropped". Not silently: [baseProblem]
+     * says why, and every request and the event stream show that sentence
+     * where they would show any other connection failure.
      */
-    fun baseUrl(): String? = BaseUrl.normalise(_host.value)?.takeIf { OwnNetwork.problem(it) == null }
+    fun baseUrl(): String? = BaseUrl.normalise(_host.value)?.takeIf { PhoneAddress.problem(it) == null }
 
     /** Why the saved address is not used, in one plain sentence, or null. */
-    fun baseProblem(): String? = BaseUrl.normalise(_host.value)?.let { OwnNetwork.problem(it) }
+    fun baseProblem(): String? = BaseUrl.normalise(_host.value)?.let { PhoneAddress.problem(it) }
 
     private companion object {
         const val PREFS = "jarvis_client"
@@ -160,6 +201,8 @@ class ClientSettings(context: Context) {
         const val KEY_BARGE_IN = "barge_in"
         const val KEY_ONE_MOMENT = "one_moment"
         const val KEY_HEARD_SOUND = "heard_sound"
+        const val KEY_WATCH_NOTIFICATIONS = "watch_notifications"
+        const val KEY_FLOATING_AVATAR = "floating_avatar"
         const val KEY_UPDATE_CHECKS = "update_checks"
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
         const val KEY_UPDATE_NEWER = "update_newer_line"

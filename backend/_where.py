@@ -123,6 +123,11 @@ SHIPPED = (
     "jarvis_voicebank.py",
     "jarvis_voice_flow.py",
     "jarvis_chat_log.py",
+    # "Paste guard" (feasibility I115): masks a pasted password, PIN or
+    # one-time code before jarvis_chat_log.py writes a message to the
+    # encrypted database - reuses jarvis_sensitive.py's and
+    # jarvis_mail_mask.py's own pattern shapes, its own small variant
+    "jarvis_paste_guard.py",
     "jarvis_auto_learn.py",
     "jarvis_sensitive.py",
     "jarvis_past.py",
@@ -130,6 +135,9 @@ SHIPPED = (
     "jarvis_profiles.py", "jarvis_hardware.py",
     "jarvis_scrub.py",
     "jarvis_schedule.py", "jarvis_quick.py",
+    # "open"/"adjust" any setting by voice or chat (2026-09-27): jarvis_quick.py
+    # (already SHIPPED, above) is the only importer - no patch of its own.
+    "jarvis_settings_registry.py",
     "jarvis_standby_schedule.py",
     "jarvis_backoff.py", "jarvis_briefing.py",
     "jarvis_reach.py",
@@ -141,6 +149,7 @@ SHIPPED = (
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",
     "jarvis_mail_mask.py",
     "jarvis_email_send.py",
+    "jarvis_email_draft.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
     # Stop everything (stop-all.patch)
@@ -157,6 +166,34 @@ SHIPPED = (
     "jarvis_ocr.py",
     # plug-in programs (MCP): read-only tools from programs on this PC, through more_tools
     "jarvis_mcp.py",
+    # the crisis help line: the word check, the fixed US help message, the note to the model
+    "jarvis_wellbeing.py",
+    # the smartwatch notifications setting (watch-notifications.patch)
+    "jarvis_watch_notify.py",
+    # "Things you can say": the fixed list of real sentences answered without
+    # the model (sayable.patch)
+    "jarvis_sayable.py",
+    # Backups: one locked backup file, a recovery code shown once, restore
+    # with a card plus Windows Hello (backup.patch)
+    "jarvis_backup.py",
+    # music and video control on this PC: play/pause/next/previous and
+    # "what's playing", never a card, never a model tool (media.patch)
+    "jarvis_media.py",
+    # news headlines in the morning briefing: RSS/Atom feed addresses the
+    # owner adds, headlines only, one card per feed (news.patch)
+    "jarvis_news.py",
+    # data health in the preflight: do the databases open, is there disk
+    # space, do the settings files parse - read-only, WARN never fix
+    # (feasibility I97, data-health.patch)
+    "jarvis_data_health.py",
+    # "Check for tool updates": outdated Python packages, Rust crates and
+    # pinned GitHub tools, report only, one card ever (tool-updates.patch)
+    "jarvis_tool_updates.py",
+    "jarvis_identity.py",
+    # "Where this came from" and the quote check: each reading tool's own
+    # result this turn, by reference; GET /api/chat/sources
+    # (feasibility I42/I132, answer-sources.patch)
+    "jarvis_sources.py",
 )
 
 

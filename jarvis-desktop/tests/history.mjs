@@ -208,6 +208,32 @@ await check("each row: title, when, which app, and the voice and read-outside ma
   assert.match(taintTitle, /did not come from you/);
 });
 
+await check("a search box narrows the loaded list by title, and asks the PC nothing (ease-of-use audit row 20)", async () => {
+  const convs = [
+    { id: "c-1", title: "Dentist on Tuesday", started: NOW - 3600, updated: NOW - 3300, turns: 2, device: "phone" },
+    { id: "c-2", title: "Summarise that PDF", started: NOW - 7200, updated: NOW - 7000, turns: 4, device: "desktop" },
+    { id: "c-3", title: "Weekend hiking plan", started: NOW - 10800, updated: NOW - 10700, turns: 3, device: "phone" },
+  ];
+  const page = await historyTab({ conversations: convs });
+  const before = await page.locator("#history-list .row-item").count();
+  await page.locator("#history-filter").fill("dentist");
+  await page.waitForTimeout(100);
+  const titles = await page.locator("#history-list .row-title").allInnerTexts();
+  await page.locator("#history-filter").fill("zzz-nothing");
+  await page.waitForTimeout(100);
+  const none = await page.locator("#history-list").innerText();
+  await page.locator("#history-filter").fill("");
+  await page.waitForTimeout(100);
+  const after = await page.locator("#history-list .row-item").count();
+  const sent = await page.evaluate(() => window.__calls.map((c) => c[0]));
+  await page.close();
+  assert.equal(before, 3);
+  assert.deepEqual(titles.map((t) => t.trim()), ["Dentist on Tuesday"]);
+  assert.match(none, /No conversations match that search/);
+  assert.equal(after, 3);
+  assert.ok(!sent.includes("brain_history_search"), "no new backend route is called");
+});
+
 await check("Load older asks for the page before the oldest shown, and adds it underneath", async () => {
   const page = await historyTab({ conversations: many(31) });
   const before = await page.locator("#history-list .row-item").count();
@@ -519,7 +545,7 @@ await check("CONTROL: only the Brain holds the history commands, and ON is held 
     const perm = `allow-${cmd.replace(/_/g, "-")}`;
     assert.deepEqual(holders(perm), ["brain-history"], `${perm} is held by ${holders(perm)}`);
   }
-  for (const c of ["brain", "faces", "hud", "onboarding", "quickbar", "settings", "widget"]) {
+  for (const c of ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "settings", "widget"]) {
     const json = read(`src-tauri/capabilities/${c}.json`);
     assert.equal(json.includes("\"brain-history\""), c === "brain", `${c} and brain-history`);
   }

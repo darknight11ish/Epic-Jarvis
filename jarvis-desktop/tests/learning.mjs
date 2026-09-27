@@ -50,9 +50,23 @@ await check("an answer with an id gets one right/wrong mark, and pressing it aga
   await page.locator("#mark-wrong").click();
   await page.waitForTimeout(150);
   const marks = await page.evaluate(() => window.__marks);
-  assert.deepEqual(marks, [{ turnId: TURN, mark: "wrong" }, { turnId: TURN, mark: "none" }]);
+  assert.deepEqual(marks.map(({ conversationId, ...rest }) => rest),
+    [{ turnId: TURN, mark: "wrong" }, { turnId: TURN, mark: "none" }]);
   assert.equal(await page.locator("#mark-wrong").getAttribute("aria-pressed"), "false");
   assert.deepEqual(page.__errors, []);
+  await page.close();
+});
+
+await check("a mark carries this conversation's id, so the backend can count a correction "
+  + "(second-card-suggest.patch)", async () => {
+  const page = await K.open(browser, base, "index.html", { chatReplies: ["It is Wednesday."] });
+  await ask(page, TURN);
+  await page.locator("#mark-wrong").click();
+  await page.waitForTimeout(150);
+  const marks = await page.evaluate(() => window.__marks);
+  assert.equal(marks.length, 1);
+  assert.match(marks[0].conversationId, /^[A-Za-z0-9_-]{8,64}$/,
+    "no usable conversation id was sent with the mark");
   await page.close();
 });
 
@@ -78,6 +92,15 @@ await check("the mark is one id and one mark, never a list", async () => {
   const rust = read("src-tauri/src/commands.rs");
   assert.match(rust, /pub async fn mark_answer\(\s*app: AppHandle,\s*turn_id: String,\s*mark: String,/);
   assert.match(rust, /"right" \| "wrong" \| "none"/);
+});
+
+await check("CONTROL: the conversation id on a mark is checked the same way as everywhere else, "
+  + "and left out when it is not valid", async () => {
+  const rust = read("src-tauri/src/commands.rs");
+  const fn = rust.slice(rust.indexOf("pub async fn mark_answer"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /conversation_id: Option<String>/);
+  assert.match(body, /valid_conversation_id\(id\)/, "not checked with the shared validator");
 });
 
 const RETIRE = { id: 51, text: "Stop using this fact? It was part of 6 wrong answers and 1 right one.",

@@ -78,8 +78,12 @@ const check = async (name, fn) => {
 /** The PC's own words for the weather (jarvis_briefing.WEATHER_OFF, NEWS_LINE). */
 const WEATHER_OFF = "Not included: the weather. It comes only from your own Home Assistant, " +
   "which is not set up for Jarvis on this PC.";
-const NEWS_LINE = "News: not available. No news provider has been chosen, so Jarvis fetches " +
-  "nothing from the internet for this.";
+// The PC's own words since news feeds (I49, 2026-09-27) and the setup/recovery
+// audit's fix (it names the words that add a feed, not a "News feeds" screen
+// neither app has).
+const NEWS_LINE = "News: not available. No news feeds are listed yet (to add one, say " +
+  "\"add this feed:\" and the feed's address), so Jarvis fetches nothing from the internet " +
+  "for this.";
 
 const BRIEFING = {
   id: "b0123456789",
@@ -122,7 +126,10 @@ await check("the words are both apps' words and the PC's own", async () => {
     assert.ok(kt.includes(`"${words.replace(/"/g, '\\"')}"`), `the phone does not say: ${words}`);
   }
   const py = readRepo("backend/jarvis_briefing.py").replace(/"\s*\n\s*"/g, "");
-  for (const words of [LOCK_SCREEN, OUTSIDE_LINE, WEATHER_OFF, NEWS_LINE,
+  // Not OUTSIDE_LINE: the apps keep the words of a PC from before news feeds
+  // existed, for exactly such a PC (jarvis_briefing.OUTSIDE_LINE's own
+  // comment); a newer PC always sends its own `outside_line`.
+  for (const words of [LOCK_SCREEN, WEATHER_OFF, NEWS_LINE.replace(/"/g, '\\"'),
     EMPTY.replace(/"/g, '\\"')]) {
     assert.ok(py.includes(words), `the PC does not say: ${words}`);
   }
@@ -498,7 +505,7 @@ await check("CONTROL: the toast is the fixed words, on ready only; changes held 
     assert.match(read("src-tauri/src/lib.rs"), new RegExp(`brain::briefing::${cmd},`));
   }
   assert.ok(JSON.parse(read("src-tauri/capabilities/brain.json")).permissions.includes("brain-briefing"));
-  for (const other of ["quickbar", "widget", "hud", "settings", "faces", "onboarding"]) {
+  for (const other of ["quickbar", "widget", "hud", "settings", "faces", "floating", "onboarding"]) {
     assert.ok(!read(`src-tauri/capabilities/${other}.json`).includes("brain-briefing"), other);
   }
 });

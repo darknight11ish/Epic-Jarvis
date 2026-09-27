@@ -81,7 +81,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -92,7 +91,6 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -112,9 +110,11 @@ import com.jarvis.client.net.Attention
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
+import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.approval.ApprovalCard
 import com.jarvis.client.ui.parts.AppearanceIcon
 import com.jarvis.client.ui.parts.Dot
+import com.jarvis.client.ui.parts.FormattedAnswer
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.HelpIcon
 import com.jarvis.client.ui.parts.InboxIcon
@@ -337,6 +337,15 @@ data class HomeState(
      */
     val answerNote: String? = null,
     /**
+     * The crisis help line (`jarvis_wellbeing.py`, the owner's decision of
+     * 2026-09-27; docs/JARVIS-API.md section 38): true only while the
+     * answer on screen is Jarvis's help message after the owner mentioned
+     * wanting to hurt themselves, so [Reply] draws it as a calm, plain
+     * panel instead of an ordinary bubble. See
+     * [com.jarvis.client.net.ChatSession.crisis].
+     */
+    val crisisAnswer: Boolean = false,
+    /**
      * Whether the quick-note field is open - the home-screen widget's Note
      * button opens it. See [QuickNotePlate].
      */
@@ -389,8 +398,17 @@ data class HomeState(
      */
     val usedIds: List<Long> = emptyList(),
     /**
+     * The answer on screen's own id ([com.jarvis.client.net.Feedback];
+     * already read for the right/wrong mark) - also what "Where this came
+     * from" fetches by, feasibility I42/I132
+     * ([com.jarvis.client.net.ChatSources]). Null for an older PC, or
+     * before recording failed.
+     */
+    val answerTurnId: String? = null,
+    /**
      * Security's "Hide memory lists and chat history" is hiding the memory
-     * lists now - the facts under "Used 2 memories" are one of them.
+     * lists now - the facts under "Used 2 memories" are one of them, and so
+     * is "Where this came from" (the same gate, not a second one).
      */
     val memoryHidden: Boolean = false,
     /** The Show under a hidden list is asking the phone's lock now. */
@@ -526,6 +544,13 @@ data class HomeActions(
         { com.jarvis.client.net.MemoryUsed.Read.Missing },
     /** Forget ONE fact, after the confirm ([com.jarvis.client.JarvisRuntime.forgetAutoFact]). */
     val onForgetUsed: suspend (Long) -> Pair<Boolean, String> = { false to "" },
+    /**
+     * "Where this came from" (feasibility I42/I132): this answer's own
+     * reading-tool receipts and its quote check, by turn_id
+     * ([com.jarvis.client.JarvisRuntime.chatSources]).
+     */
+    val onLoadSources: suspend (String?) -> com.jarvis.client.net.ChatSources.Read =
+        { com.jarvis.client.net.ChatSources.Read.Missing },
     /** Show a hidden memory list, after the phone's lock says it is the owner. */
     val onShowPrivate: () -> Unit = {},
     /** "Try again" under a failed question: ask the same question again. */
@@ -936,6 +961,7 @@ private fun ConversationList(
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
+    val motion = LocalMotion.current
     LazyColumn(
         state = listState,
         modifier = modifier,
@@ -1019,6 +1045,19 @@ private fun ConversationList(
                     onDeny = { actions.onDeny(item) },
                     onAmend = { note -> actions.onAmend(item.id, note) },
                     showFooter = state.pending.size == 1,
+                    // UI-AUDIT-2026-09-26 item 6: a new card fades in, and the
+                    // cards below glide up to fill the gap left by one that
+                    // is decided (Compose's own built-in item animation - the
+                    // "idiomatic equivalent" the item asks for where a direct
+                    // port of the desktop's slide isn't this list's job).
+                    // `motion.enter()` is the same 200ms/ease token the
+                    // desktop's own card-in animation uses, and it collapses
+                    // to 0ms under reduced motion like every other use of it.
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = motion.enter(),
+                        fadeOutSpec = motion.enter(),
+                        placementSpec = motion.enter(),
+                    ),
                 )
             }
         }
@@ -1039,6 +1078,7 @@ private fun ConversationList(
                 onNewConversation = actions.onNewConversation,
                 waiting = state.chatWaiting,
                 note = state.answerNote,
+                crisis = state.crisisAnswer,
                 used = UsedAnswer(
                     ids = state.usedIds,
                     canAct = state.link == LinkState.CONNECTED && !state.stale,
@@ -1047,6 +1087,11 @@ private fun ConversationList(
                     onShow = actions.onShowPrivate,
                     load = actions.onLoadUsed,
                     forget = actions.onForgetUsed,
+                ),
+                sources = SourcesAnswer(
+                    turnId = state.answerTurnId,
+                    hidden = state.memoryHidden,
+                    load = actions.onLoadSources,
                 ),
             )
         }
@@ -1936,10 +1981,18 @@ private fun Reply(
     waiting: String? = null,
     note: String? = null,
     used: UsedAnswer? = null,
+    // "Where this came from" (feasibility I42/I132): null when the caller
+    // gave no turn_id at all - the same "nothing to show" the line below
+    // already treats an empty `used.ids` as.
+    sources: SourcesAnswer? = null,
+    // The crisis help line (jarvis_wellbeing.py, 2026-09-27): draws this
+    // answer as a calm, plain panel instead of an ordinary bubble. Wording,
+    // the word check and never learning from it all happen on the PC;
+    // this only changes how the words already decided are shown.
+    crisis: Boolean = false,
 ) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
-    val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val text = reply()
     AnimatedVisibility(
@@ -1979,17 +2032,46 @@ private fun Reply(
                         color = if (waiting != null) chrome.textMid else chrome.textHi,
                     )
                 }
+            } else if (crisis && !streaming) {
+                // The crisis help line (jarvis_wellbeing.py, 2026-09-27): a
+                // calm, plain panel, reusing the same Plate every other
+                // grouped surface on this screen uses - larger text, and
+                // the answer's own "**...**" emphasis (there is no
+                // markdown renderer here, so it would otherwise show as
+                // literal asterisks) dropped rather than shown raw.
+                Plate(tone = chrome.surface2) {
+                    text.split(PARAGRAPH_BREAK).forEachIndexed { index, paragraph ->
+                        if (index > 0) Gap(10)
+                        Text(
+                            paragraph.replace("**", ""),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = chrome.textHi,
+                        )
+                    }
+                }
             } else {
                 // Identity by position is right here: paragraphs are only
                 // ever added at the end while a reply streams, so each index
-                // keeps meaning the same paragraph.
+                // keeps meaning the same paragraph. `shown` starts false and
+                // flips once per index (UI-AUDIT-2026-09-26 item 6), so a
+                // freshly-added paragraph fades in - the same idea as the
+                // desktop's "each freshly appended block fades in"
+                // (`style.css`'s `.fresh`, 260ms) - while an index already on
+                // screen never replays the fade as later tokens append to it.
+                // `FormattedAnswer` (ui/parts/AnswerFormat.kt) gives bold,
+                // italics, lists and code instead of the raw markdown text
+                // this `Text` used to show verbatim.
                 text.split(PARAGRAPH_BREAK).forEachIndexed { index, paragraph ->
                     if (index > 0) Gap(10)
-                    Text(
-                        paragraph,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = chrome.textHi,
-                    )
+                    var shown by remember(index) { mutableStateOf(false) }
+                    LaunchedEffect(index) { shown = true }
+                    AnimatedVisibility(visible = shown, enter = fadeIn(motion.enter())) {
+                        FormattedAnswer(
+                            paragraph,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = chrome.textHi,
+                        )
+                    }
                 }
             }
             // Only once there is a finished answer to act on - copying or
@@ -2025,10 +2107,43 @@ private fun Reply(
                         )
                     }
                 }
+                // "Where this came from" (feasibility I42/I132): fetched
+                // once, quietly, as soon as this answer's turn_id is known
+                // - there is no cheap count the way "Used 2 memories" has
+                // one (a tool's result is only known once the tool loop
+                // finishes, unlike a recalled fact). Never even asked for
+                // while Security's "Hide memory lists and chat history" is
+                // hiding the memory lists - the same gate as above, not a
+                // second one - so nothing is shown at all in that case
+                // rather than a line that cannot be opened yet.
+                if (sources != null && sources.turnId != null && !sources.hidden) {
+                    var srcOpen by remember(sources.turnId) { mutableStateOf(false) }
+                    var srcRead by remember(sources.turnId) {
+                        mutableStateOf<com.jarvis.client.net.ChatSources.Read?>(null)
+                    }
+                    LaunchedEffect(sources.turnId) { srcRead = sources.load(sources.turnId) }
+                    val shown = srcRead as? com.jarvis.client.net.ChatSources.Read.Shown
+                    if (shown != null && (shown.view.sources.isNotEmpty() || shown.view.quotes.isNotEmpty())) {
+                        Gap(4)
+                        Quiet(
+                            com.jarvis.client.net.ChatSources.TITLE,
+                            color = chrome.textMid,
+                            onClick = { srcOpen = !srcOpen },
+                        )
+                        if (srcOpen) {
+                            ChatSourcesList(shown.view)
+                        }
+                    }
+                }
                 Gap(8)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Quiet("Copy", color = chrome.textMid) {
-                        clipboard.setText(AnnotatedString(text))
+                        // Feasibility I114, "Private copy": marks the clip
+                        // sensitive so Android's own copy toast shows no
+                        // preview of the answer - see PrivateClipboard's own
+                        // doc comment for why this is the phone's whole half
+                        // of a feature the desktop does differently.
+                        PrivateClipboard.copy(context, text)
                     }
                     Quiet("Share", color = chrome.textMid) {
                         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -2076,6 +2191,17 @@ internal data class UsedAnswer(
     val onShow: () -> Unit,
     val load: suspend (List<Long>) -> com.jarvis.client.net.MemoryUsed.Read,
     val forget: suspend (Long) -> Pair<Boolean, String>,
+)
+
+/** What "Where this came from" under the answer needs (feasibility
+ *  I42/I132) - see [ChatSourcesList]. `hidden` is the SAME "Hide memory
+ *  lists and chat history" flag [UsedAnswer.hidden] reads, not a second
+ *  gate. */
+@Immutable
+internal data class SourcesAnswer(
+    val turnId: String?,
+    val hidden: Boolean,
+    val load: suspend (String?) -> com.jarvis.client.net.ChatSources.Read,
 )
 
 /**

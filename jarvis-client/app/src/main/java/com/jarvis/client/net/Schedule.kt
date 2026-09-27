@@ -724,6 +724,20 @@ object Schedule {
         return o.text("quick") != null
     }
 
+    /**
+     * "Open <a settings section>" by voice or chat
+     * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
+     * section id `SettingsScreen.kt`'s own `item(key = ...)` rows already
+     * use ("web-search", "manner", ...), or null when this answer named
+     * none. Pure navigation - nothing here changes a setting.
+     */
+    fun openSettingsFromRoute(header: String?): String? {
+        if (header.isNullOrBlank()) return null
+        val o = runCatching { JarvisJson.parseToJsonElement(header.trim()) as? JsonObject }.getOrNull()
+            ?: return null
+        return o.text("open_settings")
+    }
+
     private fun JsonObject.num(key: String): Double? =
         (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull && !it.isString }?.doubleOrNull
             ?.takeIf { it.isFinite() }

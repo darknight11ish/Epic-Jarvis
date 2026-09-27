@@ -39,6 +39,16 @@
          uses it only here, and puts the mode back when Jarvis stops. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- The Overlay path of "Floating Jarvis" (data/FloatingAvatar.kt,
+         service/AvatarOverlayService.kt): the small draggable window drawn
+         on top of every other app. This is a manifest declaration, not the
+         grant itself - the grant is `Settings.canDrawOverlays`, a special
+         app-access toggle only the owner can flip, in Android's own
+         "draw over other apps" screen, which `FloatingAvatarPlate.kt`
+         explains in plain words before ever opening it. Requested only when
+         the owner picks Overlay, never at launch and never for Bubble. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- The service returns START_STICKY, and a sticky restart happens with the app
          in the background - which is not on the FGS background-start exemption list,
          so startForeground throws and the link ends permanently. A battery-optimisation
@@ -71,11 +81,23 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask">
+            android:launchMode="singleTask"
+            android:resizeableActivity="true">
+            <!-- resizeableActivity: recommended for the Activity a chat
+                 bubble expands into ("Floating Jarvis: Bubble",
+                 service/WakeWordService.kt's attachBubble) - the bubble's
+                 floating window resizes this same Activity rather than a
+                 second, cut-down one. Harmless with Floating Jarvis off. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- App-icon shortcuts (feasibility I125): Talk, Note, Brief me,
+                 What did I miss - res/xml/shortcuts.xml. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
 
             <!-- "Share" from another app - a web page's selected text, a
                  note, an address - lands here as plain text and is folded
@@ -222,6 +244,22 @@
             android:name=".service.WakeWordService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- The Overlay path of "Floating Jarvis" (data/FloatingAvatar.kt).
+             specialUse, not any of the other types: it holds a window, not
+             the microphone (WakeWordService already has that, separately,
+             while "Listen on this phone" is on) and no data of its own -
+             see §3.1(2)'s reasoning for specialUse over dataSync, which
+             applies here too. Its own subtype string, since a service's
+             PROPERTY_SPECIAL_USE_FGS_SUBTYPE describes only that service. -->
+        <service
+            android:name=".service.AvatarOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="@string/fgs_avatar_overlay_reason" />
+        </service>
 
         <!-- exported="true" is what every app-widget provider needs - the
              launcher itself is what sends APPWIDGET_UPDATE, from outside this

@@ -1,13 +1,16 @@
 package com.jarvis.client.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -20,10 +23,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.R
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.parts.Primary
@@ -121,6 +128,35 @@ fun PairingScreen(
             .padding(horizontal = 18.dp),
     ) {
         Spacer(Modifier.height(28.dp))
+
+        // Ease-of-use audit #17: the whole of this app's onboarding is one
+        // picture and one sentence, above the pairing form - never a 3-step
+        // tour like the desktop's (see ARCHITECTURE.md §8 for why). Only on
+        // the genuine first pairing (`onCancel` is null exactly then, never
+        // once a desktop is already paired): a re-pair is a returning owner
+        // changing an address, not someone meeting Jarvis for the first time.
+        if (onCancel == null) {
+            Image(
+                painter = painterResource(R.mipmap.ic_launcher_foreground),
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .size(96.dp),
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "This is Jarvis: an assistant that runs on your own PC, not " +
+                    "someone else's server. Connect this phone to it below.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textMid,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.CenterHorizontally),
+            )
+            Spacer(Modifier.height(22.dp))
+        }
+
         Text("JARVIS", style = MaterialTheme.typography.titleLarge, color = accent)
         Text(
             if (onCancel != null) "Change desktop or token" else "Pair with your desktop",

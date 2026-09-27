@@ -90,6 +90,9 @@ TITLES = {
     # --- the smart home
     "home_read": "check your smart home",
     "home_control": "change something in your home",
+    # --- news feeds and "tell me when this page changes" (2026-09-27)
+    "news_read": "read a news feed you added",
+    "page_read": "fetch a web page you're watching",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -98,10 +101,13 @@ TITLES = {
     "models_create": "make a tuned copy of an AI model",
     "second_card_enable": "start using the second graphics card",
     "second_card_browser_enable": "turn on browser control, which works real web pages",
+    "second_card_combined_enable": "run one bigger model across both graphics cards",
     "big_model_enable": "start the big model for background jobs",
     # --- its own settings and code
     "change_own_config": "change one of its settings",
     "loosen_what_asks_first": "let one action go ahead without asking you first",
+    "enable_reading_tool": "offer a reading tool to the AI model",
+    "check_tool_updates": "check PyPI, crates.io and GitHub for tool updates",
     "modify_own_code": "change its own code",
     "power_manage": "change its power mode (Active, Quiet or Standby)",
     "schedule_repeat": "set up something that repeats",
@@ -115,6 +121,10 @@ TITLES = {
     # --- voices
     "custom_voice": "keep or use a custom voice",
     "better_voice_enable": "turn on the better custom voice",
+    # --- notifications
+    "watch_notifications_enable": "let your notifications show on a smartwatch too",
+    # --- backups
+    "restore_backup": "restore from a backup, replacing what it knows now",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

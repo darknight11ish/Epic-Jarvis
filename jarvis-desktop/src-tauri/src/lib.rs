@@ -5,8 +5,8 @@
 //!
 //! * plugin registration — global shortcut, clipboard manager, notifications;
 //! * the global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`,
-//!   `Alt+Shift+N`, `Alt+Shift+W`, and "Stop everything" on `Alt+Shift+X`;
-//!   all rebindable, [`hotkeys`]);
+//!   `Alt+Shift+N`, `Alt+Shift+W`, "Stop everything" on `Alt+Shift+X`, and
+//!   the floating face on `Alt+Shift+F`; all rebindable, [`hotkeys`]);
 //! * the notification-area tray icon ([`tray::create_tray`]);
 //! * window vibrancy and focus-loss auto-hide ([`windows::setup_windows`]).
 //!
@@ -17,13 +17,17 @@
 //! | `quickbar` | 750×80 frameless transparent spotlight bar, always on top    |
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
+pub mod account_secrets;
 pub mod aec;
 pub mod appearance;
 pub mod asks_first;
 pub mod attention;
 pub mod autostart;
+pub mod backup;
 pub mod brain;
+pub mod clipboard_privacy;
 pub mod commands;
+pub mod crash_notes;
 pub mod email_sending;
 pub mod folders;
 pub mod hardware;
@@ -33,6 +37,7 @@ pub mod lock;
 pub mod logfile;
 pub mod plain_errors;
 pub mod proctree;
+pub mod pyfind;
 pub mod reach;
 pub mod sidecar;
 pub mod spec;
@@ -41,6 +46,7 @@ pub mod sse;
 pub mod stream;
 pub mod system_theme;
 pub mod token_store;
+pub mod tool_updates;
 pub mod tray;
 pub mod update;
 pub mod vision;
@@ -158,6 +164,12 @@ pub mod events {
     /// Payload: [`crate::voice_flow::BargeVerdict`]. The PC's answer for an
     /// utterance the Jarvis bar asked about: stop the reply, or carry on.
     pub const VOICE_BARGE_VERDICT: &str = "voice-barge-verdict";
+    /// Payload: `f32`, 0.0-1.0 - the microphone's own loudness, while
+    /// push-to-talk or "hey Jarvis" listening holds it open. Sent to the
+    /// quickbar only (`emit_quickbar`), which is the one window whose
+    /// reactor reads it (`voice.js` `setLevel`). Never the audio itself -
+    /// one number, computed from samples that never leave this process.
+    pub const VOICE_LEVEL: &str = "voice-level";
     /// Payload: [`crate::lock::Security`] - the Security settings changed
     /// (Settings' Windows Hello section). The Brain re-reads its memory
     /// lists, which may now be hidden or shown.
@@ -171,6 +183,14 @@ pub mod events {
     /// line ("YouTube can wait."), fetched as SOUND from this PC's backend,
     /// to play. The words never reach any window.
     pub const FOCUS_CALLOUT: &str = "focus-callout";
+    /// Payload: `bool` - the floating face turned on or off. Settings'
+    /// "Floating face" checkbox only ever painted itself once, from
+    /// `get_floating`, on page load; the tray, the hotkey and closing the
+    /// window itself all change the same setting without telling it, so
+    /// with Settings open the box could disagree with the screen until the
+    /// owner clicked it (bug audit 2026-09-27, desktop-rust finding #5).
+    /// Sent to every window from `set_floating` and `toggle_floating`.
+    pub const FLOATING_CHANGED: &str = "floating-changed";
 
     // ---- the fanned-out event stream -----------------------------------
     //
@@ -417,16 +437,18 @@ fn spawn_telemetry_loop(app: AppHandle) {
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
 
-            // A drag is persisted even while the widget is collapsed or hidden.
-            // `flush` writes a file, so it goes to the blocking pool too.
+            // A drag is persisted even while the widget is collapsed or
+            // hidden - and the same for the floating face. `flush` writes a
+            // file, so both go to the blocking pool too.
             {
                 let handle = app.clone();
                 if let Err(err) = tokio::task::spawn_blocking(move || {
                     handle.state::<windows::WidgetState>().flush(&handle);
+                    handle.state::<windows::FloatingState>().flush(&handle);
                 })
                 .await
                 {
-                    eprintln!("[jarvis] widget preference flush failed: {err}");
+                    eprintln!("[jarvis] widget/floating preference flush failed: {err}");
                 }
             }
 
@@ -627,6 +649,12 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
 /// Builds and runs the Tauri application. Blocks until the process exits.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Feasibility I99: before anything else can panic, so a panic during
+    // setup (single-instance handling, plugin registration, window
+    // creation - all of it, above) leaves a note behind too. Never changes
+    // what a panic does; see crash_notes.rs's own doc comment.
+    crash_notes::install_panic_hook();
+
     let mut builder = tauri::Builder::default();
 
     // Build order step 3. Registered before anything else so a second launch
@@ -685,10 +713,12 @@ pub fn run() {
         .manage(ChatState::default())
         .manage(stream::StreamState::default())
         .manage(sidecar::SupervisorState::default())
+        .manage(sidecar::WatchdogState::default())
         .manage(tray::TrayHandles::default())
         .manage(tray::Painted::default())
         .manage(tray::TrayFlashGovernor::default())
         .manage(windows::WidgetState::default())
+        .manage(windows::FloatingState::default())
         .manage(RouteState::default())
         // Registered here with every other managed type, not inside setup: the
         // shortcut handler reads it and would panic on an unregistered state
@@ -770,6 +800,8 @@ pub fn run() {
             brain::auto_learn::brain_memory_saved_unseen,
             brain::profile::brain_memory_profile,
             brain::profile::brain_memory_pin,
+            brain::shared::brain_memory_shared,
+            brain::shared::brain_memory_share,
             brain::schedule::brain_schedule,
             brain::schedule::brain_schedule_act,
             brain::schedule::brain_schedule_add_todo,
@@ -785,6 +817,7 @@ pub fn run() {
             brain::briefing::stop_briefing,
             brain::briefing::set_briefing_senders,
             brain::used::memory_used,
+            brain::sources::chat_sources,
             brain::history::brain_history_list,
             brain::history::brain_history_open,
             brain::history::brain_history_delete,
@@ -796,6 +829,8 @@ pub fn run() {
             sidecar::set_supervision,
             sidecar::start_backend,
             sidecar::stop_backend,
+            crash_notes::crash_notes,
+            pyfind::find_python,
             commands::get_theme,
             commands::set_theme,
             commands::get_theme_prefs,
@@ -808,6 +843,7 @@ pub fn run() {
             commands::reveal_pairing_token,
             commands::get_second_card,
             commands::set_second_card,
+            commands::set_second_card_suggest,
             commands::get_backend_capabilities,
             commands::get_big_model,
             commands::set_big_model,
@@ -820,17 +856,30 @@ pub fn run() {
             web_search::test_web_search,
             web_search::save_search_key,
             web_search::forget_search_key,
+            account_secrets::get_account_secrets,
+            account_secrets::save_account_secret,
+            account_secrets::forget_account_secret,
             reach::get_reach,
             asks_first::get_asks_first,
             asks_first::set_asks_first,
             asks_first::set_lights_without_card,
+            asks_first::set_tool_enabled,
             email_sending::get_email_sending,
             folders::get_folders,
             folders::add_folder,
             folders::remove_folder,
             folders::import_notion,
+            backup::get_backup,
+            backup::list_backups,
+            backup::set_backup_folder,
+            backup::backup_now,
+            backup::preview_restore,
+            backup::restore_backup,
+            tool_updates::get_tool_updates,
+            tool_updates::check_tool_updates,
             plain_errors::get_manner,
             plain_errors::set_manner,
+            plain_errors::set_humor,
             plain_errors::open_fix_place,
             appearance::get_appearance,
             appearance::set_appearance,
@@ -849,6 +898,8 @@ pub fn run() {
             commands::set_widget_always_on_top,
             commands::save_widget_position,
             commands::get_widget_prefs,
+            commands::get_floating,
+            commands::set_floating,
             commands::prefill_quickbar,
             commands::capture_note,
             commands::capture_note_status,
@@ -864,6 +915,7 @@ pub fn run() {
             commands::resize_quickbar,
             commands::set_quickbar_pinned,
             commands::write_clipboard,
+            commands::write_clipboard_private,
             commands::open_external_url,
             commands::get_log_info,
             commands::open_log_folder,
@@ -901,6 +953,7 @@ pub fn run() {
             voice_training::delete_custom_voice,
             voice_training::set_better_voice,
             voice_training::set_voice_speed,
+            voice_training::set_voice_speaker,
             vision::local_model_vision,
             // Windows Hello (lock.rs): Settings reads and changes the four
             // Security settings; the Brain's Show button.
@@ -951,6 +1004,11 @@ pub fn run() {
                         "toggle_widget" => {
                             if let Err(err) = windows::toggle_widget(app) {
                                 eprintln!("[jarvis] widget toggle failed: {err}");
+                            }
+                        }
+                        "toggle_floating" => {
+                            if let Err(err) = windows::toggle_floating(app) {
+                                eprintln!("[jarvis] floating face toggle failed: {err}");
                             }
                         }
                         // Never held: not by a stale link, not by App lock,
@@ -1066,6 +1124,21 @@ pub fn run() {
             if let Err(err) = windows::setup_widget(&handle, &widget_prefs) {
                 eprintln!("[jarvis] widget setup reported: {err}");
             }
+
+            // The floating face - off by default (windows::FloatingPrefs),
+            // built on demand like Faces, Settings and the Brain rather than
+            // declared in `tauri.conf.json`. Reopened here only if the owner
+            // had turned it on and never turned it off since.
+            let floating_prefs = windows::load_floating_prefs(&handle);
+            handle
+                .state::<windows::FloatingState>()
+                .update(|prefs| *prefs = floating_prefs.clone());
+            if floating_prefs.enabled {
+                if let Err(err) = windows::show_floating(&handle) {
+                    eprintln!("[jarvis] the floating face could not be reopened: {err}");
+                }
+            }
+
             spawn_telemetry_loop(handle.clone());
 
             // Notification-area icon and context menu. Built before the
@@ -1092,6 +1165,12 @@ pub fn run() {
                     }
                 });
             }
+            // The restart-with-a-cap watchdog (feasibility I98). Started
+            // once, unconditionally: it watches for `SupervisorState::owns`
+            // on every tick, which the block above (or a later manual
+            // "Start backend") can set at any time, and it does nothing on
+            // every tick until supervision has actually started something.
+            sidecar::spawn_watchdog(handle.clone());
 
             // The one event-stream connection. Everything downstream of it —
             // the tray colour, the approval queue in all three windows, the
@@ -1143,9 +1222,15 @@ pub fn run() {
             #[cfg(desktop)]
             {
                 let bound = hotkeys::apply(&handle);
+                // A blank accelerator means `hotkeys::apply` already left it
+                // unbound because its own default lost to another action's
+                // saved key (finding #7, 2026-09-27) - that is not "another
+                // application", it is Jarvis settling a fight with itself,
+                // and it already says so in the Settings page's own error
+                // for that row, so it does not belong in this toast.
                 let refused: Vec<String> = bound
                     .iter()
-                    .filter(|b| !b.registered)
+                    .filter(|b| !b.registered && !b.accelerator.is_empty())
                     .map(|b| format!("{} ({})", b.accelerator, b.label))
                     .collect();
 
@@ -1214,6 +1299,14 @@ pub fn run() {
             // app alone replays the last few seconds of events, and an alarm
             // that already rang rings again (bug audit 2026-09-26, #4).
             stream::save_resume_now(app);
+            // Widget and floating-face prefs are otherwise flushed only by
+            // the 3 s telemetry tick, so turning the face off (or dragging
+            // either one) right before Quit could be lost - the on-disk file
+            // still says what it said before (bug audit 2026-09-27,
+            // desktop-rust finding #6). Both flushes are cheap no-ops when
+            // nothing changed since the last tick.
+            app.state::<windows::WidgetState>().flush(app);
+            app.state::<windows::FloatingState>().flush(app);
             sidecar::stop_on_exit(app);
         }
 
@@ -1222,6 +1315,8 @@ pub fn run() {
         // taken out of the state by whichever call gets there first.
         tauri::RunEvent::Exit => {
             stream::save_resume_now(app);
+            app.state::<windows::WidgetState>().flush(app);
+            app.state::<windows::FloatingState>().flush(app);
             sidecar::stop_on_exit(app);
         }
 

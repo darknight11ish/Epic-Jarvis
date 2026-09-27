@@ -76,7 +76,11 @@ MESSAGE_UNSHOWN = MESSAGE.replace("{address} ", "")
 #: other cleartext host, and a network security config cannot list an
 #: address range. So the phone's sentence names only what it can reach -
 #: suggesting 192.168.x.x or a .local name there would send the owner to an
-#: address that fails. The first half is MESSAGE's, word for word.
+#: address that fails. The first half is MESSAGE's, word for word. An
+#: address this rule accepts but the phone cannot reach in plain http:// is
+#: refused by the phone itself, in a sentence of its own
+#: (jarvis-client's data/PhoneAddress.kt; docs/ARCHITECTURE.md section 2,
+#: "Which addresses the phone can use") - not by this table.
 PHONE_MESSAGE = ("Jarvis's address {address} is not on your own networks, so this app will not "
                  "send your pairing key there: on this phone, use your PC's Tailscale name "
                  "(ending in .ts.net) or its NordVPN Meshnet name (ending in .nord).")

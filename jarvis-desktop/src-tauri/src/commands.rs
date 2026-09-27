@@ -585,8 +585,13 @@ pub fn set_theme_follow_system(app: AppHandle, follow: bool) -> Result<ThemePref
 /// Opens the Faces window from a page. Settings has an "Open Faces" button
 /// because the face and the state colours - the part of the look shared
 /// with the phone - were reachable only from the tray menu before.
+///
+/// `async`, not a plain command: `show_faces` builds a window the first
+/// time it runs, and Tauri 2.11.5's own docs say that deadlocks on Windows
+/// inside a plain command, which runs on the WebView2 callback thread
+/// rather than off it (bug audit 2026-09-27, desktop-rust finding #3).
 #[tauri::command]
-pub fn open_faces(app: AppHandle) -> Result<(), String> {
+pub async fn open_faces(app: AppHandle) -> Result<(), String> {
     crate::windows::show_faces(&app)
 }
 
@@ -1743,7 +1748,7 @@ pub async fn stream_chat(
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
     // lands before this future is polled still wins the race.
     let outcome = tokio::select! {
-        result = pump_chat(base, headers, payload, &on_event) => result,
+        result = pump_chat(&app, base, headers, payload, &on_event) => result,
         _ = cancel.notified() => Ok(()),
     };
 
@@ -1774,17 +1779,38 @@ pub fn turn_id_from_route(header: &str) -> Option<String> {
 pub const ROUTE_LINE_PREFIX: &str = "\u{1f}jarvis-route:";
 
 /// The small JSON object for [`ROUTE_LINE_PREFIX`], from an `X-Jarvis-Route`
-/// header value: `lane`, `where`, `gate` and `second_card`, each only when it
-/// is a string.
+/// header value: `lane`, `where`, `gate`, `second_card`, `quick` and
+/// `open_settings`, each only when it is a string.
 ///
 /// `second_card` (second-card.patch) is there only on a turn the second
 /// graphics card answered, and says why: `"long_context"` or `"vision"`.
 /// `where` is still `"local"` then (it is this PC) and `lane` names the model
 /// really answering. main.js adds "on the second graphics card" to the model.
+///
+/// `quick` (answer-memory.js) and `open_settings` (main.js's
+/// `openSettingsFromRoute`) are read by the page itself, not by
+/// [`quick_intent_from_route`]'s own separate read of the raw header lower
+/// in this file - that one decides whether Rust brings the Jarvis bar
+/// forward; this is what tells the PAGE the same fact, and is a different
+/// reader of the same value, not a duplicate mechanism.
 pub fn route_line_from_header(header: &str) -> Option<String> {
     let route: serde_json::Value = serde_json::from_str(header).ok()?;
     let mut out = serde_json::Map::new();
-    for key in ["lane", "where", "gate", "second_card"] {
+    // `quick` (answer-memory.js's "answered on this PC without the AI
+    // model" line; pre-existing, since 2026-09-25) and `open_settings`
+    // (main.js's openSettingsFromRoute, 2026-09-27's "open <a settings
+    // section>" feature) are both read by the page from this same filtered
+    // line - bug audit 2026-09-27 found both silently dropped here, so
+    // neither ever reached the real app despite passing every test that
+    // hands the page a route line directly instead of through this filter.
+    for key in [
+        "lane",
+        "where",
+        "gate",
+        "second_card",
+        "quick",
+        "open_settings",
+    ] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(
                 key.to_string(),
@@ -1825,7 +1851,37 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
     if !ids.is_empty() {
         out.insert("memory_ids".to_string(), serde_json::json!(ids));
     }
+    // "Where this came from" (answer-sources.patch): the SAME id the
+    // right/wrong mark already uses (mark_answer, turn_id_from_route,
+    // above) - an id, never a word of what it names, so passing it on here
+    // is no different from passing on `lane` or `gate`. The quickbar asks
+    // for the sources only when the owner opens that list
+    // (brain/sources.rs), and Rust holds them back there too while the
+    // memory lists are hidden.
+    if let Some(id) = route.get("turn_id").and_then(|v| v.as_str()) {
+        if valid_turn_id(id) {
+            out.insert(
+                "turn_id".to_string(),
+                serde_json::Value::String(id.to_string()),
+            );
+        }
+    }
     (!out.is_empty()).then(|| serde_json::Value::Object(out).to_string())
+}
+
+/// `X-Jarvis-Route`'s `quick` field — the fast-path intent's own name
+/// (jarvis_quick.py `route_fields`), when this turn was answered without the
+/// model at all. `None` for a model answer, which carries no `quick` field.
+///
+/// The one caller today, in [`stream_chat`], checks this for `"open_chat"`
+/// (the floating face, 2026-09-27: "open a chat" and close phrasings) and
+/// brings the Jarvis bar forward — the same shape [`turn_id_from_route`] and
+/// [`route_line_from_header`] already use to read one field off this header,
+/// kept separate from both because this one is acted on in Rust, never sent
+/// to a page.
+pub fn quick_intent_from_route(header: &str) -> Option<String> {
+    let route: serde_json::Value = serde_json::from_str(header).ok()?;
+    route.get("quick")?.as_str().map(str::to_string)
 }
 
 /// The fact ids in `X-Jarvis-Route`'s `injected_ids`: each `"mem:<id>"`
@@ -1900,7 +1956,10 @@ pub(crate) fn valid_conversation_id(id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
-fn valid_turn_id(id: &str) -> bool {
+/// Also what [`crate::brain::sources::sources_query`] checks before putting
+/// one in a URL, and what [`route_line_from_header`] checks before passing
+/// `turn_id` on to a window that has no direct read of the response header.
+pub(crate) fn valid_turn_id(id: &str) -> bool {
     id.len() == 32
         && id
             .bytes()
@@ -1914,6 +1973,13 @@ fn valid_turn_id(id: &str) -> bool {
 /// changes memory; at most it raises one "stop using this fact?" card in the
 /// ordinary review queue, which still needs its own decision.
 ///
+/// `conversation_id` (added second-card-suggest.patch, 2026-09-27) is
+/// [`valid_conversation_id`]-checked and sent alongside the mark, purely so
+/// the backend can bump jarvis_second_card's per-conversation "correction"
+/// count on a real "wrong" - never written to feedback.db, and left out
+/// entirely for an invalid or missing id (an older window's still-valid
+/// call).
+///
 /// A backend without the patch answers 404 (no such route) or 503 (the
 /// module is missing); both come back as `{"available": false}` so the page
 /// can hide the control quietly rather than show an error.
@@ -1922,6 +1988,7 @@ pub async fn mark_answer(
     app: AppHandle,
     turn_id: String,
     mark: String,
+    conversation_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     if !valid_turn_id(&turn_id) {
         return Err("that answer has no valid id to mark".to_string());
@@ -1929,11 +1996,20 @@ pub async fn mark_answer(
     if !matches!(mark.as_str(), "right" | "wrong" | "none") {
         return Err(format!("`{mark}` is not a mark (right, wrong or none)"));
     }
+    let mut body = serde_json::Map::new();
+    body.insert("turn_id".into(), serde_json::json!(turn_id));
+    body.insert("mark".into(), serde_json::json!(mark));
+    if let Some(id) = conversation_id
+        .as_deref()
+        .filter(|id| valid_conversation_id(id))
+    {
+        body.insert("conversation_id".into(), serde_json::json!(id));
+    }
     let base = jarvis_base(&app);
     let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
         .post(format!("{base}/api/feedback/mark"))
         .headers(jarvis_headers(&app)?)
-        .json(&serde_json::json!({ "turn_id": turn_id, "mark": mark }))
+        .json(&serde_json::Value::Object(body))
         .send()
         .await
         .map_err(|e| {
@@ -1968,6 +2044,7 @@ pub fn cancel_chat(state: State<'_, ChatState>) {
 
 /// Drives one request to completion, forwarding whole lines as they arrive.
 async fn pump_chat(
+    app: &AppHandle,
     base: String,
     headers: reqwest::header::HeaderMap,
     payload: serde_json::Value,
@@ -2040,6 +2117,30 @@ async fn pump_chat(
         .and_then(turn_id_from_route)
     {
         let _ = on_event.send(format!("{TURN_LINE_PREFIX}{turn}"));
+    }
+
+    // "Open a chat" (the floating face, 2026-09-27): jarvis_quick.py answered
+    // this turn without the model, and its own intent name IS the signal -
+    // no new event kind, no page involved. Acted on here, in Rust, rather
+    // than passed to whichever window happens to be running this call: a
+    // voice turn heard while floating runs through main.js in the QUICKBAR
+    // page (it is only hidden, never destroyed - see `hide_quickbar`), so
+    // the window this brings forward is the very one already driving the
+    // call. `show_quickbar` goes through the app lock like every other way
+    // to it, so a locked PC still asks Windows Hello first.
+    if response
+        .headers()
+        .get("X-Jarvis-Route")
+        .and_then(|v| v.to_str().ok())
+        .and_then(quick_intent_from_route)
+        .as_deref()
+        == Some("open_chat")
+    {
+        if let Err(err) = crate::windows::show_quickbar(app) {
+            eprintln!("[jarvis] \"open a chat\": the Jarvis bar could not be shown: {err}");
+        } else {
+            crate::emit_quickbar(app, crate::events::FOCUS_INPUT, ());
+        }
     }
 
     // Lines are cut from raw bytes so a multi-byte character split across two
@@ -2949,6 +3050,46 @@ pub fn get_widget_prefs(app: AppHandle) -> windows::WidgetPrefs {
     app.state::<windows::WidgetState>().snapshot()
 }
 
+// ---------------------------------------------------------------------------
+// Floating face
+// ---------------------------------------------------------------------------
+
+/// Whether the floating face is on, and where it last sat. Settings'
+/// "Floating face" toggle reads this to paint itself correctly on load.
+#[tauri::command]
+pub fn get_floating(app: AppHandle) -> windows::FloatingPrefs {
+    app.state::<windows::FloatingState>().snapshot()
+}
+
+/// Turns the floating face on or off. Off by default, like every new surface
+/// in this app; on, it opens at once with no approval card — it changes
+/// nothing Jarvis does, asks or remembers, only how its own state is shown
+/// on screen, so `asks_first.rs`'s list of things that ask first does not
+/// apply here.
+///
+/// `async`, not a plain command: the first time it turns the face on,
+/// `show_floating` builds a window, and Tauri 2.11.5's own docs say that
+/// deadlocks on Windows inside a plain command, which runs on the WebView2
+/// callback thread rather than off it (bug audit 2026-09-27, desktop-rust
+/// finding #3).
+#[tauri::command]
+pub async fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String> {
+    if enabled {
+        windows::show_floating(&app)?;
+    } else if windows::floating_is_open(&app) {
+        // Already off is not an error: the checkbox and the tray's toggle
+        // can both reach this, and the second one to run must not fail
+        // just because the first already did the work.
+        windows::hide_floating(&app)?;
+    }
+    app.state::<windows::FloatingState>()
+        .update(|prefs| prefs.enabled = enabled);
+    // So Settings' own checkbox repaints if the tray or the hotkey changes
+    // this while the window is open (bug audit 2026-09-27, finding #5).
+    crate::emit_all(&app, crate::events::FLOATING_CHANGED, enabled);
+    Ok(enabled)
+}
+
 /// Whether App lock is on - all the widget needs to know to show an approval
 /// card's title only and turn its Approve into "Approve in the Jarvis bar"
 /// (apps security audit M3). A yes or no, nothing else from the settings.
@@ -3347,6 +3488,58 @@ pub async fn set_second_card(
         .post(format!("{base}{SECOND_CARD_PATH}"))
         .headers(jarvis_headers(&app)?)
         .json(&serde_json::json!({ "feature": feature, "enabled": enabled }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    second_card_change_answer(status, &body)
+}
+
+/// "When to suggest the bigger model"'s one write - spelled out as its own
+/// literal constant, not built from [`SECOND_CARD_PATH`] by concatenation,
+/// so `tools/check_parity.py` (which finds a route by its literal `/api/...`
+/// text in the source) sees it as the distinct route it is.
+pub(crate) const SECOND_CARD_SUGGEST_PATH: &str = "/api/second-card/suggest";
+
+/// One of the two "suggest the bigger model" signals: `struggle` or
+/// `correction`. Kept as its own check for the same reason
+/// [`second_card_feature`] is: the backend refuses anything else with its
+/// own sentence, this only keeps anything else from being sent at all.
+pub(crate) fn second_card_suggest_signal(signal: &str) -> Result<&str, String> {
+    match signal {
+        "struggle" | "correction" => Ok(signal),
+        _ => Err("That is not one of the two suggestion settings.".to_string()),
+    }
+}
+
+/// "When to suggest the bigger model" - one switch on or off: `POST
+/// /api/second-card/suggest {"signal", "enabled"}`.
+///
+/// NO approval card either way (jarvis_second_card.py's own docstring: this
+/// only changes whether Jarvis may OFFER "combined" on its own, never what
+/// it may do without a person's yes - the same reasoning [`set_manner`] and
+/// [`set_humor`] already use). Held on a stale link all the same (rule 4:
+/// nothing is sent while the link is stale). Settings window only, like
+/// [`get_second_card`]/[`set_second_card`].
+#[tauri::command]
+pub async fn set_second_card_suggest(
+    app: AppHandle,
+    signal: String,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    let signal = second_card_suggest_signal(&signal)?;
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be sent until it does."
+                .to_string(),
+        );
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{SECOND_CARD_SUGGEST_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "signal": signal, "enabled": enabled }))
         .send()
         .await
         .map_err(|e| second_card_unreachable(&e, &base))?;
@@ -4835,6 +5028,17 @@ pub fn write_clipboard(app: AppHandle, text: String) -> Result<(), String> {
     app.clipboard()
         .write_text(text)
         .map_err(|e| format!("unable to write to the clipboard: {e}"))
+}
+
+/// "Private copy" (feasibility I114): the same copy as [`write_clipboard`],
+/// except the clip is also marked out of Windows Clipboard History and
+/// Cloud Clipboard sync - see `clipboard_privacy.rs` for how and why. The
+/// Jarvis bar's Copy button calls this one, never `write_clipboard`, for an
+/// answer; `write_clipboard` stays as it was for anything that is not an
+/// answer (nothing else calls it today).
+#[tauri::command]
+pub fn write_clipboard_private(text: String) -> Result<(), String> {
+    crate::clipboard_privacy::write_private(&text)
 }
 
 /// Reads text from the Windows clipboard.

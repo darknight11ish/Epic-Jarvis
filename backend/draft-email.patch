@@ -1,0 +1,61 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1589,6 +1589,25 @@
+                 # The exception's NAME only: its message could quote a setting.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+
++        if path == "/api/email/drafting":
++            # draft-email.patch - saving an email draft (jarvis_email_draft.py,
++            # the owner's decision of 2026-09-27): whether it is set up, from
++            # which address and through which server, and the one line both
++            # apps' Settings show. Whether a password is set - yes or no,
++            # never the password. Reads the settings only; saves nothing and
++            # connects to nothing.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_email_draft
++                code, out = jarvis_email_draft.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote a setting.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+         if path == "/api/reach":
+             # reach.patch - "What Jarvis can reach" (jarvis_reach.py; the Muse
+             # audit, 2026-09-25): every way Jarvis can reach something outside
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -148,6 +148,7 @@
+     "search_the_web",         # jarvis_agent.py: this card asks about ONE search's words (web-search.patch)
+     "stop_asking_before_every_web_search",    # jarvis_search.py acts only on tier "ask" (web-search.patch)
+     "send_email",             # jarvis_agent.py / jarvis_email_send.py: ONE card per email, sent only on tier "ask" (email-send.patch)
++    "draft_email",            # jarvis_agent.py / jarvis_email_draft.py: ONE card per draft, saved only on tier "ask" (draft-email.patch)
+     "write_notes_after_outside_text",  # jarvis_agent.py: a note after outside text asks every time
+     "power_manage",           # shipped "auto": a card means the owner chose "ask"
+     "append_obsidian_daily",  # shipped "auto": the same
+@@ -660,6 +661,12 @@
+     # on the card, never here: this line is what a lock screen may show.
+     # It leaves the machine and cannot be taken back, so the notice is heavy.
+     "send_email": ("no", "outbound", "sends the email shown on the card from your own account, to exactly the people it lists; once sent it cannot be taken back"),
++    # draft-email.patch (jarvis_email_draft.py, jarvis_agent.py; the owner's
++    # decision of 2026-09-27). ONE draft, saved to the owner's own Drafts
++    # folder by IMAP APPEND only - never sent, and the owner can change or
++    # delete it themselves afterward, so it is reversible; it still leaves
++    # the machine, to the owner's own mail server, so the notice is heavy.
++    "draft_email": ("yes", "outbound", "saves the draft shown on the card to your own Drafts folder; nothing is sent, and you can change or delete the draft yourself afterward"),
+     # schedule.patch (jarvis_schedule.py). Setting up something that repeats
+     # (a morning briefing or a "tell me when" - since 2026-09-26 a plain
+     # repeating reminder, alarm or standby schedule has no card, asks-first.
+@@ -713,6 +720,9 @@
+     # email-send.patch: jarvis_agent.py's send_email tool, under the action
+     # name jarvis-framework.toml gives a tier ("ask", and it must stay so).
+     "send_email": "send_email",
++    # draft-email.patch: jarvis_agent.py's draft_email tool, under the action
++    # name jarvis-framework.toml gives a tier ("ask", and it must stay so).
++    "draft_email": "draft_email",
+     # model steward: looking is free, downloading and switching are not, and
+     # they are separate decisions. Reverting is the one that must never wait.
+     "model_list": "auto", "model_recommend": "auto",

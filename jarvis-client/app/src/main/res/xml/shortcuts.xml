@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  App-icon shortcuts (feasibility I125, docs/FEASIBILITY-AUDIT-2026-09-26.md:
+  "Long-press shortcuts on the phone's app icon. Talk, Note, Brief me, What
+  did I miss; still meets App lock. No shortcuts.xml exists today.").
+
+  STATIC shortcuts (declared here, not android.content.pm.ShortcutManager),
+  because all four are fixed, always-available actions - never per-owner
+  data, so there is nothing dynamic to register or update at runtime.
+
+  Every one of the four reuses an action MainActivity.kt already handles for
+  something else (the home-screen widget's own Talk and Note buttons; the
+  briefing notification's own "open the briefing" tap) - see each shortcut's
+  own comment below for which. No new navigation or fetch logic exists
+  anywhere because of this file: it is a second way to reach an action that
+  was already one tap away, never a new one.
+
+  App lock: unaffected by any of this. android:targetClass below always
+  launches MainActivity, and MainActivity.kt's own "the app lock outranks
+  everything - nothing behind it is composed" runs before any of these
+  actions are acted on, exactly as it already does for the widget's Talk/
+  Note buttons and the briefing notification tap.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Same action the home-screen widget's own "Talk" button fires
+         (widget/QuickLinkWidget.kt's startVoice) - opens Home with the
+         push-to-talk button ready under the thumb. Does NOT start a
+         capture by itself; see MainActivity.kt's own readVoiceIntent. -->
+    <shortcut
+        android:shortcutId="talk"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_talk_short"
+        android:shortcutLongLabel="@string/shortcut_talk_long">
+        <intent
+            android:action="com.jarvis.client.action.START_VOICE"
+            android:targetPackage="com.jarvis.client"
+            android:targetClass="com.jarvis.client.MainActivity" />
+    </shortcut>
+
+    <!-- Same action the home-screen widget's own "Note" button fires
+         (widget/QuickLinkWidget.kt's quickNote) - opens Home with the
+         quick-note field open. -->
+    <shortcut
+        android:shortcutId="note"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_note_short"
+        android:shortcutLongLabel="@string/shortcut_note_long">
+        <intent
+            android:action="com.jarvis.client.action.QUICK_NOTE"
+            android:targetPackage="com.jarvis.client"
+            android:targetClass="com.jarvis.client.MainActivity" />
+    </shortcut>
+
+    <!-- Same action the morning-briefing notification's own tap fires
+         (MainActivity.kt's readBriefingIntent) - opens Brain, where the
+         latest briefing and its own "Brief me now" / "What did I miss?"
+         buttons live side by side (BriefingPlate.kt). -->
+    <shortcut
+        android:shortcutId="brief_me"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_brief_short"
+        android:shortcutLongLabel="@string/shortcut_brief_long">
+        <intent
+            android:action="com.jarvis.client.action.OPEN_BRIEFING"
+            android:targetPackage="com.jarvis.client"
+            android:targetClass="com.jarvis.client.MainActivity" />
+    </shortcut>
+
+    <!-- The SAME destination as "brief_me" above, on purpose - see
+         BriefingPlate.kt's own doc comment: "Brief me now" and "What did I
+         miss?" are already two buttons on one shared section, not two
+         screens, so there is nowhere else for this one to open TO. Kept as
+         its own shortcut (rather than folded into "brief_me") because the
+         idea names it separately, and because seeing "What did I miss?" in
+         the long-press menu tells an owner that question exists at all,
+         without first opening the app to find the button. -->
+    <shortcut
+        android:shortcutId="what_did_i_miss"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_missed_short"
+        android:shortcutLongLabel="@string/shortcut_missed_long">
+        <intent
+            android:action="com.jarvis.client.action.OPEN_BRIEFING"
+            android:targetPackage="com.jarvis.client"
+            android:targetClass="com.jarvis.client.MainActivity" />
+    </shortcut>
+
+</shortcuts>

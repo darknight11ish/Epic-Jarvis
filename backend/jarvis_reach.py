@@ -20,7 +20,12 @@ is built here from the same settings the rest of Jarvis reads:
     ever runs on a person's yes (NEEDS_A_PERSON) say "every time" whatever
     the tier;
   * which accounts are set up: the same environment variables each module
-    reads (JARVIS_IMAP_HOST, JARVIS_CALDAV_URL, JARVIS_HOME_URL, ...);
+    reads (JARVIS_IMAP_HOST, JARVIS_CALDAV_URL, JARVIS_HOME_URL, ...) - for
+    the IMAP username and password, the private calendar link, and the Home
+    Assistant token, `_env` asks the module that owns each one
+    (`jarvis_email.imap_user()`, ...), so a value saved in Windows
+    Credential Manager instead of typed as an environment variable
+    (ease-of-use audit row 15) shows here too;
   * web search: jarvis_search.settings() and whether a key is SAVED;
   * the cloud lanes: the chat route's own `_lane_names()` when this runs
     inside the server, else the same file it reads (litellm-proxy.yaml);
@@ -95,6 +100,7 @@ TOOL_NAMES = {
     "github_search": "GitHub research",
     "web_search": "Web search",
     "send_email": "Send an email (one card each)",
+    "draft_email": "Save an email draft (one card each)",
     "calendar_read": "Reading your calendar",
     "email_check": "Reading your email",
     "notes_search": "Searching your notes",
@@ -132,7 +138,7 @@ _FALLBACK_ACTIONS = {
 #: Tools jarvis_agent.py runs only on a person's yes, if it cannot be read.
 _NEEDS_A_PERSON = frozenset({"github_search", "browser_control", "control_computer",
                              "control_phone", "shell_exec", "home_control",
-                             "send_email"})
+                             "send_email", "draft_email"})
 _NOTE_WRITES = frozenset({"append_logseq_journal", "append_obsidian_daily",
                           "create_joplin_note"})
 
@@ -166,7 +172,28 @@ def _tier(action: str) -> str:
         return "ask"
 
 
+#: Four of "which accounts are set up"'s environment variables can also live
+#: in Windows Credential Manager instead (ease-of-use audit row 15) -
+#: `_env`'s default reads each through the module that actually owns it
+#: (`imap_user`/`imap_password`/`_feed_url`/`_token`, all of which already
+#: check the environment variable first) rather than a second copy of
+#: `jarvis_token_store.resolve_secret`'s own order, so this can never drift
+#: from what a real read actually does. A test's own `env=` callable (most
+#: of test_reach.py's) replaces this whole function and is unaffected.
 def _env(name: str) -> str:
+    try:
+        if name in ("JARVIS_IMAP_USER", "JARVIS_IMAP_PASSWORD"):
+            import jarvis_email as _E
+            return str((_E.imap_user() if name == "JARVIS_IMAP_USER" else _E.imap_password())
+                       or "").strip()
+        if name == "JARVIS_CALENDAR_ICS_SECRET_URL":
+            import jarvis_calendar as _C
+            return str(_C._feed_url() or "").strip()
+        if name == "JARVIS_HOME_TOKEN":
+            import jarvis_home as _H
+            return str(_H._token() or "").strip()
+    except Exception:
+        pass
     return str(os.environ.get(name, "") or "").strip()
 
 
@@ -344,13 +371,34 @@ def _tool_row(id_: str, name: str, tool: str, ctx: Ctx, *, configured: bool,
     return _row(id_, name, "off", "", ASK_NA, off_line)
 
 
+def _tool_switchable(tool: str) -> bool:
+    """Can this tool be offered to the model from an app at all - the owner's
+    answer of 2026-09-27 ("Reading tools ... can be switched on from the PC
+    app") - or is it file-only, like every other tool?"""
+    try:
+        import jarvis_asks_first
+        return tool in jarvis_asks_first.TOOLS_SWITCHABLE
+    except Exception:
+        return False
+
+
 def _enable_line(tool: str) -> str:
+    if _tool_switchable(tool):
+        return (f"Set up on this PC, but the AI model is not offered it yet: switch it on in "
+                f"Settings, \"What asks first\" (one approval card and Windows Hello), or add "
+                f"\"{tool}\" to [tools].enabled in jarvis-framework.toml by hand.")
     return (f"Set up on this PC, but the AI model is not offered it: \"{tool}\" is not in "
-            f"[tools].enabled in jarvis-framework.toml.")
+            f"[tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be "
+            f"switched on from either app.")
 
 
 def _off_line(tool: str) -> str:
-    return f"Off: \"{tool}\" is not in [tools].enabled in jarvis-framework.toml."
+    if _tool_switchable(tool):
+        return (f"Off: switch it on in Settings, \"What asks first\" (one approval card and "
+                f"Windows Hello), or add \"{tool}\" to [tools].enabled in jarvis-framework.toml "
+                f"by hand.")
+    return (f"Off: \"{tool}\" is not in [tools].enabled in jarvis-framework.toml. This one is "
+            f"file-only - it cannot be switched on from either app.")
 
 
 def _join(items: list) -> str:

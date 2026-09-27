@@ -154,6 +154,57 @@ def t_the_hud_call_shape_still_works():
     check("and None for an ordinary one", RT._PRIVATE.search("how do rivers work") is None)
 
 
+def t_distress_and_crisis_words_stay_local():
+    """Cutting-edge round 4, "Keep distress off the cloud offer" (CLAUDE.md,
+    2026-09-27): the router's private-word backstop had `diagnos`,
+    `prescription`, `medical` but nothing for mood, mental health or
+    self-harm, so a long distress message could reach gate 6's "ask a cloud
+    model?" offer - the wrong moment to ask, and health is private under
+    rule 1. Checks both halves of the fix: the explicit words the owner
+    named, and jarvis_wellbeing.CRISIS_PHRASES_EN reused rather than
+    duplicated."""
+    for q in ("I've been feeling really depressed lately",
+              "my anxiety has been so bad this week",
+              "I had a panic attack this morning",
+              "my therapist thinks I should try something else",
+              "I've been having thoughts of self-harm",
+              "I keep thinking about suicide"):
+        check(f"{q!r} is private (the explicit mood/mental-health words)", RT.is_private(q))
+        d = RT.choose(q + PAD, local_model="local", lanes=LANES,
+                     budget=RT.Budget(path=None), owner_said_yes=True)
+        check(f"... and a long {q!r} stays on the local model", d.lane == "local"
+              and d.gate == "private", repr(d))
+    # jarvis_wellbeing.CRISIS_PHRASES_EN, reused: every phrase that module
+    # answers crisis()=True for is also private here, so the SAME message
+    # that gets the crisis help line never also reaches the cloud offer.
+    try:
+        import jarvis_wellbeing as WB
+        skip = False
+    except Exception:
+        skip = True
+    if skip:
+        return check("SKIP - jarvis_wellbeing.py is not importable here", True)
+    for q in ("I want to kill myself", "I want to end my life", "I just want to die",
+              "there is no reason to live anymore", "everyone would be better off "
+              "without me", "she took her own life"):
+        check(f"CRISIS_PHRASES_EN case {q!r} is private too", RT.is_private(q))
+    # CONTROL: jarvis_wellbeing's own false alarms - an everyday idiom that
+    # shares a word with a crisis phrase - must not be swept in by the new
+    # CRISIS_PHRASES_EN patterns, which (unlike the router's own bare
+    # `\bsuicid\w*\b`/`\bself[- ]harm\w*\b`, added deliberately broad) are
+    # the SAME precise phrase-shapes jarvis_wellbeing.crisis() uses.
+    for q in ("this bug is killing me", "kill the process", "dead tired after "
+              "that run", "sudden death overtime in the game last night"):
+        check(f"CONTROL: {q!r} is not private", not RT.is_private(q), repr(RT._PRIVATE.search(q)))
+    # NOT a control: "Suicide Squad" (a jarvis_wellbeing false alarm, so the
+    # CRISIS_PHRASES_EN reuse above does not catch it) IS swept in by the
+    # router's own bare `\bsuicid\w*\b`, added deliberately broad - the
+    # owner's own words for this list ("Broad on purpose - a false match
+    # only keeps a question local, which is the safe direction to err in").
+    check("'have you watched Suicide Squad' is private too (the router's "
+          "own broad word, not a crisis phrase)", RT.is_private("have you watched Suicide Squad"))
+
+
 def t_an_ollama_cloud_model_is_never_local():
     """Ollama runs "-cloud" models through 127.0.0.1 but answers on
     ollama.com. Set as the "local" model, memory used to be injected into
@@ -177,6 +228,7 @@ if __name__ == "__main__":
                t_the_note_stores_without_their_app_names,
                t_a_word_added_to_the_config_takes_effect,
                t_the_hud_call_shape_still_works,
+               t_distress_and_crisis_words_stay_local,
                t_an_ollama_cloud_model_is_never_local):
         print(f"\n--- {fn.__name__} ---")
         try:

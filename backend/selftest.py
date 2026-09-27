@@ -1131,6 +1131,39 @@ def pf_model(live: Live) -> list:
     else:
         rows.append((FAIL, f"{model} gave an answer Jarvis could not read",
                      "Restart Ollama and run this again."))
+    # Is jarvis-primary running TODAY's rules? (I134, 2026-09-27.) keep_rules_first
+    # (jarvis_agent.py) adds LANE_SYSTEM only when something else would come first
+    # in the request - on most turns Ollama answers from the copy baked into the
+    # model itself by `ollama create`. A stale model would then mix an old rules
+    # block (missing the character paragraph, or an earlier wording) with the new
+    # one, on exactly the turns keep_rules_first does not fire. This is a read
+    # (POST /api/show, never /api/generate or /api/chat), so it is checked here,
+    # in the same step that already talks to this one model - not inside
+    # doctor()'s own three read-only calls, which test_selftest_doctor.py holds to
+    # /api/version, /api/tags and /api/ps only.
+    if model and model.split(":")[0] == "jarvis-primary" and _is_loopback(base):
+        try:
+            import jarvis_agent as AG
+            show_post = live.ollama_post
+            body = {"model": model}
+            if show_post is not None:
+                show = show_post(f"{base}/api/show", body)
+            else:
+                req = urllib.request.Request(
+                    f"{base}/api/show", method="POST",
+                    data=json.dumps(body).encode("utf-8"),
+                    headers={"Content-Type": "application/json"})
+                with _no_proxy_open(req, 15) as r:
+                    show = json.loads(r.read().decode("utf-8", "replace"))
+            stored = str((show or {}).get("system") or "") if isinstance(show, dict) else ""
+            if stored and stored != AG.LANE_SYSTEM:
+                rows.append((WARN, f"{model} is running an older copy of Jarvis's rules",
+                             "The rules baked into this model (its SYSTEM block) do not "
+                             "match jarvis-primary.Modelfile any more - probably the "
+                             "character block, or a later wording. Re-run: ollama create "
+                             "jarvis-primary -f backend\\jarvis-primary.Modelfile"))
+        except Exception:
+            pass  # best-effort only: never fail the preflight over this
     return rows
 
 
@@ -1787,6 +1820,38 @@ def pf_sleep(live: Live) -> list:
              "nothing goes off, and the phone cannot reach Jarvis. To keep it awake while "
              "plugged in (the screen can still turn off), run this one line in PowerShell: "
              "powercfg /change standby-timeout-ac 0")]
+
+
+@preflight_check("data_health", "Is Jarvis's own data healthy?")
+def pf_data_health(live: Live) -> list:
+    """data-health.patch and jarvis_data_health.py (feasibility I97): does
+    the chat history database open, does the memory database open, is
+    there room on the disk Jarvis writes its data to, and do the settings
+    files parse. Read-only, and the guardrail runs twice - this function
+    only ever turns the route's own "ok"/"warn" rows into PASS/WARN, never
+    FAIL, matching jarvis_data_health.py's own "WARN, never fix"."""
+    if not live.up:
+        return _needs_backend(live, "data health")
+    try:
+        code, body, _r, _h = live.get("/api/data-health")
+    except Exception as exc:
+        return [(WARN, "/api/data-health did not answer", type(exc).__name__)]
+    if code == 404:
+        return [(WARN, "the data health check is not on",
+                 "Run apply-patches.ps1 (data-health.patch and "
+                 "jarvis_data_health.py), then restart Jarvis.")]
+    if code != 200 or not isinstance(body, dict):
+        return [(WARN, f"/api/data-health answered {code}", "")]
+    checks = body.get("checks") if isinstance(body.get("checks"), list) else []
+    if not checks:
+        return [(WARN, "/api/data-health answered with nothing to show", "")]
+    rows = []
+    for c in checks:
+        if not isinstance(c, dict):
+            continue
+        status = WARN if c.get("status") == "warn" else PASS
+        rows.append((status, str(c.get("what") or ""), str(c.get("detail") or "")))
+    return rows
 
 
 @preflight_check("credentials", "Is Windows Credential Manager reachable?")

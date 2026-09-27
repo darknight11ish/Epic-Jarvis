@@ -1045,6 +1045,17 @@ def t_the_patch():
           not re.search(r'enabled\s*=\s*\[[^\]]*"send_email"', toml))
 
 
+def t_both_apps_read_the_current_contract():
+    # The same shape as test_asks_first.py's. Nothing ran this producer's
+    # --check automatically, so the fixture went stale once already
+    # (c92f90ed; quality audit 2026-09-27).
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_email_sending_cases.py"),
+                        "--check"], capture_output=True, text=True, timeout=120,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    check("email-sending-cases.json (desktop and phone) is what the backend says today "
+          "(python3 tools/gen_email_sending_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+
+
 if __name__ == "__main__":
     saved_env = {n: os.environ.get(n) for n in ENV_NAMES}
     try:
@@ -1058,7 +1069,8 @@ if __name__ == "__main__":
                    t_the_card_says_when_outside_text_shaped_it,
                    t_rule_1_only_the_model_on_this_pc_writes_an_email,
                    t_the_password_goes_only_to_the_mail_server,
-                   t_the_settings_line, t_the_patch):
+                   t_the_settings_line, t_the_patch,
+                   t_both_apps_read_the_current_contract):
             print(f"\n--- {fn.__name__} ---")
             try:
                 fn()

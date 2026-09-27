@@ -1,0 +1,32 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2171,12 +2171,29 @@
+                 out = jarvis_feedback.mark(body.get("turn_id"), body.get("mark"))
+             except Exception as exc:
+                 return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
+             code = int(out.pop("status", 200))
+             if not out.get("ok"):
+                 return self._send(code, {"error": out.get("reason", "refused")})
++            # second-card-suggest.patch: an optional conversation id, used
++            # only to bump jarvis_second_card's per-conversation, in-memory
++            # "correction" count (jarvis_agent.note_correction) - never
++            # written to feedback.db, which deliberately keeps no
++            # conversation id at all (jarvis_feedback.py's own docstring).
++            # Only a mark that actually CHANGED to "wrong" counts (clicking
++            # an already-wrong mark again must not inflate the count). An
++            # older client that omits conversation_id works exactly as
++            # before.
++            cid = body.get("conversation_id")
++            if out.get("mark") == "wrong" and out.get("changed") \
++                    and isinstance(cid, str) and cid:
++                try:
++                    import jarvis_agent
++                    jarvis_agent.note_correction(cid)
++                except Exception:
++                    pass
+             return self._send(code, out)
+
+         if route in ("/api/task/pause", "/api/task/resume", "/api/task/stop",
+                      "/api/task/note") or (route.startswith("/api/pending/")
+                                            and route.endswith("/amend")):
+             # task-control.patch - Pause, Resume, Stop and a note for what

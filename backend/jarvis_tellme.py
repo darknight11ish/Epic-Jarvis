@@ -71,6 +71,23 @@ tells when the state CHANGES to one the owner asked for (off, open, ...):
 a washing machine already off when the watch starts is not "finished".
 "unavailable" and "unknown" (Home Assistant restarting) are skipped.
 
+"TELL ME WHEN THIS PAGE CHANGES" (I67, 2026-09-27, CLAUDE.md's decision of
+2026-09-27: "one card per address the owner adds, read-only, never follows
+links elsewhere, never acts on what it reads") - a third source, "page":
+one plain GET of one address the owner typed (no account to sign in to, so
+no readiness "is it set up?" - only the tier), never a redirect anywhere
+the check below would refuse. The changedetection.io pattern: only a SHA-256
+fingerprint of the page's bytes is kept (reusing the same `last_state`
+column Home Assistant's state uses - it is a hash there too, just of a
+device's state word instead of a page's bytes), never the page's actual
+text - a match is "the fingerprint changed", never a diff or a quote. Every
+address is refused if it resolves - by a REAL DNS lookup, not spelling - to
+this PC or a private network address (`jarvis_local_http.private_fetch_problem`),
+checked again immediately before every look, not only when the address is
+added: a name's DNS answer can change (DNS rebinding), and a page's own
+redirect could otherwise point back at the home network after the check
+already passed once.
+
 THE GATE, EVERY LOOK
 Each look asks jarvis_gate first, like the morning briefing's reads:
 email_read or home_read, and it runs only when that says yes without a
@@ -151,6 +168,8 @@ import re
 import socket
 import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -177,12 +196,22 @@ LOCK_SCREEN = "Jarvis: something you asked to be told about happened."
 EMAIL_MINUTES = 5
 HOME_MINUTES = 1
 MAX_MINUTES = 60
+#: "Tell me when this page changes" (I67, 2026-09-27): a page on someone
+#: else's server, not the owner's own account - looked at less often than
+#: email or Home Assistant on purpose (it is a third party's server, not
+#: the owner's own), and its ceiling is its own: once a day is a fine
+#: floor for "let me know when the price drops", so PAGE_MAX_MINUTES is not
+#: MAX_MINUTES above, which is the email/home ceiling only.
+PAGE_MINUTES = 30
+PAGE_MAX_MINUTES = 24 * 60
 DEFAULT_DAYS = 30
 MAX_DAYS = 90
 #: At most this many at once, and this many that read email (each is one
 #: sign-in to the mail server every EMAIL_MINUTES).
 MAX_WATCHES = 10
 MAX_EMAIL_WATCHES = 5
+#: Each is one GET to someone else's server every PAGE_MINUTES at least.
+MAX_PAGE_WATCHES = 5
 #: New messages whose From line one look reads, at most.
 MAX_NEW = 50
 MAX_NAME = 60
@@ -207,9 +236,18 @@ EMAIL_ACTION = "email_read"
 EMAIL_TOOL = "email_check"
 HOME_ACTION = "home_read"
 HOME_TOOL = "home_read"
+#: "Tell me when this page changes" (I67) - a plain GET of one address the
+#: owner typed, gated like any other read; unlike email/home there is no
+#: account to set up first, so no PAGE_TOOL: readiness() only checks the tier.
+PAGE_ACTION = "page_read"
 
 #: The one FETCH item a look asks for (jarvis_email.SENDER_FETCH's shape).
 SENDER_FETCH = "(BODY.PEEK[HEADER.FIELDS (FROM)])"
+#: A page watch's own limits: how much of the page is read, and how long
+#: Jarvis waits for it to answer.
+PAGE_MAX_BYTES = 2 * 1024 * 1024
+PAGE_TIMEOUT = 15.0
+PAGE_MAX_URL = 500
 
 #: What the owner may say a device does, and the Home Assistant states that
 #: count as it. The card lists the states in full.
@@ -290,6 +328,10 @@ class Deps:
     idle_connect: Optional[Callable] = None
     #: Is Jarvis on standby? (jarvis_power)
     standby: Optional[Callable[[], bool]] = None
+    #: (url) -> a hex fingerprint of the page's text right now, or raises.
+    #: None: the real one (_default_page_fetch) - one GET, no proxy, capped,
+    #: hashed; a test never opens a real socket.
+    page_fetch: Optional[Callable[[str], str]] = None
 
 
 DEPS = Deps()
@@ -333,7 +375,14 @@ def readiness(source: str, deps: Optional[Deps] = None) -> str:
             return bad
         return _tier_words(deps.tier_of(HOME_ACTION), "Home Assistant", "every minute",
                            "a device")
-    return "Jarvis can watch for an email from someone, or a Home Assistant device."
+    if source == "page":
+        # No account to set up first - any address the owner names is
+        # "ready" - but the tier must still be "auto", exactly like email
+        # and home, or a look every 30 minutes would mean a card every 30
+        # minutes.
+        return _tier_words(deps.tier_of(PAGE_ACTION), "a web page", "every 30 minutes",
+                           "a web page")
+    return "Jarvis can watch for an email from someone, a Home Assistant device, or a web page."
 
 
 def _tier_words(tier: str, what: str, often: str, watched: str) -> str:
@@ -411,7 +460,19 @@ def check_watch(w) -> dict:
             name = ""
         return {"source": "home", "entity": entity, "name": name, "say": say,
                 "states": want, "urgent": urgent, "once": once}
-    raise ValueError("Jarvis can watch for an email from someone, or a Home Assistant device")
+    if source == "page":
+        url = str(w.get("url") or "").strip()
+        if not url or len(url) > PAGE_MAX_URL:
+            raise ValueError("a page to watch is a web address starting with http:// or "
+                             "https://")
+        if not re.match(r"^https?://", url, re.IGNORECASE):
+            raise ValueError("a page to watch is a web address starting with http:// or "
+                             "https://")
+        if any(ord(ch) < 0x20 for ch in url):
+            raise ValueError("that is not a web address")
+        return {"source": "page", "url": url, "urgent": urgent, "once": once}
+    raise ValueError("Jarvis can watch for an email from someone, a Home Assistant device, or "
+                     "a web page")
 
 
 def check_rule(rule, now: float) -> dict:
@@ -421,15 +482,20 @@ def check_rule(rule, now: float) -> dict:
     if not isinstance(rule, dict):
         raise ValueError("a \"tell me when\" needs what to watch")
     watch = check_watch(rule.get("watch"))
-    floor = EMAIL_MINUTES if watch["source"] == "email" else HOME_MINUTES
+    if watch["source"] == "email":
+        floor, ceiling = EMAIL_MINUTES, MAX_MINUTES
+    elif watch["source"] == "page":
+        floor, ceiling = PAGE_MINUTES, PAGE_MAX_MINUTES
+    else:
+        floor, ceiling = HOME_MINUTES, MAX_MINUTES
     n = rule.get("minutes", floor)
     if not isinstance(n, int) or isinstance(n, bool):
         raise ValueError("how often is a whole number of minutes")
     if n < floor:
         raise ValueError(f"the most often it can look is every {floor} minute"
                          + ("s" if floor != 1 else ""))
-    if n > MAX_MINUTES:
-        raise ValueError(f"the least often it can look is every {MAX_MINUTES} minutes")
+    if n > ceiling:
+        raise ValueError(f"the least often it can look is every {ceiling} minutes")
     start = rule.get("start")
     if not isinstance(start, (int, float)) or isinstance(start, bool):
         start = now
@@ -473,6 +539,8 @@ def what_words(watch: dict) -> str:
         if watch.get("missing"):
             return f"no email from {watch['sender']} by {S.long_date(float(watch['by']))}"
         return f"an email from {watch['sender']} arrives"
+    if watch.get("source") == "page":
+        return f"{watch['url']} changes"
     subject = f"the {watch['name']}" if watch.get("name") else watch.get("entity", "")
     return f"{subject} {watch.get('say') or 'changes'}"
 
@@ -486,6 +554,8 @@ def alert_words(watch: dict, count: int = 1) -> str:
         if count > 1:
             return f"{count} emails from {watch['sender']} arrived."
         return f"An email from {watch['sender']} arrived."
+    if watch.get("source") == "page":
+        return f"The page you're watching changed: {watch['url']}"
     subject = f"The {watch['name']}" if watch.get("name") else watch.get("entity", "")
     say = watch.get("say") or ""
     if say in PAST:
@@ -547,6 +617,17 @@ def card(rule: dict, text: str, now: float) -> str:
             f"It matches when the sender's name or address has \"{w['sender']}\" in it, as "
             "whole words. Your words stay on this PC: they are not sent to the mail server.",
         ]
+    elif w["source"] == "page":
+        lines += [
+            f"Watching for: {w['url']} - when its text changes.",
+            f"How: {every}, Jarvis fetches that address (a plain GET, never a link on the "
+            "page - it never follows anything else there) and compares a short fingerprint "
+            "of its text to the one from the look before. The page's actual words are never "
+            "shown, kept, or sent to the AI model - only whether the fingerprint changed.",
+            "Refused if that address turns out to lead to this PC or a private network "
+            "address, checked again on every look (never only when you add it), so a web "
+            "address can never become a way to reach your own network.",
+        ]
     else:
         try:
             import jarvis_home as HOME
@@ -578,10 +659,12 @@ def card(rule: dict, text: str, now: float) -> str:
         "acts, and never opens or reads out the email or anything else.",
         f"A locked phone shows only: \"{LOCK_SCREEN}\"",
         "",
-        "It runs on this PC, by this PC's clock. Each look is a request to your own "
-        + ("mail server" if w["source"] == "email" else "Home Assistant")
-        + ", under the same settings as asking Jarvis to read it; the notification goes only "
-          "to your own apps. Nothing else is sent anywhere.",
+        "It runs on this PC, by this PC's clock. Each look is a request to "
+        + {"email": "your own mail server", "home": "your own Home Assistant",
+           "page": "that one address on the internet"}[w["source"]]
+        + (", under the same settings as asking Jarvis to read it" if w["source"] != "page"
+           else "") + "; the notification goes only to your own apps. Nothing else is sent "
+          "anywhere.",
         "Stopping or deleting it is immediate, from either app.",
         "",
         "If you say no: nothing is set up, and nothing is watched.",
@@ -740,11 +823,12 @@ def _resp(conn, code: str) -> Optional[int]:
 def _default_email_look(p, base_uid: Optional[int], uidvalidity: Optional[int]) -> dict:
     """ONE connection, read-only. The first look (no base) only notes where
     the mailbox is; later looks read the From line of mail that arrived
-    since. Credentials read fresh from the environment, never kept."""
+    since. Credentials read fresh - the environment, or (ease-of-use audit
+    row 15) Windows Credential Manager - never kept."""
     import imaplib
     import jarvis_email as MAIL
-    user = os.environ.get("JARVIS_IMAP_USER", "")
-    password = os.environ.get("JARVIS_IMAP_PASSWORD", "")
+    user = MAIL.imap_user()
+    password = MAIL.imap_password()
     # The certificate is checked (jarvis_email.tls_context): imaplib alone
     # would hand the password to whoever answered.
     conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=20.0, ssl_context=MAIL.tls_context(p.host))
@@ -840,6 +924,68 @@ def _look_home(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
     return (1 if (raw in wanted and before not in wanted) else 0), ""
 
 
+class _PageRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuses to follow a redirect anywhere the private-address check would
+    refuse in the first place (a page could otherwise send Jarvis on to an
+    address on the home network after the check already passed)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        import jarvis_local_http as LH
+        problem = LH.private_fetch_problem(newurl)
+        if problem:
+            raise urllib.error.HTTPError(
+                req.full_url, code,
+                f"refused to follow a redirect to {newurl}: {problem}", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _default_page_fetch(url: str) -> str:
+    """ONE GET, through jarvis_local_http.public_urlopen (never a proxy, and
+    the private-address check made again on the connection itself), a
+    redirect followed only where the check above would allow it,
+    the body capped at PAGE_MAX_BYTES and hashed. Returns a hex digest of
+    the bytes read; the bytes themselves are never kept or returned."""
+    import hashlib
+    import jarvis_local_http as LH
+    req = urllib.request.Request(url, headers={"User-Agent": "Jarvis (tell me when this page "
+                                                              "changes)"})
+    # public_urlopen: the private-address check is made again on the
+    # connection itself (DNS rebinding between _look_page's check and this
+    # connect - the security/privacy audit of 2026-09-27).
+    with LH.public_urlopen(req, PAGE_TIMEOUT, _PageRedirect()) as resp:
+        body = resp.read(PAGE_MAX_BYTES + 1)
+    return hashlib.sha256(body[:PAGE_MAX_BYTES]).hexdigest()
+
+
+def _look_page(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
+    """(how many matched, the sentence for Coming up). Checked again here,
+    immediately before the GET, not only when the watch was added: DNS can
+    answer differently later (see jarvis_local_http.private_fetch_problem's
+    own docstring)."""
+    import jarvis_local_http as LH
+    url = watch["url"]
+    problem = LH.private_fetch_problem(url)
+    if problem:
+        return 0, f"Could not look: {problem}"
+    text = (f"Jarvis would like to fetch {url} for a \"tell me when\": one plain GET, to see "
+            "if its text changed since the look before - never a link on the page, and the "
+            "page's own words are never read out, kept, or shown, only whether a fingerprint "
+            "of them changed.")
+    if not _ok_to_read(PAGE_ACTION, "fetch a web page for a \"tell me when\"", text, deps):
+        return 0, ("Could not look: your settings ask for a yes each time Jarvis fetches a "
+                   "web page.")
+    fetch = deps.page_fetch or _default_page_fetch
+    try:
+        digest = fetch(url)
+    except Exception as exc:
+        return 0, f"Could not look: the page did not answer ({type(exc).__name__})."
+    before = st.get("last_state")
+    _save(job_id, sched, last_state=digest)
+    if before is None:
+        return 0, ""
+    return (1 if digest != before else 0), ""
+
+
 _JOB_LOCKS: dict = {}
 _JOB_LOCKS_LOCK = threading.Lock()
 #: When each email watch last really signed in to look (this process only:
@@ -914,6 +1060,8 @@ def _look(job_id: str, deps: Deps, sched, nudged: bool) -> dict:
         n, said = _look_email(job_id, watch, st, deps, sched)
         if not said:
             _FULL[job_id] = time.time()
+    elif watch["source"] == "page":
+        n, said = _look_page(job_id, watch, st, deps, sched)
     else:
         n, said = _look_home(job_id, watch, st, deps, sched)
     if missing:
@@ -1016,6 +1164,54 @@ def fields(job_id: str) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   "What did I miss?" - real matches only, never an idle look
+# --------------------------------------------------------------------------
+
+def matched_since(since: float, now: Optional[float] = None, *, sched=None) -> list:
+    """Watches that told the owner something between `since` and `now`,
+    newest first - `{"id", "matched_at", "alert", "urgent"}`. This is the
+    ease-of-use audit's "'tell me when' matches" for "What did I miss?"
+    (docs/EASE-OF-USE-AUDIT-2026-09-27.md row 12), and deliberately NOT
+    `jarvis_schedule.fired_since()` with its `silent`-kind filter lifted:
+    that would also hand back every idle look this kind's own `on_fire`
+    stamps `fired_at` for (tick()'s comment above `k.silent` says why a
+    look rings no doorbell), which is exactly what
+    test_tellme.py's `t_looks_are_not_what_i_missed` and
+    `t_past_its_end_it_does_not_look_again` prove is NOT "something I
+    missed". A match is different: it is stamped in THIS module's own
+    `matched_at` (never on the `jobs` row), only when a look actually told
+    the owner something, so this reads that column instead. "Tell every
+    time" keeps only its LATEST match, so an earlier one inside the window
+    followed by a later one outside it is not found separately - the same
+    limit `note()`'s "Happened at ..." line already has."""
+    sched = sched or _sched()
+    now = sched.now() if now is None else now
+    with sched._lock, sched._db() as c:
+        job_ids = [r["id"] for r in c.execute(
+            "SELECT id FROM jobs WHERE kind = ?", (KIND,)).fetchall()]
+    out = []
+    for jid in job_ids:
+        st = _state(jid, sched)
+        matched_at = st.get("matched_at")
+        if matched_at is None:
+            continue
+        matched_at = float(matched_at)
+        if not (since <= matched_at <= now):
+            continue
+        row, rule, watch = _watch_of(jid, sched)
+        if row is None:
+            continue
+        try:
+            alert = alert_words(check_watch(watch), int(st.get("alert_count") or 1))
+        except ValueError:
+            continue
+        out.append({"id": jid, "matched_at": matched_at, "alert": alert,
+                    "urgent": bool((watch or {}).get("urgent"))})
+    out.sort(key=lambda d: d["matched_at"], reverse=True)
+    return out
+
+
+# --------------------------------------------------------------------------
 #   Setting one up - from an app (the route) or the fast path
 # --------------------------------------------------------------------------
 
@@ -1043,6 +1239,22 @@ def add(watch: dict, *, ends: Optional[float] = None, minutes: Optional[int] = N
             raise OverflowError(f"there are already {MAX_EMAIL_WATCHES} watching email - each "
                                 "signs in to your mail server every few minutes; delete one "
                                 "first")
+    if w["source"] == "page":
+        # Checked BEFORE the card is ever raised, not only on each look
+        # (jarvis_local_http.private_fetch_problem's own docstring says
+        # why it is checked again on every look too).
+        import jarvis_local_http as LH
+        problem = LH.private_fetch_problem(w["url"])
+        if problem:
+            raise ValueError(problem)
+        pages = 0
+        for j in listed:
+            _r, _rule, jw = _watch_of(j["id"], sched)
+            if jw and jw.get("source") == "page":
+                pages += 1
+        if pages >= MAX_PAGE_WATCHES:
+            raise OverflowError(f"there are already {MAX_PAGE_WATCHES} watching a web page - "
+                                "each fetches someone else's server; delete one first")
     rule = {"every": "minutes", "watch": w}
     if minutes is not None:
         rule["minutes"] = minutes
@@ -1054,12 +1266,12 @@ def add(watch: dict, *, ends: Optional[float] = None, minutes: Optional[int] = N
 def add_route(body: dict) -> tuple:
     """POST /api/schedule/add {"kind": "tellme", "source": "email", "sender"}
     or {"kind": "tellme", "source": "home", "entity", "say" | "states",
-    "name"?}, with "urgent"?, "once"?, "days"? (up to 90), "minutes"?.
-    202 and ONE card, like any repeat."""
+    "name"?} or {"kind": "tellme", "source": "page", "url"}, with "urgent"?,
+    "once"?, "days"? (up to 90), "minutes"?. 202 and ONE card, like any repeat."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "Need a JSON object."}
     watch = {k: body.get(k) for k in ("source", "sender", "entity", "say", "states", "name",
-                                      "urgent", "once", "missing", "by")}
+                                      "urgent", "once", "missing", "by", "url")}
     ends = None
     days = body.get("days")
     if days is not None:
@@ -1350,10 +1562,10 @@ def _default_idle_connect(p) -> _Imap:
 
 
 def _open(conn: _Imap, p) -> _Imap:
+    import jarvis_email as MAIL
     try:
         conn.greet()
-        conn.login(os.environ.get("JARVIS_IMAP_USER", ""),
-                   os.environ.get("JARVIS_IMAP_PASSWORD", ""))
+        conn.login(MAIL.imap_user(), MAIL.imap_password())
         if not conn.capable():
             raise NoIdle()
         conn.examine(p.mailbox)

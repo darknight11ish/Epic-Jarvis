@@ -48,11 +48,16 @@ backend/README.md's `email-wiring` section for the exact `jarvis_gate`/
 rather than `ask` - the same reasoning applies here unchanged.
 
 CREDENTIALS - NEVER STORED HERE, NEVER LOGGED, NEVER ON A CARD
-`JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT`, `JARVIS_IMAP_USER`,
-`JARVIS_IMAP_PASSWORD`, `JARVIS_IMAP_MAILBOX` are read fresh from the
-environment on every call, exactly like `jarvis_calendar.py`'s three. This
-module never writes them to disk and never puts the password in a `Plan` or
-`describe()`'s output.
+`JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` and `JARVIS_IMAP_MAILBOX` are read
+fresh from the environment on every call, exactly like `jarvis_calendar.py`'s
+own. The username and password are the two that are worth stealing, so
+`imap_user()` / `imap_password()` (ease-of-use audit row 15) read them the
+same way `jarvis_search.py` reads the Exa/Tavily/Brave keys: the environment
+variable first, if the owner already set one - unchanged, nothing that works
+today stops working - otherwise Windows Credential Manager, under
+`IMAP_USER_TARGET` / `IMAP_PASSWORD_TARGET`, entered on the PC only in the
+desktop's Settings ("Accounts"). This module never writes either to disk and
+never puts the password in a `Plan` or `describe()`'s output.
 
 WHAT A "PREVIEW" ACTUALLY SHOWS, AND WHY IT IS SHORT
 The full body of an email can be arbitrarily large and can carry attachments,
@@ -92,6 +97,13 @@ USER_ENV = "JARVIS_IMAP_USER"
 PASSWORD_ENV = "JARVIS_IMAP_PASSWORD"
 MAILBOX_ENV = "JARVIS_IMAP_MAILBOX"
 
+#: Windows Credential Manager names for the username and password (ease-of-use
+#: audit row 15). The desktop's Settings -> "Accounts" writes them under
+#: these same names (jarvis-desktop/src-tauri/src/token_store.rs,
+#: ACCOUNT_SECRET_TARGETS - test_account_secrets.py checks the text).
+IMAP_USER_TARGET = "Jarvis Backend/IMAP username"
+IMAP_PASSWORD_TARGET = "Jarvis Backend/IMAP password"
+
 _DEFAULT_PORT = 993
 _DEFAULT_MAILBOX = "INBOX"
 
@@ -130,9 +142,25 @@ def _configured() -> bool:
     return bool(os.environ.get(HOST_ENV, "").strip())
 
 
+def imap_user() -> str:
+    """The IMAP username: `JARVIS_IMAP_USER` if the owner set it, else
+    Windows Credential Manager (`IMAP_USER_TARGET`), else "". See
+    jarvis_token_store.resolve_secret for the exact order."""
+    import jarvis_token_store
+    return jarvis_token_store.resolve_secret(USER_ENV, IMAP_USER_TARGET)
+
+
+def imap_password() -> str:
+    """The IMAP password, the same way. Never logged, never returned to a
+    caller other than the one connection this module or jarvis_email_send.py/
+    jarvis_email_draft.py is about to make."""
+    import jarvis_token_store
+    return jarvis_token_store.resolve_secret(PASSWORD_ENV, IMAP_PASSWORD_TARGET)
+
+
 def authenticated() -> bool:
     """Whether a username is configured. Never reveals the password."""
-    return bool(os.environ.get(USER_ENV, "").strip())
+    return bool(imap_user())
 
 
 # --------------------------------------------------------------------------
@@ -230,8 +258,8 @@ def _default_fetch_messages(p: Plan) -> list:
     disconnects. Credentials read fresh from the environment, never cached."""
     import imaplib
 
-    user = os.environ.get(USER_ENV, "")
-    password = os.environ.get(PASSWORD_ENV, "")
+    user = imap_user()
+    password = imap_password()
     # A timeout, like the other IMAP calls here: without one, a mail server
     # that stops answering held the chat answer for ever (2026-09-26 bug
     # audit, finding 6).
@@ -358,8 +386,8 @@ def _default_count(p: Plan) -> int:
     subject, no body is ever read by this function."""
     import imaplib
 
-    user = os.environ.get(USER_ENV, "")
-    password = os.environ.get(PASSWORD_ENV, "")
+    user = imap_user()
+    password = imap_password()
     conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_COUNT_TIMEOUT,
                              ssl_context=tls_context(p.host))
     try:
@@ -436,8 +464,8 @@ def _default_senders(p: Plan, newest: int) -> tuple:
     Credentials read fresh from the environment, never cached."""
     import imaplib
 
-    user = os.environ.get(USER_ENV, "")
-    password = os.environ.get(PASSWORD_ENV, "")
+    user = imap_user()
+    password = imap_password()
     conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_COUNT_TIMEOUT,
                              ssl_context=tls_context(p.host))
     try:

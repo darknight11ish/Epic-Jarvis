@@ -400,11 +400,15 @@ await check("the manner commands are Settings-only; the fix button's is the quic
   assert.deepEqual(holders("set_manner"), ["settings-surface"]);
   assert.deepEqual(holders("open_fix_place"), ["quickbar-surface"]);
   const rs = read("src-tauri/src/plain_errors.rs");
-  const fix = rs.slice(rs.indexOf("pub fn open_fix_place"));
+  // `async`, not a plain command (bug audit 2026-09-27, desktop-rust
+  // finding #3): both windows it opens are built the first time they are
+  // shown, and a plain command runs on the thread Tauri 2.11.5's own docs
+  // say that deadlocks on Windows.
+  const fix = rs.slice(rs.indexOf("pub async fn open_fix_place"));
   assert.match(fix, /"settings" =>/);
   assert.match(fix, /"brain" =>/);
   assert.match(fix, /_ => Err/);
-  const set = rs.slice(rs.indexOf("pub async fn set_manner"), rs.indexOf("pub fn open_fix_place"));
+  const set = rs.slice(rs.indexOf("pub async fn set_manner"), rs.indexOf("pub async fn open_fix_place"));
   assert.match(set, /link\(\)\.stale/, "set_manner is held on a stale link");
 });
 

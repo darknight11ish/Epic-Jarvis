@@ -41,6 +41,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.data.CheckMethod
 import com.jarvis.client.data.CheckOutcome
+import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.data.LockSession
 import com.jarvis.client.data.Security
 import com.jarvis.client.data.SecurityRules
@@ -64,6 +65,7 @@ import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PowerWatch
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.ApprovalNotifier
+import com.jarvis.client.service.AvatarOverlayService
 import com.jarvis.client.service.EventService
 import com.jarvis.client.service.WakeWordService
 import com.jarvis.client.net.WakeWord
@@ -90,6 +92,7 @@ import com.jarvis.client.ui.screens.LockedScreen
 import com.jarvis.client.ui.screens.PairingScreen
 import com.jarvis.client.ui.screens.ReadinessScreen
 import com.jarvis.client.ui.screens.SecurityScreen
+import com.jarvis.client.ui.screens.SettingsScreen
 import com.jarvis.client.ui.screens.VoiceCheckScreen
 import com.jarvis.client.ui.screens.VoiceTrainingScreen
 import com.jarvis.client.ui.screens.VoicesScreen
@@ -631,6 +634,25 @@ class MainActivity : FragmentActivity() {
             }
         }
 
+        // "Floating Jarvis" (data/FloatingAvatar.kt, JARVIS-API §56): the
+        // Overlay path is a foreground service, kept in step with the
+        // setting and the permission itself here, at the top of App() -
+        // like `security` above, rather than nested under Screen.SETTINGS -
+        // because the whole point of an overlay is that it outlives whatever
+        // screen is on top. `tick` is `permissionTick` (read further up):
+        // "draw over other apps" can be revoked in Android's own Settings at
+        // any time, and this is what notices that on return.
+        val floatingAvatar by JarvisRuntime.settings.floatingAvatar.collectAsState()
+        LaunchedEffect(floatingAvatar, tick) {
+            if (floatingAvatar == FloatingAvatarMode.OVERLAY &&
+                Settings.canDrawOverlays(this@MainActivity)
+            ) {
+                AvatarOverlayService.start(this@MainActivity)
+            } else {
+                AvatarOverlayService.stop(this@MainActivity)
+            }
+        }
+
         // "A newer version is available": asked when the app opens (at most
         // every six hours) and once a day while it stays open. Never while
         // "Check for new versions" is off. See UpdateCheck.
@@ -679,6 +701,7 @@ class MainActivity : FragmentActivity() {
         val digest by JarvisRuntime.digest.collectAsState()
         val undo by JarvisRuntime.undo.collectAsState()
         val jobs by JarvisRuntime.jobs.collectAsState()
+        val pastApprovals by JarvisRuntime.pastApprovals.collectAsState()
         // How each Inbox list's last read came back, so the screen can tell
         // "nothing waiting" apart from "could not read" (screens-3).
         val inboxRead by JarvisRuntime.inboxRead.collectAsState()
@@ -742,6 +765,34 @@ class MainActivity : FragmentActivity() {
         // only) - docs/JARVIS-API.md sections 18.1 and 4, 2026-09-25.
         val temporaryChat by chat.temporary.collectAsState()
         val usedIds by chat.usedIds.collectAsState()
+        // The crisis help line (jarvis_wellbeing.py, 2026-09-27): whether
+        // the answer on screen is shown as a calm, plain panel.
+        val crisisAnswer by chat.crisis.collectAsState()
+        // "Open <a settings section>" by voice or chat
+        // (jarvis_settings_registry.py, docs/JARVIS-API.md section 58.1):
+        // jump to Settings, at the section the answer named. Pure
+        // navigation - SettingsScreen's own `initialSection` does the
+        // scrolling; nothing here changes a setting.
+        //
+        // Bug audit 2026-09-27, finding #4: a `LaunchedEffect` reruns every
+        // time it first enters a fresh composition, not only when its key
+        // changes - and nothing used to clear `chat.openSettings` once it
+        // had been acted on, so a rotation (or any other activity rebuild)
+        // saw the same target again and jumped back into Settings on its
+        // own. Treated as a one-time request instead: the target is copied
+        // into `pendingSettingsSection` (kept across a rebuild by
+        // `rememberSaveable`, just long enough for `SettingsScreen` to
+        // scroll once) and immediately consumed on the `ChatSession` side,
+        // so a fresh composition with the same underlying answer sees null
+        // and does nothing.
+        val openSettingsTarget by chat.openSettings.collectAsState()
+        var pendingSettingsSection by rememberSaveable { mutableStateOf<String?>(null) }
+        LaunchedEffect(openSettingsTarget) {
+            val target = openSettingsTarget ?: return@LaunchedEffect
+            pendingSettingsSection = target
+            nav.go(Screen.SETTINGS)
+            chat.consumeOpenSettings()
+        }
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
         val face = remember(faceId) { Faces.byId(faceId) }
@@ -1018,7 +1069,7 @@ class MainActivity : FragmentActivity() {
             }
 
             // Pairing outranks the stack: there is nothing to show until there
-            // is somewhere to talk to. Two screens are the exception. Checks,
+            // is somewhere to talk to. A few screens are the exception. Checks,
             // because "why can I not connect" has to be answerable from here.
             // Help, because its first question is "Do I need Tailscale?", and
             // that is asked before pairing, not after.
@@ -1027,9 +1078,13 @@ class MainActivity : FragmentActivity() {
             // the owner can change the desktop or the token.
             // Security too: it is opened from Checks, and its settings are
             // this phone's own, so there is no reason to pair first.
+            // Settings joins them for the same reason (ease-of-use audit row
+            // 16, 2026-09-27): its own Security link must stay reachable
+            // mid-pair, same as Checks's. Its voice and Appearance links stay
+            // null/absent until paired, exactly as they already are on Checks.
             if ((!paired || repairing) &&
                 nav.current != Screen.CHECKS && nav.current != Screen.FAQ &&
-                nav.current != Screen.SECURITY
+                nav.current != Screen.SECURITY && nav.current != Screen.SETTINGS
             ) {
                 val replacing = paired
                 // Leaves re-pairing and keeps the desktop in use. A "refused
@@ -1366,6 +1421,9 @@ class MainActivity : FragmentActivity() {
                                 if (!on) JarvisRuntime.updates.cleared()
                             },
                             onOpenRelease = ::openReleasePage,
+                            // The phone's own Settings screen (ease-of-use
+                            // audit row 16, 2026-09-27).
+                            onOpenSettings = { nav.go(Screen.SETTINGS) },
                         )
                     }
 
@@ -1440,6 +1498,7 @@ class MainActivity : FragmentActivity() {
                             delete = { id -> JarvisRuntime.deleteCustomVoice(id) },
                             setBetter = { on -> JarvisRuntime.setBetterVoice(on) },
                             setSpeed = { id -> JarvisRuntime.setVoiceSpeed(id) },
+                            setSpeaker = { id -> JarvisRuntime.setVoiceSpeaker(id) },
                             // Any audio type: the file is checked for being a WAV
                             // once read, and says so plainly when it is not.
                             onPickFile = { pickVoiceFile.launch(arrayOf("audio/*")) },
@@ -1467,6 +1526,7 @@ class MainActivity : FragmentActivity() {
                             digest = digest,
                             undo = undo,
                             jobs = jobs,
+                            pastApprovals = pastApprovals,
                             onOpenApproval = { id ->
                                 // Carries the id now. It used to be dropped, so a
                                 // digest row with three approvals waiting took you
@@ -1649,6 +1709,23 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             },
+                            // "When to suggest the bigger model" (2026-09-27):
+                            // no card either way, so this only ever re-reads
+                            // the plate afterwards - never touches approvals.
+                            onSetSecondCardSuggest = { signal, enabled ->
+                                if (secondCardBusy == null) {
+                                    secondCardBusy = signal
+                                    secondCardNotice = null
+                                    scope.launch {
+                                        try {
+                                            secondCardNotice =
+                                                JarvisRuntime.setSecondCardSuggest(signal, enabled)
+                                        } finally {
+                                            secondCardBusy = null
+                                        }
+                                    }
+                                }
+                            },
                             onRecheckSecondCard = {
                                 if (secondCardBusy == null) {
                                     secondCardBusy = ""
@@ -1670,6 +1747,10 @@ class MainActivity : FragmentActivity() {
                             // Chat history on the PC (docs/JARVIS-API.md
                             // section 18): its own screen, opened from here.
                             onOpenHistory = { nav.go(Screen.HISTORY) },
+                            // The phone's own Settings screen (ease-of-use
+                            // audit row 16, 2026-09-27), where the old
+                            // "Settings" group moved to.
+                            onOpenSettings = { nav.go(Screen.SETTINGS) },
                         )
                     }
 
@@ -1711,6 +1792,50 @@ class MainActivity : FragmentActivity() {
                             modifier = root,
                         )
                     }
+
+                    Screen.SETTINGS -> SettingsScreen(
+                        link = link,
+                        stale = stale,
+                        onBack = { nav.back() },
+                        modifier = root,
+                        initialSection = pendingSettingsSection,
+                        // Bug audit 2026-09-27, finding #4: cleared once the
+                        // screen has scrolled to it (or found no row for
+                        // it), so a later manual visit to Settings does not
+                        // scroll anywhere on its own.
+                        onSectionConsumed = { pendingSettingsSection = null },
+                        // Same three ternaries as Screen.CHECKS above: null
+                        // until this phone is paired.
+                        onTrainVoice = if (paired) {
+                            { nav.go(Screen.VOICE) }
+                        } else {
+                            null
+                        },
+                        onVoiceCheck = if (paired) {
+                            { nav.go(Screen.VOICE_CHECK) }
+                        } else {
+                            null
+                        },
+                        onVoices = if (paired) {
+                            { nav.go(Screen.VOICES) }
+                        } else {
+                            null
+                        },
+                        securitySummary = SecurityRules.summary(security),
+                        onOpenSecurity = { nav.go(Screen.SECURITY) },
+                        onOpenAppearance = if (paired) {
+                            { nav.go(Screen.APPEARANCE) }
+                        } else {
+                            null
+                        },
+                        floatingAvatar = floatingAvatar,
+                        onFloatingAvatarChange = { JarvisRuntime.settings.setFloatingAvatar(it) },
+                        overlayGranted = remember(tick) {
+                            Settings.canDrawOverlays(this@MainActivity)
+                        },
+                        onRequestOverlay = ::requestOverlayPermission,
+                        onOpenBubbleSettings = ::openBubbleSettings,
+                    )
 
                     Screen.APPEARANCE -> AppearanceScreen(
                         current = chrome,
@@ -1847,6 +1972,8 @@ class MainActivity : FragmentActivity() {
                             updateLine = updateState.newerLine.takeIf { updateChecks },
                             temporary = temporaryChat,
                             usedIds = usedIds,
+                            answerTurnId = answerTurnId,
+                            crisisAnswer = crisisAnswer,
                             memoryHidden = privateHidden,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
@@ -1944,6 +2071,7 @@ class MainActivity : FragmentActivity() {
                                 // on one fact after the confirm, held on a stale link.
                                 onLoadUsed = { ids -> JarvisRuntime.memoryUsed(ids) },
                                 onForgetUsed = { id -> JarvisRuntime.forgetAutoFact(id) },
+                                onLoadSources = { tid -> JarvisRuntime.chatSources(tid) },
                                 onShowPrivate = ::showPrivateLists,
                                 // A fingerprint instead of a tap for anything that
                                 // leaves the machine, cannot be undone, or arrived
@@ -2325,6 +2453,42 @@ class MainActivity : FragmentActivity() {
     private fun openReleasePage() {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(UpdateCheck.RELEASE_PAGE))) }
             .onFailure { JarvisRuntime.setNotice("No browser on this phone could open the release page.") }
+    }
+
+    /**
+     * "Draw over other apps" for the Overlay path of "Floating Jarvis"
+     * ([FloatingAvatarSection]'s own explanation is shown first, always -
+     * this is only ever called from its button). Android's own screen, with
+     * its own warning about this permission; never granted silently, and
+     * the `LaunchedEffect(floatingAvatar, tick)` above keeps reading the
+     * real answer either way.
+     */
+    private fun requestOverlayPermission() {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName"),
+        )
+        runCatching { startActivity(intent) }.onFailure {
+            runCatching { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)) }
+        }
+    }
+
+    /**
+     * Android's own per-app "Allow bubbles" screen, for the Bubble path of
+     * "Floating Jarvis". This app has no other way to change that switch -
+     * only the owner, in Android's own settings, can.
+     */
+    private fun openBubbleSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_BUBBLE_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        runCatching { startActivity(intent) }.onFailure {
+            runCatching {
+                startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
+                )
+            }
+        }
     }
 
     /**

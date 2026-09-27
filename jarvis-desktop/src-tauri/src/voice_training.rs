@@ -1016,6 +1016,33 @@ pub async fn set_voice_speed(app: AppHandle, speed: String) -> Result<Value, Str
     voices_answer(status, &text)
 }
 
+/// The built-in voices Kokoro offers (`GET /api/voice/voices`
+/// `speaker.choices`, eleven of them, "0".."10"). Checked against that same
+/// list here too, so a PC on an older backend that never sends `speaker` at
+/// all cannot be sent a value it has no way to show back correctly.
+pub(crate) const SPEAKERS: [&str; 11] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+
+/// Which of Kokoro's own voices the built-in voice uses. Same shape as
+/// [`set_voice_speed`]: no card either way, held on a stale link (rule 4).
+#[tauri::command]
+pub async fn set_voice_speaker(app: AppHandle, speaker: String) -> Result<Value, String> {
+    let speaker = speaker.trim().to_string();
+    if !SPEAKERS.contains(&speaker.as_str()) {
+        return Err("Choose one of the listed voices.".to_string());
+    }
+    if stale(&app) {
+        return Err(HELD_STALE.to_string());
+    }
+    let (status, text) = post(
+        &app,
+        "/api/voice/voices/speaker",
+        &json!({ "speaker": speaker }),
+        VOICES_TIMEOUT,
+    )
+    .await?;
+    voices_answer(status, &text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

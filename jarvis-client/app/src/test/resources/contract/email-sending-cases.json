@@ -13,7 +13,7 @@
    "password_set": false,
    "port": 465,
    "ready": false,
-   "said": "Not set up: JARVIS_IMAP_USER is not set - sending uses the same account as reading email, and there is none. The steps are in backend/README.md, \"Sending email\".",
+   "said": "Not set up: JARVIS_IMAP_USER is not set, and nothing is saved in Windows Credential Manager either - sending uses the same account as reading email, and there is none. The steps are in backend/README.md, \"Sending email\".",
    "server": "",
    "server_guessed": false,
    "state": "not_set_up",

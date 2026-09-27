@@ -21,6 +21,11 @@
 //!    must not have the GUI adopt and then kill their process." Nothing here
 //!    runs unless it has been switched on.
 //!
+//! A sixth was added 2026-09-27 (feasibility I98): [`spawn_watchdog`] restarts
+//! a backend this process owns if it crashes or hangs, capped at
+//! `MAX_RESTARTS` restarts per `RESTART_WINDOW` and never touching a backend
+//! it did not start — see its own doc comment, further down.
+//!
 //! ## Why this is not a Tauri sidecar
 //!
 //! §5 describes `bundle.externalBin` and `app.shell().sidecar("jarvis")`. That
@@ -51,6 +56,7 @@ use tauri::{AppHandle, Manager};
 use crate::commands;
 use crate::logfile;
 use crate::proctree::{self, ProcessTree};
+use crate::winrt_toast;
 
 /// Store key for the on/off switch. Absent means off.
 const SUPERVISE_KEY: &str = "supervise";
@@ -85,6 +91,23 @@ const REAP_TIMEOUT: Duration = Duration::from_secs(2);
 const STARTUP_WAIT: Duration = Duration::from_secs(25);
 /// Timeout for the port probe and the shutdown request.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1_500);
+
+/// How often the watchdog (feasibility I98) looks at the backend it started.
+const WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
+/// Consecutive failed `/api/version` checks, on a process that has NOT
+/// exited, before it counts as **hung** rather than merely slow to answer
+/// one request. `HANG_THRESHOLD * WATCHDOG_INTERVAL` = 45s — long enough
+/// that a slow model load or a heavy turn already in flight is never
+/// mistaken for a hang.
+const HANG_THRESHOLD: u32 = 3;
+/// The cap feasibility idea I98 asks for in so many words: "at most 3
+/// restarts in 10 minutes, then stop and say so clearly ... never silently
+/// loop forever."
+const MAX_RESTARTS: usize = 3;
+/// The trailing window the cap above counts restarts within. It slides —
+/// three crashes at 09:00, 09:04 and 09:12 counts only the last two against
+/// the cap once the clock reaches 09:11, not "3 total, ever".
+const RESTART_WINDOW: Duration = Duration::from_secs(10 * 60);
 
 /// What to run, and where.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -715,6 +738,221 @@ pub fn watch_startup(app: AppHandle) {
     });
 }
 
+// ---------------------------------------------------------------------------
+// The watchdog (feasibility I98: "restart the Python backend if it crashes
+// or hangs, but with a hard cap: at most 3 restarts in 10 minutes, then stop
+// and say so clearly ... never silently loop forever")
+// ---------------------------------------------------------------------------
+//
+// Gated on the taint fix, Security G1 ("taint survives a restart") — checked
+// against `backend/jarvis_chat_log.py` before this was built: `_taint` is
+// deliberately in-memory only, and a conversation this process has not seen
+// since it last started is treated as unknown and asked about afresh, never
+// assumed safe. A restart here forgets exactly what a restart from the tray
+// already forgets, and no more.
+
+/// The watchdog's own memory: which recent moments in time counted as
+/// restarts, how many consecutive checks in a row have found the backend
+/// unreachable, and whether this run of the app has already given up.
+///
+/// **"Nothing resumes by itself."** Every restart this state tracks is a
+/// fresh process, started the same way the tray's "Start backend" starts
+/// one — no conversation, in-flight turn or approval card is replayed. A
+/// hung backend killed here loses whatever it was doing, exactly as if the
+/// owner had force-quit it themselves.
+#[derive(Default)]
+pub struct WatchdogState {
+    inner: Mutex<WatchdogInner>,
+}
+
+#[derive(Default)]
+struct WatchdogInner {
+    /// When each automatic restart was reserved, oldest first. Pruned to
+    /// `RESTART_WINDOW` before every check, so the cap always looks at a
+    /// sliding trailing window, not "3 restarts, ever, ended this run".
+    restarts: Vec<Instant>,
+    /// Consecutive checks in a row that found the backend unreachable while
+    /// its process had NOT exited — the "hung" signal. Reset the moment it
+    /// answers, or the moment a restart is attempted.
+    consecutive_unreachable: u32,
+    /// Set once the cap is hit. Stays set for the rest of this run of the
+    /// app: restarting again from here is the owner's own call at that
+    /// point (the tray, or Settings), not something to keep guessing at.
+    gave_up: bool,
+}
+
+impl WatchdogState {
+    fn lock(&self) -> std::sync::MutexGuard<'_, WatchdogInner> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Prunes restarts older than `RESTART_WINDOW`, then — if this run has
+    /// not already given up and fewer than `MAX_RESTARTS` remain in the
+    /// window — reserves one (recording `now`) and returns true.
+    ///
+    /// Reserving BEFORE the restart is attempted, not after it succeeds, is
+    /// deliberate: a backend that keeps failing to even start counts
+    /// against the cap exactly like one that starts and then dies again —
+    /// otherwise a broken `program`/`args` setting would retry forever,
+    /// once every `WATCHDOG_INTERVAL`, and never trip the cap at all.
+    fn try_reserve_restart(&self, now: Instant) -> bool {
+        let mut inner = self.lock();
+        inner
+            .restarts
+            .retain(|t| now.duration_since(*t) < RESTART_WINDOW);
+        if inner.gave_up || inner.restarts.len() >= MAX_RESTARTS {
+            return false;
+        }
+        inner.restarts.push(now);
+        true
+    }
+
+    /// True only the first time this is called after the cap is hit, so the
+    /// caller notifies exactly once — never once per failed check afterwards.
+    fn mark_given_up(&self) -> bool {
+        let mut inner = self.lock();
+        if inner.gave_up {
+            false
+        } else {
+            inner.gave_up = true;
+            true
+        }
+    }
+
+    /// Counts one more consecutive unreachable check and returns the new
+    /// total.
+    fn bump_unreachable(&self) -> u32 {
+        let mut inner = self.lock();
+        inner.consecutive_unreachable += 1;
+        inner.consecutive_unreachable
+    }
+
+    fn reset_unreachable(&self) {
+        self.lock().consecutive_unreachable = 0;
+    }
+}
+
+/// Runs for the life of the app, watching whatever backend this process owns
+/// and restarting it — up to the cap — if it crashes or hangs.
+///
+/// Safe to call once at startup regardless of whether the immediate start
+/// succeeds: every tick re-checks [`SupervisorState::owns`], which the
+/// tray's own "Start backend" (or a later automatic start) can set at any
+/// time, and the watchdog picks that up on its next tick with no wiring of
+/// its own.
+///
+/// **What it watches**: only a backend THIS process started, and only while
+/// supervision is switched on — never a backend the owner started by hand
+/// from a terminal, which this whole module's own design (§5, at the top of
+/// this file) exists to leave alone.
+///
+/// **What counts as broken:**
+/// - **crashed** — the process we launched has exited AND nothing answers
+///   `/api/version` any more. (A launcher that re-execs and is still
+///   reachable through its grandchild is not a crash — see
+///   [`ensure_backend`]'s own comment on exactly this case, which this
+///   function relies on to do the actual restart.)
+/// - **hung** — the process has NOT exited, but has failed to answer
+///   `/api/version` for `HANG_THRESHOLD` checks in a row (45s).
+///
+/// **The cap**: at most `MAX_RESTARTS` restarts in any trailing
+/// `RESTART_WINDOW`. Past it, this stops trying for the rest of this run of
+/// the app and says so with one notification (`winrt_toast::notify_quiet`) —
+/// never a silent, endless restart loop.
+pub fn spawn_watchdog(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(WATCHDOG_INTERVAL).await;
+
+            if !read_supervise(&app) {
+                continue;
+            }
+            let supervisor = app.state::<SupervisorState>();
+            if !supervisor.owns() {
+                // Never watches a backend it did not start.
+                continue;
+            }
+
+            let snapshot = supervisor.snapshot();
+            let base = commands::jarvis_base(&app);
+            let reachable = backend_reachable(&app, &base).await;
+            let watchdog = app.state::<WatchdogState>();
+
+            if reachable {
+                watchdog.reset_unreachable();
+                continue;
+            }
+
+            let exited = matches!(snapshot, Some((_, true)));
+            let hung = !exited && watchdog.bump_unreachable() >= HANG_THRESHOLD;
+            if !exited && !hung {
+                // Unreachable, but not for long enough yet to call it a hang,
+                // and the process has not exited either. Keep watching.
+                continue;
+            }
+
+            // Feasibility I99: one note per crash/hang NOTICED, whether or
+            // not the cap below still allows a restart - the note is the
+            // record that it happened, independent of what was done about
+            // it.
+            crate::crash_notes::record(
+                "backend",
+                if hung { "hang" } else { "crash" },
+                &format!(
+                    "the backend {} at {base}",
+                    if hung {
+                        "stopped answering /api/version"
+                    } else {
+                        "exited and nothing answers"
+                    }
+                ),
+            );
+
+            let now = Instant::now();
+            if !watchdog.try_reserve_restart(now) {
+                if watchdog.mark_given_up() {
+                    // Says where backend.log is and exactly which tray rows
+                    // to press (setup/recovery audit 2026-09-27): after a
+                    // crash the slot is still held (`snapshot` never drops
+                    // it), so the tray offers "Stop the backend" first, not
+                    // "Start". It names Jarvis, as every other screen does,
+                    // not "the backend".
+                    let msg = format!(
+                        "Jarvis {} {} times in 10 minutes, so Jarvis Desktop stopped restarting \
+                         it. Why: the end of backend.log (Settings, More options, Open the log \
+                         folder). To start it again: tray icon, Stop the backend if it is \
+                         shown, then Start the backend.",
+                        if hung { "stopped answering" } else { "crashed" },
+                        MAX_RESTARTS,
+                    );
+                    logfile::log(&format!("[jarvis] watchdog: {msg}"));
+                    winrt_toast::notify_quiet(&app, "Jarvis — backend", &msg);
+                }
+                continue;
+            }
+
+            logfile::log(&format!(
+                "[jarvis] watchdog: the backend {} — restarting it",
+                if hung { "is not answering" } else { "exited" }
+            ));
+            if hung {
+                // `ensure_backend` only restarts a process that has EXITED;
+                // a hung one that is still technically running would just be
+                // reported back as "already supervising". Stop it first, the
+                // same way the tray's own "Stop backend" would.
+                stop_owned(&app, "the watchdog: not answering").await;
+            }
+            match ensure_backend(&app).await {
+                Ok(outcome) => println!("[jarvis] watchdog: {outcome}"),
+                Err(err) => eprintln!("[jarvis] watchdog: could not restart the backend: {err}"),
+            }
+            watchdog.reset_unreachable();
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -777,5 +1015,62 @@ mod tests {
             ..Default::default()
         }
         .configured());
+    }
+
+    // -- the watchdog's cap (feasibility I98) ------------------------------
+
+    #[test]
+    fn the_cap_allows_exactly_three_then_refuses() {
+        let w = WatchdogState::default();
+        let t0 = Instant::now();
+        assert!(w.try_reserve_restart(t0));
+        assert!(w.try_reserve_restart(t0 + Duration::from_secs(1)));
+        assert!(w.try_reserve_restart(t0 + Duration::from_secs(2)));
+        // A fourth, still well inside the 10-minute window: refused.
+        assert!(!w.try_reserve_restart(t0 + Duration::from_secs(3)));
+        // mark_given_up() is true exactly once, so the caller notifies once.
+        assert!(w.mark_given_up());
+        assert!(!w.mark_given_up());
+        assert!(!w.mark_given_up());
+    }
+
+    #[test]
+    fn the_window_slides_rather_than_being_a_lifetime_total() {
+        let w = WatchdogState::default();
+        let t0 = Instant::now();
+        assert!(w.try_reserve_restart(t0));
+        assert!(w.try_reserve_restart(t0 + Duration::from_secs(30)));
+        assert!(w.try_reserve_restart(t0 + Duration::from_secs(60)));
+        // A fourth right after the third: refused, still 3 in the window.
+        assert!(!w.try_reserve_restart(t0 + Duration::from_secs(61)));
+        // Once the FIRST restart has aged out of the 10-minute window, one
+        // slot frees up again - this is not "3 restarts, ever, for this run".
+        let past_window = t0 + RESTART_WINDOW + Duration::from_secs(1);
+        assert!(w.try_reserve_restart(past_window));
+    }
+
+    #[test]
+    fn once_given_up_the_cap_never_reopens_this_run() {
+        let w = WatchdogState::default();
+        let t0 = Instant::now();
+        assert!(w.try_reserve_restart(t0));
+        assert!(w.try_reserve_restart(t0 + Duration::from_secs(1)));
+        assert!(w.try_reserve_restart(t0 + Duration::from_secs(2)));
+        assert!(!w.try_reserve_restart(t0 + Duration::from_secs(3)));
+        assert!(w.mark_given_up());
+        // Even long after every earlier restart has aged out of the window,
+        // giving up is for the rest of THIS RUN, not just this window.
+        let long_after = t0 + RESTART_WINDOW * 3;
+        assert!(!w.try_reserve_restart(long_after));
+    }
+
+    #[test]
+    fn consecutive_unreachable_resets_the_moment_it_answers() {
+        let w = WatchdogState::default();
+        assert_eq!(w.bump_unreachable(), 1);
+        assert_eq!(w.bump_unreachable(), 2);
+        assert_eq!(w.bump_unreachable(), 3);
+        w.reset_unreachable();
+        assert_eq!(w.bump_unreachable(), 1);
     }
 }

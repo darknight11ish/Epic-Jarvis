@@ -74,6 +74,7 @@ THIRD_PARTY = {
     "soundfile": "soundfile",
     "cryptography": "cryptography",
     "ddgs": "ddgs",
+    "winrt": "winrt-Windows.Media.Control",
 }
 
 # Packages in requirements.txt that no shipped module imports BY NAME,
@@ -402,6 +403,24 @@ def t_the_packages_are_pinned_with_hashes():
     check("the lock check catches a pin without a hash and a line without ==",
           any("bar==2.0 has no --hash" in b for b in bad)
           and any("not pinned" in b for b in bad), bad)
+    # requirements.txt and the lock must agree on VERSIONS, not only names
+    # (security/privacy audit, 2026-09-27).
+    ent = [("markitdown", "0.1.8", ["a" * 64]), ("sherpa-onnx", "1.13.8", ["b" * 64]),
+           ("numpy", "2.2.6", ["c" * 64]), ("numpy", "2.5.3", ["d" * 64])]
+    req = ("markitdown[pdf,docx]==0.1.8  # x\nsherpa-onnx>=1.12.26\n"
+           "numpy>=2.0; python_version < '3.11'\n")
+    check("versions the lock pins that requirements.txt allows: no problem",
+          C.spec_problems(req, ent) == [], C.spec_problems(req, ent))
+    bad = C.spec_problems(req.replace("==0.1.8", "==0.1.9").replace(">=1.12.26", ">=1.14"),
+                          ent)
+    check("a version rule the lock no longer meets is caught, for each package",
+          len(bad) == 2 and any("markitdown" in b and "0.1.9" in b for b in bad)
+          and any("sherpa-onnx" in b and "1.13.8" in b for b in bad), bad)
+    bad = C.spec_problems("numpy>=2.3\n", ent)
+    check("EVERY pinned version is checked (numpy has one per Python version)",
+          len(bad) == 1 and "2.2.6" in bad[0], bad)
+    check("a rule this simple check cannot decide is reported, never passed",
+          any("cannot check" in b for b in C.spec_problems("sherpa-onnx~=1.13\n", ent)))
     fake = {"vulnerabilities": [
         {"id": "GHSA-x", "aliases": ["CVE-1"], "fixed_in": ["1.1"], "withdrawn": None},
         {"id": "GHSA-y", "withdrawn": "2026-01-01T00:00:00"}]}

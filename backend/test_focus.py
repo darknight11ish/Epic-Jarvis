@@ -551,9 +551,11 @@ def t_the_report_card_and_the_ledger():
     check("the report card: on target, drifts, minutes adrift, percent",
           rep["drifts"] == 1 and rep["on_target_min"] >= 8 and rep["adrift_min"] == 1
           and rep["percent"] is not None and rep["lines"][0].startswith("On target: "), rep)
-    check("... a session 85% on target, run to the end, is clean and starts a streak",
-          rep["clean"] and rep["streak"] == 1 and "Streak: 1 clean session in a row." in
-          rep["lines"], rep)
+    check("... a session 85% on target, run to the end, is clean and starts a streak "
+          "(counted, but the report card no longer says so - the owner's answer of "
+          "2026-09-27, feasibility audit question 13)",
+          rep["clean"] and rep["streak"] == 1
+          and not any("streak" in ln.lower() for ln in rep["lines"]), rep)
     rows = F.read_ledger(w.ledger)
     check("the ledger holds one row, with only the whitelisted keys",
           len(rows) == 1 and list(rows[0]) == list(F.LEDGER_KEYS), rows)
@@ -1126,6 +1128,16 @@ def t_a_new_session_during_the_end_keeps_its_timer():
     check("the new session keeps its own end timer", bool(second) and second != first,
           (first, second))
     check("... which is still on the scheduler", w.s.job(second) is not None)
+
+
+def t_both_apps_read_the_current_contract():
+    # The same shape as test_asks_first.py's: nothing else ran this
+    # producer's --check automatically (quality audit 2026-09-27).
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_focus_cases.py"),
+                        "--check"], capture_output=True, text=True, timeout=120,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    check("focus-cases.json (desktop and phone) is what the backend says today "
+          "(python3 tools/gen_focus_cases.py)", r.returncode == 0, r.stdout + r.stderr)
 
 
 def main():

@@ -114,7 +114,7 @@ import {
   followZoom,
   start as startLink,
 } from "./jarvis-link.js";
-import { startVoice, setVoiceMode } from "./voice.js";
+import { startVoice, setVoiceMode, setLevel, attachSpeechSource } from "./voice.js";
 import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
 import {
   createCutOff,
@@ -167,8 +167,13 @@ import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
 // One card on every screen, and what a spoken question hears about a card
 // (the creativity audit, 2026-09-25) - card-words.js.
 import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
+import { HeavyGate, isHeavy } from "./heavy-approve.js";
+import { buildSayableList } from "./sayable.js";
 // A timer said aloud while hands-free listening is on (2026-09-25).
 import { aloudFor } from "./coming-up.js";
+// What a `step` event means, in words - shared with Brain's Live tab
+// (item 10, UI-AUDIT-2026-09-26.md).
+import { stepText } from "./step-words.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -219,6 +224,7 @@ const $ = (id) => document.getElementById(id);
 
 const dom = {
   root: document.documentElement,
+  reactor: $("reactor"),
   shell: $("shell"),
   prompt: $("prompt"),
   route: $("route"),
@@ -240,6 +246,9 @@ const dom = {
   answerUsedLine: $("answer-used-line"),
   answerUsedList: $("answer-used-list"),
   answerMemoryNote: $("answer-memory-note"),
+  answerSources: $("answer-sources"),
+  answerSourcesLine: $("answer-sources-line"),
+  answerSourcesList: $("answer-sources-list"),
   approvalOptionsWhy: $("approval-options-why"),
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
@@ -323,6 +332,16 @@ const dom = {
   previousAnswerSummary: $("previous-answer-summary"),
   previousAnswerBody: $("previous-answer-body"),
 };
+
+/** Feasibility I110: a `notice.weight: "heavy"` card's Approve stays grey
+ * for a moment and until `#approval-preview` has been in view - see
+ * heavy-approve.js's own doc comment. `syncApprovalButtons` is a plain
+ * function declaration, hoisted, so naming it here (before its own textual
+ * definition further down) is safe. */
+const heavyGate = new HeavyGate({
+  scrollEl: dom.approvalPreview,
+  onChange: () => syncApprovalButtons(),
+});
 
 /* ==========================================================================
    State
@@ -524,6 +543,13 @@ const answerMemory = createAnswerMemory({
   confirm: (question) => window.confirm(question),
   announce,
   onChange: () => syncWindowHeight(),
+  // "Where this came from" (feasibility I42/I132): the notes, wiki pages,
+  // web results and files this answer actually read, plus the quote check.
+  sources: {
+    box: dom.answerSources,
+    lineButton: dom.answerSourcesLine,
+    list: dom.answerSourcesList,
+  },
 });
 
 /** Tools that ran (`step` events) and drops of the event stream, for the
@@ -578,6 +604,16 @@ function paint({ immediate = false } = {}) {
     lastPaintAt = performance.now();
 
     dom.answer.innerHTML = renderMarkdown(state.buffer);
+    // The crisis help line (jarvis_wellbeing.py, 2026-09-27): a calm, plain
+    // panel - larger numbers, nothing else about the layout - instead of an
+    // ordinary answer, the moment the server's own flag says so
+    // (`X-Jarvis-Route`'s `wellbeing: "crisis"` - see docs/JARVIS-API.md
+    // section 38; not yet confirmed sent by every backend, so this is a
+    // no-op, and the words still show as an ordinary answer, until it is).
+    dom.answer.classList.toggle(
+      "wellbeing-crisis",
+      Boolean(state.turnRoute && state.turnRoute.wellbeing === "crisis")
+    );
     // `.fresh` marks a block that has just appeared. It used to be added to
     // `lastElementChild` on every paint — but `innerHTML` destroys and
     // recreates that element each time, so the 260ms animation restarted every
@@ -655,49 +691,26 @@ function openCard(statusText) {
 }
 
 /**
- * Rewrites the primer's key chips from the bindings Rust actually holds.
+ * Fills the primer's #sayable-list from sayable.js's own fixed words
+ * ("Things you can say" - the ease-of-use audit's do-first table, row 4).
  *
- * The four global combinations are configurable, so the markup's copy is only
- * a placeholder for first paint. A hardcoded list here would be wrong from the
- * first rebind — and this block exists precisely because the app was telling
- * people about keys that did not do what it said.
- *
- * A refused binding is marked too: "Alt + Space (in use)" is more useful than
- * a combination that silently does nothing, and it points at the one place
- * that can fix it.
+ * Unlike the kbd chips this replaces, these are not live PC settings: the
+ * hardcoded list in sayable.js IS the source both apps read, so there is
+ * nothing to fetch and nothing that can go stale from a rebind. Tapping a
+ * line only fills #prompt - it is never sent by the list itself.
  */
-async function syncPrimerKeys() {
-  if (!IS_TAURI) return;
-  let bound;
-  try {
-    bound = await invokeStrict("get_hotkeys");
-  } catch (error) {
-    // Leave the placeholders. They are the shipped defaults, so they are right
-    // unless something has been changed — and being quietly out of date beats
-    // an empty row.
-    console.warn("[jarvis] could not read the hotkeys:", error);
-    return;
-  }
-  for (const row of bound || []) {
-    const slot = dom.primer.querySelector(`[data-hotkey="${row.id}"]`);
-    if (!slot) continue;
-    slot.textContent = "";
-    // `Super` is the accelerator syntax; the key on the keyboard says Windows.
-    const parts = String(row.accelerator).split("+");
-    parts.forEach((part, i) => {
-      if (i) slot.append("+");
-      const kbd = document.createElement("kbd");
-      kbd.textContent = part === "Super" ? "Win" : part === "Control" ? "Ctrl" : part;
-      slot.append(kbd);
-    });
-    if (!row.registered) {
-      const note = document.createElement("span");
-      note.className = "primer-unbound";
-      note.textContent = " in use elsewhere";
-      slot.append(note);
-    }
-  }
-  syncWindowHeight();
+function renderSayableList() {
+  const host = document.getElementById("sayable-list");
+  if (!host) return;
+  host.replaceChildren(
+    buildSayableList((sentence) => {
+      dom.prompt.value = sentence;
+      autoGrowPrompt();
+      dom.prompt.focus();
+      dom.prompt.setSelectionRange(sentence.length, sentence.length);
+      syncWindowHeight();
+    }),
+  );
 }
 
 /**
@@ -723,6 +736,7 @@ function syncPrimer() {
 function closeCard() {
   dom.card.hidden = true;
   dom.answer.innerHTML = "";
+  dom.answer.classList.remove("wellbeing-crisis");
   dom.cardStat.textContent = "";
   paintProblem(null, "");
   dom.cursor.hidden = true;
@@ -938,10 +952,33 @@ function applyHeaderRoute(route) {
   state.turnRoute = route && typeof route === "object" ? route : null;
   // The facts this answer used (ids only) and the temporary-chat marks.
   answerMemory.route(state.turnRoute);
+  openSettingsFromRoute(state.turnRoute);
   const next = routeFromHeader(route);
   if (!next) return;
   state.routeFromHeader = true;
   applyRoute(next);
+}
+
+/**
+ * "Open <a settings section>" by voice or chat (jarvis_settings_registry.py,
+ * 2026-09-27): `open_settings` on X-Jarvis-Route names the section id
+ * settings.html and settings.js already use ("web-search", "manner", ...).
+ * The SAME mechanism "Show me where" already uses (plain-errors.js's own
+ * button): leave the place under SETTINGS_PLACE_KEY, then ask Rust to open
+ * or focus the Settings window; settings.js's own goToPlace() (generalised
+ * the same day, to any section id, not only "Starting Jarvis for you")
+ * takes it from there. Nothing here changes a setting - this only jumps
+ * the app to it, the owner still makes the change by hand.
+ */
+function openSettingsFromRoute(route) {
+  const place = route && typeof route.open_settings === "string" ? route.open_settings : "";
+  if (!place) return;
+  try {
+    localStorage.setItem(SETTINGS_PLACE_KEY, JSON.stringify({ place, at: Date.now() }));
+  } catch {
+    /* no storage: Settings opens at the top, and the answer's own words say where */
+  }
+  invoke("open_fix_place", { place: "settings" });
 }
 
 /** Paints the three health dots in the card footer. */
@@ -1380,6 +1417,16 @@ function refreshApproval(approval) {
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
 
+  // Feasibility I110: a genuinely new heavy card restarts the clock and the
+  // scroll watch; a re-render of the SAME card (a resync, `raised` ticking
+  // up) must not, or a backend that resyncs the queue every few seconds
+  // would hold Approve grey forever. A card that stops being heavy (should
+  // never happen mid-life, but nothing here assumes it cannot) is stopped.
+  if (fresh) {
+    if (isHeavy(approval)) heavyGate.start();
+    else heavyGate.stop();
+  }
+
   // The PC's own words for it (notice.title, card-words.js), never the code
   // name: "Jarvis wants to switch to a different AI model", not `switch_model`.
   dom.approvalAction.textContent = cardTitle(approval);
@@ -1808,6 +1855,9 @@ function syncParkedBar() {
 /** Clears the gate. Called when it leaves the queue, however it left. */
 function closeApproval() {
   state.approval = null;
+  // Feasibility I110: no card left to watch. `openApproval`/`refreshApproval`
+  // restarts it for whichever card (the same or a different one) opens next.
+  heavyGate.stop();
   // `state.decided` is deliberately NOT cleared here. It is the guard that
   // stops an already-answered gate being answered again, and `decide_approval`
   // does not re-read the queue — so between answering and the server's next
@@ -1839,10 +1889,15 @@ function closeApproval() {
 function syncApprovalButtons() {
   const link = currentLink();
   const blocked = link.stale || state.deciding;
+  // Feasibility I110: a heavy card's Approve stays grey until BOTH
+  // heavyGate conditions clear (the delay, and the preview having been in
+  // view). Deny is never touched by this, same as `cutOff` below.
+  const heavyBlocked = isHeavy(state.approval) && !heavyGate.ok;
   // A card whose request was cut off on its way here cannot be approved: what
   // is on screen is not all of what would run. Deny stays - refusing
   // something unread costs a retry, approving it is the thing to prevent.
-  dom.approvalApprove.disabled = blocked || Boolean(state.approval && state.approval.cutOff);
+  dom.approvalApprove.disabled =
+    blocked || Boolean(state.approval && state.approval.cutOff) || heavyBlocked;
   dom.approvalDeny.disabled = blocked;
   paintApprovalClock();
   // Not `= blocked`: the option buttons `renderOptions` builds are already
@@ -1887,6 +1942,16 @@ function paintApprovalClock() {
   const parts = ["Nothing runs until you decide."];
   if (approval && approval.cutOff) {
     parts.push("This request was cut off before it reached this card, so it cannot be approved here - deny it and ask Jarvis for a shorter plan.");
+  } else if (isHeavy(approval) && !heavyGate.ok) {
+    // Feasibility I110. Two conditions, said as one sentence rather than
+    // two, since they clear together and the owner only needs to know
+    // there is something left to do, not the mechanism.
+    const left = heavyGate.secondsLeft();
+    parts.push(
+      heavyGate.scrollOk
+        ? `Approve unlocks in ${left}s.`
+        : `Read the whole card (scroll down) - Approve unlocks once you have, and no sooner than ${left}s.`
+    );
   }
   const clock = approval ? expiryWords(approval.expiresAt) : "";
   if (clock) parts.push(clock);
@@ -2620,6 +2685,7 @@ async function send(promptText, provenance = "typed") {
   dom.cursor.hidden = false;
   dom.stop.hidden = false;
   dom.answer.innerHTML = "";
+  dom.answer.classList.remove("wellbeing-crisis");
   dom.cardStat.textContent = "";
 
   // Stay open while the answer streams, even if focus wanders.
@@ -2740,7 +2806,11 @@ async function sendMark(mark) {
   dom.markRight.disabled = true;
   dom.markWrong.disabled = true;
   try {
-    const out = await invokeStrict("mark_answer", { turnId, mark: next });
+    const out = await invokeStrict("mark_answer", {
+      turnId,
+      mark: next,
+      conversationId: state.conversationId,
+    });
     if (turnId !== state.turnId) return; // a new answer has started
     if (out && out.available === false) {
       // This backend cannot take marks: hide the control, quietly.
@@ -2899,6 +2969,27 @@ function newConversation() {
  *  recording that never started. */
 let micRecording = false;
 
+/**
+ * "Caught it" (item 7, UI-AUDIT-2026-09-26.md): the reactor contracts toward
+ * its core and springs back, once, the moment the talk button is let go -
+ * the desktop's answer to the phone's haptic tick, since a PC cannot buzz.
+ * A plain CSS class plus a `@keyframes` in style.css; reduced motion already
+ * collapses any one-shot animation to nothing, the same as `.fresh`/`card-in`
+ * elsewhere in this file, so this needs no motion check of its own.
+ */
+function inhaleReactor() {
+  const el = dom.reactor;
+  if (!el) return;
+  el.classList.remove("inhale");
+  // Force a reflow so letting go again before the last inhale finished
+  // restarts the animation instead of the class-add being a no-op.
+  void el.offsetWidth;
+  el.classList.add("inhale");
+}
+dom.reactor?.addEventListener("animationend", (event) => {
+  if (event.animationName === "reactor-inhale") dom.reactor.classList.remove("inhale");
+});
+
 async function startPushToTalk() {
   if (micRecording || state.autoListening) return;
   // Barge-in: holding the mic to talk again is as clear a signal as this
@@ -2923,8 +3014,12 @@ async function stopPushToTalk() {
   if (!micRecording) return;
   micRecording = false;
   dom.mic.setAttribute("aria-pressed", "false");
-  // The owner's turn is over: a small "I heard you" (voice-flow.js).
+  // The owner's turn is over: a small "I heard you" (voice-flow.js) and the
+  // reactor's own "Caught it" (item 7, UI-AUDIT-2026-09-26.md) - on the same
+  // beat, same as the phone's tick-plus-inhale. Only on a real release: a
+  // pointer cancel (abandonPushToTalk, below) never played this either.
   playHeardSound();
+  inhaleReactor();
   try {
     const heard = await invokeStrict("stop_voice_capture");
     if (!heard.available) {
@@ -3006,6 +3101,19 @@ let clipPlaying = false;
  *  Dropped by "stop", by a new question, and when the answer turns out to
  *  be private; checked again right before it is played either way. */
 let aheadClip = null;
+/** One `AudioContext` reused across every clip, rather than one per
+ *  sentence: `attachSpeechSource` (voice.js) would otherwise open and close
+ *  one per `Audio` element, and a fast reply is many of those a second. */
+let speechAudioCtx = null;
+function speechContext() {
+  if (speechAudioCtx) return speechAudioCtx;
+  const Ctx = typeof AudioContext === "function"
+    ? AudioContext
+    : typeof webkitAudioContext === "function" ? webkitAudioContext : null;
+  if (!Ctx) return null;
+  try { speechAudioCtx = new Ctx(); } catch { speechAudioCtx = null; }
+  return speechAudioCtx;
+}
 
 /** Interrupting by talking and "One moment." (voice-flow.js): the rules,
  *  and what the PC allows (`get_voice_flow`, the `flow` block of
@@ -3250,6 +3358,16 @@ async function playClip(dataUri, generation, text = "") {
   const own = text && !isFixedLine(text) ? text : null;
   playingText = own;
   if (own) lastPlayedText = own;
+  // The reactor's mic-and-voice meter (item 1, UI-AUDIT-2026-09-26.md): the
+  // level of the audio actually playing, never a guess at what it might
+  // sound like. `attachSpeechSource` (voice.js) was already written for
+  // exactly this and never called - this is the clip it was written for.
+  // A context that fails to open (no Web Audio, or blocked) leaves the
+  // reactor on its honest synthetic fallback; the reply still plays either
+  // way, since detachLevel is a no-op and nothing here awaits it.
+  const speechCtx = speechContext();
+  if (speechCtx && speechCtx.state === "suspended") speechCtx.resume().catch(() => {});
+  const detachLevel = speechCtx ? attachSpeechSource(audio, { context: speechCtx }) : () => {};
   try {
     try {
       await audio.play();
@@ -3270,6 +3388,7 @@ async function playClip(dataUri, generation, text = "") {
   } catch (error) {
     console.info("[quickbar] spoken reply unavailable:", error);
   } finally {
+    detachLevel();
     if (playingText === own) playingText = null;
     if (generation === speechGeneration) {
       clipPlaying = false;
@@ -3435,6 +3554,19 @@ async function refreshVoiceFlow() {
     console.info("[quickbar] no One moment clip:", error);
   }
 }
+
+/**
+ * The face's mic-level meter (item 1, UI-AUDIT-2026-09-26.md): the
+ * microphone's own loudness, 0..1, while push-to-talk or "hey Jarvis"
+ * listening holds it open (voice.rs, `VOICE_LEVEL`) - never the audio
+ * itself. `setLevel` (voice.js) is authoritative about the mode this puts
+ * the reactor in: the moment a real level arrives it takes over from
+ * whatever the event stream last said, and the arriving numbers replace
+ * the synthetic "still listening" fallback with the owner's real voice.
+ */
+listen("voice-level", (event) => {
+  setLevel(Number(event && event.payload));
+});
 
 /** Half a second of speech while listening (voice.rs): pause the reply,
  *  and have the PC say whether it was the owner. Only while Jarvis talks,
@@ -3919,7 +4051,19 @@ if (dom.temporary) dom.temporary.addEventListener("click", () => temporaryChat.t
 dom.copy.addEventListener("click", async () => {
   const text = state.buffer.trim();
   if (!text) return;
-  await invoke("write_clipboard", { text });
+  // Feasibility I114, "Private copy": an answer copied from here is kept
+  // out of Windows Clipboard History (Win+V) and Cloud Clipboard sync -
+  // both of them ways an answer that never left this PC over Jarvis's own
+  // network could still leave it through Windows' own clipboard features
+  // (clipboard_privacy.rs has the how and why). If the privacy command is
+  // ever unavailable (an older build), fall back to a plain copy rather
+  // than copying nothing at all - the owner still gets the text, just
+  // without the exclusion.
+  try {
+    await invoke("write_clipboard_private", { text });
+  } catch {
+    await invoke("write_clipboard", { text });
+  }
   const original = dom.copy.textContent;
   dom.copy.textContent = "Copied";
   setTimeout(() => {
@@ -4118,7 +4262,7 @@ followTheme();
 // has no browser chrome, so without this there is no way to make the text
 // bigger anywhere in the app. The window re-measures after each step.
 followZoom(() => syncWindowHeight());
-syncPrimerKeys();
+renderSayableList();
 syncTaskControls();
 startVoice(dom.root);
 // Subscribed before the link starts, so the first state it reports counts.
@@ -4133,6 +4277,14 @@ onEvent((frame) => {
   if (frame && frame.kind === "step") {
     recheckSpeech();
     maybeSayOneMoment(frame.data);
+    // Item 10 (UI-AUDIT-2026-09-26.md): the card used to feed a step only to
+    // speech (above) and never to the screen, so it said "Working…" through
+    // the whole of a tool call. Brain's Live tab already turns the same
+    // event into words with `stepText` (now shared, step-words.js) - the bar
+    // shows the same words here, not a word of its own.
+    if (state.phase === "streaming" && !dom.card.hidden) {
+      dom.cardStatusText.textContent = stepText(frame.data);
+    }
   }
   // A timer going off, said aloud while "Hey Jarvis" listening is on - the
   // owner's "say timers aloud when voice is on" (2026-09-25). The toast

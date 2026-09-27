@@ -55,6 +55,20 @@ class PlatformReadinessTest {
         assertFalse(PlatformReadiness.cleartextPermitted("100.101.102.103"))
     }
 
+    /**
+     * Home-network forms: on the owner's own networks by the shared rule,
+     * but not on the config's list (docs/ARCHITECTURE.md §2, "Which addresses
+     * the phone can use"), so this screen must not say Android allows them.
+     */
+    @Test
+    fun `home-network numbers and names are refused, as the config says`() {
+        assertFalse(PlatformReadiness.cleartextPermitted("192.168.1.20:4719"))
+        assertFalse(PlatformReadiness.cleartextPermitted("http://10.0.0.5"))
+        assertFalse(PlatformReadiness.cleartextPermitted("homeassistant.local"))
+        assertFalse(PlatformReadiness.cleartextPermitted("desk.lan"))
+        assertFalse(PlatformReadiness.cleartextPermitted("jarvis-pc"))
+    }
+
     @Test
     fun `ports and stray slashes do not change the verdict`() {
         assertTrue(PlatformReadiness.cleartextPermitted("desk.ts.net:8080"))

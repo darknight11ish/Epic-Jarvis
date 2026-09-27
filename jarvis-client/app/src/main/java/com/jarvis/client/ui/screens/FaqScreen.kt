@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.BuildConfig
+import com.jarvis.client.net.Sayable
 import com.jarvis.client.ui.Chevron
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalAccent
@@ -62,10 +63,11 @@ private val FAQS = listOf(
             "is another, if you already have a NordVPN account. Jarvis's brain " +
             "runs on your desktop, and this phone only reaches it over that " +
             "mesh. When you pair, type the desktop's mesh name — Tailscale's " +
-            "ends in .ts.net, Meshnet's ends in .nord — not its 100.x address " +
-            "directly. This phone is only allowed to trust a small, named " +
-            "list of hosts, and a name is on that list where a raw address " +
-            "cannot be.",
+            "ends in .ts.net, Meshnet's ends in .nord — not its 100.x address, " +
+            "a home-network address like 192.168.x.x, or a .local name. This " +
+            "phone is only allowed to trust a small, named list of hosts, and " +
+            "a name is on that list where a raw address cannot be. Jarvis " +
+            "on your PC only listens on the mesh anyway, even at home.",
     ),
     Faq(
         "Does this app run any AI on my phone?",
@@ -109,6 +111,13 @@ private val FAQS = listOf(
             "The talk button on Home appears once your voice is trained and " +
             "the desktop can turn speech into text; the same card says which " +
             "of those is still missing.",
+    ),
+    Faq(
+        // Words held to Sayable.kt by SayableContractTest, so this can never
+        // drift from what "what can you do?" answers, or from the desktop's
+        // own FAQ entry (settings.html, "What can I say?").
+        Sayable.HELP_TITLE,
+        Sayable.HELP_BODY,
     ),
     Faq(
         "Why can't I approve everything waiting for me in one tap?",

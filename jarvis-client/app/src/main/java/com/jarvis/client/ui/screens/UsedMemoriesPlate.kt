@@ -22,8 +22,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.AutoLearn
+import com.jarvis.client.net.ChatSources
 import com.jarvis.client.net.MemoryUsed
 import com.jarvis.client.net.TemporaryChat
 import com.jarvis.client.ui.parts.Gap
@@ -194,6 +197,59 @@ internal fun UsedFactsList(
             Gap(4)
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
                 modifier = Modifier.liveStatus())
+        }
+    }
+}
+
+/**
+ * "Where this came from" under an answer (feasibility I42/I132; [ChatSources],
+ * docs/JARVIS-API.md section 55) - what a reading tool actually returned
+ * this turn, by reference only, plus any quoted phrase Jarvis could not
+ * find in what it read.
+ *
+ * Read-only: there is no Forget or Erase here, only [view] - already
+ * fetched by the caller ([com.jarvis.client.ui.screens.SourcesAnswer.load]).
+ * A web source is the one kind that opens - tapping it hands the link to
+ * the real browser ([LocalUriHandler]), never a preview fetched by Jarvis;
+ * every other row shows a plain reference. A quote the PC could not find is
+ * shown as a plain warning: it changes nothing about the answer already on
+ * screen.
+ */
+@Composable
+internal fun ChatSourcesList(view: ChatSources.View) {
+    val chrome = LocalChrome.current
+    val uriHandler = LocalUriHandler.current
+    Column(Modifier.fillMaxWidth()) {
+        Kicker(ChatSources.TITLE)
+        Gap(4)
+        if (view.sources.isEmpty() && view.quotes.isEmpty()) {
+            Text("Nothing was read for this answer.", style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo)
+        }
+        view.sources.forEach { s ->
+            Gap(6)
+            if (ChatSources.isOpenable(s)) {
+                // The full link is handed to the real browser only once
+                // tapped - never fetched or previewed by Jarvis, and the
+                // row itself shows the host only ([ChatSources.line]).
+                Quiet(ChatSources.line(s), color = LocalAccent.current,
+                    onClick = { s.url?.let(uriHandler::openUri) })
+            } else {
+                Text(ChatSources.line(s), style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+            }
+        }
+        view.quotes.forEach { quote ->
+            Gap(8)
+            Text(
+                "“$quote”",
+                style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
+                color = chrome.warnInk,
+            )
+            Text(
+                ChatSources.QUOTE_WARNING_LABEL,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.warnInk,
+            )
         }
     }
 }

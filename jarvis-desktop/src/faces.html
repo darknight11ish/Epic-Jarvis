@@ -3695,7 +3695,10 @@ function drawSurface(s, dt, state){
       // finished looking at it - so the stop is applied directly, and only
       // the crawl afterwards is allowed to ease.
       if(e.rate < 1){ s.sp = spTarget * e.rate * -1; }
-      shake = e.shake;
+      // The shake used to run unconditionally - the one motion in this file
+      // the OS "reduce motion" setting never reached, while everything else
+      // here already paces itself down for it (item 3, UI-AUDIT-2026-09-26.md).
+      shake = CALM.matches ? 0 : e.shake;
     }
   }
   // The speed itself is eased, not snapped. A face whose rate steps from 0.22
@@ -3718,9 +3721,14 @@ function drawSurface(s, dt, state){
   // the speech push, the tap flinch, and the error shake. All positional or
   // scalar - none of them changes luminance, so none of them is a flash.
   const fit = (f.render && f.render.fit) || 1;
-  const push = 1 + voice * SPEECH_SCALE * (th.persistent ? 0 : 1);
+  // The speech push (growing with Jarvis's own voice) and the tap flinch
+  // both ran under reduced motion too, same as the shake above - neither is
+  // a flash, but both are exactly the "grows" and "shake" reduced motion is
+  // asked to remove (item 3, UI-AUDIT-2026-09-26.md). The face itself still
+  // changes state and colour; it just stops moving because of them.
+  const push = CALM.matches ? 1 : 1 + voice * SPEECH_SCALE * (th.persistent ? 0 : 1);
   let fx0 = 0, fy0 = 0;
-  if(s.ack){
+  if(s.ack && !CALM.matches){
     const k2 = Math.min(1, s.ack.age / ACK.flinch_s);
     const flinch = (1 - k2) * w * ACK.flinch_px_frac;
     fx0 = s.ack.dx * flinch; fy0 = s.ack.dy * flinch;

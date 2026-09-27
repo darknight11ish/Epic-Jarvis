@@ -31,6 +31,12 @@ pub(crate) const SENDING_PATH: &str = "/api/email/sending";
 /// The gate action every email is asked under (jarvis_email_send.ACTION).
 pub(crate) const SEND_EMAIL_ACTION: &str = "send_email";
 
+/// The gate action every draft is asked under (jarvis_email_draft.ACTION;
+/// JARVIS-API.md section 40). A draft's card shows the same whole-email
+/// shape as sending's, so [`is_email`] treats it the same way: approved
+/// only in the Jarvis bar, never from the widget's one line.
+pub(crate) const DRAFT_EMAIL_ACTION: &str = "draft_email";
+
 /// What a backend without `jarvis_email_send.py` is told to do about it. The
 /// phone says the same (`EmailSending.MISSING`).
 pub(crate) const SENDING_MISSING: &str =
@@ -87,11 +93,13 @@ pub async fn get_email_sending(app: AppHandle) -> Result<serde_json::Value, Stri
     sending_answer(status, &body)
 }
 
-/// Whether a waiting approval row is an email. Such a card is approved only
-/// in the Jarvis bar, where all of it can be read - never from the widget,
-/// which shows one line (see `commands::answer_approval`).
+/// Whether a waiting approval row is an email - sent, or a draft. Such a
+/// card is approved only in the Jarvis bar, where all of it can be read -
+/// never from the widget, which shows one line (see
+/// `commands::answer_approval`).
 pub(crate) fn is_email(item: &serde_json::Value) -> bool {
-    item.get("action").and_then(|a| a.as_str()) == Some(SEND_EMAIL_ACTION)
+    let action = item.get("action").and_then(|a| a.as_str());
+    action == Some(SEND_EMAIL_ACTION) || action == Some(DRAFT_EMAIL_ACTION)
 }
 
 #[cfg(test)]
@@ -135,6 +143,12 @@ mod tests {
     fn an_email_card_is_known_by_its_action() {
         assert!(is_email(
             &serde_json::json!({ "id": "a", "action": "send_email" })
+        ));
+        // A draft's card shows the same whole-email shape (JARVIS-API.md
+        // section 40) and needs the same never-Markdown, never-widget-
+        // approve treatment.
+        assert!(is_email(
+            &serde_json::json!({ "id": "a", "action": "draft_email" })
         ));
         assert!(!is_email(
             &serde_json::json!({ "id": "a", "action": "email_read" })

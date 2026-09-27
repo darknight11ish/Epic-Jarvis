@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +25,7 @@ import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.AutoLearn
 import com.jarvis.client.net.MemoryErase
 import com.jarvis.client.net.MemoryProfile
+import com.jarvis.client.net.MemoryShared
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
@@ -218,13 +220,21 @@ internal fun SavedAutomaticallySection(
     var loadingOlder by remember { mutableStateOf(false) }
     var confirmId by remember { mutableStateOf<Long?>(null) }
     var confirmEraseId by remember { mutableStateOf<Long?>(null) }
+    // "Also delete the chat it came from" (the owner's decision, 2026-09-27):
+    // a checkbox on the erase confirm, reset to unchecked each time a new
+    // fact's confirm opens.
+    var alsoDeleteChat by remember { mutableStateOf(false) }
     var busyId by remember { mutableStateOf<Long?>(null) }
-    // Which of the three the busy row is doing, for its label.
+    // Which of the four the busy row is doing, for its label.
     var erasing by remember { mutableStateOf(false) }
     var pinning by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
     // "Always keep in mind": which facts are pinned, as the PC last said.
     val pinned by JarvisRuntime.pinnedIds.collectAsState()
     val profileTick by JarvisRuntime.profileTick.collectAsState()
+    // "Between us": which facts are tagged, as the PC last said.
+    val shared by JarvisRuntime.sharedIds.collectAsState()
+    val sharedTick by JarvisRuntime.sharedTick.collectAsState()
     var said by remember { mutableStateOf<String?>(null) }
     // "Learn automatically", as the list's own answer says it: the empty
     // list says so when it is off.
@@ -234,6 +244,10 @@ internal fun SavedAutomaticallySection(
     // (not composed), and these rows still need to say Pin or Unpin.
     LaunchedEffect(reads, profileTick) {
         JarvisRuntime.memoryProfile()
+    }
+    // Same reasoning, for "Between us" and its toggle on this list's rows.
+    LaunchedEffect(reads, sharedTick) {
+        JarvisRuntime.memoryShared()
     }
 
     LaunchedEffect(reads, tick) {
@@ -322,6 +336,14 @@ internal fun SavedAutomaticallySection(
                     } else if (confirmEraseId == fact.id) {
                         Text(MemoryErase.CONFIRM, style = MaterialTheme.typography.bodySmall,
                             color = chrome.warnInk)
+                        // "Also delete the chat it came from" (the owner's
+                        // decision, 2026-09-27): off by default, on this one
+                        // fact's confirm only.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = alsoDeleteChat, onCheckedChange = { alsoDeleteChat = it })
+                            Text(MemoryErase.ALSO_CHAT_LABEL, style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid)
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Quiet(
                                 MemoryErase.YES,
@@ -332,19 +354,22 @@ internal fun SavedAutomaticallySection(
                                     busyId = fact.id
                                     erasing = true
                                     said = null
+                                    val alsoChat = alsoDeleteChat
                                     scope.launch {
                                         try {
-                                            val (gone, sentence) = JarvisRuntime.eraseAutoFact(fact.id)
+                                            val (gone, sentence) =
+                                                JarvisRuntime.eraseAutoFact(fact.id, alsoChat)
                                             if (gone) facts = facts?.filterNot { it.id == fact.id }
                                             said = sentence
                                         } finally {
                                             busyId = null
                                             erasing = false
+                                            alsoDeleteChat = false
                                         }
                                     }
                                 },
                             )
-                            Quiet("Keep it", onClick = { confirmEraseId = null })
+                            Quiet("Keep it", onClick = { confirmEraseId = null; alsoDeleteChat = false })
                         }
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -375,8 +400,35 @@ internal fun SavedAutomaticallySection(
                                     },
                                 )
                             }
+                            shared?.let { ids ->
+                                val on = fact.id in ids
+                                Quiet(
+                                    when {
+                                        busyId == fact.id && sharing ->
+                                            if (on) MemoryShared.UNSHARING else MemoryShared.SHARING
+                                        on -> MemoryShared.UNSHARE
+                                        else -> MemoryShared.SHARE
+                                    },
+                                    enabled = canAct && busyId == null,
+                                    onClick = {
+                                        confirmId = null
+                                        confirmEraseId = null
+                                        busyId = fact.id
+                                        sharing = true
+                                        said = null
+                                        scope.launch {
+                                            try {
+                                                said = JarvisRuntime.setShared(fact.id, shared = !on).second
+                                            } finally {
+                                                busyId = null
+                                                sharing = false
+                                            }
+                                        }
+                                    },
+                                )
+                            }
                             Quiet(
-                                if (busyId == fact.id && !erasing && !pinning) "Forgetting…" else "Forget",
+                                if (busyId == fact.id && !erasing && !pinning && !sharing) "Forgetting…" else "Forget",
                                 color = chrome.badInk,
                                 enabled = canAct && busyId == null,
                                 onClick = { confirmEraseId = null; confirmId = fact.id },
@@ -385,7 +437,7 @@ internal fun SavedAutomaticallySection(
                                 if (busyId == fact.id && erasing) MemoryErase.BUSY else MemoryErase.LABEL,
                                 color = chrome.badInk,
                                 enabled = canAct && busyId == null,
-                                onClick = { confirmId = null; confirmEraseId = fact.id },
+                                onClick = { confirmId = null; alsoDeleteChat = false; confirmEraseId = fact.id },
                             )
                         }
                     }

@@ -72,8 +72,15 @@ const section = (page) => page.evaluate(() => {
     all: $("second-card").innerText,
     reads: window.__secondCard.reads,
     changes: window.__secondCard.changes,
+    suggestTitleHidden: $("sc-suggest-title").hidden,
+    suggestDetail: $("sc-suggest-detail").innerText,
+    suggestSignalsHidden: $("sc-suggest-signals").hidden,
+    suggestRows: [...document.querySelectorAll("#sc-suggest-signals input[type=checkbox]")]
+      .map((input) => ({ id: input.dataset.signal, checked: input.checked,
+                         text: input.closest("label").innerText })),
   };
 });
+const suggestRow = (s, id) => s.suggestRows.find((r) => r.id === id);
 const row = (s, id) => s.rows.find((r) => r.id === id);
 const noRaw = (text) => {
   assert.doesNotMatch(text, /[{}]|HTTP \d|"available"|null|undefined|\[object/,
@@ -324,6 +331,115 @@ await check("turning a switch OFF is immediate", async () => {
   assert.match(s.status, /"Longer conversations" is off\./);
 });
 
+await check("pressing Space on a switch keeps keyboard focus in place (bug audit 2026-09-27 #5)", async () => {
+  // Disabling the focused checkbox before the request (`scToggle`) blurs it
+  // to <body> at once in Chromium; the redraw's focus-restore must not rely
+  // on reading `document.activeElement` again after that has happened.
+  const page = await open({ status: SC.running_long_context });
+  await page.locator("#sc-switch-long_context").focus();
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(300);
+  const focused = await page.evaluate(() => document.activeElement.id);
+  const s = await section(page);
+  await page.close();
+  assert.equal(row(s, "long_context").checked, false, "the switch itself did not toggle");
+  assert.equal(focused, "sc-switch-long_context", "focus landed on <body> instead of staying on the switch");
+});
+
+await check("a toggle whose re-read FAILS does not yank focus back on a later, unrelated repaint (Opus 5.5 re-check, 2026-09-27)", async () => {
+  // scToggle sets scRestoreFocusId, then awaits loadSecondCard() to re-read
+  // the real state. When that re-read throws, it lands in scShowProblem,
+  // not scPaint - and only scPaint used to clear scRestoreFocusId. Left
+  // set, the NEXT successful repaint (here: the page's own visibilitychange
+  // re-read) would steal focus back to this switch from wherever the owner
+  // is by then, even though they left this failed attempt behind.
+  const page = await open({ status: SC.running_long_context });
+  await page.locator("#sc-switch-long_context").focus();
+  await page.evaluate(() => { window.__secondCard.getFails = "boom"; });
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(300);
+  const afterFailure = await section(page);
+  assert.equal(afterFailure.bodyHidden, true, "the failed re-read did not show the problem state");
+  // The owner has moved on: nothing here is focused any more.
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+  // Now the read works again, and something else triggers a repaint - the
+  // same event settings.js's own visibilitychange listener reacts to.
+  await page.evaluate(() => { window.__secondCard.getFails = null; });
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.waitForTimeout(300);
+  const focused = await page.evaluate(() => document.activeElement.id);
+  await page.close();
+  assert.notEqual(focused, "sc-switch-long_context",
+    "the failed toggle's own switch stole focus back on a later, unrelated repaint");
+});
+
+/* ── "When to suggest the bigger model" (2026-09-27) ──────────────────────── */
+
+await check("both suggestion signals show, on by default, with the backend's own words", async () => {
+  const page = await open({ status: SC.capable_off });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.suggestTitleHidden, false);
+  assert.match(s.suggestDetail, /never switches it on by itself/);
+  assert.equal(s.suggestSignalsHidden, false);
+  assert.deepEqual(s.suggestRows.map((r) => r.id), ["struggle", "correction"]);
+  for (const id of ["struggle", "correction"]) {
+    const r = suggestRow(s, id);
+    assert.equal(r.checked, true, `${id} is not on by default`);
+  }
+  assert.match(suggestRow(s, "struggle").text, /When Jarvis is visibly struggling/);
+  assert.match(suggestRow(s, "correction").text, /When you correct an answer more than once/);
+});
+
+await check("turning a suggestion signal off sends one request, no card, and stays off", async () => {
+  const page = await open({ status: SC.capable_off });
+  await page.locator("#sc-suggest-struggle").click();
+  await page.waitForTimeout(200);
+  const s = await section(page);
+  const said = await page.locator("#sc-suggest-status").innerText();
+  await page.close();
+  assert.deepEqual(s.changes, [{ signal: "struggle", enabled: false }]);
+  assert.equal(suggestRow(s, "struggle").checked, false);
+  assert.equal(suggestRow(s, "correction").checked, true, "the other signal was touched");
+  assert.match(said, /Jarvis will not offer this on its own\./);
+});
+
+await check("pressing Space on a suggestion switch keeps keyboard focus in place (bug audit 2026-09-27 #5)", async () => {
+  const page = await open({ status: SC.capable_off });
+  await page.locator("#sc-suggest-struggle").focus();
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(300);
+  const focused = await page.evaluate(() => document.activeElement.id);
+  const s = await section(page);
+  await page.close();
+  assert.equal(suggestRow(s, "struggle").checked, false, "the switch itself did not toggle");
+  assert.equal(focused, "sc-suggest-struggle", "focus landed on <body> instead of staying on the switch");
+});
+
+await check("an older backend that sends no 'suggest' hides the whole subsection", async () => {
+  const status = JSON.parse(JSON.stringify(SC.capable_off));
+  delete status.suggest;
+  const page = await open({ status });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.suggestTitleHidden, true);
+  assert.equal(s.suggestSignalsHidden, true);
+  assert.equal(s.suggestRows.length, 0);
+  assert.equal(s.bodyHidden, false, "the rest of the section still shows");
+});
+
+await check("a suggestion setting refused by the backend goes back to what it was", async () => {
+  const page = await open({ status: SC.capable_off, setFails: "That is not one of the two suggestion settings." });
+  await page.locator("#sc-suggest-correction").click();
+  await page.waitForTimeout(200);
+  const s = await section(page);
+  const said = await page.locator("#sc-suggest-status").innerText();
+  await page.close();
+  assert.equal(suggestRow(s, "correction").checked, true, "stayed off after a refusal");
+  assert.match(said, /That is not one of the two suggestion settings\./);
+});
+
 await check("a switch whose card has gone stays on-but-waiting, and can still be turned off", async () => {
   const page = await open({ status: SC.card_missing_but_enabled });
   const s = await section(page);
@@ -498,25 +614,36 @@ await check("CONTROL: ON is held on a stale link before anything is sent; OFF ne
 await check("CONTROL: only the settings window may read or change the second card", async () => {
   const toml = read("src-tauri/permissions/surfaces.toml");
   const sets = toml.split("[[set]]").slice(1);
-  for (const perm of ["allow-get-second-card", "allow-set-second-card"]) {
+  for (const perm of ["allow-get-second-card", "allow-set-second-card", "allow-set-second-card-suggest"]) {
     const holders = sets.filter((s) => s.includes(`"${perm}"`))
       .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
     assert.deepEqual(holders, ["settings-surface"], `${perm} is held by ${holders}`);
   }
   assert.match(read("src-tauri/capabilities/settings.json"), /"settings-surface"/);
-  for (const c of ["brain", "faces", "hud", "onboarding", "quickbar", "widget"]) {
+  for (const c of ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "widget"]) {
     const json = read(`src-tauri/capabilities/${c}.json`);
     assert.ok(!json.includes("settings-surface"), `${c} holds settings-surface`);
     assert.ok(!json.includes("second-card"), `${c} can reach the second card`);
   }
   const build = read("src-tauri/build.rs");
   const lib = read("src-tauri/src/lib.rs");
-  for (const cmd of ["get_second_card", "set_second_card"]) {
+  for (const cmd of ["get_second_card", "set_second_card", "set_second_card_suggest"]) {
     assert.ok(build.includes(`"${cmd}"`), `${cmd} is not in build.rs, so no window can call it`);
     assert.ok(lib.includes(`commands::${cmd},`), `${cmd} is not registered`);
     const gen = read(`src-tauri/permissions/autogenerated/${cmd}.toml`);
     assert.match(gen, new RegExp(`commands.allow = \\["${cmd}"\\]`));
   }
+});
+
+await check("CONTROL: 'suggest the bigger model' is held on a stale link, and posts to /api/second-card/suggest", async () => {
+  const rust = read("src-tauri/src/commands.rs");
+  const fn = rust.slice(rust.indexOf("pub async fn set_second_card_suggest"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /link\(\)\.stale/, "not held on a stale link");
+  assert.match(body, /SECOND_CARD_SUGGEST_PATH/, "does not post to /api/second-card/suggest");
+  assert.match(read("src-tauri/src/commands.rs"),
+    /const SECOND_CARD_SUGGEST_PATH: &str = "\/api\/second-card\/suggest"/,
+    "the route is not spelled out literally, so check_parity.py cannot see it");
 });
 
 await check("CONTROL: the picture check asks the second card first, and only a working Pictures switch says yes", async () => {
@@ -542,7 +669,14 @@ await check("CONTROL: the picture check asks the second card first, and only a w
 await check("CONTROL: the route line passes second_card on, and nothing more", async () => {
   const rust = read("src-tauri/src/commands.rs");
   const fn = fnBody(rust, "pub fn route_line_from_header(");
-  assert.match(fn, /for key in \["lane", "where", "gate", "second_card"\]/);
+  // `for key in [...]` is spread one key per line since `quick` and
+  // `open_settings` joined it (fix: phone build/settings-registry drop),
+  // so match the list body rather than one exact line and check its keys
+  // regardless of the formatting around them.
+  const list = /for key in \[([\s\S]*?)\]/.exec(fn);
+  assert.ok(list, "no `for key in [...]` string list in route_line_from_header");
+  const keys = [...list[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings"]);
 });
 
 await browser.close();

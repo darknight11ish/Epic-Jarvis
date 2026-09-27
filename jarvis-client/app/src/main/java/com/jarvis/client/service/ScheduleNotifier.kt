@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 
@@ -124,9 +125,10 @@ object ScheduleNotifier {
             return
         }
         val n = NotificationCompat.Builder(context, ApprovalNotifier.CHANNEL_ID)
-            // Never copied to a paired watch or other device (Android bridges
-            // notifications by default): what Jarvis says stays on this phone.
-            .setLocalOnly(true)
+            // Stays on this phone unless the owner turned on "Show
+            // notifications on a compatible watch" (Brain, off by default) -
+            // Android bridges notifications to a paired device otherwise.
+            .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)
@@ -178,9 +180,10 @@ object ScheduleNotifier {
         openBriefing: Boolean,
     ) {
         val n = NotificationCompat.Builder(context, ALARM_CHANNEL_ID)
-            // Never copied to a paired watch or other device (Android bridges
-            // notifications by default): what Jarvis says stays on this phone.
-            .setLocalOnly(true)
+            // Stays on this phone unless the owner turned on "Show
+            // notifications on a compatible watch" (Brain, off by default) -
+            // Android bridges notifications to a paired device otherwise.
+            .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)
@@ -232,9 +235,10 @@ object ScheduleNotifier {
 
     private fun locked(context: Context, lockScreen: String): Notification =
         NotificationCompat.Builder(context, ApprovalNotifier.CHANNEL_ID)
-            // Never copied to a paired watch or other device (Android bridges
-            // notifications by default): what Jarvis says stays on this phone.
-            .setLocalOnly(true)
+            // Stays on this phone unless the owner turned on "Show
+            // notifications on a compatible watch" (Brain, off by default) -
+            // Android bridges notifications to a paired device otherwise.
+            .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(lockScreen)

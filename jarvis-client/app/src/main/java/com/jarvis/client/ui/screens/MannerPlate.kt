@@ -2,6 +2,7 @@ package com.jarvis.client.ui.screens
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,6 +45,7 @@ internal fun MannerSection(canAct: Boolean) {
     var readError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    var humorBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(reads) {
         when (val r = JarvisRuntime.manner()) {
@@ -73,6 +75,22 @@ internal fun MannerSection(canAct: Boolean) {
                 said = JarvisRuntime.setManner(id)
             } finally {
                 busy = false
+                reads += 1
+            }
+        }
+    }
+
+    // Humour (the owner's decision, 2026-09-27): a second, independent
+    // switch on this same screen - off to start, no card either way.
+    fun toggleHumor(on: Boolean) {
+        if (humorBusy) return
+        humorBusy = true
+        said = null
+        scope.launch {
+            try {
+                said = JarvisRuntime.setHumor(on)
+            } finally {
+                humorBusy = false
                 reads += 1
             }
         }
@@ -110,6 +128,14 @@ internal fun MannerSection(canAct: Boolean) {
                     }
                     Gap(8)
                     Text(v.spoken, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                    Gap(12)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(v.humorTitle, style = MaterialTheme.typography.titleSmall,
+                            color = chrome.textHi, modifier = Modifier.weight(1f))
+                        Switch(checked = v.humor, enabled = canAct && !humorBusy,
+                            onCheckedChange = { toggleHumor(it) })
+                    }
+                    Text(v.humorDetail, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                 }
             }
             said?.let {

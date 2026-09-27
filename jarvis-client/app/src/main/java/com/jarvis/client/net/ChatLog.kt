@@ -68,6 +68,12 @@ object ChatLog {
     const val DELETE_KEEPS_FACTS =
         "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain."
     const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone. $DELETE_KEEPS_FACTS"
+    /** Search box, over the list already loaded (ease-of-use audit row 20;
+     *  the owner's answer of 2026-09-27: "shown on screen only; nothing
+     *  saved, nothing handed to the AI"). The desktop says the same
+     *  (brain.js `paintHistoryList`). */
+    const val SEARCH_PLACEHOLDER = "Search this list…"
+    const val NO_MATCH = "No conversations match that search."
 
     // ----------------------------------------------------------- paths ---
 
@@ -196,6 +202,18 @@ object ChatLog {
 
     /** What "Load older" asks for: rows updated before the oldest one shown. */
     fun olderThan(shown: List<Summary>): Long? = shown.mapNotNull { it.updated }.minOrNull()
+
+    /**
+     * The search box: [shown] narrowed to rows whose title has [needle],
+     * case-insensitively. Pure, client-side, over the list already loaded -
+     * no new route, nothing saved, nothing handed to the AI (the owner's
+     * answer of 2026-09-27). A blank [needle] returns [shown] unchanged.
+     */
+    fun filtered(shown: List<Summary>, needle: String): List<Summary> {
+        val n = needle.trim()
+        if (n.isEmpty()) return shown
+        return shown.filter { it.title.contains(n, ignoreCase = true) }
+    }
 
     // --------------------------------------------------------- switch ---
 

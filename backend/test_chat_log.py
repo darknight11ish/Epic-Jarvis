@@ -1082,9 +1082,14 @@ def t_the_patch():
         real = sys.modules.get("jarvis_chat_log")
         sys.modules["jarvis_chat_log"] = stub
         try:
+            # games-temporary.patch: the snippet calls _temporary_chat(body)
+            # now, not body.get("temporary") directly - the real module
+            # always has that name in scope; this isolated fragment needs
+            # it in `env` too.
             env = {"_activity": lambda *a: None, "MEMORY": True, "jarvis_side_memory": False,
                    "LEARNER": types.SimpleNamespace(
                        offer=lambda m, origin="unknown", **kw: offered.append((m, origin))),
+                   "_temporary_chat": lambda b: isinstance(b, dict) and b.get("temporary") is True,
                    "body": body, "route_header": {"lane": "qwen3:8b"}, "lane": "qwen3:8b",
                    "_history": {"turn": {"answer": "hello"}, "at": 5.0}}
             try:

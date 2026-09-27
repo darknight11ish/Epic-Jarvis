@@ -365,7 +365,7 @@ fun VoiceTrainingScreen(
                     val result = checkResult
                     when {
                         checking || result == null -> Text(
-                            "Comparing on your PC...",
+                            "Comparing on your PC…",
                             style = MaterialTheme.typography.bodyMedium,
                             color = chrome.textMid,
                         )
