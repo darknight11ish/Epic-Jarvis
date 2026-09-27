@@ -111,6 +111,14 @@ _MORE_TRUE_POSITIVES = [
     "not what I asked",
     "That's not what I meant.",
     "no, this is wrong",
+    # Opus 5.5 re-check, 2026-09-27: the anchor's first cut only spared a
+    # leading "no,", so these four common lead-ins had silently stopped
+    # matching - a real loss of coverage, not the false-positive fix's own
+    # intended trade-off.
+    "Jarvis, that's wrong",
+    "nope, that's wrong",
+    "hmm, that's not right",
+    "actually it's wrong",
 ]
 
 #: Ordinary chat that must NOT match - this is the whole point of the

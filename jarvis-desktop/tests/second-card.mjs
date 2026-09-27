@@ -346,6 +346,34 @@ await check("pressing Space on a switch keeps keyboard focus in place (bug audit
   assert.equal(focused, "sc-switch-long_context", "focus landed on <body> instead of staying on the switch");
 });
 
+await check("a toggle whose re-read FAILS does not yank focus back on a later, unrelated repaint (Opus 5.5 re-check, 2026-09-27)", async () => {
+  // scToggle sets scRestoreFocusId, then awaits loadSecondCard() to re-read
+  // the real state. When that re-read throws, it lands in scShowProblem,
+  // not scPaint - and only scPaint used to clear scRestoreFocusId. Left
+  // set, the NEXT successful repaint (here: the page's own visibilitychange
+  // re-read) would steal focus back to this switch from wherever the owner
+  // is by then, even though they left this failed attempt behind.
+  const page = await open({ status: SC.running_long_context });
+  await page.locator("#sc-switch-long_context").focus();
+  await page.evaluate(() => { window.__secondCard.getFails = "boom"; });
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(300);
+  const afterFailure = await section(page);
+  assert.equal(afterFailure.bodyHidden, true, "the failed re-read did not show the problem state");
+  // The owner has moved on: nothing here is focused any more.
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+  // Now the read works again, and something else triggers a repaint - the
+  // same event settings.js's own visibilitychange listener reacts to.
+  await page.evaluate(() => { window.__secondCard.getFails = null; });
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.waitForTimeout(300);
+  const focused = await page.evaluate(() => document.activeElement.id);
+  await page.close();
+  assert.notEqual(focused, "sc-switch-long_context",
+    "the failed toggle's own switch stole focus back on a later, unrelated repaint");
+});
+
 /* ── "When to suggest the bigger model" (2026-09-27) ──────────────────────── */
 
 await check("both suggestion signals show, on by default, with the backend's own words", async () => {

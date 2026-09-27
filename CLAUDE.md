@@ -443,13 +443,49 @@ own "owner's call" findings:
   to be two separately-maintained lists).
 - **"Floating Jarvis"'s Bubble mode gets the Android conversation shortcut
   it needs** - without one, Android 11+ silently never shows it as a
-  bubble at all, even with the setting on.
+  bubble at all, even with the setting on. **Not the whole fix**, an Opus
+  5.5 re-check found (2026-09-27): Android's own conversation requirement
+  also needs `NotificationCompat.MessagingStyle`, which this notification
+  still does not use - so a bubble may still not appear until that second,
+  larger piece (a real redesign of what the notification looks like, on or
+  off Bubble mode) is also done. Try it on a real phone before trusting it.
 - **App lock matches on both apps for the floating face/avatar**: neither
   is hidden or blanked while locked - matching the desktop's original
   behaviour, which already showed link, approval and error state while
   locked. The phone's avatar used to go neutral instead; it now shows the
   same connectivity/listening state regardless of App lock, same as the
   desktop always did.
+
+Opus 5.5 re-check, 2026-09-27, of the fixes above and the CI-failure fixes
+alongside them - six small, real findings, all fixed except two written down
+here rather than patched blind:
+- Fixed: the Settings hotkey row for a key Jarvis itself blanked (a default
+  clash, not another program) said "in use by another app" - the exact wrong
+  blame finding #7 already fixed in the startup toast, missed on this row.
+- Fixed: a toggle in "Your second graphics card" whose re-read failed left
+  its one-shot focus-restore marker set, so a later, unrelated successful
+  repaint could yank keyboard focus back to that switch from wherever the
+  owner had moved on to.
+- Fixed: the correction-phrase check's anchor (finding #9's fix, above)
+  only spared a leading "no," - "Jarvis, that's wrong", "nope, that's
+  wrong", "hmm, that's not right" and "actually it's wrong" had quietly
+  stopped counting as corrections. Widened; the doctor/landlord false
+  positives finding #9 was written for stay fixed.
+- Fixed: the Bubble-mode shortcut push discarded a real success/failure
+  answer behind a hardcoded `true` - an earlier note here that the call
+  "returns Unit" was wrong.
+- Fixed: the phone/desktop "open a chat" phrase-list test (above) only ever
+  checked the fixture against the app, never the app against the fixture -
+  a phrase added straight to the phone's list, in neither direction, would
+  have passed silently.
+- **Written down, not fixed:** marking a crisis answer "wrong" (the thumbs-
+  down button) still counts toward "suggest the bigger model" - the crisis
+  exclusion above only covers the live phrase-based signal and the
+  struggle count. Fixing it needs the turn's crisis flag and its id joined
+  across two separate patches (`chat-stream.patch`, which has the flag, and
+  `second-card-suggest.patch`, which has the id) - mechanical, but not done
+  without the owner's go-ahead given how carefully this project already
+  treats crisis handling.
 
 ## Every new feature gets its own audit, without being asked
 

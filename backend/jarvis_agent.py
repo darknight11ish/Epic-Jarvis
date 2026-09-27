@@ -3530,10 +3530,21 @@ def reset_suggest_counts(conversation_id) -> None:
 # those apart from a real correction that also continues with detail
 # ("that's wrong, it's Sydney" - the pushback case below, which must still
 # match). Narrower than before; not perfect.
+#
+# The leading filler allowed before the subject+judgement itself widened
+# once (Opus 5.5 re-check, 2026-09-27): the first cut only spared "no,",
+# which meant "Jarvis, that's wrong", "nope, that's wrong", "hmm, that's
+# not right" and "actually it's wrong" stopped matching too - a real loss
+# of coverage the original fix's own commit message did not mention. Every
+# word here is a filler or a name, never itself a subject or a judgement,
+# so it cannot smuggle a false match past the anchor the way the bare word
+# "no" was already ruled out above ("no thanks" still fails: "thanks" is
+# not {SUBJECT}).
+_CORRECTION_LEADIN = r"(?:no|nope|nah|hmm+|well|actually|wait|jarvis)[,.]?\s+"
 _CORRECTION_SUBJECT = r"(?:that'?s|that\s+is|this\s+is|you'?re|you\s+are|it'?s|it\s+is)"
 _CORRECTION_JUDGEMENT = r"(?:wrong|incorrect|inaccurate|not\s+(?:right|correct|accurate|true))"
 _CORRECTION = re.compile(
-    rf"^(?:no[,.]?\s+)?{_CORRECTION_SUBJECT}\s+{_CORRECTION_JUDGEMENT}\b"
+    rf"^(?:{_CORRECTION_LEADIN})*{_CORRECTION_SUBJECT}\s+{_CORRECTION_JUDGEMENT}\b"
     r"|\bwrong\s+answer\b"
     r"|\byou\s+(?:got|have)\s+(?:that|it)\s+wrong\b"
     r"|\bnot\s+what\s+i\s+(?:asked|meant|said|wanted)\b"

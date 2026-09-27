@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * `net/OpenChatPhrase.kt`'s own phrase list, held to
@@ -41,5 +42,39 @@ class OpenChatPhraseContractTest {
             val phrase = c.jsonPrimitive.content
             assertFalse(phrase, OpenChatPhrase.matches(phrase))
         }
+    }
+
+    /**
+     * The other direction of the contract: every literal in `PHRASES` (read
+     * as text - it is private, and does not need to stop being so just to
+     * be read here) is itself one of the fixture's own "matches". Without
+     * this, a phrase added straight to `PHRASES` that is in NEITHER list
+     * would still pass both tests above - matching here and refused by
+     * neither check - while quietly disagreeing with the backend's grammar,
+     * exactly the drift this contract exists to catch (Opus 5.5 re-check,
+     * 2026-09-27: the two tests above only ever checked the fixture against
+     * the app, never the app against the fixture).
+     */
+    @Test
+    fun `every literal in PHRASES is one the backend's grammar accepts`() {
+        val matches = cases["matches"]!!.jsonArray.map { it.jsonPrimitive.content }.toSet()
+        val src = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/net/OpenChatPhrase.kt").readText()
+        val body = src.substringAfter("private val PHRASES = setOf(").substringBefore("\n    )")
+        val phrases = Regex("\"([^\"]*)\"").findAll(body).map { it.groupValues[1] }.toList()
+        assertTrue("PHRASES is empty - this test's own extraction did not find it", phrases.isNotEmpty())
+        for (p in phrases) {
+            assertTrue("PHRASES has \"$p\", which open-chat-cases.json's own \"matches\" does not", p in matches)
+        }
+    }
+
+    /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
+    private fun repoFile(rel: String): File {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null) {
+            val f = File(dir, rel)
+            if (f.isFile) return f
+            dir = dir.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
     }
 }

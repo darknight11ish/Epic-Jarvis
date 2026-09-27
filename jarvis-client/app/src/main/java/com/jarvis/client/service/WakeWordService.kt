@@ -698,12 +698,14 @@ class WakeWordService : Service() {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             )
             .build()
-        // `pushDynamicShortcut` returns Unit, not a success flag - it either
-        // publishes the shortcut or throws. The explicit `true` here is
-        // what `runCatching` actually reports as success; `getOrDefault`
-        // below is reached only on a caught exception.
+        // `pushDynamicShortcut` DOES return a real success flag (`boolean`
+        // in its own androidx source, confirmed 2026-09-27 - an earlier
+        // note here that it "returns Unit" was wrong, and had this call's
+        // real answer thrown away behind a hardcoded `true`). `false` means
+        // no exception, but no shortcut either - a rate limit or the
+        // device's own shortcut-count cap - which is exactly the case this
+        // function's own doc comment above says must not build a bubble.
         ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
-        true
     }.onFailure { Log.w(TAG, "could not publish the bubble's shortcut", it) }.getOrDefault(false)
 
     private fun readFully(rec: AudioRecord, buf: ShortArray): Boolean {
@@ -799,6 +801,17 @@ class WakeWordService : Service() {
         // requires for it to be treated as a conversation at all on API 30+,
         // and androidx's own BubbleMetadata doc comment says the two ids are
         // checked for a match once both are set, so this always matches.
+        // KNOWN GAP, flagged rather than guessed at (Opus 5.5 re-check,
+        // 2026-09-27): the shortcut publishBubbleShortcut() pushes is
+        // `setLongLived(true)` on purpose (Android's own bubble
+        // requirement), so it outlives Bubble mode being turned off and
+        // likely sits in the launcher's long-press menu after that. Its
+        // removal counterpart is a PLATFORM ShortcutManager method added in
+        // API 30, not confirmed present on ShortcutManagerCompat as of the
+        // androidx.core version this app pins (core-ktx 1.15.0) - calling
+        // one that turns out not to exist would trade a cosmetic leftover
+        // for a real compile failure, so this is left as a follow-up to
+        // verify against a real SDK rather than shipped unverified.
         if (JarvisRuntime.settings.floatingAvatar.value == FloatingAvatarMode.BUBBLE) {
             bubbleMetadata()?.let { builder.setBubbleMetadata(it).setShortcutId(BUBBLE_SHORTCUT_ID) }
         }

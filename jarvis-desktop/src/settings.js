@@ -1095,10 +1095,17 @@ function renderHotkeys() {
 
     const state = document.createElement("div");
     state.className = "hotkey-state";
+    // A blank `row.accelerator` with an error is Jarvis's OWN doing (its
+    // default lost to another action's saved key, hotkeys.rs's own
+    // `apply`) - "in use by another app" would blame the wrong thing here,
+    // the exact wrong blame bug audit 2026-09-27 finding #7 already fixed
+    // in the startup toast but missed on this row (Opus 5.5 re-check,
+    // 2026-09-27). A real OS-level refusal still names "another app",
+    // since that one really is one.
     state.textContent = row.registered
       ? "working"
       : row.error
-        ? "in use by another app"
+        ? row.accelerator ? "in use by another app" : "needs a different key"
         : "not bound";
     if (!row.registered && row.error) state.title = row.error;
 
@@ -1962,6 +1969,13 @@ function scShowProblem(words) {
   sc.state.dataset.tone = "bad";
   sc.state.textContent = words;
   scStopPoll();
+  // One-shot, the same as scPaint's own consumption of it (Opus 5.5
+  // re-check, 2026-09-27): a toggle sets this just before its re-read, and
+  // if that re-read lands here instead of in scPaint, leaving it set means
+  // the NEXT successful repaint - a poll, an approval signal, the window
+  // coming back into view - yanks keyboard focus back to that switch from
+  // wherever the owner is by then.
+  scRestoreFocusId = null;
 }
 
 function scPaint(status) {

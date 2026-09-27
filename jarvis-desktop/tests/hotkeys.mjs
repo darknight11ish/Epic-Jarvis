@@ -131,6 +131,29 @@ await check("a refused binding says so, and does not say working", async () => {
   assert.doesNotMatch(summon.state, /working/i);
 });
 
+await check("a row Jarvis itself blanked does not blame another app for it (Opus 5.5 re-check, 2026-09-27)", async () => {
+  // hotkeys.rs's own `apply()` blanks a default that lost a clash to
+  // another action's saved key - `toggle_floating`'s real shipped case,
+  // since the owner long ago moved Quick note onto that same combination.
+  // The startup toast already stopped blaming "another application" for
+  // this (finding #7); this row had not been touched and still said "in
+  // use by another app", which is Jarvis's OWN doing, not another
+  // program's.
+  const page = await open({
+    hotkeys: K.HOTKEYS.map((h) =>
+      h.id === "toggle_floating"
+        ? { ...h, accelerator: "", registered: false,
+            error: "`Alt+Shift+F` is already Quick note's own key. Give this one a different one in Settings." }
+        : h),
+  });
+  const list = await rows(page);
+  await page.close();
+  const face = list.find((r) => r.name === "Show or hide the floating face");
+  assert.equal(face.bound, "false");
+  assert.doesNotMatch(face.state, /another app/i, `said "${face.state}"`);
+  assert.match(face.state, /different key/i, `said "${face.state}"`);
+});
+
 await check("saving a combination the OS refuses does not report success", async () => {
   // The exact failure this whole feature is meant to end: the app telling you
   // a shortcut is set when the OS never took it.
