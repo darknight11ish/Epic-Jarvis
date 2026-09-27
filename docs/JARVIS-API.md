@@ -8019,31 +8019,42 @@ app's icon on the home screen or in the app drawer shows all four.
 |---|---|---|
 | Talk | `com.jarvis.client.action.START_VOICE` | The home-screen widget's own Talk button (`QuickLinkWidget.kt`) |
 | Note | `com.jarvis.client.action.QUICK_NOTE` | The same widget's own Note button |
-| Brief me | `com.jarvis.client.action.OPEN_BRIEFING` | The morning-briefing notification's own tap |
-| What did I miss? | `com.jarvis.client.action.OPEN_BRIEFING` | The same destination as "Brief me" - see 51.2 |
+| Brief me | `com.jarvis.client.action.ASK_BRIEF_ME` | Asks "Brief me now." on Home through the chat box's own send (`ChatSession.send`) |
+| What did I miss? | `com.jarvis.client.action.ASK_WHAT_DID_I_MISS` | Asks "What did I miss?" the same way |
 
-Every one of the four fires an `Intent` action `MainActivity.kt` already
-handles for something else - no new navigation or fetch logic exists
-anywhere because of this feature; it is a second way to reach an action
-that was already one tap away inside the app, never a new one.
+Talk and Note fire an `Intent` action `MainActivity.kt` already handles for
+the widget. The two briefing shortcuts ask their fixed sentence
+(`AppShortcuts.kt`) as a typed question on Home.
 
-### 52.2 Why "Brief me" and "What did I miss?" open the same place
+### 52.2 Why the two briefing shortcuts ask a question (changed 2026-09-27)
 
-`BriefingPlate.kt`'s own "Brief me now" and "What did I miss?" are already
-two buttons on ONE shared section (`BriefingSection`), not two screens -
-there is nowhere else for a "What did I miss?" shortcut to open TO. Kept
-as its own shortcut anyway, rather than folded into "Brief me", because
-the idea names it separately, and because seeing "What did I miss?" in the
-long-press menu tells an owner that question exists at all, without first
-opening the app to find the button.
+Both first opened Brain at the top (the briefing notification's own tap),
+with the briefing somewhere below the fold - so a long press on "Brief me
+now" showed a screen of other things, and both shortcuts did the same
+thing. The phone walk-through of 2026-09-27 found it; now each asks its
+own sentence on Home, and the answer appears where every answer does.
+
+Both sentences are on the "Things you can say" list (`net/Sayable.kt`,
+held to `jarvis_sayable.SENTENCES` by `SayableContractTest`), and both are
+answered on the PC by `jarvis_quick.py` WITHOUT the AI model. Both only
+read: nothing is changed, no card is raised, nothing is approved. The
+briefing's one side effect (a calendar it quotes is marked as read) is the
+same one Brain's own "Brief me now" button has. `AppShortcutsTest` checks
+the sentences against the list and the actions against `shortcuts.xml`.
+
+The question is sent only on a fresh launch or a new tap - never again
+when the phone rotates - and not at all on a phone that is not paired.
 
 ### 52.3 App lock
 
 Unaffected: every shortcut's `<intent>` targets `MainActivity`, and
 `MainActivity.kt`'s own rule - "the app lock outranks everything ...
-nothing behind it is composed" - runs before any of the three actions
-above are acted on, exactly as it already does when the SAME actions
-arrive from the home-screen widget or the briefing notification. The
+nothing behind it is composed" - runs before any of the actions above are
+acted on, exactly as it already does when the widget's actions arrive.
+The two briefing shortcuts wait for more than that: their question is not
+SENT until the app is unlocked (the effect is keyed on `locked`, like a
+tapped approval notification), because the answer is the owner's private
+briefing. The
 `LaunchedEffect`s that read `startVoiceRequested`/`quickNoteOpen`/
 `openBriefingRequested` are declared before the lock check in `App()`, so
 a shortcut tapped while locked updates that state but shows nothing until
@@ -8672,10 +8683,28 @@ every section this file knows, not only "Starting Jarvis for you":
   `"backup"`. Nothing is changed by any of this - it is read-only
   navigation, like the desktop's. Voice, Security, Appearance and Backups
   are ordinary rows on this screen, so all four ARE scroll targets, same as
-  every other section in the map. Only a genuinely desktop-only "Rare"
-  section has no key at all, and still opens the Settings screen - the one
-  screen this app has - with nothing to scroll to; the answer already
-  named the place in words either way. There is no
+  every other section in the map.
+
+  **Changed 2026-09-27 (phone walk-through):** not every section is on the
+  phone's Settings screen, and "open help", "connection", "the morning
+  briefing", "about" and "Jarvis's voices" all used to land at the top of
+  Settings, which has none of them. `ui/OpenPlace.kt` now decides, for every
+  id in `SECTIONS`, where it goes on the phone: a Settings row (as above);
+  Help (`faq`, and `about` at its end); Checks (`connection`, and `updates`
+  to the phone's own "Check for new versions"); the "Jarvis's voice" screen
+  (`voices`); or Brain (`briefing-settings`, and `hardware`, `second-card`,
+  `big-model` and `backend-supports`, which the registry marks
+  desktop-only but which the phone's Brain does have plates for). The few
+  with no phone equivalent (`shortcuts`, `account-secrets`,
+  `tool-updates`, `more-options`, `start-jarvis`) open nothing and show one
+  plain line instead: "That setting is only in Jarvis on your PC, not on
+  this phone. Open Jarvis on your PC to change it." Brain, Help and Checks
+  bring the item into view by its `item(key = ...)` (`ui/parts/
+  ScrollToKey.kt`), since some of their items are drawn only sometimes.
+  `OpenPlaceTest` reads `SECTIONS` straight from
+  `jarvis_settings_registry.py`, so a section added there without a phone
+  decision fails the phone's tests. The answer's own words are still the
+  backend's ("Opening <name> in Settings."), for the reason below. There is no
   separate wording per app: `/api/chat`'s body carries no client kind, so
   the backend cannot tell which app is asking and answers the same
   sentence to both (`jarvis_settings_registry.py`'s own header says this

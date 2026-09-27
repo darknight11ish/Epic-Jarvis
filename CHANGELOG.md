@@ -6,6 +6,23 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Fixed (phone): "open help", "connection", "the morning briefing",
+  "about" and "Jarvis's voices" opened Settings at the top.** Each now opens
+  the phone's own place for it - Help, Checks, Brain or "Jarvis's voice" -
+  and scrolls to it. A setting that only the PC app has (keyboard shortcuts,
+  accounts and a few more) now says so in one line instead.
+- **Fixed (phone): "Catching up…" explained properly.** An approval card
+  said "Not connected to the desktop" even while the phone was connected and
+  only catching up. It now says Jarvis is catching up with your PC and the
+  decision waits until then. Checks calls this state "Catching up…" like
+  Home (it said "Stale"), Home shows Retry next to it, and coming back to the
+  app reconnects on its own. Approving still waits until the link is
+  trusted again.
+- **Fixed (phone): the "Brief me now" and "What did I miss?" app-icon
+  shortcuts** opened Brain at the top. Each now asks its question on Home,
+  as if you had typed it.
+- **Fixed (phone): an answer made without the AI model** said "answered on
+  this PC" on the phone. It now says "on your PC".
 - **Fixed: typing the phone's pairing key exactly as the PC shows it.** The
   PC shows the key in groups of four with spaces, to make it easier to read.
   The phone kept those spaces, so the key was refused. The phone now drops

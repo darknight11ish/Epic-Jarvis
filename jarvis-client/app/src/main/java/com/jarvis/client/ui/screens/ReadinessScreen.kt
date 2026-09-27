@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +42,7 @@ import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.rememberTickingNow
@@ -166,8 +168,18 @@ fun ReadinessScreen(
      * exactly as they did.
      */
     onOpenSettings: (() -> Unit)? = null,
+    /**
+     * "Open connection" or "open updates" by voice or chat
+     * ([com.jarvis.client.ui.OpenPlace]): the item key to bring into view
+     * once ("connection" or "this-app"), or null for the top.
+     */
+    initialSection: String? = null,
+    /** Called once [initialSection] has been acted on, so it is not acted on again. */
+    onSectionConsumed: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
+    val listState = rememberLazyListState()
+    ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
     // Split rather than re-sorted, so within each group the order stays the
     // one PlatformReadiness wrote.
     val warnings = remember(items) { items.filter { it.state == ReadinessItem.State.WARN } }
@@ -207,6 +219,7 @@ fun ReadinessScreen(
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -287,7 +300,10 @@ private fun ConnectionCard(
         !info.paired -> "Not paired"
         info.link == LinkState.OFFLINE -> "Offline"
         info.link == LinkState.RECONNECTING -> "Reconnecting"
-        info.stale -> "Stale"
+        // The same word Home's status line and the desktop use for this
+        // state (LinkWords.CATCHING_UP). It used to say Stale here while
+        // Home said "Catching up…" - two names for one thing.
+        info.stale -> "Catching up…"
         else -> "Connected"
     }
     val line = when {

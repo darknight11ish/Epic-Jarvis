@@ -60,6 +60,7 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Refuse
 import com.jarvis.client.ui.parts.Rule
+import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
@@ -227,6 +228,14 @@ fun BrainScreen(
      * plate points at should not be assumed.
      */
     onOpenSettings: (() -> Unit)? = null,
+    /**
+     * "Open <a place>" by voice or chat ([com.jarvis.client.ui.OpenPlace]):
+     * the item key to bring into view once - "briefing", "hardware",
+     * "second-card", "big-model" or "capabilities" - or null for the top.
+     */
+    initialSection: String? = null,
+    /** Called once [initialSection] has been acted on, so it is not acted on again. */
+    onSectionConsumed: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     // The same test ModelsPlate always had, now shared by every control on this
@@ -270,6 +279,7 @@ fun BrainScreen(
         // that line is on, and that plate is on screen when it is tapped.
         val listState = rememberLazyListState()
         val listScope = rememberCoroutineScope()
+        ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             state = listState,
