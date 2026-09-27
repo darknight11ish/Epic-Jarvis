@@ -40,11 +40,15 @@ desktop-only place is marked in its `app` field, for `sections_for()` and
 this file's own tests - but the ANSWER this file gives is the same
 sentence on both apps ("Opening <name> in Settings."), because the backend
 does not know which app is asking (`/api/chat`'s body carries no client
-kind). Saying "open backups" on the phone still opens its one Settings
-screen; there is simply no row there to scroll to, the same harmless
-fallback "Show me where" already has for an unmatched place. Said plainly
-here rather than claimed as a feature: a per-app wording would need the
-backend to read `X-Jarvis-Client` for this, which it does not do today.
+kind). Saying "open backups" on the phone opens its one Settings screen
+AND scrolls to the real backup row it has there - Voice, Security,
+Appearance and Backups are ordinary `item(key = ...)` rows on the phone,
+same as on the desktop. Saying "open hardware" on the phone (a genuinely
+desktop-only section) is the harmless fallback case: the Settings screen
+still opens, but there is no row there to scroll to, the same "Show me
+where" already has for an unmatched place. Said plainly here rather than
+claimed as a feature: a per-app wording would need the backend to read
+`X-Jarvis-Client` for this, which it does not do today.
 
 ADJUSTABLE covers ten settings behind a SINGLE existing boolean or choice
 function, picked because each already has a proven `handle_*`/`request_*`
@@ -126,18 +130,18 @@ SECTIONS: tuple = (
     Section("voice", ("voice", "voice settings", "my voice", "how jarvis listens")),
     Section("manner", ("how jarvis talks", "manner", "warm and brief", "plain mode")),
     Section("briefing-settings", ("the morning briefing", "briefing settings")),
-    Section("shortcuts", ("shortcuts", "keyboard shortcuts", "hotkeys")),
+    Section("shortcuts", ("shortcuts", "keyboard shortcuts", "hotkeys"), app="desktop"),
     Section("security", ("security", "app lock", "windows hello")),
     Section("voices", ("jarvis's voice", "jarvis's voices", "custom voices",
                        "how jarvis sounds")),
     Section("web-search", ("web search", "search settings", "the search provider")),
-    Section("account-secrets", ("accounts", "account secrets", "credentials")),
-    Section("hardware", ("hardware and models", "hardware", "graphics cards")),
+    Section("account-secrets", ("accounts", "account secrets", "credentials"), app="desktop"),
+    Section("hardware", ("hardware and models", "hardware", "graphics cards"), app="desktop"),
     Section("second-card", ("the second graphics card", "second card", "second gpu"),
             app="desktop"),
     Section("big-model", ("the big model", "big model settings"), app="desktop"),
     Section("folders", ("folders jarvis may look in", "folders", "the notion export")),
-    Section("backup", ("backups", "backup settings"), app="desktop"),
+    Section("backup", ("backups", "backup settings")),
     Section("updates", ("updates", "app updates"), app="desktop"),
     Section("tool-updates", ("tool updates", "check for tool updates"), app="desktop"),
     Section("more-options", ("more options", "startup and logs"), app="desktop"),

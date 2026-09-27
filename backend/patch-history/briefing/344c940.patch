@@ -118,7 +118,7 @@
 +            pass
          try:
              import jarvis_quick
-             # peer/local: jarvis_settings_registry.py's "open"/"adjust" a setting
+             # peer/local: settings.patch's "open"/"adjust" a setting by voice
 @@ -2879,8 +2887,13 @@
              if _temporary_chat(body) and route_header.get("memory_side") != "jarvis":
                  route_header["memory_side"] = "none"

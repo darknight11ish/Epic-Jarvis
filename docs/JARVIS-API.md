@@ -7177,7 +7177,7 @@ the phone) - see `docs/ARCHITECTURE.md` section 8.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** for a tool off the four; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (41.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** for a tool off the four; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app (Rust still refuses it on the phone - no screen calls it there), never held: it only narrows what the model may be offered. |
 
 Its state rides on `GET /api/asks_first` (§32.2), which now also carries:
@@ -7511,7 +7511,7 @@ shared chat pipeline:
 - **"what news feeds do I have?"** / "list my news feeds" - the addresses,
   without the model.
 - **"read me the news"** / "the news" / "what's in the news" - today's
-  headlines from every listed feed, without the model (44.4).
+  headlines from every listed feed, without the model (§46.4).
 
 The three routes below exist so a settings screen can be added later
 without changing `jarvis_news.py` - `jarvis_quick.py`'s fast path calls the
@@ -8357,10 +8357,11 @@ The owner's request, 2026-09-27: a picture-in-picture-style avatar that
 stays visible while using other apps, voice only (no visible text box),
 that expands into the real chat screen on "open a chat" (or a close
 phrasing) or a tap. Built as a three-state setting the owner picks
-between, with BOTH of the two ways to do this on Android, as asked. Phone
-only for now - see `docs/ARCHITECTURE.md` §8, "One-sided on purpose": the
-Windows half, if any, is a separate piece of work, not part of this
-section.
+between, with BOTH of the two ways to do this on Android, as asked. This
+section covers the phone half; the desktop has its own equivalent, the
+floating face (§57) - a separate piece of work, built by a different
+session at the same time (`docs/ARCHITECTURE.md` §8's picture-in-picture
+row), not part of this section.
 
 **No new backend route.** Nothing here changes `/api/chat`, `/api/voice/
 utterance` or any other route; every existing rule about the voice loop,
@@ -8419,8 +8420,10 @@ right, until that switch is also on.
 ### 56.3 The Overlay path
 
 `service/AvatarOverlayService.kt` (new): a foreground service
-(`foregroundServiceType="specialUse"`, its own subtype string - see §3.1(2)
-for why specialUse over dataSync) holding one small `WindowManager`
+(`foregroundServiceType="specialUse"`, its own subtype string - see
+`AndroidManifest.xml`'s and `res/values/strings.xml`'s own "§3.1(2)" comments
+for why specialUse over dataSync; that label is a convention shared between
+those two files, not a JARVIS-API.md section) holding one small `WindowManager`
 window: a draggable circle showing the launcher icon, with a small coloured
 badge for the link (nothing shown when everything is fine, amber while
 reconnecting, red while offline - neutral under App lock, 56.5).
@@ -8464,25 +8467,40 @@ question. `VoiceSession.deliver` checks it right after the transcript
 arrives and, if it matches AND `floatingAvatar` is not `off`, brings
 `MainActivity` to the front (`ACTION_START_VOICE` - Home, ready to talk,
 the same destination the home-screen widget's own Talk button already
-opens) - IN ADDITION to sending the turn on to the model as usual, never
+opens) - IN ADDITION to sending the turn on to the backend as usual, never
 instead of it, so nothing here can make an answer that would have
 happened stop happening. A tap on the avatar itself (Bubble or Overlay)
 reaches the exact same destination.
 
-No change was needed in `jarvis_quick.py` for this: recognising the
-phrase happens entirely on the phone, from a field the desktop already
-sends. (A concurrent piece of work may add a comparable phrase to
-`jarvis_quick.py` for the Windows side - that is a separate mechanism for
-a separate platform, and nothing here depends on it or collides with it.)
+This list is not the backend's own: `jarvis_quick.py`'s `_OPEN_CHAT` fast
+path (§57.2) recognises a different, overlapping set of phrases, matched
+entirely server-side against the same text. For a phrase both lists share
+(such as "open a chat" or "open the chat"), the backend answers "Here you
+go." straight from that fast path, without reaching the model; for a
+phrase only the phone's list matches (such as "let's chat"), the backend
+has no fast path for it and the turn reaches the model exactly as before.
+Either way the phone still sends the turn and still gets an answer - only
+whether that answer comes from the fast path or the model differs, and the
+phone's own bring-to-front behaviour is the same regardless. `OpenChatPhrase.kt`'s
+own doc comment says why it deliberately does not mirror `jarvis_quick.py`'s
+normaliser rather than share one fixture with it.
 
 ### 56.5 App lock
 
 The floating avatar is this app's OWN drawn surface, on top of every
 other app - not a launcher-drawn widget, which is why it does not follow
-`ApprovalWidget`'s "stays visible, shows less" rule as-is. It is closer in
+`ApprovalWidget`'s "stays visible, shows less" rule as-is. Its real
+counterpart is the desktop's floating face (§57), the other half of the
+same picture-in-picture idea; both are always-on-top surfaces with the
+same purpose. The two apps chose opposite App-lock rules for it, though:
+the desktop's floating face is NOT behind App lock at all, and keeps
+showing approval, error and offline states while locked (`windows.rs`),
+while the phone goes neutral instead (below). Whether the two should match
+is the owner's call, not resolved here (bug audit 2026-09-27, finding #7);
+this section only documents the phone's own rule. It is also closer in
 shape to the desktop's HUD window, which `docs/ARCHITECTURE.md` §8 already
-covers with App lock in full. But unlike the HUD, which simply is not
-shown until asked for, the floating avatar's entire purpose is to stay
+covers with App lock in full: unlike the HUD, which simply is not shown
+until asked for, the floating avatar's entire purpose is to stay
 reachable - hiding it every time the phone relocks (which can be as often
 as every minute, "Lock again after") would be its own nuisance, and
 disappearing and reappearing is itself a bigger tell than a neutral dot.
@@ -8657,13 +8675,14 @@ every section this file knows, not only "Starting Jarvis for you":
   `LazyColumn` now keeps its own `LazyListState` and, in a
   `LaunchedEffect(initialSection)`, scrolls to that item's index by a
   small fixed key-to-index map matching its own `item(key = ...)` calls -
-  the seven moved sections, `"voice"`, `"security"` and `"appearance"`.
-  Nothing is changed by any of this - it is read-only navigation, like the
-  desktop's. A section with no such key (the three linked screens are
-  reachable by their OWN screen, not a scroll target on this one; every
-  desktop-only "Rare" section has no key at all) still opens the Settings
-  screen - the one screen this app has - with nothing to scroll to; the
-  answer already named the place in words either way. There is no
+  the seven moved sections, `"voice"`, `"security"`, `"appearance"` and
+  `"backup"`. Nothing is changed by any of this - it is read-only
+  navigation, like the desktop's. Voice, Security, Appearance and Backups
+  are ordinary rows on this screen, so all four ARE scroll targets, same as
+  every other section in the map. Only a genuinely desktop-only "Rare"
+  section has no key at all, and still opens the Settings screen - the one
+  screen this app has - with nothing to scroll to; the answer already
+  named the place in words either way. There is no
   separate wording per app: `/api/chat`'s body carries no client kind, so
   the backend cannot tell which app is asking and answers the same
   sentence to both (`jarvis_settings_registry.py`'s own header says this
@@ -8694,7 +8713,7 @@ the REST route does, never a copy of its logic:
 | Smartwatch notifications | "turn on/off smartwatch notifications" | `jarvis_watch_notify.request()` (§39) |
 | Morning briefing senders shown | "turn on/off senders in my briefing" | `jarvis_briefing.handle_senders()` (§22) |
 | "What asks first" - loosen/stricter | "stop asking before my calendar" / "ask me before my calendar" | `jarvis_asks_first.handle_tier()` (§32) |
-| Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§32) |
+| Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§43) |
 
 Every one of these keeps its EXISTING gate exactly:
 
@@ -8710,7 +8729,11 @@ Every one of these keeps its EXISTING gate exactly:
   this PC (`jarvis_asks_first.request_tier`'s and `request_tool_enable`'s
   own `_here(here, peer, local)` check, fed `peer`/`local` read off the
   live TCP connection the same way `owner-check.patch`'s own `do_POST`
-  wrapper reads them - never invented, never defaulted to "this PC") and
+  wrapper reads them - never invented; the rule is the opposite of a
+  default toward "elsewhere", though, not away from "this PC":
+  `jarvis_owner_check.from_this_pc`'s own docstring says plainly "anything
+  that cannot be placed counts as this PC", so an address that cannot be
+  read at all is treated as PC-only, never as a stranger) and
   still need Windows Hello to approve, whichever app or device raised the
   card. Making one of these settings STRICTER (`"ask": true`) is unaffected
   by PC_ONLY_ACTIONS - it always was immediate, from anywhere, no card -
