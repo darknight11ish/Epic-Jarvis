@@ -529,7 +529,7 @@ window.JARVIS_SPEC = Object.freeze({
         "more_coming": "Built after it: the pygmy owl and the sea otter (the owner's go-ahead, 2026-09-27).",
         "note": "The first animal face. Unlike the twenty instruments before it, a character needs its own pose for every state, so it receives all eight rather than borrowing four motion tables: asleep for standby, a wave for approval, a head-scratch for error, a doze for banked. The shell's transforms (dim, the approval clock, the error hitch) still apply on top.",
         "pose": "jarvis-desktop/src/critter-pose.js and jarvis-client CritterPose.kt, held equal by tools/gen_critters.py's fixture and CritterPoseTest",
-        "shader": "jarvis-desktop/critters/redpanda.sksl - one source for both apps, generated into each by tools/gen_critters.py"
+        "shader": "jarvis-desktop/critters/common_head.sksl + redpanda.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
       },
       "dim": "3d",
       "geometry": "sphere-traced soft-body character",
@@ -1962,7 +1962,7 @@ window.JARVIS_SPEC = Object.freeze({
       "max": 1.0,
       "medium": 0.8
     },
-    "note": "Most faces are meshes of a few thousand quads and a CPU rasteriser draws them fine. Three cannot be drawn sharply that way at phone resolution, and are rendered by a shader instead. The distinction is a property of the face, not of the client, so it is recorded here.",
+    "note": "Most faces are meshes of a few thousand quads and a CPU rasteriser draws them fine. A few cannot be drawn sharply that way at phone resolution (and the animals cannot be drawn as meshes at all), and are rendered by a shader instead. The distinction is a property of the face, not of the client, so it is recorded here.",
     "point_batch": {
       "calibration": {
         "how": "The first time a batchable face draws, it runs both ways in alternating blocks of 8 frames, discards the first frame of each block (shader compile, buffer resize, cold cache), takes the median of 3 blocks each way, and keeps the faster. Ties go to canvas: that is the path with no second surface, no blit, and no context to lose. The answer is remembered per face.",

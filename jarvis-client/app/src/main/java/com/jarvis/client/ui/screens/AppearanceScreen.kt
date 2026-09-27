@@ -581,8 +581,8 @@ fun AppearanceScreen(
                             // sentence is prose a drift test cannot check, and
                             // it is the number that has to stay honest, not the
                             // word "twenty" next to it.
-                            "All ${Faces.all.size} of the desktop's twenty faces render here now " +
-                                "- line and stroke art, one GPU shader, and a real OpenGL mesh, " +
+                            "All ${Faces.all.size} of the desktop's faces render here now " +
+                                "- line and stroke art, GPU shaders and a real OpenGL mesh, " +
                                 "whichever each one needed.",
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,

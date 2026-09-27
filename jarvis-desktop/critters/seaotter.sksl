@@ -210,3 +210,14 @@ float3 sparkle(float id, float3 pos) {
     float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y));
     return float3(1.5) * spark * lit * (h.z < -0.19 ? 1.0 : 0.0);
 }
+
+// What a ray that ran out of march steps without reaching anything sees
+// (common_tail.sksl). Rays that skim the otter's outline use up their steps
+// creeping along its fur before they reach the pool behind it: meet the
+// water directly, so the edge shows water rather than see-through specks.
+float stuckRay(float3 ro, float3 rd) {
+    if (rd.y > -0.001) return -1.0;
+    float t = (uWater.x - ro.y) / rd.y;
+    float3 q = ro + rd * t;
+    return length(q.xz) < POOL_R - 0.02 ? t : -1.0;
+}

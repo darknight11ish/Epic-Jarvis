@@ -1,7 +1,8 @@
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH and BOUND_R.
+// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH
+// and BOUND_R.
 
 float3 normalAt(float3 p) {
     float e = 0.0015;
@@ -105,6 +106,11 @@ float4 critter(float2 p) {
             if (t > tMax) { escaped = true; break; }
         }
         if (hitT < 0.0 && !escaped && h < 0.05) hitT = t;
+        // One that ran out further away still: the animal decides what is
+        // behind it (the otter's pool; nothing, -1, for the others) -
+        // otherwise its outline shows see-through specks where the pool
+        // should be.
+        if (hitT < 0.0 && !escaped) hitT = stuckRay(ro, rd);
     }
     float cover = 1.0;
     // A pixel and a half of feathering: one pixel alone still showed steps
@@ -192,7 +198,10 @@ float4 critter(float2 p) {
     // catchlight in an eye).
     col += sparkle(id, pos);
 
-    col += hot * halo * 0.25;
+    // The glow round the orb - but not through the animal: where the orb is
+    // behind the surface this ray hit (the owl's orb circling behind its
+    // head), the head hides it.
+    col += hot * halo * 0.25 * (1.0 - smoothstep(0.0, 0.15, tOrb - hitT));
     float3 outc = pow(aces(col), float3(1.0 / 2.2));
     // Premultiplied: a partly covered edge pixel lets the orb's glow (or,
     // with none, the background) show through by the uncovered share.

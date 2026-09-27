@@ -73,8 +73,8 @@ object OwlPose {
             }
             FaceState.THINKING -> {
                 val a = t * 0.9f
-                p[ORB_X] = 0.68f * cos(a); p[ORB_Y] = 1.02f + 0.08f * sin(a * 2.0f)
-                p[ORB_Z] = -0.05f - 0.55f * sin(a)
+                p[ORB_X] = 0.78f * cos(a); p[ORB_Y] = 1.02f + 0.08f * sin(a * 2.0f)
+                p[ORB_Z] = -0.05f - 0.70f * sin(a)
                 p[ORB_R] = 0.10f
                 p[HEAD_ROLL] = 0.55f * sin(t * 0.55f)
                 p[HEAD_YAW] = 0.45f * cos(a) * max(0f, sin(a))

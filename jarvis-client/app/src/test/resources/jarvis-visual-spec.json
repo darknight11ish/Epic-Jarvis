@@ -1533,7 +1533,7 @@
    "archived": false,
    "character": {
     "note": "The first animal face. Unlike the twenty instruments before it, a character needs its own pose for every state, so it receives all eight rather than borrowing four motion tables: asleep for standby, a wave for approval, a head-scratch for error, a doze for banked. The shell's transforms (dim, the approval clock, the error hitch) still apply on top.",
-    "shader": "jarvis-desktop/critters/redpanda.sksl - one source for both apps, generated into each by tools/gen_critters.py",
+    "shader": "jarvis-desktop/critters/common_head.sksl + redpanda.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py",
     "pose": "jarvis-desktop/src/critter-pose.js and jarvis-client CritterPose.kt, held equal by tools/gen_critters.py's fixture and CritterPoseTest",
     "colour": "The fur keeps its own colours. The bound hot colour is the orb the panda holds, which lights its paws and chin; the dim colour is the rim light round its fur. Recolouring the whole animal per state would read as a different animal, not the same one changing its mind.",
     "fallback_desktop": "Without WebGL2, a flat sticker of the same panda in the same pose.",
@@ -1663,7 +1663,7 @@
   "state_fps_why": "Idle, standby and banked are more than nine tenths of screen-on time and every face drew them at the full display rate. The shell accumulates time and skips vsyncs for these states, handing the accumulated dt to the draw so motion covers the same distance. The first 600ms after any state change, and any tap acknowledgement, run at full rate so no transition stutters. Banked at 2fps is just enough to catch a new notch. Active states are untouched."
  },
  "renderer": {
-  "note": "Most faces are meshes of a few thousand quads and a CPU rasteriser draws them fine. Three cannot be drawn sharply that way at phone resolution, and are rendered by a shader instead. The distinction is a property of the face, not of the client, so it is recorded here.",
+  "note": "Most faces are meshes of a few thousand quads and a CPU rasteriser draws them fine. A few cannot be drawn sharply that way at phone resolution (and the animals cannot be drawn as meshes at all), and are rendered by a shader instead. The distinction is a property of the face, not of the client, so it is recorded here.",
   "gpu_faces": {
    "pygmyowl": {
     "kind": "sdf_raymarch",

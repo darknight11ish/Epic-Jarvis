@@ -54,8 +54,8 @@
       // to follow it - the owl's own "thinking face".
       // It passes behind the head and round again, and the head follows it.
       const a = t * 0.9;
-      P.orbX = 0.68 * Math.cos(a); P.orbY = 1.02 + 0.08 * Math.sin(a * 2.0);
-      P.orbZ = -0.05 - 0.55 * Math.sin(a);
+      P.orbX = 0.78 * Math.cos(a); P.orbY = 1.02 + 0.08 * Math.sin(a * 2.0);
+      P.orbZ = -0.05 - 0.70 * Math.sin(a);
       P.orbR = 0.10;
       P.headRoll = 0.55 * Math.sin(t * 0.55);
       P.headYaw = 0.45 * Math.cos(a) * Math.max(0, Math.sin(a));

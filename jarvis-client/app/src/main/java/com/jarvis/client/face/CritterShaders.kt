@@ -319,7 +319,7 @@ float mapLite(float3 p) {
     float3 h = toHead(p);
     d = min(d, sdEllipsoid(h - float3(0.0, 0.32, -0.02), float3(0.40, 0.32, 0.34)) * HEAD_S);
     d = min(d, min(sdCapsule(p, uShL, uPawL, 0.07), sdCapsule(p, uShR, uPawR, 0.07)));
-    d = min(d, min(sdCapsule(p, uTail0.xyz, uTail2.xyz, 0.10), sdCapsule(p, uTail2.xyz, uTail5.xyz, 0.09)));
+    d = min(d, min(sdCapsule(p, uTail0.xyz, uTail2.xyz, 0.06), sdCapsule(p, uTail2.xyz, uTail5.xyz, 0.05)));
     return d;
 }
 
@@ -420,10 +420,17 @@ float3 sparkle(float id, float3 pos) {
     return float3(1.6) * max(spark, spark2 * 0.8) * lit * (h.z < -0.28 ? 1.0 : 0.0);
 }
 
+// What a ray that ran out of march steps without reaching anything sees
+// (common_tail.sksl): nothing behind this animal to fill it in.
+float stuckRay(float3 ro, float3 rd) {
+    return -1.0;
+}
+
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH and BOUND_R.
+// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH
+// and BOUND_R.
 
 float3 normalAt(float3 p) {
     float e = 0.0015;
@@ -527,6 +534,11 @@ float4 critter(float2 p) {
             if (t > tMax) { escaped = true; break; }
         }
         if (hitT < 0.0 && !escaped && h < 0.05) hitT = t;
+        // One that ran out further away still: the animal decides what is
+        // behind it (the otter's pool; nothing, -1, for the others) -
+        // otherwise its outline shows see-through specks where the pool
+        // should be.
+        if (hitT < 0.0 && !escaped) hitT = stuckRay(ro, rd);
     }
     float cover = 1.0;
     // A pixel and a half of feathering: one pixel alone still showed steps
@@ -614,7 +626,10 @@ float4 critter(float2 p) {
     // catchlight in an eye).
     col += sparkle(id, pos);
 
-    col += hot * halo * 0.25;
+    // The glow round the orb - but not through the animal: where the orb is
+    // behind the surface this ray hit (the owl's orb circling behind its
+    // head), the head hides it.
+    col += hot * halo * 0.25 * (1.0 - smoothstep(0.0, 0.15, tOrb - hitT));
     float3 outc = pow(aces(col), float3(1.0 / 2.2));
     // Premultiplied: a partly covered edge pixel lets the orb's glow (or,
     // with none, the background) show through by the uncovered share.
@@ -920,7 +935,11 @@ float3 headColour(float3 h) {
     float brow = 1.0 - smoothstep(0.012, 0.024,
         seg2(hs.xy, float2(0.03, 0.43 + 0.02 * uFace.z), float2(0.25, 0.49 + 0.03 * uFace.z)));
     brow *= front;
-    float crown = spots(float2(atan(h.x, h.z), h.y), 7.0) * smoothstep(-0.1, 0.12, h.z + h.y * 0.3);
+    // Spots are laid out by angle round the head, so near the very top the
+    // rows squeeze to a point - a starburst of slivers seen from above.
+    // They fade out before they get there.
+    float crown = spots(float2(atan(h.x, h.z), h.y), 7.0) * smoothstep(-0.1, 0.12, h.z + h.y * 0.3)
+                * smoothstep(0.20, 0.36, length(float2(h.x, h.z - 0.02)));
     float3 c = mix(BROWN, CREAM, max(disc * 0.85, crown * 0.8));
     return mix(c, CREAM * 1.05, brow);
 }
@@ -932,7 +951,8 @@ float3 bodyColour(float3 b) {
     float streak = smoothstep(0.35, 0.75, sin(b.x * 30.0 + sin(b.y * 6.0) * 1.6)) *
                    smoothstep(0.80, 0.25, b.y);
     float3 belly = mix(CREAM, BROWN * 1.15, streak * 0.85);
-    float3 back = mix(BROWN, CREAM, spots(float2(atan(b.x, b.z), b.y), 6.0) * 0.8);
+    float3 back = mix(BROWN, CREAM, spots(float2(atan(b.x, b.z), b.y), 6.0) * 0.8
+                      * smoothstep(0.08, 0.20, length(float2(b.x, b.z - 0.02))));
     return mix(back, belly, front);
 }
 
@@ -986,10 +1006,17 @@ float3 sparkle(float id, float3 pos) {
     return float3(1.5) * max(spark, spark2 * 0.8) * lit * (h.z < -0.33 ? 1.0 : 0.0);
 }
 
+// What a ray that ran out of march steps without reaching anything sees
+// (common_tail.sksl): nothing behind this animal to fill it in.
+float stuckRay(float3 ro, float3 rd) {
+    return -1.0;
+}
+
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH and BOUND_R.
+// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH
+// and BOUND_R.
 
 float3 normalAt(float3 p) {
     float e = 0.0015;
@@ -1093,6 +1120,11 @@ float4 critter(float2 p) {
             if (t > tMax) { escaped = true; break; }
         }
         if (hitT < 0.0 && !escaped && h < 0.05) hitT = t;
+        // One that ran out further away still: the animal decides what is
+        // behind it (the otter's pool; nothing, -1, for the others) -
+        // otherwise its outline shows see-through specks where the pool
+        // should be.
+        if (hitT < 0.0 && !escaped) hitT = stuckRay(ro, rd);
     }
     float cover = 1.0;
     // A pixel and a half of feathering: one pixel alone still showed steps
@@ -1180,7 +1212,10 @@ float4 critter(float2 p) {
     // catchlight in an eye).
     col += sparkle(id, pos);
 
-    col += hot * halo * 0.25;
+    // The glow round the orb - but not through the animal: where the orb is
+    // behind the surface this ray hit (the owl's orb circling behind its
+    // head), the head hides it.
+    col += hot * halo * 0.25 * (1.0 - smoothstep(0.0, 0.15, tOrb - hitT));
     float3 outc = pow(aces(col), float3(1.0 / 2.2));
     // Premultiplied: a partly covered edge pixel lets the orb's glow (or,
     // with none, the background) show through by the uncovered share.
@@ -1522,10 +1557,22 @@ float3 sparkle(float id, float3 pos) {
     return float3(1.5) * spark * lit * (h.z < -0.19 ? 1.0 : 0.0);
 }
 
+// What a ray that ran out of march steps without reaching anything sees
+// (common_tail.sksl). Rays that skim the otter's outline use up their steps
+// creeping along its fur before they reach the pool behind it: meet the
+// water directly, so the edge shows water rather than see-through specks.
+float stuckRay(float3 ro, float3 rd) {
+    if (rd.y > -0.001) return -1.0;
+    float t = (uWater.x - ro.y) / rd.y;
+    float3 q = ro + rd * t;
+    return length(q.xz) < POOL_R - 0.02 ? t : -1.0;
+}
+
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH and BOUND_R.
+// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH
+// and BOUND_R.
 
 float3 normalAt(float3 p) {
     float e = 0.0015;
@@ -1629,6 +1676,11 @@ float4 critter(float2 p) {
             if (t > tMax) { escaped = true; break; }
         }
         if (hitT < 0.0 && !escaped && h < 0.05) hitT = t;
+        // One that ran out further away still: the animal decides what is
+        // behind it (the otter's pool; nothing, -1, for the others) -
+        // otherwise its outline shows see-through specks where the pool
+        // should be.
+        if (hitT < 0.0 && !escaped) hitT = stuckRay(ro, rd);
     }
     float cover = 1.0;
     // A pixel and a half of feathering: one pixel alone still showed steps
@@ -1716,7 +1768,10 @@ float4 critter(float2 p) {
     // catchlight in an eye).
     col += sparkle(id, pos);
 
-    col += hot * halo * 0.25;
+    // The glow round the orb - but not through the animal: where the orb is
+    // behind the surface this ray hit (the owl's orb circling behind its
+    // head), the head hides it.
+    col += hot * halo * 0.25 * (1.0 - smoothstep(0.0, 0.15, tOrb - hitT));
     float3 outc = pow(aces(col), float3(1.0 / 2.2));
     // Premultiplied: a partly covered edge pixel lets the orb's glow (or,
     // with none, the background) show through by the uncovered share.

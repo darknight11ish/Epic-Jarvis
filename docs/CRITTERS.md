@@ -140,7 +140,7 @@ CI runs `--check`, and fails if you forget.
 ### Adding a fourth animal
 
 A new `.sksl` beside the others (it must supply `map`, `mapLite`, `partAt`,
-`material`, `sparkle` and the camera constants - see `common_tail.sksl`), a
+`material`, `sparkle`, `stuckRay` and the camera constants - see `common_tail.sksl`), a
 pose file on each side registering itself the way `critter-owl.js` and
 `OwlPose.kt` do, a line in `tools/gen_critters.py`'s `ANIMALS`, a face entry
 in the spec, and one `critterFace({...})` / one `object ... : CritterFace` in
