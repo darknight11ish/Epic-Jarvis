@@ -34,7 +34,15 @@ class MemorySharedTest {
         val flat = Regex("\"\\s*\\+\\s*\"").replace(js, "")
         for (words in listOf(MemoryShared.TITLE, MemoryShared.UNDER, MemoryShared.SHARED,
             MemoryShared.UNSHARED, MemoryShared.EMPTY)) {
-            assertTrue("the desktop does not say: $words", flat.contains("\"$words\""))
+            // `words` is the STRING VALUE (a real `"` character where SHARED/
+            // EMPTY quote "Between us"), but the desktop .js file is read as
+            // literal source text, where a JS string literal escapes that
+            // same `"` as `\"` - so the search pattern has to escape it the
+            // same way, or a value with a quote inside it can never match
+            // (audit 2026-09-27: this, not a real wording mismatch, is why
+            // this test started failing - both apps say the same thing).
+            val jsLiteral = words.replace("\"", "\\\"")
+            assertTrue("the desktop does not say: $words", flat.contains("\"$jsLiteral\""))
         }
         assertTrue(flat.contains("export const SHARE_LABEL = \"Between us\";"))
         assertTrue(flat.contains("export const UNSHARE_LABEL = \"Not between us\";"))
