@@ -147,6 +147,10 @@ fn main() {
             "get_backend_capabilities",
             "get_second_card",
             "set_second_card",
+            // "When to suggest the bigger model" (2026-09-27): no approval
+            // card either way, folded into the same Settings section. read
+            // is folded into get_second_card's own answer.
+            "set_second_card_suggest",
             // Settings' "Big model (slow)" (backend/big-model.patch): read
             // what was found and the three switches, and turn ONE switch on
             // or off. ON only raises an approval card. Settings window only.

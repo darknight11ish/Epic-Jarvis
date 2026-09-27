@@ -819,7 +819,12 @@ def t_status_shape_and_no_secrets():
     check("status() has exactly the contract's keys",
           set(st) == {"detected", "enabled", "active", "pending", "lane", "main_ollama_pinned",
                       "pin_note", "pin_command", "features", "last", "picture_text",
-                      "combined"}, sorted(st))
+                      "combined", "suggest"}, sorted(st))
+    check("suggest has exactly its keys, both signals on by default",
+          set(st["suggest"]) == {"available", "title", "detail", "signals"}
+          and all(s["enabled"] is True for s in st["suggest"]["signals"])
+          and {s["id"] for s in st["suggest"]["signals"]} == {"struggle", "correction"},
+          st["suggest"])
     check("combined has exactly its keys",
           set(st["combined"]) == {"id", "name", "what", "enabled", "capable", "capable_why",
                                   "conflict", "active", "available", "model", "context",

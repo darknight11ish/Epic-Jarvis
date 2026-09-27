@@ -83,6 +83,31 @@ question and timing it) tells the truth about it.
 both cards" toggle underneath them. It asks with one approval card first
 (`second_card_combined_enable`), the same as any other switch here.
 
+## Jarvis noticing you might want the bigger model
+
+Jarvis can also notice, on its own, that this conversation could use the
+bigger model above - and OFFER to turn it on. It never turns it on by
+itself; the offer is the exact same approval card the switch above already
+raises, just raised by Jarvis instead of by your own tap, with one added
+line saying what it noticed.
+
+Two things Jarvis watches for, each its own switch under "When to suggest
+the bigger model" (same screen, both on to start):
+
+- **When Jarvis is visibly struggling** - it had to ask the model to try a
+  tool call again more than a couple of times in one conversation.
+- **When you correct an answer more than once** - you told Jarvis it got
+  something wrong more than once in the same conversation (a "wrong" mark,
+  or saying something like "that's wrong" or "try again").
+
+It only ever offers when a genuinely capable second card is actually there
+right now - the exact same check the switch above needs, never a looser
+one - and it will not nag: at most a few offers wait for an answer at any
+time, never while you are mid-conversation, and a "no" keeps it quiet for a
+day, then a week, then a month. Turning either switch off just means Jarvis
+never asks that way; it never stops you turning the switch above on
+yourself, any time.
+
 ## What happens when a switch is on
 
 Jarvis starts a **second copy of Ollama** (the program that runs the models)

@@ -332,6 +332,12 @@ permissions = [
   "allow-get-backend-capabilities",
   "allow-get-second-card",
   "allow-set-second-card",
+  # "When to suggest the bigger model": the two settings that decide
+  # whether Jarvis may OFFER "One bigger model on both cards" on its own
+  # (2026-09-27). No card either way - it only changes whether Jarvis
+  # offers, never what it may do without a person's yes - so it sits here
+  # with manner/humour, not with the switch above.
+  "allow-set-second-card-suggest",
   # "Big model (slow)": what was found (colibri, Python, memory, the models
   # and their drives) and one switch at a time. Turning a switch ON lets
   # Jarvis start colibri on this PC for background jobs once its approval

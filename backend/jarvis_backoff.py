@@ -156,6 +156,13 @@ MAY_ASK = {
                      "shown or trusted more",
     "save_a_routine": "to save a routine you already run as a skill - each of its steps "
                       "still goes through its own approval card",
+    # jarvis_second_card.py, 2026-09-27: the offer's own "yes" only raises
+    # the SAME approval card the Hardware screen's switch already has
+    # (second_card_combined_enable) - it is not a second yes, and nothing
+    # is shown or trusted more until a person answers THAT card.
+    "suggest_bigger_model": ("to raise the same approval card that already exists for turning "
+                             "on \"One bigger model on both cards\" - nothing changes until "
+                             "you say yes on that card"),
 }
 
 #: Every kind of offer Jarvis makes on its own, and what it asks for. A new
@@ -167,6 +174,10 @@ OFFERS = {
     # jarvis_skill_discovery.py: "save this routine as a skill?" - one
     # SKILL.md from tool names; running it still asks step by step.
     "skill_offer": ("save_a_routine",),
+    # jarvis_second_card.maybe_suggest_combined: Jarvis noticed visible
+    # struggle or a repeated correction and would like to suggest the
+    # bigger model - see that module's docstring.
+    "second_card_combined_offer": ("suggest_bigger_model",),
 }
 
 

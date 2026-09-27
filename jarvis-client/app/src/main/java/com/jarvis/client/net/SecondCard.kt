@@ -124,9 +124,23 @@ object SecondCard {
          * at the same time as any of them, and it gets its own row.
          */
         val combined: Combined? = null,
+        /**
+         * "When to suggest the bigger model" (2026-09-27) - null from an
+         * older PC, which then shows neither switch. Whether Jarvis may
+         * OFFER [combined] on its own; never what it may do without a
+         * person's yes, so unlike every switch above, changing one of
+         * these raises NO approval card either way.
+         */
+        val suggest: Suggest? = null,
     ) {
         fun feature(id: String): Feature? = features.firstOrNull { it.id == id }
     }
+
+    /** `status()["suggest"]`: the two "suggest the bigger model" switches. */
+    data class Suggest(val title: String, val detail: String, val signals: List<Signal>)
+
+    /** One suggestion signal: [id] is `"struggle"` or `"correction"`. */
+    data class Signal(val id: String, val label: String, val why: String, val enabled: Boolean)
 
     /**
      * `status()["combined"]`: the third mode. [capable] is about the TWO
@@ -229,6 +243,23 @@ object SecondCard {
                     context = c.int("context"),
                     memoryGib = (c["memory_gib"] as? JsonPrimitive)?.doubleOrNull,
                     why = c.str("why").orEmpty(),
+                )
+            },
+            suggest = (obj["suggest"] as? JsonObject)?.let { sug ->
+                val signals = (sug["signals"] as? JsonArray).orEmpty().mapNotNull { el ->
+                    val sig = el as? JsonObject ?: return@mapNotNull null
+                    val id = sig.str("id") ?: return@mapNotNull null
+                    Signal(
+                        id = id,
+                        label = sig.str("label") ?: id,
+                        why = sig.str("why").orEmpty(),
+                        enabled = sig.bool("enabled") ?: true,
+                    )
+                }
+                Suggest(
+                    title = sug.str("title") ?: "When to suggest the bigger model",
+                    detail = sug.str("detail").orEmpty(),
+                    signals = signals,
                 )
             },
             features = features.mapNotNull { el ->
@@ -493,6 +524,25 @@ object SecondCard {
     /** `{"feature": "...", "enabled": true|false}` - built as JSON, never glued. */
     fun postBody(feature: String, enabled: Boolean): String = buildJsonObject {
         put("feature", feature)
+        put("enabled", enabled)
+    }.toString()
+
+    /**
+     * The path for "When to suggest the bigger model"'s one write - spelled
+     * out literally, not built from [PATH] by concatenation, so
+     * `tools/check_parity.py` (which finds a route by its literal
+     * `/api/...` text in the source) sees it as the distinct route it is.
+     */
+    const val SUGGEST_PATH = "/api/second-card/suggest"
+
+    /**
+     * `{"signal": "struggle"|"correction", "enabled": true|false}` for
+     * [SUGGEST_PATH] - NO approval card either way (`jarvis_second_card.py`'s
+     * own docstring: this only changes whether Jarvis may offer [combined]
+     * on its own, never what it may do without a person's yes).
+     */
+    fun postSuggestBody(signal: String, enabled: Boolean): String = buildJsonObject {
+        put("signal", signal)
         put("enabled", enabled)
     }.toString()
 

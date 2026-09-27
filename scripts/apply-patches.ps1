@@ -617,6 +617,15 @@ $PATCHES = @(
     # any error, the banner says so and the route answers 503, and nothing
     # about an ordinary chat turn changes.
     'answer-sources.patch'
+    # Noticing a conversation could use the bigger model (CLAUDE.md
+    # 2026-09-27's "Both, with a setting" answer): one small hunk, right
+    # after feedback.patch's own POST /api/feedback/mark block (so it goes
+    # after it, like every new patch), passing an optional
+    # `conversation_id` on to jarvis_second_card.py's per-conversation
+    # correction count. jarvis_agent.py and jarvis_second_card.py carry the
+    # rest of this feature as ordinary code, needing no patch (they are
+    # whole shipped modules, copied in like every other one in this list).
+    'second-card-suggest.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

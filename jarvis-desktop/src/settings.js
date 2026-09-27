@@ -1474,6 +1474,10 @@ const sc = {
   pinStatus: $("sc-pin-status"),
   combined: $("sc-combined"),
   combinedStatus: $("sc-combined-status"),
+  suggestTitle: $("sc-suggest-title"),
+  suggestDetail: $("sc-suggest-detail"),
+  suggestSignals: $("sc-suggest-signals"),
+  suggestStatus: $("sc-suggest-status"),
 };
 
 /** The same words the Brain's model install uses while its card waits. */
@@ -1817,6 +1821,79 @@ async function scCombinedToggle(input) {
   await loadSecondCard();
 }
 
+/**
+ * "When to suggest the bigger model" (2026-09-27): whether Jarvis may OFFER
+ * "One bigger model on both cards" on its own - never what it may do
+ * without a person's yes, so NEITHER switch here raises an approval card,
+ * exactly like Humour on the "How Jarvis talks" screen. Reads
+ * `status.suggest` (folded into the same GET /api/second-card poll as
+ * everything else in this section); an older backend sends none, and the
+ * whole subsection hides itself.
+ */
+function scSuggestRow(sig) {
+  const row = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = `sc-suggest-${sig.id}`;
+  input.checked = Boolean(sig.enabled);
+  input.dataset.signal = sig.id;
+  const text = scNode("span", "", sig.label || sig.id);
+  text.append(scNode("span", "toggle-detail", sig.why || ""));
+  row.append(input, text);
+  input.addEventListener("change", () => scSuggestToggle(input));
+  return row;
+}
+
+function scPaintSuggest(status) {
+  if (!sc.suggestSignals) return;
+  const suggest = status.suggest;
+  const have = suggest && suggest.available === true && Array.isArray(suggest.signals);
+  if (sc.suggestTitle) sc.suggestTitle.hidden = !have;
+  if (sc.suggestDetail) {
+    sc.suggestDetail.hidden = !have;
+    sc.suggestDetail.textContent = have ? scSentence(suggest.detail) || "" : "";
+  }
+  sc.suggestSignals.hidden = !have;
+  if (!have) {
+    sc.suggestSignals.replaceChildren();
+    return;
+  }
+  const focused = document.activeElement && document.activeElement.id;
+  sc.suggestSignals.replaceChildren(...suggest.signals.map(scSuggestRow));
+  if (focused && focused.startsWith("sc-suggest-")) {
+    const again = document.getElementById(focused);
+    if (again) again.focus();
+  }
+}
+
+/** One switch, no card either way (set_second_card_suggest, held on a stale
+ * link by the Rust side like every other change sent to the PC). */
+async function scSuggestToggle(input) {
+  const signal = input.dataset.signal;
+  const turnOn = input.checked;
+  if (scBusy) {
+    input.checked = !turnOn;
+    return;
+  }
+  scBusy = true;
+  input.disabled = true;
+  try {
+    await invoke("set_second_card_suggest", { signal, enabled: turnOn });
+    report(sc.suggestStatus, turnOn ? "Jarvis may now offer this on its own." :
+      "Jarvis will not offer this on its own.", "ok");
+  } catch (error) {
+    report(sc.suggestStatus, scProblemWords(error), "bad");
+    announce(sc.suggestStatus.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  // Re-read, the same as every other switch here: the checkbox above shows
+  // what the PC now reports, not just what was tapped (scCombinedToggle's
+  // own pattern) - so a refusal puts it back without this function having
+  // to know the old value.
+  await loadSecondCard();
+}
+
 function scShowProblem(words) {
   scLast = null;
   sc.body.hidden = true;
@@ -1874,6 +1951,9 @@ function scPaint(status) {
       if (again) again.focus();
     }
   }
+
+  // "When to suggest the bigger model": its own subsection, no card either way.
+  scPaintSuggest(status);
 
   // The second Ollama.
   const lane = status.lane || {};

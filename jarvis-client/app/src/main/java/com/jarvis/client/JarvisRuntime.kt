@@ -1388,6 +1388,24 @@ object JarvisRuntime {
         return SecondCard.replyLine(result)
     }
 
+    /**
+     * "When to suggest the bigger model" (2026-09-27): one signal on or off.
+     * NO approval card either way - it only changes whether Jarvis may
+     * OFFER [SecondCard.COMBINED] on its own, never what it may do without
+     * a person's yes, so there is no [refreshPending] here, unlike
+     * [setSecondCard]. Refused while the link is down or stale
+     * ([actionBlocker], rule 4) all the same.
+     *
+     * @param signal `"struggle"` or `"correction"`.
+     * @return a sentence to show, or null when the plate already says it.
+     */
+    suspend fun setSecondCardSuggest(signal: String, enabled: Boolean): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setSecondCardSuggest(signal, enabled)
+        refreshSecondCard()
+        return SecondCard.replyLine(result)
+    }
+
     // -------------------------------------------------------- big model ----
 
     /**

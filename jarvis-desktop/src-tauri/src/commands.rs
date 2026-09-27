@@ -1932,6 +1932,13 @@ pub(crate) fn valid_turn_id(id: &str) -> bool {
 /// changes memory; at most it raises one "stop using this fact?" card in the
 /// ordinary review queue, which still needs its own decision.
 ///
+/// `conversation_id` (added second-card-suggest.patch, 2026-09-27) is
+/// [`valid_conversation_id`]-checked and sent alongside the mark, purely so
+/// the backend can bump jarvis_second_card's per-conversation "correction"
+/// count on a real "wrong" - never written to feedback.db, and left out
+/// entirely for an invalid or missing id (an older window's still-valid
+/// call).
+///
 /// A backend without the patch answers 404 (no such route) or 503 (the
 /// module is missing); both come back as `{"available": false}` so the page
 /// can hide the control quietly rather than show an error.
@@ -1940,6 +1947,7 @@ pub async fn mark_answer(
     app: AppHandle,
     turn_id: String,
     mark: String,
+    conversation_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     if !valid_turn_id(&turn_id) {
         return Err("that answer has no valid id to mark".to_string());
@@ -1947,11 +1955,20 @@ pub async fn mark_answer(
     if !matches!(mark.as_str(), "right" | "wrong" | "none") {
         return Err(format!("`{mark}` is not a mark (right, wrong or none)"));
     }
+    let mut body = serde_json::Map::new();
+    body.insert("turn_id".into(), serde_json::json!(turn_id));
+    body.insert("mark".into(), serde_json::json!(mark));
+    if let Some(id) = conversation_id
+        .as_deref()
+        .filter(|id| valid_conversation_id(id))
+    {
+        body.insert("conversation_id".into(), serde_json::json!(id));
+    }
     let base = jarvis_base(&app);
     let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
         .post(format!("{base}/api/feedback/mark"))
         .headers(jarvis_headers(&app)?)
-        .json(&serde_json::json!({ "turn_id": turn_id, "mark": mark }))
+        .json(&serde_json::Value::Object(body))
         .send()
         .await
         .map_err(|e| {
@@ -3365,6 +3382,58 @@ pub async fn set_second_card(
         .post(format!("{base}{SECOND_CARD_PATH}"))
         .headers(jarvis_headers(&app)?)
         .json(&serde_json::json!({ "feature": feature, "enabled": enabled }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    second_card_change_answer(status, &body)
+}
+
+/// "When to suggest the bigger model"'s one write - spelled out as its own
+/// literal constant, not built from [`SECOND_CARD_PATH`] by concatenation,
+/// so `tools/check_parity.py` (which finds a route by its literal `/api/...`
+/// text in the source) sees it as the distinct route it is.
+pub(crate) const SECOND_CARD_SUGGEST_PATH: &str = "/api/second-card/suggest";
+
+/// One of the two "suggest the bigger model" signals: `struggle` or
+/// `correction`. Kept as its own check for the same reason
+/// [`second_card_feature`] is: the backend refuses anything else with its
+/// own sentence, this only keeps anything else from being sent at all.
+pub(crate) fn second_card_suggest_signal(signal: &str) -> Result<&str, String> {
+    match signal {
+        "struggle" | "correction" => Ok(signal),
+        _ => Err("That is not one of the two suggestion settings.".to_string()),
+    }
+}
+
+/// "When to suggest the bigger model" - one switch on or off: `POST
+/// /api/second-card/suggest {"signal", "enabled"}`.
+///
+/// NO approval card either way (jarvis_second_card.py's own docstring: this
+/// only changes whether Jarvis may OFFER "combined" on its own, never what
+/// it may do without a person's yes - the same reasoning [`set_manner`] and
+/// [`set_humor`] already use). Held on a stale link all the same (rule 4:
+/// nothing is sent while the link is stale). Settings window only, like
+/// [`get_second_card`]/[`set_second_card`].
+#[tauri::command]
+pub async fn set_second_card_suggest(
+    app: AppHandle,
+    signal: String,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    let signal = second_card_suggest_signal(&signal)?;
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be sent until it does."
+                .to_string(),
+        );
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{SECOND_CARD_SUGGEST_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "signal": signal, "enabled": enabled }))
         .send()
         .await
         .map_err(|e| second_card_unreachable(&e, &base))?;

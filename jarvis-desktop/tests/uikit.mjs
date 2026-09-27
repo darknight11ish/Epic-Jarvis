@@ -631,7 +631,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           // without the route (commands.rs turns a 404 into this).
           case "mark_answer":
             window.__marks = window.__marks || [];
-            window.__marks.push({ turnId: args.turnId, mark: args.mark });
+            window.__marks.push({ turnId: args.turnId, mark: args.mark,
+                                  conversationId: args.conversationId });
             if (window.__markRoute === false) return { available: false, status: 404 };
             return { ok: true, turn_id: args.turnId, mark: args.mark };
           // Which note apps the PC is set up for: one of the backend's real
@@ -836,6 +837,18 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             st.pending = st.pending.filter((p) => p !== args.feature);
             const label = args.feature === "master" ? "The second graphics card" : `"${row ? row.name : args.feature}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
+          }
+          // "When to suggest the bigger model" - no card either way, so this
+          // just flips the one signal in the same status object.
+          case "set_second_card_suggest": {
+            const sc = window.__secondCard;
+            sc.changes.push({ signal: args.signal, enabled: args.enabled });
+            if (sc.setFails) throw new Error(sc.setFails);
+            const st = sc.status;
+            const sig = ((st.suggest || {}).signals || []).find((s) => s.id === args.signal);
+            if (sig) sig.enabled = Boolean(args.enabled);
+            return { ok: true, available: true, title: (st.suggest || {}).title,
+                     detail: (st.suggest || {}).detail, signals: (st.suggest || {}).signals };
           }
           // voice.rs get_voice_status. `status` is a real status() from
           // VOICE; the Rust passes it on as is. `unavailable` is its answer
