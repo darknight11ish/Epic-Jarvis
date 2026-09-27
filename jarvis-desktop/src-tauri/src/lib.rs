@@ -954,6 +954,7 @@ pub fn run() {
             voice_training::set_better_voice,
             voice_training::set_voice_speed,
             voice_training::set_voice_speaker,
+            voice_training::set_voice_face,
             vision::local_model_vision,
             // Windows Hello (lock.rs): Settings reads and changes the four
             // Security settings; the Brain's Show button.

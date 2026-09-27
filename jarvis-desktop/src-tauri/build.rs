@@ -276,6 +276,7 @@ fn main() {
             "set_better_voice",
             "set_voice_speed",
             "set_voice_speaker",
+            "set_voice_face",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

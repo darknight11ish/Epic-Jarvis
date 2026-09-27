@@ -6946,6 +6946,18 @@ voice pack for the model this backend ships, kept only because it agrees
 with those two - see `jarvis_voices.KOKORO_VOICES`'s own comment for the
 full reasoning and the caveat.
 
+**Also new (2026-09-27, the owner's choice): "Voice follows the face"** -
+with the red panda, pygmy owl or sea otter face showing, the built-in voice
+becomes that animal's: one of the Kokoro voices already installed, its own
+pace, and a small pitch rise (`jarvis_voices.FACE_VOICES`; the face is read
+from `appearance.json`). An on/off switch, **on by default**, right under
+the built-in voice choice in both apps (desktop: Settings -> Jarvis's voice;
+phone: the Voices screen), `POST /api/voice/voices/face`. No card either
+way, held on a stale link like every change sent to the PC. A voice you
+recorded still wins, and your speaking speed still applies on top. The
+animals' voices were picked from Kokoro's published descriptions, **not
+listened to** - change a row in `FACE_VOICES` if one sounds wrong.
+
 ## The two candidates
 
 | | today | the candidate | where it comes from |
@@ -7012,7 +7024,8 @@ compare.
 **3. Put the new code on the PC** (copies `jarvis_bakeoff.py` and the new
 `jarvis_voices.py`, `jarvis_wakeword.py`, `jarvis_speech.py` and
 `jarvis_voice_flow.py`; `voices.patch` gains the speed and (2026-09-27) the
-built-in-voice-choice route; sherpa-onnx must be 1.12.26 or newer), from
+built-in-voice-choice and voice-follows-the-face routes; sherpa-onnx must be
+1.12.26 or newer), from
 this repository's folder, then restart Jarvis:
 
 ```powershell

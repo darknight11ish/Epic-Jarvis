@@ -578,7 +578,7 @@ def set_face_voice(body) -> tuple:
     either way (see above)."""
     if not isinstance(body, dict) or set(body) != {"enabled"} \
             or not isinstance(body["enabled"], bool):
-        return 400, {"ok": False, "error": "enabled must be true or false"}
+        return 400, {"ok": False, "error": "choose on or off"}
     on = body["enabled"]
     err = _write_state(face_voice=on)
     if err:

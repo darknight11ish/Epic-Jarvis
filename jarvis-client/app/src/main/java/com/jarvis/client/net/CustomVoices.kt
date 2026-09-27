@@ -32,6 +32,10 @@ import java.util.Locale
  * - JARVIS'S BUILT-IN VOICE: which of Kokoro's own voices - the PC's own
  *   choices and words (`speaker`), the same shape as speed, right next to
  *   it, no card either way.
+ * - VOICE FOLLOWS THE FACE: with an animal face showing, the built-in voice
+ *   becomes that animal's - an on/off switch (`face_voice`), on by default,
+ *   the PC's own words and line, no card either way; held on a stale link
+ *   like every change sent to the PC.
  *
  * Every card-raising request is held on a stale link (rule 4); the ones
  * that only narrow (built-in voice, delete, better voice off) always go.
@@ -50,12 +54,16 @@ object CustomVoices {
     const val BETTER_PATH = "/api/voice/voices/better"
     const val SPEED_PATH = "/api/voice/voices/speed"
     const val SPEAKER_PATH = "/api/voice/voices/speaker"
+    const val FACE_PATH = "/api/voice/voices/face"
 
     /** The speed plate's heading when the PC sends none - the desktop's words. */
     const val SPEED_TITLE = "How fast Jarvis speaks"
 
     /** The voice-choice plate's heading when the PC sends none - the desktop's words. */
     const val SPEAKER_TITLE = "Jarvis's built-in voice"
+
+    /** The face-voice switch's label when the PC sends none - the desktop's words. */
+    const val FACE_TITLE = "Voice follows the face"
 
     const val BUILTIN = "builtin"
 
@@ -114,6 +122,20 @@ object CustomVoices {
         val note: String = "",
     )
 
+    /**
+     * "Voice follows the face": with an animal face showing, the built-in
+     * voice becomes that animal's. An on/off switch, the PC's own words;
+     * [line] is the PC's sentence about what is happening now, and
+     * [speaking] is true while an animal's voice is the one speaking.
+     */
+    data class FaceVoice(
+        val enabled: Boolean,
+        val speaking: Boolean = false,
+        val title: String = FACE_TITLE,
+        val detail: String = "",
+        val line: String = "",
+    )
+
     /** One engine on the PC: can it speak, and why not. */
     data class Engine(val available: Boolean, val why: String)
 
@@ -158,6 +180,8 @@ object CustomVoices {
         val speed: Speed? = null,
         /** Null on a PC too old to have the voice-choice setting: nothing is shown. */
         val speaker: Speaker? = null,
+        /** Null on a PC too old to have "Voice follows the face": nothing is shown. */
+        val faceVoice: FaceVoice? = null,
     ) {
         val custom: List<Voice> get() = voices.filter { !it.builtin }
     }
@@ -263,6 +287,7 @@ object CustomVoices {
             },
             speed = o.obj("speed")?.let { parseSpeed(it) },
             speaker = o.obj("speaker")?.let { parseSpeaker(it) },
+            faceVoice = o.obj("face_voice")?.let { parseFaceVoice(it) },
         )
     }
 
@@ -299,6 +324,19 @@ object CustomVoices {
             title = sk.str("title").ifBlank { SPEAKER_TITLE },
             detail = sk.str("detail"),
             note = sk.str("note"),
+        )
+    }
+
+    /** The `face_voice` block, or null when it carries no on/off this phone can show. */
+    private fun parseFaceVoice(fv: JsonObject): FaceVoice? {
+        val on = (fv["enabled"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+            ?: return null
+        return FaceVoice(
+            enabled = on,
+            speaking = fv.flag("speaking"),
+            title = fv.str("title").ifBlank { FACE_TITLE },
+            detail = fv.str("detail"),
+            line = fv.str("line"),
         )
     }
 
@@ -349,6 +387,9 @@ object CustomVoices {
 
     /** `{"speaker": "<id>"}` - one of the ids the PC offered. */
     fun speakerBody(id: String): String = "{\"speaker\":" + JarvisApi.quote(id) + "}"
+
+    /** `{"enabled": true|false}` - "Voice follows the face" on or off. */
+    fun faceBody(on: Boolean): String = "{\"enabled\":$on}"
 
     // ------------------------------------------------------------ answers --
 

@@ -17,6 +17,16 @@ number as the last part - `0.2.57` is a build of 0.2.
   when something is waiting on you; the otter floats on its back in a
   little pool, taps a glowing pebble while it thinks and covers its eyes
   with its paws to sleep.
+- **Animal faces tidied after their audit:** no more see-through specks
+  along the otter's outline against its pool; the owl's thinking orb now
+  circles clear of its head, and its glow no longer shows through the face;
+  no starburst of streaks on the owl's crown seen from above; the panda's
+  tail no longer shades itself with a false shadow band.
+- **Voice follows the face.** With the red panda, owl or otter showing,
+  Jarvis's built-in voice becomes that animal's - its own voice, pace and a
+  slightly higher pitch. A switch in both apps, on to start, right under
+  "Jarvis's built-in voice"; it never asks first. A voice you recorded still
+  wins.
 
 ## 0.2.0 - 26 September 2026
 

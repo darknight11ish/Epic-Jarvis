@@ -78,6 +78,7 @@ fun VoicesScreen(
     setBetter: suspend (on: Boolean) -> CustomVoices.Answer?,
     setSpeed: suspend (id: String) -> CustomVoices.Answer?,
     setSpeaker: suspend (id: String) -> CustomVoices.Answer?,
+    setFace: suspend (on: Boolean) -> CustomVoices.Answer?,
     onPickFile: () -> Unit,
     onClearPicked: () -> Unit,
     onRefresh: suspend () -> Unit,
@@ -191,6 +192,9 @@ fun VoicesScreen(
                     }
                     s.speaker?.let { sk ->
                         SpeakerPlate(sk, busy, linkBlocker, onSet = { id -> act { setSpeaker(id) } })
+                    }
+                    s.faceVoice?.let { fv ->
+                        FaceVoicePlate(fv, busy, linkBlocker, onSet = { on -> act { setFace(on) } })
                     }
 
                     Plate {
@@ -571,6 +575,46 @@ private fun ChoicePlate(
         if (note.isNotBlank()) {
             Gap(6)
             Text(note, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        if (linkBlocker != null) {
+            Gap(4)
+            Text(linkBlocker, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+        }
+    }
+}
+
+/**
+ * "Voice follows the face": with an animal face showing, the built-in voice
+ * becomes that animal's. An on/off switch right under the built-in voice it
+ * changes, the PC's own words, and the PC's line saying what is happening
+ * now. No card either way; held on a stale link, like every change sent to
+ * the PC - the same switch the better voice uses below.
+ */
+@Composable
+private fun FaceVoicePlate(
+    fv: CustomVoices.FaceVoice,
+    busy: Boolean,
+    linkBlocker: String?,
+    onSet: (Boolean) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Plate {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(fv.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+                if (fv.detail.isNotBlank()) {
+                    Text(fv.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                }
+            }
+            Toggle(
+                checked = fv.enabled,
+                enabled = !busy && linkBlocker == null,
+                onCheckedChange = { on -> onSet(on) },
+            )
+        }
+        if (fv.line.isNotBlank()) {
+            Gap(6)
+            Text(fv.line, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
         if (linkBlocker != null) {
             Gap(4)

@@ -976,6 +976,7 @@ function paintVoices() {
   $("cv-timings-none").hidden = timings.length > 0;
   paintSpeed();
   paintSpeaker();
+  paintFace();
 }
 
 /** "How fast Jarvis speaks": the PC's three choices, as radios. */
@@ -1022,12 +1023,34 @@ function paintChoiceRow(view, prefix, onChoose) {
   }));
 }
 
+/** "Voice follows the face": an on/off switch under the built-in voice,
+ * with the PC's own line saying what is happening now. */
+function paintFace() {
+  const fv = CV.faceVoiceView(cv.status);
+  $("cv-face").hidden = !fv.show;
+  if (!fv.show) return;
+  $("cv-face-title").textContent = fv.title;
+  $("cv-face-detail").textContent = fv.detail;
+  const line = $("cv-face-line");
+  line.hidden = !fv.line;
+  line.textContent = fv.line;
+  const sw = $("cv-face-switch");
+  sw.checked = fv.enabled;
+  // Every change sent to the PC is held on a stale link (rule 4).
+  sw.disabled = cv.busy || linkStale;
+  sw.title = linkStale ? HELD : "";
+}
+
 async function setSpeed(speed) {
   await sendChoice("cv-speed-status", "set_voice_speed", { speed }, [paintSpeed]);
 }
 
 async function setSpeaker(speaker) {
   await sendChoice("cv-speaker-status", "set_voice_speaker", { speaker }, [paintSpeaker]);
+}
+
+async function setFaceVoice(enabled) {
+  await sendChoice("cv-face-status", "set_voice_face", { enabled }, [paintFace]);
 }
 
 async function sendChoice(statusId, command, args, repaint) {
@@ -1242,6 +1265,7 @@ export function startVoicePanel(opts = {}) {
         paintAdd();
         paintSpeed();
         paintSpeaker();
+        paintFace();
       }
     }
   });
@@ -1272,6 +1296,7 @@ export function startVoicePanel(opts = {}) {
     paintAdd();
   });
   $("cv-better-switch").addEventListener("change", (e) => setBetter(e.target.checked));
+  $("cv-face-switch").addEventListener("change", (e) => setFaceVoice(e.target.checked));
 
   // A voice card ends, a voice is deleted, the better voice goes off: the
   // `voices` doorbell. A waiting card has no event of its own for its
