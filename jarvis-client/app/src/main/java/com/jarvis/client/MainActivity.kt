@@ -773,9 +773,25 @@ class MainActivity : FragmentActivity() {
         // jump to Settings, at the section the answer named. Pure
         // navigation - SettingsScreen's own `initialSection` does the
         // scrolling; nothing here changes a setting.
+        //
+        // Bug audit 2026-09-27, finding #4: a `LaunchedEffect` reruns every
+        // time it first enters a fresh composition, not only when its key
+        // changes - and nothing used to clear `chat.openSettings` once it
+        // had been acted on, so a rotation (or any other activity rebuild)
+        // saw the same target again and jumped back into Settings on its
+        // own. Treated as a one-time request instead: the target is copied
+        // into `pendingSettingsSection` (kept across a rebuild by
+        // `rememberSaveable`, just long enough for `SettingsScreen` to
+        // scroll once) and immediately consumed on the `ChatSession` side,
+        // so a fresh composition with the same underlying answer sees null
+        // and does nothing.
         val openSettingsTarget by chat.openSettings.collectAsState()
+        var pendingSettingsSection by rememberSaveable { mutableStateOf<String?>(null) }
         LaunchedEffect(openSettingsTarget) {
-            if (openSettingsTarget != null) nav.go(Screen.SETTINGS)
+            val target = openSettingsTarget ?: return@LaunchedEffect
+            pendingSettingsSection = target
+            nav.go(Screen.SETTINGS)
+            chat.consumeOpenSettings()
         }
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
@@ -1782,7 +1798,12 @@ class MainActivity : FragmentActivity() {
                         stale = stale,
                         onBack = { nav.back() },
                         modifier = root,
-                        initialSection = openSettingsTarget,
+                        initialSection = pendingSettingsSection,
+                        // Bug audit 2026-09-27, finding #4: cleared once the
+                        // screen has scrolled to it (or found no row for
+                        // it), so a later manual visit to Settings does not
+                        // scroll anywhere on its own.
+                        onSectionConsumed = { pendingSettingsSection = null },
                         // Same three ternaries as Screen.CHECKS above: null
                         // until this phone is paired.
                         onTrainVoice = if (paired) {

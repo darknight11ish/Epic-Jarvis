@@ -213,6 +213,18 @@ class ChatSession(
     val openSettings: StateFlow<String?> = _openSettings.asStateFlow()
 
     /**
+     * Marks the current [openSettings] target as done. Bug audit
+     * 2026-09-27, finding #4: without this, nothing ever cleared the
+     * target once `MainActivity` had acted on it, so a rotation (or any
+     * other activity rebuild) saw the same non-null value again and jumped
+     * back into Settings on its own. `MainActivity` calls this right after
+     * navigating, once, so the same answer never fires a second time.
+     */
+    fun consumeOpenSettings() {
+        _openSettings.value = null
+    }
+
+    /**
      * Turns a temporary chat on or off, and starts a new conversation
      * either way ([newConversation]) - so nothing said in one kind of chat
      * is re-sent in the other. ON only when the PC says it has one.
