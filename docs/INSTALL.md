@@ -575,10 +575,13 @@ public tunnel; nothing is exposed to the internet.
 reach the PC by its Tailscale name (ending in `.ts.net`) or its Meshnet name
 (ending in `.nord`): Android lets this app use plain `http://` only to those
 names (`jarvis-client/app/src/main/res/xml/network_security_config.xml`),
-so a home-network address such as `192.168.1.20` does not work from the
-phone, even though it is on your own network. (The phone does not refuse
-such an address with its own message - it simply cannot connect; its
-Platform checks screen says so.)
+so a home-network address such as `192.168.1.20`, a name ending in
+`.local`, or the PC's `100.x` number does not work from the phone, even
+though it is on your own network. The phone says so as soon as you pair,
+in one sentence, and tells you to type the name instead - the Tailscale or
+NordVPN app shows it. (Jarvis on the PC does not listen on your home Wi-Fi
+anyway, only on its Tailscale or Meshnet address; `docs/ARCHITECTURE.md`
+section 2, "Which addresses the phone can use", has the reasons.)
 
 **Tailscale, step by step** (Meshnet works the same way, in the NordVPN app):
 

@@ -22,6 +22,37 @@
   so covering that block would mean listing four million literals. Pair by
   name instead - which also survives the address changing. The app says so
   when the host it is given cannot be reached in cleartext.
+
+  Checked against Android's own code, 2026-09-27 (AOSP
+  android.security.net.config.ApplicationConfig.getConfigForHostname): a
+  <domain> matches the exact name, or - with includeSubdomains - a name that
+  ends in "." plus it. Nothing else: no ranges, no wildcards, and no public
+  way to change this list while the app runs. OkHttp asks
+  NetworkSecurityPolicy.isCleartextTrafficPermitted(url.host) before every
+  plain http:// connection, so this file is enforced on every request.
+
+  Also left off ON PURPOSE (2026-09-27), although the app's own rule
+  (OwnNetwork.kt, the backend's) counts them as the owner's own networks:
+  `.local`, `.lan`, `.home.arpa` and other home-network names. Two reasons.
+  (1) Jarvis on the PC listens only on its Tailscale/Meshnet address and on
+  the PC itself - Jarvis Desktop refuses to save any other listening address
+  (validate_bind_address, commands.rs) - so, set up the documented way, a
+  home-network name, which points at the PC's Wi-Fi address, reaches
+  nothing. (2) This phone moves
+  between networks and keeps its link open in the background. A `.local`
+  name is looked up by shouting the question to every device on whatever
+  Wi-Fi the phone is on (multicast DNS), and any of them can answer it, so
+  on a cafe's Wi-Fi the pairing key would go, unscrambled, to whichever
+  stranger answered first. A .ts.net or .nord name is answered by the mesh
+  app while it is on (the ordinary internet does not list them), and the
+  traffic then travels inside the mesh's encryption; with the mesh off, the
+  name normally fails to resolve and nothing is sent.
+  docs/ARCHITECTURE.md section 2, "Which addresses the phone can use".
+
+  The app's own check agrees with this list and refuses the rest up front,
+  in plain words (data/PhoneAddress.kt), rather than accepting an address
+  every request would then fail on. PhoneAddressTest reads THIS file and
+  fails if the app's copy of the list differs from it.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />

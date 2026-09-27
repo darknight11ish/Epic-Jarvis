@@ -53,7 +53,8 @@ it works.
    can reach, and neither is a public tunnel. The desktop's bind-address
    check accepts exactly that range (`validate_bind_address`, commands.rs),
    and the phone allows plain HTTP only to loopback, `*.ts.net` and `*.nord`
-   names (`network_security_config.xml`). A non-loopback bind with no
+   names (`network_security_config.xml`; why no more, below under "Which
+   addresses the phone can use"). A non-loopback bind with no
    `HUD_TOKEN` refuses to start — `SystemExit(2)`, not a warning.
 
    **The other end too: both apps talk only to a Jarvis on the owner's own
@@ -86,11 +87,65 @@ it works.
    or its NordVPN Meshnet name (ending in .nord)."* (ease-of-use audit
    2026-09-27, #1e), because the phone can only connect in plain http:// to
    those names and to itself - `network_security_config.xml` allows no
-   other cleartext host, and cannot list an address range. **A known gap,
-   written down for the owner:** the phone ACCEPTS a home-network address
-   (192.168.x.x, `.local`) under the rule above, but cannot connect to it
-   (`PlatformReadiness` says so on the checks screen). Making the phone
-   reach the home network is the owner's call, not done here. An address saved before the rule (or set in
+   other cleartext host, and cannot list an address range.
+
+   **Which addresses the phone can use** (2026-09-27). The phone applies
+   the rule above AND Android's own list, and refuses up front, in one
+   sentence, an address that passes the rule but not the list: *"Jarvis's
+   address X is on your own network, but this phone can only reach your PC
+   by its Tailscale name (ending in .ts.net) or its NordVPN Meshnet name
+   (ending in .nord), not by a number or a home-network name: type the name
+   the Tailscale or NordVPN app shows for your PC."* (`PhoneAddress.kt`,
+   used by `ClientSettings.baseUrl`/`baseProblem`, so it is shown wherever
+   the own-networks sentence is). Before this, such an address (192.168.x.x,
+   10.x, `.local`, `jarvis-pc`, or a raw 100.x mesh number) was accepted,
+   OkHttp then refused every request, and the owner was told "The
+   connection to your PC dropped. Try again." - untrue, and retrying could
+   never work. `PhoneAddressTest` reads the real XML file and fails if the
+   app's copy of its list differs.
+
+   Why Android's list is **not** widened to match the rule, although the
+   owner's 2026-09-27 answer ("Phone: allow home-network addresses") asked
+   for it - checked, not assumed:
+   - *It cannot be widened for numbers.* Android's network security config
+     matches a `<domain>` as plain text: the exact name, or, with
+     `includeSubdomains`, a name ending in "." plus it (Android's own code:
+     `ApplicationConfig.getConfigForHostname`). There are no ranges or
+     wildcards, and the only method that changes the policy while the app
+     runs (`NetworkSecurityPolicy.setCleartextTrafficPermitted`) is hidden
+     from apps. The check is made inside OkHttp, against the URL's host
+     text (`RealConnection.connect` calls
+     `NetworkSecurityPolicy.isCleartextTrafficPermitted(url.host)`), so the
+     only ways around it for a number are to replace OkHttp's internal
+     platform object for the whole app, or to dial the number under a
+     made-up allowed name through a custom name lookup. Both would turn
+     Android's independent check into a rubber stamp for whatever this
+     app's own code decided - the one thing the two layers exist to avoid.
+   - *It would not reach Jarvis anyway.* Jarvis on the PC listens only on
+     its Tailscale/Meshnet address (100.64-100.127) and on the PC itself:
+     Jarvis Desktop refuses to save any other listening address, a home
+     Wi-Fi one included, because that "would open Jarvis to everything on
+     your Wi-Fi" (`validate_bind_address`, commands.rs; INSTALL.md). A
+     192.168.x.x number, or a `.local`/`.lan` name (which points at the
+     PC's Wi-Fi address), reaches nothing - set up the documented way. So
+     the owner's answer cannot be delivered by the phone alone; it would
+     first need the PC to listen on the home network, which is a separate
+     decision the owner has not been asked.
+   - *On a phone, names are safer than numbers.* The phone moves between
+     networks and keeps its link open in the background. A number means
+     whatever device holds it on the current Wi-Fi (or the mobile carrier's
+     own network, for 100.x with the mesh off), and a `.local` name is
+     asked of every device on the current Wi-Fi at once (multicast DNS) -
+     any of them can answer - so the pairing key would go, unscrambled, to
+     a stranger on a cafe's Wi-Fi. A `.ts.net` or `.nord` name is answered
+     by the mesh app while it is on, with the traffic inside the mesh's
+     encryption; with the mesh off it normally fails to resolve and nothing
+     is sent.
+   The raw 100.x number of the PC's mesh address is the one case that
+   would reach Jarvis; its name does the same job, fails safe, and survives
+   the number changing, so the sentence sends the owner to the name. The
+   desktop needs none of this: Windows has no per-app list of hosts that
+   may get plain http:// (§8, "One-sided on purpose"). An address saved before the rule (or set in
    `JARVIS_HUD_BASE`) is not used, and nothing is used in its place (owner,
    2026-09-26): the desktop does nothing over the network - no chat, no
    reads, no requests to this PC instead, no backend started - until an
@@ -1394,6 +1449,7 @@ backend routes, in both directions; the rest are listed here only.
 | **Blocking screenshots while a lock is on** (`FLAG_SECURE`, `SecurityRules.blockScreenCapture`) | **Undecided on the desktop - the owner's call.** The owner decided it for the phone (apps security audit L5, 2026-09-25), where screenshots, screen recording and casting are all a tap away. Windows could do the same for Jarvis's windows (Tauri's `set_content_protected`, which keeps a window out of screenshots, recordings and screen sharing), but it was not part of that decision and is not built. |
 | **Smartwatch notifications** (`GET`/`POST /api/notifications/watch`, `phone-only` in `tools/check_parity.py`; the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17) | A smartwatch pairs with a phone, never with a Windows PC - there is nothing on the desktop for this to mean. The setting itself still lives on the PC, the same as every other approval-card switch (`docs/ARCHITECTURE.md` §3: one permission model, one place cards come from), so a stolen or borrowed phone cannot flip it on its own; only the phone ever reads it or acts on it (`.setLocalOnly(...)` on its own `NotificationCompat.Builder`s). Off by default - every notification stays on the phone; turning it on raises one card (`watch_notifications_enable`), turning it off is instant. There is no Jarvis watch app and none is built for this: Android's own, already-built-in notification bridging does the copying, to whatever companion device is paired, once this setting stops refusing it. |
 | **A haptic tick on letting go of the talk button** (UI audit "do first" item 7, 2026-09-26) | A PC has no vibration motor. The desktop's own half of "Caught it" is a short reactor "inhale" instead - the same contraction-and-spring the moment gets on the phone (`jarvis-desktop/src/style.css` `reactor-inhale`, called from `main.js`'s `stopPushToTalk`, never on a cancel) - so both apps mark the same instant, each in the one channel its hardware actually has. |
+| **Refusing a home-network desktop address up front** ("...this phone can only reach your PC by its Tailscale name ... or its NordVPN Meshnet name ...", `PhoneAddress.kt`; 2026-09-27) | Written with the change (§2, "Which addresses the phone can use"). It makes the phone's own judgment agree with Android's per-app list of names that may get plain http:// (`network_security_config.xml`), which Android enforces through OkHttp on every request. Windows has no such per-app list, and the desktop's requests to Jarvis are made by its Rust code (`reqwest`), which has none either - an address the shared rule accepts is one the desktop can actually use (usually Jarvis on the same PC) - so it keeps the shared own-networks rule alone, with the shared sentence. Both apps still apply that rule, from the one table (`tools/gen_own_network_cases.py`). |
 
 | **"Findings" (Brain → Findings, `BrainScreen.kt`'s `Probed("Findings", brain.initiative, ...)`, "What Jarvis noticed on its own")** | Written down 2026-09-27, on the ease-of-use audit's parity check (#17). `GET /api/initiative` is read on both apps - the desktop's HUD window polls it too (`jarvis_hud.html`) - but only as transient cards the owner dismisses while the HUD happens to be open; the desktop's Brain window has no section that keeps them. The phone's Brain gives the same feed a persistent, browsable place instead, with the honest empty state from `initiativeNote()` ("Jarvis doesn't watch anything on its own yet") for when the initiative engine's check list is still empty. Nothing here is phone-only data; it is a phone-only place to read it back. |
 

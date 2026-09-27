@@ -63,10 +63,11 @@ private val FAQS = listOf(
             "is another, if you already have a NordVPN account. Jarvis's brain " +
             "runs on your desktop, and this phone only reaches it over that " +
             "mesh. When you pair, type the desktop's mesh name — Tailscale's " +
-            "ends in .ts.net, Meshnet's ends in .nord — not its 100.x address " +
-            "directly. This phone is only allowed to trust a small, named " +
-            "list of hosts, and a name is on that list where a raw address " +
-            "cannot be.",
+            "ends in .ts.net, Meshnet's ends in .nord — not its 100.x address, " +
+            "a home-network address like 192.168.x.x, or a .local name. This " +
+            "phone is only allowed to trust a small, named list of hosts, and " +
+            "a name is on that list where a raw address cannot be. Jarvis " +
+            "on your PC only listens on the mesh anyway, even at home.",
     ),
     Faq(
         "Does this app run any AI on my phone?",
