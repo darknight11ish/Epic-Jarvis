@@ -122,6 +122,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -572,6 +573,12 @@ def _rust_group(backend_dir: Path, crates_fetch: Optional[Callable]) -> dict:
                        "newer, or the tomli package)", "items": [], "unreachable": []}
     items, unreachable = [], []
     latest_by_name: dict = {}
+    # `cargo update -p <name>` refuses with "the specification is ambiguous"
+    # the moment a name is pinned at two or more versions at once (a
+    # transitive-dependency situation, not a mistake) - 61 of 576 names in
+    # this project's own lock file, today. `-p <name>@<version>` is the one
+    # cargo accepts (bug audit 2026-09-27, backend finding #6).
+    name_counts = Counter(name for name, _ in pins)
     for name, version in sorted(pins):
         if name not in latest_by_name:
             try:
@@ -583,8 +590,9 @@ def _rust_group(backend_dir: Path, crates_fetch: Optional[Callable]) -> dict:
             unreachable.append({"name": name, "current": version, "why": val})
             continue
         outdated = _version_key(val) > _version_key(version)
+        spec = f"{name}@{version}" if name_counts[name] > 1 else name
         items.append({"name": name, "current": version, "latest": val, "outdated": outdated,
-                      "command": (f"cd jarvis-desktop\\src-tauri; cargo update -p {name}"
+                      "command": (f"cd jarvis-desktop\\src-tauri; cargo update -p {spec}"
                                   if outdated else None)})
     return {"ecosystem": "Rust crates", "available": True, "why": "", "items": items,
             "unreachable": unreachable}

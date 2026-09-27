@@ -228,6 +228,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "libc"
 version = "0.2.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "anyhow"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 """, encoding="utf-8")
     calls = []
 
@@ -235,6 +240,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
         calls.append(url)
         if "serde" in url:
             return {"crate": {"max_stable_version": "1.0.200"}}
+        if "anyhow" in url:
+            return {"crate": {"max_stable_version": "1.0.1"}}
         return {"crate": {"max_stable_version": "0.2.99"}}
 
     g = TU._rust_group(d, fetch)
@@ -247,10 +254,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
           len(serde_items) == 2 and all(it["latest"] == "1.0.200" for it in serde_items))
     check("the older serde pin is outdated, with a cargo command; the newer is not",
           any(it["outdated"] and it["command"] == "cd jarvis-desktop\\src-tauri; "
-              "cargo update -p serde" for it in serde_items)
+              "cargo update -p serde@1.0.100" for it in serde_items)
           and any(not it["outdated"] for it in serde_items))
+    check("the command names the version - a bare name is ambiguous for a "
+          "crate pinned at two versions, and cargo refuses it (bug audit "
+          "2026-09-27, finding #6)",
+          all("@" in it["command"] for it in serde_items if it["command"]))
     libc_item = next(it for it in g["items"] if it["name"] == "libc")
     check("libc is exactly at the latest version - not outdated", libc_item["outdated"] is False)
+    anyhow_item = next(it for it in g["items"] if it["name"] == "anyhow")
+    check("anyhow is pinned once and outdated, so its command stays a bare "
+          "name - only a name pinned twice needs the version to disambiguate",
+          anyhow_item["outdated"] and
+          anyhow_item["command"] == "cd jarvis-desktop\\src-tauri; cargo update -p anyhow")
 
 
 def t_rust_group_missing_lock_says_so():

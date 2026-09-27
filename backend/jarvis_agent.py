@@ -3438,11 +3438,44 @@ def note_struggle(conversation_id, n: int = 1) -> int:
         return 0
 
 
-def note_correction(conversation_id, n: int = 1) -> int:
+def note_correction(conversation_id, n: int = 1, turn_id=None) -> int:
     """One more sign the owner corrected an answer in this conversation.
-    Returns the new count; never raises."""
+    Returns the new count; never raises.
+
+    `turn_id`, when given, dedupes: the SAME turn only ever adds one
+    correction, no matter how many times it is marked. Without this, the
+    one caller that passes a `turn_id` - the wrong-mark button
+    (second-card-suggest.patch) - could count one answer twice: marking it
+    wrong, then clearing the mark, then marking it wrong again is a
+    "changed" mark each time (`jarvis_feedback.mark`'s own definition), but
+    is still ONE real correction (bug audit 2026-09-27, finding #9). The
+    phrase-based signal (`looks_like_correction`, below) has no turn_id to
+    give - it is a guess about which past answer the owner's new words are
+    reacting to, not a reference to one - so it always counts, same as
+    before; deduplicating it against the mark signal would need knowing
+    which turn it is about, which this backend does not track today."""
+    if turn_id is not None and not isinstance(turn_id, str):
+        turn_id = None
+    if not isinstance(conversation_id, str) or not _CID_OK.match(conversation_id) or n <= 0:
+        return 0
     try:
-        return _bump_suggest(conversation_id, "correction", n)
+        with _SUGGEST_LOCK:
+            row = _SUGGEST.get(conversation_id)
+            if row is None:
+                _SUGGEST.pop(conversation_id, None)
+                row = {"struggle": 0, "correction": 0, "marked_turns": set()}
+                _SUGGEST[conversation_id] = row
+                while len(_SUGGEST) > _SUGGEST_MAX:
+                    _SUGGEST.pop(next(iter(_SUGGEST)))
+            marked_turns = row.setdefault("marked_turns", set())
+            if turn_id is not None:
+                if turn_id in marked_turns:
+                    return row.get("correction", 0)
+                marked_turns.add(turn_id)
+                while len(marked_turns) > _SUGGEST_MAX:
+                    marked_turns.pop()
+            row["correction"] = row.get("correction", 0) + n
+            return row["correction"]
     except Exception:
         return 0
 
@@ -3484,10 +3517,22 @@ def reset_suggest_counts(conversation_id) -> None:
 # "I'll try again later" and "let's try that again" do not count). See
 # test_second_card_suggest.py for real sentences that must NOT match,
 # alongside the ones that must.
+#
+# The subject+judgement branch ("that's wrong", "it's not right", ...) is
+# anchored to the START of the message (optionally after a leading "no,"),
+# not searched for anywhere in it - bug audit 2026-09-27, finding #9: "my
+# doctor says it is not true" used to match on "it is not true" appearing
+# mid-sentence, about the doctor, never about Jarvis's answer. Anchoring
+# does not catch every such case ("this is wrong, my code keeps crashing"
+# still matches - it happens to open with the same words a real correction
+# would), because nothing short of understanding the sentence can tell
+# those apart from a real correction that also continues with detail
+# ("that's wrong, it's Sydney" - the pushback case below, which must still
+# match). Narrower than before; not perfect.
 _CORRECTION_SUBJECT = r"(?:that'?s|that\s+is|this\s+is|you'?re|you\s+are|it'?s|it\s+is)"
 _CORRECTION_JUDGEMENT = r"(?:wrong|incorrect|inaccurate|not\s+(?:right|correct|accurate|true))"
 _CORRECTION = re.compile(
-    rf"\b{_CORRECTION_SUBJECT}\s+{_CORRECTION_JUDGEMENT}\b"
+    rf"^(?:no[,.]?\s+)?{_CORRECTION_SUBJECT}\s+{_CORRECTION_JUDGEMENT}\b"
     r"|\bwrong\s+answer\b"
     r"|\byou\s+(?:got|have)\s+(?:that|it)\s+wrong\b"
     r"|\bnot\s+what\s+i\s+(?:asked|meant|said|wanted)\b"

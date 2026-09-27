@@ -918,6 +918,18 @@ def t_main_ollama_pin():
             st = SC.status()
     check("our own second Ollama on the second card does not count against the pin",
           st["main_ollama_pinned"] is True, st["pin_note"])
+    # Bug audit 2026-09-27, backend finding #7: the combined lane's own
+    # Ollama runs on the second card BY DESIGN, and used to be mistaken for
+    # the everyday one crowding it.
+    with G.World(G.SMI["2080s_2060"], windows=True, user_env=G.U_2080S) as w:
+        w.switches(combined=True)
+        SC.combined_lane()
+        w.apps = f"{w.started[0].pid}, ollama.exe, {G.U_2060}, 9000\n"
+        with mock.patch.object(SC, "_tree", lambda pid: {pid}):
+            st = SC.status()
+    check("the combined lane's own Ollama on the second card does not count "
+          "against the pin either",
+          st["main_ollama_pinned"] is True, st["pin_note"])
 
 
 # ------------------------------------------------------------- the hooks --

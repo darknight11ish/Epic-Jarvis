@@ -56,6 +56,7 @@ note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28+00:00	Logseq and Joplin notes that are really filed
 schedule.patch	schedule/a90e8dc.patch	a90e8dc5323269d0ed88a81271d22ad1b6acf97e	2026-09-25T04:14:33+00:00	Standby schedule (backend): standby on a timetable, every model unloaded, warm-up on waking
 schedule.patch	schedule/97885fd.patch	97885fd9027e5f7c6a3d163fd5133cf634a0562a	2026-09-25T02:17:12+00:00	Timers, alarms, reminders, a to-do list and one scheduler (backend)
+second-card-suggest.patch	second-card-suggest/ed7b4b3.patch	ed7b4b3dce2b9439e2a603591af385999cf4434b	2026-09-27T08:55:01+00:00	Fix the backend audit's six real findings, and the phone's own scroll bug
 second-card-suggest.patch	second-card-suggest/476be02.patch	476be02a5a254b7f6868f3aef75fc00288e3aa73	2026-09-27T04:50:08+00:00	Suggest the bigger model when the second card could help
 second-card.patch	second-card/e1ab659.patch	e1ab6598a8784df14f084fac3150e719e920e78e	2026-09-24T06:52:58+00:00	Merge fix-b3: bug audit 3 fixes
 second-card.patch	second-card/2a25605.patch	2a25605de02b58dfbe278a6043a478ac81ed8819	2026-09-24T06:14:15+00:00	Gate notice words (AP-10): what the second card, wiki and big model do
@@ -72,6 +73,7 @@ web-search.patch	web-search/dcfdbaf.patch	dcfdbafdf25c0944179e6103990326786c11de
 web-search.patch	web-search/7c82046.patch	7c820464c4b614c3305ce54d126772b7e6e09d09	2026-09-25T06:33:24+00:00	Web search: Exa replaces Brave (SearXNG, DuckDuckGo, Exa, Tavily)
 web-search.patch	web-search/4312b46.patch	4312b4686e51299212f51077097d4a49e380ced2	2026-09-25T06:02:46+00:00	Web search in both apps: Settings (desktop) and Mind (phone); docs
 web-search.patch	web-search/22cf8a5.patch	22cf8a5d8dd1f89daab77e7ab81062886118a66b	2026-09-25T05:46:04+00:00	Web search: jarvis_search.py (four providers), the web_search tool, web-search.patch
+wellbeing.patch	wellbeing/09d4703.patch	09d4703e7193cd9340fdec32bd6f346ed9da22a6	2026-09-26T11:50:42+00:00	Games and role-play run in a temporary chat automatically; smartwatch notification setting
 wiki.patch	wiki/9aaab08.patch	9aaab08a9cdea55259a23a50ee9b1b2e990921fd	2026-09-24T03:29:14+00:00	Wiki builder: jarvis_wiki.py, wiki.patch, and its tests
 rebuilt-patches/approval-notice.patch	rebuilt-patches/approval-notice/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
 rebuilt-patches/bitemporal.patch	rebuilt-patches/bitemporal/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild

@@ -144,6 +144,12 @@ _FALSE_POSITIVES = [
     "this is going well",
     "sorry, wrong chat",
     "I got the wrong bus this morning",
+    # Bug audit 2026-09-27, finding #9: the owner describing something
+    # ELSE as wrong, mid-sentence, not Jarvis's answer. Anchoring the
+    # subject+judgement phrase to the start of the message (rather than
+    # searching for it anywhere) catches this one - the judgement clause
+    # is not at the start, it is after "my doctor says".
+    "my doctor says it is not true",
     # The pushback case from tools/tool_eval/behaviour_cases.py, so the
     # detector is tested against the exact sentence the character-check
     # harness already uses for "the owner pushes back wrongly" - a real
@@ -205,6 +211,31 @@ def t_counters_bump_read_reset():
     check("suggest_counts reads both", AG.suggest_counts(cid) == (5, 1))
     AG.reset_suggest_counts(cid)
     check("reset clears both", AG.suggest_counts(cid) == (0, 0))
+
+
+def t_correction_turn_id_dedupes_a_remarked_turn():
+    # Bug audit 2026-09-27, finding #9: marking one answer wrong, then
+    # clearing the mark, then marking it wrong again is a "changed" mark
+    # each time (jarvis_feedback.mark's own definition), but is still ONE
+    # real correction - it must count once, not twice.
+    cid = "conv-suggest-test-turn-dedupe"
+    AG.reset_suggest_counts(cid)
+    turn = "a" * 32
+    check("first mark of this turn counts",
+          AG.note_correction(cid, turn_id=turn) == 1)
+    check("marking the SAME turn again (re-marked wrong after being "
+          "cleared) does not count a second time",
+          AG.note_correction(cid, turn_id=turn) == 1)
+    other_turn = "b" * 32
+    check("a DIFFERENT turn still counts normally",
+          AG.note_correction(cid, turn_id=other_turn) == 2)
+    check("the phrase signal (no turn_id at all) is never deduped by this - "
+          "it always counts, since it names no turn to dedupe against",
+          AG.note_correction(cid) == 3)
+    AG.reset_suggest_counts(cid)
+    check("reset also clears the marked-turns memory, not just the count",
+          AG.note_correction(cid, turn_id=turn) == 1)
+    AG.reset_suggest_counts(cid)
 
 
 def t_counters_ignore_bad_conversation_id():
@@ -585,7 +616,7 @@ def t_the_patch():
           "and never let an exception replace the answer",
           'out.get("mark") == "wrong" and out.get("changed")' in after
           and "isinstance(cid, str) and cid" in after
-          and "jarvis_agent.note_correction(cid)" in after
+          and 'jarvis_agent.note_correction(cid, turn_id=out.get("turn_id"))' in after
           and "except Exception:\n                    pass" in after, after)
     cid_at = after.index('cid = body.get(')
     check("an older client (no conversation_id) is untouched: the route still ends "

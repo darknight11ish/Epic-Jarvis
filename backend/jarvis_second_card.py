@@ -1878,7 +1878,12 @@ def _main_pin(det: dict) -> tuple:
     prim_uuid = (prim.get("uuid") or "").lower()
     others = {(c.get("uuid") or "").lower(): c.get("name") for c in cards
               if c.get("role") != "primary" and c.get("uuid")}
-    ours = _LANE.pids()
+    # `_COMBINED_LANE`'s own process runs on the second card BY DESIGN, not
+    # as the "everyday Ollama" this check is looking for - excluding only
+    # `_LANE`'s pids meant a running combined lane was reported as if it
+    # were the everyday one crowding the second card (bug audit 2026-09-27,
+    # backend finding #7).
+    ours = _LANE.pids() | _COMBINED_LANE.pids()
     text = _smi_apps()
     if text:
         for line in text.splitlines():

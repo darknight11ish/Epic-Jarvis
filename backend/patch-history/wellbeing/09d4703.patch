@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -3287,6 +3287,25 @@
+@@ -2891,6 +2891,24 @@
              except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
                  pass
              return
@@ -15,11 +15,10 @@
 +        # missing module changes nothing here.
 +        try:
 +            import jarvis_wellbeing
-+            _wb_last = messages[-1] if messages else {}
-+            _wb_content = _wb_last.get("content") if isinstance(_wb_last, dict) else None
-+            if (isinstance(_wb_last, dict) and _wb_last.get("role") == "user"
-+                    and isinstance(_wb_content, str)
-+                    and jarvis_wellbeing.crisis(_wb_content)):
++            _wb_newest = next((m.get("content") for m in reversed(messages)
++                               if isinstance(m, dict) and m.get("role") == "user"
++                               and isinstance(m.get("content"), str)), "")
++            if jarvis_wellbeing.crisis(_wb_newest):
 +                route_header["wellbeing"] = "crisis"
 +        except Exception:
 +            pass

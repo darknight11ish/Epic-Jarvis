@@ -6640,12 +6640,13 @@ with the number shown large (rather than an ordinary chat bubble), the plan
 is one more field on the EXISTING `X-Jarvis-Route` header of the EXISTING
 `/api/chat` route - `"wellbeing": "crisis"`, absent on every other turn,
 the same shape `second_card` and `offer` already use. `backend/wellbeing.patch`
-drafts this, but **it was written with no real `jarvis_hud.py` to check it
-against** (backend/ holds patches against a backend that lives outside this
-repository), and `backend/briefing.patch` already rewrites the exact lines
-its context assumed - so it is not confirmed to apply, and is not in
-`scripts/apply-patches.ps1`'s `$PATCHES` list for that reason (see its own
-comment there). **Nothing above depends on it**: without the flag, the
+drafts this, checked against the real patch stack (`_stack.stand_in`,
+`tools/build_patch_history.py --check`) and confirmed to apply, and it IS in
+`scripts/apply-patches.ps1`'s `$PATCHES` list. It flags only the LAST
+message - never an earlier crisis mention still sitting in the same
+conversation - so a picture turn (or any ordinary turn) after a crisis
+message is never wrongly drawn as one (bug audit 2026-09-27, backend
+finding #10). **Nothing above depends on it**: without the flag, the
 owner still sees the full, correct help message and the real US numbers, as
 ordinary answer text, the moment they update `jarvis_agent.py` -
 `wellbeing.patch` only decides whether that text also gets drawn as a

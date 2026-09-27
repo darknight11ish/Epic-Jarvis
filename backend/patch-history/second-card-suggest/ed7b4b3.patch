@@ -1,6 +1,9 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -2174,6 +2174,23 @@
+@@ -2171,12 +2171,29 @@
+                 out = jarvis_feedback.mark(body.get("turn_id"), body.get("mark"))
+             except Exception as exc:
+                 return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
              code = int(out.pop("status", 200))
              if not out.get("ok"):
                  return self._send(code, {"error": out.get("reason", "refused")})
@@ -18,18 +21,19 @@
 +                    and isinstance(cid, str) and cid:
 +                try:
 +                    import jarvis_agent
-+                    jarvis_agent.note_correction(cid, turn_id=out.get("turn_id"))
++                    jarvis_agent.note_correction(cid)
 +                except Exception:
 +                    pass
              return self._send(code, out)
- 
+
          if route in ("/api/task/pause", "/api/task/resume", "/api/task/stop",
-@@ -2361,6 +2378,33 @@
-                 return self._send(503, {"available": False,
-                                         "error": f"{type(exc).__name__}: {exc}"})
+                      "/api/task/note") or (route.startswith("/api/pending/")
+                                            and route.endswith("/amend")):
+             # task-control.patch - Pause, Resume, Stop and a note for what
+@@ -2380,6 +2397,33 @@
              code, out = jarvis_second_card.handle_post(body)
-+            return self._send(code, out)
-+
+             return self._send(code, out)
+ 
 +        if route == "/api/second-card/suggest":
 +            # second-card-suggest.patch - one "when to suggest the bigger
 +            # model" switch on or off (jarvis_second_card.SUGGEST_SIGNALS).
@@ -55,6 +59,8 @@
 +                return self._send(503, {"available": False,
 +                                        "error": f"{type(exc).__name__}: {exc}"})
 +            code, out = jarvis_second_card.handle_suggest_post(body)
-             return self._send(code, out)
- 
++            return self._send(code, out)
++
          if route in ("/api/hardware/apply", "/api/hardware/create",
+                      "/api/hardware/measure"):
+             # hardware.patch - the three setups (jarvis_hardware.py).

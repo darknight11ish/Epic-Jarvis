@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import sys
+import textwrap
 import traceback
 import urllib.error
 from pathlib import Path
@@ -38,6 +39,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_agent.py", "jarvis_wellbeing.py", "jarvis_intake.py")
+import _stack  # noqa: E402
 import jarvis_agent as AG  # noqa: E402
 import jarvis_wellbeing as WB  # noqa: E402
 import jarvis_intake as IN  # noqa: E402
@@ -406,6 +408,58 @@ def t_the_module_writes_nothing_and_logs_nothing():
         check(f"jarvis_wellbeing.py never uses {bad!r}", bad not in src)
 
 
+# --------------------------------------------------------------------------
+#   6. The X-Jarvis-Route header check (wellbeing.patch) - a picture turn
+# --------------------------------------------------------------------------
+#
+# Bug audit 2026-09-27, backend finding #10: the header check used to take
+# the newest message whose content is a STRING - a picture message's
+# content is a list, so it was skipped, and the check fell back to an
+# OLDER message, flagging a picture turn as "crisis" because of a crisis
+# message earlier in the same conversation. `run_local_turn`'s own check
+# (watch.crisis, what actually decides tools/note/help-message) only ever
+# looks at the newest message, has none for a picture turn, and correctly
+# says no - so the two disagreed, and both apps drew the calm crisis panel
+# around an ordinary picture answer. Fixed: read only the LAST message,
+# and flag only when ITS content is a string and crisis() matches.
+def _wb_header_snippet():
+    hud = _stack.stand_in("jarvis_hud.py")[0]
+    start = hud.index("        try:\n            import jarvis_wellbeing\n")
+    end = hud.index("        # Times this answer:", start)
+    return textwrap.dedent(hud[start:end])
+
+
+def t_the_patch_flags_a_crisis_message_not_an_older_one():
+    snippet = _wb_header_snippet()
+    check("the snippet was found (the patch's own text has not drifted)",
+          bool(snippet.strip()))
+
+    def run(messages):
+        route_header = {}
+        env = {"jarvis_wellbeing": WB, "messages": messages, "route_header": route_header}
+        exec(snippet, env)
+        return route_header.get("wellbeing")
+
+    check("a crisis message, alone, is flagged",
+          run([{"role": "user", "content": "i want to kill myself"}]) == "crisis")
+    check("an ordinary message is not flagged",
+          run([{"role": "user", "content": "what plant is this?"}]) is None)
+    # The exact reproduction: a crisis message, an answer, then a picture
+    # turn - the picture turn must NOT inherit the earlier crisis flag.
+    check("a picture turn (list content) AFTER an earlier crisis message "
+          "is not flagged - only the LAST message is ever read",
+          run([{"role": "user", "content": "i want to kill myself"},
+               {"role": "assistant", "content": "please reach out to 988"},
+               {"role": "user", "content": [{"type": "text", "text": "what plant is this?"},
+                                            {"type": "image_url", "image_url": {"url": "data:..."}}]},
+               ]) is None)
+    check("an assistant's own last message is never read as the owner's",
+          run([{"role": "user", "content": "i want to kill myself"},
+               {"role": "assistant", "content": "please reach out to 988"},
+               ]) is None)
+    check("no messages at all: no crash, nothing flagged", run([]) is None)
+
+
 if __name__ == "__main__":
     for fn in (t_crisis_phrases_match,
                t_false_alarms_do_not_fire,
@@ -424,7 +478,8 @@ if __name__ == "__main__":
                t_a_first_mention_is_told_apart_from_a_conversation_with_no_history,
                t_a_crisis_turn_is_excluded_from_owner_turns,
                t_wellbeing_skip_matches_crisis_exactly,
-               t_the_module_writes_nothing_and_logs_nothing):
+               t_the_module_writes_nothing_and_logs_nothing,
+               t_the_patch_flags_a_crisis_message_not_an_older_one):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
