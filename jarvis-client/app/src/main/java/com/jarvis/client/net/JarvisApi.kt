@@ -1810,11 +1810,13 @@ class JarvisApi(
         conversationId: String? = null,
         interrupted: String? = null,
         temporary: Boolean = false,
+        /** See [ChatHistory.requestBody]'s own doc on this same parameter. */
+        cloudYes: Boolean = false,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
-            interrupted = interrupted, temporary = temporary,
+            interrupted = interrupted, temporary = temporary, cloudYes = cloudYes,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
