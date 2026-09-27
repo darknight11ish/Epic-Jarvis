@@ -689,6 +689,7 @@ $SHIPPED = @(
     'jarvis_scrub.py'            # log-scrub.patch: passwords, keys and the token kept out of backend.log
     'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
     'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
+    'jarvis_settings_registry.py' # "open"/"adjust" any setting by voice or chat, 2026-09-27; jarvis_quick.py (above) calls it, no patch of its own
     'jarvis_standby_schedule.py' # the standby schedule ("standby from 01:00 to 07:00"): a kind of job on the one scheduler, no patch
     'jarvis_backoff.py'          # briefing.patch: offers nobody asked for - a few at most, not mid-chat, a "no" heard
     'jarvis_briefing.py'         # briefing.patch: the morning briefing, a kind of job on the one scheduler

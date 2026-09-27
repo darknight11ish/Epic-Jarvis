@@ -8272,3 +8272,181 @@ call).
 **No new way out of the PC** (`docs/ARCHITECTURE.md` §4). This only reads
 what a tool ALREADY fetched this turn, by reference; it adds no fetch of
 anything, on either app.
+
+## 56. "Open" and "adjust" any setting, by voice or chat (added 2026-09-27)
+
+The owner's own words, confirmed 2026-09-27: "1. 'Open' a settings screen/
+section is pure navigation ... 2. 'Adjust' a setting means calling the
+EXACT SAME function the UI toggle already calls - never a new, parallel
+mutation path." `backend/jarvis_settings_registry.py` (shipped whole, no
+patch of its own - `jarvis_quick.py`, already shipped, is its only
+importer) holds the two small lookup tables; `jarvis_quick.py`'s own
+grammar (§21.5's fixed English sentences, extended, not replaced) matches
+the sentence and calls straight in. **No new route.** Both "open" and
+"adjust" ride inside the EXISTING `/api/chat` (§21.5): the answer is one
+short sentence, `X-Jarvis-Route` carries `"quick"` as always, and, for
+"open" only, one new field, `open_settings` (a section id - see 56.1).
+There is nothing here for either app to call directly; `check_parity.py`
+needs no new entry.
+
+### 56.1 "Open a settings section"
+
+"Open web search", "show me the security settings", "go to accounts", "take
+me to what asks first" and close phrasings. Matched only against an EXACT
+alias in `jarvis_settings_registry.SECTIONS` (a leading "the"/"my"/"a"/"an"
+ignored either side) - never a fuzzy guess, so "open the door" (home
+control, a model tool) or "show me the money" fall straight through to the
+model, unanswered here. `SECTIONS` is read off - and a test
+(`test_settings_registry.py` `t_sections_match_the_real_ui`) checks it
+against - the real ids: `jarvis-desktop/src/settings.html`'s own
+`<section class="card" id="...">` (and the one `<details id="more-
+options">`), and `SettingsScreen.kt`'s own `item(key = "...")` rows - the
+same id on both apps for the seven sections the 2026-09-27 Settings-screen
+build moved out of Brain, with one exception said plainly rather than
+smoothed over: "appearance" on the phone is `SECTIONS`' `"appearance-card"`
+(the desktop's own id) on the wire; `SETTINGS_ITEM_INDEX` (56.1, Phone)
+maps the wire id to that item's position, so the mismatch in NAME never
+becomes a mismatch in behaviour.
+
+The answer is `"Opening <name> in Settings."`; `X-Jarvis-Route` carries
+`"open_settings": "<section id>"` alongside the usual `"quick"` field -
+additive only, so an app that does not read this key is unaffected, same as
+`gate` or `injected_sensitive`.
+
+**Both apps, the SAME mechanism "Show me where" already used** (the
+ease-of-use audit's #2, §4's "When an answer fails" table) - extended to
+every section this file knows, not only "Starting Jarvis for you":
+
+- **Desktop.** `main.js`'s `applyHeaderRoute` reads `open_settings` and
+  calls the new `openSettingsFromRoute`, which leaves the place under
+  `plain-errors.js`'s own `SETTINGS_PLACE_KEY` (the exact same localStorage
+  key and shape `{place, at}` "Show me where"'s button already writes) and
+  calls the existing Tauri command `open_fix_place({place: "settings"})` -
+  no new Rust: `plain_errors.rs::open_fix_place` already opens or focuses
+  the Settings window. `settings.js`'s `goToPlace()` (generalised the same
+  day: it used to open only "Starting Jarvis for you", by a hardcoded id)
+  now looks up ANY left place by `document.getElementById`, opens its
+  nearest `<details>` ancestor if closed, scrolls to it and focuses it.
+  Nothing is changed by any of this - the owner still makes the change by
+  hand.
+- **Phone.** `net/Schedule.kt`'s new `openSettingsFromRoute` reads
+  `open_settings` off `X-Jarvis-Route` (the same header
+  `quickFromRouteHeader` already reads `quick` off).
+  `ChatSession.openSettings` (a `StateFlow<String?>`, read and cleared the
+  same way `usedIds`/`crisis` already are) carries it to `MainActivity`,
+  which - on any new value, even while on another screen - calls
+  `nav.go(Screen.SETTINGS)` (this app's own small `NavState`, `ui/Nav.kt`;
+  there is no `NavController` here) and passes the value on as
+  `SettingsScreen`'s new `initialSection` parameter. `SettingsScreen.kt`'s
+  `LazyColumn` now keeps its own `LazyListState` and, in a
+  `LaunchedEffect(initialSection)`, scrolls to that item's index by a
+  small fixed key-to-index map matching its own `item(key = ...)` calls -
+  the seven moved sections, `"voice"`, `"security"` and `"appearance"`.
+  Nothing is changed by any of this - it is read-only navigation, like the
+  desktop's. A section with no such key (the three linked screens are
+  reachable by their OWN screen, not a scroll target on this one; every
+  desktop-only "Rare" section has no key at all) still opens the Settings
+  screen - the one screen this app has - with nothing to scroll to; the
+  answer already named the place in words either way. There is no
+  separate wording per app: `/api/chat`'s body carries no client kind, so
+  the backend cannot tell which app is asking and answers the same
+  sentence to both (`jarvis_settings_registry.py`'s own header says this
+  plainly, rather than claiming a per-app fallback that was not built).
+
+### 56.2 "Adjust a setting"
+
+"Turn on/off <a setting>", "enable/disable <a setting>". Matched only
+against `jarvis_settings_registry.BOOL_SETTINGS`' own alias list, plus two
+narrower grammars for the two settings that need a second, named target
+(56.3): a phrase that matches neither exactly is left alone, never guessed
+at - "turn off my calendar" and "turn on the special mode" are not real
+settings and go to the model, same as "ask, don't guess"
+(`docs/CUTTING-EDGE-2026-09-26-round2-tools.md`'s principle, reused here).
+
+Ten settings are covered - the ones that already sit behind a single
+proven `handle_*`/`request_*` entry point this file can call exactly as
+the REST route does, never a copy of its logic:
+
+| Setting | Sentence | Calls straight into |
+|---|---|---|
+| Web search provider | "use DuckDuckGo for web search" | `jarvis_search.use()` - already a quick path (§23); registered here too so "open web search" resolves and so this feature's own tests check it end to end |
+| Manner (warm/plain) | "from now on, be more plain" | `jarvis_manner.handle_set()` - already a quick path (§27); registered the same way |
+| Background learning | "turn on/off background learning" | `jarvis_auto_learn.handle_post()` (§19) |
+| "Also remember sensitive topics automatically" | "turn on/off remembering sensitive topics automatically" | `jarvis_auto_learn.handle_post()` (§19) |
+| Lights, plugs and fans without a card | "turn on/off lights without asking" | `jarvis_asks_first.handle_lights()` (§33) |
+| "Ask before every web search" | "turn on/off asking before every web search" | `jarvis_search.request_ask_every_time()` (§23) |
+| Smartwatch notifications | "turn on/off smartwatch notifications" | `jarvis_watch_notify.request()` (§39) |
+| Morning briefing senders shown | "turn on/off senders in my briefing" | `jarvis_briefing.handle_senders()` (§22) |
+| "What asks first" - loosen/stricter | "stop asking before my calendar" / "ask me before my calendar" | `jarvis_asks_first.handle_tier()` (§32) |
+| Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§32) |
+
+Every one of these keeps its EXISTING gate exactly:
+
+- A setting already behind an approval card (background learning ON,
+  "also remember sensitive topics" ON, lights ON, briefing senders ON)
+  still raises that SAME card through this new path - never applies
+  silently - whichever app or device asked; turning the same setting OFF
+  is still immediate, no card, exactly as the existing route.
+- `loosen_what_asks_first` and `enable_reading_tool`
+  (`jarvis_owner_check.PC_ONLY_ACTIONS` - **the authoritative, current
+  list has three entries**: those two and `restore_backup`; nothing else
+  is on it today) still refuse from a request that did not truly come from
+  this PC (`jarvis_asks_first.request_tier`'s and `request_tool_enable`'s
+  own `_here(here, peer, local)` check, fed `peer`/`local` read off the
+  live TCP connection the same way `owner-check.patch`'s own `do_POST`
+  wrapper reads them - never invented, never defaulted to "this PC") and
+  still need Windows Hello to approve, whichever app or device raised the
+  card. Making one of these settings STRICTER (`"ask": true`) is unaffected
+  by PC_ONLY_ACTIONS - it always was immediate, from anywhere, no card -
+  and turning `enable_reading_tool` OFF is the same.
+- `set_asks_first`/`set_reading_tool` pass `peer`/`local` all the way from
+  `jarvis_quick.answer_turn`'s own new keyword-only parameters, which
+  `schedule.patch`'s `/api/chat` handler now reads off `self.client_address`
+  and `self.connection.getsockname()` before calling in - the SAME two
+  values `owner-check.patch`'s wrapper already reads for `POST /api/approve`.
+  `test_settings_registry.py` proves both directions for both
+  PC_ONLY_ACTIONS settings covered here (from the PC: the same card;
+  from a simulated phone request: the same 403, nothing changed) and that
+  a card-gated-but-not-device-restricted setting (lights, background
+  learning) still raises its card rather than applying at once.
+
+**Left out of "adjust" on purpose, said plainly rather than guessed at**
+(`jarvis_settings_registry.py`'s own header has the fuller reasoning):
+Jarvis's voice (speed, built-in speaker, the better voice), Hardware and
+models, the second graphics card, the big model, backups, custom voices,
+and Accounts - each either has no single value a spoken sentence maps to
+safely, or (Accounts) is a secret the owner should never be asked to say
+aloud. `restore_backup` is on PC_ONLY_ACTIONS and already wired
+(`jarvis_backup.py`, §45) but deliberately NOT offered as a spoken
+"adjust": it replaces memory, chat history, settings and notes with an
+older save, and a beginner owner should not be one sentence away from
+that by accident. All of these stay "open"-only (56.1): the app still
+jumps there. Everything `jarvis_quick.py` already answers with its own
+grammar (timers, reminders, focus, media, "tell me when", the to-do list,
+web search's provider, manner, ...) is unchanged; this feature adds no
+second version of any of it.
+
+### 56.3 What is NOT covered, and why
+
+- **Every other UI toggle** in `settings.html`/`SettingsScreen.kt` beyond
+  the ten in 56.2 stays reachable only by hand, through "open" (56.1).
+  `jarvis_settings_registry.py`'s own module header names the full list of
+  what was deliberately left for a later pass (voice speed/speaker/better
+  voice, hardware/second-card/big-model's own multi-field controls,
+  backups, Accounts).
+- **A device named in words for "loosen"/"enable a tool"** is limited to
+  the seven names `jarvis_asks_first.LOOSE`/`TOOLS_SWITCHABLE` already use
+  (calendar, email, notes, home status, and the three note-writes for
+  loosening only - the reading tools list is four, not seven). A phrase
+  naming anything else falls through to the model, same as an unknown
+  section or setting.
+- **Ambiguity is never guessed at.** A sentence that fits the shape of
+  "turn on/off X" but whose X matches no real setting, and a sentence that
+  could name more than one thing, both fall through to the model rather
+  than acting on a guess - `test_settings_registry.py`
+  `t_ambiguous_phrasing_is_left_alone` checks this holds for several near
+  misses of a real setting's own words.
+- **Not run on the owner's PC.** Like §21.7 and every fast-path feature
+  before it: tested in the dev container only, against a real Windows
+  Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
+  of `jarvis-framework.toml`, never the real thing.

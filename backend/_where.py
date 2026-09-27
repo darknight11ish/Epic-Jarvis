@@ -135,6 +135,9 @@ SHIPPED = (
     "jarvis_profiles.py", "jarvis_hardware.py",
     "jarvis_scrub.py",
     "jarvis_schedule.py", "jarvis_quick.py",
+    # "open"/"adjust" any setting by voice or chat (2026-09-27): jarvis_quick.py
+    # (already SHIPPED, above) is the only importer - no patch of its own.
+    "jarvis_settings_registry.py",
     "jarvis_standby_schedule.py",
     "jarvis_backoff.py", "jarvis_briefing.py",
     "jarvis_reach.py",

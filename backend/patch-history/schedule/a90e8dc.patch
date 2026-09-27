@@ -83,7 +83,7 @@
              return self._send(code, out)
  
          if route == "/api/wiki/ingest":
-@@ -2769,6 +2831,50 @@
+@@ -2769,6 +2831,42 @@
          # the end, read it. `_history` is what that record needs.
          messages = _chat_client_fields_off(messages)
          _history = {"turn": None, "at": time.time()}
@@ -99,15 +99,7 @@
 +        # like this one (jarvis_intake.owner_turns).
 +        try:
 +            import jarvis_quick
-+            # peer/local: settings.patch's "open"/"adjust" a setting by voice
-+            # or chat needs these for jarvis_owner_check.PC_ONLY_ACTIONS - the
-+            # same peer/local owner-check.patch's own do_POST wrapper reads.
-+            _peer = (getattr(self, "client_address", None) or ("",))[0]
-+            try:
-+                _local = self.connection.getsockname()[0]
-+            except Exception:
-+                _local = None
-+            _quick = jarvis_quick.answer_turn(body, peer=_peer, local=_local)
++            _quick = jarvis_quick.answer_turn(body)
 +        except Exception:
 +            _quick = None
 +        if _quick is not None:

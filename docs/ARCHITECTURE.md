@@ -305,6 +305,21 @@ page in both apps shows every action's tier, makes one stricter at once, and
 (`jarvis_owner_check.PC_ONLY_ACTIONS`). Each one is a place where no card is
 RAISED, by the owner's choice; none is a card answered for them.
 
+**A second DOOR to the same gates, never a second gate** (`jarvis_settings_
+registry.py`, the owner's decision of 2026-09-27, "open"/"adjust" any
+setting by voice or chat): "turn on background learning" calls the exact
+function `POST /api/memory/learning/auto` already calls; "stop asking
+before my calendar" calls `jarvis_asks_first.request_tier` exactly as
+`POST /api/asks_first/tier` does, `peer`/`local` included. `jarvis_owner_
+check.PC_ONLY_ACTIONS` has three entries TODAY - `loosen_what_asks_first`,
+`enable_reading_tool` and `restore_backup` - and this new path refuses the
+first two exactly as their own REST routes do (still Windows Hello, still
+refused from anywhere but this PC); the third is not offered as a spoken
+"adjust" at all (`docs/JARVIS-API.md` §56.2). "Open a settings section" is
+narrower still: it is read-only navigation, matched only against a fixed
+list of real section ids, so it changes nothing by construction.
+`docs/JARVIS-API.md` §56 has the whole design.
+
 **Stopping is never gated.** Stop, Pause and "Stop everything"
 (`/api/task/stop`, `/api/task/pause`, `/api/stop_all`) need no card and are
 never held on a stale event stream or by a waiting card: rule 4 blocks
@@ -1517,6 +1532,7 @@ backend routes, in both directions; the rest are listed here only.
 | "Private copy" (feasibility I114, 2026-09-27) - keeping a copied answer out of what each platform remembers or syncs on its own | Genuinely different mechanisms, not one file shared two ways: the desktop excludes the clip from Windows Clipboard History and Cloud Clipboard sync (`clipboard_privacy.rs`, two registered clipboard formats set to 0 in the same open/close sequence as the text); the phone marks the clip `ClipDescription.EXTRA_IS_SENSITIVE` so Android's own copy toast shows no preview (`PrivateClipboard.kt`) - Android has no clipboard history or cross-device sync feature to opt out of at all. `docs/JARVIS-API.md` §51 has both. |
 | App-icon shortcuts (feasibility I125, `res/xml/shortcuts.xml`, 2026-09-27) | Phone only - a long press of an app's own icon on the home screen or app drawer is an Android launcher convention with no Windows equivalent this app has any reason to add (the desktop already has its own quickbar hotkeys, Settings -> Shortcuts). Every shortcut reuses an action `MainActivity.kt` already had (the widget's Talk/Note buttons, the briefing notification's tap) - no new backend route, no new navigation logic. `docs/JARVIS-API.md` §52. |
 | "Check for tool updates" (`GET`/`POST /api/tool_updates`(`/check`); the owner's own request, made directly, 2026-09-27) | Written with the feature. Checking the versions of the Python packages, Rust building blocks and any pinned GitHub tool Jarvis is built from is developer/maintenance tooling, not something the owner does from their phone - the same reasoning that keeps the model catalogue and deep config editing off the phone (`CLAUDE.md`'s standing rule). Report only: it never installs or changes anything, on either app, ever - it only shows the exact command to run, which is itself a PC-side action (`py -3 -m pip install ...`, `cargo update ...`, run from a terminal on the PC, not from a phone). `deliberate` in `tools/check_parity.py`. |
+| "Open <a settings section>" by voice or chat (§3, `docs/JARVIS-API.md` §56.1) jumping to Hardware and models, the second graphics card, the big model, Backups, Updates, "Check for tool updates" or "More options" | No new route (this rides inside `/api/chat`), so nothing for `tools/check_parity.py` to check. Each of these sections is already desktop-only or Rare-and-desktop-only for its own reason, listed elsewhere in this table; saying "open backups" from the phone answers with the plain sentence naming the place, since `SettingsScreen.kt` has no screen there to jump to. Voice, Security and Appearance ARE reachable on the phone (their own linked screens, `SettingsScreen.kt`), just not through an `item(key=...)` this file's section-matching reads directly - jumping there opens the Settings screen and names the place in words, rather than scrolling to a row. |
 
 **On the phone, kept off the desktop:**
 

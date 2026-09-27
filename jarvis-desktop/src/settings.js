@@ -704,10 +704,14 @@ $("open-faces").addEventListener("click", async () => {
 });
 
 /**
- * "Show me where" (plain-errors.js): the quickbar left a place under
- * SETTINGS_PLACE_KEY. Taken once, and only while fresh; "More options" is
- * opened and the place scrolled to. Nothing is changed - the owner still
- * presses Start themselves.
+ * "Show me where" (plain-errors.js), and, since 2026-09-27, "open <a
+ * settings section>" by voice or chat (jarvis_settings_registry.py,
+ * main.js's own openSettingsFromRoute): the quickbar left a place under
+ * SETTINGS_PLACE_KEY - any element id this page has, not only
+ * START_PLACE's "Starting Jarvis for you". Taken once, and only while
+ * fresh; a closed <details> ancestor (only "More options" folds a card
+ * away) is opened first, then the place is scrolled to. Nothing is
+ * changed - the owner still makes the change, or presses Start, themselves.
  */
 function goToPlace() {
   let left = null;
@@ -717,18 +721,25 @@ function goToPlace() {
   } catch {
     return;
   }
-  if (!left || left.place !== START_PLACE) return;
+  if (!left || !left.place) return;
   if (!(Date.now() - Number(left.at) < PLACE_FRESH_MS)) return;
-  const more = $("more-options");
-  const card = $("start-jarvis");
-  if (!more || !card) return;
-  more.open = true;
+  const target = $(left.place);
+  if (!target) return;
+  const details = target.closest("details");
+  if (details && !details.open) details.open = true;
   // After the page has loaded and laid out: a scroll made earlier is undone
   // by the browser putting the page back where it was.
   const go = () => requestAnimationFrame(() => {
-    card.scrollIntoView({ block: "start" });
-    const first = dom.startBackend && !dom.startBackend.disabled ? dom.startBackend : dom.supervise;
-    if (first) first.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start" });
+    if (left.place === START_PLACE) {
+      // "Starting Jarvis for you": land on its own first useful control,
+      // as before "open <a section>" existed for anywhere else.
+      const first = dom.startBackend && !dom.startBackend.disabled ? dom.startBackend : dom.supervise;
+      if (first) first.focus({ preventScroll: true });
+    } else if (typeof target.focus === "function") {
+      if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+      target.focus({ preventScroll: true });
+    }
   });
   if (document.readyState === "complete") go();
   else window.addEventListener("load", go, { once: true });

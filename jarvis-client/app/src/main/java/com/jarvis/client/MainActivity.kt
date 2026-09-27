@@ -747,6 +747,15 @@ class MainActivity : FragmentActivity() {
         // The crisis help line (jarvis_wellbeing.py, 2026-09-27): whether
         // the answer on screen is shown as a calm, plain panel.
         val crisisAnswer by chat.crisis.collectAsState()
+        // "Open <a settings section>" by voice or chat
+        // (jarvis_settings_registry.py, docs/JARVIS-API.md section 56.1):
+        // jump to Settings, at the section the answer named. Pure
+        // navigation - SettingsScreen's own `initialSection` does the
+        // scrolling; nothing here changes a setting.
+        val openSettingsTarget by chat.openSettings.collectAsState()
+        LaunchedEffect(openSettingsTarget) {
+            if (openSettingsTarget != null) nav.go(Screen.SETTINGS)
+        }
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
         val face = remember(faceId) { Faces.byId(faceId) }
@@ -1735,6 +1744,7 @@ class MainActivity : FragmentActivity() {
                         stale = stale,
                         onBack = { nav.back() },
                         modifier = root,
+                        initialSection = openSettingsTarget,
                         // Same three ternaries as Screen.CHECKS above: null
                         // until this phone is paired.
                         onTrainVoice = if (paired) {
