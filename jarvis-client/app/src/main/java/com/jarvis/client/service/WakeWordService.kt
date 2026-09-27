@@ -11,7 +11,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.graphics.drawable.Icon
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -22,6 +21,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
@@ -589,12 +589,19 @@ class WakeWordService : Service() {
      * app happened to be" - Home, ready to talk, the same place a tap on
      * the Overlay avatar reaches ([AvatarOverlayService.openApp]).
      *
-     * `Notification.BubbleMetadata.Builder(PendingIntent, Icon)` needs no
-     * associated shortcut - unlike the older, messaging-style bubble builder
-     * - which is why it is the one used here: this is not a messaging app.
-     * Added in API 30; this app's `minSdk` is 33, so no version check is
-     * needed. Best-effort and silent on failure: a bubble that could not be
-     * attached leaves the plain "hey Jarvis" notification exactly as it
+     * `NotificationCompat.BubbleMetadata.Builder(PendingIntent, IconCompat)`
+     * needs no associated shortcut - unlike the older, messaging-style
+     * bubble builder - which is why it is the one used here: this is not a
+     * messaging app. Built here and handed to [goForeground]'s own
+     * `NotificationCompat.Builder` via `setBubbleMetadata` BEFORE that
+     * builder's `build()` runs: `Notification.bubbleMetadata` has no public
+     * setter on an already-built `Notification` (Kotlin sees it as a
+     * read-only property, backed only by a getter), so it can never be
+     * attached after the fact the way this function used to try to -
+     * androidx's compat metadata is a builder-time property everywhere down
+     * to API 30, matching this app's `minSdk` of 33 with no version check
+     * needed. Best-effort and null on failure: a bubble that could not be
+     * built leaves the plain "hey Jarvis" notification exactly as it
      * already was, never a crash - the same reasoning `runCatching` is used
      * for everywhere else in this file.
      *
@@ -604,28 +611,26 @@ class WakeWordService : Service() {
      * every time and still not show a bubble on a phone that has not also
      * flipped that switch.
      */
-    private fun attachBubble(notification: Notification) {
-        runCatching {
-            // The launcher icon, not `ic_notification` - that one is a
-            // single-colour status-bar mask (see its own file comment), and
-            // the bubble is a small round AVATAR on the screen, not a status
-            // bar glyph.
-            val icon = Icon.createWithResource(this, R.mipmap.ic_launcher_round)
-            val bubbleIntent = PendingIntent.getActivity(
-                this,
-                3,
-                Intent(this, MainActivity::class.java)
-                    .setAction(MainActivity.ACTION_START_VOICE)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-            notification.bubbleMetadata = Notification.BubbleMetadata.Builder(bubbleIntent, icon)
-                .setDesiredHeight(BUBBLE_HEIGHT_DP)
-                .setAutoExpandBubble(false)
-                .setSuppressNotification(false)
-                .build()
-        }.onFailure { Log.w(TAG, "could not attach bubble metadata", it) }
-    }
+    private fun bubbleMetadata(): NotificationCompat.BubbleMetadata? = runCatching {
+        // The launcher icon, not `ic_notification` - that one is a
+        // single-colour status-bar mask (see its own file comment), and
+        // the bubble is a small round AVATAR on the screen, not a status
+        // bar glyph.
+        val icon = IconCompat.createWithResource(this, R.mipmap.ic_launcher_round)
+        val bubbleIntent = PendingIntent.getActivity(
+            this,
+            3,
+            Intent(this, MainActivity::class.java)
+                .setAction(MainActivity.ACTION_START_VOICE)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        NotificationCompat.BubbleMetadata.Builder(bubbleIntent, icon)
+            .setDesiredHeight(BUBBLE_HEIGHT_DP)
+            .setAutoExpandBubble(false)
+            .setSuppressNotification(false)
+            .build()
+    }.onFailure { Log.w(TAG, "could not build bubble metadata", it) }.getOrNull()
 
     private fun readFully(rec: AudioRecord, buf: ShortArray): Boolean {
         var got = 0
@@ -693,7 +698,7 @@ class WakeWordService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
             // notifications on a compatible watch" (Brain, off by default) -
             // Android bridges notifications to a paired device otherwise.
@@ -711,8 +716,13 @@ class WakeWordService : Service() {
             // Stopping is the safe direction, so it may be one tap from the
             // lock screen. (Nothing here can turn listening ON.)
             .addAction(0, getString(R.string.wake_stop), stop)
-            .build()
-        if (JarvisRuntime.settings.floatingAvatar.value == FloatingAvatarMode.BUBBLE) attachBubble(notification)
+        // Bubble metadata is set on the BUILDER, before build() - a built
+        // Notification has no public setter for it (see bubbleMetadata()'s
+        // own doc comment for why this used to fail to compile).
+        if (JarvisRuntime.settings.floatingAvatar.value == FloatingAvatarMode.BUBBLE) {
+            bubbleMetadata()?.let { builder.setBubbleMetadata(it) }
+        }
+        val notification: Notification = builder.build()
         return try {
             ServiceCompat.startForeground(
                 this,

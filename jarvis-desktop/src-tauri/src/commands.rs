@@ -1774,17 +1774,38 @@ pub fn turn_id_from_route(header: &str) -> Option<String> {
 pub const ROUTE_LINE_PREFIX: &str = "\u{1f}jarvis-route:";
 
 /// The small JSON object for [`ROUTE_LINE_PREFIX`], from an `X-Jarvis-Route`
-/// header value: `lane`, `where`, `gate` and `second_card`, each only when it
-/// is a string.
+/// header value: `lane`, `where`, `gate`, `second_card`, `quick` and
+/// `open_settings`, each only when it is a string.
 ///
 /// `second_card` (second-card.patch) is there only on a turn the second
 /// graphics card answered, and says why: `"long_context"` or `"vision"`.
 /// `where` is still `"local"` then (it is this PC) and `lane` names the model
 /// really answering. main.js adds "on the second graphics card" to the model.
+///
+/// `quick` (answer-memory.js) and `open_settings` (main.js's
+/// `openSettingsFromRoute`) are read by the page itself, not by
+/// [`quick_intent_from_route`]'s own separate read of the raw header lower
+/// in this file - that one decides whether Rust brings the Jarvis bar
+/// forward; this is what tells the PAGE the same fact, and is a different
+/// reader of the same value, not a duplicate mechanism.
 pub fn route_line_from_header(header: &str) -> Option<String> {
     let route: serde_json::Value = serde_json::from_str(header).ok()?;
     let mut out = serde_json::Map::new();
-    for key in ["lane", "where", "gate", "second_card"] {
+    // `quick` (answer-memory.js's "answered on this PC without the AI
+    // model" line; pre-existing, since 2026-09-25) and `open_settings`
+    // (main.js's openSettingsFromRoute, 2026-09-27's "open <a settings
+    // section>" feature) are both read by the page from this same filtered
+    // line - bug audit 2026-09-27 found both silently dropped here, so
+    // neither ever reached the real app despite passing every test that
+    // hands the page a route line directly instead of through this filter.
+    for key in [
+        "lane",
+        "where",
+        "gate",
+        "second_card",
+        "quick",
+        "open_settings",
+    ] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(
                 key.to_string(),
