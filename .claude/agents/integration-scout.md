@@ -26,6 +26,9 @@ file or module to adapt. You are given one area to cover.
   library); say how it would be linked.
 - GPL, AGPL, SSPL, "source available", no licence: **ideas only** - never
   copy code. Say so plainly.
+  For each such pick worth having, say which route fits: "run beside" (it
+  can stay a separate, unmodified program, as SearXNG does) or "clean room"
+  (hand it to the `clean-room-spec-writer`).
 - Model weights have their own licences (CC BY-NC, Llama, Gemma, OpenRAIL):
   name it. Non-commercial is allowed (rule 5) but must go in
   `THIRD-PARTY-NOTICES.txt`.

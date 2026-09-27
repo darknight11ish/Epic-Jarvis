@@ -22,13 +22,14 @@ Or ask for several at once ("run the play testers and the scouts").
 | `competitor-scout` | Searches the web for closed-source assistants (ChatGPT, Gemini, Alexa+, Siri, Copilot, Muse...) and what they shipped lately | No |
 | `open-source-scout` | Reads GitHub projects (OpenClaw, Hermes, Home Assistant, Open WebUI...) for ideas Jarvis can safely borrow | No |
 | `integration-scout` | Looks on GitHub for code Jarvis can actually use (a library, a model, a module to adapt) in one area, checking the licence, whether it runs on Windows/Android, and privacy | No |
+| `clean-room-spec-writer` | For a good idea whose licence Jarvis cannot copy from (GPL, AGPL, closed apps): first checks if it can simply run as a separate program; if not, writes a plain-words spec with no code in it, for a different agent to build from | Only `docs/clean-room/` |
 | `rules-guardian` | Checks any idea or change against the five non-negotiable rules and the owner's decisions in `CLAUDE.md` | No |
 | `feature-auditor` | The owner's standing three-part audit for every new feature: bugs, both apps, fit | No |
 | `bug-hunter` | Finds real bugs, each one checked against the source before it is reported | No |
 | `plain-words-editor` | Checks on-screen wording and write-ups for jargon, vagueness and blame | No |
 | `ci-reader` | Reads GitHub Actions results (the only Android compiler) and says in plain words what failed and why | No |
 
-None of them changes code. They report; the main session (or you) decides what
+None of them changes code (the clean-room spec writer only writes specs in `docs/clean-room/`). They report; the main session (or you) decides what
 to fix. That keeps one place responsible for every change.
 
 ## House rules every agent follows
@@ -40,3 +41,20 @@ to fix. That keeps one place responsible for every change.
 - Never propose something that breaks one of the five rules. If a good idea
   needs a rule bent, say so plainly and leave the call to the owner.
 - Earlier research lives in `docs/`. Build on it; do not redo it.
+
+## Ideas from projects Jarvis cannot copy from
+
+Copyright protects someone's exact code, not the idea of what it does. So a
+good idea from a GPL/AGPL project, or from a closed app like ChatGPT, can
+still come to Jarvis, in one of two ways:
+
+1. **Run it beside Jarvis, unchanged**, as its own program (how Jarvis
+   already uses SearXNG). Its licence then stays with it.
+2. **Clean room.** The `clean-room-spec-writer` reads the original and
+   writes down only what it does, with no code, in `docs/clean-room/`. A
+   *different* agent, told never to open the original, builds Jarvis's own
+   version from that spec.
+
+Never: copying its code, prompts or long text; decompiling a closed app;
+using model weights under a licence that forbids it. This is a careful
+habit, not legal advice.
