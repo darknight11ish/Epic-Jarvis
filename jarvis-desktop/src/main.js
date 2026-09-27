@@ -1826,6 +1826,20 @@ function parkApproval() {
   state.parked.add(state.approval.id);
   closeApproval();
   announce(`Put aside: ${title}. It is still waiting; nothing was decided.`);
+  // Another card still waiting takes its place, as the queue subscription
+  // would show it on its next read (and skipping, like it does, the one just
+  // answered here). Parking the first of two cards used to hide BOTH until
+  // the next event, with the line saying "1 approval is still waiting"
+  // while two were (play tester, 2026-09-27). Display only: openApproval
+  // puts focus on the card, never on Approve, and decides nothing.
+  const next = currentQueue().items.find(
+    (item) => !state.parked.has(item.id) && item.id !== state.decided
+  );
+  if (next) {
+    openApproval(next);
+    syncParkedBar();
+    return;
+  }
   syncParkedBar();
   focusInput({ selectAll: false });
 }

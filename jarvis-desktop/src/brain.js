@@ -42,6 +42,7 @@ import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
+import { validToFromText } from "./valid-to.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -856,6 +857,27 @@ function renderCounts() {
    Faculties
    ========================================================================== */
 
+/** Why a model has no "Use" button. */
+const CANNOT_CHAT = "for memory search only - it cannot chat";
+
+/**
+ * Can this installed model hold a conversation? An embedding model such as
+ * nomic-embed-text only turns text into numbers for memory search; switching
+ * to it would leave Jarvis unable to answer anything (play tester,
+ * 2026-09-27: Brain › Model offered "Use" on it).
+ *
+ * The real `/api/models` sends `installed` as bare names (gpu-offload.patch),
+ * so the name is usually all there is. When a row does carry Ollama's own
+ * `capabilities` list, that wins: no "completion" means no chat. Otherwise
+ * a BERT-family model or "embed" / "minilm" / "bge" in the name is an
+ * embedding model - the ones Ollama's library offers are named that way.
+ */
+function canChat(m, ref) {
+  if (Array.isArray(m.capabilities)) return m.capabilities.includes("completion");
+  if (/bert/i.test(String(m.family || ""))) return false;
+  return !/embed|minilm|(^|[^a-z])bge/i.test(ref);
+}
+
 function renderModels() {
   const body = state.data.models || {};
   const why = unavailable("models");
@@ -877,8 +899,9 @@ function renderModels() {
     (m) => {
       const ref = String(m.ref || m.name || m.model || "");
       const isCurrent = ref && ref === current;
+      const chats = canChat(m, ref);
       const actions = [];
-      if (ref && !isCurrent) {
+      if (ref && !isCurrent && chats) {
         actions.push(
           button("Use", () => modelAction("switch", ref), {
             title: `Ask to switch to this model. You approve it ${APPROVE_WHERE}.`,
@@ -894,6 +917,8 @@ function renderModels() {
           m.size ? bytes(m.size) : "",
           m.family || "",
           ref && ref === previous ? "the previous model" : "",
+          // Said rather than a greyed-out button: why there is no "Use".
+          chats ? "" : CANNOT_CHAT,
         ],
         actions,
       });
@@ -1454,24 +1479,24 @@ function dismissSleepOffer() {
  * `undefined` if the owner cancelled. `undefined` is a distinct answer from
  * `null` on purpose: the caller must abort the whole action on a cancel,
  * not quietly fall back to "just now" for a date the owner never confirmed.
+ *
+ * An answer that is not a usable date ("last week", a day next month) asks
+ * again, with the reason above the question and the typed words kept. It
+ * used to show an error and return `undefined` - so a Forget the owner had
+ * already confirmed was dropped without a word (play tester, 2026-09-27).
+ * What counts as a date is `validToFromText` (valid-to.js).
  */
 function promptValidTo(message) {
-  const raw = window.prompt(message, "");
-  if (raw === null) return undefined;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  // A bare YYYY-MM-DD is parsed as local midnight, not Date.parse's UTC
-  // midnight - west of Greenwich that shift lands the timestamp on the
-  // previous calendar day, the same trap the "as of" picker above avoids.
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-  const ts = dateOnly
-    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])).getTime()
-    : Date.parse(trimmed);
-  if (Number.isNaN(ts)) {
-    window.alert(`"${trimmed}" is not a date I understand. Try YYYY-MM-DD.`);
-    return undefined;
+  let typed = "";
+  let problem = "";
+  for (;;) {
+    const raw = window.prompt(problem ? `${problem}\n\n${message}` : message, typed);
+    if (raw === null) return undefined;
+    const answer = validToFromText(raw);
+    if (!("error" in answer)) return answer.seconds;
+    typed = raw;
+    problem = answer.error;
   }
-  return ts / 1000;
 }
 
 /** Dates before this are refused by "What did you know on…". The server
@@ -2164,7 +2189,12 @@ function renderFacts() {
               "if it stopped being true a while ago and you are only telling " +
               "Jarvis about it now."
             );
-            if (validTo === undefined) return; // the date prompt was cancelled
+            if (validTo === undefined) {
+              // Cancel on the date box after "yes, forget it": say so, so
+              // the owner is not left thinking the fact is gone.
+              toast("Nothing was forgotten.");
+              return;
+            }
             const args = { id: Number(f.id) };
             if (validTo !== null) args.valid_to = validTo;
             await memoryWrite("brain_memory_forget", args, FORGOTTEN);
