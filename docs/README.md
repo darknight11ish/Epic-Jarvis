@@ -43,6 +43,7 @@ what changed when.
 
 | Date | Document | About |
 |---|---|---|
+| 2026-09-27 | [JARVIS-EVALUATION-2026-09-27.md](JARVIS-EVALUATION-2026-09-27.md) | Are the five core rules too strict, how Jarvis compares to Muse, and whether it actually flows as an assistant - three research passes, synthesized. Two questions for the owner. |
 | 2026-09-27 | [BUG-AUDIT-2026-09-27-backend.md](BUG-AUDIT-2026-09-27-backend.md), [-desktop-js](BUG-AUDIT-2026-09-27-desktop-js.md), [-desktop-rust](BUG-AUDIT-2026-09-27-desktop-rust.md), [-phone](BUG-AUDIT-2026-09-27-phone.md), [-cross-cutting](BUG-AUDIT-2026-09-27-cross-cutting.md) | The full bug audit, a team of agents, five reports. Every finding was fixed. |
 | 2026-09-27 | [QUALITY-AUDIT-2026-09-27.md](QUALITY-AUDIT-2026-09-27.md), [SECURITY-PRIVACY-DEPS-AUDIT-2026-09-27.md](SECURITY-PRIVACY-DEPS-AUDIT-2026-09-27.md), [SETUP-SETTINGS-RECOVERY-AUDIT-2026-09-27.md](SETUP-SETTINGS-RECOVERY-AUDIT-2026-09-27.md) and [handoff-2026-09-27/](handoff-2026-09-27/) | The three combined audit passes the owner asked for (quality; security/privacy/dependencies; setup/settings/recovery). |
 | 2026-09-27 | [EASE-OF-USE-AUDIT-2026-09-27.md](EASE-OF-USE-AUDIT-2026-09-27.md) and [ease-audit-2026-09-27/](ease-audit-2026-09-27/) | How easy Jarvis is to set up, use, understand and customize, for someone new to it. |
