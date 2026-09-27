@@ -202,8 +202,9 @@ class World:
                 setattr(mod, name, val)
             CP._cache.update(at=-1e9, cards=None, fields="")
 
-    def switches(self, master=False, **features):
-        data = {"master": master, "features": {f: bool(features.get(f)) for f in SC.FEATURE_IDS}}
+    def switches(self, master=False, combined=False, **features):
+        data = {"master": master, "combined": combined,
+                "features": {f: bool(features.get(f)) for f in SC.FEATURE_IDS}}
         (self.dir / "second-card.json").write_text(json.dumps(data), encoding="utf-8")
 
     def __enter__(self):
@@ -237,6 +238,12 @@ def cases() -> dict:
     # picture are read on the PC (jarvis_ocr.py, 2026-09-26).
     with World(SMI["one_card"], windows=True, reads_words=True) as w:
         out["one_card_reads_words"] = SC.status()
+    # The third mode (2026-09-26): "One bigger model on both cards", on and
+    # running - both cards capable, qwen3:14b installed, no per-card feature
+    # switched on (mutually exclusive with those).
+    with World(SMI["2080s_2060"], windows=True, user_env=U_2080S) as w:
+        w.switches(combined=True)
+        out["combined_running"] = SC.status()
     return out
 
 

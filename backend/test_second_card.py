@@ -578,6 +578,114 @@ def t_browser_control_card_is_honest():
               and seen[0][0] == "second_card_enable")
 
 
+def t_combined_mode():
+    # The third mode (2026-09-26): "One bigger model on both cards" - off by
+    # default, ties up both cards, mutually exclusive with the five features.
+    with G.World(G.SMI["2080s_2060"]) as w:
+        seen = []
+        gate = lambda a, d, p: seen.append((a, d, p)) or Verdict(True, "ask", "approved")
+        code, out = SC.request_change("combined", True, gate=gate)
+        check("combined ON: one card, action second_card_combined_enable",
+              code == 200 and out["pending"] is True and len(seen) == 1
+              and seen[0][0] == "second_card_combined_enable", (code, out, seen))
+        a, d, text = seen[0]
+        check("the card names both cards, the model, and warns about pace and being unmeasured",
+              "RTX 2080 SUPER" in text and "RTX 2060" in text and "qwen3:14b" in text
+              and "bigger, slower card" in text and "not measured yet" in text
+              and d["leaves_this_pc"] is False, text)
+        check("combined is on", SC._read_switches()["combined"] is True)
+        st = SC.status()
+        check("status shows it active and working",
+              st["combined"]["active"] is True and st["combined"]["why"].startswith("Working"),
+              st["combined"])
+        check("the classic per-card lane is untouched", st["lane"]["state"] == "off")
+        # Mutual exclusion, both directions.
+        code, out = SC.request_change("long_context", True, gate=gate)
+        check("a feature while combined is on: refused (409), combined off first",
+              code == 409 and "Turn that off first" in out["error"], out)
+        code, out = SC.request_change("master", True, gate=gate)
+        check("master while combined is on: refused too, same reason",
+              code == 409 and "Turn that off first" in out["error"], out)
+        SC.request_change("combined", False)
+        check("combined OFF is at once, and the combined Ollama stops",
+              SC._read_switches()["combined"] is False and w.killed)
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, long_context=True)
+        code, out = SC.request_change("combined", True, gate=lambda *a: Verdict(True))
+        check("combined while a feature is genuinely on: refused (409), no card",
+              code == 409 and "both cards to itself" in out["error"], out)
+    with G.World(G.SMI["one_card"]) as w:
+        code, out = SC.request_change("combined", True, gate=lambda *a: None)
+        check("combined with only one card: 503, says why",
+              code == 503 and "needs two graphics cards" in out["error"], out)
+    with G.World(G.SMI["2080s_2060"]) as w:
+        code, out = SC.request_change("combined", True, gate=gate, spawn=lambda fn: None)
+        code2, out2 = SC.request_change("combined", True, gate=gate, spawn=lambda fn: None)
+        check("a second ON while its card waits: 409",
+              code2 == 409 and "already waiting" in out2["error"])
+
+
+def t_combined_capable_arithmetic():
+    A = {"role": "primary", "name": "Card A", "uuid": "GPU-aaaa0000-0000-0000-0000-000000000000",
+         "total_mb": 8192, "compute_cap": 7.5}
+    B = {"role": "second", "name": "Card B", "uuid": "GPU-bbbb0000-0000-0000-0000-000000000000",
+         "total_mb": 10240, "compute_cap": 7.5}
+    check("8 + 10 = 18 GiB: exactly the floor, capable",
+          SC._combined_capable({"cards": [A, B]}) == (True, ""))
+    ok, why = SC._combined_capable({"cards": [A, dict(B, total_mb=10176)]})
+    check("one MiB under the floor: not capable, says why",
+          ok is False and "not the 18 GB" in why, why)
+    ok, why = SC._combined_capable({"cards": [dict(A, compute_cap=6.1), B]})
+    check("the everyday card older than Turing: not capable, names it",
+          ok is False and "the everyday card" in why and "older than Turing" in why, why)
+    ok, why = SC._combined_capable({"cards": [A, dict(B, compute_cap=6.1)]})
+    check("the second card older than Turing: not capable, names it",
+          ok is False and "the second card" in why, why)
+    check("only a primary row, no second: not capable, plain reason",
+          SC._combined_capable({"cards": [A]}) == (False, "needs two graphics cards; only one "
+                                                     "is here"))
+    check("no card ids at all: the same plain reason",
+          SC._combined_capable({"cards": []}) == (False, "needs two graphics cards; only one "
+                                                    "is here"))
+
+
+def t_combined_lane_env_and_lane_for():
+    env = SC.lane_env((G.U_2080S, G.U_2060), port=11435, num_ctx=32768, base={}, spread=True)
+    check("lane_env joins multiple ids and sets OLLAMA_SCHED_SPREAD=1 when asked",
+          env["CUDA_VISIBLE_DEVICES"] == f"{G.U_2080S},{G.U_2060}"
+          and env["OLLAMA_SCHED_SPREAD"] == "1", env)
+    env2 = SC.lane_env((G.U_2080S, G.U_2060), port=11435, num_ctx=32768, base={})
+    check("without spread, OLLAMA_SCHED_SPREAD is not set", "OLLAMA_SCHED_SPREAD" not in env2)
+    check("a single id still works exactly as before (str, not a tuple)",
+          SC.lane_env(G.U_2060, port=11435, num_ctx=1, base={})["CUDA_VISIBLE_DEVICES"]
+          == G.U_2060)
+    for bad in ((G.U_2080S, "not-an-id"), ()):
+        try:
+            SC.lane_env(bad, port=11435, num_ctx=1, base={})
+            check(f"lane_env refuses {bad!r}", False)
+        except ValueError:
+            check(f"lane_env refuses {bad!r}", True)
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(combined=True)
+        lane = SC.combined_lane()
+        check("combined_lane(): the loopback lane, the model, 32K",
+              lane is not None and lane.url == "http://127.0.0.1:11435"
+              and lane.model == "qwen3:14b" and lane.num_ctx == 32768, repr(lane))
+        check("the combined Ollama sees both cards, by id, comma-joined",
+              w.started and w.started[0].kwargs["env"]["CUDA_VISIBLE_DEVICES"]
+              == f"{G.U_2080S},{G.U_2060}", w.started[0].kwargs["env"] if w.started else None)
+    with G.World(G.SMI["2080s_2060"]) as w:
+        check("combined off (the default): combined_lane() is None", SC.combined_lane() is None)
+        check("and nothing started", not w.started)
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, long_context=True)
+        check("a feature genuinely on: combined_lane() is None even if combined were on",
+              SC.combined_lane() is None)
+    with G.World(G.SMI["one_card"]) as w:
+        w.switches(combined=True)
+        check("only one card: combined_lane() is None, never raises", SC.combined_lane() is None)
+
+
 def t_last_card():
     # AP-6: _LAST was written and never read. status()["last"] says how the
     # most recent card ended, so the apps can say what really happened.
@@ -710,7 +818,12 @@ def t_status_shape_and_no_secrets():
             os.environ.pop("HUD_TOKEN_TEST_PROBE", None)
     check("status() has exactly the contract's keys",
           set(st) == {"detected", "enabled", "active", "pending", "lane", "main_ollama_pinned",
-                      "pin_note", "pin_command", "features", "last", "picture_text"}, sorted(st))
+                      "pin_note", "pin_command", "features", "last", "picture_text",
+                      "combined"}, sorted(st))
+    check("combined has exactly its keys",
+          set(st["combined"]) == {"id", "name", "what", "enabled", "capable", "capable_why",
+                                  "conflict", "active", "available", "model", "context",
+                                  "memory_gib", "why"}, sorted(st["combined"]))
     check("detected has exactly its keys",
           set(st["detected"]) == {"capable", "why", "primary", "second", "cards"})
     check("each feature row has exactly its keys",
@@ -1112,6 +1225,8 @@ def t_the_toml():
           re.search(r'^second_card_enable\s*=\s*"ask"', toml, re.M) is not None)
     check("the shipped toml has second_card_browser_enable = \"ask\" (AP-9)",
           re.search(r'^second_card_browser_enable\s*=\s*"ask"', toml, re.M) is not None)
+    check("the shipped toml has second_card_combined_enable = \"ask\"",
+          re.search(r'^second_card_combined_enable\s*=\s*"ask"', toml, re.M) is not None)
     check("the shipped toml has a [second_card] section", "\n[second_card]\n" in toml)
     check("and no switch lives in it (the switches are in second-card.json)",
           not re.search(r"^\s*(master|long_context|vision|learning|browser_control|wiki)\s*=",
@@ -1123,10 +1238,10 @@ def t_the_fixture():
     check("second-card-cases.json (the desktop's and the phone's copy) equals a fresh run",
           rc == 0, "run python3 tools/gen_second_card_cases.py")
     data = json.loads(G.FIXTURE.read_text(encoding="utf-8"))["cases"]
-    check("the seven named cases are there",
+    check("the eight named cases are there",
           set(data) == {"one_card", "capable_off", "capable_pending", "running_long_context",
                         "card_missing_but_enabled", "not_capable_old_card",
-                        "one_card_reads_words"}, sorted(data))
+                        "one_card_reads_words", "combined_running"}, sorted(data))
 
 
 def t_the_real_file():

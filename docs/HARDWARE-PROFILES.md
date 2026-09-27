@@ -269,6 +269,15 @@ card 0 and model B on card 1 using `main_gpu`, but not reliably:
 `jarvis_second_card` does today, plus `OLLAMA_VULKAN=0`). One card of any
 size → one Ollama.
 
+**The third case, since 2026-09-27: two cards, one Ollama, deliberately, for
+one bigger model.** "gives the whole route group to llama.cpp, which
+spreads the layers over the cards" above is exactly what "One bigger model
+on both cards" (§4.3 point 6, `docs/JARVIS-API.md` §12) turns on on
+purpose, by NOT pinning either card. How that spread actually divides the
+layers - by free memory, not speed - is quoted there from
+`src/llama-model.cpp`. Off by default; a deliberate owner choice, never
+Ollama's default behaviour with two unpinned cards left to itself.
+
 ### 2.4 Two models on one card
 
 - `OLLAMA_MAX_LOADED_MODELS` unset means **3 per card** (`sched.go:87`,
@@ -635,8 +644,18 @@ and the other features go there, biggest useful first.
 4. **Background learning and the wiki** follow the long-context lane, else
    the chat model (today's behaviour).
 5. **colibri's CUDA tier** only on a card with no lane (unchanged).
-6. **Never split one model across two cards by default** (unchanged; it
-   runs at the slower card's pace).
+6. **Splitting one model across two cards stays off by default** - the
+   default is unchanged, but since 2026-09-27 it is a real, built third mode
+   ("One bigger model on both cards", `docs/JARVIS-API.md` §12), not merely
+   a fact about Ollama. Read from source (§2.3 already covered the
+   single-vs-multi-card decision; this is HOW the split then works):
+   llama.cpp's `load_tensors` (`src/llama-model.cpp`, `b11081`) splits
+   layers **by each device's free memory, not its speed** - with no
+   `tensor_split` set (the default), `splits[i] = free` bytes of device
+   `i`. So it does not simply run "at the slower card's pace for its
+   share" - the card with more free memory (here, the bigger-but-slower
+   2060) gets proportionally MORE of the model, which is worse than an even
+   split would be. Off by default; turning it on ties up both cards.
 
 **How many Ollamas:**
 

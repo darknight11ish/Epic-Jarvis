@@ -1554,13 +1554,14 @@ deciding whether pictures can be sent. `tools/check_parity.py` records
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/second-card` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_second_card.py` is missing | Token + origin. Card names and hardware ids (`GPU-...`); never a token. Re-read it after a card is decided - there is no event for it. |
-| `POST /api/second-card` | `{"feature": "master" \| "<feature id>", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, or (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card; **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), or the switch's action is not tier `ask` (`second_card_enable`, or `second_card_browser_enable` for Browser control) | ON is one approval card: action `second_card_enable`, except Browser control, which has its own action `second_card_browser_enable` because it lets Jarvis work pages on the internet. OFF is immediate. Show `error` word for word. |
+| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first"); **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. |
 
 **`status()`** - the real output of each case is in
 `jarvis-desktop/tests/fixtures/second-card-cases.json` (`one_card`,
 `capable_off`, `capable_pending`, `running_long_context`,
-`card_missing_but_enabled`, `not_capable_old_card`, and since 2026-09-26
-`one_card_reads_words`). Build against that file, not this summary.
+`card_missing_but_enabled`, `not_capable_old_card`,
+`one_card_reads_words` since 2026-09-26, and `combined_running` since
+2026-09-27). Build against that file, not this summary.
 
 Since 2026-09-26 it also carries `"picture_text": {"available": bool,
 "engine": str, "why": str}` - whether the PC reads the WORDS in a picture
@@ -1578,12 +1579,17 @@ none: both apps behave as before.
                          "display_active", "role": "primary"|"second"|"unused", "why"}]},
  "enabled": bool,            the main switch
  "active": bool,             main switch on AND a capable card seen
- "pending": [ids],           switches with a card waiting ("master" included)
+ "pending": [ids],           switches with a card waiting ("master" and "combined" included)
  "lane": {"state": "off"|"starting"|"running"|"failed", "why": str},
  "main_ollama_pinned": true|false|null, "pin_note": str, "pin_command": str|null,
  "features": [{"id", "name", "what", "enabled", "active", "available", "needs": [ids],
                "model", "model_installed": bool|null, "memory_gib": float|null, "why"}],
- "last": {"feature", "outcome", "why", "at"} | null}
+ "last": {"feature", "outcome", "why", "at"} | null,
+ "combined": {"id": "combined", "name", "what", "enabled": bool,
+              "capable": bool, "capable_why": str,   is there a SECOND capable card too
+              "conflict": bool,                      a feature above is genuinely on
+              "active": bool, "available": bool,
+              "model", "context": int|null, "memory_gib": float|null, "why"}}
 ```
 
 `last` (2026-09-24) is how the most recent approval card for any of these
@@ -1607,6 +1613,126 @@ in words, what is missing. A switch whose card has gone stays `enabled` with
 the owner's everyday Ollama on the main card; show it with a copy button and
 `pin_note` above it, on the desktop. The phone shows `pin_note` only (the
 command is run on the PC).
+
+**"One bigger model on both cards" (added 2026-09-27).** A third mode,
+alongside the five features above and alongside a chosen hardware preset's
+single-card lanes (docs/HARDWARE-PROFILES.md §4.3) - not one of `features`,
+because it does not compose with them. Off by default, one approval card
+(`second_card_combined_enable`, tier `ask`) to turn on; off is immediate, the
+same shape as every other switch here. It is mutually exclusive with the
+five features: turning it on is refused (409) while any of them is
+genuinely on, and turning any of them (or `master`) on is refused (409)
+while it is on - the owner turns the other side off first.
+
+*What it does.* While on, and both cards are capable (Turing/compute 7.5+,
+by nvidia-smi - same floor as the rest of this module, for the same
+`q8_0`/flash-attention reason), it starts a THIRD copy of Ollama that can
+see BOTH cards at once - `CUDA_VISIBLE_DEVICES` set to both ids,
+comma-joined, never pinned to one - and loads `qwen3:14b` at 32,768 tokens
+(`COMBINED_MODEL` in `jarvis_second_card.py`), genuinely bigger than every
+other plan in this file (the everyday model and every feature above use a
+7-8B model). `OLLAMA_SCHED_SPREAD=1` is set on this one Ollama only, so it
+always uses every card it can see rather than trusting Ollama's own (for a
+`q8_0` cache, over-counting - HARDWARE-PROFILES.md §2.5) guess at whether
+the model fits on one.
+
+*How Ollama actually splits it, read from source (not inferred), Ollama
+`16b4376a` (2026-09-26), llama.cpp `b11081` = `161755f` (the same version
+MODEL-TOPOLOGY.md and HARDWARE-PROFILES.md already cite):*
+
+- Ollama's scheduler (`server/sched.go`, `selectLlamaServerPlacement`) tries
+  one card first (`bestSingleGPUFit`, `predictedVRAM > candidateAvailable
+  *80/100` is skipped for that card) and only hands **every visible GPU** to
+  llama.cpp when the model does not fit on any single one - or always, with
+  `OLLAMA_SCHED_SPREAD=1`. When it does, `appendMainGPUArgs`
+  (`llm/llama_server.go:644-649`) passes `--split-mode none --main-gpu N`
+  ONLY when a single GPU was chosen; with several GPUs it passes neither
+  flag, so llama.cpp's own default (`LLAMA_SPLIT_MODE_LAYER`,
+  `common/common.h:483`) decides.
+- llama.cpp then splits **by each device's free memory at load time, not by
+  speed** (`src/llama-model.cpp:1488-1519`, `load_tensors`): with no
+  `tensor_split` given (the default), `splits[i] = free` bytes of device
+  `i`, normalised, and layers are handed out in contiguous blocks by that
+  proportion (`get_layer_buft_list`, `std::upper_bound` against the
+  cumulative splits). Quoted: `"// default split, by free memory"` at
+  `:1491`. Memory bandwidth, compute capability and PCIe slot speed are
+  **not inputs to this calculation at all**. Since the bigger card (the
+  2060, more free bytes) is also the *slower* one (≈336 GB/s vs the 2080
+  Super's ≈496), the split gives it proportionally MORE of the model, not
+  less - so generation runs close to the 2060's pace for most of the model,
+  not merely "the pace of whichever card is slowest for its own share".
+  This is a sharper (and less favourable) finding than MODEL-TOPOLOGY.md's
+  older hand-wave ("runs at the slower card's pace"); the approval card and
+  Settings/Brain now say it this way.
+- The KV cache and flash attention follow the same per-layer device split
+  (each layer's cache lives with that layer), and Ollama's own gate for
+  `OLLAMA_FLASH_ATTENTION=auto` requires **every** visible card to pass
+  (`ml/device.go` gate, quoted in MODEL-TOPOLOGY.md; HARDWARE-PROFILES.md
+  §2.2) - both the 2080 Super and the 2060 are compute 7.5, so this holds.
+- Automatic vs. a flag: **automatic**. No setting is required for Ollama to
+  split a model that does not fit on one card once several GPUs are
+  visible to it; the only flag this module adds is `OLLAMA_SCHED_SPREAD=1`,
+  to make it deterministic rather than relying on Ollama's own (inflated,
+  for `q8_0`) fit estimate to correctly decide "does not fit on one".
+- No minimum-size floor was found in `sched.go` below which Ollama
+  "declines to bother splitting" - the only gate is the 80%-of-free-memory
+  single-card check; anything that clears that stays on one card.
+- PCIe slot speed (MODEL-TOPOLOGY.md's "before/after installing" step 3,
+  "that only slows loading a model, not answering"): **true for every
+  single-card mode in this file, but not for this one.** Splitting by layer
+  means every token's forward pass crosses the device boundary once (for
+  two cards) to hand the activation vector from one card's last layer to
+  the other's first. That vector is one row of `hidden_size` values in the
+  cache's dtype - for `qwen3:14b` (`hidden_size` unconfirmed for 14B; for
+  `qwen3:8b`, read from its published `config.json`, it is 4,096, so at
+  worst a few KB per token) - which is negligible next to reading the
+  hundreds of megabytes of that layer's weights per token at either card's
+  memory bandwidth. So: PCIe slot speed still mainly affects load time, as
+  the existing text says, and the extra per-token handoff this mode adds is
+  calculated to be small - but this has not been measured, and a narrow
+  (x4/x8) slot could add real per-token latency beyond pure bandwidth math
+  (driver/kernel-launch overhead per hop). Said plainly rather than assumed.
+
+*The combined VRAM budget*, same arithmetic style as MODEL-TOPOLOGY.md's
+"The budget" and HARDWARE-PROFILES.md §4.2, one card's room added to the
+other's (owner's planned pair, RTX 2080 Super 8 GB with the monitor + RTX
+2060 12 GB without):
+
+```
+room, 2080 Super (monitor)    8.00 - 1.10 desktop - 0.33 CUDA - 1.00 fit  =  5.57 GiB
+room, 2060 (no monitor)      12.00 - 0.60 desktop - 0.33 CUDA - 1.00 fit  = 10.07 GiB
+combined room                                                             = 15.64 GiB
+
+Qwen 3 14B Q4_K_M, q8_0 KV @ 32K:
+  weights                                                       =  8.42 GiB
+  KV    2 x 40 x 8 x 128 x 1.0625 B x 32768                     =  2.66 GiB
+  runtime, TWO CUDA contexts + compute buffers (one per card in
+    the split - doubled here on purpose, pessimistically; not
+    itself sourced, same caveat MODEL-TOPOLOGY.md already carries
+    for this figure on ONE card)                                =  1.20 GiB
+                                                                    --------
+                                                                     12.28 GiB, 3.36 GiB spare
+```
+
+14B clears the everyday model and every per-card lane in this file (all
+7-8B); 32K is double the everyday model's 16,384, the same "must beat the
+main card" rule the long-context lane already follows. `COMBINED_MIN_TOTAL_MB`
+(18,432 MiB) is the floor below which this arithmetic no longer clears with
+margin; below it `combined`'s `capable` is false and `capable_why` says so.
+**Nothing above is measured**: the second card is not installed. The
+approval card and `combined.why` both say plainly that real speed is
+unmeasured, and `docs/MODEL-TOPOLOGY.md`/`HARDWARE-PROFILES.md` carry the
+same figure with the same caveat.
+
+*Both apps* show it in the same place as the five switches above (not a
+separate screen): the desktop's Settings → "Second graphics card" gets a
+new "One bigger model on both cards" subsection with its own toggle
+(`settings.js`, `sc-combined`); the phone's Brain screen gets its own row on
+`SecondCardPlate` (`SecondCard.combinedSwitch`, `net/SecondCard.kt`). Both
+read `status.combined` and post `{"feature": "combined", "enabled": ...}`
+to the exact same routes above - `set_second_card`/`SecondCard.postBody`
+needed no changes, since neither validates feature names against a fixed
+list (the backend already does).
 
 **Pictures: what the apps must change.** The desktop's
 `vision.rs::local_model_vision` asks `/api/models` for `current` and then

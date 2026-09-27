@@ -101,6 +101,7 @@ TITLES = {
     "models_create": "make a tuned copy of an AI model",
     "second_card_enable": "start using the second graphics card",
     "second_card_browser_enable": "turn on browser control, which works real web pages",
+    "second_card_combined_enable": "run one bigger model across both graphics cards",
     "big_model_enable": "start the big model for background jobs",
     # --- its own settings and code
     "change_own_config": "change one of its settings",

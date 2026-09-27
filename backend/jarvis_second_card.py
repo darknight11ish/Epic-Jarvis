@@ -27,12 +27,34 @@ THE FEATURES (the ids are the API contract - both apps build against them):
     wiki             "Wiki builder": the lane jarvis_wiki.py's builder
                      runs on (lane_for("wiki")); it runs nowhere else.
 
+A THIRD MODE, alongside these five and alongside a chosen hardware preset's
+single-card lanes (docs/HARDWARE-PROFILES.md 4.3): "One bigger model on both
+cards" (the switch id is "combined", not one of the five FEATURE_IDS above -
+it does not compose with them). Off by default, one approval card
+(action second_card_combined_enable) to turn on, same shape as the other
+switches here. When on, it starts a THIRD copy of Ollama that can see BOTH
+cards (no CUDA_VISIBLE_DEVICES pin to one) and loads a model genuinely
+bigger than either card holds alone (COMBINED_MODEL) - Ollama's own
+scheduler then splits that model's layers across both cards by itself
+(read from source, not inferred: docs/MODEL-TOPOLOGY.md "Running one model
+across both cards"). It TIES UP BOTH CARDS, so it cannot run at the same
+time as any of the five features above (request_change refuses either
+direction while the other is genuinely on: _combined_capable, and the
+"master and any feature" checks in _request_change_combined and in the
+five features' own request_change path). Real speed is unmeasured until
+the second card is physically installed - the approval card and Settings
+both say so. combined_lane() is lane_for()'s shape for it; nothing yet
+calls it automatically (see docs/JARVIS-API.md's second-card section for
+why that is a deliberate, documented gap, not an oversight).
+
 THE INTERFACE other modules use - kept exactly:
 
     lane_for(feature) -> Optional[Lane]      Lane(url, model, num_ctx, why)
+    combined_lane() -> Optional[Lane]        the third mode's own lane_for
     status() -> dict                         GET /api/second-card
     request_change(feature, enabled, *, gate=...) -> (http code, dict)
                                              POST /api/second-card
+                                             (feature may be "combined")
 
 lane_for() returns None unless the main switch and that feature are on, a
 capable second card is detected, the second Ollama is running and the model
@@ -234,6 +256,46 @@ FEATURES = (
 )
 FEATURE_IDS = tuple(f["id"] for f in FEATURES)
 _BY_ID = {f["id"]: f for f in FEATURES}
+
+# --------------------------------------------------------------------------
+#   The third mode: one bigger model, split across both cards by Ollama's
+#   own scheduler. Off by default; ties up both cards (see module docstring).
+# --------------------------------------------------------------------------
+
+COMBINED_ACTION = "second_card_combined_enable"
+COMBINED_NAME = "One bigger model on both cards"
+
+# Combined budget, same arithmetic style as LONG_BIG above and
+# docs/HARDWARE-PROFILES.md section 4.2's per-card room, added across both
+# cards (owner's planned pair: RTX 2080 Super 8 GB with the monitor, RTX
+# 2060 12 GB without):
+#
+#   room, 2080 Super (monitor)   8.00 - 1.10 desktop - 0.33 CUDA - 1.00 fit  =  5.57 GiB
+#   room, 2060 (no monitor)     12.00 - 0.60 desktop - 0.33 CUDA - 1.00 fit  = 10.07 GiB
+#   combined room                                                            = 15.64 GiB
+#
+# Qwen 3 14B Q4_K_M, q8_0 KV @ 32K (docs/HARDWARE-PROFILES.md 2.8's shapes):
+#   weights                                                        =  8.42 GiB
+#   KV     2 x 40 x 8 x 128 x 1.0625 B x 32768                      =  2.66 GiB
+#   runtime, TWO CUDA contexts + compute buffers (one per card in the
+#     split, not sourced - see docs/MODEL-TOPOLOGY.md's "not sourced
+#     anywhere I could find" about this number even for ONE card;
+#     doubled here on purpose, to stay on the pessimistic side)      =  1.20 GiB
+#                                                                       --------
+#                                                                        12.28 GiB, 3.36 spare
+#
+# 14B is genuinely bigger than every per-card plan in this file (LONG_BIG,
+# VISION_MODEL and the everyday jarvis-primary are all 7-8B), and 32K is
+# double the everyday model's 16,384 - the same "must beat the main card"
+# rule LONG_BIG already follows. Not measured: the second card is not
+# installed. Change this once it is (with eval numbers, as CLAUDE.md's
+# memory rule already requires for a different kind of change - the same
+# discipline applies here).
+COMBINED_MODEL = ("qwen3:14b", 32768, 12.28)
+#: The floor below which the arithmetic above no longer clears the model's
+#: need with any margin (see the comment): 18 GiB combined (e.g. an 8 GB
+#: card with a 10 GB one). Below it, "combined" is refused as not capable.
+COMBINED_MIN_TOTAL_MB = 18432
 
 
 @dataclass(frozen=True)
@@ -464,9 +526,11 @@ _STATE_LOCK = threading.RLock()
 
 
 def _read_switches() -> dict:
-    """{"master": bool, "features": {id: bool}}. A missing or broken file is
-    everything off - the safe reading."""
-    out = {"master": False, "features": {f: False for f in FEATURE_IDS}}
+    """{"master": bool, "combined": bool, "features": {id: bool}}. "combined"
+    is the third mode's own switch - a sibling of "master", not one of
+    "features" (it does not compose with them: see the module docstring). A
+    missing or broken file is everything off - the safe reading."""
+    out = {"master": False, "combined": False, "features": {f: False for f in FEATURE_IDS}}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -474,6 +538,7 @@ def _read_switches() -> dict:
     if not isinstance(raw, dict):
         return out
     out["master"] = raw.get("master") is True
+    out["combined"] = raw.get("combined") is True
     feats = raw.get("features")
     if isinstance(feats, dict):
         for f in FEATURE_IDS:
@@ -485,15 +550,16 @@ def _write_switch(feature: str, enabled: bool) -> Optional[str]:
     """Sets one switch. None on success, else the error in words."""
     with _STATE_LOCK:
         cur = _read_switches()
-        if feature == "master":
-            cur["master"] = bool(enabled)
+        if feature in ("master", "combined"):
+            cur[feature] = bool(enabled)
         else:
             cur["features"][feature] = bool(enabled)
         p = _state_path()
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             tmp = p.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps({"master": cur["master"], "features": cur["features"],
+            tmp.write_text(json.dumps({"master": cur["master"], "combined": cur["combined"],
+                                       "features": cur["features"],
                                        "set_at": int(time.time())}, indent=1),
                            encoding="utf-8")
             tmp.replace(p)
@@ -703,6 +769,47 @@ def _feature_model(feature: str, det: dict) -> tuple:
     return model, ctx, gib
 
 
+def _combined_rows(det: dict) -> tuple:
+    """(primary row, second row) from det["cards"] - the same rows detect()
+    already builds for both the plain and the preset paths, each with
+    name/uuid/total_mb/compute_cap. Either may be None."""
+    rows = det.get("cards") or []
+    prim = next((r for r in rows if r.get("role") == "primary"), None)
+    second = next((r for r in rows if r.get("role") == "second"), None)
+    return prim, second
+
+
+def _combined_capable(det: dict) -> tuple:
+    """(ok, why) for "One bigger model on both cards" - not det["capable"]
+    (that only checks the SECOND card; this mode runs on the PRIMARY one
+    too, so it must pass the same Turing/q8_0 floor - HARDWARE-PROFILES.md
+    2.2: flash attention is "auto" only when EVERY card passes Ollama's
+    gate). The combined-memory floor (COMBINED_MODEL's comment) applies to
+    the two cards' TOTAL, never to either one alone - the primary card
+    (today's 2080 Super, 8 GB) is well under MIN_TOTAL_MB by itself, and
+    that is fine: it only has to hold its own share of the split model."""
+    prim, second = _combined_rows(det)
+    if prim is None or second is None:
+        return False, "needs two graphics cards; only one is here"
+    for row, which in ((prim, "the everyday card"), (second, "the second card")):
+        name = row.get("name") or which
+        cc = row.get("compute_cap")
+        if cc is None:
+            return False, (f"{which} ({name}): this driver does not report which generation "
+                           f"it is, so it is treated as not capable")
+        if cc < MIN_COMPUTE:
+            return False, (f"{which} ({name}) is older than Turing (compute capability {cc}, "
+                           f"needs {MIN_COMPUTE}) - it cannot use the compact conversation "
+                           f"cache this mode needs on every card it runs on")
+        if not row.get("uuid"):
+            return False, f"{which} ({name}) has no id from nvidia-smi"
+    total = int(prim.get("total_mb") or 0) + int(second.get("total_mb") or 0)
+    if total < COMBINED_MIN_TOTAL_MB:
+        return False, (f"the two cards together have {_gb(total)}, not the "
+                       f"{_gb(COMBINED_MIN_TOTAL_MB)} a genuinely bigger model needs")
+    return True, ""
+
+
 # --------------------------------------------------------------------------
 #   Is the model there?
 # --------------------------------------------------------------------------
@@ -729,14 +836,10 @@ def _installed_names(url: str) -> Optional[set]:
     return names
 
 
-def _model_installed(model: Optional[str]) -> Optional[bool]:
-    """Asks the second Ollama when it runs, else the everyday one (both read
-    the same model folder). None: neither answered, or the everyday one is
-    not on this PC (it is not asked then)."""
-    if not model:
-        return None
-    url = _LANE.url() if _LANE.state == "running" else _main_ollama_url()
-    if not _is_loopback_url(url):
+def _model_installed_on(model: Optional[str], url: str) -> Optional[bool]:
+    """Is `model` installed, asked at `url`? None: not answered, or `url`
+    is not loopback."""
+    if not model or not _is_loopback_url(url):
         return None
     names = _installed_names(url)
     if names is None:
@@ -745,15 +848,33 @@ def _model_installed(model: Optional[str]) -> Optional[bool]:
     return bool(want & names)
 
 
+def _model_installed(model: Optional[str]) -> Optional[bool]:
+    """Asks the second Ollama when it runs, else the everyday one (both read
+    the same model folder). None: neither answered, or the everyday one is
+    not on this PC (it is not asked then)."""
+    url = _LANE.url() if _LANE.state == "running" else _main_ollama_url()
+    return _model_installed_on(model, url)
+
+
 # --------------------------------------------------------------------------
 #   The second Ollama
 # --------------------------------------------------------------------------
 
-def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
+def lane_env(uuid, *, port: int, num_ctx: int, host: str = HOST,
              base: Optional[dict] = None, flash: str = "auto",
-             keep_alive: str = "30m", fit_target: Optional[str] = None) -> dict:
-    """The environment for the second `ollama serve`. Raises ValueError for
-    a host that is not 127.0.0.1 (rule 2) or an id that is not a card id.
+             keep_alive: str = "30m", fit_target: Optional[str] = None,
+             spread: bool = False) -> dict:
+    """The environment for the second (or combined) `ollama serve`. Raises
+    ValueError for a host that is not 127.0.0.1 (rule 2) or an id that is
+    not a card id.
+
+    `uuid` is a single card id (str, the classic per-feature lane - one
+    CUDA_VISIBLE_DEVICES entry) or a sequence of them ("combined": no pin to
+    one card, so Ollama's own scheduler places the model's layers across
+    every id listed - MODEL-TOPOLOGY.md). `spread=True` sets
+    OLLAMA_SCHED_SPREAD=1, so combined mode always uses every card listed
+    rather than trusting Ollama's own (over-counting, for a q8_0 cache -
+    HARDWARE-PROFILES.md 2.5) prediction of whether the model fits on one.
 
     Built from an allowlist (jarvis_child_env.py, bug audit 3 CONN-2): what
     Windows needs to start a program, plus OLLAMA_MODELS if the owner set it
@@ -762,7 +883,8 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
     *_KEY, *_PASSWORD or *_SECRET - reaches the second Ollama."""
     if host != HOST:
         raise ValueError(f"the second Ollama only ever listens on {HOST}, not {host!r}")
-    if not re.fullmatch(r"GPU-[0-9A-Fa-f-]{8,64}", str(uuid or "")):
+    ids = (uuid,) if isinstance(uuid, str) else tuple(uuid)
+    if not ids or not all(re.fullmatch(r"GPU-[0-9A-Fa-f-]{8,64}", str(i or "")) for i in ids):
         raise ValueError("the second Ollama is only pinned by a card id (GPU-...)")
     port = int(port)
     if not (1024 <= port <= 65535) or port == MAIN_OLLAMA_PORT:
@@ -777,7 +899,7 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
         env.pop(k, None)
     env.update({
         "OLLAMA_HOST": f"{HOST}:{port}",
-        "CUDA_VISIBLE_DEVICES": uuid,
+        "CUDA_VISIBLE_DEVICES": ",".join(ids),
         "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
         "OLLAMA_KV_CACHE_TYPE": "q8_0",
         "OLLAMA_MAX_LOADED_MODELS": "1",
@@ -795,6 +917,13 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
         env["OLLAMA_FLASH_ATTENTION"] = "1"
     elif flash == "off":
         env["OLLAMA_FLASH_ATTENTION"] = "0"
+    if spread:
+        # Always give every id in `ids` to llama.cpp's own layer split
+        # (server/sched.go's bestSingleGPUFit otherwise tries one card
+        # first, using Ollama's own VRAM guess - MODEL-TOPOLOGY.md) - this
+        # mode's whole point is running on every card listed, not whichever
+        # one Ollama's guess thinks is enough.
+        env["OLLAMA_SCHED_SPREAD"] = "1"
     if fit_target is not None:
         # Under a chosen preset only: the empty gap llama.cpp keeps on the
         # card, in MiB (the owner's 0.75 GB, docs/HARDWARE-PROFILES.md
@@ -830,8 +959,9 @@ class _LaneProcess:
         self.num_ctx = 0
         self.failed_at = -1e9
         self.gen = 0
-        self.claimed = ""          # the card id whose claim this lane holds
+        self.claimed = ()          # the card id(s) whose claim this lane holds
         self.fit = None            # LLAMA_ARG_FIT_TARGET under a preset, else None
+        self.spread = False        # OLLAMA_SCHED_SPREAD=1 ("combined": every id, not one)
 
     def url(self) -> str:
         return f"http://{HOST}:{self.port}"
@@ -843,11 +973,12 @@ class _LaneProcess:
         except Exception:
             return False
 
-    def ensure(self, uuid: str, card: str, num_ctx: int, fit: Optional[str] = None) -> None:
+    def ensure(self, uuid, card: str, num_ctx: int, fit: Optional[str] = None,
+               spread: bool = False) -> None:
         with self.lock:
             port = _port()
             same = (self.uuid == uuid and self.num_ctx == num_ctx and self.port == port
-                    and self.fit == fit)
+                    and self.fit == fit and self.spread == spread)
             if self.state in ("running", "starting") and same and self.alive():
                 return
             if self.state == "running" and same and not self.alive():
@@ -863,6 +994,7 @@ class _LaneProcess:
             if self.proc is not None:
                 self._stop_proc()
             self.fit = fit
+            self.spread = spread
             self._start(uuid, card, num_ctx, port)
 
     def _exit_code(self):
@@ -878,9 +1010,11 @@ class _LaneProcess:
         self.state, self.why, self.failed_at = "failed", why, time.monotonic()
 
     def _drop_card(self) -> None:
-        """Gives back the card's claim once no process of ours is on it."""
-        card, self.claimed = self.claimed, ""
-        _release_card(card)
+        """Gives back every card's claim this lane holds, once no process
+        of ours is on it."""
+        ids, self.claimed = self.claimed, ()
+        for u in ids:
+            _release_card(u)
 
     def hold(self, why: str) -> None:
         """Not started, and not a failure: something else (the big model)
@@ -910,18 +1044,31 @@ class _LaneProcess:
             return self._fail(refused)
         try:
             env = lane_env(uuid, port=port, num_ctx=num_ctx, flash=_flash_setting(),
-                           keep_alive=_keep_alive(), fit_target=self.fit)
+                           keep_alive=_keep_alive(), fit_target=self.fit, spread=self.spread)
         except ValueError as exc:
             return self._fail(str(exc))
-        # The card's claim, taken BEFORE the process starts. jarvis_big_model
-        # takes the same claim before it starts colibri on this card, so the
-        # two can never both be starting here, whatever the timing.
-        if _claim_card(uuid) is not None:
+        # The card's claim, taken BEFORE the process starts, on EVERY id in
+        # `uuid` (a str, or a tuple of ids for the combined lane).
+        # jarvis_big_model takes the same claim before it starts colibri on
+        # a card, so the two can never both be starting on it, whatever the
+        # timing. If a later id in the list is already held, every id
+        # claimed so far in this attempt is given back at once - never a
+        # partial claim of only some of the cards this lane needs.
+        ids = (uuid,) if isinstance(uuid, str) else tuple(uuid)
+        got, held_why = [], None
+        for u in ids:
+            held = _claim_card(u)
+            if held is not None:
+                held_why = big_model_holds(u, card) or f"the big model is starting on the {card}"
+                break
+            got.append(u)
+        if held_why is not None:
+            for u in got:
+                _release_card(u)
             self.state = "off"
-            self.why = (big_model_holds(uuid, card)
-                        or f"the big model is starting on the {card}")
+            self.why = held_why
             return None
-        self.claimed = uuid
+        self.claimed = tuple(got)
         kwargs: dict = {"env": env, "stdin": subprocess.DEVNULL}
         log = None
         try:
@@ -1093,10 +1240,11 @@ def _win_parents() -> dict:
 
 
 _LANE = _LaneProcess()
+_COMBINED_LANE = _LaneProcess()
 
 
 def _wanted(sw: dict, det: dict) -> bool:
-    return bool(sw["master"] and det.get("capable")
+    return bool(not sw.get("combined") and sw["master"] and det.get("capable")
                 and any(_feature_active(f, sw, det) for f in FEATURE_IDS))
 
 
@@ -1159,6 +1307,66 @@ def _reconcile(sw: dict, det: dict) -> None:
         _LANE.state, _LANE.why = "failed", f"unexpected error ({type(exc).__name__})"
 
 
+def _combined_conflict(sw: dict) -> bool:
+    """Is a per-card feature genuinely on, so "One bigger model on both
+    cards" must not run (it needs both cards to itself)?"""
+    return bool(sw["master"] and any(sw["features"].get(f) for f in FEATURE_IDS))
+
+
+def _combined_wanted(sw: dict, det: dict) -> bool:
+    if not sw.get("combined") or _combined_conflict(sw):
+        return False
+    ok, _ = _combined_capable(det)
+    return ok
+
+
+def _reconcile_combined(sw: dict, det: dict) -> None:
+    """Start the combined Ollama (both cards, no pin) if it is wanted, stop
+    it otherwise. The mirror of _reconcile, for the third mode."""
+    lane = _COMBINED_LANE
+    try:
+        if _still_asleep():
+            if lane.state != "off" or lane.proc is not None:
+                lane.stop(_ASLEEP["why"])
+            else:
+                lane.why = _ASLEEP["why"]
+            return
+        if _combined_wanted(sw, det):
+            prim, second = _combined_rows(det)
+            ids = (prim["uuid"], second["uuid"])
+            name = f"the {prim['name']} and the {second['name']}"
+            _, ctx, _ = COMBINED_MODEL
+            ours = (lane.state in ("starting", "running") and lane.uuid == ids and lane.alive())
+            if not ours:
+                held = big_model_holds(prim["uuid"], prim["name"]) \
+                    or big_model_holds(second["uuid"], second["name"])
+                if held:
+                    lane.hold(held)
+                    return
+            lane.ensure(ids, name, ctx, spread=True)
+        elif lane.state != "off" or lane.proc is not None:
+            if _combined_conflict(sw):
+                why = ("a second-card feature is on, and \"One bigger model on both cards\" "
+                       "needs both cards to itself")
+            elif not sw.get("combined"):
+                why = "\"One bigger model on both cards\" is off"
+            else:
+                ok, why2 = _combined_capable(det)
+                why = why2 or "not ready"
+            lane.stop(why)
+        else:
+            if not sw.get("combined"):
+                lane.why = "\"One bigger model on both cards\" is off"
+            elif _combined_conflict(sw):
+                lane.why = ("a second-card feature is on, and \"One bigger model on both cards\" "
+                           "needs both cards to itself")
+            else:
+                ok, why2 = _combined_capable(det)
+                lane.why = why2 or "not ready"
+    except Exception as exc:
+        lane.state, lane.why = "failed", f"unexpected error ({type(exc).__name__})"
+
+
 # --------------------------------------------------------------------------
 #   Standby: the second card is freed too
 # --------------------------------------------------------------------------
@@ -1189,11 +1397,15 @@ def sleep(why: str = "Jarvis is on standby") -> dict:
         with _ASLEEP_LOCK:
             _ASLEEP.update(on=True, why=f"asleep: {why}")
         running = _LANE.state != "off" or _LANE.proc is not None
+        running_combined = _COMBINED_LANE.state != "off" or _COMBINED_LANE.proc is not None
         if running:
             _LANE.stop(_ASLEEP["why"])
-        _audit("second_card.sleep", {"stopped": running})
-        return {"stopped": running,
-                "sentence": "The second graphics card was freed too." if running else ""}
+        if running_combined:
+            _COMBINED_LANE.stop(_ASLEEP["why"])
+        stopped = running or running_combined
+        _audit("second_card.sleep", {"stopped": stopped})
+        return {"stopped": stopped,
+                "sentence": "The second graphics card was freed too." if stopped else ""}
     except Exception as exc:
         return {"stopped": False,
                 "sentence": f"Could not stop the second graphics card ({type(exc).__name__})."}
@@ -1237,10 +1449,24 @@ def lane_state() -> str:
         return "unknown"
 
 
+def combined_lane_state() -> str:
+    """"off", "starting", "running" or "failed": the combined Ollama's
+    state as last seen. Reads only; starts and stops nothing."""
+    try:
+        return str(_COMBINED_LANE.state)
+    except Exception:
+        return "unknown"
+
+
 def shutdown() -> None:
-    """Stops the second Ollama if this module started it. At process exit."""
+    """Stops the second Ollama(s) if this module started them. At process
+    exit."""
     try:
         _LANE.stop("Jarvis is shutting down")
+    except Exception:
+        pass
+    try:
+        _COMBINED_LANE.stop("Jarvis is shutting down")
     except Exception:
         pass
 
@@ -1291,6 +1517,38 @@ def lane_for(feature: str) -> Optional[Lane]:
             return None
         return Lane(url=url, model=model, num_ctx=int(ctx),
                     why=f"{_BY_ID[feature]['name']}: {model} on the {det['_second'].name}")
+    except Exception:
+        return None
+
+
+def combined_lane() -> Optional[Lane]:
+    """Where "One bigger model on both cards" runs, or None. lane_for()'s
+    shape, for the third mode: nothing in this backend calls it yet (see
+    the module docstring and docs/JARVIS-API.md's second-card section) - it
+    is here so that whatever does, later, gets the same contract every
+    other lane already has. Never raises."""
+    try:
+        sw = _read_switches()
+        if not sw.get("combined") or _combined_conflict(sw):
+            return None
+        if _ASLEEP["on"]:
+            wake()      # the owner is using it: wake on demand, like a feature lane
+        det = detect()
+        _reconcile_combined(sw, det)
+        ok, _ = _combined_capable(det)
+        if not ok:
+            return None
+        model, ctx, _ = COMBINED_MODEL
+        if _COMBINED_LANE.state != "running":
+            return None
+        if not model or _model_installed_on(model, _COMBINED_LANE.url()) is not True:
+            return None
+        url = _COMBINED_LANE.url()
+        if not _is_loopback_url(url):
+            return None
+        prim, second = _combined_rows(det)
+        return Lane(url=url, model=model, num_ctx=int(ctx),
+                    why=f"{COMBINED_NAME}: {model} across the {prim['name']} and {second['name']}")
     except Exception:
         return None
 
@@ -1555,9 +1813,10 @@ def status() -> dict:
     sw = _read_switches()
     det = detect()
     _reconcile(sw, det)
+    _reconcile_combined(sw, det)
     lane_state, lane_why = _LANE.state, _LANE.why
     with _PENDING_LOCK:
-        pending = [f for f in ("master",) + FEATURE_IDS
+        pending = [f for f in ("master", "combined") + FEATURE_IDS
                    if f in _PENDING and not _PENDING[f].get("withdrawn")]
         last = dict(_LAST_ANY) or None
     feats = [_feature_row(f, sw, det, lane_state, lane_why, pending) for f in FEATURES]
@@ -1582,7 +1841,57 @@ def status() -> dict:
         # answering cannot see it (jarvis_ocr.py, 2026-09-26): both apps
         # already read this route before a picture is sent.
         "picture_text": _picture_text(),
+        # The third mode: "One bigger model on both cards" (2026-09-26). Not
+        # one of "features" above - it does not compose with them, so both
+        # apps show it as its own row, next to "features", in the same
+        # Hardware screen.
+        "combined": _combined_status(sw, det, pending),
     }
+
+
+def _combined_status(sw: dict, det: dict, pending: list) -> dict:
+    """The "combined" row of status(): the same shape as a features[] row,
+    for the one switch that is not in FEATURES."""
+    enabled = bool(sw.get("combined"))
+    conflict = _combined_conflict(sw)
+    ok, capable_why = _combined_capable(det)
+    model, ctx, gib = COMBINED_MODEL
+    lane = _COMBINED_LANE
+    running = lane.state == "running"
+    installed = _model_installed_on(model, lane.url() if running else _main_ollama_url())
+    active = bool(enabled and ok and not conflict)
+    if not ok:
+        why = (f"On, but it cannot run: {capable_why}. Your choice is kept; it works again "
+               f"once both cards are back." if enabled
+               else f"Needs two capable graphics cards: {capable_why}.")
+    elif conflict:
+        why = ("On, but a second-card feature (Longer conversations, Pictures, Learning in "
+               "the background, Browser control or Wiki builder) is on too, and this mode "
+               "needs both cards to itself. Turn the other one off first."
+               if enabled else "Off.")
+    elif not enabled:
+        why = "Off. A card to turn it on is waiting for your answer." if "combined" in pending \
+            else "Off."
+    elif not running:
+        why = f"On. The combined copy of Ollama is {lane.state}: {lane.why}"
+    elif installed is None:
+        why = f"On, but Jarvis could not ask Ollama whether {model} is installed."
+    elif installed is False:
+        why = (f"On, but {model} is not installed yet. Install it (Brain, Models, or "
+               f"'ollama pull {model}' in a terminal) and it starts working.")
+    else:
+        prim, second = _combined_rows(det)
+        why = (f"Working: {model} split across the {prim['name']} and the {second['name']}, "
+               f"with room for {ctx:,} tokens. Runs at the slower card's pace - not measured "
+               f"on your hardware yet.")
+    return {"id": "combined", "name": COMBINED_NAME,
+            "what": ("Loads one bigger model than either card holds alone, split across both "
+                    "at once by Ollama's own scheduler. Ties up both cards: the second card's "
+                    "other features cannot run while this does."),
+            "enabled": enabled, "capable": ok, "capable_why": capable_why,
+            "conflict": conflict, "active": active,
+            "available": bool(active and running and installed is True),
+            "model": model, "context": ctx, "memory_gib": gib, "why": why}
 
 
 def _picture_text() -> dict:
@@ -1788,6 +2097,7 @@ def _finish(feature: str, pid: str, outcome: str, reason: str = "",
         _WITHDRAWN.discard(pid)
         _LAST[feature] = {"outcome": outcome, "reason": reason[:200]}
         label = ("The second graphics card" if feature == "master"
+                 else f"\"{COMBINED_NAME}\"" if feature == "combined"
                  else f"\"{_BY_ID[feature]['name']}\"" if feature in _BY_ID else feature)
         _LAST_ANY.clear()
         _LAST_ANY.update(feature=feature, outcome=outcome,
@@ -1854,21 +2164,185 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
     _reconcile(_read_switches(), detect())
 
 
+def _describe_combined(det: dict) -> str:
+    """The approval card for "combined". Every word from here, same as
+    describe_on - what refusing costs is on it (AP-4)."""
+    prim, second = _combined_rows(det)
+    model, ctx, gib = COMBINED_MODEL
+    return (
+        f"Let Jarvis run one bigger model across BOTH graphics cards at once?\n\n"
+        f"Which cards: the {prim['name']} and the {second['name']}.\n"
+        f"Which model: {model}, with room for {ctx:,} tokens - about {gib:.1f} GB, split "
+        f"across both cards' memory by Ollama's own scheduler.\n\n"
+        f"Jarvis starts a third copy of Ollama that can see both cards - it is not pinned to "
+        f"one - and lets Ollama decide how many of the model's layers go on each card. It "
+        f"listens on {HOST}:{_port()} - this PC only, not your network or the internet. "
+        f"Nothing leaves this PC.\n\n"
+        f"Ollama splits the model by how much FREE memory each card has right now, not by "
+        f"how fast each card is - so most of the model can land on the bigger, slower card. "
+        f"Every answer then runs at roughly that card's pace. Real speed is not measured yet: "
+        f"the second card is not installed.\n\n"
+        f"This uses both cards for the one model, so it cannot run at the same time as the "
+        f"second card's other features (Longer conversations, Pictures, Learning in the "
+        f"background, Browser control, Wiki builder) - turn those off first, or this stays "
+        f"off until you do.\n\n"
+        f"If you did not just ask for this, say no.\n\n"
+        f"If you say no: nothing changes. Everything keeps running the way it does today.")
+
+
+def _decide_combined(pid: str, gate: Callable, tier_of: Callable) -> None:
+    """_decide's shape, for "combined": raise the card, wait, act. Its own
+    function rather than a branch in _decide - the checks and the message
+    are different enough (two cards, no "needs" chain, always "nothing
+    leaves this PC") that folding it in risked the well-tested generic
+    path more than it saved."""
+    det = detect()
+    ok, why = _combined_capable(det)
+    if not ok:
+        return _finish("combined", pid, "refused", why)
+    text = _describe_combined(det)
+    prim, second = _combined_rows(det)
+    model, ctx, gib = COMBINED_MODEL
+    detail = {"text": text, "what": "run one bigger model across both graphics cards",
+              "feature": "combined", "cards": [prim["name"], second["name"]],
+              "card_ids": [prim["uuid"], second["uuid"]], "model": model, "memory_gib": gib,
+              "listens_on": f"{HOST}:{_port()}", "leaves_this_pc": False}
+    try:
+        v = gate(COMBINED_ACTION, detail, text)
+    except Exception as exc:
+        return _finish("combined", pid, "refused",
+                       f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    rid = getattr(v, "request_id", None)
+    if vtier != "ask":
+        return _finish("combined", pid, "refused",
+                       f"the gate answered at tier {vtier!r}, which is not a person saying yes",
+                       rid)
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _finish("combined", pid, outcome, "", rid)
+        return _finish("combined", pid, "refused", str(getattr(v, "reason", "refused")), rid)
+    with _PENDING_LOCK:
+        withdrawn = pid in _WITHDRAWN
+    if withdrawn:
+        return _finish("combined", pid, "withdrawn",
+                       "you turned it off while the card was waiting", rid)
+    cur = _read_switches()
+    if _combined_conflict(cur):
+        return _finish("combined", pid, "refused",
+                       "a second-card feature was turned on while the card waited", rid)
+    det2 = detect(fresh=True)
+    ok2, why2 = _combined_capable(det2)
+    if not ok2:
+        return _finish("combined", pid, "refused", why2, rid)
+    err = _write_switch("combined", True)
+    if err:
+        return _finish("combined", pid, "failed", err, rid)
+    _finish("combined", pid, "enabled", "", rid)
+    _reconcile_combined(_read_switches(), detect())
+
+
+def _request_change_combined(enabled: bool, gate: Callable, tier_of: Callable,
+                             spawn: Callable) -> tuple:
+    """request_change's shape, for feature == "combined". OFF: at once, no
+    card. ON: refused (409) while any of the five features is genuinely on
+    (they cannot share both cards with this mode); otherwise one approval
+    card, action second_card_combined_enable."""
+    label = f"\"{COMBINED_NAME}\""
+    if not enabled:
+        with _PENDING_LOCK:
+            if "combined" in _PENDING:
+                _PENDING["combined"]["withdrawn"] = True
+                _WITHDRAWN.add(_PENDING["combined"]["id"])
+        err = _write_switch("combined", False)
+        if err:
+            return 500, {"error": err}
+        _audit("second_card.off", {"feature": "combined"})
+        _reconcile_combined(_read_switches(), detect())
+        return 200, {"ok": True, "enabled": False, "pending": False, "message": f"{label} is off."}
+
+    sw = _read_switches()
+    if sw.get("combined"):
+        return 200, {"ok": True, "enabled": True, "pending": False,
+                     "message": f"{label} is already on."}
+    with _PENDING_LOCK:
+        p = _PENDING.get("combined")
+        if p is not None and not p.get("withdrawn"):
+            return 409, {"error": f"a card to turn on {label} is already waiting - "
+                                  f"approve or deny that one"}
+    if _combined_conflict(sw):
+        return 409, {"error": (f"{label} needs both cards to itself: turn off the second-card "
+                               f"features that are on now first (Brain, Hardware), then ask "
+                               f"again.")}
+    det = detect(fresh=True)
+    ok, why = _combined_capable(det)
+    if not ok:
+        return 503, {"error": f"{label} cannot be turned on: {why}."}
+    prim, second = _combined_rows(det)
+    held = big_model_holds(prim["uuid"], prim["name"]) or big_model_holds(second["uuid"],
+                                                                          second["name"])
+    if held:
+        return 409, {"error": f"Not now: {held}."}
+    try:
+        tier = tier_of(COMBINED_ACTION)
+    except Exception as exc:
+        tier = f"unreadable ({type(exc).__name__})"
+    if tier != "ask":
+        return 503, {"error": (f"{COMBINED_ACTION} is tier {tier!r} in jarvis-framework.toml; "
+                               f"turning this on needs a person to say yes, so it must be "
+                               f"'ask'")}
+    pid = _uuid.uuid4().hex
+    with _PENDING_LOCK:
+        p = _PENDING.get("combined")
+        if p is not None and not p.get("withdrawn"):
+            return 409, {"error": f"a card to turn on {label} is already waiting"}
+        _PENDING["combined"] = {"id": pid, "since": time.time(), "withdrawn": False}
+    _audit("second_card.asked", {"feature": "combined"})
+
+    def work() -> None:
+        try:
+            _decide_combined(pid, gate, tier_of)
+        except Exception:
+            _finish("combined", pid, "failed", "unexpected error")
+
+    try:
+        spawn(work)
+    except Exception:
+        _finish("combined", pid, "failed", "could not start")
+        return 503, {"error": "could not raise the approval card"}
+    return 200, {"ok": True, "enabled": False, "pending": True,
+                 "message": ("Approve the card on your PC or phone to turn it on. "
+                             "Nothing changes until you do.")}
+
+
 def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = None,
                    tier_of: Optional[Callable[[str], str]] = None,
                    spawn: Optional[Callable] = None) -> tuple:
-    """POST /api/second-card. Returns (http code, body).
+    """POST /api/second-card. Returns (http code, body). `feature` may be
+    "master", "combined" (the third mode, mutually exclusive with the rest
+    - see _request_change_combined) or one of FEATURE_IDS.
 
     OFF: at once, no card. ON: one approval card, and this returns straight
     away - `pending: true` means a card is up, NOT that it is on."""
     gate = gate or _gate
     tier_of = tier_of or _tier
     spawn = spawn or _spawn
+    if feature == "combined":
+        if not isinstance(enabled, bool):
+            return 400, {"error": "\"enabled\" must be true or false"}
+        return _request_change_combined(enabled, gate, tier_of, spawn)
     if feature != "master" and feature not in _BY_ID:
         return 400, {"error": f"there is no second-card feature called {str(feature)[:40]!r}"}
     if not isinstance(enabled, bool):
         return 400, {"error": "\"enabled\" must be true or false"}
     label = "The second graphics card" if feature == "master" else f"\"{_BY_ID[feature]['name']}\""
+    if enabled and _read_switches().get("combined"):
+        return 409, {"error": (f"{label} cannot be turned on: \"{COMBINED_NAME}\" is on, and "
+                               f"needs both cards to itself. Turn that off first.")}
 
     if not enabled:
         with _PENDING_LOCK:
@@ -1955,7 +2429,7 @@ def handle_post(body) -> tuple:
 
 
 def _reset_for_tests() -> None:
-    global _LANE
+    global _LANE, _COMBINED_LANE
     with _PENDING_LOCK:
         _PENDING.clear()
         _LAST.clear()
@@ -1969,6 +2443,11 @@ def _reset_for_tests() -> None:
     except Exception:
         pass
     _LANE = _LaneProcess()
+    try:
+        _COMBINED_LANE.stop("reset")
+    except Exception:
+        pass
+    _COMBINED_LANE = _LaneProcess()
 
 
 if __name__ == "__main__":

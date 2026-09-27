@@ -1472,6 +1472,8 @@ const sc = {
   pinCommand: $("sc-pin-command"),
   pinCopy: $("sc-pin-copy"),
   pinStatus: $("sc-pin-status"),
+  combined: $("sc-combined"),
+  combinedStatus: $("sc-combined-status"),
 };
 
 /** The same words the Brain's model install uses while its card waits. */
@@ -1728,6 +1730,93 @@ function scMasterSwitch(status) {
   return { ...SC_MASTER, enabled: status.enabled === true, pending, needs: [], why };
 }
 
+/**
+ * "One bigger model on both cards" - the third mode (2026-09-26). Not one of
+ * `status.features`: it does not compose with them (it ties up both cards),
+ * so it gets its own row and its own toggle, right in this same section,
+ * reading `status.combined` (the same shape jarvis_second_card.status()
+ * gives each feature, plus `capable`/`capable_why`/`conflict`).
+ */
+function scCombinedHeld(status) {
+  const c = status.combined || {};
+  if (c.pending) return SC_WAITING;
+  if (c.enabled) return "";
+  if (c.capable !== true) {
+    return `Can't be turned on yet: ${scClause(c.capable_why) || "needs two capable graphics cards."}`;
+  }
+  if (c.conflict) return "Turn off the switches above first.";
+  return "";
+}
+
+function scCombinedRow(status) {
+  const c = status.combined || {};
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = "combined";
+  row.dataset.state = c.pending ? "waiting" : c.enabled ? "on" : "off";
+
+  const label = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = "sc-switch-combined";
+  input.checked = Boolean(c.enabled);
+  const held = scCombinedHeld(status);
+  input.disabled = Boolean(held);
+  const text = scNode("span", "", c.name || "One bigger model on both cards");
+  text.append(scNode("span", "toggle-detail", c.what || ""));
+  label.append(input, text);
+  row.append(label);
+
+  const lines = scNode("div", "sc-lines");
+  const describedBy = [];
+  const addLine = (className, words) => {
+    if (!words) return;
+    const line = scNode("p", className, words);
+    line.id = `sc-combined-${className.split(" ").pop()}`;
+    describedBy.push(line.id);
+    lines.append(line);
+  };
+  addLine("sc-why", c.why);
+  if (c.pending) addLine("sc-held sc-waiting", SC_WAITING);
+  else if (held) addLine("sc-held", held);
+  addLine("sc-model", scModelLine(c));
+  addLine("sc-memory", scMemoryLine(c));
+  if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));
+  row.append(lines);
+
+  input.addEventListener("change", () => scCombinedToggle(input));
+  return row;
+}
+
+/** One request, the same shape as scToggle, for the single "combined" switch. */
+async function scCombinedToggle(input) {
+  const turnOn = input.checked;
+  if (scBusy) {
+    input.checked = !turnOn;
+    return;
+  }
+  scBusy = true;
+  input.disabled = true;
+  const label = "\"One bigger model on both cards\"";
+  report(sc.combinedStatus, turnOn ? `Asking to turn on ${label}…` : `Turning off ${label}…`);
+  try {
+    const out = await invoke("set_second_card", { feature: "combined", enabled: turnOn });
+    if (turnOn && out && out.pending === true) {
+      report(sc.combinedStatus, SC_WAITING, "ok");
+      announce(`${label}: ${SC_WAITING}`);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(sc.combinedStatus, out.message, "ok");
+    } else {
+      report(sc.combinedStatus, turnOn ? `${label} is on.` : `${label} is off.`, "ok");
+    }
+  } catch (error) {
+    report(sc.combinedStatus, scProblemWords(error), "bad");
+    announce(sc.combinedStatus.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  await loadSecondCard();
+}
+
 function scShowProblem(words) {
   scLast = null;
   sc.body.hidden = true;
@@ -1776,6 +1865,16 @@ function scPaint(status) {
     if (again) again.focus();
   }
 
+  // "One bigger model on both cards": its own row, its own toggle.
+  if (sc.combined) {
+    const focusedCombined = document.activeElement && document.activeElement.id;
+    sc.combined.replaceChildren(scCombinedRow(status));
+    if (focusedCombined === "sc-switch-combined") {
+      const again = document.getElementById("sc-switch-combined");
+      if (again) again.focus();
+    }
+  }
+
   // The second Ollama.
   const lane = status.lane || {};
   const laneWord = SC_LANE[lane.state] || "Unknown";
@@ -1795,8 +1894,13 @@ function scPaint(status) {
   if (previous) {
     for (const id of scWaiting) {
       if (pending.has(id)) continue;
-      const name = id === "master" ? SC_MASTER.name : names.byId[id] || id;
-      const on = id === "master" ? status.enabled === true : names.enabled.has(id);
+      const combined = status.combined || {};
+      const name = id === "master" ? SC_MASTER.name
+        : id === "combined" ? (combined.name || "One bigger model on both cards")
+        : names.byId[id] || id;
+      const on = id === "master" ? status.enabled === true
+        : id === "combined" ? combined.enabled === true
+        : names.enabled.has(id);
       report(sc.status, cardEndedWords(name, on, cardLast(status, id, scWaitingSince.get(id))),
         on ? "ok" : null);
       announce(sc.status.textContent);

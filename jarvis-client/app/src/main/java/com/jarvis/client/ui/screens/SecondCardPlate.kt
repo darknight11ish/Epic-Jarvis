@@ -103,6 +103,17 @@ internal fun SecondCardPlate(
         }
         Rule()
 
+        // "One bigger model on both cards" (2026-09-26): a different way to
+        // use the second card, not one of the switches above - it ties up
+        // both cards, so it cannot run at the same time as any of them. Own
+        // row, same place, same approval flow.
+        SecondCard.combinedSwitch(status)?.let { view ->
+            Gap(8)
+            Kicker("One bigger model on both cards", Modifier.semantics { heading() })
+            ApprovalSwitchRow(view, busy, canAct, onSet)
+            Rule()
+        }
+
         if (notice != null) {
             Gap(8)
             Text(notice, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)

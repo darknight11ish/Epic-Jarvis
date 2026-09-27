@@ -27,6 +27,7 @@ extraction-wiring.patch	extraction-wiring/a50cbf1.patch	a50cbf1ee96d71ac66e3d7a9
 feedback.patch	feedback/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
 feedback.patch	feedback/5d1cfa3.patch	5d1cfa36b3fc94807dae3597d00ffe0d54df5c77	2026-09-23T08:19:29+00:00	Backend: right/wrong mark per answer, helpful/harmful counts, retire card
 focus.patch	focus/3f467d9.patch	3f467d91283363030b92b0399a8f46354fb61406	2026-09-25T23:45:52+00:00	Focus sessions, backend: jarvis_focus.py, focus.patch, the fast-path commands
+gate-outcome.patch	gate-outcome/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23+00:00	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
 gate-outcome.patch	gate-outcome/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44+00:00	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
 gate-outcome.patch	gate-outcome/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53+00:00	Backend: keep chat history on the PC, encrypted (chat-history.patch)
 gate-outcome.patch	gate-outcome/ae434de.patch	ae434de4ffc8c18144aa3a65af57f209dcddc9aa	2026-09-24T08:27:21+00:00	Merge voice-custom: custom voices backend (ZipVoice now, F5 on the second card)
@@ -52,6 +53,7 @@ memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d4
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49+00:00	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28+00:00	Logseq and Joplin notes that are really filed
 schedule.patch	schedule/97885fd.patch	97885fd9027e5f7c6a3d163fd5133cf634a0562a	2026-09-25T02:17:12+00:00	Timers, alarms, reminders, a to-do list and one scheduler (backend)
+second-card.patch	second-card/e1ab659.patch	e1ab6598a8784df14f084fac3150e719e920e78e	2026-09-24T06:52:58+00:00	Merge fix-b3: bug audit 3 fixes
 second-card.patch	second-card/2a25605.patch	2a25605de02b58dfbe278a6043a478ac81ed8819	2026-09-24T06:14:15+00:00	Gate notice words (AP-10): what the second card, wiki and big model do
 second-card.patch	second-card/15a7f27.patch	15a7f27ebe5d5bb6bfad2f7cdd962f0c0aa1a7d6	2026-09-24T06:11:02+00:00	AP-9: Browser control's card no longer says "Nothing leaves this PC"
 second-card.patch	second-card/a0f23da.patch	a0f23dad6d3e20eee783f05a77ab4921da96818a	2026-09-24T02:37:56+00:00	Second graphics card: the switches, the second Ollama, and /api/second-card
