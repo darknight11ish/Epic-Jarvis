@@ -516,12 +516,22 @@ def t_both_apps_say_the_same_words():
         check(f"phone {name} is the PC's words", _const(kt, name) == want, _const(kt, name))
 
 
+def t_both_apps_read_the_current_contract():
+    # The same shape as test_asks_first.py's: nothing else ran this
+    # producer's --check automatically (quality audit 2026-09-27).
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_reach_cases.py"),
+                        "--check"], capture_output=True, text=True, timeout=120,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    check("reach-cases.json (desktop and phone) is what the backend says today "
+          "(python3 tools/gen_reach_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+
+
 if __name__ == "__main__":
     for fn in (t_rows_and_order, t_no_secret_anywhere, t_asks_follows_the_rules,
                t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
                t_never_raises, t_cloud_lanes_are_the_servers_own, t_the_quick_answer,
                t_the_patch, t_account_secrets_from_credential_manager_show_too,
-               t_both_apps_say_the_same_words):
+               t_both_apps_say_the_same_words, t_both_apps_read_the_current_contract):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

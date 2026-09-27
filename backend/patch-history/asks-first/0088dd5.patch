@@ -92,9 +92,9 @@
 +    # (a morning briefing or a "tell me when" - since 2026-09-26 a plain
 +    # repeating reminder, alarm or standby schedule has no card, asks-first.
 +    # patch). Setting it up sends nothing, but each run then reads the owner's
-+    # OWN calendar, mail server or Home Assistant, or one web page they named
-+    # (a page watch), through that read's own gate action; deleting is immediate.
-+    "schedule_repeat": ("yes", "local", "sets up a morning briefing, which reads your calendar and email if they are set up, or a \"tell me when\", which looks at your own mail server or Home Assistant, or at one web page you named, each time; the card says exactly what each run reads, what it finds goes only to your own apps, and deleting it is immediate"),
++    # OWN calendar, mail server or Home Assistant, through that read's own
++    # gate action - so the words say so, and deleting it is immediate.
++    "schedule_repeat": ("yes", "local", "sets up a morning briefing, which reads your calendar and email if they are set up, or a \"tell me when\", which looks at your own mail server or Home Assistant each time; the card says exactly what each run reads, what it finds goes only to your own apps, and deleting it is immediate"),
 +    # asks-first.patch (jarvis_asks_first.py, the owner's decision of
 +    # 2026-09-26). Loosening one line of [autonomy.tiers] from the desktop's
 +    # "What asks first" page, from a short safe list: it changes one line of

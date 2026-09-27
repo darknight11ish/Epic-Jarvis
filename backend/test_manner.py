@@ -815,6 +815,19 @@ def t_style_rules_for_every_fixed_line():
     check("no \"!\" on a card", not bad_bang, bad_bang[:5])
 
 
+def t_both_apps_read_the_current_contract():
+    # The same shape as test_asks_first.py's. Nothing ran this producer's
+    # --check automatically, so the humour switch's words reached
+    # jarvis_manner.view() and never both apps' copy (quality audit
+    # 2026-09-27).
+    import subprocess
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_plain_error_cases.py"),
+                        "--check"], capture_output=True, text=True, timeout=120,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    check("plain-error-cases.json (desktop and phone) is what the backend says today "
+          "(python3 tools/gen_plain_error_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+
+
 def main():
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
