@@ -23,6 +23,34 @@ number as the last part - `0.2.57` is a build of 0.2.
   as if you had typed it.
 - **Fixed (phone): an answer made without the AI model** said "answered on
   this PC" on the phone. It now says "on your PC".
+- **Answers from web search and home status are read aloud again when you
+  ask by voice.** Before, any answer where Jarvis used a tool was kept on
+  screen ("It's on your screen."), so a spoken question answered from the
+  web was never spoken. Now only web search and home status (which is
+  where the weather comes from) are read aloud. Email, calendar, notes,
+  files, memory and any other tool still keep the answer on screen, and so
+  does Jarvis not being sure which tool ran. Both apps follow one shared
+  table of cases, so they cannot drift apart.
+- **Fixed: one "Hey Jarvis" heard by both the phone and the PC.** Both
+  used to answer, so you got two answers - and a timer or "next song" could
+  happen twice. Or, after a plain "Hey Jarvis.", the second device used up
+  the listening moment and your real question was thrown away. Now only the
+  first copy is answered, the other device stays quiet, and each device
+  listens for its own follow-up question. Your voice is still checked
+  before any words are written down.
+- **Fixed (desktop): Forget's "when did this stop being true?" box.** "Sept
+  20" was saved as the year 2001; now a date with no year means the most
+  recent one that has passed, a date in the future is refused, and a date it
+  cannot read asks again instead of quietly dropping the Forget you said yes
+  to.
+- **Fixed (desktop): "Use" on a model that cannot chat.** Memory-search
+  models such as nomic-embed-text say "for memory search only" instead.
+- **Fixed (desktop): raw underscores in answers** - `_words_` now show in
+  italics.
+- **Fixed (desktop): putting one of two approval cards aside hid both.** The
+  next card now shows, and the count of waiting cards is right.
+- **Clearer (desktop): Erase's second question** says what OK and Cancel
+  each do. Two small wording slips fixed in Hardware and Voices.
 - **Fixed: typing the phone's pairing key exactly as the PC shows it.** The
   PC shows the key in groups of four with spaces, to make it easier to read.
   The phone kept those spaces, so the key was refused. The phone now drops

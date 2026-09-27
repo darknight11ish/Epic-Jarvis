@@ -9,7 +9,10 @@
  * is not true, the route has no `gate: "private"` and no `injected_facts`
  * above 0, and no tool ran while it was written: no `step` event with
  * `tool_started` / `tool_finished` since the question was sent (and no
- * `: jarvis-status working` or `approval`), with the event stream live the
+ * `: jarvis-status working` or `approval`) for a tool not on the
+ * read-aloud list (web search and home status - the owner's decision of
+ * 2026-09-27; tests/fixtures/private-aloud-cases.json holds both apps to
+ * one table), with the event stream live the
  * whole time - a stream that was stale or dropped counts as "a tool may
  * have run", the phone's rule. Otherwise Jarvis says "It's on your
  * screen." once.
@@ -24,13 +27,16 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
 import {
-  createToolWatch, isToolRun, mayReadAloud, privacyFromHeard, PRIVATE_LINE, toolRanBetween, toolsKnownBetween,
-  usedSensitiveFact,
+  createToolWatch, isPrivateToolRun, isToolRun, mayReadAloud, onlyReadAloudToolsBetween, privacyFromHeard, PRIVATE_LINE,
+  READ_ALOUD_TOOLS, toolRanBetween, toolsKnownBetween, usedSensitiveFact,
 } from "../src/private-speech.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
 const CHAT = JSON.parse(read("tests/fixtures/chat-stream-cases.json"));
+/** The table both apps are held to (tools/gen_private_aloud_cases.py; the
+ *  phone's PrivateAloudContractTest reads the same file). */
+const TABLE = JSON.parse(read("tests/fixtures/private-aloud-cases.json"));
 const header = (name) => JSON.parse(CHAT.route_headers.find((r) => r.name === name).header);
 /** The route line commands.rs sends: lane, where, gate, second_card as
  *  strings, and injected_facts and injected_sensitive as whole numbers. */
@@ -130,6 +136,59 @@ await check("decision 13: an answer that used a sensitive saved fact stays on sc
   assert.equal(mayReadAloud({ ...quiet, memoryAloud: true, route: { ...MEM, injected_sensitive: 0 } }), true);
 });
 
+await check("the shared table: every case, as the phone runs it (private-aloud-cases.json)", async () => {
+  assert.deepEqual([...READ_ALOUD_TOOLS], TABLE.read_aloud_tools);
+  assert.equal(PRIVATE_LINE, TABLE.on_screen);
+  assert.ok(TABLE.cases.length > 40, `only ${TABLE.cases.length} cases`);
+  for (const c of TABLE.cases) {
+    const w = createToolWatch();
+    if (c.stream !== "stale_at_start") w.link({ connected: true, stale: false });
+    const start = w.snapshot();
+    if (c.stream === "stale_at_start") w.link({ connected: true, stale: false });
+    for (const data of c.steps) w.event({ kind: "step", id: 1, data });
+    if (c.stream === "dropped") {
+      w.link({ connected: true, stale: true });
+      w.link({ connected: true, stale: false });
+    }
+    if (c.stream === "stale_now") w.link({ connected: true, stale: true });
+    const now = w.snapshot();
+    const h = c.heard;
+    const got = mayReadAloud({
+      privateAloud: h.private_aloud, questionPrivate: h.question_private,
+      memoryAloud: h.memory_aloud, sensitiveAloud: h.sensitive_aloud,
+      route: c.route,
+      toolRan: toolRanBetween(start, now),
+      toolsKnown: toolsKnownBetween(start, now),
+    });
+    assert.equal(got, c.read, c.name);
+  }
+});
+
+await check("read-aloud tools: web search and home status only; any other name, or none, is private", async () => {
+  assert.equal(isPrivateToolRun({ phase: "tool_started", tool: "web_search" }), false);
+  assert.equal(isPrivateToolRun({ phase: "tool_finished", tool: "home_read", ok: true }), false);
+  for (const tool of ["email_check", "calendar_read", "notes_search", "memory_search", "my_files", "unknown", "Web_Search", "", 3]) {
+    assert.equal(isPrivateToolRun({ phase: "tool_started", tool }), true, String(tool));
+  }
+  assert.equal(isPrivateToolRun({ phase: "tool_started" }), true, "no name");
+  assert.equal(isPrivateToolRun({ phase: "tool_refused", tool: "email_check" }), false, "refused: did not run");
+  assert.throws(() => { READ_ALOUD_TOOLS.push("email_check"); }, "the list is frozen");
+  // A nameless status line passes only after read-aloud tools, and only them.
+  const w = createToolWatch();
+  w.link({ connected: true, stale: false });
+  const start = w.snapshot();
+  assert.equal(onlyReadAloudToolsBetween(start, w.snapshot()), false, "no tool yet");
+  w.event({ kind: "step", data: { phase: "tool_started", tool: "web_search" } });
+  assert.equal(onlyReadAloudToolsBetween(start, w.snapshot()), true);
+  assert.equal(toolRanBetween(start, w.snapshot()), false, "web search is not private");
+  w.event({ kind: "step", data: { phase: "tool_started", tool: "email_check" } });
+  assert.equal(onlyReadAloudToolsBetween(start, w.snapshot()), false);
+  assert.equal(toolRanBetween(start, w.snapshot()), true);
+  // Snapshots with no privateRuns (not this module's): every run is private.
+  assert.equal(toolRanBetween({ runs: 1 }, { runs: 2 }), true);
+  assert.equal(onlyReadAloudToolsBetween({ runs: 1 }, { runs: 2 }), false);
+});
+
 await check("the tool watch: step events and stream drops, as the phone counts them", async () => {
   assert.equal(isToolRun({ phase: "tool_started", tool: "calendar_read" }), true);
   assert.equal(isToolRun({ phase: "tool_finished", tool: "calendar_read", ok: true }), true);
@@ -204,6 +263,33 @@ await check("a quick tool (no jarvis-status at all): the step event keeps it on 
     step({ phase: "tool_started", tool: "calendar_read" }),
     step({ phase: "tool_finished", tool: "calendar_read", ok: true }),
     delta("Your dentist is on Tuesday. "), delta("At ten. ")]);
+  assert.deepEqual(said, [PRIVATE_LINE]);
+});
+
+await check("web search ran (then `: jarvis-status working`): read aloud - the owner's decision of 2026-09-27", async () => {
+  const said = await spoken(QUIET, [routeLine(OFFER_ROUTE),
+    step({ phase: "tool_started", tool: "web_search" }),
+    ": jarvis-status working",
+    step({ phase: "tool_finished", tool: "web_search", ok: true }),
+    delta("It is sunny in Lisbon. "), delta("Twenty degrees. ")]);
+  assert.deepEqual(said, ["It is sunny in Lisbon.", "Twenty degrees."]);
+});
+
+await check("home status then email: on screen", async () => {
+  const said = await spoken(QUIET, [routeLine(OFFER_ROUTE),
+    step({ phase: "tool_finished", tool: "home_read", ok: true }),
+    step({ phase: "tool_started", tool: "email_check" }),
+    ": jarvis-status working",
+    delta("Two new emails. ")]);
+  assert.deepEqual(said, [PRIVATE_LINE]);
+});
+
+await check("web search, but the stream went stale during the answer: on screen", async () => {
+  const said = await spoken(QUIET, [routeLine(OFFER_ROUTE),
+    step({ phase: "tool_finished", tool: "web_search", ok: true }),
+    { emit: "jarvis-link", payload: { ...LINK_LIVE, stale: true } },
+    { emit: "jarvis-link", payload: LINK_LIVE },
+    delta("It is sunny. ")]);
   assert.deepEqual(said, [PRIVATE_LINE]);
 });
 

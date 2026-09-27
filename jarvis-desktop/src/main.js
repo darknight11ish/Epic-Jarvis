@@ -134,6 +134,7 @@ import {
 import {
   createToolWatch,
   mayReadAloud,
+  onlyReadAloudToolsBetween,
   privacyFromHeard,
   PRIVATE_LINE,
   TOOL_WORDS,
@@ -3205,10 +3206,15 @@ function enqueueSpeech(text) {
  *  may what it says be read aloud? */
 function speakableNow() {
   const now = toolWatch.snapshot();
+  // `: jarvis-status working` / `approval` names no tool: it counts as a
+  // private one unless the `step` events since the question say every tool
+  // that ran was a read-aloud one (web search, home status - the owner's
+  // decision of 2026-09-27).
+  const statusSaysPrivate = state.toolRan && !onlyReadAloudToolsBetween(state.toolStart, now);
   return mayReadAloud({
     ...(state.voicePrivacy || {}),
     route: state.turnRoute,
-    toolRan: state.toolRan || toolRanBetween(state.toolStart, now),
+    toolRan: statusSaysPrivate || toolRanBetween(state.toolStart, now),
     toolsKnown: toolsKnownBetween(state.toolStart, now),
   });
 }
