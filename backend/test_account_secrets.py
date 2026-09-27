@@ -125,8 +125,9 @@ def t_default_store_is_parametrized_and_the_pairing_token_is_unaffected():
     check("default_store() with no argument still opens the pairing token's own name",
           isinstance(TS.default_store(), (TS.WindowsStore, TS.StoreError)))
     d = TS.default_store("Some Other Target")
-    check("default_store(target) opens THAT target, off Windows this is still Unavailable",
-          isinstance(d, TS.StoreError))
+    check("default_store(target) opens THAT target - a real WindowsStore for it on "
+          "Windows (the credential-manager CI job), Unavailable everywhere else",
+          isinstance(d, (TS.WindowsStore, TS.StoreError)))
     factory_calls = []
     TS._STORE_FACTORY = lambda target: factory_calls.append(target) or FakeStore("x")
     try:

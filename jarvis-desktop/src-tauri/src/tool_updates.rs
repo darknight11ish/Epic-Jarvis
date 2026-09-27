@@ -180,6 +180,12 @@ mod tests {
         let body = serde_json::json!({"ok": false,
             "error": "check_tool_updates is tier 'auto' in jarvis-framework.toml"});
         let err = check_answer(503, &body.to_string()).unwrap_err();
-        assert!(err.contains("check_tool_updates"), "{err}");
+        // backend_refusal (commands.rs's second_card_refusal) raises the
+        // backend's own sentence's first letter for a user-facing line, so
+        // the real string starts "Check_tool_updates...", not
+        // "check_tool_updates..." - a case-sensitive contains() here always
+        // failed, on Windows CI (cargo test), never caught locally where
+        // only cargo check/clippy run.
+        assert!(err.to_lowercase().contains("check_tool_updates"), "{err}");
     }
 }
