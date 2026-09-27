@@ -36,10 +36,15 @@ Follow `docs/FEASIBILITY-AUDIT-2026-09-26.md` §3-4 and CLAUDE.md. Each batch
 gets its own feature audit (standing rule). Decided and waiting to be built:
 
 1. **Small fixes that follow directly from the answers:** web search ships on;
-   drop the focus streak line; phone accepts home-network addresses (Android
-   `network_security_config.xml` only allows cleartext to `.ts.net`/`.nord`
-   today - the app's own `OwnNetwork` check must stay the gatekeeper; think
-   this through carefully, it is a security change); crisis help line (US:
+   drop the focus streak line; ~~phone accepts home-network addresses~~ -
+   done, but not as a "phone accepts" change: investigating found the
+   desktop's own `validate_bind_address` already refuses to let Jarvis
+   listen on a home-Wi-Fi address at all, so there was never a home-network
+   address for the phone to reach. The phone now refuses one up front,
+   in plain words, instead of accepting it and failing later
+   (`data/PhoneAddress.kt`, `docs/ARCHITECTURE.md` §2). Asked the owner
+   which way to close the gap; they chose to keep using the Tailscale/
+   Meshnet name - no further change needed; crisis help line (US:
    988 / 911) + crisis messages never learned (wellbeing report W1-W6,
    `docs/CUTTING-EDGE-2026-09-26-round4-wellbeing.md`); games/role-play in a
    temporary chat; smartwatch setting (default phone-only, a card to allow).
