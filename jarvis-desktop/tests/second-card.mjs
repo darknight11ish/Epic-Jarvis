@@ -641,7 +641,14 @@ await check("CONTROL: the picture check asks the second card first, and only a w
 await check("CONTROL: the route line passes second_card on, and nothing more", async () => {
   const rust = read("src-tauri/src/commands.rs");
   const fn = fnBody(rust, "pub fn route_line_from_header(");
-  assert.match(fn, /for key in \["lane", "where", "gate", "second_card"\]/);
+  // `for key in [...]` is spread one key per line since `quick` and
+  // `open_settings` joined it (fix: phone build/settings-registry drop),
+  // so match the list body rather than one exact line and check its keys
+  // regardless of the formatting around them.
+  const list = /for key in \[([\s\S]*?)\]/.exec(fn);
+  assert.ok(list, "no `for key in [...]` string list in route_line_from_header");
+  const keys = [...list[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings"]);
 });
 
 await browser.close();

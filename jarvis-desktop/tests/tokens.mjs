@@ -131,8 +131,14 @@ await check("the widget's Approve button matches the Jarvis bar's", async () => 
     });
     await widget.close();
 
+    // Both fixtures must be the same weight: `APPROVAL_RAISED` is "heavy"
+    // and starts its Approve button disabled for heavy-approve.js's own
+    // 2s delay (docs/ARCHITECTURE.md §3, `MIN_DELAY_MS`), which paints the
+    // disabled colours (`--surface-1`), not the ok-token ones this test
+    // means to compare. `APPROVAL_PLAIN` is "normal" on both surfaces, so
+    // neither is gated and the comparison is actually apples to apples.
     const bar = await K.open(browser, base, "index.html",
-      { theme, pending: [K.APPROVAL_RAISED] }, { width: 750, height: 800 });
+      { theme, pending: [K.APPROVAL_PLAIN] }, { width: 750, height: 800 });
     const barColors = await bar.evaluate(() => {
       const cs = getComputedStyle(document.querySelector(".approval-approve"));
       return { bg: cs.backgroundColor, fg: cs.color, border: cs.borderColor };

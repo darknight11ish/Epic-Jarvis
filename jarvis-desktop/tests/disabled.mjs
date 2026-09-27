@@ -137,7 +137,13 @@ await check("CONTROL: a disabled control is still visibly inert", async () => {
   // quietly break the second: a disabled button that renders exactly like a
   // live one is worse than an unreadable one.
   for (const [file, selector, data, viewport] of [
-    ["index.html", "#approval-approve", { pending: [K.APPROVAL_RAISED] }, undefined],
+    // Not `APPROVAL_RAISED`: it is "heavy", so heavy-approve.js's own gate
+    // (docs/ARCHITECTURE.md §3, tested in tests/heavy-approve.mjs) already
+    // starts this button disabled before this check ever sets `.disabled`
+    // itself - "live" and "dead" would both be the disabled colours, and
+    // the control would fail this check for being disabled too early
+    // rather than too late.
+    ["index.html", "#approval-approve", { pending: [K.APPROVAL_PLAIN] }, undefined],
     ["widget.html", "#btn-appr-yes", { pending: [K.APPROVAL_PLAIN] }, { width: 320, height: 460 }],
   ]) {
     const page = await K.open(browser, base, file, data, viewport);
