@@ -38,8 +38,9 @@ const $ = (id) => document.getElementById(id);
 const DETAIL = "Jarvis can look up whether the Python packages, the Rust building blocks and " +
   "any pinned GitHub-hosted tool it is built from have a newer version out. It only reports - " +
   "it never installs or changes anything itself; it shows the exact command to run yourself. " +
-  "The first time you press the button, Jarvis asks once, because it means reaching PyPI, " +
-  "crates.io and GitHub over the internet; after that one yes it never asks again.";
+  "The first time you press the button, Jarvis asks once, because it means reaching the " +
+  "websites that publish them (PyPI for Python, crates.io for Rust, and GitHub) over the " +
+  "internet; after that one yes it never asks again.";
 const MISSING = "Your PC's Jarvis cannot check for tool updates yet - run apply-patches.ps1 " +
   "on this PC.";
 const WAITING = "Waiting for your approval on the PC or phone.";

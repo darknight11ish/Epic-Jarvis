@@ -59,8 +59,8 @@ WHAT IS IN IT - only what Jarvis can already read on this PC
     card, no setting and nothing that speaks unasked: it is one more
     section of the same briefing.
   * News headlines (I49, 2026-09-27), from RSS/Atom feed addresses the
-    owner adds in Settings ("News feeds", `jarvis_news.py`, one approval
-    card per address). Empty by default, so a briefing with none listed
+    owner adds by saying "add this feed: <address>" (`jarvis_news.py`, one
+    approval card per address; there is no settings screen for it). Empty by default, so a briefing with none listed
     still fetches nothing from the internet and says so in its last line,
     exactly as before. When feeds ARE listed, jarvis_news.read_news() does
     the one GET per feed (never a linked article), gated as `news_read`
@@ -168,7 +168,12 @@ OUTSIDE_LINE = ("Weather and news: not available. The weather can come only from
 #: ... when the weather IS in it but news is not (2026-09-27, I49: news is
 #: now a real feature, so this only means "no feeds are listed yet", never
 #: "no provider exists").
-NEWS_LINE = ("News: not available. No news feeds are listed (Settings, News feeds), so "
+#: There is no "News feeds" screen in either app (jarvis_news.py: feeds are
+#: added by the owner's own words, jarvis_quick.py's _NEWS_ADD), so this says
+#: the words to use rather than naming a Settings section that does not exist
+#: (setup/recovery audit, 2026-09-27).
+NEWS_LINE = ("News: not available. No news feeds are listed yet (to add one, say \"add this "
+             "feed:\" and the feed's address), so "
              "Jarvis fetches nothing from the internet for this.")
 #: ... the other way round: news IS in it but the weather is not.
 WEATHER_LINE = ("Weather: not available. It can come only from your own Home Assistant, "
@@ -506,7 +511,7 @@ def sources(deps: Optional[Deps] = None) -> dict:
 
 def _news_source(deps: Deps) -> dict:
     """The News line under "What it includes" (I49, 2026-09-27): "on" only
-    when at least one feed is listed (Settings, News feeds) and reading it
+    when at least one feed is listed ("add this feed: <address>") and reading it
     needs no person each time. No [tools].enabled check - news has no
     model tool, only the briefing and "read me the news" ever read it."""
     try:
@@ -515,8 +520,9 @@ def _news_source(deps: Deps) -> dict:
     except Exception:
         return {"state": "off", "said": "Not included: no news feeds are listed."}
     if not listed:
-        return {"state": "off", "said": "Not included: no news feeds are listed (Settings, "
-                                        "News feeds)."}
+        return {"state": "off", "said": "Not included: no news feeds are listed. To add "
+                                        "one, say \"add this feed:\" and the feed's "
+                                        "address."}
     if deps.tier_of(NEWS_TOOL) not in ("auto", "notify"):
         return {"state": "asks", "said": "Not included: your settings ask for a yes each "
                                          "time Jarvis reads a news feed, and a briefing does "

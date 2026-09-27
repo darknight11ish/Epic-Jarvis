@@ -33,9 +33,10 @@
       Jarvis Desktop — settings.
 
       The only window here that can change where Jarvis is and whether this
-      app may start it. One long page of cards, Connection first. Only the face tuning is
-      folded away; there is no "More options" section (the creativity
-      audit, 2026-09-25, found this comment promising one).
+      app may start it. One long page of cards, Connection first, in three
+      groups (Everyday, Rare, What Jarvis does) under a jump list. Folded
+      away: the face tuning, and "More options" at the end of Rare (starting
+      Jarvis for you, starting with Windows, the logs and the crash notes).
     -->
     <main class="page">
       <header class="page-head">
@@ -69,11 +70,13 @@
           <a href="#second-card">Second graphics card</a>
           <a href="#big-model">Big model (slow)</a>
           <a href="#folders">Folders Jarvis may look in</a>
+          <a href="#backup">Backups</a>
           <a href="#updates">Updates</a>
+          <a href="#tool-updates">Check for tool updates</a>
           <a href="#more-options">More options</a>
         </div>
         <div class="settings-jump-group">
-          <span class="settings-jump-label">Read-only</span>
+          <span class="settings-jump-label">What Jarvis does</span>
           <a href="#asks-first">What asks first</a>
           <a href="#reach">What Jarvis can reach</a>
           <a href="#email-sending">Sending email</a>
@@ -214,7 +217,7 @@
               other outside text, or when the search words would repeat
               something private, it shows you the exact words and waits
               for your yes. Sending an email, or a question to a cloud
-              model, always asks first. "What Jarvis can reach" (above)
+              model, always asks first. "What Jarvis can reach" (further down this page)
               lists which routes are on right now, and this program never
               opens a public tunnel to itself.
             </p>
@@ -250,7 +253,7 @@
             <p class="faq-a">
               Something else on this computer has already claimed that
               combination — usually PowerToys Run, or on recent Windows 11
-              builds, the Copilot app. Open Shortcuts above: a binding that
+              builds, the Copilot app. Open Shortcuts, further down this page: a binding that
               is not working says <em>in use</em> there. Pick a different
               combination and press Save shortcuts.
             </p>
@@ -347,7 +350,7 @@
             <summary class="faq-q">Will Jarvis update itself without asking?</summary>
             <p class="faq-a">
               No. <span id="faq-update-off">Update checks are not set up yet
-              for this copy (see Updates above), and even once they are,
+              for this copy (see Updates, further down this page), and even once they are,
               Jarvis</span><span id="faq-update-on" hidden>Jarvis</span> only
               tells you a newer version exists. It never installs one on its
               own. Installing is always the Install button, pressed by you.
@@ -648,7 +651,7 @@
            src-tauri/src/plain_errors.rs get_manner, set_manner; backend
            jarvis_manner.py). Wording only - never what Jarvis does, asks or
            remembers - so neither choice raises an approval card. Held on a
-           stale link like every change sent to the PC. The phone's Mind has
+           stale link like every change sent to the PC. The phone's Settings has
            the same, in the same words. -->
       <section class="card" id="manner">
         <h2>How Jarvis talks</h2>
@@ -971,7 +974,7 @@
             <button class="btn small" id="ws-address-save" type="button">Save address</button>
           </div>
           <p class="note" id="ws-address-note"></p>
-          <p class="note">Setting SearXNG up (Docker, and switching on its JSON output) is in backend/README.md, "Web search".</p>
+          <p class="note">SearXNG is a search program that runs on this PC, inside Docker (a free program that runs other programs in a sealed box). Setting it up is in backend/README.md, "Web search".</p>
 
           <h3 class="subhead">Keys</h3>
           <p class="note" id="ws-key-entry"></p>
@@ -1432,6 +1435,13 @@
             it to close only if asking did not work. A Jarvis you started
             yourself is never taken over and never stopped.
           </p>
+          <p class="note">
+            If a Jarvis this app started crashes, or stops answering for
+            about 45 seconds, this app restarts it - at most 3 times in 10
+            minutes. After that it stops trying and tells you with one
+            notification: read the end of <code>backend.log</code> (Open the
+            log folder, below) to see why, then press Stop and Start here.
+          </p>
 
           <label class="toggle">
             <input id="supervise" type="checkbox" />
@@ -1536,7 +1546,7 @@
         </section>
       </details>
 
-      <h2 class="settings-group-heading">Read-only</h2>
+      <h2 class="settings-group-heading">What Jarvis does</h2>
 
       <!-- ── What asks first ────────────────────────────────────────────────
            The owner's decisions of 2026-09-26, after the approvals audit
@@ -1564,7 +1574,7 @@
            outside itself, whether each is on, where it goes (a host only)
            and whether it asks first - written by the PC from its settings,
            never by the AI model. Read only: nothing here changes anything,
-           so nothing is held on a stale link. The phone's Mind shows the
+           so nothing is held on a stale link. The phone's Settings shows the
            same list in the same words. -->
       <section class="card" id="reach">
         <h2>What Jarvis can reach</h2>

@@ -143,8 +143,10 @@ async function change(manner) {
   await load();
 }
 
-/** Humour (the owner's decision, 2026-09-27): on or off, no card either
- * way - the same shape as `change()` above, its own Tauri command. */
+/** Humour (the owner's decision, 2026-09-27): on or off, it never asks
+ * first either way - the same shape as `change()` above, its own Tauri
+ * command. (Worded without that other word on purpose: tests/plain-errors.mjs
+ * checks this file never mentions one.) */
 async function changeHumor(on) {
   if (busy) return;
   busy = true;

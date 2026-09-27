@@ -38,10 +38,18 @@ const DETAIL = "Jarvis can write one locked backup file - your memory, chat hist
   "settings and notes, encrypted - into a folder you pick. A NordLocker or similar " +
   "cloud-synced folder is fine: that program uploads the file, as it does anything " +
   "else you put there, and the file itself stays locked either way. Jarvis keeps the " +
-  "newest 5 backups there and deletes older ones.";
+  "newest 5 backups there and deletes older ones. A backup is made only when you press " +
+  "Back up now, and each one is locked with its own recovery code, shown once.";
 const LOST_CODE_WARN = "Write this down or save it somewhere safe now. Jarvis will not " +
   "show it again, and cannot recover it. If it is lost, this backup can never be " +
   "opened again - there is no other way in.";
+/** Said next to every code (setup/recovery audit 2026-09-27): each backup is
+ * locked with its OWN code (jarvis_backup.backup_now makes a fresh one every
+ * time), which nothing else on this panel said - one code per backup is not
+ * what "a recovery code" suggests to someone who has not read the design. */
+const WHICH_BACKUP = (at) => "This code opens only the backup made " +
+  (at ? `${when(at)}` : "just now") + ". Every backup has its own code, so write the " +
+  "date down next to it.";
 const NO_FOLDER_WHY = "Choose a folder before backing up.";
 const MISSING = "Your PC's Jarvis cannot make backups yet - run apply-patches.ps1 on this PC.";
 
@@ -129,11 +137,12 @@ function when(seconds) {
   }
 }
 
-/** Shows a recovery code once, with the standard warning. Cleared only by
- * leaving the panel (reload) or pressing "I've saved it" - never re-shown. */
-function showCode(title, code) {
+/** Shows a recovery code once, with the standard warning and which backup
+ * it opens. Cleared only by leaving the panel (reload) or pressing "I've
+ * saved it" - never re-shown. */
+function showCode(title, code, at) {
   el.codeTitle.textContent = title;
-  el.codeWarn.textContent = LOST_CODE_WARN;
+  el.codeWarn.textContent = `${LOST_CODE_WARN} ${WHICH_BACKUP(at)}`;
   el.code.textContent = code;
   el.codeBox.hidden = false;
 }
@@ -201,6 +210,7 @@ function paint() {
     showCode(
       "Your data just before the restore",
       lastRestore.safety_backup.recovery_code,
+      lastRestore.safety_backup.at,
     );
   }
   el.empty.hidden = backups.length > 0;
@@ -266,7 +276,7 @@ async function backupNow() {
   try {
     const out = await TAURI.core.invoke("backup_now");
     if (out && out.ok && out.recovery_code) {
-      showCode("Your new backup's recovery code", out.recovery_code);
+      showCode("Your new backup's recovery code", out.recovery_code, out.at);
       say(out.message || "Backed up.", "ok");
     } else {
       say(String((out && (out.message || out.error)) || "Could not back up."),
