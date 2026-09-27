@@ -81,8 +81,8 @@ _REAL_PRE_IMAGE = '''\
 
 def t_the_patch():
     order = _stack.order()
-    check("cloud-say-yes.patch is in apply-patches.ps1's list, last",
-          order and order[-1] == "cloud-say-yes.patch", order[-3:])
+    check("cloud-say-yes.patch is in apply-patches.ps1's list",
+          "cloud-say-yes.patch" in order, order[-4:])
     patch = (HERE / "cloud-say-yes.patch").read_text(encoding="utf-8")
     check("it patches jarvis_hud.py and nothing else",
           sorted(l[6:].strip() for l in patch.splitlines() if l.startswith("+++ b/"))

@@ -638,6 +638,18 @@ $PATCHES = @(
     # turn an "offer" into an "escalate" for a question that had already
     # cleared every other gate on its own.
     'cloud-say-yes.patch'
+    # "Goals with one card per step" (the owner's "build it now",
+    # 2026-09-27, after the Jarvis evaluation; design:
+    # docs/creativity-2026-09-25/future.md idea 3). One try/except block,
+    # append-only, right after answer-sources.patch's own new route block -
+    # jarvis_goals.py is a brand-new whole module, so this adds a route the
+    # same way news.patch and tool-updates.patch each did. Never batches an
+    # approval: every acting step still gets its own separate card through
+    # ordinary chat tool use, exactly as today - this is NOT the "plan
+    # card" (docs/FEASIBILITY-AUDIT-2026-09-26.md I61) still gated behind
+    # the multi-step safety tests; see jarvis_goals.py's own docstring for
+    # why the two are different and why this one was never waiting on that.
+    'goals.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -770,6 +782,8 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
+    # --- "Goals with one card per step" (goals.patch) ---
+    'jarvis_goals.py'            # goals.patch: a goal's own plan and weekly check-in; accepting raises one card, like a repeating reminder; every acting step still asks through ordinary chat
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -518,6 +518,36 @@ no way for either app to actually say yes:
   this one, or a replacement for API-key cloud access). Still an open
   decision for the owner, not a "later" already committed to.
 
+Built 2026-09-27, the owner's "build it now" after the Jarvis evaluation
+(`docs/JARVIS-EVALUATION-2026-09-27.md`) surfaced it as the biggest real gap
+against Meta's Muse still on the table - **Goals: a plan the owner edits,
+one card per acting step** (`docs/creativity-2026-09-25/future.md` idea 3;
+the feasibility audit's I63/I64; `docs/JARVIS-API.md` §59).
+
+- The owner says "insulate the garage before winter", writes or asks
+  Jarvis (in ordinary chat) to suggest a short plan, edits and accepts it.
+  Accepting sets up a weekly, model-free check-in - the same ONE
+  `schedule_repeat` card a repeating reminder already raises, approving
+  nothing that acts. Every acting step (search installers, draft an email)
+  is asked for in ordinary chat and goes through the exact same per-action
+  card chat already uses - Goals adds no new way to act, ever.
+- **This is NOT "the plan card"** (feasibility I61, gated behind the
+  multi-step safety tests that have not run yet) - a mix-up this session's
+  own evaluation made once before catching it. The plan card batches
+  several safe steps under one yes; Goals never batches anything, so it
+  never touched that gate and was not waiting on it. `jarvis_goals.py`'s
+  own docstring exists partly so this does not get confused a third time.
+- Deliberately calls no model itself: the real way this backend reaches a
+  local model is inside `jarvis_hud.py`, which is not in this repository,
+  and guessing at that integration rather than verifying it would be
+  exactly what "do not claim more than the evidence supports" (above)
+  warns against. Drafting a plan happens in ordinary chat instead, already
+  built and already safe.
+- Backend only so far (`backend/jarvis_goals.py`, `goals.patch`,
+  `test_goals.py`, 57 checks). Desktop and phone UI queued next - Brain ->
+  Work, beside Coming up, is the natural place, matching the briefing and
+  the to-do list.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

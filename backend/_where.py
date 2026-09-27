@@ -194,6 +194,9 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # "Goals with one card per step" (the owner's "build it now",
+    # 2026-09-27; goals.patch): a goal's own plan and weekly check-in.
+    "jarvis_goals.py",
 )
 
 

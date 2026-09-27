@@ -1,0 +1,25 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3264,6 +3264,22 @@
+     except Exception as exc:
+         print(f"  sources    NOT ON ({type(exc).__name__}) - \"Where this came from\" is off")
+         print("             until jarvis_sources.py is back: run apply-patches.ps1 again")
++    # goals.patch (the owner's "build it now", 2026-09-27, after the
++    # Jarvis evaluation): "Goals with one card per step",
++    # docs/creativity-2026-09-25/future.md idea 3. GET/POST /api/goals,
++    # POST /api/goals/<id>/accept|step|stop. Every route is content or
++    # data - creating, editing and stopping a goal raise no card; only
++    # accepting one does, through the SAME schedule_repeat card a
++    # repeating reminder already uses (jarvis_schedule.py), never a
++    # mechanism of its own. Wrapped round Handler here, before anything
++    # listens, like sources above; the rules are all in jarvis_goals.py.
++    try:
++        import jarvis_goals
++        print(jarvis_goals.install(Handler, origin_ok=_origin_ok,
++                                   token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  goals      NOT ON ({type(exc).__name__}) - Goals is off")
++        print("             until jarvis_goals.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

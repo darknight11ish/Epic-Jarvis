@@ -8797,3 +8797,76 @@ second version of any of it.
   before it: tested in the dev container only, against a real Windows
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
+
+## 59. Goals: a plan the owner edits, one card per acting step (added 2026-09-27)
+
+The owner's "build it now" (2026-09-27, after the Jarvis evaluation;
+`docs/creativity-2026-09-25/future.md` idea 3, the feasibility audit's
+I63/I64). The owner says "I want to get the garage insulated before
+winter." and writes - or asks Jarvis, in an ordinary chat message, to
+suggest - a short plan: a handful of named steps, each with a rough date.
+That draft is edited and accepted here. From then on the goal sits on
+Coming up, and once a week Jarvis quietly checks whether the next step is
+still on track and says so. **Nothing here ever acts.** When a step needs
+real action (search for installers, draft an email, add a calendar
+entry), the owner asks Jarvis for that in an ordinary chat message, and
+THAT tool use goes through the exact same per-action approval card any
+chat turn already goes through - this feature adds no new way to act, and
+no new gate logic. `backend/jarvis_goals.py` (shipped whole, `goals.patch`
+adds the routes).
+
+**Not the same thing as "the plan card"** (the feasibility audit's I61;
+CLAUDE.md's "the plan card is allowed later, only after the multi-step
+safety tests pass"). That is a BATCHING mechanism: one yes that would run
+several safe steps at once, gated behind the multi-step tool-calling
+safety tests (`tools/tool_eval`) because batching approvals is close to
+"approves in bulk". Goals never batches anything - every acting step is
+its own separate card, exactly like ordinary chat tool use today - so it
+does not touch that gate and was never waiting on it.
+
+| Route | Method | Body | Answers |
+|---|---|---|---|
+| `/api/goals` | GET | - | `{"ok", "goals": [<goal>, ...], "limits": {"text", "steps", "goals", "by"}}` |
+| `/api/goals` | POST | `{"text", "plan"?}` | `{"ok", "goal"}` - a new DRAFT. `plan`, if given, is the owner's own steps (or something they asked Jarvis to suggest first, in ordinary chat, and pasted in); omitted, the draft's one step is the goal's own words. **No approval card**: a draft is content, not action, exactly like an email draft (§40). |
+| `/api/goals/<id>` | GET | - | `{"ok", "goal"}`; 404 `{"ok": false, "error": "no such goal"}` |
+| `/api/goals/<id>/accept` | POST | `{"plan"?}` | The owner's edited plan (or the draft as it stood) is kept, and the goal becomes `active`. Sets up a weekly check-in through `jarvis_schedule.py`'s existing `schedule_repeat` mechanism (§21) - **the SAME one card a repeating reminder or the morning briefing already raises**, approving nothing that acts. `{"ok", "goal"}` with `goal.checkin` (the scheduler's own job view, `"state": "waiting"` until the card is answered). |
+| `/api/goals/<id>/step` | POST | `{"index", "done"}` | Marks one step done or not. **No card** - the same shape as ticking off a to-do item. |
+| `/api/goals/<id>/stop` | POST | - | Stops tracking the goal and deletes its check-in job. **No card, immediate** - the same rule every "stop tracking this" control in this project follows. |
+
+A goal: `{"id", "text", "plan": [{"step", "by", "done"}, ...], "status":
+"draft"|"active"|"done"|"stopped", "created", "changed"}`. `by` is a
+free-text rough label ("before winter", "by Friday", or "") - never a
+strict calendar date, since the goal is a nudge, not a scheduler entry of
+its own. At most 7 steps (`MAX_STEPS`), kept short on purpose: the
+creativity doc's own named risk is nagging, and an 8B model is weak at
+long plans. At most 20 open goals (draft + active) at once.
+
+**The weekly check-in calls no model and no tool.** It only looks at the
+goal's own already-stored plan and picks the first step not yet marked
+done, so the nudge is entirely deterministic and cheap - never a read of
+anything new, never learned as a fact, never counted as an offer (the
+back-off, §22, is not involved: this is the owner's own already-accepted
+repeat firing on schedule, not something asked for the first time). The
+nudge is the check-in job's own `note` (§21's job shape), shown under it in
+both apps' Coming up, exactly like any other job's note.
+
+**Rule 1 (local-first).** `jarvis_goals.py` makes no network call of any
+kind - no model, no cloud, nothing. A goal's words never leave the PC
+through anything in this module. Drafting the first plan with Jarvis's
+help happens through ordinary chat (`/api/chat`, already shipped, already
+safe), which the owner then pastes into `POST /api/goals`'s `plan` -
+deliberately not a call this module makes itself, since the real way this
+backend talks to a local model takes its network calls from `jarvis_hud.py`
+(not in this repository, `docs/ARCHITECTURE.md` §9), and guessing at that
+integration rather than verifying it would be exactly the mistake
+CLAUDE.md's "do not claim more than the evidence supports" section exists
+to prevent.
+
+**Rule 4 (no auto-approve, no approve-all).** Accepting a goal approves
+NOTHING that acts - it only starts a repeating check-in, which is data,
+not action. Every acting step still needs its own separate card, raised by
+the ordinary chat/tool path, never by this feature.
+
+Not yet built: a UI in either app (Brain -> Work, beside Coming up, is the
+natural place, matching the morning briefing and the to-do list). Both
+apps' parity is tracked in `docs/ARCHITECTURE.md` §8 until then.
