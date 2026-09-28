@@ -64,7 +64,8 @@ object ChatLog {
     const val KEEP_TITLE = "Delete conversations older than"
     const val WAITING = "Waiting for your approval to turn chat history on. ${Approvals.WHERE}"
     const val EMPTY = "No conversations are kept on your PC."
-    /** Under Delete, in both apps: deleting a chat is not forgetting (ease-of-use audit #7). */
+    /** Under Delete, in both apps: deleting a chat is not forgetting (ease-of-use audit #7) -
+     *  said when there is nothing to offer (section 79, below). */
     const val DELETE_KEEPS_FACTS =
         "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain."
     const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone. $DELETE_KEEPS_FACTS"
@@ -545,6 +546,81 @@ object ChatLog {
     const val TAINT_LINE =
         "In this conversation Jarvis read text that did not come from you - a web page, a file, " +
             "an email or another tool's output - from the marked message on."
+
+    // ------------------------------------------- facts this chat taught ---
+    //
+    // Deleting a chat offers to forget the facts it taught (docs/JARVIS-API.md
+    // section 79, the owner's choice of 2026-09-28). The desktop's
+    // history-view.js says the same words (tests/history.mjs checks). NONE is
+    // ticked to start with - deleting a chat never widens into forgetting by
+    // itself - and each ticked fact is then forgotten through the ordinary
+    // Forget, ONE fact per call (JarvisRuntime.forgetAutoFact). There is no
+    // list form of Forget.
+
+    const val FACTS_PATH = "/api/memory/conversation-facts"
+
+    /** One fact the chat taught: its id and its words, as the PC keeps them. */
+    data class TaughtFact(val id: Long, val text: String)
+
+    /**
+     * The PC's answer, read. [available] false: an older PC that cannot say
+     * (404/501) - Delete then asks exactly as it always did. [hiddenCount]:
+     * facts the PC held back while the memory lists are hidden.
+     */
+    data class Taught(val available: Boolean, val facts: List<TaughtFact>, val hiddenCount: Int = 0)
+
+    private val CONVERSATION_ID = Regex("[A-Za-z0-9_-]{8,64}")
+
+    /** `GET /api/memory/conversation-facts?conversation_id=`, or null for anything
+     *  that is not a conversation id (JARVIS-API 18.1) - nothing is sent. */
+    fun factsPath(conversationId: String): String? =
+        if (CONVERSATION_ID.matches(conversationId)) "$FACTS_PATH?conversation_id=$conversationId" else null
+
+    /** The facts in a 2xx answer - each a whole-number id above 0 with words. */
+    fun taught(body: JsonObject): Taught {
+        val facts = (body["facts"] as? JsonArray).orEmpty().mapNotNull { v ->
+            val o = v as? JsonObject ?: return@mapNotNull null
+            val id = o.whole("id") ?: return@mapNotNull null
+            val words = o.str("text")?.trim().orEmpty()
+            if (id <= 0 || words.isEmpty()) null else TaughtFact(id, words)
+        }
+        val hidden = if (body.flag("hidden") == true) (body.whole("hidden_count") ?: 0L).toInt() else 0
+        return Taught(available = true, facts = facts, hiddenCount = hidden.coerceAtLeast(0))
+    }
+
+    /** Above the list, with how many facts the chat taught. */
+    fun chatFactsIntro(n: Int): String = if (n == 1) {
+        "Jarvis learned 1 fact from this chat. It is kept unless you tick it - a ticked fact is forgotten, like Forget in the Brain."
+    } else {
+        "Jarvis learned $n facts from this chat. They are kept unless you tick them - each ticked fact is forgotten, like Forget in the Brain."
+    }
+
+    /** While the memory lists are hidden: not shown, and kept. */
+    fun chatFactsHiddenLine(n: Int): String =
+        "Jarvis learned $n ${if (n == 1) "fact" else "facts"} from this chat. " +
+            "Your memory lists are hidden, so they are kept. To forget any, show the memory lists first."
+
+    /** The Delete button's words, with how many ticked facts go with it. */
+    fun deleteChatButton(n: Int): String =
+        if (n <= 0) "Delete the chat" else "Delete the chat and forget $n ${if (n == 1) "fact" else "facts"}"
+
+    /** The "are you sure?" line above Yes, with how many ticked facts go. */
+    fun deleteAndForgetConfirm(n: Int): String = if (n <= 0) {
+        "Delete this conversation from your PC? This cannot be undone. The facts it taught are kept."
+    } else {
+        "Delete this conversation and forget $n ${if (n == 1) "fact" else "facts"}? The chat cannot be " +
+            "brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words."
+    }
+
+    /** What happened, in one sentence: [chatSaid] is the delete's own sentence. */
+    fun deleteDoneWords(chatSaid: String, forgot: Int, failed: Int): String {
+        val done = if (forgot > 0) " Forgot $forgot ${if (forgot == 1) "fact" else "facts"}." else ""
+        val bad = if (failed > 0) {
+            " $failed ${if (failed == 1) "fact" else "facts"} could not be forgotten - try Forget on " +
+                "${if (failed == 1) "it" else "them"} in the Brain."
+        } else ""
+        return chatSaid + done + bad
+    }
 
     /** Why the phone could not do something with History - in the PC's words when there are some. */
     fun failure(e: ApiError): String? = when (e) {

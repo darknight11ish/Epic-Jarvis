@@ -37,6 +37,7 @@ use crate::commands;
 
 pub mod auto_learn;
 pub mod briefing;
+pub mod conversation_facts;
 pub mod fact_history;
 pub mod focus;
 pub mod history;
@@ -463,15 +464,18 @@ pub async fn brain_memory_learning(
     .await
 }
 
-/// Answers the daily overnight-tidy card ("not built yet" - switching it on
-/// only records the wish; nothing runs).
+/// Answers the daily overnight-tidy card, and turns the tidy off again.
+/// Since 2026-09-28 switching it on starts the overnight tidy
+/// (backend/jarvis_tidy.py): once a day it may raise "Still true?" and
+/// "Which is true now?" review cards - cards only, no fact changes by
+/// itself.
 ///
 /// Independent fields because the card offers independent actions:
 /// "enable" sends `enabled`, "stop asking" sends `remind`, and "not now"
 /// sends `not_now` (backend/briefing.patch): each "not now" keeps the card
 /// quiet on the PC for 1 day, then 7, then 30 (jarvis_backoff.py). An older
 /// PC answers it with nothing written - the card then returns tomorrow, as
-/// before.
+/// before. "Turn off overnight tidying" sends `enabled: false` alone.
 #[tauri::command]
 pub async fn brain_memory_sleep_time(
     app: AppHandle,
@@ -486,6 +490,17 @@ pub async fn brain_memory_sleep_time(
             &app,
             "/api/memory/sleep_time",
             serde_json::json!({ "not_now": true }),
+        )
+        .await;
+    }
+    if enabled == Some(false) && remind.is_none() && not_now.is_none() {
+        // Turning the overnight tidy OFF only makes Jarvis do less (no more
+        // nightly cards), so, like "not now", it is never held on a stale
+        // link (2026-09-28; the phone's JarvisRuntime.setSleepTime agrees).
+        return post(
+            &app,
+            "/api/memory/sleep_time",
+            serde_json::json!({ "enabled": false }),
         )
         .await;
     }

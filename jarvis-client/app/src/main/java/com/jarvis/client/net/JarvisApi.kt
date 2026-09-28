@@ -902,6 +902,14 @@ class JarvisApi(
     suspend fun historySearch(path: String): ApiResult<JsonObject> = probe(path)
 
     /**
+     * `GET /api/memory/conversation-facts` (section 79, 2026-09-28): the facts
+     * still in use ONE conversation taught, for History's Delete to offer
+     * forgetting them. A read; nothing is forgotten here. [path] is
+     * [ChatLog.factsPath]'s.
+     */
+    suspend fun conversationFacts(path: String): ApiResult<JsonObject> = probe(path)
+
+    /**
      * `POST /api/history/delete`: ONE conversation. No route deletes them
      * all, on purpose. A 404 - already gone - comes back as
      * [ApiError.NotFound] whatever its body says ([ChatLog.deleteSaid]).
@@ -1378,7 +1386,8 @@ class JarvisApi(
         probe("/api/memory/facts?known_at=$knownAtEpochSeconds")
 
     /**
-     * Answers the daily overnight-tidy card (not built yet) - see
+     * Answers the daily overnight-tidy card, and turns the tidy off again
+     * (since 2026-09-28 it runs: review cards only, backend/jarvis_tidy.py) - see
      * `BrainSnapshot.memory`'s own `setup.sleep_time_offer`. Each of its
      * three actions sends exactly one field: "enable" [enabled], "stop
      * asking" [remind] false, and "not now" [notNow] (since 2026-09-25,

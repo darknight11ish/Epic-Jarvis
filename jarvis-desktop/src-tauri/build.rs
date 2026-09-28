@@ -111,6 +111,10 @@ fn main() {
             // "History of this fact" (section 71): every version of one
             // fact, hidden like every memory list. Brain only.
             "brain_fact_history",
+            // "Facts this chat taught" (section 79): History's Delete offers
+            // to forget them, one Forget per ticked fact. A read, hidden like
+            // every memory list. Brain only.
+            "brain_conversation_facts",
             "brain_history_delete",
             "brain_history_settings",
             // Backend supervision — settings window only

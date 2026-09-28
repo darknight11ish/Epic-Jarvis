@@ -788,10 +788,13 @@ $SHIPPED = @(
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
     # --- the Brain upgrades (2026-09-28, brain-reads.patch) ---
-    'jarvis_brain_reads.py'      # brain-reads.patch: GET /api/history/search and /api/memory/fact-history, reads for the apps only
+    'jarvis_brain_reads.py'      # brain-reads.patch: GET /api/history/search, /api/memory/fact-history and /api/memory/conversation-facts, reads for the apps only
     # --- "remind me next time I talk about X" and "ring my phone" (2026-09-28) ---
     'jarvis_next_time.py'        # a reminder with no time of its own, brought up beside the question; a kind on jarvis_schedule.py, no patch
     'jarvis_find_phone.py'       # "ring my phone": ONE ring_phone event the phone rings for, no card, no patch
+    # --- smarter memory dates, "Where did I put ...?" (2026-09-28) ---
+    'jarvis_places.py'           # "where is my passport?" answered from the places the owner said, no model; jarvis_quick.py and jarvis_auto_learn.py call it, no patch
+    'jarvis_tidy.py'             # the overnight tidy: "Still true?" / "Which is true now?" review cards only, on the one scheduler, only while its switch is on; no patch
 )
 
 # The settings file. Installed only where none exists; never overwritten.

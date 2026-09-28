@@ -3997,6 +3997,23 @@ object JarvisRuntime {
      * over a link that cannot be confirmed live. One already gone counts as
      * deleted. @return whether it is gone now, and the sentence to show.
      */
+    /**
+     * "Facts this chat taught" (docs/JARVIS-API.md section 79): a read, never
+     * held - it changes nothing. History, and so this, is not shown while
+     * "Hide memory lists and chat history" hides the lists. An older PC
+     * (404/501), no link, or anything odd is `available = false`: Delete then
+     * asks exactly as it always did. Forgetting a ticked fact is
+     * [forgetAutoFact], one fact per call.
+     */
+    suspend fun chatFacts(conversationId: String): com.jarvis.client.net.ChatLog.Taught {
+        val none = com.jarvis.client.net.ChatLog.Taught(available = false, facts = emptyList())
+        val path = com.jarvis.client.net.ChatLog.factsPath(conversationId) ?: return none
+        return when (val r = api.conversationFacts(path)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.taught(r.value)
+            is ApiResult.Failed -> none
+        }
+    }
+
     suspend fun deleteHistory(id: String): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         return when (val r = api.deleteHistory(id)) {
@@ -4193,14 +4210,24 @@ object JarvisRuntime {
      * connection this queue is.
      */
     suspend fun setSleepTime(enabled: Boolean? = null, remind: Boolean? = null): ApiResult<Unit> {
-        if (_stale.value || _link.value != LinkState.CONNECTED) {
+        // Turning the overnight tidy OFF only makes Jarvis ask less (no more
+        // nightly cards), so, like "Not now", it is not held on a stale link
+        // (2026-09-28; the desktop's brain_memory_sleep_time agrees). It
+        // still needs the PC to be reachable at all.
+        val offOnly = enabled == false && remind == null
+        if (!offOnly && (_stale.value || _link.value != LinkState.CONNECTED)) {
             val blocker = "Not connected to the desktop, so this decision cannot be delivered."
             _notice.value = blocker
             return ApiResult.Failed(ApiError.Unreachable(blocker))
         }
         val result = api.setSleepTime(enabled, remind)
         when (result) {
-            is ApiResult.Ok -> refreshBrain()
+            is ApiResult.Ok -> {
+                // What turning the overnight tidy on says (2026-09-28): it
+                // only asks, with review cards - the desktop's toast.
+                if (enabled == true) _notice.value = com.jarvis.client.net.MemoryWords.OVERNIGHT_ON_SAID
+                refreshBrain()
+            }
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
         return result

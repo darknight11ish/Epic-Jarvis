@@ -79,6 +79,21 @@ number as the last part - `0.2.57` is a build of 0.2.
   the PC only, with a card and Windows Hello. Not yet covered: the ntfy push
   notice, which lives in your own `jarvis_gate.py`.
 
+**New: smarter memory**
+
+- **"Where did I put ...?"** Tell Jarvis "the passport is in the top
+  drawer", then ask "where's my passport?" - it answers at once, without the
+  AI model, and says when you told it. A newer place replaces the older one.
+  ("Where's my phone?" still rings your phone.)
+- **Facts keep "until" dates from your words** ("on holiday until 12
+  October") and are never hidden by themselves when the date passes: Jarvis
+  asks "Still true?" instead.
+- **Overnight memory tidying now actually runs, cards only:** at most five
+  "Still true?" or "Which is true now?" cards a night, using the AI on this
+  PC only, and only while its switch is on. It never changes a fact by itself.
+- **Deleting a chat offers to forget the facts it taught you**, with nothing
+  ticked to start, and "are you sure?" before anything is forgotten.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

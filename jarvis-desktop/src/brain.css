@@ -1523,6 +1523,30 @@ body {
   background: var(--surface-sunken);
 }
 
+/* Deleting a chat offers to forget the facts it taught (JARVIS-API.md
+   section 79): the list under the row, a tick box each, none ticked. */
+.history-delete-facts {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+}
+.history-delete-list {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+}
+.history-delete-fact {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 3px 0;
+  cursor: pointer;
+}
+.history-delete-fact input {
+  margin-top: 3px;
+}
+
 .history-taint-note {
   margin: 0 0 8px;
   font-size: var(--text-xs);

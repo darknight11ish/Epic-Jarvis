@@ -1083,6 +1083,47 @@ added, each measured by the self-test before it was kept:
   `~/.openjarvis/models`, or `FASTEMBED_CACHE_PATH`), not the temp folder a
   disk clean-up empties.
 
+**Smarter memory dates, "Where did I put ...?" and the overnight tidy**
+(the owner's choice of 2026-09-28, docs/RESEARCH-AUDIT-2026-09-28.md
+sections 3 and 8.5; docs/JARVIS-API.md sections 77-79; backend/README.md
+"Smarter memory dates"). Each measured by the memory self-test before it
+was kept (docs/MEMORY-SCOREBOARD.md):
+
+- **"True until" is a label, never a hide.** `add()` reads an end date from
+  the owner's words ("until 12 October", "the lease ends in December") into
+  `meta.true_until`, with fixed rules like `true_from`. `valid_to` is NOT
+  set from the words: a fact is never hidden on its own, before or after
+  the date. Recall shows "(until 12 Oct)" while the date is ahead; once it
+  has passed, the overnight tidy asks "Still true?" and only the owner's
+  yes ends the fact - on that date.
+- **A thing that moved is not a correction card.** A fact that says where
+  a thing is (`jarvis_places.place_of`, fixed rules) and names a thing
+  Jarvis already keeps a place for, somewhere else, is saved without the
+  correction card when every OTHER automatic-learning check passes (a
+  sensitive hiding place still waits); the older place is then ended as
+  history, replaced by the new one - older news, by the owner's own dates,
+  is filed as history instead. "Where is my passport?" is answered by the
+  fast path from the places in use, without the model, and says it used
+  memory (`injected_ids`), so the usual on-screen rules apply. This is the
+  one place automatic learning retires a fact; it is limited to the same
+  thing's place, and the retired place stays in the history.
+- **The overnight tidy raises cards and nothing else** (`jarvis_tidy.py`).
+  It is off unless the owner's "Overnight memory tidying" switch is on; one
+  job on the one scheduler, at most once a day, paced by the back-off, at
+  most five cards a night. "Still true?" (an end date that passed) and
+  "Which is true now?" (two facts that may clash, found with the learner's
+  LOCAL model, which is given numbered facts and returns only numbers - the
+  Graphiti `resolve_edge` pattern). Every card is the ordinary "stop using
+  this fact?" card, one fact each. Accepting one ENDS the fact as history
+  (on its said date, or replaced by the newer fact), not a Forget - the one
+  place `retire()` reads which card is being accepted (`_tidy_ending`: the
+  `tidy_cards` row of the proposal in state `accepting`). A Forget from a
+  list stays a Forget.
+- **"Facts this chat taught"** (`GET /api/memory/conversation-facts`): a
+  read of the facts in use whose meta names that conversation, for
+  History's Delete to offer forgetting them - none ticked, then the usual
+  "are you sure?", then the ordinary Forget, one fact per call.
+
 **Never compress facts or transcripts** with a keep/drop token dropper
 (LLMLingua and relatives). They are negation-blind, and this store is
 bi-temporal precisely because negation matters. Retrieve less; do not compress
@@ -1180,7 +1221,9 @@ reads from on its own. Three things about it are invariants:
   switch and its encryption.
 - **Turning it back on is a card; off is immediate. No delete-all.**
   One conversation per delete, and both apps hold deleting and shortening
-  the keep period on a stale link.
+  the keep period on a stale link. Since 2026-09-28 deleting one offers to
+  forget the facts it taught (docs/JARVIS-API.md §79): none ticked, each
+  ticked fact forgotten through the ordinary Forget, one per call.
 - **A temporary chat is never kept** (2026-09-25): nothing of it reaches
   `chat-history.db`, whether history is on or off (§5, "A temporary chat
   uses and makes no memory").
@@ -1976,12 +2019,13 @@ they landed):
   refused with the reason, and so is a vault where the Periodic Notes plugin
   may be naming the daily note. Nothing guesses a file name.
 
-- **Overnight memory tidying.** `jarvis_sleep.py` only offers it, at most
-  once a day and under the back-off (a "not now" is quiet for 1, then 7,
-  then 30 days), and the card says it is not built; switching it on records the wish
-  and runs nothing. If it is ever built it may only raise review cards: no
-  stored fact is retired or changed without the owner's yes on that one
-  fact.
+- **Overnight memory tidying beyond two kinds of card.** Built on
+  2026-09-28 (`jarvis_tidy.py`, section 5): "Still true?" and "Which is true
+  now?" review cards only, off unless switched on. There is still no
+  merging of repeats, no rewording and no summarising, and no fact is
+  retired or changed without the owner's yes on that one fact. What the
+  real local model gets right in "Which is true now?" is not measured yet
+  (it needs the PC run).
 - **A wake word measured on real speech.** "Hey Jarvis" is built (openWakeWord's
   model, on the phone and through the PC; turning it on is an approval card),
   but it has only been tested on synthesised voices: 44/44 heard, and the

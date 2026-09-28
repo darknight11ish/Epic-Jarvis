@@ -834,6 +834,7 @@ pub fn run() {
             brain::history::brain_history_open,
             brain::history::brain_history_search,
             brain::fact_history::brain_fact_history,
+            brain::conversation_facts::brain_conversation_facts,
             brain::history::brain_history_delete,
             brain::history::brain_history_settings,
             brain::brain_model,

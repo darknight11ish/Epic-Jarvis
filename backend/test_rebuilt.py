@@ -1394,7 +1394,10 @@ class Small(unittest.TestCase):
     def test_the_two_shells_say_they_are_shells(self):
         """Neither was reconstructible. Reporting them as working would be
         the worst outcome: a Jarvis that looks proactive and is not."""
-        self.assertFalse(SL.status()["implemented"])
+        # The overnight tidy is built since 2026-09-28 - cards only
+        # (jarvis_tidy.py) - and says so; the initiative engine is not.
+        self.assertTrue(SL.status()["implemented"])
+        self.assertIn("cards only", SL.status()["note"])
         e = IN.build_from_config()
         self.assertEqual(e.status()["checks"], 0)
         self.assertIn("not recoverable", e.status()["note"])

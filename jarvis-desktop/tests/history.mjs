@@ -29,6 +29,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   addPage,
+  chatFactsHiddenLine,
+  chatFactsIntro,
+  deleteAndForgetQuestion,
+  deleteChatButton,
+  deleteDoneWords,
+  readChatFacts,
   DELETE_KEEPS_FACTS,
   deleteQuestion,
   deviceTag,
@@ -658,6 +664,153 @@ await check("dates say the weekday; an answer not kept and a delete say so, in t
   for (const w of [NOT_KEPT_LINE, DELETE_KEEPS_FACTS]) {
     assert.ok(kt.includes(JSON.stringify(w).slice(1, -1).replace(/\\'/g, "'")), `the phone says: ${w}`);
   }
+  // Deleting a chat offers to forget its facts (section 79): the same words
+  // - every fixed piece of them, since the numbers change.
+  for (const w of [
+    " fact from this chat. It is kept unless you tick it - a ticked fact is forgotten, like Forget in the Brain.",
+    " facts from this chat. They are kept unless you tick them - each ticked fact is forgotten, like Forget in the Brain.",
+    "Your memory lists are hidden, so they are kept. To forget any, show the memory lists first.",
+    "Delete the chat and forget ",
+    "The facts it taught are kept.",
+    "could not be forgotten - try Forget on ",
+  ]) {
+    assert.ok(chatFactsIntro(1).includes(w) || chatFactsIntro(2).includes(w)
+      || chatFactsHiddenLine(2).includes(w) || deleteChatButton(2).includes(w)
+      || deleteAndForgetQuestion({ title: "t" }, []).includes(w)
+      || deleteDoneWords({ failed: 2 }).includes(w), `the desktop does not say: ${w}`);
+    assert.ok(kt.includes(w), `the phone does not say: ${w}`);
+  }
+});
+
+/* ── Deleting a chat offers to forget the facts it taught (section 79) ─── */
+
+await check("the words: none ticked, how many, what is forgotten, what happened", async () => {
+  assert.match(chatFactsIntro(1), /^Jarvis learned 1 fact from this chat\. It is kept unless you tick it/);
+  assert.match(chatFactsIntro(2), /^Jarvis learned 2 facts from this chat\. They are kept unless you tick them/);
+  assert.equal(deleteChatButton(0), "Delete the chat");
+  assert.equal(deleteChatButton(1), "Delete the chat and forget 1 fact");
+  assert.equal(deleteChatButton(3), "Delete the chat and forget 3 facts");
+  const q = deleteAndForgetQuestion({ title: "Dentist" }, [{ id: 4, text: "Owner likes tea" }]);
+  assert.match(q, /^Delete this conversation and forget 1 fact\?/);
+  assert.match(q, /- Owner likes tea/);
+  assert.match(q, /cannot be brought back/);
+  assert.match(deleteAndForgetQuestion({ title: "D" }, []), /The facts it taught are kept\./);
+  assert.equal(deleteDoneWords({}), "Deleted from this PC.");
+  assert.equal(deleteDoneWords({ forgot: 2 }), "Deleted from this PC. Forgot 2 facts.");
+  assert.match(deleteDoneWords({ gone: true, forgot: 1, failed: 1 }),
+    /^That conversation was already deleted\. Forgot 1 fact\. 1 fact could not be forgotten/);
+  assert.match(chatFactsHiddenLine(2), /hidden, so they are kept/);
+  const r = readChatFacts({ facts: [{ id: 3, text: " Owner likes tea " }, { id: 0, text: "x" },
+    { id: 5, text: "" }, { id: "6", text: "y" }] });
+  assert.deepEqual(r.facts, [{ id: 3, text: "Owner likes tea" }]);
+  assert.equal(readChatFacts({ facts: [], hidden: true, hidden_count: 2 }).hiddenCount, 2);
+  assert.equal(readChatFacts({ available: false, why: "old" }).available, false);
+  assert.deepEqual(readChatFacts(null).facts, []);
+});
+
+const TAUGHT = { "conv-0000": [
+  { id: 41, text: "Owner's passport is in the top drawer", created: NOW - 600, source: "auto" },
+  { id: 42, text: "Owner likes green tea", created: NOW - 500, source: "auto" }] };
+
+await check("delete lists the facts the chat taught, NONE ticked, and forgets only the ticked one", async () => {
+  const page = await historyTab({ conversations: many(2), chatFacts: TAUGHT });
+  await page.locator("#history-list .row-item").first().getByRole("button", { name: "Delete" }).click();
+  await page.waitForTimeout(250);
+  const panel = await page.locator("#history-delete-facts").innerText();
+  const ticked = await page.locator("#history-delete-facts input[type=checkbox]:checked").count();
+  const boxes = await page.locator("#history-delete-facts input[type=checkbox]").count();
+  const before = await page.evaluate(() => window.__history.deleted);
+  await page.locator("#history-delete-facts input[data-fact-id='42']").check();
+  const label = await page.locator("#history-delete-go").innerText();
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await page.locator("#history-delete-go").click();
+  await page.waitForTimeout(400);
+  const deleted = await page.evaluate(() => window.__history.deleted);
+  const writes = await page.evaluate(() => window.__memoryWrites.filter((w) => w.cmd === "brain_memory_forget"));
+  const toast = await page.locator("#toast").innerText();
+  const gone = await page.locator("#history-delete-facts").count();
+  const errors = page.__errors;
+  await page.close();
+  assert.match(panel, /Jarvis learned 2 facts from this chat/);
+  assert.match(panel, /Owner's passport is in the top drawer/);
+  assert.equal(boxes, 2);
+  assert.equal(ticked, 0, "a fact was ticked before the owner ticked it");
+  assert.deepEqual(before, [], "the chat went before the owner answered");
+  assert.equal(label, "Delete the chat and forget 1 fact");
+  assert.match(asked, /forget 1 fact/);
+  assert.match(asked, /- Owner likes green tea/);
+  assert.doesNotMatch(asked, /passport/, "an unticked fact was named for forgetting");
+  assert.deepEqual(deleted, ["conv-0000"]);
+  assert.deepEqual(writes.map((w) => w.id), [42], "not exactly the one ticked fact was forgotten");
+  assert.match(toast, /Deleted from this PC\. Forgot 1 fact\./);
+  assert.equal(gone, 0);
+  assert.deepEqual(errors, []);
+});
+
+await check("nothing ticked: the chat goes, every fact stays; Cancel keeps both", async () => {
+  const page = await historyTab({ conversations: many(2), chatFacts: TAUGHT });
+  const del = () => page.locator("#history-list .row-item").first().getByRole("button", { name: "Delete" }).click();
+  await del();
+  await page.waitForTimeout(250);
+  await page.locator("#history-delete-facts").getByRole("button", { name: "Cancel" }).click();
+  await page.waitForTimeout(150);
+  const afterCancel = await page.evaluate(() => window.__history.deleted);
+  await del();
+  await page.waitForTimeout(250);
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await page.locator("#history-delete-go").click();
+  await page.waitForTimeout(400);
+  const deleted = await page.evaluate(() => window.__history.deleted);
+  const writes = await page.evaluate(() => window.__memoryWrites.filter((w) => w.cmd === "brain_memory_forget"));
+  await page.close();
+  assert.deepEqual(afterCancel, [], "Cancel deleted the chat");
+  assert.match(asked, /The facts it taught are kept/);
+  assert.deepEqual(deleted, ["conv-0000"]);
+  assert.deepEqual(writes, [], "a fact was forgotten with nothing ticked");
+});
+
+await check("hidden memory lists: no fact is shown, and the confirm says they are kept", async () => {
+  const page = await historyTab({ conversations: many(1), chatFacts: TAUGHT, chatFactsHidden: true });
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await page.locator("#history-list .row-item").first().getByRole("button", { name: "Delete" }).click();
+  await page.waitForTimeout(400);
+  const panel = await page.locator("#history-delete-facts").count();
+  const writes = await page.evaluate(() => window.__memoryWrites.filter((w) => w.cmd === "brain_memory_forget"));
+  await page.close();
+  assert.equal(panel, 0);
+  assert.match(asked, /Jarvis learned 2 facts from this chat\. Your memory lists are hidden, so they are kept/);
+  assert.doesNotMatch(asked, /passport|green tea/);
+  assert.deepEqual(writes, []);
+});
+
+await check("an older PC: delete asks exactly as before", async () => {
+  const page = await historyTab({ conversations: many(1), chatFacts: TAUGHT, chatFactsMissing: true });
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await page.locator("#history-list .row-item").first().getByRole("button", { name: "Delete" }).click();
+  await page.waitForTimeout(400);
+  const deleted = await page.evaluate(() => window.__history.deleted);
+  await page.close();
+  assert.ok(asked.endsWith(DELETE_KEEPS_FACTS), asked);
+  assert.deepEqual(deleted, ["conv-0000"]);
+});
+
+await check("the read is a memory list: in the Brain's memory set, hidden in Rust, one Forget per fact", async () => {
+  const rust = read("src-tauri/src/brain/conversation_facts.rs");
+  assert.match(rust, /private_hidden\(&app\)/);
+  assert.match(rust, /redact_conversation_facts/);
+  const toml = read("src-tauri/permissions/surfaces.toml");
+  const memorySet = toml.slice(toml.indexOf('identifier = "brain-memory"'));
+  assert.ok(memorySet.slice(0, memorySet.indexOf("[[set]]", 10) > 0 ? memorySet.indexOf("[[set]]", 10) : undefined)
+    .includes('"allow-brain-conversation-facts"'), "not in the brain-memory set");
+  assert.match(read("src-tauri/build.rs"), /"brain_conversation_facts"/);
+  assert.match(read("src-tauri/src/lib.rs"), /brain::conversation_facts::brain_conversation_facts,/);
+  const js = read("src/brain.js");
+  const fin = js.slice(js.indexOf("async function finishDelete("));
+  assert.match(fin.slice(0, 1500), /for \(const id of factIds\)[\s\S]*invoke\("brain_memory_forget", \{ id \}\)/);
 });
 
 await check("the keep choice sends one keep_days and says how many went", async () => {

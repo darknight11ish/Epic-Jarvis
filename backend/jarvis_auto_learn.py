@@ -59,7 +59,14 @@ THE CHECKS (each a small function below, returning a reason in words or "")
   Grounded    every content word and number in the fact is in the owner's
               own turns (L5).
   Correction  a proposal that would replace a stored fact is always a card
-              (L6).
+              (L6) - with ONE exception, the owner's choice of 2026-09-28
+              ("Where did I put ...?", jarvis_places.py): a place for a
+              thing Jarvis already keeps a place for, somewhere else, is not
+              a correction card when every other check here passes; once it
+              is saved, the older place is ended as history (never a
+              Forget), and older news by the owner's own dates never
+              replaces newer. A person, a pet, an event, a date or where
+              the owner lives is never such a place.
   Sensitive   jarvis_sensitive.py on the fact and on the turns it came from:
               word lists in eight languages, number and token shapes, the
               other-person rule, then the learner's own local model. Unless
@@ -1729,6 +1736,7 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
             rows = _rows(c, pids)
             decisions = {}
             topics = {}
+            moves = {}
             for pid in pids:
                 row = rows.get(pid)
                 if row is None or row.get("state") != "pending":
@@ -1746,7 +1754,18 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                     _drop(c, pid, gone)
                     result.setdefault("dropped", []).append(pid)
                     continue
-                why = why or check_not_correction(row) or check_instruction(fact)
+                # "Where did I put ...?" (jarvis_places.py, 2026-09-28): a
+                # thing that only MOVED ("the passport is in the desk now",
+                # when Jarvis keeps "in the top drawer") is not a correction
+                # card - the owner chose that things move without asking.
+                # Every other check below still runs; only the correction
+                # check is skipped, and the older place is ended by
+                # apply_move() once this one is saved.
+                move = None if why else _moved_from(c, row, fact, st)
+                if move is not None:
+                    moves[pid] = move
+                why = why or ("" if move is not None else check_not_correction(row)) \
+                    or check_instruction(fact)
                 sens = ""
                 if not why:
                     why = check_sensitive(fact, src, allowed)
@@ -1758,7 +1777,7 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 why = why or check_grounded(fact, texts)
                 if not why and like_forgotten(fact, st):
                     why = FORGOTTEN_BEFORE          # layer 2: a card, never automatic
-                if not why:
+                if not why and pid not in moves:
                     # B5: a clash with a stored fact the model did not mark.
                     # The card then names that fact, as a correction would.
                     old = find_contradiction(fact, st)
@@ -1768,6 +1787,12 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                                   " WHERE id=? AND state='pending' AND replaces_id IS NULL",
                                   (int(old["id"]), str(old.get("text") or ""), pid))
                         c.commit()
+                if why and pid in moves:
+                    # A move that still waits for a yes (sensitive, not in
+                    # the owner's words ...): the card names the older
+                    # place, so accepting it replaces that one, as any
+                    # correction card does.
+                    _card_names(c, pid, moves.pop(pid))
                 decisions[pid] = why
                 topics[pid] = sens
                 if why and not off:
@@ -1788,9 +1813,15 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
             if fid is None:
                 result["cards"][pid] = "could not be saved automatically"
                 with closing(st._connect()) as c:
+                    if pid in moves:
+                        _card_names(c, pid, moves[pid])
                     _note_card(c, pid, result["cards"][pid])
             else:
                 result["saved"].append(fid)
+                if pid in moves:
+                    done = _apply_move(st, fid, moves[pid])
+                    if done:
+                        result.setdefault("moved", []).append({"id": fid, "how": done})
         if result["saved"]:
             publish(result["saved"])
             _entity_model_pass(result["saved"], ollama, model)
@@ -1805,6 +1836,57 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
         except Exception:
             pass
     return result
+
+
+def _moved_from(c, row: dict, fact: str, store) -> Optional[dict]:
+    """The place fact in use that this proposal only MOVES (jarvis_places:
+    the same thing, somewhere else), or None. When the learner's model
+    marked the proposal as replacing a fact, that fact must be the older
+    place itself - a proposal aimed at anything else stays a correction.
+    The proposal's own "replaces" marks are taken off (so accept_auto can
+    save it: it never saves a correction), and put back by _card_names if
+    it ends up a card after all. Never raises."""
+    try:
+        import jarvis_places
+        old = jarvis_places.older_place(store, fact)
+        if old is None:
+            return None
+        rid = row.get("replaces_id")
+        if rid and int(rid) != int(old["id"]):
+            return None
+        if row.get("replaces") and not rid and not jarvis_places.moved(fact, row["replaces"]):
+            return None
+        c.execute("UPDATE proposals SET replaces=NULL, replaces_id=NULL, replaces_text=NULL"
+                  " WHERE id=? AND state='pending'", (int(row["id"]),))
+        return {"id": int(old["id"]), "text": str(old.get("text") or "")}
+    except Exception:
+        return None
+
+
+def _card_names(c, pid: int, old: dict) -> None:
+    """A move that stays a card names the older place it would replace."""
+    try:
+        c.execute("UPDATE proposals SET replaces_id=?, replaces_text=? WHERE id=?"
+                  " AND state='pending' AND replaces_id IS NULL",
+                  (int(old["id"]), str(old.get("text") or ""), int(pid)))
+    except Exception:
+        pass
+
+
+def _apply_move(store, new_id: int, old: dict) -> str:
+    """End the older place once the new one is saved. The older place is
+    looked up AGAIN, now: two places for one thing in the same pass ("in the
+    drawer", then "in the desk") must each replace the one before, not both
+    the place that was stored when the pass began."""
+    try:
+        import jarvis_places
+        new = store.get(int(new_id))
+        prev = jarvis_places.older_place(store, str((new or {}).get("text") or ""),
+                                         exclude=(int(new_id),)) if new else None
+        target = int(prev["id"]) if prev is not None else int(old["id"])
+        return jarvis_places.apply_move(store, int(new_id), target)
+    except Exception:
+        return ""
 
 
 def _entity_model_pass(ids: list, ollama, model) -> None:

@@ -1737,6 +1737,27 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               conversations: found.slice(0, 20), more: found.length > 20, partial: false,
               searched: all.length }));
           }
+          case "brain_conversation_facts": {
+            // "Facts this chat taught" (JARVIS-API.md section 79): the facts
+            // in use one conversation taught, by its id. `chatFacts` maps a
+            // conversation id to its facts; `chatFactsHidden` answers as Rust
+            // does while the memory lists are hidden; `chatFactsMissing` as
+            // an older PC.
+            const h = window.__history;
+            h.factReads = h.factReads || [];
+            h.factReads.push(args.conversationId);
+            if (h.chatFactsMissing) {
+              return { available: false,
+                       why: "This PC's Jarvis cannot list the facts a chat taught yet - run apply-patches.ps1 on the PC to update it." };
+            }
+            const facts = ((h.chatFacts || {})[args.conversationId] || []);
+            if (h.chatFactsHidden) {
+              return { conversation_id: args.conversationId, facts: [], count: facts.length,
+                       hidden: true, hidden_count: facts.length };
+            }
+            return JSON.parse(JSON.stringify({ conversation_id: args.conversationId, facts,
+                                               count: facts.length, more: false }));
+          }
           case "brain_history_delete": {
             const h = window.__history;
             h.deleted.push(args.id);

@@ -1433,6 +1433,10 @@ whichever asks first on a given day still gets the card and the other does
 not, until tomorrow - the same once-a-day contract `jarvis_sleep.py` always
 had. The line lives in this patch; `feedback.patch` quotes it as context.
 
+**Updated 2026-09-28:** the pass is now built, as review cards only
+(`jarvis_tidy.py`, "Smarter memory dates" at the end of this file), and the
+card's words say what it does. The paragraph below is the history.
+
 **What the card says is now true.** The pass it offers is not built
 (`jarvis_sleep.status()` says `"implemented": false`), and the card used to
 say it would "merge duplicates and retire facts that newer ones replaced" -
@@ -4252,6 +4256,7 @@ produces a value into the real thing that reads it:
   `/api/memory/pending` no longer uses it up (only `?sleep_offer=1` does,
   which the Brain window and the phone send), and the card's words say the
   feature is not built and nothing is retired without a yes on that fact.
+  (Since 2026-09-28 it is built, cards only - "Smarter memory dates".)
 - **Field names**: the real `MemoryStore.status()`, fact rows and
   `jarvis_intake.annotate()` rows against every field `brain.js` and the
   phone's `Learning.kt` read - and against the desktop UI tests' own
@@ -14343,3 +14348,112 @@ a list.
   tables, never payload.
 - "Ring my phone" cannot pick one phone, and nothing reports which phone
   rang: every paired phone shares one key until "more devices" is built.
+
+# Smarter memory dates: `jarvis_places.py`, `jarvis_tidy.py` (2026-09-28)
+
+The owner chose all three of these on 2026-09-28, from
+`docs/RESEARCH-AUDIT-2026-09-28.md` (section 3 ideas 4 and 9, section 8.5
+ideas 4 and 5). The contract is `docs/JARVIS-API.md` §77 ("Where did I put
+...?"), §78 (smarter memory dates and the overnight tidy) and §79 (deleting
+a chat offers to forget the facts it taught). No new patch: two new shipped
+modules, and changes to modules already shipped whole.
+
+## In plain words
+
+- **"Where did I put ...?"** Tell Jarvis "I put the spare key under the blue
+  pot" and it keeps that like any fact. Ask "where did I put the spare
+  key?" and it answers at once, without the AI model: "You said on Tuesday:
+  under the blue pot." Move something and say so, and the new place replaces
+  the old one - no card each time - and the old one stays in the history.
+- **"True until".** "I'm on holiday in Lisbon until 12 October" now keeps
+  the end date. Jarvis never hides the fact by itself when the date passes;
+  it asks you.
+- **The overnight tidy, cards only.** It was an offer card that ran nothing.
+  Switch it on and, once a day, Jarvis may ask "Still true?" about a fact
+  whose end date passed, and "Which is true now?" about two facts that may
+  not both be true (the AI model on this PC finds those). At most five cards
+  a night. Nothing changes unless you say yes on a card. Turning it off is
+  one tap in either app.
+- **Deleting a chat offers to forget what it taught.** The facts are listed
+  with a tick box each, none ticked; you tick the ones to forget.
+
+## The rules it keeps (each has a test)
+
+- **Ordinary memory.** A place is learned only from your own words, by
+  every check automatic learning already makes. A hiding place for a key is
+  a sensitive topic and still waits for your yes (`test_places.py`, learner
+  case w05).
+- **A move is the one place automatic learning retires a fact** - only the
+  same thing's older place, only when every other check passed, and as
+  history (`retired_by` the new place), never a Forget. Older news, by your
+  own dates, never replaces newer (learner case w06, `test_places.py`).
+- **Never hidden on its own.** "True until" is a label; `valid_to` is not
+  set from the words (`test_tidy.py`, learner cases u01-u12).
+- **The tidy never changes a fact.** Every fact's row is byte-for-byte the
+  same after a night (`test_tidy.py`). Its cards are the ordinary "stop
+  using this fact?" cards both apps already show. Accepting one ends the
+  fact as history (on its said date, or replaced by the newer fact); keeping
+  it changes nothing, and the question is never asked again.
+- **Off unless switched on**, once a day, paced by the back-off (not while
+  you chat, not in Quiet or Standby), at most five cards a night and never
+  more than five waiting. **On this PC's model only**; without one, only
+  "Still true?" runs and nothing is sent.
+- **A chat's facts is a read.** It forgets nothing; each ticked fact is the
+  ordinary Forget, one per call. Hidden like every memory list.
+
+## What changed
+
+- `jarvis_places.py` - new, shipped whole: reading a place, the question
+  grammar, `lookup`, `apply_move`, the answer's words.
+- `jarvis_tidy.py` - new, shipped whole: a kind of job on the one
+  scheduler (`KIND_MODULES`), `ensure_job` (the switch), `run_night`,
+  `find_conflicts` (the Graphiti `resolve_edge` pattern, Apache-2.0: the
+  pattern only, the prompt written here), the cards and their ledger.
+- `rebuilt/jarvis_memory.py` - `true_until()`, `until_words()`; `add()` and
+  `edit()` keep the label; `true_from()` ignores an end date and now also
+  reads "put / placed / stored / stashed / hid / parked" as a change; the
+  `tidy_cards` table; `retire()` ends a fact as history when a tidy card is
+  being accepted (`_tidy_ending`); `_erase_copies` wipes a newer fact's
+  words out of a card that quoted them; `conversation_facts_view()` and
+  `handle_conversation_facts_get()`; the recall-label stripper knows
+  "(until ...)".
+- `jarvis_past.py` - chat recall shows "(until 12 Oct)" while the date is
+  ahead (`label_until`).
+- `jarvis_quick.py` - the "where is my ...?" question, answered from
+  `jarvis_places`, with the memory fields in `X-Jarvis-Route`.
+- `jarvis_auto_learn.py` - a thing that moved skips only the correction
+  check; the older place is ended after the save.
+- `jarvis_schedule.py` - `jarvis_tidy` in `KIND_MODULES`, `jobs_of()`, and
+  `after_start()` (so a kind can keep its one job in step with a setting).
+- `rebuilt/jarvis_sleep.py` - the offer card's words say what now runs;
+  `set_enabled()` adds or removes the tidy's job; `status()["implemented"]`
+  is true.
+- `jarvis_backoff.py` - two declared offers: the switch now
+  `start_a_card_only_check`, and the tidy's cards `review_a_fact`.
+- `jarvis_brain_reads.py` - a third route, `/api/memory/conversation-facts`
+  (`brain-reads.patch` already installs the module, so no patch changed).
+- `eval_learner.py`, `eval_tidy.py` (new), `eval_memory.py` and
+  `eval/learner_cases.jsonl`, `eval/where_cases.jsonl`,
+  `eval/conflict_cases.jsonl` - the new measurements.
+- `scripts/apply-patches.ps1`, `backend/_where.py` - the two modules listed.
+
+## Test it
+
+    python3 backend/test_places.py
+    python3 backend/test_tidy.py
+    python3 backend/test_brain_reads.py
+    python3 backend/eval_memory.py --sizes 0,100
+
+## Not checked, said plainly
+
+- **The real model.** How the owner's learner model words a place, and how
+  often the real local model is right about "Which is true now?", are
+  measured only by the PC run with `--learner-model`
+  (docs/MEMORY-SCOREBOARD.md). The stand-in in the self-test is always
+  right, so its precision measures the finder, not the model.
+- **English only**, like "true from": other languages simply get no end
+  date and no place.
+- **Not run on the owner's PC.** The tidy's hourly look, the scheduler job
+  and the back-off were driven by tests with their own clocks, not left
+  running overnight on Windows.
+- The phone half is not compiled here; CI compiles it.

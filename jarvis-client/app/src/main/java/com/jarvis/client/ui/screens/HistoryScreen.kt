@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -567,6 +568,17 @@ private fun Conversation(
     var confirm by remember(id) { mutableStateOf(false) }
     var busy by remember(id) { mutableStateOf(false) }
     var said by remember(id) { mutableStateOf<String?>(null) }
+    // Deleting a chat offers to forget the facts it taught (docs/JARVIS-API.md
+    // section 79): read when Delete is pressed; NONE ticked to start with.
+    var taught by remember(id) { mutableStateOf<ChatLog.Taught?>(null) }
+    var ticked by remember(id) { mutableStateOf(setOf<Long>()) }
+    LaunchedEffect(id, confirm) {
+        if (confirm) {
+            taught = null
+            ticked = emptySet()
+            taught = JarvisRuntime.chatFacts(id)
+        }
+    }
     var find by remember(id) { mutableStateOf(initialFind) }
     var current by remember(id) { mutableIntStateOf(0) }
     val matches = remember(loaded, find) {
@@ -611,20 +623,81 @@ private fun Conversation(
                 }
                 Gap(6)
                 if (confirm) {
-                    Text(ChatLog.DELETE_CONFIRM, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Quiet("Yes, delete it", color = chrome.badInk, enabled = !busy, onClick = {
-                            confirm = false
-                            busy = true
-                            scope.launch {
-                                try {
-                                    val (gone, sentence) = JarvisRuntime.deleteHistory(id)
-                                    if (gone) onDeleted(id, sentence) else said = sentence
-                                } finally {
-                                    busy = false
+                    val t = taught
+                    val facts = t?.facts.orEmpty()
+                    when {
+                        t == null -> Text(
+                            "Checking which facts this chat taught…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid,
+                        )
+                        facts.isEmpty() -> Text(
+                            if ((t?.hiddenCount ?: 0) > 0) {
+                                "Delete this conversation from your PC? This cannot be undone. " +
+                                    ChatLog.chatFactsHiddenLine(t?.hiddenCount ?: 0)
+                            } else {
+                                ChatLog.DELETE_CONFIRM
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.warnInk,
+                        )
+                        else -> {
+                            Text(
+                                ChatLog.chatFactsIntro(facts.size),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid,
+                            )
+                            facts.forEach { fact ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = fact.id in ticked,
+                                        enabled = !busy,
+                                        onCheckedChange = { on ->
+                                            ticked = if (on) ticked + fact.id else ticked - fact.id
+                                        },
+                                    )
+                                    Text(fact.text, style = MaterialTheme.typography.bodySmall,
+                                        color = chrome.textHi)
                                 }
                             }
-                        })
+                            Text(
+                                ChatLog.deleteAndForgetConfirm(ticked.size),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.warnInk,
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Quiet(
+                            if (facts.isEmpty()) "Yes, delete it" else ChatLog.deleteChatButton(ticked.size),
+                            color = chrome.badInk,
+                            enabled = !busy && t != null,
+                            onClick = {
+                                // Read at the tap: exactly the facts ticked now.
+                                val forget = facts.filter { it.id in ticked }.map { it.id }
+                                confirm = false
+                                busy = true
+                                scope.launch {
+                                    try {
+                                        val (gone, sentence) = JarvisRuntime.deleteHistory(id)
+                                        if (gone) {
+                                            // One Forget per ticked fact - never a list form.
+                                            var forgot = 0
+                                            var failed = 0
+                                            for (factId in forget) {
+                                                val (ok, _) = JarvisRuntime.forgetAutoFact(factId)
+                                                if (ok) forgot += 1 else failed += 1
+                                            }
+                                            onDeleted(id, ChatLog.deleteDoneWords(sentence, forgot, failed))
+                                        } else {
+                                            said = sentence
+                                        }
+                                    } finally {
+                                        busy = false
+                                    }
+                                }
+                            },
+                        )
                         Quiet("Keep it", onClick = { confirm = false })
                     }
                 } else {
