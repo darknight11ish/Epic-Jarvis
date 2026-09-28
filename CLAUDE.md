@@ -721,6 +721,17 @@ testers, scouts and integration scouts; `.claude/agents/`):
   approval card, the stricter one is immediate. **The desktop Brain's
   existing "Live" tab is renamed "Now"** so it is not confused with
   Jarvis Live.
+- **"Forget a time frame"** (owner, 2026-09-28): the owner may ask, by
+  voice or typing, to forget what Jarvis learned or said in a time frame
+  ("forget what you learned last week", "delete my chats from 1 to 15
+  September"). Nothing is removed at once: both apps show the exact facts
+  and chats from that time, each ticked, the owner can untick any, and ONE
+  approval card listing every item is decided by tapping only - never by
+  voice. Approved, the facts are **forgotten (retired, as Forget does) and
+  the chats deleted, with 10 minutes to Undo**; erasing a fact's words for
+  good stays the separate per-fact "Erase the words". This is the one
+  exception to "irreversible bulk actions stay off the API" (JARVIS-API
+  §18), made safe by the list, the card and the Undo window.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
