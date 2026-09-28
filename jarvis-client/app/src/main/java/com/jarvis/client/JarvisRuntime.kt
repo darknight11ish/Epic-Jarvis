@@ -27,6 +27,7 @@ import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.Hardware
+import com.jarvis.client.net.PcHelp
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
@@ -1491,6 +1492,15 @@ object JarvisRuntime {
         refreshDeep()
         return BigModel.replyLine(result)
     }
+
+    // --------------------------------------------------------- PC help ----
+
+    /**
+     * Reads `/api/pc/help` once ([PcHelp]). Nothing is kept here: the answer
+     * can name programs on the PC, so the screen that asked holds it and
+     * drops it when it closes. A read, so not held on a stale link.
+     */
+    suspend fun pcHelp(): PcHelp.Read = PcHelp.readOf(api.pcHelp())
 
     // --------------------------------------------------------- hardware ----
 

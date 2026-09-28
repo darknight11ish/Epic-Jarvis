@@ -799,7 +799,7 @@ $SHIPPED = @(
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
     # --- the Brain upgrades (2026-09-28, brain-reads.patch) ---
-    'jarvis_brain_reads.py'      # brain-reads.patch: GET /api/history/search, /api/memory/fact-history and /api/memory/conversation-facts, reads for the apps only
+    'jarvis_brain_reads.py'      # brain-reads.patch: GET /api/history/search, /api/memory/fact-history, /api/memory/conversation-facts and /api/pc/help, reads for the apps only
     # --- "remind me next time I talk about X" and "ring my phone" (2026-09-28) ---
     'jarvis_next_time.py'        # a reminder with no time of its own, brought up beside the question; a kind on jarvis_schedule.py, no patch
     'jarvis_find_phone.py'       # "ring my phone": ONE ring_phone event the phone rings for, no card, no patch
@@ -811,6 +811,8 @@ $SHIPPED = @(
     # --- Today cards (2026-09-28) ---
     'jarvis_today.py'            # the owner's own words on the Today part of both apps, at a time on chosen days; a kind on jarvis_schedule.py, no card, no patch
     'jarvis_photo_remind.py'     # "Photo to reminder": the dates in a picture, read on this PC and PROPOSED, never set by itself (photo-reminder.patch)
+    # --- "PC help" (2026-09-28, no patch of its own) ---
+    'jarvis_pc_help.py'          # "why is my PC slow?", "how full is my disk?" and three more, read-only, no model; GET /api/pc/help through jarvis_brain_reads.py
 )
 
 # The settings file. Installed only where none exists; never overwritten.

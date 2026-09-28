@@ -14802,3 +14802,68 @@ What changed:
 - **"5/10" is May 10** (month first). A flyer written day first comes out
   wrong in the date box - check it before adding.
 - The phone half is not compiled here; CI compiles it.
+
+# PC help: `jarvis_pc_help.py` (2026-09-28)
+
+## In plain words
+
+Ask Jarvis about your PC and get a plain answer: **"why is my PC slow?"**,
+**"how full is my disk?"**, **"what's using my graphics card?"**, **"how hot
+is my graphics card?"** and **"when did my PC last restart?"**. Jarvis answers
+at once, without the AI model (a slow PC is the worst time to wait for it,
+and the model is often what is using the card). The same five answers are
+in the desktop app (Settings -> Hardware and models -> PC help, "Check now")
+and on the phone (Brain -> PC help, under Hardware). You chose this on
+2026-09-28 (the research audit's idea 12). `docs/JARVIS-API.md` section 84
+is the contract.
+
+**It only reads.** Nothing is changed, closed or deleted, so there is no
+approval card. Changing Windows settings from Jarvis (Night light, dark
+mode, Do not disturb) is **not built**: nothing in Jarvis can change a
+Windows setting safely yet, so that is written down as a later step
+(`docs/ARCHITECTURE.md` section 10) instead of being added here.
+
+**Program names stay private.** They are never logged, printed or written
+to a file; the reading is kept in memory for 5 seconds at most. An answer
+that names programs stays on screen instead of being read aloud, and Jarvis
+never learns anything from it (a program chooses its own name, so it is
+treated like text from outside).
+
+## What changed
+
+- `jarvis_pc_help.py` (new, shipped whole, no patch): the readings and the
+  words. Programs come from ONE Windows PowerShell call reading Windows' own
+  performance counters; memory, drives and the last start from Windows
+  itself (kernel32); graphics cards from `nvidia-smi` and Ollama, the same
+  readings Hardware and models already uses. No new package.
+- `jarvis_quick.py`: the five questions, answered without the model.
+- `jarvis_brain_reads.py`: `GET /api/pc/help`, for the apps (no new patch -
+  it is one more Brain read).
+- `test_pc_help.py`, `tools/gen_pc_help_cases.py` (both apps' fixture).
+
+## Owner steps
+
+1. Run `apply-patches.ps1` as usual - it copies `jarvis_pc_help.py` in.
+   Restart Jarvis.
+2. Check it on the PC - this prints the five answers in the PowerShell
+   window only (change the folder if your backend is elsewhere):
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 -c "import jarvis_pc_help as p; [print(s['title'], '-', s['words']) for s in p.read()['sections']]"
+```
+
+3. Then ask Jarvis "why is my PC slow?" in either app.
+
+## Not checked, said plainly
+
+- **Nothing here has run on Windows yet.** The PowerShell reading, the
+  counters' names and the ctypes calls were written from Microsoft's
+  documentation and tested only with made-up readings. The PowerShell part
+  could not even be syntax-checked in this container (its PowerShell was
+  not available to this piece of work). If any part fails, its answer says
+  "Jarvis could not read this on your PC just now." - never a wrong number.
+  Step 2 above is the check.
+- The graphics-card memory per program needs Windows 10 1709 or later and
+  a driver that reports it; if yours does not, "Other programs using its
+  memory" is simply left out.
+- Only NVIDIA cards are read (as on the Hardware screen).

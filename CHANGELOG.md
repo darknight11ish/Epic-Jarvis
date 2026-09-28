@@ -138,6 +138,15 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **You can now say calendar dates:** "remind me on 12 October at 2pm to pay
   the deposit". A slashed date like 5/10 is read month first (May 10).
 
+**New: PC help**
+
+- **Ask "why is my PC slow?", "how full is my disk?", "what's using my graphics
+  card?", "how hot is my graphics card?" or "when did my PC last restart?"**
+  and get a plain answer at once, without the AI model. Also under Settings ->
+  Hardware and models on the PC and Brain -> PC help on the phone. It only
+  reads; program names never leave the PC and are not saved. Changing Windows
+  settings (Night light, dark mode) is not built yet.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

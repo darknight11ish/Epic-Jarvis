@@ -117,6 +117,12 @@ my phone", "where's my phone" - ONE event the phone rings for, on its alarm
 channel, even on silent. No card: it only rings the owner's own phone.
 "Stop ringing my phone" stops it from the PC.
 
+"PC HELP" (jarvis_pc_help.py, 2026-09-28): "why is my PC slow?", "how full
+is my disk?", "what's using my graphics card?", "how hot is my graphics
+card?", "when did my PC last restart?" - read on this PC, answered at once.
+Read-only: no card, nothing changes. An answer that names programs is
+private and marked as outside text (a program picks its own name).
+
 LOCKDOWN (jarvis_asks_first.py, 2026-09-28): "lockdown", "turn on lockdown",
 "lock everything down" - every way out of this PC asks first, or stops, at
 once. "Turn off lockdown" goes through the same path as the apps' button:
@@ -957,6 +963,11 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "PC help": why is my PC slow, how full is my disk ... (jarvis_pc_help.py) ---
+    got = _pc_help(s)
+    if got is not None:
+        return got
+
     # --- "remind me next time I talk about ..." (jarvis_next_time.py) ------------------
     got = _next_time(s)
     if got is not None:
@@ -1407,6 +1418,78 @@ def _next_time(s: str) -> Optional[Intent]:
     if m:
         return Intent("next_time_cancel", {"about": m.group("about").strip()})
     return None
+
+
+#: "PC help" (jarvis_pc_help.py, 2026-09-28): five read-only questions about
+#: this PC, answered without the model. Each must be the WHOLE sentence, so
+#: "why is my PC slow to boot after the update, and should I reinstall?"
+#: still goes to the model.
+_PC = r"(?:my|the|this)\s+(?:pc|computer|laptop|machine|desktop)"
+_GPU = r"(?:my|the)\s+(?:graphics\s+card|gpu|video\s+card)"
+_DRIVE = (r"(?:my|the)\s+(?:disks?|drives?|hard\s+drives?|hard\s+disks?|ssds?|storage|"
+          r"c\s+drive)")
+_PC_HELP = (
+    ("slow", re.compile(
+        r"why\s+is\s+" + _PC + r"\s+(?:so\s+|really\s+|being\s+|running\s+)?"
+        r"(?:so\s+)?(?:slow|sluggish|laggy|lagging)(?:\s+(?:today|right\s+now|now))?"
+        r"|" + _PC + r"\s+(?:is|feels|seems)\s+(?:so\s+|really\s+|very\s+)?(?:running\s+)?"
+        r"(?:slow|sluggish|laggy)(?:\s+(?:today|right\s+now|now))?"
+        r"|what(?:'?s|\s+is)\s+slowing\s+(?:down\s+)?" + _PC + r"(?:\s+down)?"
+        r"|what(?:'?s|\s+is)\s+(?:using|eating|hogging)\s+(?:all\s+)?(?:my|the)\s+"
+        r"(?:cpu|processor|memory|ram)"
+        r"|how\s+busy\s+is\s+(?:my|the)\s+(?:cpu|processor|pc|computer)")),
+    ("disk", re.compile(
+        r"how\s+full\s+(?:is|are)\s+" + _DRIVE +
+        r"|how\s+much\s+(?:free\s+)?(?:disk\s+|drive\s+|storage\s+)?space\s+"
+        r"(?:do\s+i\s+have|is\s+(?:there|left)|have\s+i\s+got)(?:\s+left)?"
+        r"(?:\s+on\s+(?:" + _PC + r"|" + _DRIVE + r"))?"
+        r"|is\s+" + _DRIVE + r"\s+(?:full|nearly\s+full|almost\s+full|running\s+out)"
+        r"|am\s+i\s+running\s+(?:out|low)\s+(?:of|on)\s+(?:disk\s+|drive\s+)?"
+        r"(?:space|storage)")),
+    ("heat", re.compile(
+        r"how\s+hot\s+is\s+" + _GPU + r"(?:\s+(?:running|getting|right\s+now|now))?"
+        r"|what(?:'?s|\s+is)\s+(?:the\s+temperature\s+of\s+" + _GPU + r"|" + _GPU
+        + r"(?:'s)?\s+temp(?:erature)?)"
+        r"|is\s+" + _GPU + r"\s+(?:too\s+|running\s+|getting\s+)?(?:hot|overheating|warm)")),
+    ("gpu", re.compile(
+        r"what(?:'?s|\s+is)\s+(?:using|on|running\s+on|eating|hogging)\s+" + _GPU
+        + r"(?:'s)?(?:\s+memory)?"
+        r"|how\s+(?:busy|full)\s+is\s+" + _GPU + r"(?:'s\s+memory)?"
+        r"|how\s+much\s+(?:of\s+)?(?:my\s+|the\s+)?(?:gpu\s+memory|vram|video\s+memory|"
+        r"graphics\s+card\s+memory)\s+is\s+(?:used|in\s+use|being\s+used|free)")),
+    ("restart", re.compile(
+        r"when\s+did\s+" + _PC + r"\s+(?:last\s+)?(?:restart|reboot|start(?:\s+up)?|"
+        r"boot(?:\s+up)?)(?:\s+last)?"
+        r"|when\s+was\s+" + _PC + r"\s+last\s+(?:restarted|rebooted|started|turned\s+on)"
+        r"|when\s+did\s+i\s+last\s+(?:restart|reboot|turn\s+on)\s+" + _PC +
+        r"|how\s+long\s+has\s+" + _PC + r"\s+been\s+(?:on|running|up)(?:\s+for)?"
+        r"|what(?:'?s|\s+is)\s+(?:my|the)\s+(?:pc's\s+|computer's\s+)?uptime"
+        r"|(?:pc|computer|system)\s+uptime")),
+)
+
+
+def _pc_help(s: str) -> Optional[Intent]:
+    for topic, rx in _PC_HELP:
+        if rx.fullmatch(s):
+            return Intent("pc_help", {"topic": topic})
+    return None
+
+
+PC_HELP_MISSING = ("Your PC's Jarvis cannot answer questions about the PC yet - run "
+                   "apply-patches.ps1 on the PC.")
+
+
+def _run_pc_help(intent: Intent) -> Result:
+    """Read-only, no card: nothing changes and nothing leaves this PC. An
+    answer naming programs is private (it stays on screen) and marks the
+    turn as having read outside text - a program chooses its own name."""
+    try:
+        import jarvis_pc_help as PCH
+    except Exception:
+        return Result(PC_HELP_MISSING, intent.name)
+    out = PCH.answer(str(intent.f.get("topic") or ""))
+    return Result(str(out.get("said") or ""), intent.name, private=bool(out.get("private")),
+                  read=list(out.get("read") or []))
 
 
 #: "Ring my phone" (jarvis_find_phone.py, 2026-09-28). A phone the owner
@@ -2753,6 +2836,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_next_time(intent, sched)
     if n.startswith("today_"):
         return _run_today(intent, sched)
+    if n == "pc_help":
+        return _run_pc_help(intent)
     if n in ("phone_ring", "phone_stop"):
         return _run_find_phone(intent)
     if n.startswith("lockdown_"):

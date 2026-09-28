@@ -223,6 +223,10 @@ SHIPPED = (
     # /api/photo/scan reads a picture's dates with plain code and PROPOSES a
     # reminder; it sets nothing up itself
     "jarvis_photo_remind.py",
+    # "PC help" (2026-09-28): why is my PC slow, how full is my disk, what is
+    # using the graphics card - read-only, answered without the model;
+    # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
+    "jarvis_pc_help.py",
 )
 
 

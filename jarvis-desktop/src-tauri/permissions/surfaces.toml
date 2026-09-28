@@ -373,6 +373,10 @@ permissions = [
   "allow-apply-hardware",
   "allow-hardware-step",
   "allow-measure-hardware",
+  # "PC help" (JARVIS-API section 84): why the PC is slow, how full the
+  # drives are, what is using the graphics card, how hot it is, when it last
+  # restarted - read-only, it changes nothing.
+  "allow-get-pc-help",
   # "Web search": the five providers with their "why" lines, and ONE change
   # at a time - the provider, the SearXNG address, "Ask before every web
   # search" (off raises an approval card on the PC). Changes and the test
