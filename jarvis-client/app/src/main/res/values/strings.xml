@@ -88,4 +88,9 @@
     <string name="avatar_overlay_text">The small avatar is on your screen. Tap "Turn off"
         below, or turn "Floating Jarvis" off in Settings.</string>
     <string name="avatar_overlay_stop">Turn off</string>
+
+    <!-- The Jarvis Live extras (2026-09-28): the Quick Settings tile, and the
+         second Share entry (activity-alias ShareToLive). -->
+    <string name="live_tile_label">Jarvis Live</string>
+    <string name="share_to_live_label">Talk about this in Live</string>
 </resources>

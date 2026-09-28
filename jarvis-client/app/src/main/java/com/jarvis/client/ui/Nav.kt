@@ -84,6 +84,9 @@ enum class Screen {
 
     /** Jarvis Live (ui/screens/LiveScreen.kt). Last, for the same reason as the others. */
     LIVE,
+
+    /** "Solve it here" (ui/screens/HandoffScreen.kt). Last, for the same reason. */
+    HANDOFF,
 }
 
 /**

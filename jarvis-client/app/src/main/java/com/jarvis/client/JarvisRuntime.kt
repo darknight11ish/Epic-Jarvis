@@ -3640,6 +3640,19 @@ object JarvisRuntime {
 
     private val _liveMove = MutableStateFlow("")
 
+    private val _liveMic = MutableStateFlow<String?>(null)
+
+    /**
+     * Which microphone Live listens through on this phone ("Microphone: your
+     * Bluetooth headset (Buds)"), set by LiveService each time it opens one;
+     * null while Live is not listening here (the Jarvis Live extras).
+     */
+    val liveMic: StateFlow<String?> = _liveMic.asStateFlow()
+
+    fun liveMicWords(words: String?) {
+        _liveMic.value = words
+    }
+
     /** "Live is on your PC - move it here?": the other device's name ("desktop"), or "". */
     val liveMove: StateFlow<String> = _liveMove.asStateFlow()
 
@@ -3798,6 +3811,17 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * Start Live from the Quick Settings tile or "Live ended - Resume"
+     * (MainActivity, once the app is unlocked): [liveStart], in the
+     * runtime's own scope so a screen change cannot cut it off. Its own
+     * rules hold (held on a stale link; the PC refuses it until the owner's
+     * voice is trained), and a refusal shows on the Live screen.
+     */
+    fun liveStartSoon(resume: Boolean = false) {
+        scope.launch { liveStart(resume) }
+    }
+
     /** End Live from anywhere that must not wait (the notification, the End Live button): the runtime's own scope. */
     fun liveEndNow(why: String = "owner") {
         scope.launch { liveStop(why) }
@@ -3949,10 +3973,12 @@ object JarvisRuntime {
         val now = SystemClock.elapsedRealtime()
         when (reply.action) {
             com.jarvis.client.voice.LiveRules.Action.START -> {
-                // "Hey Jarvis, let's talk" while App lock would lock the app:
-                // ended again at once, and nothing is said.
-                if (appLockWouldLock(now, settings.security.value)) {
-                    scope.launch { api.liveWrite(rules.stopBody("app_lock")) }
+                // "Hey Jarvis, let's talk" while App lock would lock the app
+                // (or, under "End Live when: Only when the phone's screen
+                // locks", while the screen is locked): ended again at once,
+                // and nothing is said.
+                liveLockEnd(now)?.let { why ->
+                    scope.launch { api.liveWrite(rules.stopBody(why)) }
                     return
                 }
                 scope.launch {
@@ -4006,15 +4032,22 @@ object JarvisRuntime {
         liveType(words)
     }
 
-    /** The Live screen's text box: a typed question, with a typed answer's rules. It keeps Live open. */
-    fun liveType(words: String) {
+    /**
+     * The Live screen's text box: a typed question, with a typed answer's
+     * rules. It keeps Live open. [shared]: text handed over with "Talk about
+     * this in Live" (the Share sheet) - sent as its own message, tagged
+     * "shared", right before the typed words (or alone): outside text, like
+     * any shared item, so the PC treats the chat as having read it.
+     */
+    fun liveType(words: String, shared: String? = null) {
         val text = words.trim()
-        if (text.isEmpty()) return
+        val held = shared?.takeIf { it.isNotBlank() }
+        if (text.isEmpty() && held == null) return
         scope.launch {
             // The conversation goes on: the PC's quiet clock starts again
             // (the review's B4 - 90 s of typing used to end Live).
             if (liveOnHere()) api.liveWrite(com.jarvis.client.voice.LiveRules.ACTIVE_BODY)
-            chat.send(text, provenance = com.jarvis.client.net.Provenance.TYPED)
+            chat.send(text, provenance = com.jarvis.client.net.Provenance.TYPED, shared = held)
         }
     }
 
@@ -4100,21 +4133,47 @@ object JarvisRuntime {
                 if (!here && failures == 0) {
                     val line = com.jarvis.client.voice.LiveRules.transition(before, now)
                     endLiveHere(cancelWatch = false)
+                    // "Live ended - Resume" (the Jarvis Live extras): after an
+                    // end here the PC can resume, for the rest of its 10 minutes.
+                    com.jarvis.client.voice.LiveExtras.resumeFor(now)?.let { ms ->
+                        val words = (now?.get("ended_words") as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+                        appContext?.let { com.jarvis.client.service.LiveService.showResume(it, words, ms) }
+                    }
                     if (line.isNotEmpty()) voice.sayLine(line)
                     break
                 }
                 if (here) {
                     val line = com.jarvis.client.voice.LiveRules.transition(before, now)
                     if (line.isNotEmpty()) sayLiveLine(line)
-                    if (appLockWouldLock(SystemClock.elapsedRealtime(), settings.security.value)) {
+                    val lockEnd = liveLockEnd(SystemClock.elapsedRealtime())
+                    if (lockEnd != null) {
                         // In its own job: liveStop ends this watcher.
-                        scope.launch { liveStop("app_lock") }
+                        scope.launch { liveStop(lockEnd) }
                         break
                     }
                 }
             }
         }
     }
+
+    /**
+     * Does a lock end Live on this phone now - "app_lock", "screen_lock" or
+     * null ([com.jarvis.client.data.SecurityRules.liveEndsNow], the Security
+     * screen's "End Live when"; the owner's decision of 2026-09-28).
+     */
+    private fun liveLockEnd(nowMs: Long): String? {
+        val security = settings.security.value
+        return com.jarvis.client.data.SecurityRules.liveEndsNow(
+            security,
+            appLockWouldLock = appLockWouldLock(nowMs, security),
+            screenLocked = screenLocked(),
+        )
+    }
+
+    /** The phone's own screen lock is on (a PIN, pattern or password is needed to get in). */
+    private fun screenLocked(): Boolean =
+        (appContext?.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)
+            ?.isDeviceLocked == true
 
     /**
      * A fixed line while Live runs. "Two minutes left..." used to be skipped
@@ -4226,7 +4285,8 @@ object JarvisRuntime {
     private var chatbotWatcher: kotlinx.coroutines.Job? = null
 
     /** `GET /api/chatbot/status` - the one [id] names, or the latest still going. A read. */
-    suspend fun chatbotStatus(id: String?): ApiResult<JsonObject> = api.chatbotStatus(id)
+    suspend fun chatbotStatus(id: String?): ApiResult<JsonObject> =
+        api.chatbotStatus(id).onOk { noteHandoff(it) }
 
     /** `GET /api/chatbot/status?compare=` - the comparison [id] names. A read. */
     suspend fun chatbotCompareStatus(id: String): ApiResult<JsonObject> = api.chatbotStatus(null, id)
@@ -4359,6 +4419,8 @@ object JarvisRuntime {
                 val ctx = appContext
                 if (r is ApiResult.Ok) {
                     misses = 0
+                    // "Solve it here": a page waiting for the owner.
+                    noteHandoff(r.value)
                     val v = com.jarvis.client.net.Chatbot.parse(r.value)
                     val s = v?.session
                     val c = v?.compare
@@ -4408,7 +4470,8 @@ object JarvisRuntime {
     private var supportWatcher: kotlinx.coroutines.Job? = null
 
     /** `GET /api/chatbot/status?support=` - the one [id] names, or the latest going. A read. */
-    suspend fun supportStatus(id: String?): ApiResult<JsonObject> = api.supportStatus(id)
+    suspend fun supportStatus(id: String?): ApiResult<JsonObject> =
+        api.supportStatus(id).onOk { noteHandoff(it) }
 
     /** Ask the PC for a support chat: ONE approval card. Held on a stale link (rule 4). */
     suspend fun supportStart(
@@ -4486,6 +4549,7 @@ object JarvisRuntime {
                 val ctx = appContext
                 if (r is ApiResult.Ok) {
                     misses = 0
+                    noteHandoff(r.value)
                     val c = com.jarvis.client.net.Support.parse(r.value)?.chat
                     if (c != null && c.live) {
                         supportLastId = c.id
@@ -4506,6 +4570,126 @@ object JarvisRuntime {
                 kotlinx.coroutines.delay(com.jarvis.client.net.Support.POLL_MS)
             }
         }
+    }
+
+    // ----------------------------------------------------- Solve it here ----
+    // The owner's decision of 2026-09-28 - see [com.jarvis.client.net.Handoff],
+    // service/HandoffNotifier.kt and ui/screens/HandoffScreen.kt. A chatbot
+    // website or a support chat paused at a captcha, a sign-in page or an
+    // "unusual activity" page: an alert (site and reason only; generic under
+    // App lock), and "Solve it here" - a live picture of that one browser
+    // window and the owner's own taps and typing to it, only while Jarvis is
+    // paused there (the PC checks that on every picture and every input).
+
+    private val _handoffOffer = MutableStateFlow<com.jarvis.client.net.Handoff.Offer?>(null)
+
+    /** The page waiting for the owner, as last read with a chatbot or support status. */
+    val handoffOffer: StateFlow<com.jarvis.client.net.Handoff.Offer?> = _handoffOffer.asStateFlow()
+
+    /** The alert already raised, so one pause alerts once. */
+    @Volatile private var handoffAlerted: String? = null
+
+    private val _handoffOpen = MutableStateFlow(false)
+
+    /**
+     * True when a Brain plate's "Solve it here" was tapped and the screen is
+     * not open yet: MainActivity opens it and calls [handoffOpened].
+     */
+    val handoffOpen: StateFlow<Boolean> = _handoffOpen.asStateFlow()
+
+    fun openHandoff() {
+        _handoffOpen.value = true
+    }
+
+    fun handoffOpened() {
+        _handoffOpen.value = false
+    }
+
+    /** The hand-off this phone started and has not ended, so a rotation keeps it. */
+    @Volatile var handoffActive: String? = null
+        private set
+
+    /**
+     * A chatbot or support status was read: alert once for a page newly
+     * waiting for the owner, take the alert away once nothing waits.
+     */
+    private fun noteHandoff(status: JsonObject?) {
+        val o = com.jarvis.client.net.Handoff.offer(status)
+        _handoffOffer.value = o
+        val ctx = appContext ?: return
+        if (o == null) {
+            if (handoffAlerted != null) com.jarvis.client.service.HandoffNotifier.cancel(ctx)
+            handoffAlerted = null
+            return
+        }
+        if (handoffAlerted == o.key) return
+        handoffAlerted = o.key
+        val security = settings.security.value
+        com.jarvis.client.service.HandoffNotifier.post(ctx, o, locked = security.appLock || security.privateLists)
+    }
+
+    /**
+     * "Solve it here": start passing that one window on. No card - nothing
+     * leaves the owner's own devices - but not on a stale link: the picture
+     * would be old and every input held anyway. The hand-off id, or why not.
+     */
+    suspend fun handoffStart(o: com.jarvis.client.net.Handoff.Offer): Pair<String?, String?> {
+        actionBlocker()?.let { return null to it }
+        val body = com.jarvis.client.net.Handoff.startBody(o)
+            ?: return null to "That is not a page this phone knows."
+        return when (val r = api.handoffWrite(com.jarvis.client.net.Handoff.START_PATH, body)) {
+            is ApiResult.Ok -> {
+                val h = (r.value.body?.get("handoff") as? JsonPrimitive)?.takeIf { it.isString }?.content
+                if (r.value.code in 200..299 && com.jarvis.client.net.Handoff.validHid(h)) {
+                    handoffActive = h
+                    h to null
+                } else {
+                    null to ((r.value.body?.get("error") as? JsonPrimitive)?.content
+                        ?: "Your PC did not start it. Try again.")
+                }
+            }
+            is ApiResult.Failed -> null to describe(r.error)
+        }
+    }
+
+    /** One picture of that window, kept by the screen that asked only. A read: never held. */
+    suspend fun handoffFrame(h: String): com.jarvis.client.net.Handoff.Answer =
+        when (val r = api.handoffFrame(h)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Handoff.answer(r.value.code, r.value.body).also {
+                if (it is com.jarvis.client.net.Handoff.Answer.Ended && handoffActive == h) handoffActive = null
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.Handoff.Answer.Failed(describe(r.error))
+        }
+
+    /**
+     * One input from the owner (a body made by [com.jarvis.client.net.Handoff]).
+     * Held on a stale link (rule 4). Null when it reached the page; else the
+     * answer the screen shows.
+     */
+    suspend fun handoffInput(body: String?): com.jarvis.client.net.Handoff.Answer? {
+        com.jarvis.client.net.Handoff.inputHeld(_stale.value || _link.value != LinkState.CONNECTED)?.let {
+            return com.jarvis.client.net.Handoff.Answer.Failed(it)
+        }
+        if (body == null) return com.jarvis.client.net.Handoff.Answer.Failed("That cannot be passed on.")
+        return when (val r = api.handoffWrite(com.jarvis.client.net.Handoff.INPUT_PATH, body)) {
+            is ApiResult.Ok ->
+                if (r.value.code in 200..299) {
+                    null
+                } else {
+                    com.jarvis.client.net.Handoff.answer(r.value.code, r.value.body)
+                }
+            is ApiResult.Failed -> com.jarvis.client.net.Handoff.Answer.Failed(describe(r.error))
+        }
+    }
+
+    /**
+     * End the hand-off. Never held, never a card; in the runtime's own scope
+     * so leaving the screen cannot lose it.
+     */
+    fun handoffEnd(h: String) {
+        if (handoffActive == h) handoffActive = null
+        val body = com.jarvis.client.net.Handoff.endBody(h) ?: return
+        scope.launch { api.handoffWrite(com.jarvis.client.net.Handoff.END_PATH, body) }
     }
 
     // ------------------------------------------------ Morning briefing ----

@@ -32,6 +32,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.data.LiveEnd
+import com.jarvis.client.net.Provenance
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Primary
@@ -40,6 +42,7 @@ import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.BargeIn
+import com.jarvis.client.voice.LiveExtras
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.delay
@@ -69,6 +72,11 @@ import kotlinx.coroutines.launch
  *   it ends (the review's #1: it kept the phone awake and unlocked). The
  *   camera switch appears only when the PC says it is ready - it is off until
  *   the 12 GB graphics card is in and passes the photo test.
+ * - The Live extras (the owner's decisions of 2026-09-28): which microphone
+ *   it listens through (a Bluetooth headset's is preferred), what the
+ *   headset button does, and text shared with "Talk about this in Live" -
+ *   held here as a "Shared text" chip and sent, tagged "shared" (outside
+ *   text), only when the owner taps Send.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -76,6 +84,9 @@ fun LiveScreen(
     onBack: () -> Unit,
     onOpenCards: () -> Unit,
     onTrainVoice: () -> Unit,
+    /** Text shared with "Talk about this in Live", held until Send; or null. */
+    shared: String? = null,
+    onDropShared: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -93,6 +104,7 @@ fun LiveScreen(
     val interrupt by JarvisRuntime.settings.interrupt.collectAsState()
     val security by JarvisRuntime.settings.security.collectAsState()
     val voiceStatus by JarvisRuntime.voice.status.collectAsState()
+    val mic by JarvisRuntime.liveMic.collectAsState()
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     var typed by rememberSaveable { mutableStateOf("") }
@@ -281,9 +293,27 @@ fun LiveScreen(
                 }
             }
 
-            // Typing in Live: a typed question, answered on screen.
-            if (on) {
+            // Typing in Live: a typed question, answered on screen. Text
+            // shared with "Talk about this in Live" waits here as a chip and
+            // goes with the next Send, tagged "shared" (outside text).
+            if (on || shared != null) {
                 Plate {
+                    if (shared != null) {
+                        Text(
+                            Provenance.sharedLine(shared),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textHi,
+                        )
+                        Gap(4)
+                        Text(
+                            "Shared from another app: outside text. It goes to Jarvis when you tap " +
+                                "Send, then you can talk about it.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textMid,
+                        )
+                        Quiet("Remove", onClick = onDropShared)
+                        Gap(6)
+                    }
                     TextInput(
                         value = typed,
                         onValueChange = { typed = it },
@@ -293,9 +323,10 @@ fun LiveScreen(
                         maxLines = 4,
                     )
                     Gap(6)
-                    Secondary("Send", enabled = typed.isNotBlank(), onClick = {
-                        JarvisRuntime.liveType(typed)
+                    Secondary("Send", enabled = on && (typed.isNotBlank() || shared != null), onClick = {
+                        JarvisRuntime.liveType(typed, shared)
                         typed = ""
+                        onDropShared()
                     })
                 }
             }
@@ -305,10 +336,17 @@ fun LiveScreen(
             // canceller on this phone and the PC's voice check.
             if (on) {
                 val notes = buildList {
+                    mic?.let { add(it) }
+                    add(LiveExtras.HEADSET_HINT)
                     if (security.appLock) {
                         add(
-                            "App lock is on: Live ends when App lock would lock Jarvis again " +
-                                "(\"Lock again after\" in Security).",
+                            if (security.liveEnd == LiveEnd.SCREEN_LOCK) {
+                                "App lock is on: Live ends when the phone's screen locks (\"End Live " +
+                                    "when\" in Security)."
+                            } else {
+                                "App lock is on: Live ends when App lock would lock Jarvis again " +
+                                    "(\"Lock again after\" in Security)."
+                            },
                         )
                     }
                     if (interrupt == LiveRules.INTERRUPT_VOICE && !JarvisRuntime.settings.echoCanceller) {

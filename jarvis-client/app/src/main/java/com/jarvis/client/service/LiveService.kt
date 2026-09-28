@@ -10,11 +10,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
+import android.view.KeyEvent
 import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
@@ -25,6 +29,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.audio.Wav
+import com.jarvis.client.voice.LiveExtras
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.OrtTurnModel
 import com.jarvis.client.voice.SmartTurn
@@ -80,6 +85,23 @@ import kotlinx.coroutines.sync.withLock
  * Android's audio mode (IN_CALL / IN_COMMUNICATION, [LiveRules.onCall]) - no
  * phone-state permission is needed for that. It never undoes the owner's own
  * Mute.
+ *
+ * THE LIVE EXTRAS (the owner's decisions of 2026-09-28; [LiveExtras]):
+ *  - THE HEADSET BUTTON, through a media session that is active only while
+ *    Live runs here: a press stops Jarvis talking, a long press turns the
+ *    microphone off or on ([onHeadset]). It calls nothing else - it never
+ *    approves, denies or starts anything. Android gives the button to the
+ *    app that played sound last, so with music playing elsewhere the other
+ *    app may get it; and on some phones holding it opens the phone's
+ *    assistant instead. The Live screen says so.
+ *  - A BLUETOOTH HEADSET'S MICROPHONE is preferred while one is connected
+ *    ([preferHeadset]: Android's communication device, and the recorder's
+ *    preferred input); if it cannot be used the phone's own is, and the Live
+ *    screen says which ([JarvisRuntime.liveMicWords]). No Bluetooth
+ *    permission is needed: the headset is picked from Android's own audio
+ *    device lists (MODIFY_AUDIO_SETTINGS, already held).
+ *  - "LIVE ENDED - RESUME" ([showResume]): a notification kept on this phone
+ *    for the rest of the PC's 10 minutes after an end that can be resumed.
  */
 class LiveService : Service() {
 
@@ -93,13 +115,25 @@ class LiveService : Service() {
     /** Clips go to the PC one at a time, in order, while the microphone keeps being read. */
     private val sending = Mutex()
 
+    /** The headset button, while Live runs here. */
+    private var media: MediaSession? = null
+    private val headsetKeys = LiveExtras.HeadsetKeys()
+
+    /** True once this service made a Bluetooth headset the communication device (undone at the end). */
+    private var headsetRouted = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         JarvisRuntime.initialize(this)
         ensureChannel(this)
-        if (!goForeground(LiveRules.sign(JarvisRuntime.liveStatus.value))) stopSelf()
+        clearResume(this)
+        if (!goForeground(LiveRules.sign(JarvisRuntime.liveStatus.value))) {
+            stopSelf()
+            return
+        }
+        openHeadsetButton()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -140,7 +174,95 @@ class LiveService : Service() {
         loop?.cancel()
         scope.cancel()
         runCatching { JarvisRuntime.voice.speaker.endVoiceCall() }
+        runCatching { media?.release() }
+        media = null
+        releaseHeadset()
+        JarvisRuntime.liveMicWords(null)
         super.onDestroy()
+    }
+
+    // ------------------------------------------------------ headset button
+
+    /**
+     * A media session, active only while Live runs here, so a headset's one
+     * button reaches [onHeadset]. It plays nothing and shows no media card
+     * (no media-style notification).
+     */
+    private fun openHeadsetButton() {
+        media = runCatching {
+            MediaSession(this, "JarvisLive").apply {
+                setCallback(object : MediaSession.Callback() {
+                    override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
+                        val e = mediaButtonIntent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
+                            ?: return false
+                        if (e.keyCode !in LiveExtras.BUTTON_KEYS) return false
+                        onHeadset(e.action, e.keyCode, e.repeatCount, e.downTime, e.eventTime)
+                        return true
+                    }
+                })
+                setPlaybackState(
+                    PlaybackState.Builder()
+                        .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE)
+                        .setState(PlaybackState.STATE_PLAYING, 0L, 1f)
+                        .build(),
+                )
+                isActive = true
+            }
+        }.onFailure { Log.w(TAG, "no media session for the headset button", it) }.getOrNull()
+    }
+
+    /**
+     * The headset button: a press stops Jarvis talking (unless "Don't
+     * interrupt" is chosen), a long press turns the microphone off or on.
+     * Nothing else - never an approval, a denial or a start.
+     */
+    private fun onHeadset(action: Int, keyCode: Int, repeat: Int, downTime: Long, eventTime: Long) {
+        when (headsetKeys.onKey(action, keyCode, repeat, downTime, eventTime)) {
+            LiveExtras.Press.STOP_TALKING ->
+                if (JarvisRuntime.settings.interrupt.value != LiveRules.INTERRUPT_OFF) {
+                    JarvisRuntime.voice.stopSpeaking()
+                }
+            LiveExtras.Press.MIC_TOGGLE -> {
+                val muted = (JarvisRuntime.liveStatus.value?.get("muted") as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.content == "true"
+                scope.launch { JarvisRuntime.liveMute(!muted) }
+            }
+            LiveExtras.Press.NONE -> Unit
+        }
+    }
+
+    // ------------------------------------------------------ Bluetooth headset
+
+    /**
+     * A connected Bluetooth headset, made the communication device so its
+     * microphone can be used (Android 12+'s way; minSdk is 33), and the
+     * matching input for the recorder - or null to use the phone's own.
+     */
+    private fun preferHeadset(): Pair<LiveExtras.Mic, AudioDeviceInfo?>? {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return null
+        try {
+            val comm = am.availableCommunicationDevices
+            val picked = LiveExtras.pickHeadset(
+                comm.map { LiveExtras.Mic(it.type, it.productName?.toString().orEmpty()) },
+            ) ?: return null
+            val device = comm.first { it.type == picked.type }
+            if (am.communicationDevice?.id != device.id && !am.setCommunicationDevice(device)) {
+                return null
+            }
+            headsetRouted = true
+            val input = am.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { it.type == device.type }
+            return picked to input
+        } catch (e: Exception) {
+            Log.w(TAG, "the Bluetooth headset could not be chosen", e)
+            return null
+        }
+    }
+
+    private fun releaseHeadset() {
+        if (!headsetRouted) return
+        headsetRouted = false
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        runCatching { am.clearCommunicationDevice() }
     }
 
     // ------------------------------------------------------------- listening
@@ -214,7 +336,7 @@ class LiveService : Service() {
                 }
                 if (rec == null || recSource != source) {
                     close(keepRing = rec != null)
-                    val opened = openRecorder(source)
+                    val opened = openPreferred(source)
                     if (opened == null) {
                         JarvisRuntime.liveNotice("No microphone available right now.")
                         delay(IDLE_MS * 5)
@@ -358,6 +480,25 @@ class LiveService : Service() {
             got += n
         }
         return true
+    }
+
+    /**
+     * The recorder, through a connected Bluetooth headset's microphone when
+     * there is one, else the phone's own - and the Live screen told which.
+     */
+    private fun openPreferred(source: Int): AudioRecord? {
+        val headset = preferHeadset()
+        val rec = openRecorder(source) ?: return null
+        if (headset == null) {
+            releaseHeadset()
+            JarvisRuntime.liveMicWords(LiveExtras.micWords(null))
+            return rec
+        }
+        val input = headset.second
+        val took = input != null && runCatching { rec.setPreferredDevice(input) }.getOrDefault(false)
+        if (!took) releaseHeadset()
+        JarvisRuntime.liveMicWords(if (took) LiveExtras.micWords(headset.first) else LiveExtras.micWords(headset.first, fellBack = true))
+        return rec
     }
 
     @SuppressLint("MissingPermission") // hasMicPermission() is checked before this is reached
@@ -557,6 +698,60 @@ class LiveService : Service() {
                     .addAction(0, "Move it here", open)
                     .build()
                 manager.notify(OFFER_ID, n)
+            }
+        }
+
+        /** "Live ended - Resume" (the Jarvis Live extras): its channel and id. */
+        const val RESUME_CHANNEL_ID = "jarvis_live_resume"
+        private const val RESUME_ID = 0x4A4E
+
+        /**
+         * "Jarvis Live ended" with Resume Live, for [forMs] (the rest of the
+         * PC's 10 minutes), after an end here that can be resumed. Kept on
+         * this phone; fixed words only (why it ended, from the PC's fixed
+         * list). Resume opens the app, which starts Live again in the same
+         * chat - after App lock, and held on a stale link like the button.
+         */
+        fun showResume(context: Context, endedWords: String, forMs: Long) {
+            val manager = ContextCompat.getSystemService(context, NotificationManager::class.java) ?: return
+            runCatching {
+                manager.createNotificationChannel(
+                    NotificationChannel(RESUME_CHANNEL_ID, "Jarvis Live: Resume", NotificationManager.IMPORTANCE_DEFAULT)
+                        .apply {
+                            description = "\"Live ended - Resume\" for ten minutes after Jarvis Live ended by " +
+                                "itself (it was quiet, or the time was up)."
+                            setShowBadge(false)
+                            setSound(null, null)
+                        },
+                )
+                val resume = PendingIntent.getActivity(
+                    context, 16,
+                    Intent(context, MainActivity::class.java)
+                        .setAction(MainActivity.ACTION_RESUME_LIVE)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                val n = NotificationCompat.Builder(context, RESUME_CHANNEL_ID)
+                    .setLocalOnly(true)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle(LiveExtras.RESUME_TITLE)
+                    .setContentText(endedWords.ifEmpty { LiveExtras.RESUME_BUTTON })
+                    .setAutoCancel(true)
+                    .setSilent(true)
+                    .setTimeoutAfter(forMs.coerceAtLeast(1_000L))
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setCategory(NotificationCompat.CATEGORY_STATUS)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setContentIntent(resume)
+                    .addAction(0, LiveExtras.RESUME_BUTTON, resume)
+                    .build()
+                manager.notify(RESUME_ID, n)
+            }
+        }
+
+        fun clearResume(context: Context) {
+            runCatching {
+                ContextCompat.getSystemService(context, NotificationManager::class.java)?.cancel(RESUME_ID)
             }
         }
 

@@ -154,6 +154,25 @@ class MainActivity : FragmentActivity() {
     /** The Jarvis Live notification was tapped: its screen. */
     private val openLiveRequested = mutableStateOf(false)
 
+    /**
+     * The Jarvis Live Quick Settings tile (start) or the "Live ended - Resume"
+     * notification (resume) asked to start Live here: null, "start" or
+     * "resume". Acted on only once the app is unlocked (App lock), then
+     * cleared.
+     */
+    private val startLiveRequested = mutableStateOf<String?>(null)
+
+    /**
+     * Text shared with "Talk about this in Live" (the Share sheet's second
+     * Jarvis entry, the activity-alias ShareToLive): held for the Live
+     * screen's box, sent only when the owner taps Send, tagged "shared" -
+     * outside text, like any shared item. Consumed once.
+     */
+    private val liveSharedText = mutableStateOf<String?>(null)
+
+    /** "Solve it here" - the "a website needs you" alert was tapped. */
+    private val openHandoffRequested = mutableStateOf(false)
+
     /** The quick-note field on Home is open - see [readQuickNoteIntent]. */
     private val quickNoteOpen = mutableStateOf(false)
 
@@ -333,9 +352,13 @@ class MainActivity : FragmentActivity() {
 
         lastCrash.value = CrashLog.read(this)
         readApprovalIntent(intent)
-        readShareIntent(intent)
+        // `fresh`: a rotation rebuilds this activity from the SAME launch
+        // intent - a Live start (the tile, "Resume") or a share into Live
+        // must not happen again then.
+        readShareIntent(intent, fresh = savedInstanceState == null)
         readVoiceIntent(intent)
-        readLiveIntent(intent)
+        readLiveIntent(intent, fresh = savedInstanceState == null)
+        readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
         // Only on a fresh start. A rotation (or a restore after Android
@@ -368,6 +391,7 @@ class MainActivity : FragmentActivity() {
         readShareIntent(intent)
         readVoiceIntent(intent)
         readLiveIntent(intent)
+        readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
         readShortcutQuestionIntent(intent)
@@ -417,10 +441,23 @@ class MainActivity : FragmentActivity() {
         startVoiceRequested.value = true
     }
 
-    /** The Jarvis Live notification: its screen (behind the app lock, as ever). */
-    private fun readLiveIntent(intent: Intent?) {
-        if (intent?.action != ACTION_OPEN_LIVE) return
-        openLiveRequested.value = true
+    /**
+     * The Jarvis Live notification: its screen (behind the app lock, as
+     * ever). The Quick Settings tile and the "Resume" notification also
+     * start Live - the owner's own tap - once the app is unlocked.
+     */
+    private fun readLiveIntent(intent: Intent?, fresh: Boolean = true) {
+        when (intent?.action) {
+            ACTION_OPEN_LIVE -> openLiveRequested.value = true
+            ACTION_START_LIVE -> if (fresh) startLiveRequested.value = "start" else openLiveRequested.value = true
+            ACTION_RESUME_LIVE -> if (fresh) startLiveRequested.value = "resume" else openLiveRequested.value = true
+        }
+    }
+
+    /** The "a website needs you" alert: the Solve it here screen (behind the app lock, as ever). */
+    private fun readHandoffIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_HANDOFF) return
+        openHandoffRequested.value = true
     }
 
     /**
@@ -428,8 +465,16 @@ class MainActivity : FragmentActivity() {
      * here rather than starting a new instance - same reason [readApprovalIntent]
      * needs the `onNewIntent` half too.
      */
-    private fun readShareIntent(intent: Intent?) {
+    private fun readShareIntent(intent: Intent?, fresh: Boolean = true) {
         if (intent?.action != Intent.ACTION_SEND) return
+        // "Talk about this in Live": the same share, through the second
+        // entry (activity-alias ShareToLive). Text only; held for the Live
+        // screen, never sent on its own.
+        if (intent.component?.className?.endsWith(SHARE_TO_LIVE) == true) {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+            if (fresh && !text.isNullOrEmpty()) liveSharedText.value = text
+            return
+        }
         if (intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
             if (!text.isNullOrEmpty()) sharedText.value = text
@@ -674,8 +719,15 @@ class MainActivity : FragmentActivity() {
         // And while the pairing token is shown in plain letters on the
         // pairing screen ("Show token"): set by PairingScreen, and back to
         // false the moment it is hidden or the screen goes.
-        LaunchedEffect(security.appLock, security.privateLists, pairingKeyShown) {
-            val secure = SecurityRules.blockScreenCapture(security, keyShown = pairingKeyShown)
+        // And while "Solve it here" shows a picture of the PC's browser
+        // window (it is never saved, so it must not be screenshotted either).
+        val handoffShown = nav.current == Screen.HANDOFF
+        LaunchedEffect(security.appLock, security.privateLists, pairingKeyShown, handoffShown) {
+            val secure = SecurityRules.blockScreenCapture(
+                security,
+                keyShown = pairingKeyShown,
+                handoffShown = handoffShown,
+            )
             setRecentsScreenshotEnabled(!secure)
             if (secure) {
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
@@ -1098,6 +1150,47 @@ class MainActivity : FragmentActivity() {
             if (!openLiveRequested.value) return@LaunchedEffect
             openLiveRequested.value = false
             nav.go(Screen.LIVE)
+        }
+
+        // The Live tile, or "Live ended - Resume": the Live screen, and Live
+        // starts - the owner's own tap - but only once the app is unlocked
+        // (keyed on `locked`, like focusApproval): behind App lock nothing
+        // starts. Held on a stale link like the Live button (liveStart).
+        LaunchedEffect(startLiveRequested.value, locked) {
+            val how = startLiveRequested.value ?: return@LaunchedEffect
+            nav.go(Screen.LIVE)
+            if (locked) return@LaunchedEffect
+            startLiveRequested.value = null
+            // In the runtime's own scope: clearing the request above restarts
+            // this effect, which would cut a start off half-way.
+            if (!JarvisRuntime.liveOnHere()) JarvisRuntime.liveStartSoon(resume = how == "resume")
+        }
+
+        // "Talk about this in Live": the shared text waits on the Live
+        // screen as a "Shared text" chip, and Live starts (once unlocked).
+        // Nothing is sent until the owner taps Send there.
+        var liveSharedHeld by rememberSaveable { mutableStateOf<String?>(null) }
+        LaunchedEffect(liveSharedText.value) {
+            val text = liveSharedText.value ?: return@LaunchedEffect
+            liveSharedHeld = Provenance.joinShared(liveSharedHeld, text)
+            liveSharedText.value = null
+            if (!JarvisRuntime.liveOnHere()) startLiveRequested.value = "start"
+            nav.go(Screen.LIVE)
+        }
+
+        // "Solve it here" tapped on a Brain plate.
+        val handoffOpen by JarvisRuntime.handoffOpen.collectAsState()
+        LaunchedEffect(handoffOpen) {
+            if (!handoffOpen) return@LaunchedEffect
+            JarvisRuntime.handoffOpened()
+            nav.go(Screen.HANDOFF)
+        }
+
+        // "Solve it here": the alert was tapped.
+        LaunchedEffect(openHandoffRequested.value) {
+            if (!openHandoffRequested.value) return@LaunchedEffect
+            openHandoffRequested.value = false
+            nav.go(Screen.HANDOFF)
         }
 
         // The widget's Note button: Home, with the quick-note field open.
@@ -1903,6 +1996,14 @@ class MainActivity : FragmentActivity() {
                         // "Jarvis Live didn't start: it needs your voice
                         // trained first - Settings, then Train my voice."
                         onTrainVoice = { nav.go(Screen.VOICE) },
+                        // "Talk about this in Live": held here until Send.
+                        shared = liveSharedHeld,
+                        onDropShared = { liveSharedHeld = null },
+                        modifier = root,
+                    )
+
+                    Screen.HANDOFF -> com.jarvis.client.ui.screens.HandoffScreen(
+                        onBack = { nav.back() },
                         modifier = root,
                     )
 
@@ -2709,6 +2810,18 @@ class MainActivity : FragmentActivity() {
 
         /** Fired by the Jarvis Live notification ([com.jarvis.client.service.LiveService]). */
         const val ACTION_OPEN_LIVE = "com.jarvis.client.action.OPEN_LIVE"
+
+        /** Fired by the Jarvis Live tile ([com.jarvis.client.service.LiveTileService]): start Live. */
+        const val ACTION_START_LIVE = "com.jarvis.client.action.START_LIVE"
+
+        /** Fired by "Live ended - Resume" ([com.jarvis.client.service.LiveService.showResume]). */
+        const val ACTION_RESUME_LIVE = "com.jarvis.client.action.RESUME_LIVE"
+
+        /** Fired by the "a website needs you" alert ([com.jarvis.client.service.HandoffNotifier]). */
+        const val ACTION_OPEN_HANDOFF = "com.jarvis.client.action.OPEN_HANDOFF"
+
+        /** The activity-alias the "Talk about this in Live" share entry opens this activity as. */
+        const val SHARE_TO_LIVE = ".ShareToLive"
     }
 }
 

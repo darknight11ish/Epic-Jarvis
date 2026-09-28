@@ -490,8 +490,12 @@ object LiveRules {
     /** Only these fixed words go out; nothing heard ever does. */
     fun startBody(): String = "{\"do\":\"start\",\"device\":\"$ME\",\"by\":\"button\"}"
 
-    /** Why the phone ends Live: the owner (End Live), or App lock would lock the app. */
-    val END_REASONS: List<String> = listOf("owner", "app_lock")
+    /**
+     * Why the phone ends Live: the owner (End Live), App lock would lock the
+     * app, or - under the Security screen's "End Live when: Only when the
+     * phone's screen locks" - the phone's screen lock came on.
+     */
+    val END_REASONS: List<String> = listOf("owner", "app_lock", "screen_lock")
 
     fun stopBody(why: String = "owner"): String =
         "{\"do\":\"stop\",\"why\":\"${if (why in END_REASONS) why else "owner"}\",\"device\":\"$ME\"}"
