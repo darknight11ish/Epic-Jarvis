@@ -679,6 +679,21 @@ flash_attention = "auto"
 # true, the full version runs only while that lane is running, and the
 # limited one-card version runs otherwise.
 full_version = false
+# The API adapters (jarvis_chatbot_api.py) each use a cheap model by
+# default; one line changes it (read when Jarvis starts). The key itself
+# is never here - it goes into Windows Credential Manager with:
+#     py -3 jarvis_chatbot_api.py key openai    (or deepseek, mistral, xai,
+#                                                 openrouter, groq)
+# openai_api_model     = "gpt-5-mini"
+# deepseek_api_model   = "deepseek-chat"
+# mistral_api_model    = "mistral-small-latest"
+# xai_api_model        = "grok-4.6"
+# openrouter_api_model = "openai/gpt-5-mini"
+# groq_api_model       = "openai/gpt-oss-20b"
+# "A second AI on this PC" (jarvis_chatbot_local.py): which model it is -
+# a name `ollama list` shows, never a cloud one. On one graphics card only
+# the everyday model itself is allowed; any model on the second card.
+# local_model = "qwen3:8b"
 
 # ------------------------------------------------------------------------
 # 9c. THE BIG MODEL, SLOW (docs/BIG-MODEL.md)

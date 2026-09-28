@@ -14235,6 +14235,86 @@ instead of Playwright's own Chromium.
   (its code checks now read the site file AND the shared base);
   `backend/test_reach.py`.
 
+# Talking to an AI chatbot for you: API keys and a second AI on this PC, `jarvis_chatbot_api.py` and `jarvis_chatbot_local.py` (2026-09-28)
+
+Owner's decision (CLAUDE.md, "The chatbot driver becomes versatile"): one
+adapter speaking the common OpenAI-style API, so a key reaches ChatGPT,
+DeepSeek, Mistral, Grok, OpenRouter and similar; and a second AI on the
+owner's own PC. Still **not usable from either app** - no route or screen
+yet (`docs/JARVIS-API.md` 60.4.1 and 60.4.2).
+
+## In plain words
+
+- **With a key**, Jarvis can hold its one-card conversation with ChatGPT
+  (OpenAI), DeepSeek, Mistral, Grok (xAI), OpenRouter or Groq through each
+  company's official API instead of a website. Each is its own choice, so
+  the card names the exact service, its address and its model. The key is
+  kept in Windows Credential Manager (like the web-search keys), sent only
+  to that one company's address, never written to a log. Each message costs
+  a little on that account; Jarvis counts the "tokens" (word-pieces) the
+  company reports and shows them, but **there is no money limit yet** - the
+  message limit on the card is what limits the cost.
+- **A second AI on this PC** is another model in Ollama on this PC. Nothing
+  leaves the PC. With one graphics card, the only model allowed is the one
+  Jarvis already uses (the 8 GB card has no room for a second), so it is a
+  fresh look from the same model, and the card says so; any other model
+  says "needs your second graphics card". With both cards, any model the PC
+  has (up to 9 GiB) runs on the second card.
+
+## What to do on the PC, in order
+
+1. Run `apply-patches.ps1` as usual (it copies both files).
+2. **To use a service with a key:** make a key on the company's site
+   (OpenAI: https://platform.openai.com/api-keys), then save it with one
+   line in PowerShell (the key is pasted at a prompt and does not show):
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py key openai
+   ```
+
+   (`deepseek`, `mistral`, `xai`, `openrouter` or `groq` for the others;
+   `py -3 jarvis_chatbot_api.py status` lists which are saved.)
+3. **To change a service's model** (optional), add a line under `[chatbot]`
+   in `jarvis-framework.toml`, e.g. `openai_api_model = "gpt-4.1-mini"`,
+   and restart Jarvis.
+4. **To use a second AI on this PC:** see the models the PC has, then add
+   `local_model = "<one of them>"` under `[chatbot]` and restart Jarvis:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_local.py models
+   ```
+
+## What changed
+
+- `backend/jarvis_chatbot_api.py` (new): six presets, each its own chatbot
+  id (`openai_api`, `deepseek_api`, `mistral_api`, `xai_api`,
+  `openrouter_api`, `groq_api`); keys through `jarvis_token_store` (the
+  web-search keys' store); the host pin, redirect refusal, plain-words
+  errors, one capped retry after a 429; token counts; its command line.
+- `backend/jarvis_chatbot_local.py` (new): `local_ai`; loopback only, cloud
+  models refused, the one-card/two-card rule from the core's own
+  `choose_tier()`, installed-models check, waits while the owner chats on
+  one card; its command line.
+- `backend/jarvis_chatbot.py` (the core) - small changes, listed exactly:
+  `AdapterInfo.kind` ("website", "api", "local", default "website") and
+  `choices()` returns it; `describe()` mentions captchas only for websites
+  and says "is sent" instead of "leaves this PC" for the local AI;
+  `Session.usage` (an adapter's own counts, read after each reply and at
+  the end) and `session_view()["usage"]`; an adapter error raised while
+  sending or reading shows its `owner_words` (as `open()` already did);
+  the two modules are loaded at the end.
+- `backend/jarvis_reach.py`: a new row, "Chatbot conversations with a key
+  (API)" (`chatbot_api`), listing the hosts with a key saved; the website
+  row now lists websites only. No row for the local AI. Both apps'
+  `reach-cases.json` regenerated (`tools/gen_reach_cases.py`).
+- `backend/rebuilt/jarvis-framework.toml`: commented example lines under
+  `[chatbot]` (nothing switched on).
+- `docs/ARCHITECTURE.md` section 4 (a new way out, one host per service),
+  section 8 and section 11; `docs/JARVIS-API.md` section 60;
+  `docs/CHATBOT-DRIVER-DESIGN.md`'s status line.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: both shipped. No new
+  dependency (standard library only).
+
 ## Test it
 
 ```
@@ -14269,3 +14349,29 @@ names "send" or "submit". Pass site names to run just those
   sites show a cookie box in some countries).
 - If a site's send button is not found, it stops - it does not press Enter
   instead.
+python3 backend/test_chatbot_api.py
+python3 backend/test_chatbot_local.py
+```
+
+The first runs a fake OpenAI-style server on 127.0.0.1 (every preset
+pointed at it) and a second one a redirect points to: the key goes only to
+the pinned host, never into a log line (logging captured), a redirect is
+refused, no key means not ready, 429/5xx/401/timeouts end in plain words
+with at most one retry, token counts are recorded, and a whole core session
+through the adapter never sends a planted secret or saved fact. The second
+runs a fake Ollama: cloud names refused, loopback only, one- and two-card
+readiness, a whole session.
+
+## Not checked, said plainly
+
+- **No real service was called.** The addresses of OpenAI, Mistral,
+  OpenRouter and Groq were read from each company's own code on GitHub;
+  **DeepSeek's address, and xAI's `/v1/chat/completions` path, are from
+  memory** (their documentation was blocked from the container). The first
+  real conversation with a saved key is the proof.
+- **The default models were not checked against any price list**, and
+  model names change; a 404 says so and how to change the model.
+- **No money cap.** Token counts are shown; the design's cap is not built.
+- **One card, local:** the rule "only the everyday model" comes from
+  MODEL-TOPOLOGY's numbers (the 8 GB card is full at 16K), not from a
+  measurement. The two-card swap time is not measured either.

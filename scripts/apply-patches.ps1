@@ -805,6 +805,8 @@ $SHIPPED = @(
     'jarvis_chatbot_grok.py'     # Grok (grok.com): a thin site file
     'jarvis_chatbot_lechat.py'   # Le Chat by Mistral AI (chat.mistral.ai): a thin site file
     'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
+    'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
+    'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
 )
 
 # The settings file. Installed only where none exists; never overwritten.

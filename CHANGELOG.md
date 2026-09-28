@@ -23,6 +23,16 @@ number as the last part - `0.2.57` is a build of 0.2.
   Swiping right to approve and left to deny stays on unless you turn it
   off; off, every card is decided with its buttons only. Turning it back on
   asks for your fingerprint or PIN.
+- **The chatbot driver can also use a key, or a second AI on your PC -
+  still not usable from either app.** With a key saved on the PC, Jarvis
+  can hold its one-card conversation with ChatGPT (OpenAI), DeepSeek,
+  Mistral, Grok, OpenRouter or Groq through each company's official API.
+  The key stays in Windows Credential Manager and goes only to that
+  company. Each message costs a little on that account; Jarvis shows the
+  word-pieces (tokens) used, but there is no money limit yet. Or it can talk
+  to another AI model on your own PC, where nothing leaves the PC: with one
+  graphics card that is the same model Jarvis uses, with both cards any
+  model you already have. How to save a key: `backend/README.md`.
 - **The chatbot driver's Gemini part is written - still not usable from
   either app.** Jarvis can now open its own Gemini window (gemini.google.com,
   in a browser window you can see), type a question at a steady pace, and

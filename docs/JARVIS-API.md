@@ -8898,6 +8898,12 @@ owner's answers (2026-09-28)"); the owner's decisions are in `CLAUDE.md`
   file over one shared base, `backend/jarvis_chatbot_web.py`, tested by
   `backend/test_chatbot_sites.py`. None of their selectors is checked against
   the real sites yet either.
+- **API adapters and a second AI on this PC** (the same decision): §60.4.1,
+  `backend/jarvis_chatbot_api.py` (one entry per service - OpenAI, DeepSeek,
+  Mistral, xAI, OpenRouter, Groq - tested by `backend/test_chatbot_api.py`
+  against a fake OpenAI-style server), and §60.4.2,
+  `backend/jarvis_chatbot_local.py` (another Ollama model on this PC, tested
+  by `backend/test_chatbot_local.py` against a fake Ollama).
 
 ### 60.1 What it is
 
@@ -9016,6 +9022,83 @@ sees or keeps the password. The owner's three lines, in PowerShell:
 
 `JARVIS_GEMINI_BROWSER=msedge` (or `chrome`) uses the browser already on
 the PC instead of Playwright's Chromium.
+
+### 60.4.1 Through an official API with a key (`jarvis_chatbot_api.py`, 2026-09-28)
+
+One adapter family speaking the OpenAI-style "Chat Completions" API
+(`POST <base>/chat/completions`, `{"model", "messages", "stream": false}`,
+one answer back), registered as one chatbot per service so the card names
+the exact service, host and model. `chatbots[].kind` is `"api"` for these,
+`"website"` for Gemini and `"local"` for 60.4.2.
+
+| id | name | base address | default model | address checked |
+|---|---|---|---|---|
+| `openai_api` | ChatGPT (OpenAI API) | `https://api.openai.com/v1` | `gpt-5-mini` | yes - openai/openai-python |
+| `deepseek_api` | DeepSeek (API) | `https://api.deepseek.com` | `deepseek-chat` | **unverified** (docs blocked from the build container) |
+| `mistral_api` | Mistral (API) | `https://api.mistral.ai/v1` | `mistral-small-latest` | yes - mistralai/client-python |
+| `xai_api` | Grok (xAI API) | `https://api.x.ai/v1` | `grok-4.6` | host yes (xai-sdk-python); the `/v1/chat/completions` path **unverified** |
+| `openrouter_api` | OpenRouter (API) | `https://openrouter.ai/api/v1` | `openai/gpt-5-mini` | yes - OpenRouterTeam/typescript-sdk |
+| `groq_api` | Groq (API) | `https://api.groq.com/openai/v1` | `openai/gpt-oss-20b` | yes - groq/groq-python |
+
+The default models are a cheap first choice, **not checked against any
+price list**. `<id>_model = "..."` under `[chatbot]` in
+`jarvis-framework.toml` changes one; it is read once, when Jarvis starts,
+so a card and its conversation always name the same model.
+
+**Keys (rule 3).** Windows Credential Manager, one entry per service
+(`Jarvis Backend/OpenAI API key`, `.../DeepSeek API key`, `.../Mistral AI
+API key`, `.../xAI API key`, `.../OpenRouter API key`, `.../Groq API key`),
+through the same `jarvis_token_store` code as the web-search keys. Entered
+on the PC only, one line in PowerShell in Jarvis's folder (the key is
+pasted at a hidden prompt):
+`py -3 jarvis_chatbot_api.py key openai` (or `deepseek`, `mistral`, `xai`,
+`openrouter`, `groq`); `forget-key <service>` removes it, `status` lists
+which are saved. A service with no key is `ready: false` with that line as
+its `note`, before any card. The key goes in the `Authorization` header to
+that service's own https host and port only (checked at open and before
+every request), a redirect is refused, nothing is logged, and an error
+never quotes the service's own error text.
+
+**Errors** end the conversation with plain words (the session's `ended`):
+the key refused (401/403, with the line to save it again), no credit (402),
+an unknown model (404), too many requests (429), a problem on the
+service's side (5xx), no answer within 75 seconds, no connection, a
+redirect. A 429 is retried **at most once**, and only when its
+`Retry-After` is at most 20 seconds; nothing else is retried.
+
+**Money.** No money cap exists yet (the design's section 2 planned one).
+Each answer's `usage` is recorded and shown as the session's `usage`:
+`{"model", "requests", "retries", "prompt_tokens", "completion_tokens",
+"total_tokens"}` (null for Gemini). The card says there is no money limit
+and that the message limit is what bounds the cost.
+
+### 60.4.2 A second AI on this PC (`jarvis_chatbot_local.py`, 2026-09-28)
+
+Chatbot id `local_ai`, kind `"local"`, host `"this PC"`: another Ollama
+model on this PC. **Nothing leaves the PC**, so it has no row in "What
+Jarvis can reach" and the card says so; its replies are still outside
+text (another model's words are not the owner's), and the last check still
+runs before every message.
+
+- **Which model:** `local_model = "<name>"` under `[chatbot]`, a name
+  `ollama list` shows (read once, at start). `py -3
+  jarvis_chatbot_local.py models` lists them; `... status` says whether it
+  can be used now, and where. A model the PC does not have is refused;
+  nothing is ever downloaded.
+- **Never a cloud model:** a name with `-cloud` / `:cloud` is refused
+  before any card (`jarvis_router.is_remote_model` plus this file's own
+  pattern). **Loopback only:** 127.0.0.1 / localhost / ::1, never through a
+  proxy, redirects refused.
+- **One graphics card** (the core's limited version): only the everyday
+  model already loaded is allowed, at chat's own context size, and it waits
+  while the owner chats. It is the same model Jarvis uses, given only the
+  conversation - a fresh look, not a different AI; the card says so. Any
+  other model is `ready: false`: "needs your second graphics card".
+- **Two graphics cards** (the core's full version, the same check): any
+  model the PC has, up to 9 GiB on disk, in the second card's Ollama. That
+  card holds one model at a time, so a model other than the lane's own
+  swaps with Jarvis's driver model every message (a few seconds each); the
+  card says so.
 
 ### 60.5 More chatbot websites (`jarvis_chatbot_web.py` and one site file each)
 

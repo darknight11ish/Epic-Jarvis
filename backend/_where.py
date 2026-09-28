@@ -220,6 +220,12 @@ SHIPPED = (
     "jarvis_chatbot_grok.py",
     "jarvis_chatbot_lechat.py",
     "jarvis_chatbot_metaai.py",
+    # ... its API adapters (OpenAI-style Chat Completions: OpenAI, DeepSeek,
+    # Mistral, xAI, OpenRouter, Groq; keys in Credential Manager) and "a
+    # second AI on this PC" (another Ollama model, loopback only). No patch
+    # of their own: jarvis_chatbot.py loads both.
+    "jarvis_chatbot_api.py",
+    "jarvis_chatbot_local.py",
 )
 
 
