@@ -5314,6 +5314,9 @@ pub fn quit_app(app: AppHandle) {
     }
     // Closing the HUD explicitly stops WebView2 from logging a teardown warning
     // when the process exits while a remote origin is still loaded.
+    // Sizes and places first: the window-state plugin's own save runs
+    // at exit, when the HUD below is already gone (window_memory.rs).
+    crate::window_memory::save_now(&app);
     if let Some(hud) = tauri::Manager::get_webview_window(&app, HUD_LABEL) {
         let _ = hud.destroy();
     }

@@ -51,6 +51,13 @@ import {
   readFocus,
   toneOf as focusToneOf,
 } from "./focus.js";
+import {
+  APPEARED_WORDS as SCREEN_APPEARED,
+  POLL_MS as SCREEN_POLL_MS,
+  STOP_TITLE as SCREEN_STOP_TITLE,
+  nextScreenWork,
+  secondsRunning,
+} from "./screen-work.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -105,6 +112,10 @@ const dom = {
   focusPause: $("focus-pause"),
   focusLock: $("focus-lock"),
   focusStop: $("focus-stop"),
+
+  screenStrip: $("screen-strip"),
+  screenClock: $("screen-clock"),
+  screenStop: $("screen-stop"),
 
   netDot: $("net-dot"),
   offline: $("widget-offline"),
@@ -357,6 +368,106 @@ async function focusAct(button) {
 
 for (const b of [dom.focusPause, dom.focusLock, dom.focusStop]) {
   if (b) b.addEventListener("click", () => focusAct(b));
+}
+
+/* ==========================================================================
+   "Jarvis is working on your screen, 0:42 - Stop" (screen-work.js)
+
+   Asked of the PC every two seconds, and only while the event stream says
+   Jarvis is working - an idle Jarvis costs no requests. Rust answers from
+   GET /api/task's running list (screen_work.rs), so the line shows only
+   while a screen-control plan really runs. When the stream stops saying
+   "working" the PC is asked once more, and a failed last ask hides the line
+   rather than leaving a stale clock running. Stop is Stop everything,
+   never held: not by a stale link, not by App lock.
+   ========================================================================== */
+
+const screenWork = { view: null, poll: null, tick: null, loading: false, again: false };
+
+async function loadScreenWork({ hideOnError = false } = {}) {
+  if (!IS_TAURI) return;
+  if (screenWork.loading) {
+    // Asked again while an ask is out: once more afterwards, and a "last
+    // ask" (hide on failure) is never downgraded by an ordinary poll.
+    screenWork.again = { hideOnError: hideOnError || Boolean(screenWork.again && screenWork.again.hideOnError) };
+    return;
+  }
+  screenWork.loading = true;
+  try {
+    const got = await invokeStrict("screen_work");
+    paintScreenWork(nextScreenWork(screenWork.view, got, Date.now()));
+  } catch (error) {
+    // Nothing new is known. Keep the line while Jarvis still reports it is
+    // working; drop it once it does not.
+    if (hideOnError) paintScreenWork(null);
+  } finally {
+    screenWork.loading = false;
+  }
+  if (screenWork.again) {
+    const next = screenWork.again;
+    screenWork.again = false;
+    await loadScreenWork(next);
+  }
+}
+
+function screenTickOnce() {
+  if (!screenWork.view || !dom.screenClock) return;
+  dom.screenClock.textContent = focusClock(secondsRunning(screenWork.view, Date.now()));
+}
+
+function paintScreenWork(view) {
+  if (!dom.screenStrip) return;
+  const appeared = Boolean(view) && !screenWork.view;
+  screenWork.view = view;
+  dom.screenStrip.hidden = !view;
+  if (view) {
+    screenTickOnce();
+    if (!screenWork.tick) screenWork.tick = setInterval(screenTickOnce, 1000);
+    // Once, when it appears - never the clock every second.
+    if (appeared) announce(SCREEN_APPEARED);
+  } else if (screenWork.tick) {
+    clearInterval(screenWork.tick);
+    screenWork.tick = null;
+  }
+  syncSize();
+}
+
+/** Called on every link report: ask while working, stop asking after. */
+function syncScreenPolling(link) {
+  const working = Boolean(link && link.connected && link.activity === "working");
+  if (working && !screenWork.poll) {
+    loadScreenWork();
+    screenWork.poll = setInterval(() => loadScreenWork(), SCREEN_POLL_MS);
+  } else if (!working && screenWork.poll) {
+    clearInterval(screenWork.poll);
+    screenWork.poll = null;
+    loadScreenWork({ hideOnError: true });
+  } else if (!working && screenWork.view) {
+    loadScreenWork({ hideOnError: true });
+  }
+}
+
+async function screenStop() {
+  const b = dom.screenStop;
+  if (!b || b.disabled) return;
+  b.disabled = true;
+  try {
+    await invokeStrict("stop_everything");
+    // The notification says what was stopped; this says it was sent.
+    flash("Stop sent.", "ok",
+      "Stop everything sent. Jarvis stops before its next step; steps already done stay done. A notification says what was stopped.");
+  } catch (error) {
+    flash(String((error && error.message) || error), "bad");
+  } finally {
+    b.disabled = false;
+  }
+  // The line goes when the PC says the plan has ended, not on this click.
+  setTimeout(() => loadScreenWork(), 800);
+}
+
+if (dom.screenStop) {
+  dom.screenStop.title = SCREEN_STOP_TITLE;
+  dom.screenStop.addEventListener("click", screenStop);
 }
 
 /* ==========================================================================
@@ -1420,6 +1531,7 @@ startLink();
 
     syncApprovalButtons();
     syncFocusButtons();
+    syncScreenPolling(link);
     if (link.connected && !focus.readOnce) loadFocus();
     syncSize();
   });

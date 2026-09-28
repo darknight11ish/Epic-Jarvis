@@ -197,6 +197,7 @@ CLASSIFICATION = {
     "/api/skills/decide": ("ported", "Removing a skill, after an are-you-sure, as on the desktop (Brain, Model, Skills). Phone: Brain, Skills (SkillsPlate.kt, net/Skills.kt). Never held on a stale link; a card the PC raises is shown as waiting. Removal only - no app can install a skill."),
     "/api/status": ("ported", ""),
     "/api/tags": ("not-backend", "Ollama's /api/tags on loopback: the installed model list (commands.rs). Not a Jarvis route."),
+    "/api/task": ("deliberate", "\"Jarvis is working on your screen, 0:42 - Stop\" (the owner's choice of 2026-09-28, the research audit's idea 17): the desktop widget reads which task runs to show a line with a clock while a Windows screen-control plan (control_computer) is moving the mouse and typing on the PC, and its Stop is the Stop everything hotkey (screen_work.rs). It is about the PC's own screen, seen by whoever sits at it; the phone already has Stop everything and the task Pause/Stop, driven by the event stream's activity, and needs no second poll. ARCHITECTURE section 8."),
     "/api/task/note": ("ported", ""),
     "/api/task/pause": ("ported", ""),
     "/api/task/resume": ("ported", ""),

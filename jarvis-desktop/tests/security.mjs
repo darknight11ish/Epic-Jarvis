@@ -486,7 +486,14 @@ await check("App lock covers the HUD on every way it is shown (apps security aud
   assert.doesNotMatch(single, /hud\.show\(\)/);
   const build = fnBody(lib, "fn build_hud_window(");
   assert.match(build, /let lock_first = !hidden && lock::current\(app\)\.app_lock;/);
-  assert.match(build, /\.visible\(!hidden && !lock_first\)/, "a normal start shows the HUD while locked");
+  // Built hidden every time, put back where the owner left it
+  // (window_memory.rs), then shown only on a normal, unlocked start
+  // (2026-09-28, windows remember their size and place).
+  assert.match(build, /\.visible\(false\)/, "the HUD is built on screen");
+  assert.match(build, /let show_now = !hidden && !lock_first;/, "a normal start shows the HUD while locked");
+  assert.match(build, /window_memory::restore\(&hud, show_now\);\s*if show_now \{\s*let _ = hud\.show\(\);/,
+    "the HUD is shown past the lock, or maximised (which shows it) while it should stay hidden");
+  assert.equal((build.match(/hud\.show\(\)/g) || []).length, 1, "one show, behind show_now");
   assert.match(build, /if lock_first \{\s*if let Err\(err\) = windows::show_hud\(app\)/);
   const tray = read("src-tauri/src/tray.rs");
   assert.match(tray, /ID_SHOW_HUD => \{\s*if let Err\(err\) = windows::show_hud\(app\)/);

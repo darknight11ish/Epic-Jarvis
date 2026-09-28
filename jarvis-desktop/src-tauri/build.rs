@@ -43,6 +43,10 @@ fn main() {
             "pause_task",
             "resume_task",
             "stop_task",
+            // The widget's "working on your screen" line and its Stop - the
+            // same stop as the hotkey (screen_work.rs). task-control set.
+            "screen_work",
+            "stop_everything",
             "inject_task_note",
             // The interruption budget and the daily brief. Reads and two
             // writes; the tray calls the same functions in-process, so it

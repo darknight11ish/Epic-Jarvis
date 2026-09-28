@@ -1236,6 +1236,9 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let _ = app.global_shortcut().unregister_all();
             }
+            // Sizes and places first: the window-state plugin's own save runs
+            // at exit, when the HUD below is already gone (window_memory.rs).
+            crate::window_memory::save_now(app);
             if let Some(hud) = app.get_webview_window(crate::HUD_LABEL) {
                 let _ = hud.destroy();
             }

@@ -181,6 +181,15 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **Fixed:** a Google Takeout with Search activity in it no longer treats
   searches as Gemini chats.
 
+**New: desktop polish**
+
+- **Brain, Settings, Faces and the HUD reopen where you left them,** at the
+  same size, and maximised if they were. App lock still asks Windows Hello
+  before the HUD shows. A window whose screen was unplugged opens centred.
+- **While Jarvis is clicking or typing on your screen,** the widget shows
+  "Jarvis is working on your screen", a timer and a Stop button - the same
+  as the Stop everything key.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the
