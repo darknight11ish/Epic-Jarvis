@@ -93,13 +93,21 @@ NO_PLUGINS = {"servers": [], "running": [], "problem": "", "card_every_start": F
 # would list it - never signed in, or ready but not reachable from the apps
 # yet (no route exists). Fixed here, so the file does not depend on whether
 # Playwright happens to be installed on the machine that writes it.
+# The API adapters (jarvis_chatbot_api.py) likewise: every service listed,
+# with a key saved for OpenAI only when `ready` - never read from this
+# machine's own Credential Manager.
 import jarvis_chatbot_gemini as _G  # noqa: E402
+import jarvis_chatbot_api as _A  # noqa: E402
 
 
 def _gemini(ready: bool) -> dict:
-    return {"routed": False, "chatbots": [{
-        "id": _G.ID, "name": _G.NAME, "host": _G.HOST, "built": True, "ready": ready,
-        "note": "" if ready else _G.NOT_SIGNED_IN}]}
+    bots = [{"id": _G.ID, "name": _G.NAME, "host": _G.HOST, "built": True, "ready": ready,
+             "note": "" if ready else _G.NOT_SIGNED_IN, "kind": "website"}]
+    for pid, p in _A.PRESETS.items():
+        ok = ready and pid == "openai_api"
+        bots.append({"id": pid, "name": p.name, "host": p.host, "built": True, "ready": ok,
+                     "note": "" if ok else _A.no_key_words(p), "kind": "api"})
+    return {"routed": False, "chatbots": bots}
 
 
 def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=None,

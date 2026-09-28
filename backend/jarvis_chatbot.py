@@ -320,6 +320,11 @@ class AdapterInfo:
     #: else the plain-words reason and how to fix it (Playwright missing,
     #: never signed in). plan() asks it BEFORE any card. Opens nothing.
     ready: Optional[Callable[[], str]] = None
+    #: How it is reached: "website" (a browser window), "api" (an official
+    #: API with a key, jarvis_chatbot_api.py) or "local" (another model on
+    #: this PC, jarvis_chatbot_local.py). The card and "What Jarvis can
+    #: reach" word each one differently.
+    kind: str = "website"
 
 
 class FakeChatbot(Adapter):
@@ -436,7 +441,7 @@ def choices() -> list:
             continue
         note = _not_ready(i)
         out.append({"id": i.id, "name": i.name, "host": i.host, "built": bool(i.built),
-                    "ready": not note, "note": note})
+                    "ready": not note, "note": note, "kind": i.kind})
     return out
 
 
@@ -496,6 +501,9 @@ class Session:
     stop_mark: Optional[int] = None
     task_id: str = ""
     last_move: str = ""
+    #: What the adapter counted (an API adapter's token counts), for the
+    #: session view; {} for an adapter that counts nothing.
+    usage: dict = field(default_factory=dict)
     adapter: Any = field(default=None, repr=False, compare=False)
 
 
@@ -1006,6 +1014,8 @@ def describe(s: Session) -> str:
     """The approval card. The goal in full, every limit, nothing summarised."""
     info = _info(s)
     name = info.name if info else "a chatbot"
+    kind = info.kind if info else "website"
+    leaves = "is sent" if kind == "local" else "leaves this PC"
     if s.problem:
         return (f"Jarvis would like to hold a conversation with {name} for you, but "
                 f"{s.problem}.")
@@ -1037,7 +1047,7 @@ def describe(s: Session) -> str:
         f"  - it never sends: {BUILT_IN_NEVER}",
         f"  - and never your own never-send words: {_never_send_line(s)}",
         "",
-        "Every message is checked against that list just before it leaves this PC. One "
+        f"Every message is checked against that list just before it {leaves}. One "
         "that fails is rewritten once; if it fails again, the conversation pauses and "
         "asks you.",
         "",
@@ -1047,9 +1057,9 @@ def describe(s: Session) -> str:
         "",
         f"It stops by itself when the goal looks met, a limit is reached, {name} refuses "
         f"twice, the answers go in circles, or {name} asks about you (that question comes "
-        f"back to you; Jarvis never answers it). It pauses and asks you at a captcha, a "
-        f"sign-in page or an \"unusual activity\" page - Jarvis never solves or skips "
-        f"those.",
+        f"back to you; Jarvis never answers it)."
+        + (" It pauses and asks you at a captcha, a sign-in page or an \"unusual activity\" "
+           "page - Jarvis never solves or skips those." if kind == "website" else ""),
         "",
         f"Version: {TIER_NAMES[s.tier.id]} - {TIER_WORDS[s.tier.id]}",
         "",
@@ -1601,6 +1611,7 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
             reply = str(reply)[:MAX_REPLY_CHARS]
             s.transcript.append({"who": "chatbot", "n": s.turns_used, "text": reply,
                                  "at": d.clock(), "outside_text": True, "source": SOURCE})
+            s.usage = _usage_of(s.adapter) or s.usage
             look()
             q = asks_about_owner(reply)
             if q:
@@ -1633,10 +1644,25 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
         # An adapter that raised (a window closed under it, a page it could
         # not read): the conversation ends, its window is closed, and the
         # session never stays "running" with nothing behind it.
+        # An adapter may say why in plain words (jarvis_chatbot_api: the key
+        # refused, a rate limit) - shown as it is, as for open() above.
         s.active_seconds = elapsed()
-        _end_now(s, "adapter_failed", ENDED["adapter_failed"].format(
+        words = str(getattr(exc, "owner_words", "") or "")
+        _end_now(s, "adapter_failed", words or ENDED["adapter_failed"].format(
             name=name, error=type(exc).__name__), d)
         return _result(s, ok=False, reason=s.ended_words)
+
+
+def _usage_of(adapter) -> dict:
+    """An adapter's own counts (jarvis_chatbot_api: tokens), or {}."""
+    fn = getattr(adapter, "usage", None)
+    if not callable(fn):
+        return {}
+    try:
+        got = fn()
+    except Exception:
+        return {}
+    return dict(got) if isinstance(got, dict) else {}
 
 
 def _end_words(s: Session, code: str, words: str) -> str:
@@ -1658,6 +1684,7 @@ def _end_now(s: Session, code: str, words: str, d: Deps) -> None:
         s.steps = []
         adapter, s.adapter = s.adapter, None
     if adapter is not None:
+        s.usage = _usage_of(adapter) or s.usage
         try:
             adapter.close()
         except Exception:
@@ -1925,7 +1952,7 @@ def session_view(s: Session, *, transcript: bool = True) -> dict:
            "max_minutes": s.limits.max_minutes, "never_send": list(s.limits.never_send),
            "paused": s.paused_why, "ended": s.ended_words, "question": s.question,
            "problem": s.problem, "summary": dict(s.summary) if s.summary else None,
-           "read_aloud": False}
+           "usage": dict(s.usage) if s.usage else None, "read_aloud": False}
     if transcript:
         out["transcript"] = [dict(t) for t in s.transcript]
     return out
@@ -1956,5 +1983,17 @@ except Exception:  # pragma: no cover - shipped beside it on the PC
 # imports nothing heavy: Playwright is loaded only when a window opens.
 try:
     import jarvis_chatbot_gemini  # noqa: F401,E402
+except ImportError:  # pragma: no cover - shipped beside it on the PC
+    pass
+
+# The API adapters (OpenAI-style Chat Completions, one entry per service)
+# and "a second AI on this PC" (another Ollama model). Neither opens anything
+# at import.
+try:
+    import jarvis_chatbot_api  # noqa: F401,E402
+except ImportError:  # pragma: no cover - shipped beside it on the PC
+    pass
+try:
+    import jarvis_chatbot_local  # noqa: F401,E402
 except ImportError:  # pragma: no cover - shipped beside it on the PC
     pass

@@ -783,6 +783,8 @@ $SHIPPED = @(
     # --- Projects, build steps 1 and 2 (projects.patch, 2026-09-28) ---
     'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
     'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
+    'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
+    'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
 )
 
 # The settings file. Installed only where none exists; never overwritten.

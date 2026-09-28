@@ -174,6 +174,50 @@ def t_chatbot_row():
           r["state"] in ("off", "not_set_up"), r)
 
 
+def t_chatbot_api_row():
+    """Chatbot conversations through an API key (jarvis_chatbot_api.py): its
+    own row, one host per service with a saved key; "a second AI on this PC"
+    (jarvis_chatbot_local.py) adds no row and never shows in either chatbot
+    row; the website row lists websites only."""
+    note = "No OpenAI API key is saved on this PC."
+
+    def bots(openai_ready, routed=False, local_ready=True):
+        return {"routed": routed, "chatbots": [
+            {"id": "gemini_web", "name": "Gemini", "host": "gemini.google.com",
+             "built": True, "ready": False, "note": "never signed in", "kind": "website"},
+            {"id": "openai_api", "name": "ChatGPT (OpenAI API)", "host": "api.openai.com",
+             "built": True, "ready": openai_ready, "note": "" if openai_ready else note,
+             "kind": "api"},
+            {"id": "groq_api", "name": "Groq (API)", "host": "api.groq.com", "built": True,
+             "ready": False, "note": "No Groq API key", "kind": "api"},
+            {"id": "local_ai", "name": "A second AI on this PC", "host": "this PC",
+             "built": True, "ready": local_ready, "note": "", "kind": "local"}]}
+    r = row(R.view(ctx(chatbot=bots(False))), "chatbot_api")
+    check("chatbot_api: no key saved reads 'not set up' and names the services",
+          r["state"] == "not_set_up" and "ChatGPT (OpenAI API)" in r["line"]
+          and "Groq" in r["line"] and "PC only" in r["line"], r)
+    r = row(R.view(ctx(chatbot=bots(True))), "chatbot_api")
+    check("chatbot_api: a key saved but no route yet is 'off'",
+          r["state"] == "off" and "neither app" in r["line"] and r["where"] == "", r)
+    r = row(R.view(ctx(chatbot=bots(True, routed=True))), "chatbot_api")
+    check("chatbot_api: once routed it is on, goes to api.openai.com only (the service with "
+          "a key), asks every time",
+          r["on"] and r["where"] == "api.openai.com" and r["asks"] == R.ASK_EVERY, r)
+    r = row(R.view(ctx(chatbot=bots(True, routed=True),
+                       tiers={"chatbot_session": "never"})), "chatbot_api")
+    check("chatbot_api: tier never is blocked", r["state"] == "blocked", r)
+    web = row(R.view(ctx(chatbot=bots(True, routed=True))), "chatbot")
+    check("the website row lists websites only - not the API services or the local AI",
+          web["state"] == "not_set_up" and "this PC" not in web["where"]
+          and "OpenAI" not in web["line"] and "second AI" not in web["line"], web)
+    v = R.view(ctx(chatbot=bots(True, routed=True)))
+    check("'a second AI on this PC' adds no row and is named in no row",
+          not any("second AI" in r["line"] or r["id"] == "local_ai" for r in v["rows"]))
+    r = row(R.view(ctx()), "chatbot_api")
+    check("chatbot_api: the real reading (this machine) is never 'on' - there is no route",
+          r["state"] in ("off", "not_set_up"), r)
+
+
 def t_no_secret_anywhere():
     with Env(ENV):
         c = ctx(ALL, lanes=["jarvis-escalate"], providers=["openrouter"],
@@ -555,7 +599,7 @@ def t_both_apps_read_the_current_contract():
 
 
 if __name__ == "__main__":
-    for fn in (t_rows_and_order, t_chatbot_row, t_no_secret_anywhere,
+    for fn in (t_rows_and_order, t_chatbot_row, t_chatbot_api_row, t_no_secret_anywhere,
                t_asks_follows_the_rules,
                t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
                t_never_raises, t_cloud_lanes_are_the_servers_own, t_the_quick_answer,

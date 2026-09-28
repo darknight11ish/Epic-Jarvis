@@ -794,10 +794,13 @@ def _chatbot_status() -> dict:
 def _chatbot(ctx: Ctx) -> dict:
     """Chatbot conversations (jarvis_chatbot.py + jarvis_chatbot_gemini.py,
     the owner's decisions of 2026-09-27/28): Jarvis talks to an AI chatbot
-    WEBSITE for the owner, one card per conversation."""
+    WEBSITE for the owner, one card per conversation. The API adapters have
+    their own row (_chatbot_api); "a second AI on this PC" has none - it
+    reaches nothing outside the PC."""
     name = "Chatbot conversations"
     st = ctx.chatbot if ctx.chatbot is not None else _chatbot_status()
-    bots = [b for b in st.get("chatbots") or [] if b.get("built")]
+    bots = [b for b in st.get("chatbots") or [] if b.get("built")
+            and str(b.get("kind") or "website") == "website"]
     if st.get("missing") or not bots:
         return _row("chatbot", name, "not_set_up", "", ASK_NA,
                     "Not set up: no chatbot is built into this PC's Jarvis yet.")
@@ -828,6 +831,47 @@ def _chatbot(ctx: Ctx) -> dict:
                 "or sign-in page. What the chatbot says is outside text.")
 
 
+def _chatbot_api(ctx: Ctx) -> dict:
+    """Chatbot conversations through an official API with a key
+    (jarvis_chatbot_api.py, the owner's decision of 2026-09-28): one named
+    way out per service - each service's host is listed once its key is
+    saved. Whether a key is saved is yes or no; the key is never read here
+    beyond that."""
+    name = "Chatbot conversations with a key (API)"
+    st = ctx.chatbot if ctx.chatbot is not None else _chatbot_status()
+    bots = [b for b in st.get("chatbots") or [] if b.get("built")
+            and str(b.get("kind") or "") == "api"]
+    if st.get("missing") or not bots:
+        return _row("chatbot_api", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis has no chatbot API adapters yet.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("chatbot_session"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("chatbot_api", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never talks to a chatbot for you.")
+    ready = [b for b in bots if b.get("ready")]
+    if not ready:
+        return _row("chatbot_api", name, "not_set_up", "", ASK_NA,
+                    "Not set up: no key is saved on this PC for "
+                    + _join([str(b.get("name") or b.get("id")) for b in bots])
+                    + ". Keys are added on the PC only.")
+    ready_names = _join([str(b.get("name") or b.get("id")) for b in ready])
+    if not st.get("routed"):
+        return _row("chatbot_api", name, "off", "", ASK_NA,
+                    "A key is saved on this PC for " + ready_names + ", but neither app "
+                    "can start a conversation yet - that comes in a later step.")
+    return _row("chatbot_api", name, "on", _join([str(b.get("host") or "") for b in ready]),
+                ASK_EVERY,
+                "Holds a conversation with an AI chatbot through its official API, with the "
+                "key saved on this PC, sent only to that service: one approval card per "
+                "conversation shows the service, the model, the goal word for word and the "
+                "most messages and minutes. Each message costs a little on that account. "
+                "Nothing private is sent, and what the chatbot says is outside text.")
+
+
 #: Every way Jarvis can reach something outside itself, in the order both
 #: apps show them. A new way out is ONE entry here.
 KINDS = (
@@ -845,6 +889,7 @@ KINDS = (
     ("computer", _computer),
     ("browser", _browser),
     ("chatbot", _chatbot),
+    ("chatbot_api", _chatbot_api),
     ("phone_control", _phone),
     ("shell", _shell),
     ("plugins", _plugins),
