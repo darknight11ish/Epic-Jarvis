@@ -40,6 +40,9 @@ what changed when.
 
 | Date | Document | About |
 |---|---|---|
+| 2026-09-28 | [AUDIT-2026-09-28-AFTER-CHANGES.md](AUDIT-2026-09-28-AFTER-CHANGES.md) and [audit-2026-09-28/](audit-2026-09-28/) | Twelve audits of all five unmerged branches together: bugs, both apps, security, merge clashes, owner decisions, play tests, speed, docs, tools, unfinished work. |
+| 2026-09-28 | [UPDATE-AND-CHECK-2026-09-28.md](UPDATE-AND-CHECK-2026-09-28.md) | How to put the new work on the PC and phone, and a checklist that it works. |
+| 2026-09-28 | [GEMINI-AUDIT-2026-09-28.md](GEMINI-AUDIT-2026-09-28.md) | The outside (Gemini) audit package for everything since 2026-09-20, with its prompt. |
 | 2026-09-26 | [BUG-AUDIT-2026-09-26-backend.md](BUG-AUDIT-2026-09-26-backend.md), [-desktop](BUG-AUDIT-2026-09-26-desktop.md), [-phone](BUG-AUDIT-2026-09-26-phone.md) | Bug hunts in each part. |
 | 2026-09-26 | [APPROVALS-AUDIT-2026-09-26.md](APPROVALS-AUDIT-2026-09-26.md) | What asks first, and what could stop asking. |
 | 2026-09-26 | [PROFESSIONALISM-AUDIT-2026-09-26.md](PROFESSIONALISM-AUDIT-2026-09-26.md) | Packaging, versions, READMEs, wording. |
