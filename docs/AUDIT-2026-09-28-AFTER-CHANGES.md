@@ -156,13 +156,12 @@ came from, for the session that owns it.
 
 ## What you need to decide
 
-1. **How the five branches reach `main`.** Recommended: let one session
-   (this one, if you allow it to push one more branch) push the combined,
-   already-resolved copy plus the fixes above as ONE pull request, and run
-   CI on it; the phone app has never been built from the combined code. The
-   other way is five pull requests merged one at a time in this order:
-   continuation, GitHub repos, competitor audit, research, mascot, each
-   session fixing the clashes after the one before lands.
+1. **How the five branches reach `main`.** Decided (owner, 2026-09-28): ONE
+   combined pull request from this audit's branch, with the clashes
+   resolved and the blocking fixes in it (the one-time-code filter, the
+   animal voice starting off and the otter not on "Sky", the four "is
+   last" tests, the `faces.html` address). The one-time "Use it / Keep my
+   voice" question is not in it yet.
 2. **The entity layer**: keep it, fix it, or turn it off, after the memory
    test on your PC.
 3. Questions the audits raised for you, each in its report: whether builds

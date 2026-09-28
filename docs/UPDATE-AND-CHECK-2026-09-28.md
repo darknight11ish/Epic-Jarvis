@@ -101,30 +101,25 @@ paired.
 These block a safe merge. Each is in the audit report named, with the file,
 the line and a proposed fix:
 
-| # | What | Branch | Report |
-|---|---|---|---|
-| 1 | One-time codes get past the phone's hiding filter | continuation | [04 security](audit-2026-09-28/04-security.md), [01 Android](audit-2026-09-28/01-bugs-android.md) |
-| 2 | Your animal-voice decision (starts off, one-time question, otter not "Sky") | mascot | [06 decisions](audit-2026-09-28/06-decisions.md) |
-| 3 | The five "right after the sources block" patches, and the four "is last" tests | all five | [05 merge](audit-2026-09-28/05-merge.md) |
-| 4 | Desktop `send()`: Live and "Try the cloud model" clash | research + continuation | [05 merge](audit-2026-09-28/05-merge.md) |
-| 5 | API section numbers §59-61 and the phone's settings index 12 used twice | all | [05 merge](audit-2026-09-28/05-merge.md) |
-| 6 | The web address in a code comment in `faces.html` (fails a test) | GitHub repos | [10 sessions](audit-2026-09-28/10-threads.md) |
+| # | What | Branch | Report | Status |
+|---|---|---|---|---|
+| 1 | One-time codes get past the phone's hiding filter | continuation | [04 security](audit-2026-09-28/04-security.md), [01 Android](audit-2026-09-28/01-bugs-android.md) | fixed in the combined pull request |
+| 2 | Your animal-voice decision (starts off, one-time question, otter not "Sky") | mascot | [06 decisions](audit-2026-09-28/06-decisions.md) | starts off and otter not "Sky": fixed; the one-time question: **not yet** |
+| 3 | The five "right after the sources block" patches, and the four "is last" tests | all five | [05 merge](audit-2026-09-28/05-merge.md) | fixed |
+| 4 | Desktop `send()`: Live and "Try the cloud model" clash | research + continuation | [05 merge](audit-2026-09-28/05-merge.md) | fixed |
+| 5 | API section numbers §59-61 and the phone's settings index 12 used twice | all | [05 merge](audit-2026-09-28/05-merge.md) | fixed |
+| 6 | The web address in a code comment in `faces.html` (fails a test) | GitHub repos | [10 sessions](audit-2026-09-28/10-threads.md) | fixed |
 
-Items 3-5 are already solved in the combined copy this audit built.
+### How it gets merged - one pull request (your choice, 2026-09-28)
 
-### How it gets merged - your choice
+All five branches, the fixes above and the audit's own fixes are in ONE
+pull request from `claude/jarvis-post-change-audits-olihzo`. **You press
+Merge** on GitHub, only when all its checks are green - that includes the
+phone app being built and started on an emulator from the combined code,
+which has never happened before.
 
-- **Recommended: one pull request with everything.** Let one Claude
-  session push the combined, already-resolved copy plus fixes 1, 2 and 6
-  as one branch, open one pull request, and get GitHub's checks green on
-  it. It is the only way the phone app gets built from the combined code
-  before it reaches you, and it avoids five rounds of clashes.
-- **Or five pull requests, one at a time, in this order:** continuation (it
-  has no pull request yet - ask its session to open one), GitHub repos,
-  competitor audit, research, mascot. After each merge, the next session
-  brings `main` in and fixes the clashes before you merge it.
-
-Either way: **you press Merge** on GitHub, only when its checks are green.
+Work the other sessions push to their own branches AFTER this pull request
+was made is not in it; it goes in a later pull request.
 
 ### After it is merged
 
