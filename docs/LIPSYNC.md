@@ -570,6 +570,50 @@ sentences.
   silent), 27 are next to an m, b or p (whose closing starts 50 ms early)
   and 9 are other quiet "l", "n" and "r" sounds.
 
+### Correction: Kokoro's sound comes about 50 ms before its own plan
+
+Found by the corpus tests later the same day (2026-09-28), and fixed.
+Kokoro's durations say when each sound is PLANNED; the sound itself comes
+about 50-60 ms earlier. Measured on raw Kokoro audio (no pause shortening,
+no pitch change): hiss 60 ms early at speed 1.0 and 0.8 alike - a fixed
+two Kokoro frames, not a share of each sound - and m/b/p energy troughs
+42-49 ms early over 1,130 clips. So the timed mouth was showing about
+10 ms LATE instead of the intended ~50 ms early.
+
+- **The fix:** `jarvis_mouth.SOUND_LEAD` (2 frames, 50 ms) moves every
+  sound earlier in `finish()`. Piece edges and the sample-exact length
+  check are unchanged. After it, on the same clips: hiss -20 ms, speech
+  onset -10 ms, loudness-vs-mouth cross-correlation +5 to +10 ms,
+  troughs -5 ms (default voice). The owl's troughs are still about
+  -45 ms, so its lead may be a little larger; one value is used for all
+  voices rather than fitting a small sample.
+- **The table above is biased by this.** It scored the sound analysis at
+  the plan's moments, 50 ms after the sounds really happen. Scored where
+  the sounds actually are (the sound-analysis tester, 738 Kokoro clips),
+  the sound analysis does much better than the table says - m, b, p shut
+  509/548 (default), 68/90 (panda), 526/546 (owl), 75/101 (otter) against
+  the timing's 441/548, 74/90, 430/546, 85/101 at the time (before the
+  fix); and the owl's "0.20 open in pauses" is really 0.02. The timing is
+  still clearly better at "oo" rounding (about 0.6 against 0.18-0.37),
+  and at not shutting on t, d, n, k and "r".
+- **The corpus test** (`backend/test_mouth_corpus.py`, 25 checks, no model
+  needed; 28 with `JARVIS_KOKORO_DIR`): 3,286 lines built to break things
+  - every verb form, the 720 Harvard sentences, minimal pairs, every sound
+  at the start, middle and end of a word, numbers, dates, money, names,
+  emoji, web addresses, control characters, a 20,000-character word -
+  timed in all four voices (13,144 tracks: no errors, m/b/p shut and f/v
+  bitten 100%), and 2,631 clips spoken by the real model: a mouth made for
+  99.24% (the rest fall back safely to no mouth, sound unchanged), the
+  sound byte-identical with and without the mouth in 504/504, the mouth
+  open in 0 of 13,224 silent frames. Six text-reading bugs it found are
+  fixed (punctuation with no letter, NUL, U+FFFD, which characters count
+  as digits, other English accents' vowels, and memory on a 10-minute
+  answer: ~1 GB down to 256 MB).
+- **Left as they are** (each would change `test_mouth.py`'s committed
+  tracks): "w" before "ee" rounds weakly (median 0.36); no early rounding
+  straight after a pause (the silence gate); the biggest one-frame step is
+  0.326 at an f/v release, just over the 0.3 the tests allow elsewhere.
+
 ### Limits, said plainly
 
 - **Not run on Windows or on the owner's PC.** The Windows espeakng-loader
