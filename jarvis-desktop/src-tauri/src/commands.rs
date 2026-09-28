@@ -1810,6 +1810,10 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
         "second_card",
         "quick",
         "open_settings",
+        // "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the
+        // Brain place main.js opens (openBrainFromRoute) after "forget what
+        // you learned last week" filled in its list. Navigation only.
+        "open_brain",
     ] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(
@@ -5786,6 +5790,21 @@ mod turn_tests {
             let line = super::route_line_from_header(&header).unwrap();
             assert!(!line.contains("injected_sensitive"), "{odd}: {line}");
         }
+    }
+
+    /// "Forget a time frame" (2026-09-28): `open_brain` reaches the page, as a
+    /// string only - main.js opens the Brain there. Nothing else rides on it.
+    #[test]
+    fn the_route_line_carries_open_brain_as_a_string_only() {
+        let line = super::route_line_from_header(
+            r#"{"lane": "x", "quick": "forget_range", "open_brain": "forget-range"}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["open_brain"], "forget-range");
+        assert_eq!(got["quick"], "forget_range");
+        let odd = super::route_line_from_header(r#"{"lane": "x", "open_brain": 3}"#).unwrap();
+        assert!(!odd.contains("open_brain"), "{odd}");
     }
 
     /// Temporary chat and "Used in this answer" (2026-09-25): the two marks

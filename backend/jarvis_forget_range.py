@@ -126,6 +126,7 @@ WORDS = {
     "from": "From",
     "to": "To",
     "date_hint": "A date like 2026-09-01",
+    "custom": "Choose the dates",
     "kinds": "What to look for",
     "kind_facts": "What Jarvis learned",
     "kind_chats": "Chats",

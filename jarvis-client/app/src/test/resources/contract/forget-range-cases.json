@@ -655,6 +655,7 @@
   "bad_date": "Type the dates like 2026-09-01.",
   "between_us": "Between us",
   "chats_head": "Chats from then",
+  "custom": "Choose the dates",
   "date_hint": "A date like 2026-09-01",
   "erase_note": "Facts are forgotten, as Forget does: they stop being used and stay in the history. To wipe a fact's words for good, use Erase the words on that fact.",
   "facts_head": "What Jarvis learned then",

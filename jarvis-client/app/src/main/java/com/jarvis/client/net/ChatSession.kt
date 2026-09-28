@@ -478,7 +478,12 @@ class ChatSession(
                         // "Open <a settings section>" (jarvis_settings_
                         // registry.py, docs/JARVIS-API.md section 58.1):
                         // pure navigation, read the same way.
+                        // "Forget what you learned last week" (2026-09-28):
+                        // `open_brain` names Brain's "Forget a time frame",
+                        // the list already filled in - the same navigation,
+                        // through OpenPlace. Nothing is removed by it.
                         _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
+                            ?: ForgetRange.openFromRoute(routeHeader)
                     }
                     val temporaryNotes = TemporaryChat.notes(asTemporary, routeHeader)
                     // Decoded as CHARACTERS, not as whatever bytes happened

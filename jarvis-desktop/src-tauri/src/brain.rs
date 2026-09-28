@@ -39,6 +39,7 @@ pub mod auto_learn;
 pub mod briefing;
 pub mod chatbot;
 pub mod focus;
+pub mod forget_range;
 pub mod history;
 pub mod profile;
 pub mod projects;

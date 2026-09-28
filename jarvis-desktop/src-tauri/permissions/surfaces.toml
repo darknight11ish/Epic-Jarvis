@@ -744,6 +744,24 @@ permissions = [
   "allow-projects-choose-folder",
 ]
 
+# "Forget a time frame" (backend/forget-range.patch; JARVIS-API section 64;
+# the owner's decision of 2026-09-28). Reading the status or the list for
+# some days is a read - the list's words hidden in Rust while "Windows Hello
+# for memory lists and chat history" hides the private lists, or App lock
+# has locked Jarvis. A change is ONE of two actions from a fixed list
+# (brain/forget_range.rs) - the page never names a URL: "Forget these" sends
+# the ids still ticked, and the PC raises ONE card listing every item (never
+# approved here, never by voice); it is refused while the list is hidden
+# and held while the event stream is stale. Undo puts back what that card
+# removed, within 10 minutes, with no card; it is never held.
+[[set]]
+identifier = "brain-forget-range"
+description = "Read what Jarvis learned and the chats from some days, ask the PC to forget the ticked ones (the PC raises ONE approval card), and Undo within 10 minutes. Approves nothing."
+permissions = [
+  "allow-forget-range-read",
+  "allow-forget-range-write",
+]
+
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
 # timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
 # is a read. ONE thing per call to the running session - pause, resume, +10

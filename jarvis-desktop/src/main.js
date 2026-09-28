@@ -146,6 +146,9 @@ import {
 // The renderer the answer card and the approval preview use - see markdown.js.
 import { escapeHtml, renderMarkdown } from "./markdown.js";
 import { approvalPlainText, isEmailCard } from "./email-sending.js";
+// "Forget a time frame": where the Brain opens after "forget what you learned
+// last week" (openBrainFromRoute).
+import { BRAIN_PLACE_KEY, PLACE as FORGET_RANGE_PLACE } from "./forget-range.js";
 import {
   fromChatFailure,
   fromStreamError,
@@ -1013,6 +1016,7 @@ function applyHeaderRoute(route) {
   // The facts this answer used (ids only) and the temporary-chat marks.
   answerMemory.route(state.turnRoute);
   openSettingsFromRoute(state.turnRoute);
+  openBrainFromRoute(state.turnRoute);
   const next = routeFromHeader(route);
   if (!next) return;
   state.routeFromHeader = true;
@@ -1039,6 +1043,25 @@ function openSettingsFromRoute(route) {
     /* no storage: Settings opens at the top, and the answer's own words say where */
   }
   invoke("open_fix_place", { place: "settings" });
+}
+
+/**
+ * "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): after "forget
+ * what you learned last week", said or typed, `open_brain` on X-Jarvis-Route
+ * names the Brain place with the list already filled in. The same shape as
+ * openSettingsFromRoute: leave the place under BRAIN_PLACE_KEY, then ask Rust
+ * to open or focus the Brain; brain.js takes it from there. Navigation only -
+ * nothing is removed until the owner ticks, presses Forget these and
+ * approves the card.
+ */
+function openBrainFromRoute(route) {
+  if (!route || route.open_brain !== FORGET_RANGE_PLACE) return;
+  try {
+    localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify({ place: FORGET_RANGE_PLACE, at: Date.now() }));
+  } catch {
+    /* no storage: the Brain opens where it was, and the answer's own words say where */
+  }
+  invoke("open_fix_place", { place: "brain" });
 }
 
 /** Paints the three health dots in the card footer. */

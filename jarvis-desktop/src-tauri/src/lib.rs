@@ -842,6 +842,8 @@ pub fn run() {
             brain::projects::projects_read,
             brain::projects::projects_write,
             brain::projects::projects_choose_folder,
+            brain::forget_range::forget_range_read,
+            brain::forget_range::forget_range_write,
             brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,
