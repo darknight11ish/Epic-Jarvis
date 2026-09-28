@@ -1355,6 +1355,27 @@ caught by the compiler itself, neither by a review:
   device) - written down here so that gap is visible, not papered over by
   "tests passed."
 
+Decided 2026-09-28, the owner's answers after the post-change audits
+(`docs/AUDIT-2026-09-28-AFTER-CHANGES.md`; all merged in PR #23):
+- **The memory entity layer: test the fix.** Build the "skip very common
+  names" fix switched off; the owner runs the memory self-test on the PC
+  and whichever setting scores best is kept.
+- **Next work: fix the audits' open problems** - the seven smaller
+  findings (Lockdown gaps, health words in the private-topic check, "call
+  my mum's phone", talk-to-type vs Live on the microphone, Live warming the
+  wrong model, the plan card's gaps while it stays off, the hard face
+  picker, the widget's App lock line) plus the one-time "Use it / Keep my
+  voice" question - in one checked pull request, before bringing in the
+  other sessions' newer work.
+- **Phone builds publish from `main` only**, not from the old branch.
+- **Under App lock, the phone widget's buttons open the locked app
+  first**, like the desktop widget; they do not act on their own.
+- **A goal's weekly check-in needs no card**, like plain repeating
+  reminders: it only reminds and never acts.
+- **QR-code pairing keeps waiting** for per-device keys ("more devices").
+- **The app builder's projects join Projects**: an app is a coding project
+  whose tests are its benchmarks - one list, not two.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
