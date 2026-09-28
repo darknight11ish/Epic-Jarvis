@@ -8865,20 +8865,31 @@ second version of any of it.
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
 
-## 60. Chatbot conversations - Jarvis talks to an AI chatbot for you (core and Gemini adapter built 2026-09-28, not routed yet)
+## 60. Chatbot conversations - Jarvis talks to an AI chatbot for you (core, Gemini adapter, routes and both apps' screens built 2026-09-28)
 
-**Not routed yet. Neither app calls anything here, and no route exists on
-the backend.** This section is a stub, so both apps build against one
-shape when the routes land. The design is `docs/CHATBOT-DRIVER-DESIGN.md`
-(with "The owner's answers (2026-09-28)"); the owner's decisions are in
-`CLAUDE.md` (2026-09-27 and 2026-09-28). What exists today is steps 1 and
-2 of the build: the backend core, `backend/jarvis_chatbot.py`, tested by
-`backend/test_chatbot.py` against a stand-in chatbot (`FakeChatbot`); and
-**the Gemini website adapter**, `backend/jarvis_chatbot_gemini.py`, tested
-by `backend/test_chatbot_gemini.py` against a fake Gemini page on
-127.0.0.1 in a real browser. Both are shipped whole; `chatbot.patch` gives
-the gate its `_RISK` line. **Its selectors are not yet checked against the
-real gemini.google.com** - the owner's self-check below does that.
+**Routed, on both apps' screens, with the Gemini website adapter - but not
+yet tried against the real gemini.google.com** (the owner's self-check in
+§60.4 does that). The design is `docs/CHATBOT-DRIVER-DESIGN.md` (with "The
+owner's answers (2026-09-28)"); the owner's decisions are in `CLAUDE.md`
+(2026-09-27 and 2026-09-28).
+
+- The backend core: `backend/jarvis_chatbot.py`, shipped whole, tested by
+  `backend/test_chatbot.py` against a stand-in chatbot (`FakeChatbot`).
+- The Gemini website adapter: `backend/jarvis_chatbot_gemini.py`, shipped
+  whole, tested by `backend/test_chatbot_gemini.py` against a fake Gemini
+  page on 127.0.0.1 in a real browser. `backend/chatbot.patch` gives the
+  gate its `_RISK` line.
+- The routes: `backend/jarvis_chatbot_routes.py`, shipped whole, and
+  `backend/chatbot-routes.patch` (one `install()` call in `jarvis_hud.py`),
+  tested by `backend/test_chatbot_routes.py`. `tools/gen_chatbot_cases.py`
+  writes the routes' real answers, and the sentences both apps show
+  (`jarvis_chatbot_routes.WORDS`), into both apps' contract file.
+- The desktop: Brain -> Work -> "Talk to a chatbot for me" (`src/chatbot.js`,
+  `brain.js`, `src-tauri/src/brain/chatbot.rs`; `tests/chatbot.mjs`).
+- The phone: Brain -> "Talk to a chatbot for me" (`net/Chatbot.kt`,
+  `ui/screens/ChatbotPlate.kt`; `ChatbotTest`), and an ongoing notification
+  while one is going ("Talking to Gemini, 3 of 5", with Stop;
+  `service/ChatbotNotifier.kt`).
 
 ### 60.1 What it is
 
@@ -8906,14 +8917,35 @@ per conversation; **any** change to a limit is a new card; Resume is
 same last check as every message **before** the card; a goal that fails is
 refused with the reason and no card.
 
-### 60.3 The planned routes (none exists yet)
+### 60.3 The routes
+
+Every route is behind the server's own origin and token checks, like every
+other route; both apps send the token and `X-Jarvis-Client: hud`.
 
 | route | body | answer |
 |---|---|---|
-| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()`: `{"routed", "chatbots": [{"id","name","host","built","ready","note"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max"}, "session": <session> or null}` |
-| `POST /api/chatbot/start` | `{"chatbot", "goal", "max_messages"?, "max_minutes"?, "never_send"?: [..]}` | 202 `{"ok", "session", "asking": true, "message"}` - nothing is sent until the card is approved; 400 with `error` when `plan()` refused it (the reason in plain words); 409 while another conversation runs or is paused |
-| `POST /api/chatbot/stop` | `{"id"}` | 200; never a card |
-| `POST /api/chatbot/limits` | `{"id", "max_messages"?, "max_minutes"?, "never_send"?}` | a new card; the limits change only on a yes |
+| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()` plus `"available": true` and `"limits": {"waiting", "said"}` (the last limits change for the conversation shown): `{"routed": true, "chatbots": [{"id","name","host","built","note"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max"}, "session": <session> or null, "limits"}`. With no `id`, the latest conversation still going (null when none - an ended one is read by its id); an unknown id is `session: null` (conversations are kept in memory only, so a backend restart loses them); an id that is not `chat_` and 12 hex digits is a 400. The one thing a read may change: a paused conversation that can no longer be resumed (Stop on the task, or its hour ran out, so `jarvis_task_control` no longer holds it) is ended - "stopped", its window closed - once a read has seen it so for 10 seconds; before, it stayed "paused" with a Resume that could only fail until a new conversation was planned |
+| `POST /api/chatbot/start` | `{"chatbot", "goal", "max_messages"?, "max_minutes"?, "never_send"?: [..]}` | 202 `{"ok", "session", "asking": true, "message"}` - the card is asked on a background thread and nothing is sent until a person approves it; 400 `{"ok": false, "error", "session"}` when `plan()` refused it (the reason as a sentence: "Gemini through its website is not built yet.", "The goal cannot be sent: it held an email address. Nothing would be sent.", "At most 8 messages in this version."), with no card; 409 while another conversation is going (asking, running or paused), and 409 when `chatbot_session` is not tier "ask" (switched off, or a tier that would ask nobody) - no card either way |
+| `POST /api/chatbot/stop` | `{"id"}` | 200 `{"ok", "session", "message"}`; never a card, never held on a stale link; 400 for a bad id, 404 for an unknown one, 409 when it has already ended |
+| `POST /api/chatbot/limits` | `{"id", "max_messages"?, "max_minutes"?, "never_send"?}` | 202 `{"ok", "asking": true, "session", "message"}` - a NEW card, asked on a background thread; the limits change only on a yes, and the outcome is on the next GET's `limits` (`waiting` while the card is up, then `said`). 200 `{"changed": false}` for the limits it already has; 400 for a number past this version's most (checked now, before any card); 404 unknown; 409 when it is not running or paused, when a limits card is already waiting, or when the tier is not "ask" |
+
+**No event of its own.** The core reports progress on the one activity
+line (`set_activity("working", "Talking to Gemini: message 3 of 5.")`); it
+publishes no transcript on the bus. Both apps read `GET /api/chatbot/status`
+again every 4 seconds while a conversation is going, and on every activity
+event. The phone starts its ongoing notification from an activity line that
+looks like a conversation's (`Chatbot.isChatbotActivity`), so one started
+on the desktop shows there too.
+
+**In the apps.** Start, Resume and Change limits are held on a stale link
+(rule 4: they send, or raise a card to); Stop and Pause are not. While
+"Hide memory lists and chat history" is on, the goal, the never-send words,
+the transcript, the summary, the chatbot's question and the end words are
+not shown (the desktop's Rust takes them out; the phone's plate leaves them
+out); the counts, the state and the version stay. The phone's notification
+carries only the chatbot's name and the counts, never the goal or a word of
+the conversation, and a locked phone shows only "Jarvis is talking to a
+chatbot for you."
 
 Pause and Resume are the existing `/api/task/pause` and `/api/task/resume`
 (tool name `chatbot_session`); Stop is also `/api/task/stop`, and Stop
@@ -8979,10 +9011,12 @@ the PC instead of Playwright's Chromium.
 
 ### 60.5 Not decided or not built
 
-The routes; both apps' screens and the phone's ongoing notification;
-keeping the transcript in the encrypted chat history (today it is in memory
-only and lost on a restart); the two-card version's measurements; checking
-the Gemini selectors on the owner's PC (the self-check above).
+Starting a conversation by saying it ("ask Gemini for me about ...") -
+today only the form starts one; task notes to a running conversation ("ask
+it about X too"); keeping the transcript in the encrypted chat history
+(today it is in memory only and lost on a restart); the two-card version's
+measurements; checking the Gemini selectors on the owner's PC (the
+self-check above).
 
 ## 61. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
 

@@ -1260,6 +1260,103 @@ body {
   color: var(--ok);
 }
 
+/* "Talk to a chatbot for me" (chatbot.js). The chatbot's words and the
+   summary are outside text: a warn-coloured edge and the same "outside text"
+   chip History uses for a turn that read outside text. */
+.chatbot-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.chatbot-form .row,
+.chatbot-limits .row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.chatbot-form input[type="number"],
+.chatbot-limits input[type="number"] {
+  width: 6em;
+}
+
+.chatbot-goal {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+
+.chatbot-sent-note {
+  color: var(--warn);
+}
+
+.chatbot-now {
+  padding: 8px 10px;
+  border-left: 2px solid var(--ok);
+  border-radius: 4px;
+}
+
+.chatbot-now[data-state="paused"],
+.chatbot-now[data-state="asking"] {
+  border-left-color: var(--warn);
+}
+
+.chatbot-now[data-state="done"],
+.chatbot-now[data-state="stopped"],
+.chatbot-now[data-state="refused"] {
+  border-left-color: var(--border);
+}
+
+.chatbot-head {
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.chatbot-limits {
+  margin-top: 10px;
+}
+
+.chatbot-limits > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.chatbot-turn {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--border);
+  border-radius: 4px;
+}
+
+.chatbot-outside {
+  border-left: 2px solid var(--warn);
+  background: var(--warn-faint);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-top: 8px;
+}
+
+.chatbot-turn-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatbot-who {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.chatbot-text {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .standby-time {
   display: inline-flex;
   gap: 6px;

@@ -133,6 +133,15 @@ class EventService : Service() {
             // because the last onStartCommand happened to be a Deny tap.
             return START_STICKY
         }
+        if (intent?.action == ACTION_CHATBOT_STOP) {
+            // Stop on the "Talking to Gemini, 3 of 5" line (ChatbotNotifier):
+            // the stream first, like Snooze, then ONE stop for that
+            // conversation. Never held on a stale link and never a card - it
+            // only makes Jarvis do less.
+            JarvisRuntime.startStream()
+            stopChatbotFromNotification(intent.getStringExtra(ChatbotNotifier.EXTRA_SESSION_ID))
+            return START_STICKY
+        }
         if (intent?.action == ACTION_SNOOZE) {
             // A notification's Snooze (ScheduleNotifier): the stream first,
             // like Deny, then ONE snooze once the link is live.
@@ -160,6 +169,23 @@ class EventService : Service() {
             val (changed, said) = JarvisRuntime.scheduleAct(id, "snooze")
             runCatching { Toast.makeText(this@EventService, said, Toast.LENGTH_LONG).show() }
             if (changed) runCatching { ScheduleNotifier.cancel(this@EventService, id) }
+        }
+    }
+
+    /**
+     * The Stop button on the chatbot conversation's ongoing notification. It
+     * waits briefly for the link (a cold process has no connection yet) but
+     * sends the stop whether or not the link is confirmed live: stopping is
+     * never held (rule 4 blocks ACTING, and this is the opposite). The toast
+     * says how it went - the app is very likely not on screen.
+     */
+    private fun stopChatbotFromNotification(id: String?) {
+        if (id == null || !com.jarvis.client.net.Chatbot.validId(id)) return
+        scope.launch {
+            awaitLive()
+            val (stopped, said) = JarvisRuntime.chatbotStop(id)
+            runCatching { Toast.makeText(this@EventService, said, Toast.LENGTH_LONG).show() }
+            if (stopped) runCatching { ChatbotNotifier.cancel(this@EventService) }
         }
     }
 
@@ -446,6 +472,7 @@ class EventService : Service() {
         const val ACTION_DENY = "com.jarvis.client.DENY_APPROVAL"
         const val ACTION_SNOOZE = "com.jarvis.client.SNOOZE_JOB"
         const val ACTION_STOP_RINGING = "com.jarvis.client.STOP_RINGING"
+        const val ACTION_CHATBOT_STOP = "com.jarvis.client.STOP_CHATBOT"
 
         /**
          * How long a Deny from outside the app waits for the link to come up

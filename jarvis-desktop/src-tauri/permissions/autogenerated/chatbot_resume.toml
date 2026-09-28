@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chatbot-resume"
+description = "Enables the chatbot_resume command without any pre-configured scope."
+commands.allow = ["chatbot_resume"]
+
+[[permission]]
+identifier = "deny-chatbot-resume"
+description = "Denies the chatbot_resume command without any pre-configured scope."
+commands.deny = ["chatbot_resume"]

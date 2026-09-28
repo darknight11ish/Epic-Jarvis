@@ -195,8 +195,7 @@ SHIPPED = (
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
     # A conversation with an AI chatbot for the owner: the driver, the last
-    # check, one card per conversation (the core only; not routed yet, no
-    # patch)
+    # check, one card per conversation
     "jarvis_chatbot.py",
     # Projects, build steps 1 and 2: projects, life benchmarks and their
     # numbers in projects.db; GET/POST /api/projects (projects.patch)
@@ -205,6 +204,8 @@ SHIPPED = (
     # openly, stopping at any captcha or sign-in page (chatbot.patch gives
     # the gate its _RISK line)
     "jarvis_chatbot_gemini.py",
+    # ...and its routes, /api/chatbot/* (chatbot-routes.patch)
+    "jarvis_chatbot_routes.py",
 )
 
 

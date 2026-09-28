@@ -1,0 +1,433 @@
+package com.jarvis.client.net
+
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+
+/**
+ * "Talk to a chatbot for me" (the owner's decisions of 2026-09-27 and
+ * 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md; docs/JARVIS-API.md section 60;
+ * backend `jarvis_chatbot.py` and `jarvis_chatbot_routes.py`,
+ * `chatbot-routes.patch`).
+ *
+ * Jarvis asks an AI chatbot (Gemini first) about something for the owner and
+ * writes its own follow-ups on the PC, within limits approved on ONE card.
+ * This phone starts one (the PC raises the card - nothing is sent before a
+ * yes), shows the conversation, Pauses, Resumes (its own card) and Stops it,
+ * asks for new limits (a NEW card), and keeps an ongoing notification
+ * ("Talking to Gemini, 3 of 5" with Stop) while one is going.
+ *
+ * The chatbot's words and the end summary are OUTSIDE TEXT: shown, never
+ * read aloud, never offered to be remembered. Signing in to the chatbot's
+ * account happens on the PC only (ARCHITECTURE section 8).
+ *
+ * Start, Resume and new limits are held on a stale link (rule 4: they make
+ * Jarvis send, or raise a card to); Pause and Stop are let through.
+ *
+ * Pure Kotlin, no Android types, so `ChatbotTest` runs it on a plain JVM
+ * against `contract/chatbot-cases.json` - the PC's real answers, and the
+ * PC's own words (`jarvis_chatbot_routes.WORDS`).
+ */
+object Chatbot {
+    const val STATUS_PATH = "/api/chatbot/status"
+    const val START_PATH = "/api/chatbot/start"
+    const val STOP_PATH = "/api/chatbot/stop"
+    const val LIMITS_PATH = "/api/chatbot/limits"
+
+    /** The only routes [com.jarvis.client.net.JarvisApi.chatbotWrite] posts to. */
+    val WRITE_PATHS = setOf(START_PATH, STOP_PATH, LIMITS_PATH)
+
+    // ---- the words, the PC's own (jarvis_chatbot_routes.WORDS) ----------
+
+    const val TITLE = "Talk to a chatbot for me"
+    const val DETAIL =
+        "Jarvis asks an AI chatbot about something for you, and writes its own " +
+            "follow-up questions on this PC, within limits you set. One approval card " +
+            "covers the whole conversation. While it does this, Jarvis knows only your " +
+            "goal - not your memory, email, calendar, notes or files."
+    const val CHATBOT_LABEL = "Chatbot"
+    const val GOAL_LABEL = "What should Jarvis find out?"
+    const val GOAL_NOTE = "These words will be sent to the chatbot exactly as you type them."
+    const val MESSAGES_LABEL = "Most messages"
+    const val MINUTES_LABEL = "Most minutes"
+    const val NEVER_LABEL = "Words it must never send (optional, separated by commas)"
+    const val START = "Start"
+    const val START_NOTE = "Nothing is sent until you approve the card."
+    const val PAUSE = "Pause"
+    const val RESUME = "Resume"
+    const val STOP = "Stop"
+    const val CHANGE_LIMITS = "Change limits"
+    const val LIMITS_NOTE = "A change to the limits needs a new approval card."
+    const val TRANSCRIPT_TITLE = "The conversation"
+    const val OUTSIDE_NOTE =
+        "The chatbot's words are outside text: shown here, never learned from, " +
+            "never read aloud."
+    const val SUMMARY_TITLE = "What Jarvis found"
+    const val SUMMARY_NOTE = "Written on this PC from the chatbot's words, so it is outside text too."
+    const val CLAIM_SOURCED = "it gave a source (not checked by Jarvis)"
+    const val CLAIM_UNSOURCED = "no source given"
+    const val OPEN_TITLE = "Still open"
+    const val QUESTION_TITLE = "The chatbot asked about you"
+    const val QUESTION_NOTE =
+        "Jarvis never answers questions about you. It is shown here for you to " +
+            "decide."
+    const val NONE_BUILT =
+        "No chatbot can be reached yet: Gemini's part is still being built. " +
+            "Start waits until it is."
+    const val SIGN_IN_PC =
+        "Signing in to the chatbot's account happens on the PC only, in the " +
+            "browser window Jarvis uses."
+    const val MISSING =
+        "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on " +
+            "the PC."
+    const val GONE =
+        "That conversation is gone: Jarvis on the PC restarted, and conversations are " +
+            "kept in memory only."
+    const val HIDDEN = "The goal and the conversation are hidden until you confirm it is you."
+    const val VERSION = "Version"
+    const val NOTIFY_RUNNING = "Talking to {name}, {used} of {max}"
+    const val NOTIFY_WAITING = "Waiting for your yes to talk to {name}"
+    const val NOTIFY_PAUSED = "Paused: talking to {name}, {used} of {max}"
+    const val NOTIFY_LOCKED = "Jarvis is talking to a chatbot for you."
+
+    /** Every sentence above by the PC's own key, for ChatbotTest. */
+    val WORDS: Map<String, String> = mapOf(
+        "title" to TITLE, "detail" to DETAIL, "chatbot_label" to CHATBOT_LABEL,
+        "goal_label" to GOAL_LABEL, "goal_note" to GOAL_NOTE, "messages_label" to MESSAGES_LABEL,
+        "minutes_label" to MINUTES_LABEL, "never_label" to NEVER_LABEL, "start" to START,
+        "start_note" to START_NOTE, "pause" to PAUSE, "resume" to RESUME, "stop" to STOP,
+        "change_limits" to CHANGE_LIMITS, "limits_note" to LIMITS_NOTE,
+        "transcript_title" to TRANSCRIPT_TITLE, "outside_note" to OUTSIDE_NOTE,
+        "summary_title" to SUMMARY_TITLE, "summary_note" to SUMMARY_NOTE,
+        "claim_sourced" to CLAIM_SOURCED, "claim_unsourced" to CLAIM_UNSOURCED,
+        "open_title" to OPEN_TITLE, "question_title" to QUESTION_TITLE,
+        "question_note" to QUESTION_NOTE, "none_built" to NONE_BUILT, "sign_in_pc" to SIGN_IN_PC,
+        "missing" to MISSING, "gone" to GONE, "hidden" to HIDDEN, "version" to VERSION,
+        "notify_running" to NOTIFY_RUNNING, "notify_waiting" to NOTIFY_WAITING,
+        "notify_paused" to NOTIFY_PAUSED, "notify_locked" to NOTIFY_LOCKED,
+    )
+
+    /** The states in which a conversation is still going. */
+    val LIVE = setOf("asking", "approved", "running", "paused")
+
+    /** Held on a stale link: they make Jarvis send, or raise a card to. */
+    val HELD_WHEN_STALE = setOf("start", "resume", "limits")
+
+    /** How often the plate and the notification read again while one is live. */
+    const val POLL_MS = 4000L
+
+    /** The longest goal the PC takes, and the never-send limits. */
+    const val MAX_GOAL_CHARS = 1000
+    const val MAX_NEVER = 50
+    const val MAX_NEVER_CHARS = 60
+
+    /** What each state is called on screen (the desktop's chatbot.js STATE_WORDS). */
+    val STATE_WORDS = mapOf(
+        "asking" to "Waiting for your yes on the approval card.",
+        "approved" to "Approved - starting.",
+        "running" to "Talking now.",
+        "paused" to "Paused.",
+        "done" to "Finished.",
+        "stopped" to "Stopped.",
+        "refused" to "Not started.",
+    )
+
+    data class Choice(val id: String, val name: String, val host: String, val built: Boolean,
+                      val note: String)
+
+    data class Tier(
+        val id: String,
+        val name: String,
+        val words: String,
+        val why: String,
+        val turnsDefault: Int,
+        val turnsMax: Int,
+        val minutesDefault: Int,
+        val minutesMax: Int,
+    )
+
+    data class Turn(val who: String, val n: Int, val text: String, val outside: Boolean)
+
+    data class Claim(val claim: String, val sourced: Boolean)
+
+    data class Summary(val answer: String, val claims: List<Claim>, val open: List<String>)
+
+    data class Session(
+        val id: String,
+        val chatbot: String,
+        val name: String,
+        val goal: String,
+        val state: String,
+        val tierName: String,
+        val used: Int,
+        val max: Int,
+        val minutesUsed: Double,
+        val maxMinutes: Int,
+        val never: List<String>,
+        /** The pause's words, only while it is really paused (the PC keeps them after a stop). */
+        val paused: String,
+        val ended: String,
+        val question: String,
+        val summary: Summary?,
+        val transcript: List<Turn>,
+    ) {
+        val live: Boolean get() = state in Chatbot.LIVE
+    }
+
+    data class LimitsNote(val waiting: Boolean, val said: String)
+
+    data class View(
+        val chatbots: List<Choice>,
+        val tier: Tier,
+        val session: Session?,
+        val limits: LimitsNote,
+    ) {
+        val anyBuilt: Boolean get() = chatbots.any { it.built }
+    }
+
+    /** `GET /api/chatbot/status`, read - or null when it is not one (an older PC). */
+    fun parse(body: JsonObject): View? {
+        if (body.flag("available") == false) return null
+        val bots = body["chatbots"] as? JsonArray ?: return null
+        val t = body["tier"] as? JsonObject ?: return null
+        val chatbots = bots.mapNotNull { it as? JsonObject }.mapNotNull { c ->
+            val id = c.text("id") ?: return@mapNotNull null
+            Choice(id, c.text("name") ?: id, c.text("host") ?: "", c.flag("built") == true,
+                c.text("note") ?: "")
+        }
+        val lim = body["limits"] as? JsonObject
+        return View(
+            chatbots = chatbots,
+            tier = Tier(
+                id = t.text("id") ?: "",
+                name = t.text("name") ?: "",
+                words = t.text("words") ?: "",
+                why = t.text("why") ?: "",
+                turnsDefault = t.num("turns_default")?.toInt() ?: 5,
+                turnsMax = t.num("turns_max")?.toInt() ?: 8,
+                minutesDefault = t.num("minutes_default")?.toInt() ?: 10,
+                minutesMax = t.num("minutes_max")?.toInt() ?: 15,
+            ),
+            session = parseSession(body["session"] as? JsonObject),
+            limits = LimitsNote(lim?.flag("waiting") == true, lim?.text("said") ?: ""),
+        )
+    }
+
+    fun parseSession(o: JsonObject?): Session? {
+        if (o == null) return null
+        val id = o.text("id") ?: return null
+        val state = o.text("state") ?: return null
+        val turns = (o["transcript"] as? JsonArray)?.mapNotNull { it as? JsonObject }?.mapNotNull { t ->
+            val who = when (t.text("who")) {
+                "chatbot" -> "chatbot"
+                "jarvis" -> "jarvis"
+                else -> return@mapNotNull null
+            }
+            // Anything the chatbot said is outside text, whatever the flag says.
+            Turn(who, t.num("n")?.toInt() ?: 0, t.raw("text") ?: "",
+                who == "chatbot" || t.flag("outside_text") == true)
+        } ?: emptyList()
+        val sum = (o["summary"] as? JsonObject)?.let { s ->
+            Summary(
+                answer = s.text("answer") ?: "",
+                claims = (s["claims"] as? JsonArray)?.mapNotNull { it as? JsonObject }?.mapNotNull { c ->
+                    c.text("claim")?.let { Claim(it, c.flag("source_given") == true) }
+                } ?: emptyList(),
+                open = (s["open"] as? JsonArray)?.mapNotNull {
+                    (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull?.trim()
+                        ?.takeIf { x -> x.isNotEmpty() }
+                } ?: emptyList(),
+            )
+        }
+        return Session(
+            id = id,
+            chatbot = o.text("chatbot") ?: "",
+            name = o.text("name") ?: "the chatbot",
+            goal = o.raw("goal") ?: "",
+            state = state,
+            tierName = o.text("tier_name") ?: "",
+            used = o.num("messages_used")?.toInt() ?: 0,
+            max = o.num("max_messages")?.toInt() ?: 0,
+            minutesUsed = o.num("minutes_used") ?: 0.0,
+            maxMinutes = o.num("max_minutes")?.toInt() ?: 0,
+            never = (o["never_send"] as? JsonArray)?.mapNotNull {
+                (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull?.trim()
+                    ?.takeIf { x -> x.isNotEmpty() }
+            } ?: emptyList(),
+            paused = if (state == "paused") o.text("paused") ?: "" else "",
+            ended = o.text("ended") ?: "",
+            question = o.text("question") ?: "",
+            summary = sum,
+            transcript = turns,
+        )
+    }
+
+    /** A read that failed because this PC has no chatbot routes. */
+    fun missing(error: ApiError): Boolean =
+        error == ApiError.NotFound || error == ApiError.NotAvailable ||
+            (error is ApiError.Server && error.code == 501)
+
+    /** "Version: the limited version (one graphics card) - shorter conversations; ..." */
+    fun versionLine(v: View): String =
+        if (v.tier.name.isEmpty()) "" else
+            "$VERSION: ${v.tier.name}" + if (v.tier.words.isNotEmpty()) " - ${v.tier.words}" else ""
+
+    /** The never-send words typed, as a list: split on commas, tidied, no repeats. */
+    fun neverWords(text: String): List<String> {
+        val out = mutableListOf<String>()
+        for (raw in text.split(",")) {
+            val w = raw.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+            if (w.isNotEmpty() && out.none { it.equals(w, ignoreCase = true) }) out.add(w)
+        }
+        return out
+    }
+
+    /** A limit typed, or null when it is not 1 to [most]. */
+    fun limitOf(text: String, most: Int): Int? {
+        val s = text.trim()
+        if (!Regex("^\\d{1,3}$").matches(s)) return null
+        return s.toInt().takeIf { it in 1..most }
+    }
+
+    /** What is wrong with the form, in a sentence, or null when it can be sent. */
+    fun formProblem(v: View, chatbot: String, goal: String, messages: String, minutes: String): String? {
+        val bot = v.chatbots.firstOrNull { it.id == chatbot } ?: return "Choose a chatbot."
+        if (!bot.built) return "${bot.name} is not built yet."
+        if (goal.isBlank()) return "Say what Jarvis should find out."
+        if (goal.trim().length > MAX_GOAL_CHARS) return "The goal is longer than 1000 characters."
+        if (limitOf(messages, v.tier.turnsMax) == null) {
+            return "Most messages: 1 to ${v.tier.turnsMax} in this version."
+        }
+        if (limitOf(minutes, v.tier.minutesMax) == null) {
+            return "Most minutes: 1 to ${v.tier.minutesMax} in this version."
+        }
+        return null
+    }
+
+    /** 10.0 as "10", 0.5 as "0.5" - as the desktop prints them. */
+    fun number(d: Double): String =
+        if (d == Math.floor(d) && !d.isInfinite()) d.toLong().toString() else d.toString()
+
+    /** "Message 2 of 4 · 1.5 of 10 minutes". */
+    fun progressLine(s: Session): String =
+        "Message ${s.used} of ${s.max} · ${number(s.minutesUsed)} of ${s.maxMinutes} minutes"
+
+    /** The buttons for a conversation, in order. Stop is always there while it is live. */
+    fun actionsOf(s: Session?): List<String> = when {
+        s == null || !s.live -> emptyList()
+        s.state == "paused" -> listOf("resume", "stop")
+        s.state == "running" -> listOf("pause", "stop")
+        else -> listOf("stop")
+    }
+
+    fun labelOf(action: String): String = when (action) {
+        "pause" -> PAUSE
+        "resume" -> RESUME
+        "stop" -> STOP
+        else -> action
+    }
+
+    /** One conversation's status line: the PC's own words when it has them. */
+    fun statusLine(s: Session): String = when {
+        s.state == "paused" && s.paused.isNotEmpty() -> s.paused
+        !s.live && s.ended.isNotEmpty() -> s.ended
+        else -> STATE_WORDS[s.state] ?: s.state
+    }
+
+    /** The ongoing notification's line ("Talking to Gemini, 3 of 5"), or "" when it has ended. */
+    fun talkingLine(s: Session?): String {
+        if (s == null || !s.live) return ""
+        val w = when (s.state) {
+            "asking" -> NOTIFY_WAITING
+            "paused" -> NOTIFY_PAUSED
+            else -> NOTIFY_RUNNING
+        }
+        return w.replace("{name}", s.name).replace("{used}", s.used.toString())
+            .replace("{max}", s.max.toString())
+    }
+
+    /** Whether an activity line may be a conversation's ("Talking to Gemini: message 3 of 5."). */
+    fun isChatbotActivity(detail: String?): Boolean {
+        val d = detail ?: return false
+        // The core's own lines (jarvis_chatbot.run), and jarvis_task_control's
+        // when a Resume card was approved ("Continuing chatbot_session...").
+        return d.startsWith("Talking to ") || d.startsWith("Waiting while you chat before asking ") ||
+            d.startsWith("Continuing chatbot_session")
+    }
+
+    private val ID = Regex("^chat_[0-9a-f]{12}$")
+
+    fun validId(id: String): Boolean = ID.matches(id)
+
+    private fun quote(s: String): String =
+        JarvisJson.encodeToString(kotlinx.serialization.serializer<String>(), s)
+
+    private fun wordsArray(words: List<String>): String =
+        words.joinToString(",", prefix = "[", postfix = "]") { quote(it) }
+
+    /** `POST /api/chatbot/start`'s body, or null when something in it cannot be sent. */
+    fun startBody(chatbot: String, goal: String, maxMessages: Int?, maxMinutes: Int?,
+                  never: List<String>): String? {
+        if (!Regex("^[A-Za-z0-9_]{1,40}$").matches(chatbot)) return null
+        val g = goal.trim()
+        if (g.isEmpty() || g.length > MAX_GOAL_CHARS) return null
+        if (never.size > MAX_NEVER || never.any { it.length > MAX_NEVER_CHARS }) return null
+        val parts = mutableListOf("\"chatbot\":${quote(chatbot)}", "\"goal\":${quote(g)}",
+            "\"never_send\":${wordsArray(never)}")
+        if (maxMessages != null) parts.add("\"max_messages\":$maxMessages")
+        if (maxMinutes != null) parts.add("\"max_minutes\":$maxMinutes")
+        return parts.joinToString(",", prefix = "{", postfix = "}")
+    }
+
+    /** `POST /api/chatbot/stop`'s body, or null for an id that is not the PC's shape. */
+    fun stopBody(id: String): String? = if (validId(id)) "{\"id\":${quote(id)}}" else null
+
+    /** `POST /api/chatbot/limits`'s body: only what was given. */
+    fun limitsBody(id: String, maxMessages: Int?, maxMinutes: Int?, never: List<String>?): String? {
+        if (!validId(id)) return null
+        if (never != null && (never.size > MAX_NEVER || never.any { it.length > MAX_NEVER_CHARS })) {
+            return null
+        }
+        val parts = mutableListOf("\"id\":${quote(id)}")
+        if (maxMessages != null) parts.add("\"max_messages\":$maxMessages")
+        if (maxMinutes != null) parts.add("\"max_minutes\":$maxMinutes")
+        if (never != null) parts.add("\"never_send\":${wordsArray(never)}")
+        return parts.joinToString(",", prefix = "{", postfix = "}")
+    }
+
+    /** What the PC answered a change, kept whole. */
+    data class Reply(val code: Int, val body: JsonObject?)
+
+    /** Whether it went through, and the PC's sentence to show. */
+    fun said(reply: Reply): Pair<Boolean, String> {
+        val b = reply.body
+        val error = b?.text("error")
+        return when {
+            reply.code in 200..299 && b?.flag("ok") != false ->
+                true to (b?.text("message") ?: "Done.")
+            // The route's own "no such conversation" is a 404 with {"ok": false}.
+            reply.code == 404 && b?.flag("ok") == false && error != null -> false to error
+            reply.code == 404 || reply.code == 501 -> false to MISSING
+            error != null -> false to error
+            else -> false to "Not changed (HTTP ${reply.code})."
+        }
+    }
+
+    private fun JsonObject.num(key: String): Double? =
+        (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull && !it.isString }?.doubleOrNull
+            ?.takeIf { it.isFinite() }
+
+    private fun JsonObject.text(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** A string exactly as sent (a goal or a message keeps its own spacing). */
+    private fun JsonObject.raw(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+
+    private fun JsonObject.flag(key: String): Boolean? =
+        (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull && !it.isString }?.booleanOrNull
+}

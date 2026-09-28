@@ -13760,9 +13760,10 @@ has the phone-parity row.
 
 Step 1 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`, the owner's
 answers of 2026-09-28; `docs/JARVIS-API.md` section 60). **Not usable
-yet**: no route, no app screen, and no real chatbot - Gemini's adapter is
-listed and says "not built yet". Shipped whole (`apply-patches.ps1` copies
-it; no patch), so the next steps build on code that is already tested.
+yet**: no real chatbot - Gemini's adapter is listed and says "not built
+yet". (The routes and both apps' screens came next: `chatbot-routes.patch`,
+below.) Shipped whole (`apply-patches.ps1` copies it; no patch), so the
+next steps build on code that is already tested.
 
 ## In plain words
 
@@ -13828,7 +13829,8 @@ python3 backend/run_suites.py
   check that number again?" - "number" is in a saved phone-number fact).
 - **The transcript lives in memory only** and is lost on a backend
   restart. Keeping it in the encrypted chat history, tagged as outside
-  text, comes with the routes.
+  text, was meant to come with the routes; it did NOT (see `chatbot-routes.patch`
+  below) - still to do.
 - The one-card limits (5 messages by default, at most 8; 10 minutes, at
   most 15) are a first guess; the two-card ones (8/20 messages, 10/30
   minutes) are the design's.
@@ -13990,6 +13992,57 @@ Windows 11) instead of Playwright's own Chromium.
 - `backend/test_chatbot_gemini.py` (new); `backend/test_chatbot.py` and
   `backend/test_reach.py` updated.
 
+# Talking to an AI chatbot for you, the routes and both apps: `chatbot-routes.patch` (2026-09-28)
+
+Step 3 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md` sections 2
+and 6; `docs/JARVIS-API.md` section 60). **Still not usable**: Gemini's
+adapter is not built, so every start is refused with "Gemini through its
+website is not built yet." and no card. Everything around it now is.
+
+## In plain words
+
+Both apps get a "Talk to a chatbot for me" card - the PC in Brain -> Work,
+the phone in Brain. You pick the chatbot, type what Jarvis should find out
+(the card says plainly that these words are sent exactly as typed), set the
+most messages and minutes (within what the version that runs allows - it
+says which: "the limited version (one graphics card)" today) and any words
+it must never send. Start asks for ONE approval card; nothing is sent
+before you say yes. While it talks you see each message, the chatbot's
+words marked "outside text", the counts, and Pause, Resume and Stop; a
+change to the limits is a new card. When it ends, the summary stays on
+screen and is never read aloud. The phone also shows "Talking to Gemini, 3
+of 5" as a quiet notification with a Stop button.
+
+## What changed
+
+- `backend/jarvis_chatbot_routes.py` (new, shipped whole): `GET
+  /api/chatbot/status`, `POST /api/chatbot/start`, `/stop` and `/limits`,
+  and `WORDS` - the sentences both apps show. It only turns HTTP into
+  `jarvis_chatbot` calls; no rule lives here. One fix the feature audit
+  asked for: a read ends a paused conversation that can no longer be
+  resumed (its task was stopped, or its hour ran out), after 10 seconds'
+  grace - the core only did that when a NEW conversation was planned, so
+  both apps showed "Paused" with a Resume that could only fail, and the
+  phone's notification stayed up.
+- `backend/chatbot-routes.patch` (new, last in the list): one `install()` block in
+  `jarvis_hud.py`, after answer-sources.patch's.
+- `backend/jarvis_chatbot.py`: its notes now point at the routes; no
+  behaviour changed.
+- `tools/gen_chatbot_cases.py` (new): the routes' real answers, and
+  `WORDS`, into `jarvis-desktop/tests/fixtures/chatbot-cases.json` and
+  `jarvis-client/.../contract/chatbot-cases.json`.
+- The desktop: `src/chatbot.js`, `brain.html`/`brain.js`/`brain.css` (the
+  card on the Work tab), `src-tauri/src/brain/chatbot.rs` (six commands,
+  the Brain's alone - start, limits and resume held on a stale link; the
+  owner's words taken out while the private lists are hidden),
+  `tests/chatbot.mjs`.
+- The phone: `net/Chatbot.kt`, `ui/screens/ChatbotPlate.kt`,
+  `service/ChatbotNotifier.kt` (and `EventService`'s Stop),
+  `JarvisRuntime`'s chatbot calls and watcher, `ChatbotTest`.
+- `tools/check_parity.py`: the four routes, `ported`.
+  `docs/ARCHITECTURE.md` §8: signing in to the chatbot's account is PC-only,
+  the ongoing notification is phone-only.
+
 ## Test it
 
 ```
@@ -14021,3 +14074,26 @@ the message box and the send button.
   instead.
 - A captcha that appears after a message went means that message counts
   as sent; after Resume the driver carries on from the next message.
+python3 backend/test_chatbot_routes.py
+python3 tools/gen_chatbot_cases.py --check
+node jarvis-desktop/tests/chatbot.mjs
+```
+
+## Not checked, said plainly
+
+- **No real chatbot**, as before: every answer in the contract file comes
+  from `FakeChatbot` registered under Gemini's own entry (its name, host
+  and card wording) - a test double, not a claim that Gemini works.
+- **The Kotlin UI and notification are compiled only by CI.** The phone's
+  pure logic (`net/Chatbot.kt`) and `ChatbotTest` were compiled and run here
+  with a stand-alone Kotlin compiler against the real contract file; the
+  Compose plate, the notification and the runtime changes were not.
+- **No event of its own.** Both apps read the conversation again every 4
+  seconds while one is going, and on every activity event.
+- **Stop while the card is still waiting** marks the conversation to stop,
+  but the card stays on screen until it is answered or times out; approving
+  it then starts nothing (the core checks the stop first). The conversation
+  shows "Waiting for your yes" until then.
+- **Not built:** starting a conversation by saying it, task notes to a
+  running conversation, and keeping the transcript in the encrypted chat
+  history (it is in memory only, lost on a backend restart).

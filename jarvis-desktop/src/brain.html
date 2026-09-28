@@ -463,6 +463,41 @@
               <p class="note">Or say "focus for 30 minutes". While one runs: "lock on this", "snooze", "I'm doing research", "I need a minute", "pause", "how am I doing?".</p>
               <div id="focus-report"></div>
             </div>
+            <div class="card card-wide" id="chatbot-card">
+              <h2>Talk to a chatbot for me</h2>
+              <p class="note">Jarvis asks an AI chatbot about something for you, and writes its own follow-up questions on this PC, within limits you set. One approval card covers the whole conversation. While it does this, Jarvis knows only your goal - not your memory, email, calendar, notes or files.</p>
+              <p class="note" id="chatbot-version"></p>
+              <div id="chatbot"></div>
+              <!-- Painted only when the conversation or its limits change, so
+                   numbers being typed are not wiped by the 4-second re-read. -->
+              <div id="chatbot-limits" class="chatbot-limits" hidden></div>
+              <div id="chatbot-log"></div>
+              <form id="chatbot-form" class="chatbot-form" autocomplete="off" novalidate hidden>
+                <label class="lbl">Chatbot
+                  <select id="chatbot-which" class="field"></select>
+                </label>
+                <label class="lbl">What should Jarvis find out?
+                  <textarea id="chatbot-goal" class="field chatbot-goal" rows="3" maxlength="1000" spellcheck="true"></textarea>
+                </label>
+                <p class="note chatbot-sent-note">These words will be sent to the chatbot exactly as you type them.</p>
+                <div class="row">
+                  <label class="lbl">Most messages
+                    <input id="chatbot-messages" class="field" type="number" min="1" max="20" required>
+                  </label>
+                  <label class="lbl">Most minutes
+                    <input id="chatbot-minutes" class="field" type="number" min="1" max="30" required>
+                  </label>
+                </div>
+                <label class="lbl">Words it must never send (optional, separated by commas)
+                  <input id="chatbot-never" class="field" type="text" maxlength="600" spellcheck="false">
+                </label>
+                <div class="row">
+                  <button id="chatbot-start" class="btn small" type="submit">Start</button>
+                </div>
+                <p class="note">Nothing is sent until you approve the card.</p>
+                <p class="note">Signing in to the chatbot's account happens on the PC only, in the browser window Jarvis uses.</p>
+              </form>
+            </div>
             <div class="card card-wide" id="coming-up-card">
               <h2>Coming up</h2>
               <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. A repeating reminder or alarm is set up at once, with no card; a repeating briefing or "tell me when" waits for your yes on an approval card.</p>

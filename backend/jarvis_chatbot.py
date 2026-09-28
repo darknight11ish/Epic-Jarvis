@@ -1,10 +1,12 @@
 """jarvis_chatbot.py - Jarvis holds a conversation with an AI chatbot for the
 owner, following up on its own, within limits the owner approved on ONE card.
 
-NEW MODULE, shipped whole. STEP 1 OF THE BUILD: THE CORE. Nothing here is
-reachable from either app yet (no route, no patch). Step 2, the Gemini
-website adapter, is jarvis_chatbot_gemini.py (loaded at the end of this
-file); FakeChatbot, in this file, talks to nobody and is for the tests.
+NEW MODULE, shipped whole. STEP 1 OF THE BUILD: THE CORE. Both apps reach
+it through jarvis_chatbot_routes.py (step 3, chatbot-routes.patch:
+/api/chatbot/*); the gate's risk line for its card is chatbot.patch. Step 2,
+the Gemini website adapter, is jarvis_chatbot_gemini.py (loaded at the end
+of this file); FakeChatbot, in this file, talks to nobody and is for the
+tests.
 
 THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-27 and 2026-09-28;
 docs/CHATBOT-DRIVER-DESIGN.md, "The owner's answers (2026-09-28)")
@@ -103,9 +105,10 @@ read aloud. The end summary is written on this PC from that outside text,
 so it is outside text too (`read_aloud: False`).
 
 WHAT THIS STEP DOES NOT DO, SAID PLAINLY
-  * No route and no app screen: start()/view()/stop()/change_limits() are
-    what the routes will call (docs/JARVIS-API.md section 60, "not routed
-    yet").
+  * The routes are jarvis_chatbot_routes.py's (docs/JARVIS-API.md section
+    60): they call start()/view()/stop()/change_limits() and add nothing to
+    the rules here. view()'s own `routed` stays False; the route answers
+    True.
   * The transcript is kept in memory only, like jarvis_task_control's state:
     a backend restart loses it. Storing it in the encrypted chat history,
     tagged as outside text, comes with the routes.
@@ -1932,7 +1935,7 @@ def session_view(s: Session, *, transcript: bool = True) -> dict:
 
 
 def view(session_id: str = "", *, deps: Optional[Deps] = None) -> dict:
-    """The whole picture for the (future) GET /api/chatbot/status."""
+    """The whole picture for GET /api/chatbot/status (jarvis_chatbot_routes)."""
     with _LOCK:
         s = _SESSIONS.get(session_id) if session_id else next(
             (x for x in reversed(list(_SESSIONS.values())) if _live(x)), None)
