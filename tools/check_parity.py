@@ -268,6 +268,8 @@ STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 # "phone-only"    - kept off the desktop on purpose; the reason is the point
 # "desktop-todo"  - the desktop should have it too, and nobody has built it
 PHONE_ONLY = {
+    "/api/media": ("phone-only", "\"Playing on your PC\" on Home (2026-09-28, the research audit's idea 8; backend jarvis_media.py, media.patch): what is playing on the PC, in its own sentence (net/PcMedia.kt, HomeScreen PcMediaPlate). The desktop IS the PC: Windows' own media keys and media controls are already right there, and \"pause the music\" said or typed to the Jarvis bar is answered by jarvis_quick.py, so a copy in the desktop would add nothing (docs/ARCHITECTURE.md §8)."),
+    "/api/media/control": ("phone-only", "Play, pause, next and previous on the PC from the phone's Home (2026-09-28): ONE action per tap, no card (the owner's decision of 2026-09-27), greyed and refused on a stale link (JarvisRuntime.pcMediaControl). Not on the desktop for the same reason as /api/media (docs/ARCHITECTURE.md §8)."),
     "/api/notifications/watch": ("phone-only", "The smartwatch notification setting (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). A smartwatch pairs with a phone, never a Windows PC; the setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or writes it (docs/ARCHITECTURE.md §8)."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
