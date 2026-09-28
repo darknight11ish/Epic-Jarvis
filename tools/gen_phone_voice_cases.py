@@ -595,7 +595,7 @@ def vpost(fn, body, g=None, spawn=run_now, check=not_owner):
     if fn in (VS.create, VS.switch):
         kw["check"] = check
     if fn in (VS.delete, VS.set_speed, VS.set_speaker, VS.set_face_voice,
-              VS.set_face_animal, VS.try_face_animal):
+              VS.set_face_animal, VS.try_face_animal, VS.answer_face_offer):
         return fn(body)
     return fn(body, **kw)
 
@@ -661,7 +661,17 @@ def voices_cases():
                                                encoding="utf-8")
         # It ships OFF (the owner's 2026-09-28 decision): the owner turns it
         # on first, as they would, before the face's voice can stand in.
+        # The one-time question (owner, 2026-09-28): with the switch off and
+        # the panda never asked about, face_voice.offer asks "The Red Panda
+        # has its own voice. Use it?" ("face_default_off" shows it). "Keep
+        # my voice" leaves the switch off and never asks about the panda
+        # again; "Use it" (the owl, further down) turns the switch on.
         status["face_default_off"] = scrub(VS.status(), w)
+        answers["face_offer_keep"] = scrub(answer(vpost(VS.answer_face_offer, {
+            "face": "redpanda", "answer": "keep"})), w)
+        status["face_offer_answered"] = scrub(VS.status(), w)
+        answers["face_offer_bad"] = scrub(answer(vpost(VS.answer_face_offer, {
+            "face": "redpanda", "answer": "maybe"})), w)
         vpost(VS.set_face_voice, {"enabled": True})
         status["face_showing"] = scrub(VS.status(), w)
         answers["face_off"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": False})), w)
@@ -684,6 +694,16 @@ def voices_cases():
         with VS._TRY_LOCK:
             answers["animal_try_busy"] = scrub(answer(vpost(VS.try_face_animal,
                                                             {"face": "redpanda"})), w)
+
+    # "Use it": a new animal (the owl), the switch off, never asked - the
+    # answer turns the switch on, and the owl speaks.
+    with VoicesWorld() as w:
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "pygmyowl"}),
+                                               encoding="utf-8")
+        status["face_offer_owl"] = scrub(VS.status(), w)
+        answers["face_offer_use"] = scrub(answer(vpost(VS.answer_face_offer, {
+            "face": "pygmyowl", "answer": "use"})), w)
+        status["face_offer_used"] = scrub(VS.status(), w)
 
     with VoicesWorld(zipvoice=False) as w:
         vpost(VS.create, create_body())

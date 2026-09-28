@@ -536,7 +536,17 @@ def voices_cases():
                                                encoding="utf-8")
         # It ships OFF (the owner's 2026-09-28 decision): the owner turns it
         # on first, as they would, before the face's voice can stand in.
+        # The one-time question (owner, 2026-09-28): with the switch off and
+        # the panda never asked about, face_voice.offer asks "The Red Panda
+        # has its own voice. Use it?" ("face_default_off" shows it). "Keep
+        # my voice" leaves the switch off and never asks about the panda
+        # again; "Use it" (the owl, further down) turns the switch on.
         keep(w, "face_default_off", VO.status(), statuses)
+        keep(w, "face_offer_keep", post("/api/voice/voices/face_offer",
+                                        {"face": "redpanda", "answer": "keep"}), posts)
+        keep(w, "face_offer_answered", VO.status(), statuses)
+        keep(w, "face_offer_bad", post("/api/voice/voices/face_offer",
+                                       {"face": "redpanda", "answer": "maybe"}), posts)
         post("/api/voice/voices/face", {"enabled": True})
         keep(w, "face_showing", VO.status(), statuses)
         keep(w, "face_off", post("/api/voice/voices/face", {"enabled": False}), posts)
@@ -562,6 +572,16 @@ def voices_cases():
         with VO._TRY_LOCK:
             keep(w, "animal_try_busy", post("/api/voice/voices/face_animal/try",
                                             {"face": "redpanda"}), posts)
+
+    # "Use it": a new animal (the owl), the switch off, never asked - the
+    # answer turns the switch on, and the owl speaks.
+    with World("both") as w:
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "pygmyowl"}),
+                                               encoding="utf-8")
+        keep(w, "face_offer_owl", VO.status(), statuses)
+        keep(w, "face_offer_use", post("/api/voice/voices/face_offer",
+                                       {"face": "pygmyowl", "answer": "use"}), posts)
+        keep(w, "face_offer_used", VO.status(), statuses)
 
     # A custom voice chosen, but ZipVoice's files are not on this PC: the
     # built-in voice speaks, and says why.

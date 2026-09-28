@@ -2281,6 +2281,20 @@ animal's voice stands in, `speaker.note` says so, so choosing a built-in
 voice and hearing no change does not look broken. The animals' voices were
 picked from Kokoro's published descriptions, not listened to.
 
+**The one-time question** (added 2026-09-28, the owner's decision): the
+first time the owner picks an animal face, one line asks "The Red Panda has
+its own voice. Use it?" with two buttons, **Use it** and **Keep my voice**.
+`face_voice.offer` carries it, word for word (`{"face", "question", "use",
+"keep"}`), and is `null` unless the face showing is an animal, "Voice
+follows the face" is off, and that face was never asked about. Both apps
+show it where the face is picked (and may show it wherever `face_voice` is
+shown), and post the answer to `POST /api/voice/voices/face_offer`. The PC
+remembers each face asked (`<config dir>/voices/state.json`,
+`face_offered`), so the question never comes back for that face, whichever
+answer was given; "Use it" also turns the switch on. A face never changes
+the voice by itself. **No card either way** - the switch it turns on has
+none - but held on a stale link like every change.
+
 **Each animal's voice** (added 2026-09-28, the owner's choice "per animal,
 built-in voices"): the `FACE_VOICES` rows are only where each animal
 starts. For each of the three the owner may pick **any of the eleven
@@ -2365,6 +2379,7 @@ owner.
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
 | `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
+| `POST /api/voice/voices/face_offer` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "answer": "use" \| "keep"}` (both, nothing else) | **200** `{"ok": true, "message": "The Red Panda speaks in its own voice now. \"Voice follows the face\" is on; turn it off in the voice settings to go back." \| "Jarvis keeps your voice. You can still turn on \"Voice follows the face\" in the voice settings.", "face_voice": {...as in status(), with "offer": null}}` at once, no card either way; **400** `{"ok": false, "error"}` in words - "send the face and the answer, \"use\" or \"keep\"", "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "the answer must be \"use\" or \"keep\""; 500 `{"ok": false, "error"}` if it could not be saved | The face is marked asked (`face_offered` in `<config dir>/voices/state.json`) either way; "use" also turns "Voice follows the face" on. Rings the `voices` event (`{"what": "face_offer", "outcome": "use" \| "keep"}`). The audit line has the face and the answer only. |
 | `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
 | `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey"}`; **429** `{"ok": false, "error": "the PC is still making the sound for the last Try it. Try it again in a moment"}` - one at a time; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window - the faces in its other windows do not move; the phone through its answer speaker), never while Jarvis is talking or listening, and stop it when a question or answer starts (above). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
@@ -2417,7 +2432,7 @@ request.
              "title": "Jarvis's built-in voice", "detail": str, "note": str,
              "choices": [{"id": "0", "label": "American (female)"}, ... 11 in all]},   absent on an older PC: show nothing
  "face_voice": {"enabled": bool,          the switch (on unless the owner turned it off)
-                "default": true,
+                "default": false,
                 "face": "" | "<face id>",  the face saved in appearance.json ("" if none)
                 "speaking": bool,         an animal's voice is the one speaking now
                 "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter" | "Monkey",
@@ -2431,8 +2446,12 @@ request.
                 "animals_title": "Each animal's voice", "animals_detail": str,
                 "animal_choices": {"voices": [{"id", "label"}, ... the 11 of speaker.choices],
                                    "paces": [{"id": "slower", "label": "Slower"}, ...],
-                                   "pitch": {"min": -3.0, "max": 4.0, "step": 0.5}}},
-                                  animals absent on an older PC: show the switch only
+                                   "pitch": {"min": -3.0, "max": 4.0, "step": 0.5}},
+                "offer": null | {"face": "redpanda",   the one-time question (added 2026-09-28)
+                                 "question": "The Red Panda has its own voice. Use it?",
+                                 "use": "Use it", "keep": "Keep my voice"}},
+                                  animals absent on an older PC: show the switch only;
+                                  offer absent on an older PC: ask nothing
  "pending": {"kind": "create" | "switch", "voice": "<id>", "name": str, "expires_in": <seconds>} | null,
  "last": {"kind": "create" | "switch", "voice": "<id>",
           "outcome": "created"|"switched"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",
