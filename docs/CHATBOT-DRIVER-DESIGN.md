@@ -255,3 +255,195 @@ key is entered on the PC only, like the web-search keys.
 [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data);
 [ChatGPT web bridge ban report](https://github.com/Wladefant/super-board/issues/276);
 [Playwright blocked on ChatGPT](https://community.latenode.com/t/playwright-automation-getting-blocked-by-cloudflare-when-accessing-chatgpt/21831).
+
+---
+
+## Customer-support chats (design, 2026-09-28)
+
+Status: **designed, not built.** The owner's decision of 2026-09-28 in
+`CLAUDE.md` ("Customer-support chats"). Written by the studio's designer.
+Most web facts below are **unverified**: the container could not reach
+groupon.com, tosdr.org or the widget makers' live pages.
+
+**Three things to know first.** The shared website base does not exist yet
+(`GeminiWeb` holds everything; the website-adapters builder is pulling it
+out). Today's `last_check` blocks almost every detail a support chat needs
+(emails, phone numbers, long numbers, addresses), so support mode needs "hide
+the approved details, then check the rest". Groupon's terms reportedly forbid
+automated access (search summary only), and here the risk lands on the
+owner's **real** account.
+
+### 1. How this differs from the AI-chatbot mode
+
+| | AI-chatbot mode | Support mode |
+|---|---|---|
+| Account | a spare account used only by Jarvis | **the owner's real account** (orders, vouchers, money) |
+| The other side | a program | a company, often a real person |
+| What can go wrong | a wrong answer | **a promise made in the owner's name** |
+| Personal details | none ever sent | **the listed details only**, per chat |
+| Record | memory only today | **kept in the encrypted chat history** as evidence |
+
+**Rule 1 is bent per chat, for the listed values only** - like the locked
+backup and a project's Shareable switch: the exact words are shown first and
+nothing else goes. Written down as a named exception in ARCHITECTURE §2 rule
+1 ("support-chat details"), a new §4 row ("customer-support chat
+(website)"), and an audit-log line `support.detail_sent` per value sent
+(company, the detail's name, the time - **never the value**, which lives only
+in the encrypted transcript).
+
+### 2. Reaching the chat
+
+Most support chats are a widget on the company's help page, made by a few
+vendors whose structure is the same everywhere. **One general support-widget
+adapter** (`jarvis_support_widget.py`) on the shared website base knows each
+vendor from one table - Zendesk (`iframe[title*="Zendesk"]`), Intercom
+(`iframe#intercom-frame`), LivePerson (`#lpChat`), Gorgias
+(`#gorgias-chat-container`), Freshchat (`#fc_frame`), Salesforce (its
+`embeddedservice_bootstrap` iframe - exact id a guess), Ada (a guess) - with
+a fallback to standard page roles (`role="log"`, a text box, a "Send"
+button); otherwise it pauses and says why. Everything inside each widget
+(message box, Send, agent messages, queue position, "chat ended") is guessed
+until checked on the PC with `py -3 jarvis_support_widget.py check <help
+page>` (reads only, sends nothing). **Company presets** (Groupon, Amazon,
+eBay, airlines, phone companies) only where they add something: the help
+page address, extra hosts, or Amazon's in-house chat.
+
+**How a chat starts:** a separate Jarvis browser profile for support chats,
+in a visible window; the owner opens the help page and **signs in by hand**
+(Jarvis never types, sees or keeps a password); a 2-factor code, security
+question or identity check **pauses** and hands over to the owner; Jarvis
+never clicks a link in the chat (it is handed to the owner); it stays on the
+starting host plus the vendor's hosts; menu buttons inside the widget count
+as messages and go through the same checks (one labelled with offer words
+always raises a card). **Take over** in both apps pauses Jarvis so the owner
+types in the window; Resume carries on, with the owner's messages marked as
+theirs.
+
+### 3. The details card
+
+A short form: the company, the goal ("refund order 1234, the spa closed"),
+and one row per detail - its name and exact value, typed by the owner, or
+"find it for me" on a single row (Jarvis looks it up locally and uses it
+only if the owner ticks what it found). Nothing is pulled in automatically.
+
+**The card** (action `support_chat`, tier `ask`, risky: Windows Hello on the
+PC, a screen lock on the phone) shows the company and host, the disclosure
+line, the goal, **every detail word for word** under "Jarvis may give these,
+and nothing else", the time limit, and "If you say no: no chat is started".
+No "same as last time"; not on the PC-only loosen list.
+
+**Refused outright:** rows named password, PIN, security answer, card number
+or ID number; values shaped like a payment card number (13-19 digits passing
+the card checksum), a full US Social Security number, or a secret.
+
+**Last check, support version:** hide each approved value exactly as
+written, then run today's `last_check` on the rest. Anything not on the card
+still blocks; card numbers, passwords and full ID numbers block even when on
+the card. The driver model gets the goal, the approved details and the
+transcript only - no memory, no tools.
+
+### 4. Saying it is an AI
+
+Sent first, fixed text: *"Hi, I'm Jarvis, an AI assistant writing on behalf
+of Alex, the account holder. I'm not Alex. Alex approves any offer before I
+accept it, so some replies may take a minute."* (The owner's name is a card
+detail; without it, "the account holder".) Sent again when a human takes
+over from a bot. "Am I talking to a bot / a person / Alex?" always gets a
+fixed, truthful answer ("Yes, I'm an AI assistant writing for Alex. Alex is
+following along and approves anything I agree to. If you need Alex directly,
+I can ask them to join."). If the agent will not deal with an AI, Jarvis
+stops and offers Take over.
+
+### 5. Offers and promises
+
+After every agent message two detectors look for an offer - the driver's new
+`offer` move (refund, credit/voucher, cancellation, change of order or
+address, "do you agree/confirm", a request for a new detail) and a plain-code
+backstop (money amounts; refund, credit, voucher, cancel, confirm, agree,
+accept). Either raises a card; if in doubt, a card.
+
+**The offer card** (action `support_offer`, risky, one per offer) shows the
+agent's exact words (outside text) and Jarvis's proposed reply word for word.
+The owner picks **Accept** (the shown reply is sent), **Decline** ("Alex
+would rather not; is there another option?"), **Say something else** (typed,
+through the last check) or **Take over**. A request for a detail not on the
+card gets its own card adding that one value. Jarvis never pays, never agrees
+to terms, never accepts on its own.
+
+**While a card waits:** a fixed holding line ("I'm checking with Alex, one
+moment please") at most every 2 minutes, up to 3 times; then "Alex hasn't
+answered yet; I can't accept anything without them" and a pause. Nothing is
+accepted by default. **"Is there anything else?"** is not an offer: Jarvis
+asks for a reference number and a written summary, then closes.
+
+**Time:** waiting in a queue costs nothing (its own limit, default 45
+minutes, at most 2 hours; the position is shown); the chat's limit starts at
+the first agent message; a quiet agent gets one "Are you still there?" after
+5 minutes, and a pause after 10 more; "chat ended" ends it with the summary.
+
+### 6. Transcript
+
+The company's words are outside text (`source: "support_transcript"`), never
+learned from or read aloud. The whole chat is saved in the **encrypted chat
+history** as a "Support chat" record (company, date, the details card, every
+message with time and author, each offer card and answer, the reference
+number); History search finds it. "Export transcript" is the owner's tap on
+the PC, to a folder they pick, and says the file is not encrypted. Jarvis
+never clicks the widget's "email me the transcript".
+
+### 7. Legal and ethics (plain words, not legal advice)
+
+- **Saying it is a bot:** California's SB 1001 covers bots used to push a
+  sale or sway a vote; a buyer's assistant is probably outside it
+  (**unverified**). Jarvis says it anyway - the owner's decision.
+- **Saving the transcript:** saving your own text chat is generally not
+  "recording" under US law (**unverified**; state laws differ).
+- **Terms of service:** Groupon's terms reportedly forbid access "using any
+  robot, spider, scraper, or other automated means" (search summary; the
+  page was blocked). **The owner's real account could be closed**, unused
+  vouchers with it.
+- **What the owner agrees to through Jarvis binds the owner** - hence a card
+  for every offer.
+
+### 8. Both apps; one or two graphics cards
+
+Both apps use the `/api/chatbot/*` routes with `"mode": "support"`: start,
+approve cards, watch, Pause, Stop, Take over, export. **One-sided on
+purpose** (ARCHITECTURE §8): signing in and 2-factor codes happen in the PC
+window. The phone's ongoing notification reads "Chat with Groupon: offer
+waiting". **One card:** basic chats (goal, details, last 6 turns; the offer
+backstop is plain code, so a small model cannot miss an offer; a support
+reply goes ahead of the owner's own chat for its few seconds). **Two cards:**
+the whole transcript, several problems in one chat, the owner's chat never
+delayed - on once the second card is measured.
+
+### 9. Risks
+
+An account is closed (§7). An offer is missed (two detectors; only an offer
+card can send an accepting reply). The agent asks for a card number or
+password (refused by the form and the last check; handed to the owner).
+Tricks written into the chat (no tools, nothing private to leak; the
+injection detector warns). Sign-in cookies for real accounts in the Jarvis
+profile ("Forget my sign-ins" button; App lock covers the screens). The
+widget changes its layout (the general check, then a pause with a reason).
+
+### 10. Build plan (each step tested on 127.0.0.1)
+
+1. The shared website base out of `GeminiWeb` (Gemini's tests still pass).
+2. The support last check (planted card numbers, SSN-shaped numbers,
+   passwords, unlisted emails all blocked; listed values pass).
+3. Fake widget pages per vendor plus an unbranded one: queue, bot-to-human
+   handover, menu, cross-host iframe, "chat ended", a quiet agent.
+4. The disclosure line, re-sent at handover; the fixed answer to "are you a bot?".
+5. Offer detection over 100 written agent lines; the offer card, holding
+   lines and time-out.
+6. The encrypted transcript and export; the learner test shows nothing learned.
+7. Routes, both apps, docs, ARCHITECTURE §2/§4/§8; `check_parity.py` clean.
+8. The owner's `check` on Groupon's real help page (reads only), then one real chat.
+9. The new-feature audit.
+
+Sources: Zendesk Messaging Web Widget cookbook; "How to detect if a website
+uses Intercom" (DEV); LivePerson engagement window docs; Gorgias chat HTML
+snippets; freshworks/freshchat-widget; Salesforce Embedded Service guide;
+Groupon support FAQ and Terms of Use (blocked here; search summary); SB 1001
+text and Perkins Coie's summary.
