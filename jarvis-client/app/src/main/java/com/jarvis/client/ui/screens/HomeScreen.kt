@@ -101,7 +101,9 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.Activity
 import com.jarvis.client.FaceState
 import com.jarvis.client.LinkState
+import com.jarvis.client.face.AnimalNow
 import com.jarvis.client.face.Bindings
+import com.jarvis.client.face.CritterFace
 import com.jarvis.client.face.Face
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.data.FaceSize
@@ -1488,8 +1490,11 @@ private fun HandlePill() {
  * So this listens in the Initial pass, which runs parent first, and consumes
  * nothing: the face still draws its press ring, and a drag on the face -
  * which consumes the moves - cancels the tap here.
+ *
+ * [character]: the face is an animal or the robot, which a long press pets
+ * (AnimalNow.pressOpensBrain says when a press still opens the Brain).
  */
-private fun Modifier.tapThrough(label: String, onTap: () -> Unit): Modifier = this
+private fun Modifier.tapThrough(label: String, character: Boolean, onTap: () -> Unit): Modifier = this
     // Merged so TalkBack reads the face's own live description ("Jarvis is
     // idle") on the same node that offers the action.
     .semantics(mergeDescendants = true) {
@@ -1499,14 +1504,17 @@ private fun Modifier.tapThrough(label: String, onTap: () -> Unit): Modifier = th
             true
         }
     }
-    .pointerInput(onTap) {
+    .pointerInput(onTap, character) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             val up = waitForUpOrCancellation(PointerEventPass.Initial)
-            // A long press is petting the animal (the owner's decision of
-            // 2026-09-28: "a long press on the phone that does not open
-            // Brain"), so only a short tap opens it.
-            if (up != null && up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) onTap()
+            // A long press on an animal is petting it (the owner's decision
+            // of 2026-09-28: "a long press on the phone that does not open
+            // Brain"), so there only a short tap opens it - held for less
+            // than the petting hold, the same threshold FaceView pets at.
+            // With Petting off, or on any other face, every tap opens it, as
+            // before. The switch is read as the finger lifts.
+            if (up != null && AnimalNow.pressOpensBrain(up.uptimeMillis - down.uptimeMillis, character)) onTap()
         }
     }
 
@@ -1580,7 +1588,11 @@ private fun FaceBlock(
                         )
                         .then(
                             if (opensMind) {
-                                Modifier.tapThrough(label = "Open the Brain", onTap = actions.onOpenBrain)
+                                Modifier.tapThrough(
+                                    label = "Open the Brain",
+                                    character = state.face is CritterFace,
+                                    onTap = actions.onOpenBrain,
+                                )
                             } else {
                                 Modifier
                             },

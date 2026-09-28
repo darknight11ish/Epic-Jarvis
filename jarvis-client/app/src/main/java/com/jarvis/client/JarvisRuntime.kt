@@ -679,11 +679,13 @@ object JarvisRuntime {
         // The shared animal switches (AnimalOptions) for the faces: the new
         // behaviours (face.AnimalNow) and the seasonal touches (SeasonNow),
         // whenever they arrive - this phone's copy first, then the PC's. The
-        // PC's defaults until either has been heard.
+        // PC's defaults until either has been heard - not counted as a read
+        // (AnimalNow.reads), so a face opened before the real ones arrive
+        // still takes them at once.
         scope.launch {
             appearance.animal.collect { shared ->
                 val values = (shared ?: com.jarvis.client.net.AnimalOptions.Shared()).values
-                com.jarvis.client.face.AnimalNow.apply(values)
+                com.jarvis.client.face.AnimalNow.apply(values, stored = shared != null)
                 com.jarvis.client.face.SeasonNow.on = values["seasonal"] == true
             }
         }
@@ -1067,7 +1069,21 @@ object JarvisRuntime {
     @Volatile private var toolRuns = 0L
     @Volatile private var streamOpens = 0L
 
+    /**
+     * The newest event id the PC had when this connection opened
+     * (`hello.latest`): every event at or below it is the PC replaying what
+     * this phone missed (AnimalNow.isReplay), above it is live. -1 until
+     * this connection's hello, or from a PC that does not send it. Read so
+     * the animal's moments - a fact's nod, a long answer's glow, the focus
+     * stretch - play for what happens now, never for a replay after a
+     * reconnect or a restart.
+     */
+    @Volatile private var replayUpTo = -1L
+
     private suspend fun onOpen(hello: com.jarvis.client.net.HelloPayload?) {
+        // The connect (no hello yet) forgets the last connection's replay
+        // point; the hello, the first frame, brings this one's.
+        replayUpTo = hello?.latest ?: -1L
         // A (re)connect: step events may have been missed since the last one.
         streamOpens += 1
         _link.value = LinkState.CONNECTED
@@ -1085,6 +1101,9 @@ object JarvisRuntime {
             // to forget.
             resumePointPending = null
             settings.clearResumePoint()
+            // A focus session's "ended" may be among what was missed: the
+            // animal's focus buddy must not stay on for good.
+            com.jarvis.client.face.AnimalNow.focusUnknown()
         }
 
         // A client that connects mid-turn has no other way to learn what Jarvis
@@ -1113,6 +1132,8 @@ object JarvisRuntime {
      * of these re-fetches the real endpoint; the bus is a doorbell.
      */
     private suspend fun onEvent(event: SseEvent) {
+        // Part of the PC's replay of what this phone missed (see replayUpTo).
+        val replayed = com.jarvis.client.face.AnimalNow.isReplay(event.id, replayUpTo)
         when (event.kind) {
             "approval" -> {
                 refreshPending()
@@ -1160,10 +1181,9 @@ object JarvisRuntime {
             // never the question or the answer). The list is re-read for the
             // answer, and the switches for the speed it measured.
             "deep" -> {
-                // A long answer ready: the animal's glow (a doorbell only).
-                if (com.jarvis.client.face.AnimalNow.deepDone(event.data)) {
-                    com.jarvis.client.face.AnimalNow.longAnswer()
-                }
+                // A long answer ready: the animal's glow (a doorbell only) -
+                // not for a replayed one.
+                com.jarvis.client.face.AnimalNow.deepEvent(event.data, replayed)
                 refreshDeep()
                 refreshBigModel()
             }
@@ -1211,7 +1231,7 @@ object JarvisRuntime {
             // the text - a doorbell like the rest. The list on Mind reads
             // itself again, and a quiet line counts them. Never a
             // notification: nothing here reaches ApprovalNotifier.
-            com.jarvis.client.net.AutoLearn.EVENT -> onMemorySaved(event.data)
+            com.jarvis.client.net.AutoLearn.EVENT -> onMemorySaved(event.data, replayed)
             // A timer, alarm or reminder went off on the PC, or Coming up
             // changed (`{"id", "kind", "state"}` only - a doorbell, never the
             // words). The list on Mind reads itself again; a job that went
@@ -1223,8 +1243,9 @@ object JarvisRuntime {
             // session" reads itself again. The spoken line is the PC's
             // alone: the phone is refused it, and does not ask.
             "focus" -> {
-                // The animal's focus buddy, and its stretch as a session ends.
-                com.jarvis.client.face.AnimalNow.focusOf(event.data)?.let { com.jarvis.client.face.AnimalNow.focus(it) }
+                // The animal's focus buddy, and its stretch as a session ends
+                // (not for a replayed end).
+                com.jarvis.client.face.AnimalNow.focusEvent(event.data, replayed)
                 _focusTick.update { it + 1 }
             }
             // Face and bindings changed on another device. Each device renders
@@ -3387,7 +3408,7 @@ object JarvisRuntime {
         _autoRememberedIds.value = emptyList()
     }
 
-    private fun onMemorySaved(data: kotlinx.serialization.json.JsonElement?) {
+    private fun onMemorySaved(data: kotlinx.serialization.json.JsonElement?, replayed: Boolean = false) {
         val ids = com.jarvis.client.net.AutoLearn.savedIds(data)
         val fresh = synchronized(this) {
             val (added, seen) = com.jarvis.client.net.AutoLearn.fresh(autoSeenIds, ids)
@@ -3398,9 +3419,10 @@ object JarvisRuntime {
             _autoRemembered.update { it + fresh.size }
             _autoRememberedIds.update { (it + fresh).takeLast(com.jarvis.client.net.MemoryUsed.MAX) }
             // The animal's small nod - never while App lock or "Hide memory
-            // lists and chat history" is on (the owner's rule, 2026-09-28).
+            // lists and chat history" is on (the owner's rule, 2026-09-28),
+            // and never for a replayed event.
             val security = settings.security.value
-            if (!security.appLock && !security.privateLists) com.jarvis.client.face.AnimalNow.factSaved()
+            com.jarvis.client.face.AnimalNow.factSavedIf(security.appLock, security.privateLists, replayed)
         }
         _autoTick.update { it + 1 }
     }

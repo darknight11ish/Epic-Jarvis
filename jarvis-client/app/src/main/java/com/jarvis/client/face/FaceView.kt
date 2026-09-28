@@ -244,6 +244,8 @@ fun FaceView(
         // switch the owner made: it is worn at once.
         if (host.onScreenS() < SWITCH_SETTLE_S) {
             shownFace = face
+            host.wear(face)
+            frame = host.snapshot()
             return@LaunchedEffect
         }
         // A hello still playing finishes first, so a face never jumps back
@@ -252,6 +254,8 @@ fun FaceView(
         while (!host.helloDone() && System.nanoTime() < helloBy) delay(SWITCH_POLL_MS)
         if (shownFace !is CritterFace && face !is CritterFace) {
             shownFace = face
+            host.wear(face)
+            frame = host.snapshot()
             return@LaunchedEffect
         }
         // A mesh face (Tokamak, Membrane) draws on its own GL surface, which
@@ -264,6 +268,11 @@ fun FaceView(
         }
         shownFace = face
         host.beginHello()
+        // The new face's own first frame, in the same change as the face
+        // itself: drawn with the leaving face's last frame, a face that is
+        // not a character showed fully for a frame before its fade-in began.
+        host.wear(face)
+        frame = host.snapshot()
     }
     val shown = shownFace
 
@@ -332,6 +341,10 @@ fun FaceView(
             // One frame's worth of the host, with the voice read at this
             // instant. The mouth's own level wins while a real voice plays.
             fun step(dt: Float, b: ResolvedBudget): Boolean {
+                // The face was switched and this loop is about to be replaced:
+                // a frame made now would be for the face that has gone (and
+                // FaceView's Canvas would draw nothing with it).
+                if (shownFace !== shown) return false
                 val voiced = mouthOf(voiceNow)
                 return host.advance(
                     dt, liveState, mic(), if (voiced) voiceNow[0] else speech(), bindings, shown,
@@ -582,11 +595,16 @@ fun FaceView(
             // The face switch's fade (FaceFrame.alpha), read in the layer only,
             // so a changing alpha redraws the layer and recomposes nothing.
             Canvas(Modifier.matchParentSize().graphicsLayer { alpha = frame.alpha }) {
+                // A frame made for another face (the one just switched away
+                // from) is never drawn on this one: its fade belongs to that
+                // face. Null: the host has not drawn yet - the opening frame.
+                val f = frame
+                if (f.faceId != null && f.faceId != shown.id) return@Canvas
                 // Timed for the Auto adjust governor: two clock reads a frame.
                 val t0 = System.nanoTime()
                 // The quality tier's `post`: no glow at Low or in battery saver.
                 val postGlow = if (FaceQuality.current.post) glowK else 0f
-                drawFace(frame, shown, notches, glowSprite, background, postGlow)
+                drawFace(f, shown, notches, glowSprite, background, postGlow)
                 if (ringColour != null) drawOfflineRing(size.minDimension, ringColour)
                 drawCost.nanos = System.nanoTime() - t0
             }
@@ -1068,6 +1086,12 @@ data class FaceFrame(
      * ([CritterPose.switchAlpha]), or a face that is not a character.
      */
     val alpha: Float = 1f,
+    /**
+     * The id of the face this frame was made for ([Face.id]); null before
+     * the host has drawn any. FaceView draws nothing with a frame made for
+     * another face - see its Canvas.
+     */
+    val faceId: String? = null,
 )
 
 /**
@@ -1202,17 +1226,33 @@ class FaceHost {
     // desktop's faces.html does), not eased in from 0 every time a face opens.
     private var rampsSeeded = false
     // When this host first saw the stored animal options read (its own
-    // clock); negative: not yet. See [STILL_SETTLE_S].
-    private var optionsReadAt = -1.0
+    // clock), once [optionsRead]. See [STILL_SETTLE_S]. Moved back with the
+    // clock by [wrapClocks], so a wrap never reopens the settling window.
+    private var optionsRead = false
+    private var optionsReadAt = 0.0
     // The Zs' weight (FaceFrame.zsW), eased; starts shown.
     private var zsRamp = 1f
     // The new behaviours' side of this face (FaceFrame.behave).
     private val feed = AnimalFeed()
-    // The face on screen is a character (an animal or the robot).
+    // The face on screen is a character (an animal or the robot), and which
+    // face it is (FaceFrame.faceId); null until the first advance.
     private var character = false
+    private var faceId: String? = null
+    // When the face on screen began to be drawn by this host (t): at its
+    // first advance, or when it was switched to. See [restedS].
+    private var bornAt = 0f
+    // Seconds this host has been drawing, never wrapped (see [onScreenS]).
+    private var onScreen = 0.0
     // A face switch: 0 none, 1 the goodbye, 2 the hello; since when (t).
     private var switchPhase = 0
     private var switchAt = 0f
+
+    /**
+     * Whether the face's own-timed talking gesture is playing at its clock:
+     * asked once per speaking stretch, as the voice is first heard (see
+     * [AnimalFeed.onState]). [talkingGestureAt]; a test may replace it.
+     */
+    internal var talkingGesture: (Face, Float) -> Boolean = ::talkingGestureAt
     // FaceFrame.awakeDim: the dim standby's is laid over (DimRule.awakeAfter).
     private var awakeDim = 1f
     private var zsTint: Color = Color.White
@@ -1313,8 +1353,49 @@ class FaceHost {
     /** The goodbye is playing. */
     fun leaving(): Boolean = switchPhase == 1
 
-    /** Seconds this host has been drawing (its real clock). */
-    fun onScreenS(): Float = t
+    /**
+     * Seconds this host has been drawing. Its own count, not the real clock
+     * [t]: a wrap takes whole periods off that, and a face that has been on
+     * screen for an hour must not read as just opened (FaceView's
+     * SWITCH_SETTLE_S) the moment after one.
+     */
+    fun onScreenS(): Float = onScreen.toFloat()
+
+    /**
+     * [face] is the face drawn from now on (every advance says so too).
+     * When it is a different face from the last, it begins here ([bornAt]),
+     * and what the host kept of the last face's changes of state is let go:
+     * the new face was not there for them, so it neither settles from them
+     * nor counts their time as rested (see [restedS]).
+     */
+    fun wear(face: Face) {
+        if (face.id == faceId) return
+        val first = faceId == null
+        faceId = face.id
+        character = face is CritterFace
+        bornAt = t
+        if (first) return
+        prevState = state
+        prevState2 = state
+        prevGap = 1e9f
+        prevAmp = lastDrive
+        prevAmp2 = lastDrive
+        past = emptyList()
+    }
+
+    /**
+     * How long the face has been in its state, as the pose's "since": for a
+     * character at rest, never longer than it has been on screen - so a face
+     * just opened, or just switched to, waits its "rested a while" before a
+     * cute moment or the robot's zip ([CritterPose.CUTE_AFTER]) rather than
+     * reading the host's opening -999 (or the last face's rest) as hours of
+     * rest. Only at rest: in every other state the time is the state's own,
+     * so opening straight into an approval plays no arrival because of it.
+     */
+    private fun restedS(): Float {
+        val since = t - changedAt
+        return if (character && state == FaceState.IDLE) min(since, t - bornAt) else since
+    }
 
     fun goodbyeDone(): Boolean = switchPhase != 1 || t - switchAt >= CritterPose.GOODBYE_S
 
@@ -1355,6 +1436,12 @@ class FaceHost {
             lastVoiceAt -= by
             clockStartedAt -= by
             tapStartedAt -= by
+            // The face switch and the face's start: a hello cut off by the
+            // screen going off must not be left 4096 s in the future (its
+            // face out of view, or faded out, for good).
+            switchAt -= by
+            bornAt -= by
+            if (optionsRead) optionsReadAt -= w
             governor.shift(by)
             strobeBudget.shift(by)
         }
@@ -1405,6 +1492,9 @@ class FaceHost {
          */
         pace: RestPace? = null,
     ): Boolean {
+        // The face first: a new one starts afresh (see [wear]) and then sees
+        // any change of state below as its own.
+        wear(face)
         // While Jarvis's voice is actually playing - and for a moment after -
         // a resting or busy face shows SPEAKING whatever the state says: the
         // answer's text finishes streaming (and the PC says `idle`) before its
@@ -1418,16 +1508,17 @@ class FaceHost {
             wanted
         }
         if (shown != state) onStateChange(shown)
-        // Gestures on the phrase ends: decided as an answer starts - however
-        // the state changed (here, or the composable's onStateChange).
-        feed.onState(state, voiceIn != null || voiceMouth != null)
-        character = face is CritterFace
+        // Gestures on the phrase ends: decided as the voice is first heard in
+        // a speaking stretch - however the state changed (here, or the
+        // composable's onStateChange).
+        feed.onState(state, voiceIn != null || voiceMouth != null) { talkingGesture(face, motionT.toFloat()) }
         this.calm = calm
         val speedK = if (speed.isFinite() && speed > 0f) speed else 1f
         // Exactly 1 when calm is off and speed is 1, so a default face
         // advances exactly as it always has.
         val motionK = if (calm) CALM_MOTION_RATE * min(speedK, 1f) else speedK
         clock += dtIn
+        onScreen += dtIn
         motionT += (dtIn * motionK).toDouble()
         accum += dtIn
         // The animals' option weights ramp at one full switch per
@@ -1440,8 +1531,11 @@ class FaceHost {
             seriousRamp = if (serious) 1f else 0f
             stillRamp = if (still) 1f else 0f
         }
-        if (optionsReadAt < 0.0 && AnimalNow.reads > 0) optionsReadAt = clock
-        val settling = optionsReadAt >= 0.0 && clock - optionsReadAt < STILL_SETTLE_S
+        if (!optionsRead && AnimalNow.reads > 0) {
+            optionsRead = true
+            optionsReadAt = clock
+        }
+        val settling = optionsRead && clock - optionsReadAt < STILL_SETTLE_S
         calmRamp = ramp(calmRamp, calm, step)
         seriousRamp = ramp(seriousRamp, serious, step)
         // Still is taken at once while the stored options are settling: a face
@@ -1578,18 +1672,26 @@ class FaceHost {
     fun restFps(face: Face, pace: RestPace?): Int {
         if (!settled()) return 0
         if (pace == null || face !is CritterFace) return Spec.fpsFor(state)
-        // A cute moment counts too: the pose finds it from how long the face
-        // has been idle and its switches (only idle has any, so the opts are
-        // made only then - this runs on every vsync).
-        val busy = !calm && stillRamp < 0.99f && if (state == FaceState.IDLE) {
+        // Still, or a serious moment, fully on: nothing extra plays.
+        val quiet = stillRamp >= 0.99f || seriousRamp >= 0.99f
+        // A fact's nod, a long answer's glow, the focus stretch and being
+        // stroked are drawn at the full rate while they play (calm makes them
+        // smaller, not still).
+        val moment = !quiet && feed.momentPlaying()
+        // An idle happening, or a cute moment: the pose finds it from how
+        // long the face has been idle and its switches (only idle has any,
+        // so the opts are made only then - this runs on every vsync). Not
+        // under calm motion, and not in a focus session the buddy works
+        // through - the pose plays none then.
+        val happening = !calm && !quiet && !feed.focusQuiet() && if (state == FaceState.IDLE) {
             face.busyAt(
-                state, motionT.toFloat(), t - changedAt,
+                state, motionT.toFloat(), restedS(),
                 feed.opts(smoothstep(calmRamp), smoothstep(seriousRamp), smoothstep(stillRamp)),
             )
         } else {
             face.busyAt(state, motionT.toFloat())
         }
-        return AnimalPace.restFps(state, pace.target, pace.headroom, busy)
+        return AnimalPace.restFps(state, pace.target, pace.headroom, moment || happening)
     }
 
     fun snapshot(): FaceFrame {
@@ -1648,6 +1750,8 @@ class FaceHost {
 
         // The error hitch: stop dead in 60 ms, hold, shake, then crawl.
         val sinceChange = t - changedAt
+        // What the pose is told (see [restedS]).
+        val hitch = restedS()
         // Not under calm motion. The error still reads: its own colour, and
         // the transform's stop-then-crawl, which is a change of speed rather
         // than a jolt.
@@ -1670,7 +1774,7 @@ class FaceHost {
             awakeDim = awakeDim,
             overlay = tf.overlay,
             clockFrac = clockFrac,
-            hitchPhase = sinceChange,
+            hitchPhase = hitch,
             shake = shake,
             flinch = flinch,
             ringAt = tapAt,
@@ -1693,6 +1797,7 @@ class FaceHost {
             zsTint = zsTint,
             behave = behave,
             alpha = alpha,
+            faceId = faceId,
             // A new three-float array only while a voice plays: a frame is
             // an immutable snapshot, and the draw may still hold the last.
             mouth = if (voiced) floatArrayOf(mouthOpen, mouthWide, mouthRound) else null,
@@ -1711,6 +1816,20 @@ class FaceHost {
 }
 
 private fun smoothstep(x: Float) = x * x * (3f - 2f * x)
+
+/**
+ * Whether [face]'s own-timed talking gesture (a nod, a paw or wing lift, a
+ * tilt) is playing at its clock [t] - asked once per speaking stretch, as
+ * the voice is first heard, because turning the phrase-end gestures on then
+ * would cut that gesture off in one frame ([AnimalFeed.onState]).
+ *
+ * Not known yet: the pose files keep each face's gesture timing private and
+ * CritterFace has no way to ask it. Until it does, a character answers
+ * "maybe", so its gestures keep their own timing through every answer
+ * rather than risk a jump (docs/CRITTERS.md). A face that is not a character
+ * has no gestures.
+ */
+internal fun talkingGestureAt(face: Face, t: Float): Boolean = face is CritterFace
 
 /** [from] moved [step] toward 1 (on) or 0 (off). */
 private fun ramp(from: Float, on: Boolean, step: Float): Float =
