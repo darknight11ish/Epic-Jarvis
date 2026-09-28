@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -241,6 +242,25 @@ class JarvisApi(
         // profile, would see the token in the clear. The desktop's clients
         // use no proxy either (`.no_proxy()`).
         .proxy(java.net.Proxy.NO_PROXY)
+        // Why a key was refused (docs/PAIRING-DESIGN.md §5.3): a 401 may
+        // carry `"key": "device_removed"` or `"shared_retired"`, which
+        // [KeyRefusal] keeps - the reason word only, never the body - so the
+        // places that already say "your PC did not accept this phone's key"
+        // can say which. Every request made WITH a key that is answered
+        // without a 401 clears it. [streamClient] and [shortCall] inherit
+        // this, so the event stream's refusal is read too. The two no-key
+        // pairing routes carry no key and are left alone.
+        .addInterceptor { chain ->
+            val response = chain.proceed(chain.request())
+            if (chain.request().header(TOKEN_HEADER) != null) {
+                if (response.code == 401) {
+                    KeyRefusal.note(runCatching { response.peekBody(2_048L).string() }.getOrNull())
+                } else {
+                    KeyRefusal.clear()
+                }
+            }
+            response
+        }
         .build()
 
     /**
@@ -572,6 +592,62 @@ class JarvisApi(
      */
     suspend fun setWatchNotify(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(WatchNotify.PATH, WatchNotify.enabledBody(on))
+
+    // ------------------------------------------------- pairing and devices ----
+    // docs/PAIRING-DESIGN.md §6.2 and §6.4.
+
+    /**
+     * One of the two pairing routes that take NO key (`/api/pair/claim`,
+     * `/api/pair/collect`): the phone has none yet, and the sums in the body
+     * are what prove it may ask. Sent to [base] - the PC named by the QR code
+     * or the typed name, never the saved address - and deliberately not
+     * [authed]: no `X-Jarvis-Token`. It still sends `X-Jarvis-Client: hud`,
+     * which the PC's origin check requires of every request. Status 0 means
+     * nothing answered. Nothing about the request or its answer is logged.
+     */
+    suspend fun pairPost(base: String, path: String, json: String): Pair<Int, JsonObject?> =
+        withContext(Dispatchers.IO) {
+            if (path != Pairing.CLAIM_PATH && path != Pairing.COLLECT_PATH) return@withContext 0 to null
+            val target = runCatching { (base.trimEnd('/') + path).toHttpUrlOrNull() }.getOrNull()
+                ?: return@withContext 0 to null
+            val req = Request.Builder()
+                .url(target)
+                .post(json.toRequestBody("application/json".toMediaType()))
+                .header(CLIENT_HEADER, CLIENT_VALUE)
+                .header("Accept", "application/json")
+                .build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    resp.code to runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                }
+            }.getOrElse { 0 to null }
+        }
+
+    /** `GET /api/devices`: every device with its own key, and the old shared key's state. */
+    suspend fun devices(): ApiResult<JsonObject> = probe(Devices.PATH)
+
+    /**
+     * `POST /api/devices/remove` or `/api/devices/shared`: the status and the
+     * body come back together ([Devices.removeSaid], [Devices.retireSaid]),
+     * so the PC's reason is shown. A 401 is a refused key.
+     */
+    suspend fun devicesPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            if (path != Devices.REMOVE_PATH && path != Devices.SHARED_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a devices route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401) ApiResult.Failed(ApiError.BadToken) else ApiResult.Ok(resp.code to obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
 
     // ------------------------------------------------- reading phone notifications ----
     // docs/JARVIS-API.md §61; see [PhoneNotifications] for the shapes and

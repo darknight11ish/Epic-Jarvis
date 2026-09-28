@@ -74,6 +74,9 @@ object CrashLog {
         // And a belt: anything shaped like the header goes, whatever the
         // token store had to say about itself.
         safe = TOKEN_HEADER.replace(safe, "$1«token»")
+        // A key made for this device (docs/PAIRING-DESIGN.md §5.1, §8.6) is
+        // recognisable by its shape even with no header name beside it.
+        safe = com.jarvis.client.net.DeviceKey.scrub(safe, "«token»")
         File(context.filesDir, FILE).writeText(safe)
     }
 
