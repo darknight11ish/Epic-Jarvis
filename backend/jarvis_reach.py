@@ -838,9 +838,12 @@ def _chatbot(ctx: Ctx) -> dict:
                 "or sign-in page. What the chatbot says is outside text.")
 
 
-#: jarvis_chatbot_api's own notes: no_key_words() and CANNOT_READ.
+#: jarvis_chatbot_api's own notes: no_key_words(), CANNOT_READ and
+#: no_limit_words() (a key but no monthly money limit yet: not used until
+#: one is set - the owner's decision of 2026-09-28).
 _NO_KEY = re.compile(r"^No .+ API key\b")
 _NO_STORE = re.compile(r"^Jarvis cannot read Windows Credential Manager\b")
+_NO_LIMIT = re.compile(r"^No monthly money limit is set for\b")
 
 
 def _chatbot_api(ctx: Ctx) -> dict:
@@ -875,11 +878,17 @@ def _chatbot_api(ctx: Ctx) -> dict:
         notes = [(b, str(b.get("note") or "").strip()) for b in bots]
         no_key = [b for b, n in notes if _NO_KEY.match(n)]
         no_store = [b for b, n in notes if _NO_STORE.match(n)]
-        parts = [n for b, n in notes if b not in no_key and b not in no_store and n]
+        no_limit = [b for b, n in notes if _NO_LIMIT.match(n)]
+        parts = [n for b, n in notes
+                 if b not in no_key and b not in no_store and b not in no_limit and n]
         if no_store:
             parts.append("Jarvis cannot read Windows Credential Manager (the Windows password "
                          "store) on this computer, where the key for " + names(no_store)
                          + " would be kept.")
+        if no_limit:
+            parts.append(("no monthly money limit" if not parts else "No monthly money limit")
+                         + " is set on this PC for " + names(no_limit) + ", so Jarvis does not "
+                         "use it yet. A limit comes first, and is set on the PC only.")
         if no_key:
             parts.append(("no key" if not parts else "No key") + " is saved on this PC for "
                          + names(no_key) + ". Keys are added on the PC only.")
@@ -895,8 +904,11 @@ def _chatbot_api(ctx: Ctx) -> dict:
                 "Holds a conversation with an AI chatbot through its official API, with the "
                 "key saved on this PC, sent only to that service: one approval card per "
                 "conversation shows the service, the model, the goal word for word and the "
-                "most messages and minutes. Each message costs a little on that account. "
-                "Nothing private is sent, and what the chatbot says is outside text.")
+                "most messages and minutes, and about how much of the monthly money limit is "
+                "left. Each message costs a little on that account; Jarvis stops using a "
+                "service when the monthly limit you set on the PC is reached (an estimate from "
+                "a price list you can correct there). Nothing private is sent, and what the "
+                "chatbot says is outside text.")
 
 
 #: Every way Jarvis can reach something outside itself, in the order both

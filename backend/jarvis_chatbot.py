@@ -288,6 +288,10 @@ class Adapter:
     Optional: waiting_for_owner() -> True while the message has not been
     handed on yet because the owner's own chat comes first; that time is
     not counted against REPLY_TIMEOUT.
+    Optional: before_send(text) -> "" to send `text`, else the plain-words
+    reason the conversation must end before it (jarvis_chatbot_api: the
+    monthly money limit). Asked right before every send; one that raises
+    ends the conversation too (fail closed).
     An adapter never decides anything: no retries of a send, no clicking
     through a captcha, a sign-in or a warning page, no hiding that it is a
     program. When its page is anything but the normal chat, status() says
@@ -335,6 +339,11 @@ class AdapterInfo:
     #: this PC, jarvis_chatbot_local.py). The card and "What Jarvis can
     #: reach" word each one differently.
     kind: str = "website"
+    #: None, or a callable() -> None or {"line", "company", "limit", "left",
+    #: "spent", "until", "reached"}: this month's money limit for an API
+    #: service (jarvis_chatbot_api.money_view), read when the card is
+    #: written and when both apps list the chatbots. Opens nothing.
+    money: Optional[Callable[[], Optional[dict]]] = None
 
 
 class FakeChatbot(Adapter):
@@ -441,17 +450,35 @@ def _not_ready(info: AdapterInfo) -> str:
         return f"{info.name} cannot be checked ({type(exc).__name__})."
 
 
+def money_of(info: Optional[AdapterInfo]) -> Optional[dict]:
+    """An API service's money limit this month (AdapterInfo.money), or None."""
+    if info is None or info.money is None:
+        return None
+    try:
+        got = info.money()
+    except Exception:
+        return None
+    return dict(got) if isinstance(got, dict) else None
+
+
 def choices() -> list:
     """The chatbots the owner can be offered, for both apps: never the
     test stand-in; one that is unbuilt or not set up says why in `note`
-    (and `ready` is False)."""
+    (and `ready` is False). An API service with a monthly money limit
+    carries `money`: the amounts as the PC writes them ("$4.02"), which
+    both apps put into WORDS["money_left"]."""
     out = []
     for i in ADAPTERS.values():
         if i.test_only:
             continue
         note = _not_ready(i)
-        out.append({"id": i.id, "name": i.name, "host": i.host, "built": bool(i.built),
-                    "ready": not note, "note": note, "kind": i.kind})
+        row = {"id": i.id, "name": i.name, "host": i.host, "built": bool(i.built),
+               "ready": not note, "note": note, "kind": i.kind}
+        m = money_of(i)
+        if m is not None:
+            row["money"] = {k: m.get(k) for k in ("company", "limit", "left", "spent",
+                                                  "until", "reached")}
+        out.append(row)
     return out
 
 
@@ -1063,6 +1090,9 @@ def describe(s: Session) -> str:
     ]
     if info and info.card_note:
         lines.append(info.card_note)
+    money = money_of(info)
+    if money and money.get("line"):
+        lines.append(str(money["line"]))
     lines += [
         "",
         ("These words will be sent first, exactly as written:" if not s.turns_used else
@@ -1414,6 +1444,7 @@ ENDED = {
     "no_reply": "{name} did not answer within {seconds} seconds.",
     "stopped": "You stopped it. Nothing more is sent.",
     "driver_failed": "Jarvis's own model could not decide what to ask next.",
+    "money_limit": "{name} was stopped before the next message to keep to your money limit.",
     "adapter_failed": "The {name} window could not be worked ({error}).",
 }
 
@@ -1610,6 +1641,11 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
                 d.sleep(min(REPLY_SLICE, PACE_SECONDS - (d.clock() - s.last_send_at)))
             control()
             look()
+            # The adapter's own last word before this message leaves (an
+            # API service's monthly money limit). Its words end it.
+            why = _before_send(s.adapter, pending)
+            if why:
+                raise _End("money_limit", why)
             s.adapter.send(pending)
             s.blocked_in_row = 0
             s.turns_used += 1
@@ -1698,6 +1734,19 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
         _end_now(s, "adapter_failed", words or ENDED["adapter_failed"].format(
             name=name, error=type(exc).__name__), d)
         return _result(s, ok=False, reason=s.ended_words)
+
+
+def _before_send(adapter, text: str) -> str:
+    """An adapter's own "not this message" (jarvis_chatbot_api: the money
+    limit), or "". One that raises is a no (fail closed)."""
+    fn = getattr(adapter, "before_send", None)
+    if not callable(fn):
+        return ""
+    try:
+        return str(fn(text) or "")
+    except Exception as exc:
+        return (f"Jarvis could not check the money limit before the next message "
+                f"({type(exc).__name__}), so nothing more was sent.")
 
 
 def _held_for_owner(adapter) -> bool:

@@ -21,6 +21,12 @@
  * gave, who dropped out and why). Pause / Resume / Stop act on the whole
  * comparison. The summary is outside text too.
  *
+ * An API service (a chatbot reached with a key) carries this month's money
+ * limit from the PC (`money` on the chatbot: "$4.02" and so on, written by
+ * the PC), shown with WORDS.money_left; a conversation's `usage.cost` is the
+ * PC's estimate. Limits and prices are set on the PC only (its command
+ * line, like keys) - this app only shows them.
+ *
  * The phone says the same words (net/Chatbot.kt); tests/chatbot.mjs and the
  * phone's ChatbotTest check them against tools/gen_chatbot_cases.py's file,
  * which takes them from the PC's own jarvis_chatbot_routes.WORDS.
@@ -103,7 +109,11 @@ export const WORDS = {
   kind_website: "Websites (a browser window on the PC)",
   kind_api: "With a key (each message costs a little)",
   kind_local: "On this PC",
-  usage_line: "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}",
+  usage_line: "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}, about {cost}",
+  money_left:
+    "About {left} of {limit} left this month for {company} (prices are estimates you can correct on the PC).",
+  money_pc_only:
+    "Each service with a key needs a monthly money limit before Jarvis uses it. Limits and prices are set on the PC only, like keys; the amounts are estimates.",
 };
 
 /** How each chatbot is reached (`kind`), in the order the chooser groups them. */
@@ -156,7 +166,9 @@ export function readUsage(u) {
   const requests = num(o.requests);
   const tokens = num(o.total_tokens) || num(o.prompt_tokens) + num(o.completion_tokens);
   if (!requests && !tokens) return null;
-  return { requests, tokens, model: text(o.model) };
+  // `cost` is the PC's own estimate, as it writes it ("$0.03"); an older PC
+  // sends none.
+  return { requests, tokens, model: text(o.model), cost: text(o.cost) };
 }
 
 /** 4215 as "4,215" - the same on every machine (no locale). */
@@ -164,13 +176,37 @@ export function grouped(n) {
   return String(Math.round(num(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-/** "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini", or "". */
+/** "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini, about $0.01", or "". */
 export function usageLine(u) {
   if (!u) return "";
   let line = WORDS.usage_line;
   if (!u.model) line = line.replace(", model {model}", "");
+  if (!u.cost) line = line.replace(", about {cost}", "");
   return line.replace("{requests}", `${u.requests} request${u.requests === 1 ? "" : "s"}`)
-    .replace("{tokens}", grouped(u.tokens)).replace("{model}", u.model);
+    .replace("{tokens}", grouped(u.tokens)).replace("{model}", u.model || "")
+    .replace("{cost}", u.cost || "");
+}
+
+/** An API service's money limit this month, as the PC wrote it, or null. */
+export function readMoney(m) {
+  const o = obj(m);
+  if (!o || !text(o.limit) || !text(o.left)) return null;
+  return {
+    company: text(o.company),
+    limit: text(o.limit),
+    left: text(o.left),
+    spent: text(o.spent),
+    until: text(o.until),
+    reached: o.reached === true,
+  };
+}
+
+/** "About $4.55 of $5.00 left this month for OpenAI (...)", or "". */
+export function moneyLine(bot) {
+  const m = bot && bot.money;
+  if (!m) return "";
+  return WORDS.money_left.replace("{left}", m.left).replace("{limit}", m.limit)
+    .replace("{company}", m.company || bot.name || "");
 }
 
 function readSummary(s) {
@@ -242,6 +278,8 @@ export function readChatbot(body) {
     // "website", "api" or "local" (an older PC sends none: its chatbots
     // were all websites).
     kind: text(c.kind) || "website",
+    // An API service's monthly money limit (the PC's own amounts), or null.
+    money: readMoney(c.money),
   }));
   const lim = obj(o.limits) || {};
   const tier = {

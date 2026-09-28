@@ -308,15 +308,39 @@ class ChatbotTest {
 
     @Test
     fun `an API conversation's counts, alone and per chatbot in a comparison`() {
-        val line = "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"
+        val line = "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini, about \$0.01"
         assertEquals(line, Chatbot.usageLine(view("usage_done").session!!.usage))
         assertEquals(listOf("", line),
             view("compare_usage").compare!!.members.map { Chatbot.usageLine(it.usage) })
         assertNull(view("running").session!!.usage)
         assertEquals("Used so far: 1 request, 1,234,567 word-pieces (tokens)",
             Chatbot.usageLine(Chatbot.Usage(1, 1234567L, "")))
+        // An older PC sends no cost: the line leaves it out.
+        assertEquals("Used so far: 2 requests, 10 word-pieces (tokens), model m",
+            Chatbot.usageLine(Chatbot.Usage(2, 10L, "m")))
         assertEquals("999", Chatbot.grouped(999L))
         assertEquals("1,000", Chatbot.grouped(1000L))
+    }
+
+    @Test
+    fun `an API service's money limit reads as the PC wrote it - left, reached, never set`() {
+        val openai = view("long_list").chatbots.single { it.id == "openai_api" }
+        assertEquals("About \$4.55 of \$5.00 left this month for OpenAI (prices are estimates you can " +
+            "correct on the PC).", Chatbot.moneyLine(openai))
+        assertTrue(view("long_list").chatbots.filter { it.id != "openai_api" }.all { it.money == null })
+        val r = view("money_reached")
+        val reached = r.chatbots.single { it.id == "openai_api" }
+        assertFalse(reached.built)
+        assertTrue(reached.money!!.reached)
+        assertEquals("About \$0.00 of \$1.00 left this month for OpenAI (prices are estimates you can " +
+            "correct on the PC).", Chatbot.moneyLine(reached))
+        assertTrue(reached.note.startsWith("You set \$1.00 a month for OpenAI; about \$1.02 is used"))
+        assertEquals(reached.note, Chatbot.formProblem(r, "openai_api", "x", "3", "5"))
+        val mistral = r.chatbots.single { it.id == "mistral_api" }
+        assertNull(mistral.money)
+        assertTrue(mistral.note.startsWith("No monthly money limit is set for Mistral AI"))
+        assertEquals(false to reached.note, Chatbot.said(reply("start_money_reached")))
+        assertEquals("", Chatbot.moneyLine(null))
     }
 
     @Test

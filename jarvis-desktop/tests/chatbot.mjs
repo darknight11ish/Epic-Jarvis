@@ -34,6 +34,7 @@ import {
   actionsOf,
   chatbotGroups,
   usageLine,
+  moneyLine,
   compareFormProblem,
   compareStatusLine,
   compareTalkingLine,
@@ -194,13 +195,40 @@ await check("a long list is grouped by how each chatbot is reached; an API conve
   const old = readChatbot({ ...CASES.long_list, chatbots: [{ id: "x", name: "X", built: true }] });
   assert.equal(old.chatbots[0].kind, "website", "an older PC's chatbot was not read as a website");
   const u = readChatbot(CASES.usage_done).session;
-  assert.equal(usageLine(u.usage), "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini");
+  assert.equal(usageLine(u.usage),
+    "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini, about $0.01");
   const members = readChatbot(CASES.compare_usage).compare.members;
   assert.deepEqual(members.map((m) => usageLine(m.usage)),
-    ["", "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"]);
+    ["", "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini, about $0.01"]);
   assert.equal(usageLine({ requests: 1, tokens: 1234567, model: "" }),
     "Used so far: 1 request, 1,234,567 word-pieces (tokens)");
+  assert.equal(usageLine({ requests: 2, tokens: 10, model: "m", cost: "" }),
+    "Used so far: 2 requests, 10 word-pieces (tokens), model m", "an older PC's usage grew a cost");
   assert.equal(readChatbot(CASES.running).session.usage, null, "a website conversation grew a usage line");
+});
+
+await check("an API service's money limit reads as the PC wrote it; reached, and never set", async () => {
+  const v = readChatbot(CASES.long_list);
+  const openai = v.chatbots.find((c) => c.id === "openai_api");
+  assert.equal(moneyLine(openai),
+    "About $4.55 of $5.00 left this month for OpenAI (prices are estimates you can correct on the PC).");
+  assert.ok(v.chatbots.filter((c) => c.id !== "openai_api").every((c) => c.money === null),
+    "a chatbot with no limit grew a money line");
+  const r = readChatbot(CASES.money_reached);
+  const reached = r.chatbots.find((c) => c.id === "openai_api");
+  assert.equal(reached.built, false, "a service at its limit read as usable");
+  assert.equal(reached.money.reached, true);
+  assert.equal(moneyLine(reached),
+    "About $0.00 of $1.00 left this month for OpenAI (prices are estimates you can correct on the PC).");
+  assert.equal(formProblem(r, { chatbot: "openai_api", goal: "x", messages: 3, minutes: 5 }),
+    reached.note);
+  assert.match(reached.note, /^You set \$1\.00 a month for OpenAI; about \$1\.02 is used this month\. .*October 1\.$/);
+  const mistral = r.chatbots.find((c) => c.id === "mistral_api");
+  assert.equal(mistral.money, null);
+  assert.match(mistral.note, /^No monthly money limit is set for Mistral AI/);
+  assert.equal(CASES.start_money_reached.code, 400);
+  assert.equal(CASES.start_money_reached.body.error, reached.note);
+  assert.match(CASES.start_no_limit.body.error, /limit mistral 5/);
 });
 
 await check("CONTROL: Rust holds what sends, hides the owner's words, Brain only", async () => {
@@ -466,7 +494,8 @@ await check("Brain, a long list: grouped under three headings, each not-ready on
   await page.waitForTimeout(200);
   const rows = await page.locator("#chatbot-several-list > *").evaluateAll((ns) => ns.map((n) =>
     n.tagName === "LABEL" ? ["box", n.querySelector("input").value, n.querySelector("input").disabled]
-      : [n.className.includes("chatbot-kind") ? "heading" : "why", n.textContent]));
+      : [n.className.includes("chatbot-kind") ? "heading" : n.className.includes("chatbot-money-line")
+        ? "money" : n.className.includes("chatbot-money-note") ? "pc" : "why", n.textContent]));
   const errors = page.__errors;
   await page.close();
   assert.deepEqual(groups, [
@@ -479,8 +508,11 @@ await check("Brain, a long list: grouped under three headings, each not-ready on
   assert.deepEqual(rows, [
     ["heading", WORDS.kind_website], ["box", "chatgpt_web", true], ["why", note("chatgpt_web")],
     ["box", "gemini_web", false], ["box", "perplexity_web", true], ["why", note("perplexity_web")],
-    ["heading", WORDS.kind_api], ["box", "openai_api", false], ["box", "deepseek_api", true],
+    ["heading", WORDS.kind_api], ["box", "openai_api", false],
+    ["money", "About $4.55 of $5.00 left this month for OpenAI (prices are estimates you can correct on the PC)."],
+    ["box", "deepseek_api", true],
     ["why", note("deepseek_api")], ["box", "groq_api", true], ["why", note("groq_api")],
+    ["pc", WORDS.money_pc_only],
     ["heading", WORDS.kind_local], ["box", "local_ai", true], ["why", note("local_ai")],
   ]);
   assert.deepEqual(errors, []);
@@ -490,14 +522,34 @@ await check("Brain, what an API conversation used: one line, alone and per chatb
   let page = await workTab({ chatbot: { status: CASES.usage_done } });
   const one = await page.locator("#chatbot .chatbot-usage").allInnerTexts();
   await page.close();
-  assert.deepEqual(one, ["Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"]);
+  assert.deepEqual(one, ["Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini, about $0.01"]);
   page = await workTab({ chatbot: { status: CASES.compare_usage } });
   const each = await page.locator("#chatbot .chatbot-members li").evaluateAll((ls) => ls.map((l) => {
     const u = l.querySelector(".chatbot-usage");
     return u ? u.textContent : "";
   }));
   await page.close();
-  assert.deepEqual(each, ["", "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"]);
+  assert.deepEqual(each, ["", "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini, about $0.01"]);
+});
+
+await check("Brain, a service with a key: the money left under the chooser, and that it is set on the PC", async () => {
+  const page = await workTab({ chatbot: { status: CASES.long_list } });
+  const shown = async () => ({
+    hidden: await page.locator("#chatbot-money").evaluate((n) => n.hidden),
+    text: await page.locator("#chatbot-money").textContent(),
+  });
+  const onGemini = await shown();
+  await page.locator("#chatbot-which").selectOption("openai_api");
+  await page.waitForTimeout(100);
+  const onOpenai = await shown();
+  const errors = page.__errors;
+  await page.close();
+  assert.equal(onGemini.hidden, true, "a website showed a money line");
+  assert.equal(onOpenai.hidden, false);
+  assert.equal(onOpenai.text,
+    "About $4.55 of $5.00 left this month for OpenAI (prices are estimates you can correct on the PC). "
+    + WORDS.money_pc_only);
+  assert.deepEqual(errors, []);
 });
 
 /* ── Ask several and compare ─────────────────────────────────────────── */

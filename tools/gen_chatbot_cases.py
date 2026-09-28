@@ -34,6 +34,13 @@ captcha, so the finished comparison shows one dropping out.
 
 Session ids are numbered here (chat_000000000001, ...), and comparison ids
 too (cmp_000000000001, ...), so the file is the same on every run.
+
+THE MONEY LIMIT (jarvis_chatbot_api.py, the owner's decision of
+2026-09-28): the money file lives in this script's own temporary folder,
+"now" is pinned to 15 September 2026 (jarvis_chatbot_api._now), and every
+amount is written with the real record_spend()/set_limit(), so `money` on
+each API chatbot and `cost` on a conversation are the PC's own - fixed
+numbers, not this machine's spending. fresh() deletes the file.
 """
 import dataclasses
 import json
@@ -57,6 +64,7 @@ _fw.action_tier = lambda a: "ask"
 sys.modules["jarvis_framework"] = _fw
 
 import jarvis_chatbot as CB  # noqa: E402
+import jarvis_chatbot_api as A  # noqa: E402
 import jarvis_chatbot_routes as R  # noqa: E402
 import jarvis_chatbot_compare as CMP  # noqa: E402
 import jarvis_task_control as TC  # noqa: E402
@@ -167,14 +175,27 @@ _SHIPPED_CLAUDE = CB.ADAPTERS["claude_web"]
 _SHIPPED_ALL = dict(CB.ADAPTERS)
 
 
+#: 15 September 2026, midday: the money file's "now" (its month and the
+#: "wait until" date), whatever day this runs.
+A._now = lambda: 1_789_473_600.0
+# Read every service's model now: the first read re-registers that service
+# (its card names the model), which would otherwise replace a stand-in
+# entry below in the middle of a listing (the money line reads the model).
+for _pid in A.PRESETS:
+    A.model_for(_pid)
+
+
 class ApiBot(CB.FakeChatbot):
     """A stand-in for an API adapter: it counts like jarvis_chatbot_api does
-    (fixed numbers, so the file is the same everywhere)."""
+    (fixed numbers, so the file is the same everywhere), and its cost is the
+    real price list's estimate."""
 
     def usage(self):
         n = len(self.sent)
+        spent = A.cost_of("openai_api", "gpt-5-mini", 1200 * n, 205 * n) or 0.0
         return {"model": "gpt-5-mini", "requests": n, "prompt_tokens": 1200 * n,
-                "completion_tokens": 205 * n, "total_tokens": 1405 * n, "retries": 0}
+                "completion_tokens": 205 * n, "total_tokens": 1405 * n, "retries": 0,
+                "dollars": round(spent, 8), "cost": A.dollars(spent)}
 
 
 def fresh():
@@ -188,6 +209,10 @@ def fresh():
         TC._resuming.clear()
     CB.ADAPTERS.clear()
     CB.register_adapter(_SHIPPED_GEMINI)
+    try:
+        A.money_path().unlink()
+    except FileNotFoundError:
+        pass
 
 
 def world(bot=None, *, model=None, gate=None):
@@ -371,6 +396,10 @@ def cases() -> dict:
     entry("deepseek_api", A.no_key_words(A.PRESETS["deepseek_api"]))
     entry("perplexity_web", PPX.SITE.not_signed_in)
     entry("groq_api", A.no_key_words(A.PRESETS["groq_api"]))
+    # OpenAI: a $5 monthly limit, $0.45 of it used this month (1,000,000
+    # word-pieces in and 100,000 out at the default, unverified price).
+    A.set_limit("openai_api", 5)
+    A.record_spend("openai_api", "gpt-5-mini", 1_000_000, 100_000)
     d = world(model=Model(stop_at=None))
     out["long_list"] = status(d)
 
@@ -380,6 +409,19 @@ def cases() -> dict:
     api_bot.sent.clear()
     cid = compare(d, chatbots=["gemini_web", "openai_api"])[1]["compare"]
     out["compare_usage"] = status(d, compare_id=cid)
+
+    # ---- the money limit: reached, and never set ---------------------------
+    fresh()
+    CB.ADAPTERS.clear()
+    A.set_limit("openai_api", 1)
+    A.record_spend("openai_api", "gpt-5-mini", 4_000_000, 10_000)     # about $1.02
+    entry("openai_api", A.money_problem("openai_api", "gpt-5-mini"))
+    entry("mistral_api", A.no_limit_words(A.PRESETS["mistral_api"]))
+    entry("gemini_web", "", CB.FakeChatbot(REPLIES))
+    d = world(model=Model(stop_at=None))
+    out["money_reached"] = status(d)
+    out["start_money_reached"] = answer(start(d, chatbot="openai_api"))
+    out["start_no_limit"] = answer(start(d, chatbot="mistral_api"))
     return out
 
 

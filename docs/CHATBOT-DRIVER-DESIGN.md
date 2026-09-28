@@ -14,7 +14,9 @@ adapters (`backend/jarvis_chatbot_api.py`: OpenAI, DeepSeek, Mistral, xAI,
 OpenRouter, Groq, one key each); "a second AI on this PC"
 (`backend/jarvis_chatbot_local.py`); and "Ask several and compare"
 (`backend/jarvis_chatbot_compare.py`, the section of that name below). The
-money cap in section 2 is NOT built (token counts are recorded and shown).
+money cap in section 2 is built for the API adapters, as the owner decided
+it on 2026-09-28 - a monthly limit per service, not the per-session $0.25
+and daily ceiling first planned (see "Money is checked in code" below).
 (An earlier version of this line said "no route or app screen yet" twice;
 that was out of date.) Written 2026-09-27 by the
 studio's designer for the owner's decision in `CLAUDE.md` ("Decided
@@ -115,6 +117,40 @@ over the event bus to both apps.
 token counts the API reported plus an estimate for the next turn, and stops
 rather than go over the cap. The daily ceiling survives a restart, like the
 router's `Budget`.
+
+**What was built instead (owner, 2026-09-28: "a money limit comes before
+API chatbots are used for real"):** not a per-session amount on the card
+and a daily ceiling, but **a monthly limit per API service, set on the PC**
+(`py -3 jarvis_chatbot_api.py limit openai 5`). The card SHOWS how much is
+left ("About $4.55 of $5.00 left this month for OpenAI (prices are
+estimates you can correct on the PC).") instead of setting an amount per
+conversation. How it works (`backend/jarvis_chatbot_api.py`, JARVIS-API
+§60.4.1):
+
+- **No limit, no conversation**: a service with a key but no monthly limit
+  is not ready, and says so, before any card.
+- **An estimate from a price list the owner can see and correct**: dollars
+  per million word-pieces in and out, per service and model. The shipped
+  defaults were written 2026-09-28 from memory with no price page
+  reachable, so **every one is UNVERIFIED** and marked so wherever it is
+  shown (`py -3 jarvis_chatbot_api.py spent`); `price openai 0.25 2.00`
+  corrects one. A model with no price is not used.
+- **Counted per calendar month** from the token counts each answer reports
+  (OpenRouter's own reported cost when it sends one), in a small file on
+  the PC holding numbers only - never the key. The month rolls over on the
+  1st, PC local time. The file survives a restart.
+- **Stops before going over**: a service at its limit is refused before any
+  card; before every message, that message's worst case (everything resent
+  plus 8,000 word-pieces of answer) must fit in what is left, or the
+  conversation ends there with plain words. In a comparison, that chatbot
+  drops out and the others carry on.
+- **Set on the PC only**, like keys - raising a limit is a loosening, so
+  there is no route for it; both apps only show the amounts.
+- **Honest limit**: it is an estimate; a wrong price, or one very long
+  answer (a "thinking" model's hidden reasoning is billed as answer), can
+  put a month a little over. Jarvis does not yet ask services to cap the
+  length of an answer (the request field differs by service and was not
+  checked).
 
 ## 3. Rule 1: nothing private goes out
 
@@ -240,7 +276,9 @@ key is entered on the PC only, like the web-search keys.
   tactics was declined.
 - This changes parts of the design above: the "API client" steps become a
   browser driver (Playwright on the PC, one browser profile used only for
-  this), the cost cap becomes a turn and time cap, and the logged-in page's
+  this), the cost cap becomes a turn and time cap (for the websites; the
+  API adapters added later have the monthly money limit above), and the
+  logged-in page's
   own history and Gemini's own memory of the account become a rule 1
   question - see the account question below.
 

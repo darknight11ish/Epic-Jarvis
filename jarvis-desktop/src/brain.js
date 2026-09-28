@@ -65,6 +65,7 @@ import {
 import {
   actionsOf as chatbotActionsOf,
   chatbotGroups,
+  moneyLine as chatbotMoneyLine,
   usageLine as chatbotUsageLine,
   compareFormProblem,
   compareProgress,
@@ -383,6 +384,7 @@ const dom = {
   chatbotCompareDetail: $("chatbot-compare-detail"),
   chatbotCompareNote: $("chatbot-compare-note"),
   chatbotWhichLabel: $("chatbot-which-label"),
+  chatbotMoney: $("chatbot-money"),
   chatbotSeveral: $("chatbot-several"),
   chatbotSeveralLegend: $("chatbot-several-legend"),
   chatbotSeveralList: $("chatbot-several-list"),
@@ -4465,9 +4467,33 @@ function paintChatbotSeveral(v) {
       lab.append(box, ` ${c.name}`);
       rows.push(lab);
       if (!c.built) rows.push(el("p", "note chatbot-not-ready", c.note || "Not built yet."));
+      // An API service: how much of its monthly money limit is left.
+      const money = chatbotMoneyLine(c);
+      if (money) rows.push(el("p", "note chatbot-money-line", money));
     }
+    if (g.kind === "api") rows.push(el("p", "note chatbot-money-note", CHATBOT.money_pc_only));
   }
   list.replaceChildren(...rows);
+}
+
+/**
+ * Under the single chooser: the chosen API service's money left this month
+ * (the PC's own amounts), and that limits and prices are set on the PC.
+ * Hidden for a website or the second AI on this PC.
+ */
+function paintChatbotMoney(v) {
+  const box = dom.chatbotMoney;
+  if (!box) return;
+  const id = dom.chatbotWhich ? dom.chatbotWhich.value : "";
+  const bot = v && v.available ? v.chatbots.find((c) => c.id === id) : null;
+  const several = compareMode();
+  if (!bot || bot.kind !== "api" || several) {
+    box.hidden = true;
+    box.textContent = "";
+    return;
+  }
+  box.textContent = [chatbotMoneyLine(bot), CHATBOT.money_pc_only].filter(Boolean).join(" ");
+  box.hidden = false;
 }
 
 function paintChatbotForm(v) {
@@ -4506,6 +4532,7 @@ function paintChatbotForm(v) {
       || shown[0];
     if (pick) which.value = pick.id;
   }
+  paintChatbotMoney(v);
   if (dom.chatbotMessages) dom.chatbotMessages.max = String(v.tier.turnsMax);
   if (dom.chatbotMinutes) dom.chatbotMinutes.max = String(v.tier.minutesMax);
   if (!cb.filled) {
@@ -4536,6 +4563,11 @@ if (dom.chatbotForm) {
 if (dom.chatbotCompare) {
   dom.chatbotCompare.addEventListener("change", () => {
     if (cb.view && cb.view.available) paintChatbotForm(cb.view);
+  });
+}
+if (dom.chatbotWhich) {
+  dom.chatbotWhich.addEventListener("change", () => {
+    if (cb.view && cb.view.available) paintChatbotMoney(cb.view);
   });
 }
 if (dom.chatbotStart) {

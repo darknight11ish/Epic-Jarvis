@@ -14277,8 +14277,10 @@ real services or a real Ollama yet.
   kept in Windows Credential Manager (like the web-search keys), sent only
   to that one company's address, never written to a log. Each message costs
   a little on that account; Jarvis counts the "tokens" (word-pieces) the
-  company reports and shows them, but **there is no money limit yet** - the
-  message limit on the card is what limits the cost.
+  company reports and shows them, ~~but **there is no money limit yet** - the
+  message limit on the card is what limits the cost~~ - **changed
+  2026-09-28:** each service now needs a monthly money limit first ("A money
+  limit for chatbots with a key", below).
 - **A second AI on this PC** is another model in Ollama on this PC. Nothing
   leaves the PC. With one graphics card, the only model allowed is the one
   Jarvis already uses (the 8 GB card has no room for a second), so it is a
@@ -14647,3 +14649,154 @@ and drops names that were not asked; the routes.
   real local model on real answers is not measured.
 - The numbers (3 on one card, 4 on two) are a first proposal, not measured.
 - A comparison is kept in memory only: a backend restart loses it.
+
+
+# A money limit for chatbots with a key, `jarvis_chatbot_api.py` (2026-09-28)
+
+Owner's decision (CLAUDE.md, "A money limit comes before API chatbots are
+used for real"): "a monthly amount per service, set on the PC; Jarvis stops
+that service when it is reached, and the approval card shows how much is
+left. Prices change, so the amount is an estimate from a price list the
+owner can see and correct, and the card says 'about'." Built on the
+backend and shown in both apps (`docs/JARVIS-API.md` 60.4.1). Like the rest
+of the chatbot driver, **not yet tried against the real services**.
+
+## In plain words
+
+- **Each service with a key (OpenAI, DeepSeek, Mistral, xAI, OpenRouter,
+  Groq) now needs a monthly money limit before Jarvis uses it.** Until you
+  set one, that service shows "No monthly money limit is set ..." in both
+  apps and a conversation with it cannot start. If you already saved a key,
+  this is the one extra step.
+- **Jarvis estimates what each message costs** from the word-pieces
+  ("tokens") the company reports and a price list. It counts per calendar
+  month and starts again on the 1st.
+- **It stops before going over**: once this month's estimate reaches your
+  limit, that service is not offered; and before every message Jarvis
+  checks that the most that message could cost still fits in what is left.
+  If it does not, the conversation ends there and says so. In "Ask several
+  and compare", that one chatbot drops out and the others carry on.
+- **The approval card says how much is left**, "about", e.g. "About $4.55
+  of $5.00 left this month for OpenAI (prices are estimates you can correct
+  on the PC)." Both apps show the same line under that service, and a
+  conversation's "Used so far" line adds "about $0.03".
+- **The prices Jarvis starts with are NOT checked.** They were written from
+  memory on 2026-09-28, because no company's price page could be opened
+  while this was built. Please compare each one with the company's price
+  page and correct it (below). Until then, the money figures may be wrong.
+- **It is an estimate, so a month can end slightly over your limit** - for
+  example if a price is wrong, or one answer is much longer than usual
+  ("thinking" models are billed for their hidden reasoning too). For a hard
+  stop, also set a spending limit on the company's own website if it offers
+  one.
+- **Limits and prices are set on the PC only**, in PowerShell, the same
+  place keys are added. The phone and the desktop app can only show them.
+  Raising a limit lets more money be spent, so it is kept where only a
+  person at the PC can do it.
+
+## What to do on the PC, in order
+
+1. Run `apply-patches.ps1` as usual (it copies the changed files).
+2. **Set a monthly limit for each service you use** - this example is $5 a
+   month for OpenAI (use `deepseek`, `mistral`, `xai`, `openrouter` or
+   `groq` for the others, and your own amount):
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py limit openai 5
+   ```
+
+3. **Look at the price list and this month's spending:**
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py spent
+   ```
+
+   Every price marked "UNVERIFIED" is one Jarvis started with. Open the
+   page it names and check it.
+4. **Correct a price** if it is wrong - dollars per million word-pieces
+   IN first, then OUT (the price pages usually say "per 1M tokens", input
+   and output). This example sets OpenAI's to $0.25 in and $2.00 out:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py price openai 0.25 2.00
+   ```
+
+   `py -3 jarvis_chatbot_api.py price openai default` goes back to the
+   price Jarvis started with. A model you chose yourself with a
+   `<service>_model` line has no price at all until you set one this way.
+5. To remove a limit (the service is then not used):
+   `cd "<your backend folder>"; py -3 jarvis_chatbot_api.py limit openai none`
+
+The numbers are kept in `chatbot\api-money.json` inside Jarvis's settings
+folder (`spent` prints the full path). It holds numbers only - never a key,
+never a word of a conversation. Deleting it forgets this month's spending
+AND every limit and price you set.
+
+## What changed
+
+- `backend/jarvis_chatbot_api.py`: the money limit - the price list
+  (`DEFAULT_PRICES`, every one UNVERIFIED, with each company's price page),
+  the monthly count (`record_spend`, the file), `money_problem` (no limit,
+  no price, limit reached, the next message's worst case), `money_view`
+  (what the card and both apps show), `before_send` on the adapter, the
+  session's `dollars` and `cost`, and the command line's `limit`, `price`
+  and `spent`. A service with a key but no limit is no longer ready; the
+  no-key line now mentions the limit as the next step. OpenRouter's own
+  reported cost is counted when it sends one.
+- `backend/jarvis_chatbot.py` (the core) - small changes, listed exactly:
+  `AdapterInfo.money` and `money_of()`; `choices()` carries `money` for an
+  API service with a limit; `describe()` adds the money line; `run()` asks
+  the adapter's optional `before_send()` right before every message and
+  ends with `money_limit` when it says no (one that fails is a no).
+- `backend/jarvis_chatbot_compare.py`: the one card shows each API
+  service's money line, and says its money limit can make it drop out.
+- `backend/jarvis_chatbot_routes.py`: `WORDS` gains `money_left` and
+  `money_pc_only`; `usage_line` gains ", about {cost}".
+- `backend/jarvis_reach.py`: "Chatbot conversations with a key (API)" says
+  "no monthly money limit is set" for such services, and its "on" line
+  says it stops at the limit.
+- Both apps: the money line under each API service in the chooser (and
+  "Limits and prices are set on the PC only"), and "about $0.03" on the
+  "Used so far" line. Desktop `src/chatbot.js`, `src/brain.js`,
+  `src/brain.html`; phone `net/Chatbot.kt`, `ui/screens/ChatbotPlate.kt`.
+  No Rust change (the status passes through as it is).
+- `tools/gen_chatbot_cases.py`: `money_reached`, `start_money_reached` and
+  `start_no_limit` cases, and `money` / `cost` in the long-list and usage
+  cases; `tools/gen_reach_cases.py` regenerated.
+
+## Test it
+
+```
+python3 backend/test_chatbot_api.py
+python3 backend/test_reach.py
+python3 tools/gen_chatbot_cases.py --check
+node jarvis-desktop/tests/chatbot.mjs
+```
+
+Against a fake OpenAI-style server on 127.0.0.1: no limit = not ready and
+no card; two answers counted into the month (tokens, requests, dollars) and
+shown as "about $0.90"; the month rolls over on the 1st and the "wait until"
+date moves; the limit reached refuses before any card, raising it on the
+command line lets it run again, lowering it stops it; the worst case of the
+next message stops a conversation after one message, and stops one with
+too little left before the goal is even sent (the card warns first);
+OpenRouter's own cost counted, another service's ignored; an answer with no
+counts estimated from its length; price correction and "default"; bad
+limits and prices refused; `spent` marks every default UNVERIFIED and never
+prints the key; a model with no price refused until one is set; an
+unreadable money file stops everything and is left untouched; the money file
+never holds the key, the goal or a reply; in a comparison the API chatbot
+near its limit drops out after one message and the other carries on.
+
+## Not checked, said plainly
+
+- **Every default price** (in `DEFAULT_PRICES` and `docs/JARVIS-API.md`
+  60.4.1). None could be checked; `grok-4.6` had no known price at all and
+  uses Grok 4's as a cautious guess. The price-page addresses are from
+  memory too.
+- **Whether each service reports `usage` the way the code reads it** (all
+  six are OpenAI-style, which does), and **whether OpenRouter sends
+  `usage.cost`** without being asked - its documentation describes a
+  request switch for it that Jarvis does not send (not checked, so not
+  added); without it, OpenRouter's answers are estimated like the others.
+- Not tried against any real service, like the rest of the API adapters.

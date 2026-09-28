@@ -134,7 +134,15 @@ object Chatbot {
     const val KIND_WEBSITE = "Websites (a browser window on the PC)"
     const val KIND_API = "With a key (each message costs a little)"
     const val KIND_LOCAL = "On this PC"
-    const val USAGE_LINE = "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}"
+    const val USAGE_LINE =
+        "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}, about {cost}"
+    /** An API service's monthly money limit; the amounts are the PC's own ("$4.02"). */
+    const val MONEY_LEFT =
+        "About {left} of {limit} left this month for {company} (prices are estimates you can " +
+            "correct on the PC)."
+    const val MONEY_PC_ONLY =
+        "Each service with a key needs a monthly money limit before Jarvis uses it. Limits and " +
+            "prices are set on the PC only, like keys; the amounts are estimates."
 
     /** Every sentence above by the PC's own key, for ChatbotTest. */
     val WORDS: Map<String, String> = mapOf(
@@ -163,7 +171,7 @@ object Chatbot {
         "notify_compare_waiting" to NOTIFY_COMPARE_WAITING,
         "notify_compare_paused" to NOTIFY_COMPARE_PAUSED, "member_waiting" to MEMBER_WAITING,
         "kind_website" to KIND_WEBSITE, "kind_api" to KIND_API, "kind_local" to KIND_LOCAL,
-        "usage_line" to USAGE_LINE,
+        "usage_line" to USAGE_LINE, "money_left" to MONEY_LEFT, "money_pc_only" to MONEY_PC_ONLY,
     )
 
     /** How each chatbot is reached (`kind`), in the order the chooser groups them. */
@@ -201,13 +209,25 @@ object Chatbot {
     data class Choice(val id: String, val name: String, val host: String, val built: Boolean,
                       val note: String, val made: Boolean = built,
                       /** "website", "api" or "local"; an older PC sends none (all websites). */
-                      val kind: String = "website")
+                      val kind: String = "website",
+                      /** An API service's money limit this month, or null (none set, or not an API). */
+                      val money: Money? = null)
+
+    /**
+     * An API service's monthly money limit, as the PC wrote it ("$4.02"). Set
+     * on the PC only (its command line, like keys); the phone only shows it.
+     */
+    data class Money(val company: String, val limit: String, val left: String, val spent: String,
+                     val until: String, val reached: Boolean)
 
     /** One of the chooser's groups: its heading ("" for a kind this app does not know). */
     data class Group(val kind: String, val title: String, val chatbots: List<Choice>)
 
-    /** What an API (or local) conversation has used so far. */
-    data class Usage(val requests: Int, val tokens: Long, val model: String)
+    /**
+     * What an API (or local) conversation has used so far. [cost] is the PC's
+     * own estimate as it writes it ("$0.03"); "" from an older PC.
+     */
+    data class Usage(val requests: Int, val tokens: Long, val model: String, val cost: String = "")
 
     data class Tier(
         val id: String,
@@ -322,7 +342,7 @@ object Chatbot {
             val made = c.flag("built") == true
             Choice(id, c.text("name") ?: id, c.text("host") ?: "",
                 made && c.flag("ready") != false, c.text("note") ?: "", made,
-                c.text("kind") ?: "website")
+                c.text("kind") ?: "website", parseMoney(c["money"] as? JsonObject))
         }
         val lim = body["limits"] as? JsonObject
         return View(
@@ -466,7 +486,23 @@ object Chatbot {
         val tokens = if (total > 0) total
         else (o.num("prompt_tokens")?.toLong() ?: 0L) + (o.num("completion_tokens")?.toLong() ?: 0L)
         if (requests == 0 && tokens == 0L) return null
-        return Usage(requests, tokens, o.text("model") ?: "")
+        return Usage(requests, tokens, o.text("model") ?: "", o.text("cost") ?: "")
+    }
+
+    /** `money` on a chatbot, or null when there is none (no limit set, or not an API). */
+    fun parseMoney(o: JsonObject?): Money? {
+        if (o == null) return null
+        val limit = o.text("limit") ?: return null
+        val left = o.text("left") ?: return null
+        return Money(o.text("company") ?: "", limit, left, o.text("spent") ?: "",
+            o.text("until") ?: "", o.flag("reached") == true)
+    }
+
+    /** "About $4.55 of $5.00 left this month for OpenAI (...)", or "". */
+    fun moneyLine(c: Choice?): String {
+        val m = c?.money ?: return ""
+        return MONEY_LEFT.replace("{left}", m.left).replace("{limit}", m.limit)
+            .replace("{company}", m.company.ifEmpty { c.name })
     }
 
     /** 4215 as "4,215" - the same on every phone (no locale). */
@@ -480,12 +516,15 @@ object Chatbot {
         return (if (n < 0) "-" else "") + out.toString()
     }
 
-    /** "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini", or "". */
+    /** "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini, about $0.01", or "". */
     fun usageLine(u: Usage?): String {
         if (u == null) return ""
-        val line = if (u.model.isEmpty()) USAGE_LINE.replace(", model {model}", "") else USAGE_LINE
+        var line = USAGE_LINE
+        if (u.model.isEmpty()) line = line.replace(", model {model}", "")
+        if (u.cost.isEmpty()) line = line.replace(", about {cost}", "")
         return line.replace("{requests}", "${u.requests} request${if (u.requests == 1) "" else "s"}")
             .replace("{tokens}", grouped(u.tokens)).replace("{model}", u.model)
+            .replace("{cost}", u.cost)
     }
 
     /**

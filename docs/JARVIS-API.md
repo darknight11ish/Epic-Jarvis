@@ -8995,7 +8995,7 @@ other route; both apps send the token and `X-Jarvis-Client: hud`.
 
 | route | body | answer |
 |---|---|---|
-| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()` plus `"available": true` and `"limits": {"waiting", "said"}` (the last limits change for the conversation shown): `{"routed": true, "chatbots": [{"id","name","host","built","ready","note","kind"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max","compare_min","compare_max"}, "session": <session> or null, "limits"}`. With no `id`, the latest conversation still going (null when none - an ended one is read by its id); an unknown id is `session: null` (conversations are kept in memory only, so a backend restart loses them); an id that is not `chat_` and 12 hex digits is a 400. The one thing a read may change: a paused conversation that can no longer be resumed (Stop on the task, or its hour ran out, so `jarvis_task_control` no longer holds it) is ended - "stopped", its window closed - once a read has seen it so for 10 seconds; before, it stayed "paused" with a Resume that could only fail until a new conversation was planned |
+| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()` plus `"available": true` and `"limits": {"waiting", "said"}` (the last limits change for the conversation shown): `{"routed": true, "chatbots": [{"id","name","host","built","ready","note","kind","money"?}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max","compare_min","compare_max"}, "session": <session> or null, "limits"}`. With no `id`, the latest conversation still going (null when none - an ended one is read by its id); an unknown id is `session: null` (conversations are kept in memory only, so a backend restart loses them); an id that is not `chat_` and 12 hex digits is a 400. The one thing a read may change: a paused conversation that can no longer be resumed (Stop on the task, or its hour ran out, so `jarvis_task_control` no longer holds it) is ended - "stopped", its window closed - once a read has seen it so for 10 seconds; before, it stayed "paused" with a Resume that could only fail until a new conversation was planned |
 | `POST /api/chatbot/start` | `{"chatbot", "goal", "max_messages"?, "max_minutes"?, "never_send"?: [..]}` | 202 `{"ok", "session", "asking": true, "message"}` - the card is asked on a background thread and nothing is sent until a person approves it; 400 `{"ok": false, "error", "session"}` when `plan()` refused it (the reason as a sentence: "Gemini through its website is not built yet.", "The goal cannot be sent: it held an email address. Nothing would be sent.", "At most 8 messages in this version."), with no card; 409 while another conversation is going (asking, running or paused), and 409 when `chatbot_session` is not tier "ask" (switched off, or a tier that would ask nobody) - no card either way |
 | `POST /api/chatbot/stop` | `{"id"}` | 200 `{"ok", "session", "message"}`; never a card, never held on a stale link; 400 for a bad id, 404 for an unknown one, 409 when it has already ended |
 | `POST /api/chatbot/limits` | `{"id", "max_messages"?, "max_minutes"?, "never_send"?}` | 202 `{"ok", "asking": true, "session", "message"}` - a NEW card, asked on a background thread; the limits change only on a yes, and the outcome is on the next GET's `limits` (`waiting` while the card is up, then `said`). 200 `{"changed": false}` for the limits it already has; 400 for a number past this version's most (checked now, before any card); 404 unknown; 409 when it is not running or paused, when a limits card is already waiting, or when the tier is not "ask" |
@@ -9048,11 +9048,24 @@ with the `note` under any that is not ready. An older PC that sends no
 
 `session.usage` is what an API (or local) conversation has used so far -
 `{"model", "requests", "prompt_tokens", "completion_tokens",
-"total_tokens", "retries"}` as the adapter counted it - or `null` for a
-website conversation. Both apps show one line from `WORDS.usage_line`:
-"Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"
-(the model part left out when there is none); in a comparison, one line per
+"total_tokens", "retries", "dollars", "cost"}` as the adapter counted it -
+or `null` for a website conversation. `dollars` is the estimate as a number
+and `cost` the same as the PC writes it ("$0.03"; an amount under a cent
+shows as "$0.01", never as free); an API conversation has both, a second AI
+on this PC has neither. Both apps show one line from `WORDS.usage_line`:
+"Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini,
+about $0.01" (the model part left out when there is none, the "about" part
+when there is no `cost` - an older PC); in a comparison, one line per
 chatbot. Counts only, so it stays shown while the private lists are hidden.
+
+`chatbots[].money` (API services only, and only once a monthly money limit
+is set - §60.4.1) is this month's limit as the PC writes it: `{"company":
+"OpenAI", "limit": "$5.00", "left": "$4.55", "spent": "$0.45", "until":
+"October 1", "reached": false}`. Both apps show it with `WORDS.money_left`,
+"About {left} of {limit} left this month for {company} (prices are
+estimates you can correct on the PC).", under that chatbot in the chooser,
+and `WORDS.money_pc_only` once under the "With a key" group. Neither app can
+change a limit or a price: that is the PC's command line only.
 
 `chatbots[].ready` is false, and `note` says why in plain words with the
 one line that fixes it, when the chatbot is built but cannot run on this PC
@@ -9151,11 +9164,75 @@ service's side (5xx), no answer within 75 seconds, no connection, a
 redirect. A 429 is retried **at most once**, and only when its
 `Retry-After` is at most 20 seconds; nothing else is retried.
 
-**Money.** No money cap exists yet (the design's section 2 planned one).
-Each answer's `usage` is recorded and shown as the session's `usage`:
-`{"model", "requests", "retries", "prompt_tokens", "completion_tokens",
-"total_tokens"}` (null for Gemini). The card says there is no money limit
-and that the message limit is what bounds the cost.
+**Money: a monthly limit per service (the owner's decision, 2026-09-28).**
+"A monthly amount per service, set on the PC; Jarvis stops that service
+when it is reached, and the approval card shows how much is left. Prices
+change, so the amount is an estimate from a price list the owner can see
+and correct, and the card says 'about'."
+
+- **No limit, no conversation.** A service with a key but no limit is
+  `ready: false`, its `note` "No monthly money limit is set for OpenAI, so
+  Jarvis will not use ChatGPT (OpenAI API) yet. Set one on the PC, ...:
+  py -3 jarvis_chatbot_api.py limit openai 5", and a start is a 400 with
+  that sentence, before any card. The no-key note now ends with the same
+  limit line, since the limit is the next step.
+- **Set on the PC only**, one line in PowerShell in Jarvis's folder, the
+  same place keys are added - raising a limit is a loosening, so there is
+  no route for it (or for a price) and neither app can change one:
+  `py -3 jarvis_chatbot_api.py limit openai 5` ($5 a calendar month; `none`
+  removes it and the service is then not used), `price openai 0.25 2.00`
+  (dollars per million word-pieces in, then out, for the model in use;
+  `price openai default` goes back), `spent` (this month, every limit, and
+  every price with where it came from).
+- **The price list** (`DEFAULT_PRICES`, written 2026-09-28, **every one
+  UNVERIFIED** - from memory, no price page was reachable; `spent` marks
+  each default "UNVERIFIED - check <price page>"):
+
+  | service | model | $ per million in | $ per million out |
+  |---|---|---|---|
+  | `openai_api` | `gpt-5-mini` | 0.25 | 2.00 |
+  | `deepseek_api` | `deepseek-chat` | 0.28 | 0.42 |
+  | `mistral_api` | `mistral-small-latest` | 0.10 | 0.30 |
+  | `xai_api` | `grok-4.6` | 3.00 | 15.00 (no price was known for this name; Grok 4's, the highest here, as a cautious guess) |
+  | `openrouter_api` | `openai/gpt-5-mini` | 0.25 | 2.00 |
+  | `groq_api` | `openai/gpt-oss-20b` | 0.10 | 0.50 |
+
+  A model the list does not know (a `<id>_model` line) has no price and is
+  not used until the owner sets one with `price` - without a price there
+  is no way to keep to the limit.
+- **What is counted:** each answer's `usage` (tokens in and out) times the
+  price, per calendar month in the PC's local time, in
+  `<Jarvis's settings folder>/chatbot/api-money.json` (numbers only - never
+  the key, never a word of a message; the last 13 months). OpenRouter's own
+  `usage.cost` (dollars), when it sends one, is counted instead of the
+  estimate; no other service's `cost` field is trusted. An answer with no
+  `usage` is estimated from its length (4 characters a word-piece). A file
+  that cannot be read stops every API chatbot until it is fixed (it never
+  reads as "nothing spent").
+- **When it stops:** a service whose month has reached its limit is
+  `ready: false` ("You set $5.00 a month for OpenAI; about $5.02 is used
+  this month. Raise the limit on the PC or wait until October 1."), so no
+  card. And right before EVERY message the core asks the adapter's
+  `before_send()`: the worst case of that request - everything it resends
+  (3 characters a word-piece, erring high) plus 8,000 word-pieces of answer
+  - must fit in what is left, or the conversation ends there
+  (`ended_code` "money_limit", ok, not an error) with "The next message to
+  ... could cost up to about $0.02, which would pass the $0.02 a month you
+  set for OpenAI (about $0.01 is used this month). Nothing more was sent.
+  Raise the limit on the PC or wait until October 1." In a comparison
+  (§60.7), a service already at its limit, or with none set, is refused
+  when the comparison is planned - like one with no key, with its own
+  sentence and no card - while one whose next message would pass the limit
+  during the comparison drops out and the others carry on.
+- **The card** (single and compare) says "About $4.55 of $5.00 left this
+  month for OpenAI (prices are estimates you can correct on the PC)." and,
+  when what is left may not cover even one message, "That may not be
+  enough for one more message; if so, Jarvis stops before sending it."
+- **Honest limits.** It is an estimate: a default price may be wrong until
+  the owner corrects it, and one answer can be longer than 8,000
+  word-pieces (a "thinking" model's hidden reasoning is billed as answer),
+  so a month can end a little over. Jarvis does not ask a service to cut
+  answers short (that field differs between services and was not checked).
 
 ### 60.4.2 A second AI on this PC (`jarvis_chatbot_local.py`, 2026-09-28)
 
@@ -9260,6 +9337,11 @@ kept only for this.
 
 ### 60.6 Not decided or not built
 
+Money: asking each service to cap an answer's length (so the worst case is
+a promise, not an estimate), asking OpenRouter for its real cost on every
+answer (its "usage accounting" request field, not checked), and checking
+the default prices against each company's price page.
+
 Starting a conversation by saying it ("ask Gemini for me about ...") -
 today only the form starts one; task notes to a running conversation ("ask
 it about X too"); keeping the transcript in the encrypted chat history
@@ -9294,7 +9376,8 @@ another in both. The numbers are in `tier.compare_min` / `tier.compare_max`.
 **One card.** Gate action `chatbot_session` (the same card kind, tier `ask`
 only, a risky approval, no "always allow"). `describe()` lists every
 chatbot, numbered, by name and address (and each one's own card note, e.g.
-the website terms), the goal word for word "sent first to each of them",
+the website terms, and for an API service "About $X of $Y left this month
+for <company> ..." - §60.4.1), the goal word for word "sent first to each of them",
 the limits per chatbot AND in all ("at most 3 messages to each chatbot, the
 goal included (9 in all)"), the never-send words, that the chatbots never
 see each other's answers, what happens when one drops out, the version, and
@@ -9303,8 +9386,9 @@ meets the last check before the card; a goal that fails raises no card. A
 "no" leaves every chatbot unopened.
 
 **When one cannot go on.** An error, a closed page, no reply, two blocked
-messages, a question about the owner, or a captcha / sign-in / "unusual
-activity" page: that chatbot is **left out** (its window closed; a captcha
+messages, a question about the owner, an API service's monthly money limit
+(the next message's worst case would pass it - §60.4.1), or a captcha /
+sign-in / "unusual activity" page: that chatbot is **left out** (its window closed; a captcha
 is never solved or skipped) and the others carry on. A single conversation
 would pause and ask; a comparison does not, so one chatbot's page never
 holds up the others. The summary's `dropped` says who and why, in plain

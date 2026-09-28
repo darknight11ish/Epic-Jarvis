@@ -839,7 +839,7 @@
     {
      "asks": "Yes, every time",
      "id": "chatbot_api",
-     "line": "Holds a conversation with an AI chatbot through its official API, with the key saved on this PC, sent only to that service: one approval card per conversation shows the service, the model, the goal word for word and the most messages and minutes. Each message costs a little on that account. Nothing private is sent, and what the chatbot says is outside text.",
+     "line": "Holds a conversation with an AI chatbot through its official API, with the key saved on this PC, sent only to that service: one approval card per conversation shows the service, the model, the goal word for word and the most messages and minutes, and about how much of the monthly money limit is left. Each message costs a little on that account; Jarvis stops using a service when the monthly limit you set on the PC is reached (an estimate from a price list you can correct there). Nothing private is sent, and what the chatbot says is outside text.",
      "name": "Chatbot conversations with a key (API)",
      "on": true,
      "state": "on",
