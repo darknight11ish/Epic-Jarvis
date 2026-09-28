@@ -18,7 +18,7 @@ import kotlin.math.min
 /**
  * Projects - the owner's decision of 2026-09-28 ("Projects, like Claude's
  * Projects and more"), docs/PROJECTS-DESIGN.md build step 3, and
- * docs/JARVIS-API.md section 61 (`/api/projects` and its benchmarks).
+ * docs/JARVIS-API.md section 88 (`/api/projects` and its benchmarks).
  *
  * A project is one place for one thing the owner is working on: an app, or
  * "run a half marathon". It keeps "how Jarvis should work on this", a few

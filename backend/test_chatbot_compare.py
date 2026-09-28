@@ -1,5 +1,5 @@
 """test_chatbot_compare.py - "Ask several and compare" (jarvis_chatbot_compare.py;
-the owner's decision of 2026-09-28; docs/JARVIS-API.md section 60.7).
+the owner's decision of 2026-09-28; docs/JARVIS-API.md section 87.7).
 
     python3 backend/test_chatbot_compare.py
 

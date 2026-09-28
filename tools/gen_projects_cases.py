@@ -5,7 +5,7 @@
     python3 tools/gen_projects_cases.py --check    # compare only
 
 What the Projects routes really answer (backend/jarvis_projects.py,
-projects.patch; docs/JARVIS-API.md section 61), in named situations - made
+projects.patch; docs/JARVIS-API.md section 88), in named situations - made
 by the real code, nothing written by hand:
 
     jarvis-desktop/tests/fixtures/projects-cases.json

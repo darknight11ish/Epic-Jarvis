@@ -2,14 +2,13 @@
 
 **Read this paragraph before you trust anything else on this page.**
 
-Eight files in this repository cite `docs/JARVIS-API.md` as the authoritative
-contract — `CLAUDE.md`, the top-level `README.md`, `ApiModels.kt`,
-`TokenStore.kt`, `stream.rs`, `main.js` and others. That file has never
-existed. Checked on 2026-09-20: it is not in the working tree, and
-`git log --all -- "**/JARVIS-API.md"` returns **zero** commits — it was never
-added and never deleted. So every "§4 says…" comment in this codebase points
-at a document nobody here has. This page is an attempt to fill that hole
-honestly, not to pretend the hole was never there.
+This page was first reconstructed on 2026-09-20 from the two apps' call
+sites, when no API document existed at all. Since then most of the backend
+has been added to this repository (`backend/`: the shipped modules and the
+patches), and the sections from §11 on are written from that code. The
+owner's own `jarvis_hud.py`, `jarvis_gate.py` and `jarvis_extract.py` still
+live only on the PC, so sections 1-10 are still read from the apps. Where
+this page and the backend disagree, the backend wins.
 
 ## What this is
 
@@ -21,7 +20,9 @@ check any line of it yourself.
 
 - **It is not the backend's contract.** The Python backend (`jarvis_hud.py`
   and friends) lives on the owner's Windows machine, outside this repository —
-  `docs/ARCHITECTURE.md` §9 says where. Nobody writing this page could read it.
+  `docs/ARCHITECTURE.md` §9 says where. The routes the patches and shipped
+  modules add are read from that code; the owner's own routes (sections 1-10)
+  were read from the apps.
 - **It describes what the clients EXPECT, not what the server GUARANTEES.**
   A row below saying a route takes `{"id": …}` means "the phone sends that",
   not "the server accepts that".
@@ -1553,7 +1554,8 @@ they explain why several obvious routes are missing rather than forgotten.
    `jarvis-android` became unusable.
 
 Reconstructed 2026-09-20 from client call sites on branch
-`fix/audit-remaining-four`. Roughly 55 distinct endpoint paths.
+`fix/audit-remaining-four`. About 55 distinct endpoint paths then; about 200
+by 2026-09-28.
 
 ---
 

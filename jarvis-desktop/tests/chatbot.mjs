@@ -1,6 +1,6 @@
 /**
  * "Talk to a chatbot for me" on the desktop (the owner's decisions of
- * 2026-09-27 and 2026-09-28; JARVIS-API.md section 60; src/chatbot.js,
+ * 2026-09-27 and 2026-09-28; JARVIS-API.md section 87; src/chatbot.js,
  * brain.js paintChatbot, src-tauri/src/brain/chatbot.rs).
  *
  * What must hold:

@@ -745,7 +745,7 @@ $PATCHES = @(
     # either app.
     'chatbot.patch'
     # "Talk to a chatbot for me" (the owner's decisions of 2026-09-27 and
-    # 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md, JARVIS-API section 60): GET
+    # 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md, JARVIS-API section 87): GET
     # /api/chatbot/status, POST /api/chatbot/start (ONE approval card per
     # conversation; nothing is sent before a person's yes), /api/chatbot/stop
     # (never a card) and /api/chatbot/limits (a NEW card). Its jarvis_hud.py

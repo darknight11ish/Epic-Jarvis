@@ -10,7 +10,7 @@ import kotlinx.serialization.json.doubleOrNull
 
 /**
  * "Talk to a chatbot for me" (the owner's decisions of 2026-09-27 and
- * 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md; docs/JARVIS-API.md section 60;
+ * 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md; docs/JARVIS-API.md section 87;
  * backend `jarvis_chatbot.py` and `jarvis_chatbot_routes.py`,
  * `chatbot-routes.patch`).
  *

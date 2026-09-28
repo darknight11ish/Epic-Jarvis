@@ -4,7 +4,7 @@ official API, with a key the owner saved on this PC.
 
 NEW MODULE, shipped whole (like jarvis_chatbot.py, which it plugs into, and
 jarvis_chatbot_gemini.py beside it). Reachable from both apps through
-/api/chatbot/* (jarvis_chatbot_routes.py, docs/JARVIS-API.md section 60)
+/api/chatbot/* (jarvis_chatbot_routes.py, docs/JARVIS-API.md section 87)
 once that service's key is saved on the PC. NOT yet tried against any
 real service.
 

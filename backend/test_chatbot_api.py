@@ -1398,7 +1398,7 @@ def t_shipped_and_documented():
           "jarvis_chatbot_api.py" in SHIPPED and "'jarvis_chatbot_api.py'" in ps1)
     api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     arch = (REPO / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
-    check("JARVIS-API.md section 60 describes the API adapters",
+    check("JARVIS-API.md section 87 describes the API adapters",
           "jarvis_chatbot_api.py" in api and "openai_api" in api)
     check("ARCHITECTURE section 4 names every API host as a way out",
           all(p.host in arch for p in ORIGINAL.values()))

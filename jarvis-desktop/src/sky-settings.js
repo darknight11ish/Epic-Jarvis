@@ -1,7 +1,7 @@
 /**
  * Settings -> Appearance -> "Sun, moon and weather" (the owner's decisions of
  * 2026-09-28: "Sun and moon behind the animals" and "Weather in the animals'
- * scene" - both off by default; JARVIS-API.md section 59).
+ * scene" - both off by default; JARVIS-API.md section 89).
  *
  * Two Rust commands (src-tauri/src/sky.rs), Settings only:
  *  - get_sky: the settings and the weather now, with the PC's own words;

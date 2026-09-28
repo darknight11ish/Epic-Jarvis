@@ -44,6 +44,9 @@ what changed when.
 
 | Date | Document | About |
 |---|---|---|
+| 2026-09-28 | [AUDIT-2026-09-28-AFTER-CHANGES.md](AUDIT-2026-09-28-AFTER-CHANGES.md) and [audit-2026-09-28/](audit-2026-09-28/) | Twelve audits of all five unmerged branches together: bugs, both apps, security, merge clashes, owner decisions, play tests, speed, docs, tools, unfinished work. |
+| 2026-09-28 | [UPDATE-AND-CHECK-2026-09-28.md](UPDATE-AND-CHECK-2026-09-28.md) | How to put the new work on the PC and phone, and a checklist that it works. |
+| 2026-09-28 | [GEMINI-AUDIT-2026-09-28.md](GEMINI-AUDIT-2026-09-28.md) | The outside (Gemini) audit package for everything since 2026-09-20, with its prompt. |
 | 2026-09-28 | [RESEARCH-AUDIT-2026-09-28.md](RESEARCH-AUDIT-2026-09-28.md) and [research-audit-2026-09-28/](research-audit-2026-09-28/) | Every feature next to competitors and GitHub projects; the Brain; what to fix, borrow and speed up. |
 | 2026-09-28 | [HARDWARE-DETECTION-AUDIT-2026-09-28.md](HARDWARE-DETECTION-AUDIT-2026-09-28.md) | How well Jarvis detects hardware (graphics cards, Windows Hello, the phone's mic/notifications/battery, RAM and disk), adapts to it, and tells the owner why - every mechanism, not only GPUs. One small wording bug found. |
 | 2026-09-27 | [BACKGROUND-WORK-AUDIT-2026-09-27.md](BACKGROUND-WORK-AUDIT-2026-09-27.md) | Everything Jarvis does unattended - the scheduler, standby, briefing, "tell me when", focus, backups, initiative - checked and tested for real. |

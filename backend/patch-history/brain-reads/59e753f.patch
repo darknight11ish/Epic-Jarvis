@@ -2,8 +2,8 @@
 +++ b/jarvis_hud.py
 @@ -2579,6 +2579,23 @@
      except Exception as exc:
-         print(f"  notif      NOT ON ({type(exc).__name__}) - Phone notifications setting is off")
-         print("             until jarvis_phone_notifications.py is back: run apply-patches.ps1 again")
+         print(f"  sources    NOT ON ({type(exc).__name__}) - \"Where this came from\" is off")
+         print("             until jarvis_sources.py is back: run apply-patches.ps1 again")
 +    # brain-reads.patch (the Brain upgrades, the owner's choice of
 +    # 2026-09-28; docs/JARVIS-API.md section 71): two reads for the apps'
 +    # Brain screens, behind the token like every memory and history read.

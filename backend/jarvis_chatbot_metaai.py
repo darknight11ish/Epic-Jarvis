@@ -8,7 +8,7 @@ sign-in helper and the self-check - is jarvis_chatbot_web.py. This file
 holds only what is Meta AI's own: the SELECTORS table, the hosts and the
 words. Registered as chatbot `metaai_web`.
 Reachable from both apps through /api/chatbot/* (jarvis_chatbot_routes.py,
-docs/JARVIS-API.md section 60) once its window has been signed in.
+docs/JARVIS-API.md section 87) once its window has been signed in.
 NOT yet tried against the real site.
 
 THE OWNER'S DECISION (CLAUDE.md, 2026-09-28, "The chatbot driver becomes

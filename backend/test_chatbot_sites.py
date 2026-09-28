@@ -412,7 +412,7 @@ def t_shipped_and_documented():
         check(f"{f}: shipped (in _where.SHIPPED and apply-patches.ps1)",
               f in SHIPPED and f"'{f}'" in ps1)
     for k, m in MODS.items():
-        check(f"{k}: JARVIS-API.md section 60 has its id, host and both commands, run from "
+        check(f"{k}: JARVIS-API.md section 87 has its id, host and both commands, run from "
               "\"<your backend folder>\"",
               m.ID in api and m.HOST in api
               and f'cd "<your backend folder>"; {m.SIGN_IN_LINE}' in api
@@ -420,7 +420,7 @@ def t_shipped_and_documented():
         check(f"{k}: ARCHITECTURE names its host as a way out, and README its commands",
               m.HOST in arch and m.CHECK_LINE in readme and m.SIGN_IN_LINE in readme)
     check("no command in the docs uses the owner's own folder",
-          "pcadmin" not in api[api.find("## 60."):api.find("## 61.")])
+          "pcadmin" not in api[api.find("## 87."):api.find("## 88.")])
 
 
 # ==========================================================================

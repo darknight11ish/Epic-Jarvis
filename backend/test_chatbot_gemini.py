@@ -270,7 +270,7 @@ def t_shipped_and_listed():
     import jarvis_reach as R
     check("'What Jarvis can reach' has a row for it", "chatbot" in dict(R.KINDS))
     api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    check("JARVIS-API.md section 60 names the adapter and the self-check",
+    check("JARVIS-API.md section 87 names the adapter and the self-check",
           "jarvis_chatbot_gemini.py" in api and G.CHECK_LINE in api)
     notices = (REPO / "THIRD-PARTY-NOTICES.txt").read_text(encoding="utf-8")
     check("THIRD-PARTY-NOTICES names Playwright (Apache-2.0)",

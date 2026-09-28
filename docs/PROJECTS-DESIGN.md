@@ -244,7 +244,7 @@ Whether a git-undoable edit counts as risky depends on the risk table.
   always ask (`MUST_ASK`, `HARD_LIMITS`); fixed no-card rows: "Re-running a
   saved benchmark you start yourself", "Logging your own number", "Undo of
   Jarvis's change".
-- API: a new section 61 in `docs/JARVIS-API.md` (59 is Goals, 60 the chatbot driver). No new row in
+- API: a new section 88 in `docs/JARVIS-API.md` (59 is Goals, 87 the chatbot driver). No new row in
   `jarvis_reach.KINDS` unless question 1 is "yes".
 
 ## 9. Build plan (small testable steps)
@@ -306,7 +306,7 @@ an AppContainer, whether git is installed on the owner's PC, and
 **Built:** `backend/jarvis_projects.py` (shipped whole), `projects.db`,
 `projects.patch` (one install block), `backend/test_projects.py`, and the
 "log a number" sentences in `jarvis_quick.py`. Routes: `docs/JARVIS-API.md`
-section 61 (59 is Goals on the continuation branch, 60 the chatbot
+section 88 (59 is Goals on the continuation branch, 60 the chatbot
 driver). Neither app calls them yet; `tools/check_parity.py` lists them
 as `planned`.
 
@@ -365,7 +365,7 @@ clearing it ask first (it would let a number be read aloud)?
 **Built:** Brain -> Projects on the desktop (`projects.js`,
 `projects-panel.js`, `projects.css`, `brain/projects.rs`) and on the phone
 (`ProjectsPlate.kt`, `net/Projects.kt`), in the same words from one
-contract file (`tools/gen_projects_cases.py`). `docs/JARVIS-API.md` 61.6
+contract file (`tools/gen_projects_cases.py`). `docs/JARVIS-API.md` 88.6
 says what each shows. The chart is drawn by the apps (an inline SVG on the
 desktop, a Compose Canvas on the phone) from the benchmark's own points,
 with the scale both apps share.

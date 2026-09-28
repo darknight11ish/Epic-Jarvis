@@ -12703,7 +12703,7 @@
           }
         ],
         "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
         "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used with any other face.",
         "title": "Jarvis's built-in voice",
         "value": 9

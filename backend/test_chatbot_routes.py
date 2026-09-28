@@ -1,6 +1,6 @@
 """test_chatbot_routes.py - the routes both apps use for "Talk to a chatbot
 for me" (jarvis_chatbot_routes.py, chatbot-routes.patch; docs/JARVIS-API.md
-section 60).
+section 87).
 
     python3 backend/test_chatbot_routes.py
 
@@ -509,8 +509,8 @@ def t_shipped_and_contract():
     check("both apps' contract file is up to date (tools/gen_chatbot_cases.py --check)",
           r.returncode == 0, r.stdout + r.stderr)
     api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    sec = api[api.index("## 60."):]
-    check("JARVIS-API section 60 lists every route", all(
+    sec = api[api.index("## 87."):]
+    check("JARVIS-API section 87 lists every route", all(
         p in sec for p in (R.STATUS_ROUTE, R.START_ROUTE, R.STOP_ROUTE, R.LIMITS_ROUTE)))
 
 

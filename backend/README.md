@@ -139,7 +139,7 @@ on a throwaway copy instead.
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Two more small hunks (the owner, 2026-09-28) hand a crisis turn's `turn_id` to `jarvis_agent.note_crisis_turn` - right after `feedback.patch` makes the id, on `wellbeing.patch`'s flag, and again after `run_local_turn` on its own crisis check - so a "wrong" mark on a crisis answer is never counted. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
-| `projects.patch` | `jarvis_hud.py` | **Projects, build steps 1 and 2** (the owner's decision of 2026-09-28, `docs/PROJECTS-DESIGN.md`). One hunk, like every install()-shaped patch: `jarvis_projects.install(Handler, ...)` at start-up, answering `GET`/`POST /api/projects` and its benchmarks (`docs/JARVIS-API.md` §61). Its context is `answer-sources.patch`'s own install block, so it goes after it - last, like every new patch. **When the continuation branch merges:** `goals.patch` there anchors on the very same lines, so whichever lands second is re-anchored on the other's block. Needs `jarvis_projects.py`; without it, or on any error, the banner says so and the routes are not there. See "Projects", at the very end. |
+| `projects.patch` | `jarvis_hud.py` | **Projects, build steps 1 and 2** (the owner's decision of 2026-09-28, `docs/PROJECTS-DESIGN.md`). One hunk, like every install()-shaped patch: `jarvis_projects.install(Handler, ...)` at start-up, answering `GET`/`POST /api/projects` and its benchmarks (`docs/JARVIS-API.md` §88). Its context is `answer-sources.patch`'s own install block, so it goes after it - last, like every new patch. **When the continuation branch merges:** `goals.patch` there anchors on the very same lines, so whichever lands second is re-anchored on the other's block. Needs `jarvis_projects.py`; without it, or on any error, the banner says so and the routes are not there. See "Projects", at the very end. |
 | `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py`, `jarvis_chatbot_gemini.py` and the other website adapters (`jarvis_chatbot_web.py` and a site file each), shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window" and "... more chatbot websites, the same open way", at the very end. |
 | `live.patch` | `jarvis_hud.py` | **Jarvis Live: talking back and forth** (the owner's decision and answers of 2026-09-28, `docs/LIVE-DESIGN.md`). One call at start-up, `jarvis_live.install(Handler, ...)`, answers `GET`/`POST /api/voice/live` (JARVIS-API section 63): start (no card; refused until your voice is trained), stop, more time, carry on, mute. Last in the list; its context is `chatbot-routes.patch`'s install block. Needs `jarvis_live.py` - without it, or on any error, the banner says so. See "Jarvis Live", at the very end. |
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
@@ -13983,7 +13983,7 @@ has the phone-parity row.
 # Talking to an AI chatbot for you, the core: `jarvis_chatbot.py` (2026-09-28)
 
 Step 1 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`, the owner's
-answers of 2026-09-28; `docs/JARVIS-API.md` section 60). **Not usable
+answers of 2026-09-28; `docs/JARVIS-API.md` section 87). **Not usable
 yet**: no real chatbot - Gemini's adapter is listed and says "not built
 yet". (The routes and both apps' screens came next: `chatbot-routes.patch`,
 below.) Shipped whole (`apply-patches.ps1` copies it; no patch), so the
@@ -14066,7 +14066,7 @@ python3 backend/run_suites.py
 
 The owner's decision of 2026-09-28 (`CLAUDE.md`, "Projects, like Claude's
 Projects and more"), designed in `docs/PROJECTS-DESIGN.md`. This is the
-backend of build steps 1 and 2 only. `docs/JARVIS-API.md` section 61 has
+backend of build steps 1 and 2 only. `docs/JARVIS-API.md` section 88 has
 the routes. **Not in either app yet** (step 3).
 
 ## In plain words
@@ -14139,7 +14139,7 @@ the routes. **Not in either app yet** (step 3).
   ONE `change_own_config` card (`unmark_card`), in the Shareable card's
   words and shape. A new `auto_cleared` column (an older `projects.db`
   gains it when opened); renaming or a new unit clears it.
-- Both apps' screens call every route (JARVIS-API 61.6);
+- Both apps' screens call every route (JARVIS-API 88.6);
   `tools/gen_projects_cases.py` writes the contract file they share, and
   `test_projects.py` fails when it is stale.
 - Not run on the owner's PC: tested in the dev container only, with a
@@ -14151,7 +14151,7 @@ the routes. **Not in either app yet** (step 3).
 # Talking to an AI chatbot for you, step 2: Gemini's window, `jarvis_chatbot_gemini.py` (2026-09-28)
 
 Step 2 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`;
-`docs/JARVIS-API.md` section 60.4). ~~Still not usable from either app:
+`docs/JARVIS-API.md` section 87.4). ~~Still not usable from either app:
 no route and no app screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
 (`chatbot-routes.patch`) take any chatbot id, so this is reachable
 from both apps once it is set up; it has not been tried against the
@@ -14235,7 +14235,7 @@ Windows 11) instead of Playwright's own Chromium.
 # Talking to an AI chatbot for you, the routes and both apps: `chatbot-routes.patch` (2026-09-28)
 
 Step 3 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md` sections 2
-and 6; `docs/JARVIS-API.md` section 60). ~~Still not usable: Gemini's
+and 6; `docs/JARVIS-API.md` section 87). ~~Still not usable: Gemini's
 adapter is not built, so every start is refused with "Gemini through its
 website is not built yet." and no card.~~ **Corrected 2026-09-28:** the
 Gemini adapter (the section above) and every later adapter are built and
@@ -14347,7 +14347,7 @@ The owner's decision "the chatbot driver becomes versatile" (`CLAUDE.md`,
 2026-09-28): ChatGPT, Claude, Microsoft Copilot, Perplexity and other
 commonly used chatbot websites, each driven **openly like Gemini**, each
 with **its own spare account** used only by Jarvis. `docs/JARVIS-API.md`
-section 60.5. ~~Still not usable from either app: no route and no app
+section 87.5. ~~Still not usable from either app: no route and no app
 screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
 (`chatbot-routes.patch`) take any chatbot id, so this is reachable
 from both apps once it is set up; it has not been tried against the
@@ -14476,7 +14476,7 @@ instead of Playwright's own Chromium.
 Owner's decision (CLAUDE.md, "The chatbot driver becomes versatile"): one
 adapter speaking the common OpenAI-style API, so a key reaches ChatGPT,
 DeepSeek, Mistral, Grok, OpenRouter and similar; and a second AI on the
-owner's own PC (`docs/JARVIS-API.md` 60.4.1 and 60.4.2). ~~Still not
+owner's own PC (`docs/JARVIS-API.md` 87.4.1 and 87.4.2). ~~Still not
 usable from either app - no route or screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
 (`chatbot-routes.patch`) take any chatbot id, so this is reachable
 from both apps once it is set up; it has not been tried against the
@@ -14551,7 +14551,7 @@ real services or a real Ollama yet.
 - `backend/rebuilt/jarvis-framework.toml`: commented example lines under
   `[chatbot]` (nothing switched on).
 - `docs/ARCHITECTURE.md` section 4 (a new way out, one host per service),
-  section 8 and section 11; `docs/JARVIS-API.md` section 60;
+  section 8 and section 11; `docs/JARVIS-API.md` section 87;
   `docs/CHATBOT-DRIVER-DESIGN.md`'s status line.
 - `backend/_where.py`, `scripts/apply-patches.ps1`: both shipped. No new
   dependency (standard library only).
@@ -14678,7 +14678,7 @@ source first, and fixed. No new feature; nothing the owner must switch on.
 - `jarvis_reach.py`: the true reason in the "with a key (API)" row.
 - Every site file, `jarvis_chatbot_api.py`, `jarvis_chatbot_local.py`:
   opening lines; `docs/ARCHITECTURE.md` sections 4 and 8,
-  `docs/CHATBOT-DRIVER-DESIGN.md`, `docs/JARVIS-API.md` 60.4 and 60.5.
+  `docs/CHATBOT-DRIVER-DESIGN.md`, `docs/JARVIS-API.md` 87.4 and 87.5.
 
 ## Test it
 
@@ -14784,7 +14784,7 @@ route, no key, no badge, no phone gesture.
 Owner's decision (CLAUDE.md, "The chatbot driver becomes versatile", point
 4): "compare: ask several AIs the same question, one card listing every AI
 it will ask, one summary of agreements, disagreements and sources." Built on
-the backend and in both apps (`docs/JARVIS-API.md` 60.7; the design and the
+the backend and in both apps (`docs/JARVIS-API.md` 87.7; the design and the
 proposed numbers are in `docs/CHATBOT-DRIVER-DESIGN.md`, "Ask several and
 compare"). Like the rest of the chatbot driver, **not yet tried against the
 real sites**.
@@ -14872,7 +14872,7 @@ used for real"): "a monthly amount per service, set on the PC; Jarvis stops
 that service when it is reached, and the approval card shows how much is
 left. Prices change, so the amount is an estimate from a price list the
 owner can see and correct, and the card says 'about'." Built on the
-backend and shown in both apps (`docs/JARVIS-API.md` 60.4.1). Like the rest
+backend and shown in both apps (`docs/JARVIS-API.md` 87.4.1). Like the rest
 of the chatbot driver, **not yet tried against the real services**.
 
 ## In plain words
@@ -15023,7 +15023,7 @@ make it a hard stop too"): "Jarvis also asks each service to cap how long
 an answer can be, so one long answer cannot carry a month past the limit.
 Each service names that setting differently, so each one's own
 documentation is checked before it is used." Built on the backend and
-shown in both apps (`docs/JARVIS-API.md` 60.4.1). **Not yet tried against
+shown in both apps (`docs/JARVIS-API.md` 87.4.1). **Not yet tried against
 the real services.**
 
 ## In plain words

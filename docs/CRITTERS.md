@@ -780,7 +780,7 @@ Where to switch them on: the desktop's Settings, Appearance, "Sun, moon and
 weather" (the town is typed there, once); the phone's Appearance, "Sun, moon
 and weather" (it shows the town the PC has, and can switch the sky on or
 off, forget the town, or choose the weather source). docs/JARVIS-API.md
-section 59 has the route; ARCHITECTURE section 4 the one part that goes
+section 89 has the route; ARCHITECTURE section 4 the one part that goes
 online (Open-Meteo, only if chosen, after an approval card).
 
 **How the sky is worked out.** On each device, from the town's rough

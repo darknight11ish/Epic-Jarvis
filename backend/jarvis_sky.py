@@ -3,7 +3,7 @@
 NEW MODULE, shipped whole, with its town list `jarvis_sky_places.py`.
 sky.patch adds one call at start-up, `install(Handler, ...)` (the same shape
 as jarvis_news.py), which answers GET /api/sky and POST /api/sky.
-docs/JARVIS-API.md section 59; backend/README.md "The sky behind the animals".
+docs/JARVIS-API.md section 89; backend/README.md "The sky behind the animals".
 
 THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-28)
   * "Sun and moon behind the animals, optional (off by default): the real
