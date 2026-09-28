@@ -659,20 +659,15 @@ def voices_cases():
         # apps keep the face), its own voice stands in.
         (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
                                                encoding="utf-8")
-        # It ships OFF (the owner's 2026-09-28 decision): the owner turns it
-        # on first, as they would, before the face's voice can stand in.
-        # The one-time question (owner, 2026-09-28): with the switch off and
-        # the panda never asked about, face_voice.offer asks "The Red Panda
-        # has its own voice. Use it?" ("face_default_off" shows it). "Keep
-        # my voice" leaves the switch off and never asks about the panda
-        # again; "Use it" (the owl, further down) turns the switch on.
+        # It ships OFF (the owner's 2026-09-28 decision), and each animal
+        # keeps its OWN answer to the one-time question: with the panda never
+        # answered for, face_voice.offer asks "The Red Panda has its own
+        # voice. Use it?" ("face_default_off" shows it). The owner says "Use
+        # it", as they would, which records it for the panda and turns the
+        # switch on - so the panda's own voice stands in. "Keep my voice"
+        # and an animal never answered for are further down.
         status["face_default_off"] = scrub(VS.status(), w)
-        answers["face_offer_keep"] = scrub(answer(vpost(VS.answer_face_offer, {
-            "face": "redpanda", "answer": "keep"})), w)
-        status["face_offer_answered"] = scrub(VS.status(), w)
-        answers["face_offer_bad"] = scrub(answer(vpost(VS.answer_face_offer, {
-            "face": "redpanda", "answer": "maybe"})), w)
-        vpost(VS.set_face_voice, {"enabled": True})
+        vpost(VS.answer_face_offer, {"face": "redpanda", "answer": "use"})
         status["face_showing"] = scrub(VS.status(), w)
         answers["face_off"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": False})), w)
         status["face_off"] = scrub(VS.status(), w)
@@ -695,15 +690,31 @@ def voices_cases():
             answers["animal_try_busy"] = scrub(answer(vpost(VS.try_face_animal,
                                                             {"face": "redpanda"})), w)
 
-    # "Use it": a new animal (the owl), the switch off, never asked - the
-    # answer turns the switch on, and the owl speaks.
+    # Each animal keeps its own answer (the owner, 2026-09-28): the panda
+    # "Keep my voice" (the switch stays off), then the owl "Use it" (the
+    # switch turns on and the owl speaks) - the panda still keeps the normal
+    # voice ("face_kept_on"), and the monkey, never answered for, asks with
+    # the switch on and does not speak as itself ("face_unanswered_on").
     with VoicesWorld() as w:
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
+                                               encoding="utf-8")
+        answers["face_offer_keep"] = scrub(answer(vpost(VS.answer_face_offer, {
+            "face": "redpanda", "answer": "keep"})), w)
+        status["face_offer_answered"] = scrub(VS.status(), w)
+        answers["face_offer_bad"] = scrub(answer(vpost(VS.answer_face_offer, {
+            "face": "redpanda", "answer": "maybe"})), w)
         (w.dir / "appearance.json").write_text(json.dumps({"face": "pygmyowl"}),
                                                encoding="utf-8")
         status["face_offer_owl"] = scrub(VS.status(), w)
         answers["face_offer_use"] = scrub(answer(vpost(VS.answer_face_offer, {
             "face": "pygmyowl", "answer": "use"})), w)
         status["face_offer_used"] = scrub(VS.status(), w)
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
+                                               encoding="utf-8")
+        status["face_kept_on"] = scrub(VS.status(), w)
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "monkey"}),
+                                               encoding="utf-8")
+        status["face_unanswered_on"] = scrub(VS.status(), w)
 
     with VoicesWorld(zipvoice=False) as w:
         vpost(VS.create, create_body())

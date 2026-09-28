@@ -11378,6 +11378,7 @@
           },
           "animals": [
             {
+              "answer": "use",
               "changed": false,
               "face": "redpanda",
               "line": "Bella, 2 steps higher, at normal pace.",
@@ -11393,6 +11394,7 @@
               "voice": "Bella"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "pygmyowl",
               "line": "Nicole, 1 step higher, a little slower.",
@@ -11408,6 +11410,7 @@
               "voice": "Nicole"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "seaotter",
               "line": "Sarah, 3 steps higher, a little faster.",
@@ -11423,6 +11426,7 @@
               "voice": "Sarah"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "monkey",
               "line": "Michael, 1 step higher, at normal pace.",
@@ -11441,7 +11445,7 @@
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
           "animals_title": "Each animal's voice",
           "default": false,
-          "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
           "enabled": true,
           "face": "redpanda",
           "line": "Speaking as the Red Panda: Bella, a little higher.",
@@ -11527,6 +11531,7 @@
           },
           "animals": [
             {
+              "answer": "use",
               "changed": true,
               "face": "redpanda",
               "line": "Sarah, 1.5 steps deeper, a little faster.",
@@ -11542,6 +11547,7 @@
               "voice": "Sarah"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "pygmyowl",
               "line": "Nicole, 1 step higher, a little slower.",
@@ -11557,6 +11563,7 @@
               "voice": "Nicole"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "seaotter",
               "line": "Sarah, 3 steps higher, a little faster.",
@@ -11572,6 +11579,7 @@
               "voice": "Sarah"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "monkey",
               "line": "Michael, 1 step higher, at normal pace.",
@@ -11590,7 +11598,7 @@
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
           "animals_title": "Each animal's voice",
           "default": false,
-          "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
           "enabled": true,
           "face": "redpanda",
           "line": "Speaking as the Red Panda: Sarah, a little deeper.",
@@ -11794,6 +11802,7 @@
           },
           "animals": [
             {
+              "answer": "use",
               "changed": false,
               "face": "redpanda",
               "line": "Bella, 2 steps higher, at normal pace.",
@@ -11809,6 +11818,7 @@
               "voice": "Bella"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "pygmyowl",
               "line": "Nicole, 1 step higher, a little slower.",
@@ -11824,6 +11834,7 @@
               "voice": "Nicole"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "seaotter",
               "line": "Sarah, 3 steps higher, a little faster.",
@@ -11839,6 +11850,7 @@
               "voice": "Sarah"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "monkey",
               "line": "Michael, 1 step higher, at normal pace.",
@@ -11857,7 +11869,7 @@
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
           "animals_title": "Each animal's voice",
           "default": false,
-          "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
           "enabled": false,
           "face": "redpanda",
           "line": "Off: the built-in voice stays the same whatever the face.",
@@ -11950,6 +11962,7 @@
           },
           "animals": [
             {
+              "answer": "keep",
               "changed": false,
               "face": "redpanda",
               "line": "Bella, 2 steps higher, at normal pace.",
@@ -11965,6 +11978,7 @@
               "voice": "Bella"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "pygmyowl",
               "line": "Nicole, 1 step higher, a little slower.",
@@ -11980,6 +11994,7 @@
               "voice": "Nicole"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "seaotter",
               "line": "Sarah, 3 steps higher, a little faster.",
@@ -11995,6 +12010,7 @@
               "voice": "Sarah"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "monkey",
               "line": "Michael, 1 step higher, at normal pace.",
@@ -12013,7 +12029,7 @@
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
           "animals_title": "Each animal's voice",
           "default": false,
-          "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
           "enabled": false,
           "face": "redpanda",
           "line": "Off: the built-in voice stays the same whatever the face.",
@@ -12022,7 +12038,7 @@
           "speaking": false,
           "title": "Voice follows the face"
         },
-        "message": "Jarvis keeps your voice. You can still turn on \"Voice follows the face\" in the voice settings.",
+        "message": "Jarvis keeps your voice for the Red Panda. Each animal asks once for itself.",
         "ok": true
       },
       "code": 200
@@ -12099,6 +12115,7 @@
           },
           "animals": [
             {
+              "answer": "keep",
               "changed": false,
               "face": "redpanda",
               "line": "Bella, 2 steps higher, at normal pace.",
@@ -12114,6 +12131,7 @@
               "voice": "Bella"
             },
             {
+              "answer": "use",
               "changed": false,
               "face": "pygmyowl",
               "line": "Nicole, 1 step higher, a little slower.",
@@ -12129,6 +12147,7 @@
               "voice": "Nicole"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "seaotter",
               "line": "Sarah, 3 steps higher, a little faster.",
@@ -12144,6 +12163,7 @@
               "voice": "Sarah"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "monkey",
               "line": "Michael, 1 step higher, at normal pace.",
@@ -12162,7 +12182,7 @@
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
           "animals_title": "Each animal's voice",
           "default": false,
-          "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
           "enabled": true,
           "face": "pygmyowl",
           "line": "Speaking as the Pygmy Owl: Nicole, a little higher.",
@@ -12248,6 +12268,7 @@
           },
           "animals": [
             {
+              "answer": "use",
               "changed": false,
               "face": "redpanda",
               "line": "Bella, 2 steps higher, at normal pace.",
@@ -12263,6 +12284,7 @@
               "voice": "Bella"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "pygmyowl",
               "line": "Nicole, 1 step higher, a little slower.",
@@ -12278,6 +12300,7 @@
               "voice": "Nicole"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "seaotter",
               "line": "Sarah, 3 steps higher, a little faster.",
@@ -12293,6 +12316,7 @@
               "voice": "Sarah"
             },
             {
+              "answer": null,
               "changed": false,
               "face": "monkey",
               "line": "Michael, 1 step higher, at normal pace.",
@@ -12311,7 +12335,7 @@
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
           "animals_title": "Each animal's voice",
           "default": false,
-          "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
           "enabled": true,
           "face": "redpanda",
           "line": "Speaking as the Red Panda: Bella, a little higher.",
@@ -12554,6 +12578,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -12569,6 +12594,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -12584,6 +12610,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -12599,6 +12626,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -12617,7 +12645,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -12869,6 +12897,7 @@
         },
         "animals": [
           {
+            "answer": "use",
             "changed": true,
             "face": "redpanda",
             "line": "Sarah, 1.5 steps deeper, a little faster.",
@@ -12884,6 +12913,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -12899,6 +12929,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -12914,6 +12945,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -12932,7 +12964,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": true,
         "face": "redpanda",
         "line": "Speaking as the Red Panda: Sarah, a little deeper.",
@@ -13015,7 +13047,7 @@
         ],
         "default": "0",
         "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
-        "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used with any other face.",
+        "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
         "title": "Jarvis's built-in voice",
         "value": 9
       },
@@ -13184,6 +13216,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -13199,6 +13232,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -13214,6 +13248,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -13229,6 +13264,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -13247,7 +13283,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -13472,6 +13508,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -13487,6 +13524,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -13502,6 +13540,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -13517,6 +13556,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -13535,7 +13575,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -13756,6 +13796,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -13771,6 +13812,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -13786,6 +13828,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -13801,6 +13844,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -13819,7 +13863,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -14040,6 +14084,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -14055,6 +14100,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -14070,6 +14116,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -14085,6 +14132,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -14103,7 +14151,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -14324,6 +14372,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -14339,6 +14388,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -14354,6 +14404,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -14369,6 +14420,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -14387,7 +14439,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -14614,6 +14666,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -14629,6 +14682,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -14644,6 +14698,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -14659,6 +14714,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -14677,7 +14733,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "redpanda",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -14828,7 +14884,7 @@
         }
       ]
     },
-    "face_offer_answered": {
+    "face_kept_on": {
       "active": "builtin",
       "active_name": "Built-in voice",
       "available": true,
@@ -14845,23 +14901,23 @@
         "need_mb_measured": false,
         "pending": false,
         "state": "off",
-        "state_why": "the better-voice switch is off",
-        "why": "needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
       },
       "engines": {
         "f5": {
           "available": false,
           "where": "the second graphics card",
-          "why": "the better-voice switch is off"
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
         },
         "kokoro": {
-          "available": true,
-          "why": ""
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
         },
         "zipvoice": {
-          "available": true,
+          "available": false,
           "where": "this PC's processor",
-          "why": ""
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -14934,6 +14990,7 @@
         },
         "animals": [
           {
+            "answer": "keep",
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -14949,6 +15006,7 @@
             "voice": "Bella"
           },
           {
+            "answer": "use",
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -14964,6 +15022,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -14979,6 +15038,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -14997,23 +15057,17 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": true,
         "face": "redpanda",
-        "line": "Off: the built-in voice stays the same whatever the face.",
+        "line": "You chose to keep your voice for the Red Panda.",
         "name": "Red Panda",
         "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
       "fallback": "",
-      "last": {
-        "at": 1790000000.0,
-        "kind": "switch",
-        "outcome": "switched",
-        "voice": "grandpa",
-        "why": "Jarvis now speaks in \"Grandpa\"."
-      },
+      "last": null,
       "limits": {
         "max_clip_bytes": 2900000,
         "max_name_chars": 40,
@@ -15031,7 +15085,7 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "9",
+        "choice": "0",
         "choices": [
           {
             "id": "0",
@@ -15082,11 +15136,11 @@
         "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
         "note": "",
         "title": "Jarvis's built-in voice",
-        "value": 9
+        "value": 0
       },
       "speaking_with": "kokoro",
       "speed": {
-        "choice": "faster",
+        "choice": "normal",
         "choices": [
           {
             "id": "slower",
@@ -15105,41 +15159,304 @@
         "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
         "note": "",
         "title": "How fast Jarvis speaks",
-        "value": 1.15
+        "value": 1.0
       },
-      "timings": [
-        {
-          "at": 1790000000.0,
-          "audio_seconds": 3.6,
-          "chars": 54,
-          "engine": "zipvoice",
-          "failed": "",
-          "fallback": "",
-          "note": "",
-          "rtf": 0.233,
-          "seconds": 0.84,
-          "voice": "grandpa"
-        },
-        {
-          "at": 1790000000.0,
-          "audio_seconds": 0.5,
-          "chars": 5,
-          "engine": "zipvoice",
-          "failed": "",
-          "fallback": "",
-          "note": "",
-          "rtf": 1.68,
-          "seconds": 0.84,
-          "voice": "grandpa"
-        }
-      ],
+      "timings": [],
       "voices": [
         {
           "builtin": true,
           "id": "builtin",
           "name": "Built-in voice",
-          "ready": true,
-          "why": ""
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        }
+      ]
+    },
+    "face_offer_answered": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "keep",
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
+        "face": "redpanda",
+        "line": "Off: the built-in voice stays the same whatever the face.",
+        "name": "Red Panda",
+        "offer": null,
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "0",
+        "choices": [
+          {
+            "id": "0",
+            "label": "American (female)"
+          },
+          {
+            "id": "1",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "2",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "3",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "4",
+            "label": "American (female) - Sky"
+          },
+          {
+            "id": "5",
+            "label": "American (male) - Adam"
+          },
+          {
+            "id": "6",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "7",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "8",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "9",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "10",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "0",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "note": "",
+        "title": "Jarvis's built-in voice",
+        "value": 0
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
         }
       ]
     },
@@ -15249,6 +15566,7 @@
         },
         "animals": [
           {
+            "answer": "keep",
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -15264,6 +15582,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -15279,6 +15598,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -15294,6 +15614,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -15312,7 +15633,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "pygmyowl",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -15538,6 +15859,7 @@
         },
         "animals": [
           {
+            "answer": "keep",
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -15553,6 +15875,7 @@
             "voice": "Bella"
           },
           {
+            "answer": "use",
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -15568,6 +15891,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -15583,6 +15907,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -15601,7 +15926,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": true,
         "face": "pygmyowl",
         "line": "Speaking as the Pygmy Owl: Nicole, a little higher.",
@@ -15678,7 +16003,7 @@
         ],
         "default": "0",
         "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
-        "note": "While the Pygmy Owl face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used with any other face.",
+        "note": "While the Pygmy Owl face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -15822,6 +16147,7 @@
         },
         "animals": [
           {
+            "answer": "use",
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -15837,6 +16163,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -15852,6 +16179,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -15867,6 +16195,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -15885,7 +16214,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": true,
         "face": "redpanda",
         "line": "Speaking as the Red Panda: Bella, a little higher.",
@@ -15968,7 +16297,7 @@
         ],
         "default": "0",
         "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
-        "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used with any other face.",
+        "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
         "title": "Jarvis's built-in voice",
         "value": 9
       },
@@ -16028,6 +16357,299 @@
           "name": "Built-in voice",
           "ready": true,
           "why": ""
+        }
+      ]
+    },
+    "face_unanswered_on": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "keep",
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": "use",
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": true,
+        "face": "monkey",
+        "line": "The Monkey will ask once whether to use its own voice.",
+        "name": "Monkey",
+        "offer": {
+          "face": "monkey",
+          "keep": "Keep my voice",
+          "question": "The Monkey has its own voice. Use it?",
+          "use": "Use it"
+        },
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "0",
+        "choices": [
+          {
+            "id": "0",
+            "label": "American (female)"
+          },
+          {
+            "id": "1",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "2",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "3",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "4",
+            "label": "American (female) - Sky"
+          },
+          {
+            "id": "5",
+            "label": "American (male) - Adam"
+          },
+          {
+            "id": "6",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "7",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "8",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "9",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "10",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "0",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "note": "",
+        "title": "Jarvis's built-in voice",
+        "value": 0
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
         }
       ]
     },
@@ -16137,6 +16759,7 @@
         },
         "animals": [
           {
+            "answer": "use",
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -16152,6 +16775,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -16167,6 +16791,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -16182,6 +16807,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -16200,7 +16826,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "redpanda",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -16452,6 +17078,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -16467,6 +17094,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -16482,6 +17110,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -16497,6 +17126,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -16515,7 +17145,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -16765,6 +17395,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -16780,6 +17411,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -16795,6 +17427,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -16810,6 +17443,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -16828,7 +17462,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -17080,6 +17714,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -17095,6 +17730,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -17110,6 +17746,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -17125,6 +17762,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -17143,7 +17781,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -17405,6 +18043,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -17420,6 +18059,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -17435,6 +18075,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -17450,6 +18091,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -17468,7 +18110,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -17720,6 +18362,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -17735,6 +18378,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -17750,6 +18394,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -17765,6 +18410,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -17783,7 +18429,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -18025,6 +18671,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -18040,6 +18687,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -18055,6 +18703,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -18070,6 +18719,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -18088,7 +18738,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
@@ -18325,6 +18975,7 @@
         },
         "animals": [
           {
+            "answer": null,
             "changed": false,
             "face": "redpanda",
             "line": "Bella, 2 steps higher, at normal pace.",
@@ -18340,6 +18991,7 @@
             "voice": "Bella"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "pygmyowl",
             "line": "Nicole, 1 step higher, a little slower.",
@@ -18355,6 +19007,7 @@
             "voice": "Nicole"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "seaotter",
             "line": "Sarah, 3 steps higher, a little faster.",
@@ -18370,6 +19023,7 @@
             "voice": "Sarah"
           },
           {
+            "answer": null,
             "changed": false,
             "face": "monkey",
             "line": "Michael, 1 step higher, at normal pace.",
@@ -18388,7 +19042,7 @@
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
         "animals_title": "Each animal's voice",
         "default": false,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and pitch, which you can change for each animal. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "",
         "line": "Off: the built-in voice stays the same whatever the face.",
