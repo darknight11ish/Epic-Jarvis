@@ -440,7 +440,7 @@ pub struct RouteState {
 /// numbers, and the GPU probe is a process spawn.
 fn spawn_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let mut system = sysinfo::System::new_all();
+        let mut system = telemetry_system();
 
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
@@ -491,7 +491,7 @@ fn spawn_telemetry_loop(app: AppHandle) {
                     // The blocking task panicked or was cancelled; `system`
                     // went with it, so start a fresh one for the next tick.
                     eprintln!("[jarvis] telemetry sampling failed: {err}");
-                    system = sysinfo::System::new_all();
+                    system = telemetry_system();
                     continue;
                 }
             };
@@ -500,6 +500,19 @@ fn spawn_telemetry_loop(app: AppHandle) {
             }
         }
     });
+}
+
+/// The sampler's `System`, loading only what `sample_telemetry` reads: CPU
+/// usage and memory. `System::new_all()` also listed every process, disk,
+/// network adapter and user at start-up and kept them for the session,
+/// none of which the widget shows.
+fn telemetry_system() -> sysinfo::System {
+    use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind};
+    sysinfo::System::new_with_specifics(
+        RefreshKind::new()
+            .with_cpu(CpuRefreshKind::new().with_cpu_usage())
+            .with_memory(MemoryRefreshKind::everything()),
+    )
 }
 
 /// Default note target for the quick-capture hotkey.
