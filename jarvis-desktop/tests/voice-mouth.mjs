@@ -144,6 +144,12 @@ await check("speaking with no real voice keeps an animal's mouth shut", async ()
   for (const face of ["redpanda", "pygmyowl", "seaotter"]) {
     const { page, frame, errors } = await host(face);
     await state(page, "speaking");
+    // The state takes effect on the face's next drawn frame: wait for it
+    // (bounded) - on a busy machine that first frame can come late.
+    for (const until = Date.now() + 3000; Date.now() < until;) {
+      if ((await drawn(frame)).lastState === "speaking") break;
+      await page.waitForTimeout(50);
+    }
     let most = 0;
     for (let i = 0; i < 12; i += 1) {
       await page.waitForTimeout(80);
@@ -253,10 +259,19 @@ await check("the floating face's window passes the voice and the microphone into
   near(got.mic, 0.6, 1e-6, "mic level");
   // A face that loads in the middle of a clip is handed the track again.
   await page.evaluate(() => { const f = document.getElementById("face-frame"); f.src = f.src; });
-  await page.waitForTimeout(300);
-  const again = await drawn(await faceFrame(page));
+  // The relay hands the clip over on the frame's `load` event, a moment
+  // AFTER the face marks itself ready, and the face only works out where
+  // the audio is on its next drawn frame - so wait (bounded) for both,
+  // rather than reading once at a fixed time: on a busy machine a single
+  // read landed in one gap or the other (seen in CI, and 2 in 27 runs here).
+  let again = null;
+  const until = Date.now() + 5000;
+  do {
+    await page.waitForTimeout(100);
+    again = await drawn(await faceFrame(page)).catch(() => null);
+  } while ((!again || again.id !== id || !(again.est > 0.4)) && Date.now() < until);
   await page.close();
-  assert.equal(again.id, id, "the reloaded face was not handed the clip");
+  assert.equal(again && again.id, id, "the reloaded face was not handed the clip");
   assert.ok(again.est > 0.4, `reloaded at ${again.est}`);
 });
 
