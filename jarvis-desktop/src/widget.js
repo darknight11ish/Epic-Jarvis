@@ -40,6 +40,7 @@ import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./not
 import { EMAIL_APPROVE, EMAIL_DETAIL, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
 import { isHeavy } from "./heavy-approve.js";
+import { relayFaceVoice } from "./face-voice.js";
 import {
   actionsOf as focusActionsOf,
   clock as focusClock,
@@ -1439,6 +1440,9 @@ startLink();
   // changes. Read once from Jarvis (so a phone change arrives), then from
   // memory on every change.
   if (dom.faceFrame) dom.faceFrame.addEventListener("load", postFace);
+  // Lip-sync: Jarvis's voice and the owner's microphone, passed into the
+  // face (face-voice.js) - an event reaches this page, never its frame.
+  relayFaceVoice(dom.faceFrame, listen);
   listen("appearance-changed", () => readFaceAppearance(false));
   readFaceAppearance(true);
 

@@ -139,6 +139,7 @@ on a throwaway copy instead.
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -874,12 +875,18 @@ line into `keep_rules_first()`; it needs your `jarvis_hud.py`, so it is
 skipped in the container. The rules-first checks in both fail when
 `keep_rules_first()` is switched off.
 
-**One thing to check on the machine**, because it cannot be checked from here:
-the HUD posts to `JARVIS_URL/v1/chat/completions`, not to Ollama directly. All
-of the above is Ollama's behaviour. If the Jarvis backend normalises the
-message list by hoisting system messages to the front before forwarding, it
-would undo both halves of this. Worth one look at how it builds its Ollama
-request.
+**What happens between the HUD and Ollama** (this used to say "one thing to
+check on the machine"; checked from the repository on 2026-09-28). With
+`ollama-direct.patch`, `jarvis_hud.py` itself sends the local model's request
+straight to Ollama's `/v1/chat/completions` - there is no other server in
+between that could move system messages to the front. The relay's `_open()`
+(lines written by `ollama-direct.patch`, `chat-history.patch` and
+`cloud-one-turn.patch`) strips the apps' bookkeeping fields and, for a cloud
+lane only, keeps just the newest question; it never reorders. The owner's
+own `_build_payload`, which this repository does not hold, forwards
+`messages` as they are (`docs/AUDIT.md`). What that check DID turn up: a turn
+with no tools enabled never reached `keep_rules_first()` at all - fixed by
+`rules-first-relay.patch`, at the very end of this file.
 
 ## Test it
 
@@ -887,13 +894,13 @@ request.
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_prefix.py
 ```
 
-Sixteen checks. The ordering expression is lifted out of `jarvis_hud.py` with
+Twenty checks. The ordering expression is lifted out of `jarvis_hud.py` with
 `ast` and evaluated, rather than paraphrased in the test, so what runs is the
 shipped line. The check that matters serialises two turns that recall
 *different* facts over the same history and asserts the prefixes are
 identical — with a control that runs the old prepend through the same
 assertion and confirms it fails, so the property is known to discriminate.
-Against the unpatched file all sixteen fail.
+Against the unpatched file the original sixteen fail.
 
 ---
 
@@ -6946,6 +6953,18 @@ voice pack for the model this backend ships, kept only because it agrees
 with those two - see `jarvis_voices.KOKORO_VOICES`'s own comment for the
 full reasoning and the caveat.
 
+**Also new (2026-09-27, the owner's choice): "Voice follows the face"** -
+with the red panda, pygmy owl or sea otter face showing, the built-in voice
+becomes that animal's: one of the Kokoro voices already installed, its own
+pace, and a small pitch rise (`jarvis_voices.FACE_VOICES`; the face is read
+from `appearance.json`). An on/off switch, **on by default**, right under
+the built-in voice choice in both apps (desktop: Settings -> Jarvis's voice;
+phone: the Voices screen), `POST /api/voice/voices/face`. No card either
+way, held on a stale link like every change sent to the PC. A voice you
+recorded still wins, and your speaking speed still applies on top. The
+animals' voices were picked from Kokoro's published descriptions, **not
+listened to** - change a row in `FACE_VOICES` if one sounds wrong.
+
 ## The two candidates
 
 | | today | the candidate | where it comes from |
@@ -7012,7 +7031,8 @@ compare.
 **3. Put the new code on the PC** (copies `jarvis_bakeoff.py` and the new
 `jarvis_voices.py`, `jarvis_wakeword.py`, `jarvis_speech.py` and
 `jarvis_voice_flow.py`; `voices.patch` gains the speed and (2026-09-27) the
-built-in-voice-choice route; sherpa-onnx must be 1.12.26 or newer), from
+built-in-voice-choice and voice-follows-the-face routes; sherpa-onnx must be
+1.12.26 or newer), from
 this repository's folder, then restart Jarvis:
 
 ```powershell
@@ -13746,3 +13766,129 @@ has the phone-parity row.
   estimated exist; every top-level section is "open"-able. The exact list
   is in `jarvis_settings_registry.py`'s own module header and
   `docs/JARVIS-API.md` section 58.2/58.3.
+
+# Mouths that match the words: `jarvis_mouth.py` (2026-09-28)
+
+## In plain words
+
+The animals' mouths used to be worked out by the apps from the sound alone.
+Now, when Jarvis speaks in its built-in voice (Kokoro), the PC also sends
+the exact moment of every speech sound, taken from Kokoro itself - so the
+lips shut for every "m", "b" and "p", bite for "f" and "v", round for "oo"
+and "w" (a little before the sound, as real lips do) and spread for "ee".
+The shapes ride inside the sound file the PC already sends (one extra
+labelled block after the sound); both apps use them. Nothing leaves the PC.
+
+It needs **one one-time step on the PC**: a small copy of the timing part of
+the voice model (`model.durations.onnx`, about 56 MB, next to `model.onnx`
+in `.openjarvis\voice-models\tts`). The voice model itself is only read,
+never changed. Until the step is done - or whenever anything about the
+timing is in doubt - the apps work the mouth out from the sound, exactly as
+before, and nothing else changes.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put it in** (from this repository's folder), then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. The one-time step.** It installs the two small packages it needs (if
+the step above has not already), then makes the copy and says what it did.
+Running it again does nothing ("Already done"):
+
+```powershell
+Push-Location "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 -m pip install onnx espeakng-loader; py -3 .\jarvis_mouth.py --prepare; Pop-Location
+```
+
+Then restart Jarvis. **To check it**: `py -3 .\jarvis_mouth.py` (same
+folder) prints whether mouths are ready and, after Jarvis has spoken, how
+many sentences got them and why any did not; the phone and desktop read
+the same from `/api/voice/status` (`tts.mouth`).
+
+## What the code does
+
+- `jarvis_mouth.py` (new, shipped whole): `prepare()` (the one-time step);
+  `phonemize()` (espeak-ng through the espeakng-loader package, read the way
+  sherpa-onnx's piper-phonemize reads it); `speak()` (asks sherpa-onnx for
+  Kokoro's sound with its pause-shortening off, one piece per sentence,
+  while the timing is worked out on a thread of its own, then shortens the
+  pauses itself with an exact copy of sherpa-onnx's own code, so the sound
+  is the same); `finish()` (checks every piece is exactly as long as the
+  timing says, to the sample - otherwise no mouth); `build_track()` (sounds
+  to mouth shapes, 100 a second); `add_chunk()` (the "jmth" block).
+- `jarvis_speech.py`: `say()` asks `kokoro_speak(..., mouth=[])` for the
+  shapes and adds the block to the WAV; `status()` gains `tts.mouth`; the
+  engine's own `silence_scale` is read when it is built. The "One moment."
+  clip, the barge-in reference and custom voices are made exactly as before
+  (no block).
+- `requirements.txt` / `requirements.lock`: `espeakng-loader` (runtime) and
+  `onnx` (the one-time step only).
+- docs: `docs/LIPSYNC.md` ("Mouths from Kokoro's own timing" - how, and the
+  measurements), `docs/JARVIS-API.md` section 5 (the block, `tts.mouth`),
+  `THIRD-PARTY-NOTICES.txt` (espeak-ng is GPL-3: fine for this personal,
+  non-commercial build; espeakng-loader MIT; HeadTTS's table MIT).
+
+## Test it
+
+    python3 backend/test_mouth.py
+    python3 backend/run_suites.py
+
+With the real voice files (`JARVIS_KOKORO_DIR` = a kokoro-en-v0_19 folder)
+`test_mouth.py` also checks the real model in all four voices.
+
+## Not checked, said plainly
+
+- **Not run on Windows or on the owner's PC.** Everything was measured in
+  the Linux dev container. The Windows espeakng-loader wheel was downloaded
+  and its `espeak-ng.dll` checked: it exports the three calls used
+  (`espeak_Initialize`, `espeak_SetVoiceByName`, `espeak_TextToPhonemes`)
+  and needs the Microsoft C++ runtime (`MSVCP140.dll`), which onnxruntime
+  already brings into the process. If it cannot load, status says so and
+  the apps work the mouth out from the sound.
+- **The timing reads the text the way sherpa-onnx does, but not with the
+  same espeak-ng build** (piper-phonemize's own call that says how a clause
+  ended is not in the standard library, so it is read from the text). On
+  48,424 lines (this repository's docs and the 36 test sentences) it
+  matched piper-phonemize on all but 8 odd code fragments; any mismatch makes that sentence's length check
+  fail, and it simply has no mouth block.
+
+---
+
+# The rules on a turn with no tools: `rules-first-relay.patch` (2026-09-28)
+
+**What was wrong.** `jarvis_agent.keep_rules_first()` puts the Jarvis rules
+(`LANE_SYSTEM`, the Modelfile's SYSTEM block word for word) in front whenever
+a system message would otherwise be first - because Ollama adds the
+Modelfile's SYSTEM block only when the first message is *not* a system
+message. See "Cases this edit missed" under `memory-prefix.patch`. But only
+the tool loop (`run_local_turn`) called it. A turn with no tools enabled
+never reaches the tool loop: `jarvis_hud.py`'s relay sends the request
+straight to Ollama from `_open()`. On those turns, a first question that
+recalled a fact - or that carried the desktop's attached clipboard text -
+still went to Ollama with a system message first, and the rules were
+dropped.
+
+**The fix.** One hunk in `_open()`, right after `chat-history.patch`'s
+`_chat_client_fields_off` lines: when the lane is the local model and the
+body has a message list, it calls `jarvis_agent.keep_rules_first()`. Nothing
+else changes. A list that starts with a user message is sent as it was, and
+a cloud lane is not touched here (it keeps only the newest question anyway).
+If `jarvis_agent` cannot be loaded, the request goes as it did before this
+patch. A turn that does use the tool loop is not affected: that path never
+goes through `_open()`, and `keep_rules_first()` does nothing to a list that
+already starts with the rules.
+
+**Tested** by `test_rules_first_relay.py`, with no file from the PC. The
+patch is last in `apply-patches.ps1`'s list. Every context line is one that
+`chat-history.patch` or `cloud-one-turn.patch` adds, so it lands on the real
+file, not only on the stand-in. It applies to the stand-in of `jarvis_hud.py`
+that the whole stack before it leaves, and comes off again. The lines it
+adds are then run as they are, for the cases above. A control check confirms
+the relay did not call `keep_rules_first()` before this patch.
+
+**Not checked from here:** that the model on your PC behaves differently.
+That needs a first question on a turn with no tools enabled, where Jarvis
+recalls a fact, and a look at whether the answer follows the rules (for
+example "say what is a guess and what is verified").

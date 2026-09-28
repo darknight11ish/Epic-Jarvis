@@ -886,6 +886,26 @@ interrupting Jarvis by talking (`source=barge_in`), the "One moment." clip
 delay step by step, in numbers. The first status read starts the warm-up in
 the background; the reply does not wait for it.
 
+**Since 2026-09-28 a Kokoro WAV from `/api/voice/say` may carry the mouth
+shapes** (`backend/jarvis_mouth.py`, docs/LIPSYNC.md "Mouths from Kokoro's
+own timing"): one extra RIFF chunk **after** `data`, id `jmth`, its payload
+ASCII `v1;src=kokoro;` + a lipsync.js `pack()` string (`100:<base64>`, 4
+bytes a frame: level, open, wide, round, 100 frames a second, as many frames
+as the clip's own analysis has). It is padded to even length and the RIFF
+size covers it; the `data` chunk still declares its real size, so the sound
+itself is unchanged and a reader that does not know `jmth` skips it. It is
+there only when the built-in voice (Kokoro) spoke and the PC could time
+every speech sound exactly (the predicted length equal to the real sound's,
+to the sample); a custom voice, the "One moment." clip (`/api/voice/moment`)
+and any doubt give a plain WAV, and the apps work the mouth out from the
+sound as before. Both apps take open, wide and round from it and loudness
+from the sound (lipsync.js `merge`, `LipSync.merge`). `/api/voice/status`'s
+`tts` block gained `mouth`: `{"available": bool, "status": "<ready, or why
+not in plain words - e.g. the one-time step to run>", "made", "skipped"
+(sentences the timing was tried on since the backend started, and how many
+of them got no block), "last_skip_why", "last_ms" (how long the last
+timing took)}`.
+
 **The audio format: 16-bit PCM in a WAV container. The two apps send
 different rates, and the server copes with both** (checked against the code
 on 2026-09-24):
@@ -2026,6 +2046,25 @@ but no names at all, and `status()` stays cheap on purpose (no model is
 loaded to answer it). Choosing a voice beyond what a PC's real model has is
 no different from setting `tts_speaker_id` too high by hand today.
 
+**Voice follows the face** (added 2026-09-27, the owner's choice): with one
+of the animal faces showing (red panda, pygmy owl, sea otter -
+`docs/CRITTERS.md`), the **built-in** voice becomes that animal's: one of
+Kokoro's own voices already installed, its own pace, and a small pitch rise
+(`jarvis_voices.FACE_VOICES`). The face is read from `<config
+dir>/appearance.json` (the one place both apps keep it). What wins, in
+order: a custom voice the owner chose; then the face's voice; then the
+built-in voice choice above. The owner's speaking speed still applies on
+top of the animal's pace. A chosen recorded voice wins; when it cannot be
+used right now, the built-in voice speaks instead - and so, with an animal
+face showing, the animal does, and `face_voice.line` says so. An on/off switch, **on by default**, right under
+the built-in voice choice in both apps: `status()` carries it and every word
+(`face_voice`, below); `POST /api/voice/voices/face` sets it. **No card
+either way** - it only changes how Jarvis sounds, never what it does, asks
+or remembers - but held on a stale link like every change. While an
+animal's voice stands in, `speaker.note` says so, so choosing a built-in
+voice and hearing no change does not look broken. The animals' voices were
+picked from Kokoro's published descriptions, not listened to.
+
 **Where the audio goes: nowhere.** The recording is held in the PC's memory
 until the card is answered; approved, it is kept in
 `<config dir>/voices/<id>/` (`clip.wav` - mono, 24 kHz, 16-bit -
@@ -2043,8 +2082,8 @@ any voice print changes.
 All routes: token + origin, like every other write. A client sends
 `X-Jarvis-Client: hud` as always. **Hold on a stale link (rule 4) every
 POST that raises a card** - adding a voice, switching to a custom one,
-better voice ON - and the speed and the built-in voice choice (a change,
-though each raises none). Deleting a voice, going back to the built-in one and
+better voice ON - and the speed, the built-in voice choice and "Voice
+follows the face" (a change, though each raises none). Deleting a voice, going back to the built-in one and
 better voice OFF only take something away and always go (both apps). Show every `error` and `why` word for word: they are written for the
 owner.
 
@@ -2056,6 +2095,7 @@ owner.
 | `POST /api/voice/voices/delete` | `{"voice": "<id>"}` | **200** `{"ok": true, "deleted": "<id>", "active": "<id>" \| "builtin"}` at once, no card; **400** for `builtin`; **404** unknown id; 500 `{"ok": false, "error"}` if the folder could not be removed | Deletes the folder. If Jarvis was speaking in it, it goes back to the built-in voice (`active` says so). |
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
 | `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
+| `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
 Errors from the route itself (not the module): **400** `{"error": "the
@@ -2105,6 +2145,13 @@ request.
              "default": "0",
              "title": "Jarvis's built-in voice", "detail": str, "note": str,
              "choices": [{"id": "0", "label": "American (female)"}, ... 11 in all]},   absent on an older PC: show nothing
+ "face_voice": {"enabled": bool,          the switch (on unless the owner turned it off)
+                "default": true,
+                "face": "" | "<face id>",  the face saved in appearance.json ("" if none)
+                "speaking": bool,         an animal's voice is the one speaking now
+                "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter",
+                "line": str,              what is happening now, one sentence: show it under the switch
+                "title": "Voice follows the face", "detail": str},   absent on an older PC: show nothing
  "pending": {"kind": "create" | "switch", "voice": "<id>", "name": str, "expires_in": <seconds>} | null,
  "last": {"kind": "create" | "switch", "voice": "<id>",
           "outcome": "created"|"switched"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",

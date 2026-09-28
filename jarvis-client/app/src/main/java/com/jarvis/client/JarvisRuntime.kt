@@ -2018,6 +2018,17 @@ object JarvisRuntime {
         return postCustomVoice(CustomVoices.SPEAKER_PATH, CustomVoices.speakerBody(id))
     }
 
+    /**
+     * "Voice follows the face": with an animal face showing, the built-in
+     * voice becomes that animal's. Same shape as [setVoiceSpeaker]: no card
+     * either way, but held on a stale link like every change sent to the PC
+     * (rule 4), whichever way it is switched.
+     */
+    suspend fun setVoiceFace(on: Boolean): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.FACE_PATH, CustomVoices.faceBody(on))
+    }
+
     private val _customVoiceNote = MutableStateFlow<String?>(null)
 
     /** The last thing a Voices request came to, in words, for the screen to show. */

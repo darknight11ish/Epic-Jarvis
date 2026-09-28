@@ -4,7 +4,35 @@ Newest first. One version number covers the desktop app, the phone app and
 the backend files (the `VERSION` file). Builds made by GitHub add a build
 number as the last part - `0.2.57` is a build of 0.2.
 
-## Next version (not numbered yet)
+## Not in a numbered version yet
+
+- **A red panda face** - the first animal among Jarvis's faces, on the
+  desktop and the phone. It sleeps when Jarvis is on standby, perks its ears
+  and tilts its head when listening, gazes into a glowing orb when thinking,
+  talks with Jarvis's voice, waves when an approval is waiting, and scratches
+  its head at an error. The orb is your colour for each state. Drawn in 3D
+  by the graphics card with no model file; see `docs/CRITTERS.md`.
+- **A pygmy owl and a sea otter** join the panda, on both apps. The owl
+  perches on a branch, turns its head to follow the room and waves a wing
+  when something is waiting on you; the otter floats on its back in a
+  little pool, taps a glowing pebble while it thinks and covers its eyes
+  with its paws to sleep.
+- **Animal faces tidied after their audit:** no more see-through specks
+  along the otter's outline against its pool; the owl's thinking orb now
+  circles clear of its head, and its glow no longer shows through the face;
+  no starburst of streaks on the owl's crown seen from above; the panda's
+  tail no longer shades itself with a false shadow band.
+- **The animals' mouths follow Jarvis's real voice.** Each spoken answer is
+  read up front into a mouth track - how open, how wide ("ee"), how round
+  ("oo"), shut in pauses and on m/b/p - and played in step with the sound
+  you actually hear, on the PC (every window that shows a face) and the
+  phone. When Jarvis answers without speaking (typed, Quiet mode, kept on
+  screen), the animals keep their mouths shut. See `docs/LIPSYNC.md`.
+- **Voice follows the face.** With the red panda, owl or otter showing,
+  Jarvis's built-in voice becomes that animal's - its own voice, pace and a
+  slightly higher pitch. A switch in both apps, on to start, right under
+  "Jarvis's built-in voice"; it never asks first. A voice you recorded still
+  wins.
 
 **Fixed**
 

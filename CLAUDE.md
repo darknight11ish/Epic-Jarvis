@@ -487,6 +487,36 @@ here rather than patched blind:
   without the owner's go-ahead given how carefully this project already
   treats crisis handling.
 
+Decided 2026-09-27, when the owner asked for a 3D animal face (with
+Gemini's notes as input, not instructions):
+- **All three animals - red panda, pygmy owl, sea otter - panda first.**
+  The owner then said go for the owl and the otter the same day, and all
+  three are built. Each is a face like the others (picked in the Faces
+  window / Appearance), drawn from shared shader parts plus its own, one
+  source for both apps (`docs/CRITTERS.md`), not a downloaded 3D model.
+
+Decided 2026-09-28, the owner's answers after the animal-face audits:
+- **Mouths follow Jarvis's real voice**, timed by Kokoro's own phoneme
+  durations when the PC is set up for it (`jarvis_mouth.py --prepare`), else
+  analysed from the sound (`docs/LIPSYNC.md`). No sound, no mouth movement.
+- **Body movement: natural and calm, never busy or sporadic** - small,
+  slow, eased motion; rare idle events; asleep is still. Reuse proven open
+  motion logic (MIT: Spring-It-On, TalkingHead) rather than invent it.
+- **Serious moments are calm and plain:** no wave while asking for an
+  approval (an attentive look instead), a still, concerned look at an error,
+  and for a crisis-help answer a neutral pose and Jarvis's plain voice (not
+  the animal voice).
+- **Not connected = asleep with a hollow ring**, on every face surface of
+  both apps, matching the tray icon; never an approval pose while acting is
+  blocked. The screen reader says "Jarvis isn't connected".
+- **Asleep shows rising Zs** above each animal whenever Jarvis is on standby,
+  whether the standby schedule or the owner put it there - never while
+  merely not connected (that is the hollow ring alone). Drawn over the face,
+  not inside the shader, in both apps.
+- **A "Still" option for the animals** in both apps' face settings, off by
+  default: the animal sits calmly and only breathes - no looking around,
+  no gestures or idle events.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
@@ -537,9 +567,28 @@ by the network policy, so the Android Gradle plugin cannot resolve and
 `jarvis-android`. Expect a CI round trip (~15 min) to find out whether
 anything compiles. Check work carefully before pushing.
 
+**A phone face's AGSL shader must stay under Android's size limit.** Android
+compiles `RuntimeShader`s in Skia's strict mode, which refuses any shader
+whose flattened size is over 100,000 - and the app crashes when that face is
+drawn. Every operation counts 1, a call counts the called function's whole
+size, and a loop counts its body once per step, so a big distance function
+inside a long march loop blows it fast. WebGL and a newer Skia on a PC
+(skia-python) accept an over-size shader without a word: the first red panda
+went out four times over and only the emulator test caught it. Measure with
+`python3 tools/shader_size.py` (CI runs `--check`) before pushing a shader.
+
 The `jarvis-client` APK is published to the rolling `client-latest` release,
 but only when the emulator smoke job passes. `jarvis-android` no longer
 publishes a release at all - see the top-level `README.md` for why.
+
+## Editing a backend `.patch`: record its old version first
+
+After changing any `backend/*.patch`, run `python3 tools/build_patch_history.py`
+before committing (its docstring says why). **This container's clone is
+shallow**, and there the tool refuses to run and `test_patch_history.py`
+quietly skips the checks that need history - so it passes here and fails in
+CI. Run `git fetch --unshallow origin` first. (Shipped once, 2026-09-28:
+`voices.patch` changed, CI's backend job went red.)
 
 ## Checking the Rust without waiting for CI
 

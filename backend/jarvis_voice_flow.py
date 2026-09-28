@@ -324,23 +324,38 @@ def _reference_sources() -> list:
         except Exception:
             size = -1
         if size > 0:
-            # The owner's built-in-voice choice (one source: jarvis_speech.tts_speaker).
-            sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
-                  else int(S._cfg("tts_speaker_id", 0) or 0))
-            # The owner's speaking speed (one source: jarvis_speech.tts_speed).
-            speed = (S.tts_speed() if hasattr(S, "tts_speed")
-                     else float(S._cfg("tts_speed", 1.0) or 1.0))
+            if hasattr(S, "tts_voice"):
+                # The built-in voice, read once (jarvis_speech.tts_voice):
+                # the owner's choice or an animal face's voice, its speed,
+                # and the face's pitch rise ("Voice follows the face"; 0
+                # else) - so talking over the red panda is checked against
+                # the panda's voice, not an unshifted one it no longer
+                # sounds like.
+                sid, speed, semis = S.tts_voice()
+            else:
+                # The owner's built-in-voice choice (one source: jarvis_speech.tts_speaker).
+                sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
+                      else int(S._cfg("tts_speaker_id", 0) or 0))
+                # The owner's speaking speed (one source: jarvis_speech.tts_speed).
+                speed = (S.tts_speed() if hasattr(S, "tts_speed")
+                         else float(S._cfg("tts_speed", 1.0) or 1.0))
+                semis = 0.0
 
-            def load_builtin(S=S, sid=sid, speed=speed):
+            def load_builtin(S=S, sid=sid, speed=speed, semis=semis):
                 engine = S._tts_engine()
                 if engine is None:
                     return None
+                if hasattr(S, "kokoro_speak"):
+                    got = S.kokoro_speak(engine, REFERENCE_TEXT, int(sid), float(speed), semis)
+                    if got is None:
+                        return None
+                    return np.asarray(got[0], dtype=np.float32), int(got[1])
                 audio = engine.generate(REFERENCE_TEXT, sid=int(sid), speed=float(speed))
                 if audio is None or len(audio.samples) == 0:
                     return None
                 return np.asarray(audio.samples, dtype=np.float32), int(audio.sample_rate)
-            out.append((("builtin", str(sid), size, str(speed)), "the built-in voice",
-                        load_builtin))
+            out.append((("builtin", str(sid), size, str(speed), str(semis)),
+                        "the built-in voice", load_builtin))
     return out
 
 
@@ -647,7 +662,8 @@ def _brief() -> dict:
 def moment_key() -> tuple:
     """(key, active voice id, engine it would be made with) - the key
     changes whenever the clip would sound different: another voice, another
-    engine, another built-in speaker or speed, another model file."""
+    engine, another built-in speaker, speed or pitch (an animal face's own
+    voice), another model file."""
     b = _brief()
     active = str(b.get("active") or "builtin")
     engine = str(b.get("engine") or "kokoro")
@@ -661,11 +677,19 @@ def moment_key() -> tuple:
             parts.append("unreadable")
     S = _speech()
     if S is not None:
-        sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
-              else S._cfg("tts_speaker_id", 0) or 0)
-        speed = (S.tts_speed() if hasattr(S, "tts_speed")
-                 else S._cfg("tts_speed", 1.0) or 1.0)
+        if hasattr(S, "tts_voice"):
+            sid, speed, semis = S.tts_voice()     # read once, like the clip itself
+        else:
+            sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
+                  else S._cfg("tts_speaker_id", 0) or 0)
+            speed = (S.tts_speed() if hasattr(S, "tts_speed")
+                     else S._cfg("tts_speed", 1.0) or 1.0)
+            semis = 0.0
         parts += [str(sid), str(speed)]
+        # An animal face's pitch rise ("Voice follows the face"). Added only
+        # when there is one, so every key made before this stays the same.
+        if semis:
+            parts.append(f"pitch {semis:g}")
         try:
             parts.append(__import__("os").path.getsize(S._sherpa_tts_paths()["model"]))
         except Exception:
