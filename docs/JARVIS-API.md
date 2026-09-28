@@ -1302,7 +1302,10 @@ neither app says it would.
 | `/api/memory/learning/auto` | POST | `{"enabled": bool}` | `brain_memory_learning_auto` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Learn automatically" (on by default). The shape of `/api/memory/learning`: **OFF** 200 at once, never a card, withdraws a waiting ON; **ON** 202 `{"waiting": true, ...}` and ONE approval card, action `learning_auto_enable`; on only when it is approved. Already on: 200, no card. A second ON while one waits: 202, no second card. Tier other than `ask`: **503**. Bad body: `400`. Every reply carries the `GET /api/memory/learning` fields (not `enabled`). |
 | `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | `brain_memory_learning_sensitive` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted. Anything else: `400`. Every reply carries the `/api/history` status fields. |
-| `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. |
+| `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
+| `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the 10-minute Undo, the days a spoken request filled in). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item; nothing changes before a person approves. `409` a card already waiting, an Undo still open, or the list changed since it was read (`"changed": true`). |
+| `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis) | `JarvisRuntime.forgetRangeRead` | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label - at most 200 together, else counts only. A read: never held. |
+| `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the card's approval: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
 | `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}`, or `{"not_now": true}` alone | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.setSleepTime` | The overnight tidy is **not built**: `enabled` only records the wish, and nothing runs. "Not now" sends `{"not_now": true}` since 2026-09-25 (`briefing.patch`): the PC keeps the offer quiet for 1 day, then 7, then 30 (`jarvis_backoff.py`, section 22.6), and answers `{"ok", "said", "quiet_until"}`; it changes no setting and is not held on a stale link in either app (it only makes Jarvis quieter). An older PC answers 400 and the card simply returns tomorrow. `not_now` beside `enabled` or `remind` is ignored. |
 | `/api/attention/mute` | POST | `{}` | `attention.rs:119` | `JarvisApi.kt:469` | **Until tomorrow only.** There is no "mute forever". |
 | `/api/attention/unmute` | POST | `{}` | `attention.rs:121` | `JarvisApi.kt:471` | Response is `budget()`, not `status()`, so the desktop re-reads rather than applying half an update. |
@@ -3223,7 +3226,14 @@ does not forget facts Jarvis learned from it.
 
 `POST /api/history/delete {"id": "..."}` - `200 {"ok": true}` or `404`. One
 conversation per request. **There is no "delete all" route**: irreversible
-bulk actions stay off the API.
+bulk actions stay off the API - **with ONE exception**, the owner's decision
+of 2026-09-28: **"Forget a time frame" (§64)** forgets the facts and deletes
+the chats from some days together. It is made safe by three things this
+route does not need: the apps first SHOW every fact and chat, each ticked,
+and the owner unticks any to keep; ONE approval card (action
+`memory_forget_range`, tier `ask`) lists every item in full and is decided
+by a tap, never by voice; and for 10 minutes afterwards one tap on Undo puts
+everything back. Nothing else deletes in bulk.
 
 `POST /api/history/settings` - one setting per request:
 
@@ -3259,7 +3269,9 @@ other sections. (The HUD page sends `conversation_id`, `device: "hud"` and
 - Opening one: a read-only transcript. On user turns that are not
   typed or voice, the provenance is shown quietly ("shared", "pasted",
   "from clipboard").
-- Deleting one, with a confirm step. No delete-all.
+- Deleting one, with a confirm step. No delete-all - the one exception is
+  "Forget a time frame" (§64), a checked list and one approval card with
+  10 minutes to undo, on the desktop's History tab and the phone's Brain.
 - **A search box over the list, added 2026-09-27** (ease-of-use audit row
   20; the owner's answer to `docs/OWNER-QUESTIONS-2026-09-27.md`, question
   4: "A search box in History for the owner's own old chats is allowed now
@@ -10045,3 +10057,153 @@ the test on the PC once the 12 GB card is in (one PowerShell line, in
 right, a median answer time of 3 s or less, the slowest 6 s or less, and
 never naming a person. The photos are not in the repository (licences):
 the crowd photo must be a licensed stock photo.
+
+## 64. Forget a time frame (added 2026-09-28)
+
+**What it is.** The owner decided on 2026-09-28 (CLAUDE.md): the owner may
+ask, by voice or typing, to forget what Jarvis learned or said in a time
+frame - "forget what you learned last week", "delete my chats from 1 to 15
+September". Nothing is removed at once: both apps show the exact facts and
+chats from that time, each ticked; the owner can untick any; ONE approval
+card listing every item is decided by tapping only - never by voice.
+Approved, the facts are **forgotten** (retired, exactly as Forget does -
+never erased) and the chats **deleted**, with **10 minutes to Undo**.
+Erasing a fact's words for good stays the separate, per-fact "Erase the
+words" (§19). This is the one exception to "irreversible bulk actions stay
+off the API" (§18).
+
+`backend/jarvis_forget_range.py` (shipped whole), installed by
+`forget-range.patch` (the startup `install()` block, and the gate's risk
+line). Desktop: a card on the Brain's History tab (`forget-range.js`,
+`forget-range-panel.js`, `brain/forget_range.rs`). Phone: Brain ->
+"Forget a time frame" (`ForgetRangePlate.kt`, `net/ForgetRange.kt`). Both
+apps' words and the real answers: `forget-range-cases.json`
+(`tools/gen_forget_range_cases.py`).
+
+### 64.1 Which facts, which chats, which days
+
+- **Facts by when Jarvis SAVED them** (`created`), never by their "true
+  from" date (`valid_from`, which can come from the words themselves - "I
+  moved here in 2019", said today, was learned today). Only facts still in
+  use: a forgotten or erased one has nothing left to forget. "Between us"
+  and pinned facts are included, and marked on the list.
+- **Chats by when they happened.** A conversation that OVERLAPS the days
+  counts - one message inside is enough - and the WHOLE conversation is
+  deleted. One that also has messages from outside the days is marked
+  (`spills`), in both apps and on the card: "Also has messages from outside
+  these days - the whole chat is deleted."
+- **Days are the PC's own local time, and inclusive**: "1 to 15 September"
+  runs from midnight at the start of the 1st to the end of the 15th. A frame
+  may carry a time of day ("this morning": midnight to 11:59 am).
+- **At most 200 facts and chats together.** More: `too_many`, the counts
+  only, no list, and "Choose fewer days" - nothing can be forgotten from it.
+
+### 64.2 The routes
+
+`GET /api/memory/forget_range` - the status:
+`{"available": true, "waiting", "waiting_for", "undo": null | {"until",
+"seconds_left", "minutes_left", "facts", "chats", "frame", "said"}, "last":
+null | {"outcome", "message", "at"}, "asked": null | {"id", "from", "to",
+"said", "kinds"}, "max_items": 200, "undo_minutes": 10, "presets": [{"id",
+"label"}]}`. `asked` is a request said or typed in the last 30 minutes -
+the days the apps fill in.
+
+`GET /api/memory/forget_range/preview?preset=<id>&kinds=facts,chats` or
+`?from=2026-09-01&to=2026-09-15&kinds=...` (`from`/`to`: `YYYY-MM-DD`, or
+`YYYY-MM-DDTHH:MM`, inclusive). Presets: `today`, `yesterday`, `this_week`
+(Monday to today), `last_week` (the Monday-to-Sunday week before),
+`last_7_days`, `this_month`, `last_month`. `200 {"ok": true, "frame":
+{"from", "to", "said", "start", "end"}, "kinds", "facts": [{"id", "text",
+"saved", "label", "pinned", "between_us"}], "chats": [{"id", "title",
+"started", "updated", "turns", "in_frame", "spills", "label"}], "counts":
+{"facts"?, "chats"?}, "too_many", "empty", "said", "chats_why"}`.
+`chats_why`: the chats could not be read (the history key). `400` a date
+that is not one, a frame in the future, a kind that is not `facts` or
+`chats` - its sentence in `error`.
+
+`POST /api/memory/forget_range {"from", "to", "facts": [<int>], "chats":
+["<id>"]}` - the two dates exactly as the preview wrote them, and the ids
+still ticked. Every id is checked again: still in use (a fact) or still
+kept (a chat), and still from those days - anything else is `409
+{"changed": true}` ("The list changed since you read it ... Read the list
+again."), so nothing off the list the owner read can ride on the card.
+**202** `{"waiting": true, "counts"}` and ONE card. `400` nothing ticked,
+more than 200, a bad id or date. `409` a card already waiting, or an Undo
+still open (one Undo window at a time: "You can still undo the last time
+frame you forgot, for about N more minutes..."). `503` the tier is not
+`ask`, or the chats cannot be read.
+
+`POST /api/memory/forget_range/undo {}` - `200 {"ok": true, "restored":
+{"facts", "chats"}, "not_restored": {"facts", "chats"}, "message"}`; `409`
+nothing to undo.
+
+### 64.3 The card
+
+Action **`memory_forget_range`**, which must be tier `ask` in
+`jarvis-framework.toml` (shipped that way; a file without the line asks
+too) - anything else answers `503`, so a settings line can never become
+the owner's yes. What asks first cannot loosen it (`HARD_LIMITS`,
+`MUST_ASK`). The gate's risk line: `local`, and **not reversible** (after
+the 10 minutes the chats are gone for good) - so approving it is a risky
+approval: Windows Hello on the PC, the screen lock on the phone. Title:
+"Jarvis wants to forget what it learned and delete chats from the days you
+chose". Its text lists EVERY fact word for word and every chat's title,
+with their dates and the "whole chat is deleted" note, then: "For 10
+minutes after you approve, one tap on Undo puts everything back ...
+Nothing is removed unless you approve this card. Saying yes out loud does
+not approve it." A "no" is never turned into a proposed memory
+(`_NO_RULE_FROM_DENIAL`).
+
+### 64.4 Approved, and Undo
+
+- Each fact: `jarvis_memory.retire()`, the call Forget makes - so it gets
+  Forget's own "forgotten" mark (`meta.forgotten_at`): a question about the
+  past does not bring it back, and "a forgotten fact is not learned again
+  automatically" (on the audit branch as of 2026-09-28) applies to it too.
+- Each chat: taken out of the history file (secure_delete, as a single
+  delete is) and held **in memory only**, still sealed exactly as it was on
+  disk, for Undo. Nothing is written anywhere else.
+- **Undo**: one tap, **no card** (it only restores), never held on a stale
+  link. Each fact is un-forgotten only if it is still exactly as this
+  Forget left it (`jarvis_memory.unforget`): one erased in the meantime
+  stays erased, and the answer says so. A chat the owner went on with after
+  it was deleted is joined back together - the old messages first.
+- **The hold ends after 10 minutes or when the backend stops, whichever is
+  first** - it is never on disk, so a restart ends it by itself; a timer
+  drops it at 10 minutes. After that the chats are gone for good and the
+  facts stay forgotten, as after any Forget.
+
+### 64.5 By voice or typing
+
+`jarvis_quick.py` answers, without the model: "forget what you learned
+last week", "delete my chats from 1 to 15 September", "forget everything
+from yesterday", "forget what I said this morning", "forget what I told
+you on Tuesday", "delete my chats from the last 3 days", "... since
+Friday", "... between 30 August and 5 September". "What you learned" is
+facts, "my chats" chats, "what I said" or "everything" both. It **removes
+nothing**: it fills in `asked`, says how many facts and chats are on the
+list and where ("I've put the list in Brain, under Forget a time frame: 4
+facts and 2 chats from 21 to 27 September 2026. Check it, untick anything
+you want to keep, and tap Forget these, then Approve on the card. Nothing
+is removed until you do - saying yes out loud does not approve it."), and
+puts `open_brain: "forget-range"` in `X-Jarvis-Route`, so the app it was
+asked from opens that place. **A date it cannot be sure of is a question**,
+and opens nothing: "on Monday" said on a Monday, "3/9" (two ways to read
+it), "the 3rd" (which month?), "last night", 31 February, a month that has
+not happened yet this year. "Erase what I said ..." is told plainly that
+this forgets, and "Erase the words" is per fact. A spoken "yes" or
+"approve" matches nothing and approves nothing.
+
+### 64.6 What the apps must do
+
+- Show the list with **every item ticked**, the owner free to untick any;
+  send **only the ticked ids**, in one request. Never approve anything.
+- **"Forget these" waits for a live link** (rule 4) and, on the desktop, is
+  refused while the list's words are hidden (the owner must be able to
+  read what goes); **Undo is never held**.
+- **Hidden lists**: while "Hide memory lists and chat history" (phone) or
+  "Windows Hello for memory lists and chat history" (desktop) hides the
+  Brain's lists, or App lock has locked Jarvis, the list's words are
+  hidden - the counts and the days stay - until Show is confirmed. The
+  status (an open Undo) carries no words and stays.
+- The words are the contract's (`words`), in both apps.
