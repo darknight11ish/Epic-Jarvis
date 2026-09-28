@@ -8,7 +8,10 @@ import com.jarvis.client.face.CritterPose.beat
 import com.jarvis.client.face.CritterPose.blinkAt
 import com.jarvis.client.face.CritterPose.bump
 import com.jarvis.client.face.CritterPose.clamp
+import com.jarvis.client.face.CritterPose.ease
 import com.jarvis.client.face.CritterPose.envAHR
+import com.jarvis.client.face.CritterPose.eyesClose
+import com.jarvis.client.face.CritterPose.eyesOpen
 import com.jarvis.client.face.CritterPose.happening
 import com.jarvis.client.face.CritterPose.invRow
 import com.jarvis.client.face.CritterPose.looks
@@ -19,6 +22,7 @@ import com.jarvis.client.face.CritterPose.ry
 import com.jarvis.client.face.CritterPose.rz
 import com.jarvis.client.face.CritterPose.shift
 import com.jarvis.client.face.CritterPose.smooth
+import com.jarvis.client.face.CritterPose.toward
 import com.jarvis.client.face.CritterPose.wave
 import kotlin.math.PI
 import kotlin.math.cos
@@ -266,8 +270,9 @@ object OwlPose {
                     val s = if (ev[0] == 3f) -1f else 1f
                     p[HEAD_ROLL] += hap * s * 0.25f * envAHR(x, 0.5f, 1.6f, 0.9f)
                 } else if (ev[0] == 5f) {
-                    // A long slow blink (a blink, so the options leave it be).
-                    eyeK = 1f - 0.85f * envAHR(x, 0.45f, 0.35f, 0.6f)
+                    // A long slow blink (a blink, so the options leave it be -
+                    // all but waking up's quiet, which has blinks of its own).
+                    eyeK = 1f - 0.85f * envAHR(x, 0.45f, 0.35f, 0.6f) * (1f - o.quiet)
                 }
                 turnBlink = g[4]
             }
@@ -287,15 +292,45 @@ object OwlPose {
             p[HEAD_PITCH] += o.head * 0.25f * ly * w
         }
 
-        val k = eyeK * (1f - max(if (blinks) blinkAt(t, S_BLINK, blinkSlow, 3f, 12f) else 0f, turnBlink))
+        val q = 1f - o.quiet
+        val k = eyeK * (1f - q * max(if (blinks) blinkAt(t, S_BLINK, blinkSlow, 3f, 12f) else 0f, turnBlink))
         p[EYE_L] *= k
         p[EYE_R] *= k
         return p
     }
 
+    /** The owl's waking up and nodding off - the desktop's wakeSleep in critter-owl.js, and its notes. */
+    private fun wakeSleep(p: FloatArray, state: FaceState, x: Float, k: Float, ex: Float, t: Float, f: FloatArray?) {
+        val e = ex * k
+        if (state == FaceState.STANDBY && f != null) {
+            // Nodding off: eyes half close, one last slow blink, then it fluffs
+            // up round (a touch past, and settles) and tucks its head in.
+            val lids = (1f - 0.5f * ease(x / 0.7f) - 0.5f * ease((x - 1.6f) / 0.7f)) * (1f - bump((x - 0.85f) / 0.65f))
+            val lid = k * toward(eyesClose(x), lids, ex)
+            p[EYE_L] = f[EYE_L] * lid; p[EYE_R] = f[EYE_R] * lid
+            val head = e * (1f - ease((x - 1.6f) / 1.2f))
+            p[NECK_DROP] = toward(p[NECK_DROP], f[NECK_DROP], head)
+            p[HEAD_PITCH] = toward(p[HEAD_PITCH], f[HEAD_PITCH], head)
+            p[HEAD_ROLL] = toward(p[HEAD_ROLL], f[HEAD_ROLL], head)
+            p[FLUFF] = toward(p[FLUFF], f[FLUFF], e * (1f - ease((x - 1.4f) / 0.7f))) + 0.03f * e * bump((x - 1.7f) / 1.0f)
+            return
+        }
+        // Waking: one eye opens, then the other; a quick ruffle with a small
+        // shiver; its head draws up a little and settles with a small shake.
+        val both = eyesOpen(x)
+        val l = toward(both, 0.6f * ease((x - 0.15f) / 0.35f) + 0.4f * ease((x - 0.75f) / 0.3f), ex)
+        val r = toward(both, ease((x - 0.55f) / 0.4f), ex)
+        val fl = e * envAHR(x - 0.9f, 0.3f, 0.35f, 0.55f)
+        p[EYE_L] *= (1f - k * (1f - l)) * (1f - 0.25f * fl)
+        p[EYE_R] *= (1f - k * (1f - r)) * (1f - 0.25f * fl)
+        p[FLUFF] += 0.06f * fl + 0.012f * e * wave(t, 2048f, 0f) * bump((x - 0.95f) / 0.9f)
+        p[NECK_DROP] -= 0.015f * e * bump((x - 0.2f) / 1.3f)
+        p[HEAD_ROLL] += 0.04f * e * (bump((x - 1.25f) / 0.45f) - bump((x - 1.6f) / 0.45f))
+    }
+
     // The orb floats: it drifts to a new place more slowly than anything else,
     // and sideways faster than up and down (the desktop's note).
-    private val HALF = CritterPose.halfLives(
+    internal val HALF = CritterPose.halfLives(
         N,
         intArrayOf(EYE_L, EYE_R, LOOK_X, LOOK_Y), intArrayOf(SPEAK), intArrayOf(HEAD_YAW, HEAD_PITCH, HEAD_ROLL, NECK_DROP, BROW),
         intArrayOf(), intArrayOf(WING_L, WING_R, FLUFF),
@@ -317,7 +352,7 @@ object OwlPose {
         look: Look = Look(),
         hist: CritterPose.Hist = CritterPose.Hist(),
         opts: Opts = Opts(),
-    ): FloatArray = CritterPose.blend(::stateTargets, HALF, state, prevState, since, t, amp, look, hist, opts)
+    ): FloatArray = CritterPose.blend(::stateTargets, HALF, state, prevState, since, t, amp, look, hist, opts, ::wakeSleep, ASLEEP)
 
     private const val SEAT_Y = -0.93f
 

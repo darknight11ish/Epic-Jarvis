@@ -54,6 +54,14 @@ number as the last part - `0.2.57` is a build of 0.2.
   hand - small z's float up from beside its head, two or three at a time,
   on both apps. Not when Jarvis simply cannot be reached: then it is the
   hollow ring alone. With reduced (calm) motion, one still z instead.
+- **The animals wake up and nod off**, on both apps. Leaving standby, each
+  plays a short, calm wake-up (about two seconds): the panda opens its eyes
+  with a slow double blink, stretches and perks its ears; the owl opens one
+  eye, then the other, and ruffles its feathers; the otter rubs its eyes
+  and stretches in the water. Going to standby, each nods off (about three
+  seconds) before the Zs rise. The mouth never moves (no yawn); waking into
+  an approval or an error, and with calm, serious or "Keep the animal
+  still" on, only the eyes open or close. See `docs/CRITTERS.md`.
 - **"Keep the animal still"**, off to start: the animal only breathes and
   blinks - no looking around, gestures or idle happenings. On the PC in
   Settings -> Appearance -> "Face on this computer"; on the phone in

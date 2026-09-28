@@ -17,7 +17,7 @@
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
           wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
-          overlayAt } = C.util;
+          overlayAt, ease, toward, eyesOpen, eyesClose, TAU } = C.util;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "bob", "rock", "tilt", "breath",
@@ -256,15 +256,64 @@
       P.orbY += (PEBBLE_DOWN - P.orbY) * wash;
     }
 
-    const k = eyeK * (1 - Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 2, 10) : 0, turnBlink));
+    const q = 1 - o.quiet;
+    const k = eyeK * (1 - q * Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 2, 10) : 0, turnBlink));
     P.eyeL *= k; P.eyeR *= k;
     return P;
+  }
+
+  /** A small stretch in the water, `s` 0..1: paws up and apart, chin up, toes out. */
+  function stretch(P, s) {
+    P.pawLy += 0.06 * s; P.pawRy += 0.06 * s; P.pawLz -= 0.06 * s; P.pawRz += 0.06 * s;
+    P.headPitch += 0.10 * s; P.tilt += 0.04 * s; P.paddle += 0.5 * s;
+  }
+  /**
+   * The otter's waking up and nodding off - see critter-pose.js's "Waking
+   * up and falling asleep" and the panda's wakeSleep for what x, k, E and F
+   * are.
+   */
+  function wakeSleep(P, state, x, k, E, t, F) {
+    const e = E * k;
+    if (state === "standby") {
+      // Nodding off: a slow stretch in the water, then its paws come up
+      // over its eyes (leaving the pebble on its chest) and it settles.
+      const s = e * envAHR(x - 0.15, 0.5, 0.25, 0.5);
+      const lids = (1 - 0.35 * ease((x - 0.2) / 0.8)) * (1 - 0.5 * E * envAHR(x - 0.15, 0.5, 0.25, 0.5))
+        * (1 - ease((x - 1.4) / 0.8));
+      const lid = k * toward(eyesClose(x), lids, E);
+      P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
+      // Its paws (and the pebble in them) stay where they were until 1.2 s,
+      // then take 1.2 s to come up over its eyes; the stretch is over by 1.4 s.
+      const hold = e * (1 - ease((x - 1.2) / 1.2));
+      P.pawLx = toward(P.pawLx, F.pawLx, hold); P.pawLy = toward(P.pawLy, F.pawLy, hold); P.pawLz = toward(P.pawLz, F.pawLz, hold);
+      P.pawRx = toward(P.pawRx, F.pawRx, hold); P.pawRy = toward(P.pawRy, F.pawRy, hold); P.pawRz = toward(P.pawRz, F.pawRz, hold);
+      P.orbX = toward(P.orbX, F.orbX, hold); P.orbY = toward(P.orbY, F.orbY, hold);
+      stretch(P, s);
+      return;
+    }
+    // Waking: its paws stay over its eyes a moment, rub them (twice each,
+    // lowered a little so the eyes show, squinting open), come away into a
+    // small stretch, and go back to the pebble, picking it up.
+    const s = e * envAHR(x - 1.0, 0.4, 0.3, 0.4);
+    stretch(P, s);
+    const face = e * (1 - ease((x - 1.0) / 1.0));
+    if (face > 0) {
+      const rub = envAHR(x - 0.3, 0.2, 0.45, 0.2), ph = TAU * 2 * (x - 0.3);
+      const L = onHead(P, [-0.10, 0.05 - 0.05 * rub + 0.025 * rub * Math.sin(ph), -0.25]);
+      const R = onHead(P, [0.10, 0.05 - 0.05 * rub - 0.025 * rub * Math.sin(ph), -0.25]);
+      P.pawLx = toward(P.pawLx, L[0], face); P.pawLy = toward(P.pawLy, L[1], face); P.pawLz = toward(P.pawLz, L[2], face);
+      P.pawRx = toward(P.pawRx, R[0], face); P.pawRy = toward(P.pawRy, R[1], face); P.pawRz = toward(P.pawRz, R[2], face);
+    }
+    P.orbY = toward(P.orbY, PEBBLE_DOWN, e * (1 - ease((x - 1.6) / 0.6)));
+    const lids = 0.4 * ease((x - 0.45) / 0.4) + 0.6 * ease((x - 1.05) / 0.45);
+    const f = 1 - k * (1 - toward(eyesOpen(x), lids, E));
+    P.eyeL *= f; P.eyeR *= f;
   }
 
   const HALF = halfLives(
     ["eyeL", "eyeR", "lookX", "lookY"], ["speak"], ["headYaw", "headPitch", "headRoll"],
     ["pawLx", "pawLy", "pawLz", "pawRx", "pawRy", "pawRz", "orbX", "orbY", "orbZ"], ["paddle"]);
-  const pose = makePose(stateTargets, KEYS, HALF);
+  const pose = makePose(stateTargets, KEYS, HALF, wakeSleep);
 
   const WATER_Y = -0.42;
 

@@ -659,4 +659,198 @@ class CritterPoseTest {
         val b = CritterPose.zs(9f, floatArrayOf(1f, 0.4f, 0.6f), 1f)
         for (j in 0 until 5) assertEquals(a[j], b[j], 0f)
     }
+
+    // --- waking up and nodding off (the owner, 2026-09-28) ----------------
+
+    private class Sleeper(
+        val id: String,
+        val pose: (FaceState, FaceState, Float, Float, Float, CritterPose.Look, CritterPose.Hist, CritterPose.Opts) -> FloatArray,
+        /** The same settling with no wake-up or nodding-off piece: what it was before. */
+        val plain: (FaceState, FaceState, Float, Float, Float, CritterPose.Hist, CritterPose.Opts) -> FloatArray,
+        val uniforms: (FloatArray, FloatArray?) -> Map<String, FloatArray>,
+        val overlay: (FloatArray, Float, Float, Float) -> FloatArray,
+    )
+    private val sleepers = listOf(
+        Sleeper("redpanda", CritterPose::pose, { s, p, since, t, amp, h, o ->
+            CritterPose.blend(CritterPose::stateTargets, CritterPose.HALF, s, p, since, t, amp, CritterPose.Look(), h, o)
+        }, CritterPose::uniforms, CritterPose::overlay),
+        Sleeper("pygmyowl", OwlPose::pose, { s, p, since, t, amp, h, o ->
+            CritterPose.blend(OwlPose::stateTargets, OwlPose.HALF, s, p, since, t, amp, CritterPose.Look(), h, o)
+        }, OwlPose::uniforms, OwlPose::overlay),
+        Sleeper("seaotter", OtterPose::pose, { s, p, since, t, amp, h, o ->
+            CritterPose.blend(OtterPose::stateTargets, OtterPose.HALF, s, p, since, t, amp, CritterPose.Look(), h, o)
+        }, OtterPose::uniforms, OtterPose::overlay),
+    )
+    // Asleep for 9 s (awake for 20 before that), and awake for 20 s.
+    private val asleep9 = CritterPose.Hist(past = listOf(
+        CritterPose.Change(FaceState.STANDBY, 9f, 0f), CritterPose.Change(FaceState.IDLE, 20f, 0f)))
+    private val awake20 = CritterPose.Hist(past = listOf(
+        CritterPose.Change(FaceState.IDLE, 20f, 0f), CritterPose.Change(FaceState.STANDBY, 9f, 0f)))
+    private fun ampOf(s: FaceState) = when (s) {
+        FaceState.SPEAKING -> 0.4f
+        FaceState.LISTENING, FaceState.APPROVAL -> 0.28f
+        else -> 0f
+    }
+    /** The biggest difference between two poses' uniforms, leaving out the eyelids (and, if asked, the pupils). */
+    private fun bodyGap(a: Map<String, FloatArray>, b: Map<String, FloatArray>): Float {
+        var worst = 0f
+        for ((name, v) in a) for (i in v.indices) {
+            if (name == "uFace" && i < 2) continue
+            worst = maxOf(worst, abs(v[i] - b.getValue(name)[i]))
+        }
+        return worst
+    }
+
+    @Test
+    fun `waking up plays, and is over by 2_2 seconds`() {
+        for (a in sleepers) {
+            val woke = { x: Float -> a.uniforms(a.pose(FaceState.IDLE, FaceState.STANDBY, x, 120f + x, 0f, CritterPose.Look(), asleep9, opts()), null) }
+            val was = { x: Float -> a.uniforms(a.plain(FaceState.IDLE, FaceState.STANDBY, x, 120f + x, 0f, asleep9, opts()), null) }
+            // It plays: somewhere in its two seconds the body does something the
+            // plain settling did not (a stretch, a ruffle, an eye rub).
+            val most = (1..40).maxOf { f -> bodyGap(woke(f * 0.05f), was(f * 0.05f)) }
+            assertTrue("${a.id}: the wake-up did nothing (${most})", most > 0.02f)
+            // And the eyes open more slowly than they used to (in 0.1 s, before).
+            val eyes = woke(0.3f).getValue("uFace")[0]
+            assertTrue("${a.id}: eyes already ${eyes} open 0.3 s in", eyes < 0.6f)
+            // It is over by 2.2 s: from then on, what the plain settling was.
+            for (f in 0..20) {
+                val x = 2.25f + f * 0.1f
+                val gap = bodyGap(woke(x), was(x))
+                assertTrue("${a.id}: still ${gap} from the plain pose ${x} s after waking", gap < 0.01f)
+            }
+        }
+    }
+
+    @Test
+    fun `nodding off plays, and the Zs wait until it is asleep`() {
+        for (a in sleepers) {
+            val nod = { x: Float -> a.pose(FaceState.STANDBY, FaceState.IDLE, x, 140f + x, 0f, CritterPose.Look(), awake20, opts()) }
+            val was = { x: Float -> a.uniforms(a.plain(FaceState.STANDBY, FaceState.IDLE, x, 140f + x, 0f, awake20, opts()), null) }
+            val most = (1..58).maxOf { f -> bodyGap(a.uniforms(nod(f * 0.05f), null), was(f * 0.05f)) }
+            assertTrue("${a.id}: nodding off did nothing (${most})", most > 0.02f)
+            // No Zs for the first two seconds; all of them once it is asleep.
+            for (f in 0..19) {
+                val z = a.overlay(nod(f * 0.1f), 0f, 0f, 1f)[0]
+                assertEquals("${a.id}: Zs at ${f * 0.1f} s into nodding off", 0f, z, 1e-6f)
+            }
+            assertEquals("${a.id}: asleep at 3 s", 1f, a.overlay(nod(3.0f), 0f, 0f, 1f)[0], 1e-6f)
+            // Waking, they fade out within the first second.
+            val gone = a.overlay(a.pose(FaceState.IDLE, FaceState.STANDBY, 1.0f, 121f, 0f, CritterPose.Look(), asleep9, opts()), 0f, 0f, 1f)[0]
+            assertEquals("${a.id}: Zs a second after waking", 0f, gone, 1e-6f)
+            // Eyes shut by the end, heavy (not yet shut) half a second in.
+            val half = a.uniforms(nod(0.4f), null).getValue("uFace")[0]
+            assertTrue("${a.id}: eyes ${half} 0.4 s into nodding off", half in 0.3f..1.0f)
+            assertEquals("${a.id}: eyes open at 3 s", 0f, a.uniforms(nod(3.0f), null).getValue("uFace")[0], 1e-6f)
+        }
+    }
+
+    @Test
+    fun `waking into waiting on you or an error, only the eyes open`() {
+        for (a in sleepers) for (s in listOf(FaceState.APPROVAL, FaceState.ERROR, FaceState.BANKED)) {
+            for (f in 0..50) {
+                val x = f * 0.05f
+                val got = a.uniforms(a.pose(s, FaceState.STANDBY, x, 160f + x, ampOf(s), CritterPose.Look(), asleep9, opts()), null)
+                val was = a.uniforms(a.plain(s, FaceState.STANDBY, x, 160f + x, ampOf(s), asleep9, opts()), null)
+                val gap = bodyGap(got, was)
+                assertTrue("${a.id} $s: the body moved ${gap} more than it used to, ${x} s after waking", gap < 1e-4f)
+            }
+        }
+    }
+
+    @Test
+    fun `calm, serious and still keep only the eyes, both ways`() {
+        for (a in sleepers) for (o in listOf(opts(calm = 1f), opts(serious = 1f), opts(still = 1f))) {
+            for ((s, p, h) in listOf(Triple(FaceState.IDLE, FaceState.STANDBY, asleep9), Triple(FaceState.STANDBY, FaceState.IDLE, awake20))) {
+                for (f in 0..64) {
+                    val x = f * 0.05f
+                    val got = a.uniforms(a.pose(s, p, x, 190f + x, 0f, CritterPose.Look(), h, o), null)
+                    val was = a.uniforms(a.plain(s, p, x, 190f + x, 0f, h, o), null)
+                    val gap = bodyGap(got, was)
+                    assertTrue("${a.id} $s from $p $o: the body moved ${gap} more than it used to at ${x} s", gap < 1e-4f)
+                }
+            }
+        }
+    }
+
+    /**
+     * Steps a plan ([seconds, state] pairs) at 240 frames a second the way the
+     * apps do - a list of past changes, newest first - and returns the worst
+     * change of speed from one frame to the next over every gliding number
+     * (units a second), failing on anything that is not a number.
+     */
+    private fun worstSpeedStep(a: Sleeper, plan: List<Pair<Float, FaceState>>, o: CritterPose.Opts = opts()): Float {
+        val fps = 240f
+        val dt = 1f / fps
+        var past = listOf<CritterPose.Change>()
+        var st = plan[0].second
+        var at = -1e6f
+        val frames = ArrayList<Map<String, FloatArray>>()
+        var start = 0f
+        var worst = 0f
+        for ((secs, state) in plan) {
+            val n = (secs * fps).toInt()
+            for (k in 0 until n) {
+                val now = start + k * dt
+                if (state != st) {
+                    past = (listOf(CritterPose.Change(st, now - at, ampOf(st))) + past).take(6)
+                    st = state; at = now
+                }
+                val prev = past.firstOrNull()?.state ?: st
+                val u = a.uniforms(a.pose(st, prev, now - at, 300f + now, ampOf(st), CritterPose.Look(), CritterPose.Hist(past = past), o), null)
+                for ((name, v) in u) for (i in v.indices) {
+                    assertTrue("${a.id}: $name[$i] is not a number at $now s", v[i].isFinite())
+                }
+                frames.add(u)
+                if (frames.size >= 3) {
+                    val (p2, p1, p0) = Triple(frames[frames.size - 3], frames[frames.size - 2], u)
+                    for ((name, v) in p0) for (i in v.indices) {
+                        if (!glides(name, i)) continue
+                        val dv = abs((v[i] - p1.getValue(name)[i]) - (p1.getValue(name)[i] - p2.getValue(name)[i])) / dt
+                        worst = maxOf(worst, dv)
+                    }
+                    frames.removeAt(0)
+                }
+            }
+            start += n * dt
+        }
+        return worst
+    }
+
+    @Test
+    fun `waking up and nodding off never change speed suddenly`() {
+        // At 240 frames a second a sudden change of speed shows up whole
+        // (a step of 0.3 a second stays 0.3), while a smooth one shrinks
+        // with the frame. Before this was right, the end of each piece
+        // stepped by about 3.
+        val plans = listOf(
+            listOf(3f to FaceState.IDLE, 4f to FaceState.STANDBY, 3f to FaceState.IDLE),
+            listOf(3f to FaceState.IDLE, 0.3f to FaceState.STANDBY, 3f to FaceState.IDLE),
+            listOf(4f to FaceState.STANDBY, 0.3f to FaceState.IDLE, 3.5f to FaceState.STANDBY),
+            listOf(4f to FaceState.STANDBY, 0.6f to FaceState.LISTENING, 0.8f to FaceState.THINKING, 2.5f to FaceState.SPEAKING),
+            listOf(4f to FaceState.STANDBY, 3f to FaceState.APPROVAL),
+        )
+        for (a in sleepers) for (plan in plans) {
+            val w = worstSpeedStep(a, plan)
+            assertTrue("${a.id}: speed changed by $w a second in one frame (${plan.map { it.second }})", w < 0.25f)
+        }
+        for (a in sleepers) {
+            val w = worstSpeedStep(a, plans[0], opts(calm = 1f))
+            assertTrue("${a.id} calm: speed changed by $w a second in one frame", w < 0.25f)
+        }
+    }
+
+    @Test
+    fun `woken by a question, the mouth follows the voice and nothing else`() {
+        // Speaking straight after waking: the mouth is exactly the voice's
+        // shape times how much it is speaking, as ever - the wake-up never
+        // touches it - and its talking gestures wait until it is over.
+        val voice = floatArrayOf(0.7f, 0.3f, 0.2f)
+        for (a in sleepers) for (f in 0..40) {
+            val x = f * 0.05f
+            val got = a.uniforms(a.pose(FaceState.SPEAKING, FaceState.STANDBY, x, 170f + x, 0.4f, CritterPose.Look(), asleep9, opts()), voice)
+            val was = a.uniforms(a.plain(FaceState.SPEAKING, FaceState.STANDBY, x, 170f + x, 0.4f, asleep9, opts()), voice)
+            for (i in 0 until 3) assertEquals("${a.id}: mouth[$i] at $x s", was.getValue("uMouth")[i], got.getValue("uMouth")[i], 1e-6f)
+        }
+    }
 }

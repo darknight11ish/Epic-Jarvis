@@ -197,6 +197,44 @@ def golden_cases(species):
                           "amp": 0.0, "look": {}, "hist": {"prevAmp": 0.0}})
         cases.append({"species": sp, "state": "approval", "prev": "banked", "since": 0.1, "t": 80.1,
                       "amp": 0.28, "look": {}, "hist": {"prevAmp": 0.0}})
+        # The wake-up (about 2 s) and the nodding off (about 3 s), each played
+        # from end to end, with the host's list of past changes: an animal
+        # asleep for 9 s waking into idle, and one awake for 20 s nodding off.
+        asleep9 = [{"state": "standby", "gap": 9.0, "amp": 0.0}, {"state": "idle", "gap": 20.0, "amp": 0.0}]
+        awake20 = [{"state": "idle", "gap": 20.0, "amp": 0.0}, {"state": "standby", "gap": 9.0, "amp": 0.0}]
+        for x in (0.05, 0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.3):
+            cases.append({"species": sp, "state": "idle", "prev": "standby", "since": x, "t": 120.0 + x,
+                          "amp": 0.0, "look": {}, "hist": {"past": asleep9}})
+        for x in (0.1, 0.5, 0.9, 1.3, 1.7, 2.1, 2.5, 2.9, 3.2):
+            cases.append({"species": sp, "state": "standby", "prev": "idle", "since": x, "t": 140.0 + x,
+                          "amp": 0.0, "look": {}, "hist": {"past": awake20}})
+        # Waking straight into waiting on you (only the eyes open), into
+        # speaking (the mouth untouched, the gestures waiting), and into
+        # listening then thinking (the wake-up carries on across both).
+        for x in (0.3, 0.9, 1.6):
+            cases.append({"species": sp, "state": "approval", "prev": "standby", "since": x, "t": 160.0 + x,
+                          "amp": 0.28, "look": {}, "hist": {"past": asleep9}})
+            cases.append({"species": sp, "state": "speaking", "prev": "standby", "since": x, "t": 170.0 + x,
+                          "amp": 0.4, "look": {}, "hist": {"past": asleep9},
+                          "mouth": {"open": 0.7, "wide": 0.3, "round": 0.2}})
+        cases.append({"species": sp, "state": "thinking", "prev": "listening", "since": 0.4, "t": 181.4,
+                      "amp": 0.0, "look": {}, "hist": {"past": [{"state": "listening", "gap": 0.7, "amp": 0.3}] + asleep9}})
+        # Calm, serious and still: only the eyes open, or close.
+        for opts in ({"calm": 1}, {"serious": 1}, {"still": 1}, {"calm": 0.5}):
+            for x in (0.5, 1.2):
+                cases.append({"species": sp, "state": "idle", "prev": "standby", "since": x, "t": 190.0 + x,
+                              "amp": 0.0, "look": {}, "hist": {"past": asleep9}, "opts": opts})
+            cases.append({"species": sp, "state": "standby", "prev": "idle", "since": 1.6, "t": 195.6,
+                          "amp": 0.0, "look": {}, "hist": {"past": awake20}, "opts": opts})
+        # Quick flips: asleep a third of a second and awake again, and the
+        # other way round (each carries on from how far the one before got);
+        # and the older, shorter form of the history a host may pass.
+        cases.append({"species": sp, "state": "idle", "prev": "standby", "since": 0.25, "t": 200.25, "amp": 0.0,
+                      "look": {}, "hist": {"past": [{"state": "standby", "gap": 0.3, "amp": 0.0}] + awake20[:1]}})
+        cases.append({"species": sp, "state": "standby", "prev": "idle", "since": 0.4, "t": 210.4, "amp": 0.0,
+                      "look": {}, "hist": {"past": [{"state": "idle", "gap": 0.3, "amp": 0.0}] + asleep9[:1]}})
+        cases.append({"species": sp, "state": "listening", "prev": "standby", "since": 0.7, "t": 220.7,
+                      "amp": 0.3, "look": {}, "hist": {"prevAmp": 0.0, "gap": 6.0}})
         # Three changes inside a second: each still settling when the next came
         # (the host's list of past changes, newest first).
         for since in (0.05, 0.3):

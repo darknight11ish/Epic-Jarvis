@@ -18,7 +18,7 @@
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
           wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
-          overlayAt } = C.util;
+          overlayAt, ease, toward, eyesOpen, eyesClose } = C.util;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "neckDrop", "bob", "breath", "fluff",
@@ -262,8 +262,9 @@
         const s = ev[0] === 3 ? -1 : 1;
         P.headRoll += hap * s * 0.25 * envAHR(x, 0.5, 1.6, 0.9);
       } else if (ev[0] === 5) {
-        // A long slow blink (a blink, so the options leave it be).
-        eyeK = 1 - 0.85 * envAHR(x, 0.45, 0.35, 0.6);
+        // A long slow blink (a blink, so the options leave it be - all but
+        // waking up's quiet, which has blinks of its own).
+        eyeK = 1 - 0.85 * envAHR(x, 0.45, 0.35, 0.6) * (1 - o.quiet);
       }
       turnBlink = g[4];
     }
@@ -284,9 +285,43 @@
     }
 
     // Owls blink slowly, and on their own clock (their own salt).
-    const k = eyeK * (1 - Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 3, 12) : 0, turnBlink));
+    const q = 1 - o.quiet;
+    const k = eyeK * (1 - q * Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 3, 12) : 0, turnBlink));
     P.eyeL *= k; P.eyeR *= k;
     return P;
+  }
+
+  /**
+   * The owl's waking up and nodding off - see critter-pose.js's "Waking up
+   * and falling asleep" and the panda's wakeSleep for what x, k, E and F are.
+   */
+  function wakeSleep(P, state, x, k, E, t, F) {
+    const e = E * k;
+    if (state === "standby") {
+      // Nodding off: its eyes half close, one last slow blink, then it
+      // fluffs up round (a touch past, and settles) and tucks its head in.
+      const lids = (1 - 0.5 * ease(x / 0.7) - 0.5 * ease((x - 1.6) / 0.7)) * (1 - bump((x - 0.85) / 0.65));
+      const lid = k * toward(eyesClose(x), lids, E);
+      P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
+      const head = e * (1 - ease((x - 1.6) / 1.2));
+      P.neckDrop = toward(P.neckDrop, F.neckDrop, head);
+      P.headPitch = toward(P.headPitch, F.headPitch, head);
+      P.headRoll = toward(P.headRoll, F.headRoll, head);
+      P.fluff = toward(P.fluff, F.fluff, e * (1 - ease((x - 1.4) / 0.7))) + 0.03 * e * bump((x - 1.7) / 1.0);
+      return;
+    }
+    // Waking: one eye opens, then the other; a quick ruffle of its feathers
+    // with a small shiver (the idle ruffle's, shorter); its head draws up a
+    // little and settles with a small shake.
+    const both = eyesOpen(x);
+    const l = toward(both, 0.6 * ease((x - 0.15) / 0.35) + 0.4 * ease((x - 0.75) / 0.3), E);
+    const r = toward(both, ease((x - 0.55) / 0.4), E);
+    const fl = e * envAHR(x - 0.9, 0.3, 0.35, 0.55);
+    P.eyeL *= (1 - k * (1 - l)) * (1 - 0.25 * fl);
+    P.eyeR *= (1 - k * (1 - r)) * (1 - 0.25 * fl);
+    P.fluff += 0.06 * fl + 0.012 * e * wave(t, 2048, 0) * bump((x - 0.95) / 0.9);
+    P.neckDrop -= 0.015 * e * bump((x - 0.2) / 1.3);
+    P.headRoll += 0.04 * e * (bump((x - 1.25) / 0.45) - bump((x - 1.6) / 0.45));
   }
 
   // The orb floats: it drifts to a new place more slowly than anything else
@@ -296,7 +331,7 @@
   const HALF = Object.assign(halfLives(
     ["eyeL", "eyeR", "lookX", "lookY"], ["speak"], ["headYaw", "headPitch", "headRoll", "neckDrop", "brow"],
     [], ["wingL", "wingR", "fluff"]), { orbA: [0.16, 0, ORB_CUT, 1], orbY: [0.55, 0, null, 1], orbD: [0.16, 0, null, 1] });
-  const settle = makePose(stateTargets, KEYS, HALF);
+  const settle = makePose(stateTargets, KEYS, HALF, wakeSleep);
   /**
    * The pose, with the orb's place also given across and in depth (orbX,
    * orbZ, body frame) for a drawing that reads it that way - the flat

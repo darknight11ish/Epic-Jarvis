@@ -96,9 +96,10 @@ nothing jumps or suddenly changes speed. A change arriving mid-settle
 carries on from the half-finished pose - even a quick change back
 (speaking, something else, speaking again), and three or four changes in a
 row: each app hands the pose its list of recent changes (up to six), and
-the pose works back through them. Falling asleep is slower on purpose - the
-head droops over about two seconds - and waking takes about one; dozing
-off and rousing from a doze take about twice the usual time.
+the pose works back through them. Falling asleep and waking are not a plain
+settle: each animal plays a short piece of its own (see "Waking up and
+nodding off" below); dozing off and rousing from a doze take about twice
+the usual time.
 
 ### How they move
 
@@ -139,6 +140,46 @@ on a desk, not a busy mascot. What they do, and the limits they keep to:
   the head round.
 - **Asleep** only the breathing moves (and a rare sigh); **dozing**, the
   head sinks slowly and catches itself now and then.
+- **Waking up and nodding off** (the owner, 2026-09-28). When Jarvis
+  leaves standby - by the schedule, by hand, or when the link comes back
+  after "not connected", which shows standby too - the animal wakes up in
+  about two seconds; when it goes to standby it nods off in about three.
+  Calm, never busy, and **the mouth never moves** (it follows Jarvis's real
+  voice and nothing else, so no yawn):
+
+  | | Waking up (about 2 s) | Nodding off (about 3 s) |
+  |---|---|---|
+  | Red panda | Its eyes open with a slow double blink; its head lifts a little past and settles; a small stretch (leans back, paws up and out, chin up, a deeper breath); its ears perk with a flick. | Heavy eyes and a slow blink; its head nods as it drifts, it catches itself (eyes open a little, ears up), another heavy blink - then its head goes down and its tail curls round. |
+  | Pygmy owl | One eye opens, then the other; a quick ruffle of its feathers with a small shiver; its head draws up a little and settles with a small shake. | Its eyes half close, one last slow blink, then it fluffs up round (a touch past, and settles) and tucks its head in. |
+  | Sea otter | Its paws stay over its eyes a moment and rub them; then they come away into a small stretch in the water (paws up and apart, chin up, toes out) and go back to the pebble, picking it up. | A slow stretch in the water, then its paws come up over its eyes, leaving the pebble on its chest, and it settles. |
+
+  - **Waking straight into "waiting on you", "something went wrong" or a
+    doze**, only the eyes open, gently - no stretch, rub or ruffle - so
+    those looks stay attentive and still.
+  - **Calm, serious and still:** only the eyes open, or close, slowly.
+    (Each is a weight, so part way on gives part of the piece.)
+  - **Nothing doubles up.** While it wakes, its idle happenings, talking
+    gestures and ordinary blinks wait, then come back over the last
+    moments. Woken by a question and answering straight away, it plays the
+    whole wake-up while it speaks: the mouth follows the voice as always,
+    only the gestures wait.
+  - **A quick flip never snaps.** Asleep for a moment and awake again (or
+    the other way round): each piece is scaled by how far the one before it
+    had got, and carries on from what was on screen. Woken into listening
+    and then thinking, the wake-up carries on across both changes rather
+    than starting again.
+  - **The Zs** fade out in the first 0.3 to 0.7 seconds of waking, and
+    only rise once it is asleep - from about two seconds into nodding off,
+    all of them by three - not the moment standby starts.
+  - Both apps play the same piece: it is part of the pose code
+    (`wakeSleep` in each animal's `critter-*.js`, the same in
+    `CritterPose.kt`, `OwlPose.kt` and `OtterPose.kt`), a pure function of
+    the state, the list of past changes and the clock, held equal by the
+    fixture like everything else. Measured at 240 frames a second: no
+    sudden change of speed where either piece starts or ends; the head
+    turns at most about 35 to 50 degrees a second (as it did before); the
+    otter's paws are the fastest thing, about half the picture's width a
+    second as they leave its face.
 - **Serious moments stay serious** (the owner's call, 2026-09-28).
   **Waiting on you** can be a risky decision - an email about to be sent -
   so there is no wave and nothing cute: an attentive look straight at you,
@@ -223,8 +264,9 @@ Each animal's pose code says where the Zs rise from and how much:
 - phone: `CritterPose.overlay(p, yaw, pitch, zoom)`, `OwlPose.overlay(...)`,
   `OtterPose.overlay(...)` return `[asleep, x, y]`.
 
-`asleep` goes from 0 to 1 as it nods off (over a couple of seconds) and back
-as it wakes: fade the Zs with it. `x` and `y` are a point a little above and
+`asleep` stays 0 for the first two seconds of nodding off and reaches 1 by
+three (the Zs only rise once it is asleep), and falls back to 0 within
+about 0.7 seconds of waking: fade the Zs with it. `x` and `y` are a point a little above and
 to one side of the head (the otter's: above its head, toward the picture's
 left), carried with the head and the breathing, in the shader's own screen
 units: 0 at the middle of the picture, 1 at its edge, y UP. To pixels: on
@@ -250,7 +292,10 @@ rare and apart and never the same kind twice running, a look is held at
 least 0.6 seconds, the otter's speaking and waiting look different, calm
 turns the head less, serious has no tilt, still keeps the head still and
 the eyes on you, switching an option eases, three changes inside a second
-carry on smoothly, and the Zs show only asleep.
+carry on smoothly, the Zs show only asleep, and the wake-up and the nodding
+off play, end on time, keep to the eyes when they should (waiting on you,
+something wrong, a doze; calm, serious, still), leave the mouth alone, and
+never change speed suddenly (stepped at 240 frames a second).
 
 **The voice's loudness does not move the body.** It rises and falls with
 every syllable, about four times a second, and a head that followed it

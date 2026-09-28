@@ -414,11 +414,17 @@
    *    on you with only tiny darts; blinking and breathing stay.
    *
    * None of them touches the mouth: it follows the voice whatever is set.
+   *
+   * A fourth weight, `quiet`, is never set by a host: the pose sets it
+   * itself for the couple of seconds an animal is waking up (see "Waking up
+   * and falling asleep" below). It takes the happenings, the talking
+   * gestures and the ordinary blinks away (the looks stay the state's own),
+   * so the wake-up never lands on top of a stretch or a nod.
    */
   function optsOf(o) {
     o = o || {};
     const w = (v) => (v === true ? 1 : clamp(+v || 0, 0, 1));
-    return { calm: w(o.calm), serious: w(o.serious), still: w(o.still) };
+    return { calm: w(o.calm), serious: w(o.serious), still: w(o.still), quiet: 0 };
   }
   /**
    * How much of each kind of movement is left under the options:
@@ -427,7 +433,7 @@
    */
   function mods(o) {
     return [
-      1 - Math.max(o.calm, o.serious, o.still),
+      1 - Math.max(o.calm, o.serious, o.still, o.quiet || 0),
       (1 - 0.6 * Math.max(o.calm, o.serious)) * (1 - o.still),
       (1 - 0.5 * o.calm) * (1 - 0.7 * o.serious) * (1 - o.still),
       1 - o.serious,
@@ -748,9 +754,136 @@
       P.pawRz += (q[2] - P.pawRz) * scratch - 0.10 * arc;
     }
 
-    const k = eyeK * (1 - Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 2, 10) : 0, turnBlink));
+    const q = 1 - (o.quiet || 0);
+    const k = eyeK * (1 - q * Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 2, 10) : 0, turnBlink));
     P.eyeL *= k; P.eyeR *= k;
     return P;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Waking up and falling asleep (the owner, 2026-09-28: "If I wake up the
+   * animal models from sleep, do they have a short wake up animation? If
+   * not add one" - and then the same for nodding off).
+   *
+   * Each animal plays a short, calm piece when Jarvis leaves standby (about
+   * two seconds) and when it goes to standby (about three) - by the
+   * schedule, by hand, or (leaving) when the link comes back after "not
+   * connected", which shows standby too. What each animal does is in its
+   * own `wakeSleep` (the panda's is below). The rules every one keeps:
+   *
+   *  - The mouth never moves: it follows Jarvis's real voice and nothing
+   *    else, so there is no yawn.
+   *  - Waking straight into "waiting on you", "something went wrong" or a
+   *    doze, only the eyes open, gently: those looks stay still.
+   *  - Under calm, serious or still (weighted: `E` in wakeSleep), only the eyes
+   *    open, or close, slowly.
+   *  - While it wakes, its idle happenings, talking gestures and ordinary
+   *    blinks wait (the `quiet` weight, see optsOf), so nothing doubles up;
+   *    speaking straight away is fine - the mouth is untouched, only the
+   *    gestures wait.
+   *  - A quick flip (awake, asleep, awake inside a second) never snaps: each
+   *    piece is scaled by how far the one before it got (`k`), and the
+   *    settling (makePose) carries on from what was on screen as always.
+   *  - The Zs fade out as it wakes, and only rise once it is asleep - near
+   *    the end of nodding off, not at its start (zsOf).
+   *
+   * Like everything here it is a pure function of the state, the list of
+   * past changes and the clock - no randomness, nothing remembered.
+   * ------------------------------------------------------------------ */
+  const WAKE_S = 2.2, SLEEP_S = 3.0;
+  /**
+   * The last change between asleep (standby) and awake (anything else), seen
+   * from `since` seconds into `state`, whose own change is past[i]: [seconds
+   * since that change, its index in past] - or null when there is none (or,
+   * with `cut`, when it is long enough ago that the piece it started has
+   * finished). Changes between two awake states in between (woken into
+   * listening, then thinking) do not restart it.
+   */
+  function crossing(state, past, i, since, cut) {
+    const asleep = state === "standby", len = asleep ? SLEEP_S : WAKE_S;
+    let x = since;
+    for (let j = i; j < HIST_MAX && j < past.length; j++) {
+      if (cut && x >= len) return null;
+      const pv = past[j];
+      if (!pv || !pv.state) return null;
+      if ((pv.state === "standby") !== asleep) return [x, j];
+      x += pv.gap;
+    }
+    return null;
+  }
+  /**
+   * How asleep it is, 0 (awake) to 1: rises over SLEEP_S as it nods off and
+   * falls over WAKE_S as it wakes, each time carrying on from wherever the
+   * change before left it (so a quick flip back and forth never jumps).
+   */
+  function depth(state, past, i, since) {
+    const to = state === "standby" ? 1 : 0;
+    const c = crossing(state, past, i, since, true);
+    if (!c) return to;
+    const pv = past[c[1]];
+    const d0 = depth(pv.state, past, c[1] + 1, pv.gap);
+    return d0 + (to - d0) * ease(c[0] / (to ? SLEEP_S : WAKE_S));
+  }
+  /** How much of the Zs to show for a depth: none until it is nearly asleep. */
+  function zsOf(d) { return smooth(clamp((d - 0.8) / 0.2, 0, 1)); }
+  /** The wake-up's `quiet` weight, x seconds in: all of it, then easing off by WAKE_S. */
+  function quietOf(x) { return 1 - smooth(clamp((x - 1.5) / (WAKE_S - 1.5), 0, 1)); }
+  /** How much of the extras (a stretch, a fluff, a rub) the options leave. */
+  function extras(o) { return (1 - o.still) * (1 - o.calm) * (1 - o.serious); }
+  function withQuiet(o, q) { return { calm: o.calm, serious: o.serious, still: o.still, quiet: q }; }
+  /** a, moved toward b by w (0..1). */
+  function toward(a, b, w) { return a + (b - a) * w; }
+  // Waking into these, only the eyes open: the looks stay still.
+  const PLAIN = { approval: 1, error: 1, banked: 1 };
+  /** The plain wake-up's eyes, 0 shut .. 1 open, x seconds in: open over 0.1 to 0.7 s. */
+  function eyesOpen(x) { return ease((x - 0.1) / 0.6); }
+  /** The plain nodding-off's eyes: close slowly over 1.8 s. */
+  function eyesClose(x) { return 1 - ease(x / 1.8); }
+
+  /**
+   * The panda's waking up and nodding off, on top of the state's own pose P.
+   * `x`: seconds since the change; `k`: how far the change before it had got
+   * (1: fully asleep when it woke, fully awake when it nodded off); `E`: how
+   * much of the extras the options and the state allow (the extras play at
+   * E times k); `F`: nodding off only - the pose of the state it was in, at the
+   * change, which it holds a while before letting go.
+   */
+  function wakeSleep(P, state, x, k, E, t, F) {
+    const e = E * k;
+    if (state === "standby") {
+      // Nodding off: heavy eyes and a slow blink; a nod as it drifts, it
+      // catches itself (eyes open a little, ears up), another heavy blink -
+      // then its head goes down for good and its tail curls round.
+      const lids = (1 - 0.45 * ease(x / 0.6) - 0.30 * ease((x - 0.95) / 0.6) + 0.25 * ease((x - 1.55) / 0.3)
+        - 0.50 * ease((x - 2.1) / 0.5)) * (1 - bump((x - 0.55) / 0.45)) * (1 - bump((x - 1.85) / 0.35));
+      const lid = k * toward(eyesClose(x), lids, E);
+      P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
+      // How far down the head has gone: sags, nods, catches, and drops.
+      const down = 0.2 * ease(x / 0.9) + 0.35 * ease((x - 0.95) / 0.6) - 0.2 * ease((x - 1.55) / 0.45)
+        + 0.65 * ease((x - 2.0) / 1.0);
+      const up = e * (1 - down);
+      P.headPitch = toward(P.headPitch, F.headPitch, up);
+      P.headRoll = toward(P.headRoll, F.headRoll, up);
+      P.earL = toward(P.earL, F.earL, up) + 0.25 * e * bump((x - 1.5) / 0.6);
+      P.earR = toward(P.earR, F.earR, up) + 0.25 * e * bump((x - 1.5) / 0.6);
+      P.tailCurl = toward(P.tailCurl, F.tailCurl, e * (1 - ease((x - 1.9) / 1.0)));
+      return;
+    }
+    // Waking: its eyes open with a slow double blink; its head lifts a
+    // little past and settles; a small stretch (leans back, paws up and
+    // out, chin up, a deeper breath); its ears perk with a flick.
+    const lids = eyesOpen(x) * (1 - E * bump((x - 0.75) / 0.45)) * (1 - 0.85 * E * bump((x - 1.25) / 0.4));
+    const f = 1 - k * (1 - lids);
+    P.eyeL *= f; P.eyeR *= f;
+    P.headPitch += 0.05 * e * bump((x - 0.2) / 1.2);
+    const s = e * envAHR(x - 0.55, 0.5, 0.35, 0.6);
+    P.lean -= 0.05 * s; P.headPitch += 0.08 * s; P.breath += 0.012 * s;
+    if (state !== "thinking") {
+      // (Thinking holds the orb up in both paws: they stay on it.)
+      P.pawLx -= 0.05 * s; P.pawRx += 0.05 * s; P.pawLy += 0.06 * s; P.pawRy += 0.06 * s;
+    }
+    const flick = e * (bump((x - 0.95) / 0.5) - 0.3 * bump((x - 1.35) / 0.5));
+    P.earL += 0.45 * flick; P.earR += 0.45 * flick;
   }
 
   /**
@@ -799,6 +932,14 @@
    *
    * `opts` ({calm, serious, still}, see optsOf()) is handed to every state's
    * targets, the old ones included.
+   *
+   * `moves` (optional) is the animal's waking up and nodding off (see
+   * "Waking up and falling asleep" above, and the panda's wakeSleep): laid
+   * on each state's own pose for the first seconds after a change between
+   * asleep and awake, inside the settling - so what was on screen at any
+   * later change already includes it, and carries on from it. With it, the
+   * pose's `asleep` (what the Zs fade with) comes from depth() rather than
+   * settling like a body part.
    */
   const LN2 = 0.6931471805599453;
   const FD = 1 / 120;   // the step the screen's speed at the change is measured over
@@ -823,7 +964,7 @@
   const turn = (a) => a - TAU * Math.round(a / TAU);
   // The same angle, somewhere in (c - 2pi, c].
   const below = (a, c) => a - TAU * Math.ceil((a - c) / TAU);
-  function makePose(targets, keys, halflives) {
+  function makePose(targets, keys, halflives, moves) {
     const HL = keys.map((k) => (halflives[k] ? halflives[k][0] : HL_BODY));
     const B = keys.map((k) => (halflives[k] ? halflives[k][1] : 0));
     // An angle (a third entry, a number c): settles round the circle the way
@@ -839,16 +980,40 @@
     // as well, which is what the change after this one needs to know how
     // fast the screen was moving. The walk back is one call per change.
     function level(state, past, i, since, t, amp, look, o, both) {
-      const cur = targets(state, t, amp, look, since, o);
-      const curB = both ? targets(state, t - FD, amp, look, since - FD, o) : null;
+      // Waking up or nodding off: how long ago, how far the change before it
+      // had got (far), how much of the extras to play (ex), and - nodding off -
+      // the pose it is letting go of (F: the old state's at the change, its
+      // ordinary blinks and happenings left out). Found even once the piece
+      // is over: the settling below measures what was on screen against this
+      // state's pose AT the change, piece and all, for as long as it settles.
+      const cr = moves ? crossing(state, past, i, since, false) : null;
+      const len = state === "standby" ? SLEEP_S : WAKE_S;
+      let far = 0, ex = 0, F = null;
+      if (cr) {
+        const pc = past[cr[1]], d0 = depth(pc.state, past, cr[1] + 1, pc.gap);
+        const asleep = state === "standby";
+        far = asleep ? 1 - d0 : d0;
+        ex = asleep || !PLAIN[state] ? extras(o) : 0;
+        if (asleep) F = targets(pc.state, t - cr[0], pc.amp, look, pc.gap, withQuiet(o, 1));
+      }
+      // The state's pose at clock tt, `sn` seconds into it, dx seconds after now.
+      const at = (tt, sn, dx) => {
+        const x = cr ? cr[0] + dx : len;
+        if (x >= len) return targets(state, tt, amp, look, sn, o);
+        const P = targets(state, tt, amp, look, sn, withQuiet(o, state === "standby" ? 0 : quietOf(x)));
+        moves(P, state, x, far, ex, tt, F);
+        return P;
+      };
+      const cur = at(t, since, 0);
+      const curB = both ? at(t - FD, since - FD, -FD) : null;
       const pv = i < HIST_MAX ? past[i] : null;
       if (!pv || !pv.state || pv.state === state) return [cur, curB];
       const k = slowBy(state, pv.state);
       if (since >= longest * k) return [cur, curB];
       const s = Math.max(0, since), sB = Math.max(0, since - FD), tc = t - s;
       const on = level(pv.state, past, i + 1, pv.gap, tc, pv.amp, look, o, true);
-      const nwA = targets(state, tc, amp, look, 0, o);
-      const nwB = targets(state, tc - FD, amp, look, -FD, o);
+      const nwA = at(tc, 0, -s);
+      const nwB = at(tc - FD, -FD, -s - FD);
       const outA = {}, outB = both ? {} : null;
       for (let j = 0; j < keys.length; j++) {
         const key = keys[j], hl = OWN[j] ? HL[j] : HL[j] * k;
@@ -866,7 +1031,10 @@
     return function pose(state, prevState, since, t, amp, look, hist, opts) {
       look = look || {};
       hist = hist || {};
-      return level(state, pastOf(prevState, hist, amp), 0, since, t, amp, look, optsOf(opts), false)[0];
+      const past = pastOf(prevState, hist, amp);
+      const P = level(state, past, 0, since, t, amp, look, optsOf(opts), false)[0];
+      if (moves) P.asleep = zsOf(depth(state, past, 0, since));
+      return P;
     };
   }
   // What is left, `s` seconds after a change, of an offset x0 moving at v0,
@@ -893,7 +1061,7 @@
     ["eyeL", "eyeR", "lookX", "lookY"], ["speak"], ["headYaw", "headPitch", "headRoll", "brow"],
     ["pawLx", "pawLy", "pawLz", "pawRx", "pawRy", "pawRz", "orbX", "orbY", "orbZ"],
     ["earL", "earR", "earTwL", "earTwR", "tailSwing", "tailCurl", "tail2", "tail3", "tail4", "tail5"]);
-  const pose = makePose(stateTargets, KEYS, HALF);
+  const pose = makePose(stateTargets, KEYS, HALF, wakeSleep);
 
   /**
    * The mouth to draw: [open, wide, round], each 0..1.
@@ -1192,7 +1360,8 @@
     // Shared with the other animals' files, so all three do their sums alike.
     util: { makePose, halfLives, mouthOf, clamp, smooth, ease, rx, ry, rz, mul, apply, add, invRow,
             wave, bump, envAHR, happening, beat, shift, gaze, looks, restingGaze, optsOf, mods, chain,
-            gauss, blinkAt, overlayAt, phaseOf, LOOP, PERIOD, TAU },
+            gauss, blinkAt, overlayAt, phaseOf, LOOP, PERIOD, TAU,
+            toward, eyesOpen, eyesClose, WAKE_S, SLEEP_S },
   };
   root.CritterPose = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
