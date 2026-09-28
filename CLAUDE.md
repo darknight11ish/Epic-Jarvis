@@ -628,6 +628,18 @@ testers, scouts and integration scouts; `.claude/agents/`):
   be closed); **identity checks** (last digits of a card, security
   questions, codes) **are always handed to the owner** in the window, never
   answered by Jarvis.
+- **Jarvis may look at the owner's screen, on the PC and the phone**
+  (owner, 2026-09-28), two ways: **"Look at this"** - one look when the
+  owner asks (a key on the PC; the assistant gesture on the phone), nothing
+  saved; and **"Watch with me"** - a live session the owner starts and
+  stops, with a visible "Jarvis is watching" sign the whole time, pausing
+  on password fields and on apps the owner excludes (banking), nothing
+  saved. What Jarvis sees is outside text. Screen images stay on the owner's
+  own devices (the phone sends them only to the PC, over Tailscale/Meshnet).
+  Full picture understanding needs the 12 GB card; with one card, Jarvis
+  reads the screen's text only. **Not** always-on watching with a history
+  (Recall-style) - the owner declined it. Designed in
+  `docs/SCREEN-DESIGN.md` before it is built.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
