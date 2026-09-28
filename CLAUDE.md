@@ -584,6 +584,15 @@ testers, scouts and integration scouts; `.claude/agents/`):
   like everything else. Designed in `docs/PROJECTS-DESIGN.md` before
   anything is built; queued after the chatbot driver unless the owner says
   otherwise.
+  Owner's answers to the design's questions (2026-09-28):
+  **a "Shareable" switch per project, off by default** - when on, a short
+  piece of the project's files may go to a web search or the chatbot
+  driver, shown word for word on its card first; never health or money
+  numbers, and never memory, email or credentials. This bends rule 1 for
+  that shown piece only, the way the locked backup bends it for one file.
+  **Build order inside Projects:** projects, goals, benchmarks, charts and
+  running tests first; Jarvis writing code comes once the 12 GB card is
+  installed and measured.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`

@@ -264,7 +264,18 @@ Whether a git-undoable edit counts as risky depends on the risk table.
 7. Coding bake-off in `tool_eval`; the second-card coding switch. (PC.)
 8. The feature audit (bugs, both apps, fit).
 
-## 10. Questions for the owner
+## The owner's answers (2026-09-28)
+
+- **Sharing: a "Shareable" switch per project, off by default.** When on, a
+  short piece of the project's files may go to a web search or the chatbot
+  driver, shown word for word on the card first; never health or money
+  numbers, memory, email or credentials. This bends rule 1 for that shown
+  piece only; it needs a row in `jarvis_reach.KINDS` and ARCHITECTURE §4.
+- **Order: projects, goals, benchmarks, charts and running tests first**
+  (build steps 1-4 and 6); code writing (`project_edit`, steps 5 and 7)
+  once the 12 GB card is installed and measured.
+
+## 10. Questions for the owner (answered above)
 
 1. **Sharing.** Jarvis could ask Gemini (or a web search) for help with your
    code, which means sending some project files off the PC and bends rule 1.
