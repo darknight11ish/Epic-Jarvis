@@ -389,6 +389,18 @@ def t_registered_and_ready():
         check("with Playwright but never signed in, ready() says how to sign in, in that "
               "site's words", m.ready() == m.NOT_SIGNED_IN and "Grok window" in m.ready()
               and "spare Grok account" in m.ready() and m.SIGN_IN_LINE in m.ready())
+        folder = m.profile_dir()
+        folder.mkdir(parents=True)
+        try:
+            why = m.ready()
+            check("a profile folder alone (the sign-in window was opened, but the sign-in "
+                  "never finished) is NOT 'ready': it says to run sign-in again",
+                  why == m.SITE.sign_in_unfinished and m.SIGN_IN_LINE in why
+                  and "spare Grok account" in why, why)
+            W.mark_signed_in(folder)
+            check("... and once a finished sign-in is noted, it is ready", m.ready() == "")
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
 
 
 def t_shipped_and_documented():
@@ -557,6 +569,7 @@ function doSend() {
   const stop = document.querySelector('[data-fake=stop]'); stop.style.display = 'inline-block';
   let words;
   if (/2 plus 2/.test(text)) words = ['2', 'plus', '2', 'is', '4.'];
+  else if (/3 plus 3/.test(text)) words = ['3', 'plus', '3', 'is', '6.'];
   else words = ('Reply ' + n + ': here is a streamed answer that grows word by word.').split(' ');
   let i = 0;
   function tick() {
@@ -579,9 +592,11 @@ function doSend() {
     }
     stop.style.display = 'none';
     // Like the real sites: a new chat gets its own address a little later...
-    if (MODE === 'normal' && n === 1) setTimeout(() => history.pushState({}, '', PATHS[0]), 400);
-    // ... and the owner switching to another chat in the window.
-    if (MODE === 'normal' && n === 2) setTimeout(() => history.pushState({}, '', PATHS[1]), 400);
+    if ((MODE === 'normal' || MODE === 'check') && n === 1)
+      setTimeout(() => history.pushState({}, '', PATHS[0]), 400);
+    // ... and the owner switching to another chat in the window, once the
+    // reply has been read.
+    if (MODE === 'normal' && n === 2) setTimeout(() => history.pushState({}, '', PATHS[1]), 2500);
   }
   setTimeout(tick, 300);
 }
@@ -778,8 +793,12 @@ def t_full_turn(fs: FakeSite):
               (r2, round(took, 2)))
         check(f"{k}: no old chat or sidebar words ever came back",
               "SIDEBAR" not in (reply or "") + (r2 or "") and "OLD-REPLY" not in (r2 or ""))
-        time.sleep(1.0)
+        # The fake opens the other chat 2.5 seconds after the reply ends.
+        end = time.monotonic() + 8
         st = a.status()
+        while st.state == "ok" and time.monotonic() < end:
+            time.sleep(0.25)
+            st = a.status()
         check(f"{k}: a DIFFERENT chat opened in the window: needs_owner, never read",
               st.state == "needs_owner" and st.reason == "a different chat is showing", st)
         refused = False
@@ -892,21 +911,36 @@ def t_sign_in_and_self_check(fs: FakeSite):
           code == 0 and any(line.startswith(f"Signed in: {m.NAME}'s message box") for line in lines)
           and any(f"SPARE {m.SITE.account}" in line for line in lines)
           and fs.state["sent"] == [] and fs.state["clicked"] == [] and a._ctx is None, lines)
-    fs.reset()
+    check(f"{k}: a finished sign-in is noted in that window's profile folder",
+          W.signed_in_marker(a.profile).is_file())
+    fs.reset("check")
     lines = []
     report = _TMP / f"{k}-check.txt"
     code = m.self_check(out=lines.append, adapter=fs.adapter(), report=report, reply_wait=30)
     fails = [line for line in lines if line.startswith("FAIL")]
-    check(f"{k}: the owner's self-check passes every step against the fake page, sending "
-          "only the fixed question, and saves its results",
+    check(f"{k}: the owner's self-check passes every step against the fake page (the site "
+          f"naming the chat {CHAT_PATHS[k][0]} included), sending only the two fixed "
+          "questions in that one chat, and saves its results",
           code == 0 and not fails and any("it says 4" in line for line in lines)
-          and fs.state["sent"] == [W.CHECK_QUESTION] and report.is_file()
+          and any("it says 6" in line for line in lines)
+          and fs.state["sent"] == [W.CHECK_QUESTION, W.CHECK_QUESTION_2] and report.is_file()
           and any(f"{m.NAME}'s chat page is showing" in line for line in lines), lines)
     if k == "perplexity":
         check("perplexity: the self-check notes which selector read the sources, without "
               "counting it as a pass or a fail",
               any(line.startswith("NOTE  Sources read as text: selector 1") for line in lines)
-              and "10 pass, 0 fail" in lines, lines)
+              and "14 pass, 0 fail" in lines, lines)
+    # A wrong guess at the site's new-chat address is caught HERE, not on the
+    # second message of a real conversation (audit, 2026-09-28).
+    fs.reset("check")
+    lines = []
+    wrong = fs.adapter()
+    wrong._chat_re = re.compile(r"^/not-this-site/")
+    code = m.self_check(out=lines.append, adapter=wrong, report=report, reply_wait=8)
+    fails = [line for line in lines if line.startswith("FAIL")]
+    check(f"{k}: a wrong chat_address FAILs the self-check and names the line to update",
+          code == 1 and len(fails) == 1
+          and f"chat_address line in {m.SITE.module}" in fails[0], lines)
 
 
 def t_through_the_driver():

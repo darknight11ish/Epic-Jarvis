@@ -18,8 +18,10 @@ wording - and hands everything else to this module:
 
 jarvis_chatbot.py imports this module at its end; load_sites(), at the end
 of THIS module, imports every site file in SITE_MODULES, and each one
-registers itself in the driver's list. Still not reachable from either app:
-the routes and screens are a later step (docs/JARVIS-API.md section 60).
+registers itself in the driver's list. Every site is reachable from both
+apps through /api/chatbot/* (jarvis_chatbot_routes.py, docs/JARVIS-API.md
+section 60) once Playwright is installed and that site's window has been
+signed in. NONE of them has yet been tried against its real site.
 
 THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md)
   * Gemini first, through its WEBSITE, driven OPENLY; then "the chatbot
@@ -73,8 +75,8 @@ WHEN A SITE CHANGES
 Every selector is in that site's ONE table, SELECTORS, with fallbacks. They
 were written without access to any of these sites (the container this was
 built in cannot reach them, and must not automate them). The owner checks
-them on the PC with one line per site, which sends one harmless fixed
-question and prints PASS or FAIL per step:
+them on the PC with one line per site, which sends two harmless fixed
+questions in one new chat and prints PASS or FAIL per step:
     py -3 jarvis_chatbot_<site>.py check
 
 THREADS
@@ -145,8 +147,12 @@ NOT_INSTALLED = ("Playwright (the program Jarvis uses to work a browser window) 
 NO_BROWSER = ("Playwright is installed, but its browser is not. Run this one line in "
               "PowerShell: py -3 -m playwright install chromium")
 
-#: The one fixed, harmless question every site's self-check sends.
+#: The two fixed, harmless questions every site's self-check sends, in the
+#: same chat: the second one proves the conversation can carry on there
+#: (a site gives a new chat its own address around the first reply, and a
+#: wrong guess at that address shows only on the next message).
 CHECK_QUESTION = "What is 2 plus 2?"
+CHECK_QUESTION_2 = "And what is 3 plus 3?"
 
 # ============================================================================
 #   Shared selector lists a site table may reuse
@@ -284,6 +290,20 @@ class Site:
                 f"in PowerShell in Jarvis's folder: {self.sign_in_line}")
 
     @property
+    def sign_in_unfinished(self) -> str:
+        """The profile folder is there but no finished sign-in was recorded:
+        the sign-in window was closed early, or it was set up before Jarvis
+        recorded a finished sign-in (2026-09-28). Running sign-in again is
+        quick when the window is in fact signed in: it sees the message box
+        at once."""
+        return (f"Jarvis's {self.name} window was opened, but its sign-in was never "
+                f"finished (or it was set up before Jarvis kept a note of a finished "
+                f"sign-in). Run this one line in PowerShell in Jarvis's folder and sign in "
+                f"to the spare {self.account} used only by Jarvis - if it is already signed "
+                f"in, it finishes as soon as {self.name}'s message box shows: "
+                f"{self.sign_in_line}")
+
+    @property
     def profile_busy(self) -> str:
         return (f"Jarvis's {self.name} window is already open (the sign-in window, or a "
                 "check). Close that window first, then try again.")
@@ -334,6 +354,28 @@ def check_report_path(site: Site) -> Path:
     return config_dir() / "chatbot" / f"{site.profile_name}-check.txt"
 
 
+#: A small file in a site's profile folder, written only when the sign-in
+#: helper saw the site's message box (a sign-in that actually finished). It
+#: holds the date and nothing else - no account, no cookie, no password.
+#: Inside the profile folder, so deleting the folder forgets both.
+SIGNED_IN_MARKER = "jarvis-signed-in.txt"
+
+
+def signed_in_marker(folder: Path) -> Path:
+    return Path(folder) / SIGNED_IN_MARKER
+
+
+def mark_signed_in(folder: Path) -> bool:
+    """Record a finished sign-in in `folder`. Never raises."""
+    try:
+        signed_in_marker(folder).write_text(
+            "Signed in by hand with the sign-in helper on "
+            + time.strftime("%Y-%m-%d") + ".\n", encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
 def browser_name(site: Site) -> str:
     b = (os.environ.get(site.browser_env or "_") or os.environ.get("JARVIS_CHATBOT_BROWSER")
          or "chromium").strip().lower()
@@ -365,8 +407,13 @@ def ready(site: Site) -> str:
     that cannot run."""
     if not playwright_installed():
         return NOT_INSTALLED
-    if not profile_dir(site).is_dir():
+    folder = profile_dir(site)
+    if not folder.is_dir():
         return site.not_signed_in
+    # The folder alone proves nothing: opening the sign-in window makes it.
+    # Only a sign-in that finished leaves the marker.
+    if not signed_in_marker(folder).is_file():
+        return site.sign_in_unfinished
     return ""
 
 
@@ -490,7 +537,11 @@ class WebAdapter(CB.Adapter):
         self._last_text = ""
         self._last_change = 0.0
         self._sent = 0               # messages this adapter has sent
-        self._chat_path = ""         # the chat's address once the site gave it one
+        #: The chat this conversation is in, locked at the FIRST send: the
+        #: new-chat address, then - once, and only to the site's own shape of
+        #: a new chat's address - the address the site gives that chat. Any
+        #: other address afterwards is "a different chat is showing".
+        self._chat_path = ""
 
     # ---- the interface ---------------------------------------------------
 
@@ -687,10 +738,14 @@ class WebAdapter(CB.Adapter):
         if self._chat_path and path != self._chat_path:
             start = host_path(self.start_url)[1].rstrip("/")
             if self._chat_path.rstrip("/") == start and self._is_new_chat_address(path):
-                # The site gave this new chat its own address.
+                # The site gave this new chat its own address. Accepted ONCE:
+                # from now on the chat is locked to this address.
                 self._chat_path = path
             else:
-                # Someone opened another chat in the window: never read it.
+                # Someone opened another chat in the window (or the site gave
+                # the new chat an address of a shape this site file does not
+                # expect - the self-check's second question finds that):
+                # never read it.
                 return CB.Status("needs_owner", "a different chat is showing")
         if self._find("captcha") is not None:
             return CB.Status("needs_owner", "captcha")
@@ -821,6 +876,10 @@ class WebAdapter(CB.Adapter):
         btn.click()
 
     def _send_here(self, text: str) -> None:
+        if self._sent == 0:
+            # Nothing sent yet: no chat is locked (a first send that failed
+            # half-way does not leave one behind). It is locked below.
+            self._chat_path = ""
         st = self._status_here()
         if st.state != "ok":
             # The driver looks first; this is a second lock, not a retry.
@@ -838,6 +897,12 @@ class WebAdapter(CB.Adapter):
             st = self._status_here()
             if st.state != "ok":
                 raise RuntimeError(f"not sending: the page needs you ({st.reason or st.state})")
+        if self._sent == 0:
+            # Lock the chat at the first send: the new-chat address it is on
+            # now. Only one move from here is accepted - to this new chat's
+            # own address (status()); anything else is another chat, whose
+            # replies are never read.
+            self._chat_path = host_path(self._page.url)[1]
         box = self._find("input")
         if box is None:
             raise RuntimeError(f"{self.site.name}'s message box was not found")
@@ -878,6 +943,15 @@ class WebAdapter(CB.Adapter):
         while True:
             if not self._page_alive():
                 raise RuntimeError(f"the {self.site.name} window was closed")
+            # Read ONLY while the page is the normal chat this conversation
+            # is in. Anything else (another chat opened in the window, a
+            # captcha, a sign-in page) and nothing is read: the driver's own
+            # status() look then pauses and asks the owner.
+            if self._status_here().state != "ok":
+                if time.monotonic() >= end:
+                    return None
+                self._page.wait_for_timeout(int(POLL_SECONDS * 1000))
+                continue
             reply = self._newest_reply()
             if reply is not None:
                 text = self._whole_reply(reply)
@@ -889,8 +963,6 @@ class WebAdapter(CB.Adapter):
                         and now - self._last_change >= self.settle_seconds):
                     self._waiting = False
                     self._before = self._reply_counts()
-                    if not self._chat_path:
-                        self._chat_path = host_path(self._page.url)[1]
                     out, self._last_text = text.strip(), ""
                     return out
             if time.monotonic() >= end:
@@ -944,6 +1016,10 @@ def sign_in(site: Site, cls: type, *, out=print, adapter: Optional[WebAdapter] =
                 break
             if st.state == "ok" and not signed:
                 signed = True
+                folder = a.profile if a.profile is not None else profile_dir(site)
+                if not mark_signed_in(folder):
+                    out(f"(Jarvis could not note the finished sign-in in {folder}, so it "
+                        "may still say the window is not signed in.)")
                 out(f"Signed in: {site.name}'s message box is showing. You can close the "
                     "window now.")
             time.sleep(1.0)
@@ -960,8 +1036,9 @@ def sign_in(site: Site, cls: type, *, out=print, adapter: Optional[WebAdapter] =
 
 def self_check(site: Site, cls: type, *, out=print, adapter: Optional[WebAdapter] = None,
                report: Optional[Path] = None, reply_wait: float = 120.0) -> int:
-    """Send ONE harmless fixed question and print PASS or FAIL per step, with
-    which selector matched - so the selectors are proved on the owner's PC
+    """Send TWO harmless fixed questions in one new chat and print PASS or
+    FAIL per step, with which selector matched - so the selectors, and the
+    conversation carrying on in the same chat, are proved on the owner's PC
     before any real conversation. Stops at any page that needs the owner."""
     lines: list = []
 
@@ -991,9 +1068,9 @@ def self_check(site: Site, cls: type, *, out=print, adapter: Optional[WebAdapter
         step(False, "Playwright is installed", exc.owner_words)
         return _finish(lines, report, out)
     if a is None:
-        if not profile_dir(site).is_dir():
-            step(False, f"Jarvis's {site.name} window has been signed in once",
-                 site.not_signed_in)
+        why = ready(site)
+        if why:
+            step(False, f"Jarvis's {site.name} window has been signed in once", why)
             return _finish(lines, report, out)
         a = cls()
     try:
@@ -1031,9 +1108,13 @@ def _check_steps(site: Site, a: WebAdapter, step: Callable, note: Callable, sel:
     while reply is None and time.monotonic() - started < reply_wait:
         reply = a.read_reply(2.0)
         saw_stop = saw_stop or "stop" in a.matched
-    step(reply is not None, "A complete reply came back",
-         f"{sel('reply')}; words: {sel('reply_text')}" if reply is not None
-         else f"nothing within {int(reply_wait)} seconds ({sel('reply')})")
+    if reply is not None:
+        why = f"{sel('reply')}; words: {sel('reply_text')}"
+    else:
+        st = a.status()
+        why = (_after_words(site, st) if st.state == "needs_owner"
+               else f"nothing within {int(reply_wait)} seconds ({sel('reply')})")
+    step(reply is not None, "A complete reply came back", why)
     step(saw_stop, "Saw the \"stop\" button while it wrote", sel("stop")
          if saw_stop else "not seen - replies are still read, but only by waiting for the "
                           "text to stop changing")
@@ -1045,9 +1126,49 @@ def _check_steps(site: Site, a: WebAdapter, step: Callable, note: Callable, sel:
             note(f"Sources read as text: {sel('sources')}" if "sources" in a.matched
                  else f"No sources were listed with this reply, so how Jarvis reads "
                       f"{site.name}'s sources is not checked by this question")
+    if reply is None:
+        return
+    # The SECOND question, in the same chat. A site gives a new chat its own
+    # address around the first reply; if this site file expects the wrong
+    # shape of address, it shows only now, on the next message of a real
+    # conversation - so the check sends one.
     st = a.status()
-    step(st.state == "ok", "The page is still the normal chat afterwards",
-         "" if st.state == "ok" else f"{st.state}: {st.reason}")
+    if not step(st.state == "ok", "The page is still the same chat after the first reply",
+                "" if st.state == "ok" else _after_words(site, st)):
+        return
+    try:
+        a.send(CHECK_QUESTION_2)
+        step(True, f"Typed and sent a second question in the same chat, \"{CHECK_QUESTION_2}\"")
+    except Exception as exc:
+        step(False, f"Typed and sent a second question in the same chat, \"{CHECK_QUESTION_2}\"",
+             _after_words(site, a.status()) if a.status().state == "needs_owner" else str(exc))
+        return
+    reply2, started = None, time.monotonic()
+    while reply2 is None and time.monotonic() - started < reply_wait:
+        reply2 = a.read_reply(2.0)
+    if not step(reply2 is not None, "A complete second reply came back in the same chat",
+                "" if reply2 is not None else
+                (_after_words(site, a.status()) if a.status().state == "needs_owner"
+                 else f"nothing within {int(reply_wait)} seconds")):
+        return
+    step(bool(re.search(r"\b6\b|\bsix\b", reply2, re.IGNORECASE)),
+         "The second reply answers the second question (it says 6)", norm(reply2)[:120])
+    # A site may name the chat a moment after the reply; look once more
+    # after that moment.
+    time.sleep(2.0)
+    st = a.status()
+    step(st.state == "ok", "The page is still the same chat afterwards",
+         "" if st.state == "ok" else _after_words(site, st))
+
+
+def _after_words(site: Site, st) -> str:
+    """The self-check's words for a page that is not the normal chat."""
+    if getattr(st, "reason", "") == "a different chat is showing":
+        return (f"{st.state}: {st.reason} - if you did not open another chat yourself, "
+                f"{site.name} gave the new chat an address this site file does not expect, "
+                f"so a real conversation would stop there too: the chat_address "
+                f"line in {site.module} needs updating")
+    return f"{st.state}: {st.reason}"
 
 
 def _finish(lines: list, report: Path, out) -> int:
@@ -1073,7 +1194,7 @@ def main(site: Site, cls: type, argv: list) -> int:
         return self_check(site, cls)
     print(f"Jarvis's {site.name} window. Two commands, run in Jarvis's folder:\n"
           f"  {site.sign_in_line}   sign in once, by hand, to the spare {site.account}\n"
-          f"  {site.check_line}     send one harmless question and print PASS/FAIL per step")
+          f"  {site.check_line}     send two harmless questions and print PASS/FAIL per step")
     return 2
 
 
