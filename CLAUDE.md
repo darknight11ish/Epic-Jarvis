@@ -573,6 +573,17 @@ testers, scouts and integration scouts; `.claude/agents/`):
   of only hold-to-talk. The phone detects the pause (Smart Turn); the words
   are still worked out on the PC after the voice check. A Stop button and a
   time limit stay.
+- **Projects, like Claude's Projects and more** (owner, 2026-09-28): a
+  project has a name, its own instructions, files and chats, its goals
+  (built on the Goals feature, `jarvis_goals.py` on the continuation
+  branch - not a second goals system), benchmarks to measure progress, and
+  the work being built. **Both kinds**: coding projects (benchmarks are
+  tests, speed and scores) and life projects (benchmarks are numbers the
+  owner tracks). **Jarvis does real work**: it writes files and runs code
+  and benchmarks on the PC, and **every change asks first with a card**,
+  like everything else. Designed in `docs/PROJECTS-DESIGN.md` before
+  anything is built; queued after the chatbot driver unless the owner says
+  otherwise.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
