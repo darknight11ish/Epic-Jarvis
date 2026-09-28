@@ -682,6 +682,15 @@ testers, scouts and integration scouts; `.claude/agents/`):
   off until the card is in and a photo test passes. Designed in
   `docs/LIVE-DESIGN.md` and brought back to the owner before anything is
   built.
+  Owner's answers to the design (2026-09-28): **under "Only trust the talk
+  button", a Live session is trusted like the talk button by default**
+  (the owner pressed Start), **with a voice setting to give Live the extra
+  "Hey Jarvis" caution instead**; choosing the extra caution is immediate,
+  going back raises an approval card, like the other voice settings.
+  **Answers about what the camera sees are read aloud, like screen
+  answers**, unless a sensitive fact was used or the strict setting says
+  otherwise. **The camera stays off until the 12 GB card is in and passes
+  the photo test** - no words-only camera on one card.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`

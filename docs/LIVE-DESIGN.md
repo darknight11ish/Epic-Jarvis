@@ -557,6 +557,16 @@ The camera - built switched off, **needs the 12 GB card to switch on**:
 
 ## 10. Questions for the owner
 
+**Answered by the owner, 2026-09-28** (recorded in `CLAUDE.md`):
+1. Under "Only trust the talk button", Live is **trusted like the talk
+   button by default**, with a voice setting to give it the "Hey Jarvis"
+   caution instead (choosing the caution is immediate; going back raises an
+   approval card). This replaces the recommendation below.
+2. Camera answers are **read aloud, like screen answers**.
+3. The camera stays **off until the second card passes the photo test**.
+
+The questions as they were asked:
+
 1. **In Live you press Start once, then talk freely. If you have chosen
    "Only trust the talk button", should Live count as the talk button?**
    (Under the default setting nothing changes either way.)
