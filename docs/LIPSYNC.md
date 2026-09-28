@@ -20,9 +20,12 @@ That list of numbers is the **mouth track**. While the clip plays, each
 face reads the track at the exact point of the sound you are hearing, so the
 mouth cannot drift out of step, even if the computer or phone is busy.
 
-- It works for Jarvis's normal voice, the three animal voices (which are
-  pitched up), and recorded custom voices, because it only looks at the
-  sound itself.
+- It works for Jarvis's normal voice, the three animal voices (pitched up
+  by default, and whatever voice, pitch - deeper or higher - and pace the
+  owner picks for each animal since 2026-09-28), and recorded custom
+  voices, because it only looks at the sound itself. The Kokoro timing
+  below follows the chosen voice, pitch and pace too: see "Each animal's
+  own voice" at the end.
 - **Nothing leaves your device** (rule 1). The track is made from sound
   that is already on your PC or phone, and it stays there.
 - **No sound, no mouth movement.** A typed answer, Quiet mode, or an answer
@@ -259,6 +262,7 @@ pitch rise is the real one:
 | red panda | 1 | 1.0 | +2 semitones |
 | pygmy owl | 2 | 0.85 | +1 |
 | sea otter | 4 | 1.15 | +3 |
+| monkey (added 2026-09-28; not in these clips - `backend/test_mouth.py`'s real-model run covers it) | 6 | 1.0 | +1 |
 
 (`backend/jarvis_voices.py` `FACE_VOICES`.) 24 kHz, 16-bit mono.
 
@@ -364,13 +368,56 @@ once per sentence, before it plays, and not on the drawing thread.
 - **American "oo" is fronted** ("knew", "you"): its second formant sits
   between "ee" and "oh". Those vowels come out less round, which is roughly
   what the lips do too.
-- **Custom (recorded) voices were not measured** - only Kokoro. The
-  per-clip normalisation should carry over; it is untested.
+- **Custom voices are now measured** (2026-09-28): Piper (amy, lessac and
+  the male alan), ZipVoice (the backend's own cloning engine, from a clean
+  and from a noisy reference) and Pocket TTS - see "Deep and noisy voices"
+  below.
+- **A voice pitched 3 semitones down is only partly corrected** (the band
+  move is capped at 3/8 of an octave), and am_adam at -3 reads "oo" a
+  little less round than before (0.71 -> 0.59 of words rounder than
+  wide).
 - **Bluetooth delay** (see "Why 50 ms").
 - The phone's own fallback voice (Android's text-to-speech, used when the
   PC's voice is not available) never gives the app the whole clip, so it
   cannot use this analysis; `SpeechClock.kt` estimates the opening from
   loudness only.
+
+## Deep and noisy voices (2026-09-28)
+
+Two steps were added to the analysis after the corpus tests. Both are in
+`lipsync.js` and `LipSync.kt` (byte-identical output on 3,541 clips).
+
+- **The lip bands follow the voice's pitch.** A deep voice's formants sit
+  lower, so "ee" was read as round. `pitchOf()` estimates the median pitch
+  of the vowel frames (normalised autocorrelation on the clip averaged down
+  to ~6 kHz, every third vowel frame, with an octave guard), and both lip
+  band sets move down by `0.6 x 4 log2(F0 / 210)` quarter-octaves, only
+  down and at most 3/8 of an octave (`K.pitchRef 210, pitchAlpha 0.6,
+  pitchLo -1.5, pitchHi 0`). Below a 4 kHz sample rate it does nothing.
+  Moving the bands UP for high voices was tried and rejected (it broke
+  the default voice's high-pitched "oo").
+- **An adaptive noise floor.** The silence gate is raised to 7 dB above
+  the clip's quietest 2% of frames, never more than 18 dB under its
+  loudest (`gate = min(ref - 18, max(gate, p2 + 7))`). Clean clips' floor
+  sits 38-60 dB down, so no clean voice changed; on a noisy clip the gate
+  lands just above the noise.
+
+| voice | before | after |
+|---|---|---|
+| am_adam (deep), "ee" sentences read wide | 0 / 8 | **8 / 8** |
+| four voices at -3 semitones, "ee" wider than round | 0.28 | **0.72** |
+| am_michael, bm_george, bm_lewis, "ee" sentences | 0.38 | **1.00** |
+| Kokoro with noise 20 dB under it: mouth open in pauses | 0.16 | **0.01** |
+| ZipVoice cloned from a noisy recording: level in pauses | 0.24 | **0.14** |
+
+What it cost (kept because each is within a sentence or so of noise, and
+every margin stays the right way round): the default voice and the otter
+each read one of eight "oo" sentences less round (still rounder than
+wide); Piper alan the same; the owl pitched +4 "oo rounder" 0.68 -> 0.61
+(about 1.3 standard errors); breathy owl vowels under 20 dB of noise open
+past 0.2 a little less often (0.96 -> 0.89). About +0.5 ms per second of
+audio in node. Two new test clips: `kokoro-default-wide-deep.wav` (a
+"sheep" sentence at -3 semitones) and `kokoro-default-pauses-noisy.wav`.
 
 ## Tests
 
@@ -474,8 +521,10 @@ no block, and the apps do exactly what the sections above describe.
    `scale_silence`, a line-for-line copy of sherpa-onnx's own
    `GeneratedAudio::ScaleSilence` (a stretch of 0.2 s or more within
    +-0.01 keeps its first 20 %, float32 arithmetic as in C++), which also
-   says where every sample went. The animal pitch rise
-   (`jarvis_speech.pitch_up`) then divides every time by 2^(semitones/12).
+   says where every sample went. The animal's pitch
+   (`jarvis_speech.pitch_up`) then divides every time by f = 2^(semitones/12)
+   - above 1 for a higher voice (shorter), below 1 for a deeper one
+   (longer; since 2026-09-28 the owner may pick -3 to +4 per animal).
 5. **Sounds to mouth shapes** (`build_track`, 100 frames a second, the same
    n as the apps' own analysis): each sound pulls the mouth towards its
    shape with a weight that fades before and after it (Cohen and Massaro's
@@ -565,6 +614,50 @@ sentences.
   silent), 27 are next to an m, b or p (whose closing starts 50 ms early)
   and 9 are other quiet "l", "n" and "r" sounds.
 
+### Correction: Kokoro's sound comes about 50 ms before its own plan
+
+Found by the corpus tests later the same day (2026-09-28), and fixed.
+Kokoro's durations say when each sound is PLANNED; the sound itself comes
+about 50-60 ms earlier. Measured on raw Kokoro audio (no pause shortening,
+no pitch change): hiss 60 ms early at speed 1.0 and 0.8 alike - a fixed
+two Kokoro frames, not a share of each sound - and m/b/p energy troughs
+42-49 ms early over 1,130 clips. So the timed mouth was showing about
+10 ms LATE instead of the intended ~50 ms early.
+
+- **The fix:** `jarvis_mouth.SOUND_LEAD` (2 frames, 50 ms) moves every
+  sound earlier in `finish()`. Piece edges and the sample-exact length
+  check are unchanged. After it, on the same clips: hiss -20 ms, speech
+  onset -10 ms, loudness-vs-mouth cross-correlation +5 to +10 ms,
+  troughs -5 ms (default voice). The owl's troughs are still about
+  -45 ms, so its lead may be a little larger; one value is used for all
+  voices rather than fitting a small sample.
+- **The table above is biased by this.** It scored the sound analysis at
+  the plan's moments, 50 ms after the sounds really happen. Scored where
+  the sounds actually are (the sound-analysis tester, 738 Kokoro clips),
+  the sound analysis does much better than the table says - m, b, p shut
+  509/548 (default), 68/90 (panda), 526/546 (owl), 75/101 (otter) against
+  the timing's 441/548, 74/90, 430/546, 85/101 at the time (before the
+  fix); and the owl's "0.20 open in pauses" is really 0.02. The timing is
+  still clearly better at "oo" rounding (about 0.6 against 0.18-0.37),
+  and at not shutting on t, d, n, k and "r".
+- **The corpus test** (`backend/test_mouth_corpus.py`, 25 checks, no model
+  needed; 28 with `JARVIS_KOKORO_DIR`): 3,286 lines built to break things
+  - every verb form, the 720 Harvard sentences, minimal pairs, every sound
+  at the start, middle and end of a word, numbers, dates, money, names,
+  emoji, web addresses, control characters, a 20,000-character word -
+  timed in all four voices (13,144 tracks: no errors, m/b/p shut and f/v
+  bitten 100%), and 2,631 clips spoken by the real model: a mouth made for
+  99.24% (the rest fall back safely to no mouth, sound unchanged), the
+  sound byte-identical with and without the mouth in 504/504, the mouth
+  open in 0 of 13,224 silent frames. Six text-reading bugs it found are
+  fixed (punctuation with no letter, NUL, U+FFFD, which characters count
+  as digits, other English accents' vowels, and memory on a 10-minute
+  answer: ~1 GB down to 256 MB).
+- **Left as they are** (each would change `test_mouth.py`'s committed
+  tracks): "w" before "ee" rounds weakly (median 0.36); no early rounding
+  straight after a pause (the silence gate); the biggest one-frame step is
+  0.326 at an f/v release, just over the 0.3 the tests allow elsewhere.
+
 ### Limits, said plainly
 
 - **Not run on Windows or on the owner's PC.** The Windows espeakng-loader
@@ -589,3 +682,39 @@ also runs the real model in all four voices. The scratch scripts that made
 the numbers above (the 144-sentence exactness run with the seeded copy, the
 comparison, the 48,424-line espeak check) were run in the dev container and
 are not committed.
+
+## Each animal's own voice (2026-09-28)
+
+The owner can now pick, for each animal, any of the eleven built-in voices,
+a pitch from 3 steps deeper to 4 steps higher (half steps) and a pace
+(`JARVIS-API.md` section 15). Nothing about the mouths had to be added for
+it: the timing already follows whatever voice number and speed Kokoro is
+asked for, and every time is divided by the pitch factor f =
+2^(semitones/12). What changed is that f may now be **below 1** (a deeper
+voice is played slower, so it is longer): `jarvis_speech.pitch_up` and
+`jarvis_mouth.speak` both take a negative number, and Kokoro is asked for
+speed / f - faster - so the pace still comes out as chosen.
+
+**Checked with the real Kokoro model** (dev container, one fixed
+three-piece answer, each combination spoken end to end through
+`jarvis_speech.say()`): 11 combinations - three per animal, every pace,
+pitches -3, -2, -1.5, -1, -0.5, 0, +2.5 and +4, voices 0, 3, 5, 6, 7, 8,
+9 and 10, and the owner's own speed at Faster and Slower on top. In
+**11/11** the `jmth` block was made, every piece sherpa-onnx spoke was
+exactly as long as the timing said (0 samples out), the timing's end and
+the final sound's end agreed within **0.94 samples** at worst, and the
+track had exactly one frame per 10 ms of the final sound. With the test
+copy of Kokoro whose random-noise nodes are seeded (see above), the sound
+with the mouth was **the same sound, sample for sample, as the sound
+without it** in 10 of the 11. The eleventh (voice 7, pitch 0, Faster)
+differed in that long run, but run again on its own - twice, and beside
+voice 0 and a +0.5 pitch - it was identical every time (0 samples
+different). Pitch 0 is the one case this change does not touch (no pitch
+factor at all), so the likeliest cause is the two seeded copies falling out
+of step in the long run, not the new code; it is written down rather than
+explained away. With the timing made impossible (a missing
+durations model) the answer was still spoken, with no block - the
+audio-only fallback is unchanged. `test_mouth.py` now also checks
+`finish()` at +4, -1.5 and -3, and its real-model run (with
+`JARVIS_KOKORO_DIR`) includes the deepest voice at a quick pace.
+

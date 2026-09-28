@@ -211,6 +211,14 @@ fn main() {
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.
             "get_reach",
+            // The sun, the moon and the weather behind the animal faces
+            // (backend/sky.patch, 2026-09-28): the settings and the weather
+            // now (a read - Settings, the Widget and the floating face keep
+            // what drawing needs in this computer's localStorage); ONE
+            // change at a time (Settings only; Open-Meteo ON raises one
+            // approval card on the PC; adding is held on a stale link).
+            "get_sky",
+            "set_sky",
             // Settings' "What asks first" (backend/asks-first.patch): every
             // action and whether it asks, in the PC's words; "Ask me first"
             // on ONE action of the short safe list (stricter at once, never
@@ -300,6 +308,9 @@ fn main() {
             "set_voice_speed",
             "set_voice_speaker",
             "set_voice_face",
+            "set_voice_animal",
+            "reset_voice_animal",
+            "try_voice_animal",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

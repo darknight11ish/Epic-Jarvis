@@ -149,6 +149,8 @@ on a throwaway copy instead.
 | `photo-reminder.patch` | `jarvis_hud.py` | **Photo to reminder** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §83). One install()-shaped hunk at start-up - `jarvis_photo_remind.install(Handler, ...)` - whose context is `brain-reads.patch`'s own install block, so it goes after it, last like every new patch. It answers `POST /api/photo/scan`: the words in a picture read by Windows (`jarvis_ocr.py`), a date, time and title found by `jarvis_quick.py`'s own parser, and a PROPOSED reminder sent back - nothing set up, nothing kept, outside text. Needs `jarvis_photo_remind.py`; without it the banner says so and the route is not there. See "Photo to reminder", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude or Gemini** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 | `forget-range.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Forget a time frame"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 64). Adds `GET /api/memory/forget_range` and `/preview` (what Jarvis learned and the chats from some days, as a list the owner unticks), `POST /api/memory/forget_range` (ONE approval card, `memory_forget_range`, listing every item - nothing changes before a person approves) and `/undo` (10 minutes, no card), and the gate's risk line for the new action (local, not reversible: a risky approval). Last in the list: its context is `chatbot.patch`'s gate lines and `live.patch`'s install block. Needs `jarvis_forget_range.py` - see "Forget a time frame", at the very end. |
+| `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
 
 ## All but two of the patches apply, and that is correct
 
@@ -7047,7 +7049,7 @@ with those two - see `jarvis_voices.KOKORO_VOICES`'s own comment for the
 full reasoning and the caveat.
 
 **Also new (2026-09-27, the owner's choice): "Voice follows the face"** -
-with the red panda, pygmy owl or sea otter face showing, the built-in voice
+with the red panda, pygmy owl, sea otter or monkey face showing, the built-in voice
 becomes that animal's: one of the Kokoro voices already installed, its own
 pace, and a small pitch rise (`jarvis_voices.FACE_VOICES`; the face is read
 from `appearance.json`). An on/off switch, **on by default**, right under
@@ -7057,6 +7059,28 @@ way, held on a stale link like every change sent to the PC. A voice you
 recorded still wins, and your speaking speed still applies on top. The
 animals' voices were picked from Kokoro's published descriptions, **not
 listened to** - change a row in `FACE_VOICES` if one sounds wrong.
+
+**Also new (2026-09-28, the owner's choice): each animal's own voice.**
+Under that switch, for each animal, any of the eleven built-in voices, a
+pitch from 3 steps deeper to 4 steps higher (half steps; a step is a
+semitone) and a pace (Slower / Normal / Faster, still times your speaking
+speed), with **Try it** and **Reset to its own voice** - desktop: Settings
+-> Jarvis's voice, "Each animal's voice"; phone: the Voices screen. `POST
+/api/voice/voices/face_animal` sets or resets one animal (no card either
+way, held on a stale link, kept in `voices/state.json` as `face_animals`);
+`POST /api/voice/voices/face_animal/try` answers a WAV of one fixed line in
+that voice (nothing kept, never any words from the app), one at a time - a
+second one while the first is still being made is refused at once with a
+429 in words (`jarvis_voices.try_face_animal`'s lock, so `voices.patch` did
+not change for it). Both are routed in
+`voices.patch`, so **run `apply-patches.ps1` again** on the PC; until then
+the apps show the rows but a change answers "your PC does not have this
+yet". A deeper pitch plays the sound slower (`jarvis_speech.pitch_up` with
+a negative number: Kokoro is asked for faster speech first, so the pace
+stays as chosen), and the mouth timing is divided by the same factor, so
+**the mouths match whatever is chosen** - checked with the real Kokoro model
+(`docs/LIPSYNC.md`). `test_voice_upgrades.py` covers the choices, the
+refusals, reset, the deeper pitch, the "One moment." key and Try it.
 
 ## The two candidates
 
@@ -11891,6 +11915,58 @@ mentioned in another language is not caught.
 - **No off switch, and no card, ever** - the owner's own instruction. It
   only adds words to an answer; it never approves or acts (rule 4).
 
+## The serious moment: a neutral face and the plain voice (2026-09-28)
+
+The owner's decision: "At serious moments the animals drop the cute
+gestures." For a crisis answer the animal faces show a neutral pose, and
+Jarvis speaks in its plain built-in voice - not the animal's voice
+("Voice follows the face", `jarvis_voices.py`), no pitch rise.
+
+**Why a window on the PC, not a flag on each spoken sentence.** Both apps
+speak an answer one sentence at a time through `POST /api/voice/say
+{"text"}`, and that route hands `jarvis_speech.say()` the text and nothing
+else - a per-request flag would need both apps and the route changed first.
+So `jarvis_wellbeing.py` keeps ONE in-memory window instead (two
+timestamps and a counter; never a word of the turn, never on disk, never
+logged):
+
+- `serious_begin()` - `jarvis_agent.run_local_turn` calls it (through
+  `serious_moment("begin")`) for a crisis turn, before the model is asked,
+  so before the first word. An ordinary turn calls `serious_calm()`
+  instead, which closes an ENDED crisis answer's window at once (both apps
+  drop the rest of the last answer's queued sentences when a new question
+  is sent); a crisis answer still being written is never closed that way.
+- `serious_end(words)` - in `run_local_turn`'s `finally`, for a crisis
+  turn: the window stays open `grace_seconds(words)` more - 30 s plus one
+  second per 1.2 words (the slowest speaking speed, with room), at most
+  300 s - then a timer closes it. The length is used once, not kept.
+- A crisis turn that never reports its end stops counting after 600 s.
+- Both apps are told by a `wellbeing` event, `{"serious": true | false}` -
+  one boolean. `view()` (`GET /api/wellbeing`, proposed) carries
+  `serious` too.
+
+**The voice.** `jarvis_speech.say()` asks `plain_voice_now(text)` (which
+asks `jarvis_wellbeing.speak_plainly`) for each sentence: True inside the
+window, and for the help message's own words at any time (`help_words`:
+`REPLY`, `REPLY_SPOKEN`, `REPEAT`, `REPEAT_SPOKEN`, or a piece naming 988,
+"nine eight eight", the Crisis Lifeline or "call 911" - however the app
+cut the sentence). Then `_synthesise(..., plain=True)` speaks through
+`tts_voice(plain=True)`: the owner's own built-in choice and speed
+(`jarvis_voices.speaker()`/`speed()`), no pitch rise. A recorded custom voice
+still speaks first, as always; the mouth chunk is made the same way. While
+the window is open, `jarvis_voice_flow`'s barge-in check also compares
+against the plain voice (`_reference_sources`), so Jarvis's own plain voice
+is not taken for the owner talking over it.
+
+**Not touched:** the request and answer of `/api/voice/say`, the "Voice
+follows the face" switch, the "One moment." clip (made ahead in the voice
+in use, not remade plainly for a crisis turn), and every non-voice part of
+the crisis help line above. **Erring on the safe side**: anything else said
+inside the window (an alarm a minute later) is plain too, and the faces may
+stay neutral up to 300 s after the answer. **The app side - the neutral
+pose - is not built here**: `docs/JARVIS-API.md` section 38.1 says exactly
+what each app must read, and when it starts and ends.
+
 ## `wellbeing.patch` - the one piece that is NOT confirmed
 
 Every other patch in the table above was checked against real, cited lines
@@ -11930,12 +12006,19 @@ be edited by hand from a guess.
 python3 backend/test_wellbeing.py
 ```
 
-122 checks, no model and no network: the crisis phrases and the false-alarm
+209 checks, no model and no network: the crisis phrases and the false-alarm
 list, the fixed texts (the US numbers only, no invented feeling), the note
 never first and the rules block staying first, no tools offered, the help
 message following the model's answer and sent alone on a failure, the
-repeat line on a second mention, the learner exclusion, and that the module
-itself never opens a file, a socket or a log.
+repeat line on a second mention, the learner exclusion, that the module
+itself never opens a file, a socket or a log - and (section 7, 2026-09-28)
+the serious moment: the window opening before the first word and lasting
+until the answer can have been spoken, the next ordinary question closing
+it, an old timer never closing a newer one, the `wellbeing` event (one
+boolean), the help words recognised however a sentence is cut, `say()`
+speaking the owner's plain built-in voice instead of the panda's inside it
+(the mouth track still made) and the panda's again outside it, and the
+barge-in check knowing the plain voice while it lasts.
 
 ## Not checked, said plainly
 
@@ -15528,6 +15611,50 @@ The owner chose this group on 2026-09-28, from
     python3 backend/test_brain_reads.py
     python3 backend/test_chat_log.py
     python3 backend/test_memory_erase.py
+# The sky behind the animals: `jarvis_sky.py`, `sky.patch` (2026-09-28)
+
+## In plain words
+
+Two options for the animal faces, both off until switched on: the real sun
+and moon for your town behind the animal, and rain, snow or wind. You type
+your town once on the PC (Settings, Appearance, "Sun, moon and weather");
+the PC finds it in a list of towns it carries and keeps only a rough
+position. Nothing goes online for the sun and moon - each app works them out
+itself. The weather comes from your own Home Assistant, or from Open-Meteo
+on the internet if you choose it and approve its card.
+
+## Owner steps (one line each, in PowerShell)
+
+Nothing new to install: `apply-patches.ps1` copies the two modules and
+applies `sky.patch`, like every other feature. Then, in the desktop's
+Settings, Appearance: switch on "Show the sun and moon behind the animal",
+type your town and press Set. For the weather from Home Assistant, it must
+already be set up for Jarvis (the same device the morning briefing reads).
+
+## What the code does
+
+- `jarvis_sky.py`: the settings (`<config dir>/sky.json`: on or off, the town
+  with its position rounded to 0.1 degree, the weather source and the
+  position an Open-Meteo card approved), the town search (offline, accents
+  and "St." ignored, a state or country after a comma, or a typed position),
+  the two weather reads, the cache (read again after 20 minutes, a failure
+  after 30, and only while an app asks), the Open-Meteo card, and the route.
+- `jarvis_sky_places.py`: about 16,000 towns from GeoNames (CC BY 4.0),
+  made by `tools/gen_sky_places.py` - one long string, no code.
+- Home Assistant: the morning briefing's own rules (`jarvis_briefing.
+  _weather_source`) and weather device (`jarvis_home.weather_entity`), one
+  GET of its state through the gate as `home_read`, at tier auto only.
+- Open-Meteo: one fixed address, the rounded position and four value names,
+  no proxy, no redirect, 10 s, 64 KB; ON is a `change_own_config` card that
+  names the exact numbers, good for that position only.
+- `jarvis_reach.py`: a row, "Weather for the animal's scene".
+- Never: the town or position in a log line, the audit log or anything the
+  AI model sees.
+
+## Test it
+
+    python3 backend/test_sky.py
+    python3 tools/gen_sky_cases.py --check
     python3 backend/run_suites.py
 
 ## Not checked, said plainly
@@ -16485,3 +16612,12 @@ The words and real answers both apps are tested against:
 - "A forgotten fact is not learned again automatically" is on the audit
   branch, not this one yet. These forgets use Forget's own mark, so it will
   cover them when it lands.
+- **Not run on the owner's PC, and Open-Meteo was never actually called**:
+  every read in the tests is injected (no network in the container's tests).
+  The address and the four value names follow Open-Meteo's published API
+  (`/v1/forecast`, `current=`, `wind_speed_unit=ms`); if Open-Meteo changes
+  it, the status line says it could not read the answer and no weather is
+  drawn.
+- A Home Assistant weather device whose attributes run past 500 characters
+  (`jarvis_home`'s cap) loses its wind; the condition still draws.
+

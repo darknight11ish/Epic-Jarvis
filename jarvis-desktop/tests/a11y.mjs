@@ -283,6 +283,69 @@ await check("CONTROL: a plain keypress is not a zoom", async () => {
   assert.equal(typed, "0-=", "the zoom handler swallowed ordinary typing");
 });
 
+await check("the Faces picker works from the keyboard", async () => {
+  // Every card used to be a bare canvas: a mouse could open a face and "Use
+  // this face"; a keyboard could not reach a single card.
+  const page = await K.open(browser, base, "faces.html", {}, { width: 1300, height: 950 });
+  await page.waitForTimeout(800);
+  const cards = await page.evaluate(() => [...document.querySelectorAll("#grid .card canvas")]
+    .map((c) => ({ tab: c.tabIndex, role: c.getAttribute("role"), name: c.getAttribute("aria-label") })));
+  assert.ok(cards.length >= 20, `${cards.length} cards`);
+  for (const c of cards) {
+    assert.equal(c.tab, 0, `${c.name} cannot be reached with Tab`);
+    assert.equal(c.role, "button");
+    assert.match(c.name || "", / face$/, "a card needs a name");
+  }
+  assert.ok(cards.some((c) => c.name === "Red Panda face"), "the panda's card is not named");
+
+  // Tab reaches a card, and it shows it has the focus.
+  const panda = page.locator('#grid canvas[aria-label="Red Panda face"]');
+  await panda.focus();
+  const ring = await panda.evaluate((c) => getComputedStyle(c).outlineStyle);
+  await page.keyboard.press("Tab");          // off, and back, so it is keyboard focus
+  await page.keyboard.press("Shift+Tab");
+  const ringKb = await page.evaluate(() => {
+    const a = document.activeElement;
+    return { name: a.getAttribute("aria-label"), outline: getComputedStyle(a).outlineStyle };
+  });
+  // Arrow keys walk the grid.
+  await page.keyboard.press("ArrowRight");
+  const right = await page.evaluate(() => document.activeElement.getAttribute("aria-label"));
+  await page.keyboard.press("ArrowLeft");
+  // Enter opens it, focus lands on "Use this face", Escape brings it back.
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(200);
+  const opened = await page.evaluate(() => ({
+    hidden: document.getElementById("solo").hidden,
+    dialog: document.getElementById("solo").getAttribute("role"),
+    name: document.getElementById("solo-name").textContent,
+    focus: document.activeElement.id,
+  }));
+  // Tab stays inside the open face.
+  for (let i = 0; i < 6; i++) await page.keyboard.press("Tab");
+  const trapped = await page.evaluate(() => Boolean(document.activeElement.closest("#solo")));
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  const closed = await page.evaluate(() => ({
+    hidden: document.getElementById("solo").hidden,
+    focus: document.activeElement.getAttribute("aria-label"),
+  }));
+  // Space opens a card too.
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(150);
+  const space = await page.evaluate(() => !document.getElementById("solo").hidden);
+  await page.close();
+
+  assert.ok(ring !== undefined);
+  assert.equal(ringKb.name, "Red Panda face");
+  assert.notEqual(ringKb.outline, "none", "no visible focus on a card");
+  assert.ok(right && right !== "Red Panda face", "ArrowRight did not move");
+  assert.deepEqual(opened, { hidden: false, dialog: "dialog", name: "Red Panda", focus: "solo-use" });
+  assert.ok(trapped, "Tab left the open face for the page behind it");
+  assert.deepEqual(closed, { hidden: true, focus: "Red Panda face" });
+  assert.ok(space, "Space did not open the card");
+});
+
 await browser.close(); close();
 console.log(fails.length ? `\n${fails.length} FAILED` : "\nall accessibility blockers held");
 process.exit(fails.length ? 1 : 0);

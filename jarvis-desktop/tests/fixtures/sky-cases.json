@@ -1,0 +1,300 @@
+{
+ "cases": {
+  "home_assistant_not_set_up": {
+   "available": true,
+   "can_set_place": false,
+   "forget_label": "Forget my town",
+   "place": {
+    "lat": 39.7,
+    "lon": -105.0,
+    "name": "Denver, Colorado, United States"
+   },
+   "place_detail": "Your town is typed on the PC, in Settings, Appearance.",
+   "place_label": "Your town",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "show": true,
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the animal",
+   "title": "Sun, moon and weather",
+   "weather": {
+    "choices": [
+     {
+      "id": "off",
+      "label": "Off (default)",
+      "why": "No weather is drawn."
+     },
+     {
+      "id": "home_assistant",
+      "label": "My Home Assistant",
+      "why": "Reads the weather device your Home Assistant already has. Stays on your home network. Needs Home Assistant set up for Jarvis on the PC."
+     },
+     {
+      "id": "open_meteo",
+      "label": "Open-Meteo (online)",
+      "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
+     }
+    ],
+    "detail": "Rain, snow or wind behind the animal. Off by default.",
+    "label": "Weather in the animal's scene",
+    "last": null,
+    "now": null,
+    "source": "home_assistant",
+    "status": "No weather drawn: Home Assistant is not set up for Jarvis on this PC.",
+    "waiting": false
+   },
+   "why": ""
+  },
+  "off": {
+   "available": true,
+   "can_set_place": true,
+   "forget_label": "Forget my town",
+   "place": null,
+   "place_detail": "Type it once on the PC. Jarvis finds it in a list of towns it carries and keeps only a rough position (about 11 km). Not found? Type the position instead, like 39.7, -105.0.",
+   "place_label": "Your town",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "show": false,
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the animal",
+   "title": "Sun, moon and weather",
+   "weather": {
+    "choices": [
+     {
+      "id": "off",
+      "label": "Off (default)",
+      "why": "No weather is drawn."
+     },
+     {
+      "id": "home_assistant",
+      "label": "My Home Assistant",
+      "why": "Reads the weather device your Home Assistant already has. Stays on your home network. Needs Home Assistant set up for Jarvis on the PC."
+     },
+     {
+      "id": "open_meteo",
+      "label": "Open-Meteo (online)",
+      "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
+     }
+    ],
+    "detail": "Rain, snow or wind behind the animal. Off by default.",
+    "label": "Weather in the animal's scene",
+    "last": null,
+    "now": null,
+    "source": "off",
+    "status": "Off.",
+    "waiting": false
+   },
+   "why": ""
+  },
+  "open_meteo_rain": {
+   "available": true,
+   "can_set_place": false,
+   "forget_label": "Forget my town",
+   "place": {
+    "lat": 39.7,
+    "lon": -105.0,
+    "name": "Denver, Colorado, United States"
+   },
+   "place_detail": "Your town is typed on the PC, in Settings, Appearance.",
+   "place_label": "Your town",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "show": true,
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the animal",
+   "title": "Sun, moon and weather",
+   "weather": {
+    "choices": [
+     {
+      "id": "off",
+      "label": "Off (default)",
+      "why": "No weather is drawn."
+     },
+     {
+      "id": "home_assistant",
+      "label": "My Home Assistant",
+      "why": "Reads the weather device your Home Assistant already has. Stays on your home network. Needs Home Assistant set up for Jarvis on the PC."
+     },
+     {
+      "id": "open_meteo",
+      "label": "Open-Meteo (online)",
+      "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
+     }
+    ],
+    "detail": "Rain, snow or wind behind the animal. Off by default.",
+    "label": "Weather in the animal's scene",
+    "last": {
+     "at": 0,
+     "message": "Approved. The weather now comes from Open-Meteo.",
+     "outcome": "changed",
+     "why": ""
+    },
+    "now": {
+     "at": 1759000000.0,
+     "cloud": 0.9,
+     "dir": -1,
+     "fog": 0.0,
+     "rain": 0.6,
+     "snow": 0.0,
+     "wind": 0.5
+    },
+    "source": "open_meteo",
+    "status": "Rain, windy, from Open-Meteo.",
+    "waiting": false
+   },
+   "why": ""
+  },
+  "open_meteo_waiting": {
+   "available": true,
+   "can_set_place": false,
+   "forget_label": "Forget my town",
+   "place": {
+    "lat": 39.7,
+    "lon": -105.0,
+    "name": "Denver, Colorado, United States"
+   },
+   "place_detail": "Your town is typed on the PC, in Settings, Appearance.",
+   "place_label": "Your town",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "show": true,
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the animal",
+   "title": "Sun, moon and weather",
+   "weather": {
+    "choices": [
+     {
+      "id": "off",
+      "label": "Off (default)",
+      "why": "No weather is drawn."
+     },
+     {
+      "id": "home_assistant",
+      "label": "My Home Assistant",
+      "why": "Reads the weather device your Home Assistant already has. Stays on your home network. Needs Home Assistant set up for Jarvis on the PC."
+     },
+     {
+      "id": "open_meteo",
+      "label": "Open-Meteo (online)",
+      "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
+     }
+    ],
+    "detail": "Rain, snow or wind behind the animal. Off by default.",
+    "label": "Weather in the animal's scene",
+    "last": null,
+    "now": null,
+    "source": "off",
+    "status": "Waiting for your yes on the approval card.",
+    "waiting": true
+   },
+   "why": ""
+  },
+  "town_on_the_pc": {
+   "available": true,
+   "can_set_place": true,
+   "forget_label": "Forget my town",
+   "place": {
+    "lat": 39.7,
+    "lon": -105.0,
+    "name": "Denver, Colorado, United States"
+   },
+   "place_detail": "Type it once on the PC. Jarvis finds it in a list of towns it carries and keeps only a rough position (about 11 km). Not found? Type the position instead, like 39.7, -105.0.",
+   "place_label": "Your town",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "show": true,
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the animal",
+   "title": "Sun, moon and weather",
+   "weather": {
+    "choices": [
+     {
+      "id": "off",
+      "label": "Off (default)",
+      "why": "No weather is drawn."
+     },
+     {
+      "id": "home_assistant",
+      "label": "My Home Assistant",
+      "why": "Reads the weather device your Home Assistant already has. Stays on your home network. Needs Home Assistant set up for Jarvis on the PC."
+     },
+     {
+      "id": "open_meteo",
+      "label": "Open-Meteo (online)",
+      "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
+     }
+    ],
+    "detail": "Rain, snow or wind behind the animal. Off by default.",
+    "label": "Weather in the animal's scene",
+    "last": null,
+    "now": null,
+    "source": "off",
+    "status": "Off.",
+    "waiting": false
+   },
+   "why": ""
+  },
+  "town_on_the_phone": {
+   "available": true,
+   "can_set_place": false,
+   "forget_label": "Forget my town",
+   "place": {
+    "lat": 39.7,
+    "lon": -105.0,
+    "name": "Denver, Colorado, United States"
+   },
+   "place_detail": "Your town is typed on the PC, in Settings, Appearance.",
+   "place_label": "Your town",
+   "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
+   "show": true,
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the animal",
+   "title": "Sun, moon and weather",
+   "weather": {
+    "choices": [
+     {
+      "id": "off",
+      "label": "Off (default)",
+      "why": "No weather is drawn."
+     },
+     {
+      "id": "home_assistant",
+      "label": "My Home Assistant",
+      "why": "Reads the weather device your Home Assistant already has. Stays on your home network. Needs Home Assistant set up for Jarvis on the PC."
+     },
+     {
+      "id": "open_meteo",
+      "label": "Open-Meteo (online)",
+      "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
+     }
+    ],
+    "detail": "Rain, snow or wind behind the animal. Off by default.",
+    "label": "Weather in the animal's scene",
+    "last": null,
+    "now": null,
+    "source": "off",
+    "status": "Off.",
+    "waiting": false
+   },
+   "why": ""
+  }
+ },
+ "choices": [
+  {
+   "id": "off",
+   "label": "Off (default)",
+   "why": "No weather is drawn."
+  },
+  {
+   "id": "home_assistant",
+   "label": "My Home Assistant",
+   "why": "Reads the weather device your Home Assistant already has. Stays on your home network. Needs Home Assistant set up for Jarvis on the PC."
+  },
+  {
+   "id": "open_meteo",
+   "label": "Open-Meteo (online)",
+   "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
+  }
+ ],
+ "missing": "Your PC's Jarvis cannot show the sun, moon or weather yet - run apply-patches.ps1 on the PC.",
+ "sources": [
+  "off",
+  "home_assistant",
+  "open_meteo"
+ ]
+}

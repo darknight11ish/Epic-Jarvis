@@ -790,6 +790,38 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
 - **A "Still" option for the animals** in both apps' face settings, off by
   default: the animal sits calmly and only breathes - no looking around,
   no gestures or idle events.
+- **Wake-up and falling-asleep animations** for every animal: short (about
+  2-3 s), calm, no yawn (the mouth moves only with Jarvis's voice); eyes
+  only when waking into an approval, under Still, calm motion or a crisis.
+- **A fourth animal: a cartoon monkey** (from the owner's picture), in the
+  same style as the others and with every improvement they have. It hangs
+  from a vine by one arm and swings gently; it sits on the vine to sleep,
+  tail curled round it. **The banana is its orb**: it glows in the state
+  colour, as the others' orbs do. A male voice, a touch energetic. It is
+  a little more lively than the other three - still smooth and never
+  sporadic. Its resting motion targets about 1.5x the panda's.
+- **Sharp animals on capable hardware:** when Jarvis detects a capable
+  graphics chip and the owner has chosen quality over battery saving,
+  every animal draws at full resolution (no soft or jagged edges).
+- **The otter gets more detail:** visible fur texture, and small gentle
+  waves on the water around it.
+- **Sun and moon behind the animals, optional (off by default):** the real
+  sun and moon for the date and time - sunrise and sunset, the moon's
+  phase (full, waxing, waning) and its rising and setting - worked out on
+  the owner's own devices from a town the owner types once on the PC (the
+  phone gets it from the PC). Nothing goes online for it.
+- **Weather in the animals' scene, optional (off by default):** rain, snow
+  or wind. Two sources to choose from in settings: the owner's own Home
+  Assistant (stays on the home network), or Open-Meteo online (free, no
+  key; it receives the rough location, so turning it on raises an
+  approval card, like any new way out of the PC; turning it off is
+  immediate).
+- **Every animal option lives in one place in both apps' settings** (Still,
+  sun and moon, weather and its source, resolution, frame rate, and every
+  new one), and **Jarvis can change any of them when asked** ("turn weather
+  off", "make the animal sharper"). Asking Jarvis follows the same rules as
+  the switch: cosmetic options change at once; anything that opens a way
+  out of the PC (online weather) still raises its approval card.
 
 Decided 2026-09-28, after checking two Gemini reviews of the outside
 projects Jarvis names (`docs/AUDIT-2026-09-28-REPO-REFS.md` - read it

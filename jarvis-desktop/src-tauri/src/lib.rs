@@ -43,6 +43,7 @@ pub mod pyfind;
 pub mod reach;
 pub mod screen_work;
 pub mod sidecar;
+pub mod sky;
 pub mod spec;
 pub mod spec_drift;
 pub mod sse;
@@ -153,6 +154,12 @@ pub mod events {
     /// still playing, this is the moment to stop it, before the finished
     /// utterance (`VOICE_HEARD`, above) is anywhere close to ready.
     pub const VOICE_SPEECH_STARTED: &str = "voice-speech-started";
+    /// Payload: none. The talk button is about to open the microphone
+    /// ([`crate::voice::start_voice_capture`]). Sent to every window: an
+    /// animal's "Try it" playing in Settings stops at once, so the owner's
+    /// question is not recorded over it (voice-panel.js `followJarvisVoice`).
+    /// Carries nothing; starts and decides nothing.
+    pub const VOICE_CAPTURE_STARTED: &str = "voice-capture-started";
     /// Payload: none. Sent to the quickbar only, by
     /// [`crate::voice::summon_push_to_talk`] (the HUD's mic button): put
     /// focus on the mic and say how to talk. Starts no recording.
@@ -952,6 +959,8 @@ pub fn run() {
             plain_errors::set_manner,
             plain_errors::set_humor,
             plain_errors::open_fix_place,
+            sky::get_sky,
+            sky::set_sky,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,
@@ -1035,6 +1044,9 @@ pub fn run() {
             voice_training::set_voice_speed,
             voice_training::set_voice_speaker,
             voice_training::set_voice_face,
+            voice_training::set_voice_animal,
+            voice_training::reset_voice_animal,
+            voice_training::try_voice_animal,
             vision::local_model_vision,
             // Windows Hello (lock.rs): Settings reads and changes the four
             // Security settings; the Brain's Show button.

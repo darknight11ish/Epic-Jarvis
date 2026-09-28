@@ -98,6 +98,13 @@ pub(crate) const TRAINING_UPDATE: &str =
 pub(crate) const VOICES_UPDATE: &str =
     "This PC's Jarvis does not have custom voices yet. Update the backend by running \
      apply-patches.ps1, then open this again.";
+/// "Try it" on a PC whose backend has no route for it yet. The phone says
+/// the same (CustomVoices.kt `TRY_UPDATE`; custom-voices.js too).
+pub(crate) const TRY_UPDATE: &str =
+    "Your PC cannot play an animal's voice yet. Run the patch script on the PC first.";
+/// "Try it" while the talk button records: it would be recorded with the
+/// question. The phone says the same (CustomVoices.kt `TRY_BUSY`).
+pub(crate) const TRY_BUSY: &str = "Jarvis is busy talking or listening. Try it again in a moment.";
 /// Asking for a card, or loosening, while the event stream is stale.
 pub(crate) const HELD_STALE: &str =
     "The connection to Jarvis is catching up, so this cannot be sent until it does. \
@@ -1133,6 +1140,169 @@ pub async fn set_voice_face(app: AppHandle, enabled: bool) -> Result<Value, Stri
     voices_answer(status, &text)
 }
 
+/// The animal faces with a voice of their own (`GET /api/voice/voices`
+/// `face_voice.animals`). Anything else is refused here, before it is sent.
+pub(crate) const ANIMALS: [&str; 4] = ["redpanda", "pygmyowl", "seaotter", "monkey"];
+
+/// How far an animal's pitch may move, in semitones ("steps" on screen):
+/// 3 deeper to 4 higher, in half steps - the PC's own range
+/// (`face_voice.animal_choices.pitch`, jarvis_voices.MIN/MAX_SEMITONES).
+pub(crate) const PITCH_MIN: f64 = -3.0;
+pub(crate) const PITCH_MAX: f64 = 4.0;
+
+fn animal_id(face: &str) -> Result<&'static str, String> {
+    let face = face.trim();
+    ANIMALS.iter().copied().find(|a| *a == face).ok_or_else(|| {
+        "Choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey.".to_string()
+    })
+}
+
+/// `semitones` if it is a pitch the PC takes (in range, whole half steps).
+pub(crate) fn animal_pitch(semitones: f64) -> Option<f64> {
+    if !semitones.is_finite() || !(PITCH_MIN..=PITCH_MAX).contains(&semitones) {
+        return None;
+    }
+    let halves = semitones * 2.0;
+    if (halves - halves.round()).abs() > 1e-9 {
+        return None;
+    }
+    Some(halves.round() / 2.0)
+}
+
+/// The body for one animal's voice (`POST /api/voice/voices/face_animal`),
+/// or why it cannot be sent.
+pub(crate) fn animal_body(
+    face: &str,
+    speaker: &str,
+    semitones: f64,
+    pace: &str,
+) -> Result<Value, String> {
+    let face = animal_id(face)?;
+    let speaker = speaker.trim();
+    if !SPEAKERS.contains(&speaker) {
+        return Err("Choose one of the listed voices.".to_string());
+    }
+    let semitones = animal_pitch(semitones).ok_or_else(|| {
+        "The pitch must be from 3 steps deeper to 4 steps higher, in half steps.".to_string()
+    })?;
+    let pace = pace.trim();
+    if !SPEEDS.contains(&pace) {
+        return Err("Choose Slower, Normal or Faster.".to_string());
+    }
+    Ok(json!({ "face": face, "speaker": speaker, "semitones": semitones, "pace": pace }))
+}
+
+/// One animal's own voice, pitch and pace (under "Voice follows the face").
+/// Same shape as [`set_voice_speaker`]: no card either way, held on a stale
+/// link (rule 4).
+#[tauri::command]
+pub async fn set_voice_animal(
+    app: AppHandle,
+    face: String,
+    speaker: String,
+    semitones: f64,
+    pace: String,
+) -> Result<Value, String> {
+    let body = animal_body(&face, &speaker, semitones, &pace)?;
+    if stale(&app) {
+        return Err(HELD_STALE.to_string());
+    }
+    let (status, text) = post(&app, "/api/voice/voices/face_animal", &body, VOICES_TIMEOUT).await?;
+    voices_answer(status, &text)
+}
+
+/// "Reset to its own voice" for one animal. No card, held on a stale link
+/// like every change sent to the PC (rule 4).
+#[tauri::command]
+pub async fn reset_voice_animal(app: AppHandle, face: String) -> Result<Value, String> {
+    let face = animal_id(&face)?;
+    if stale(&app) {
+        return Err(HELD_STALE.to_string());
+    }
+    let (status, text) = post(
+        &app,
+        "/api/voice/voices/face_animal",
+        &json!({ "face": face, "reset": true }),
+        VOICES_TIMEOUT,
+    )
+    .await?;
+    voices_answer(status, &text)
+}
+
+/// The most sound "Try it" takes back: one short fixed line is a few
+/// hundred kilobytes; anything far bigger is not that.
+const TRY_MAX_BYTES: usize = 4_000_000;
+
+/// "Try it": the PC says one fixed line (its own words, never the app's) in
+/// that animal's voice as it is now, and it comes back as
+/// `{"ok": true, "audio": "data:audio/wav;base64,..."}` for the page to
+/// play - the same data-URI shape as [`crate::voice::speak_reply`]. Changes
+/// nothing on the PC, so it is not held on a stale link. A refusal is the
+/// PC's own sentence, as for every other voice answer. Refused while the
+/// talk button records ([`TRY_BUSY`]): the sound would go into the question.
+/// Settings also refuses while Jarvis is speaking, from the events it hears
+/// (voice-panel.js `jarvisBusy`).
+#[tauri::command]
+pub async fn try_voice_animal(
+    app: AppHandle,
+    capture: State<'_, VoiceCaptureState>,
+    face: String,
+) -> Result<Value, String> {
+    let face = animal_id(&face)?;
+    if capture.busy() {
+        return Err(TRY_BUSY.to_string());
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(VOICES_TIMEOUT))?
+        .post(format!("{base}/api/voice/voices/face_animal/try"))
+        .headers(jarvis_headers(&app)?)
+        .json(&json!({ "face": face }))
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let audio = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("audio/"));
+    if (200..300).contains(&status) && audio {
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| format!("could not read the sound: {e}"))?;
+        return try_answer(&bytes);
+    }
+    let text = response.text().await.unwrap_or_default();
+    try_refusal(status, &text)
+}
+
+/// Why "Try it" got no sound. A 404 that is not the PC's own answer means
+/// its backend is older than the route: said in the same words as the
+/// phone ([`TRY_UPDATE`]), not the general "update the backend" one.
+pub(crate) fn try_refusal(status: u16, body: &str) -> Result<Value, String> {
+    let has_ok = parsed_object(body).is_some_and(|m| m.contains_key("ok"));
+    if status == 404 && !has_ok {
+        return Err(TRY_UPDATE.to_string());
+    }
+    voices_answer(status, body)
+}
+
+/// The sound "Try it" got back, as the page plays it - or why not.
+pub(crate) fn try_answer(bytes: &[u8]) -> Result<Value, String> {
+    if bytes.len() < 12 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
+        return Err("The PC sent something that is not a sound.".to_string());
+    }
+    if bytes.len() > TRY_MAX_BYTES {
+        return Err("The PC sent far more sound than one short line.".to_string());
+    }
+    Ok(json!({
+        "ok": true,
+        "http": 200,
+        "audio": format!("data:audio/wav;base64,{}", BASE64.encode(bytes)),
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1172,6 +1342,108 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{name}: {e}"));
             assert_eq!(&got, st, "{name}");
         }
+    }
+
+    #[test]
+    fn each_animals_choices_are_the_pcs_own() {
+        let all = cases();
+        let fv = &all["voices"]["face_showing"]["face_voice"];
+        let faces: Vec<&str> = fv["animals"]
+            .as_array()
+            .expect("animals")
+            .iter()
+            .map(|a| a["face"].as_str().expect("face"))
+            .collect();
+        assert_eq!(
+            faces, ANIMALS,
+            "the PC's animals and the ones sent from here"
+        );
+        let ch = &fv["animal_choices"];
+        let voices: Vec<&str> = ch["voices"]
+            .as_array()
+            .expect("voices")
+            .iter()
+            .map(|c| c["id"].as_str().expect("id"))
+            .collect();
+        assert_eq!(voices, SPEAKERS);
+        let paces: Vec<&str> = ch["paces"]
+            .as_array()
+            .expect("paces")
+            .iter()
+            .map(|c| c["id"].as_str().expect("id"))
+            .collect();
+        assert_eq!(paces, SPEEDS);
+        assert_eq!(ch["pitch"]["min"], json!(PITCH_MIN));
+        assert_eq!(ch["pitch"]["max"], json!(PITCH_MAX));
+        assert_eq!(ch["pitch"]["step"], json!(0.5));
+    }
+
+    #[test]
+    fn an_animal_body_is_checked_before_it_is_sent() {
+        assert_eq!(
+            animal_body("redpanda", "3", -1.5, "faster").expect("sent"),
+            json!({"face": "redpanda", "speaker": "3", "semitones": -1.5, "pace": "faster"})
+        );
+        assert!(animal_body("orbit", "3", 0.0, "normal").is_err());
+        assert!(animal_body("redpanda", "11", 0.0, "normal").is_err());
+        assert!(animal_body("redpanda", "3", 0.0, "fast").is_err());
+        for bad in [4.5, -3.5, 1.25, f64::NAN, f64::INFINITY] {
+            assert!(
+                animal_body("redpanda", "3", bad, "normal").is_err(),
+                "{bad}"
+            );
+        }
+        for ok in [-3.0, -0.5, 0.0, 2.5, 4.0] {
+            assert_eq!(animal_pitch(ok), Some(ok));
+        }
+    }
+
+    #[test]
+    fn try_it_is_a_wav_or_a_sentence() {
+        let wav = [b"RIFF".as_slice(), &[0; 4], b"WAVEfmt "].concat();
+        let got = try_answer(&wav).expect("a sound");
+        assert_eq!(got["ok"], true);
+        assert!(got["audio"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("data:audio/wav;base64,"));
+        assert!(try_answer(b"<html>not a sound</html>").is_err());
+        assert!(try_answer(b"").is_err());
+        let all = cases();
+        let bad = voices_answer(
+            400,
+            &all["voice_posts"]["animal_try_bad"]["body"].to_string(),
+        )
+        .expect("the PC's own sentence");
+        assert_eq!(bad["http"], 400);
+    }
+
+    #[test]
+    fn try_it_on_an_older_pc_says_so_like_the_phone() {
+        // No route: the server's own 404, which is not a voices answer.
+        for body in ["", "{\"error\": \"not found\"}", "<html>404</html>"] {
+            assert_eq!(try_refusal(404, body).unwrap_err(), TRY_UPDATE, "{body:?}");
+        }
+        // The PC's own refusals still come through in its own words.
+        let all = cases();
+        let bad = try_refusal(
+            400,
+            &all["voice_posts"]["animal_try_bad"]["body"].to_string(),
+        )
+        .expect("the PC's own sentence");
+        assert_eq!(bad["http"], 400);
+        let busy = try_refusal(
+            429,
+            &all["voice_posts"]["animal_try_busy"]["body"].to_string(),
+        )
+        .expect("the PC's own sentence");
+        assert_eq!(busy["http"], 429);
+        assert_eq!(busy["ok"], false);
+        // A 503 from a backend without jarvis_voices.py is still the general one.
+        assert_eq!(
+            try_refusal(503, "{\"available\": false, \"error\": \"x\"}").unwrap_err(),
+            VOICES_UPDATE
+        );
     }
 
     #[test]

@@ -70,6 +70,8 @@ internal fun FaceEditor(
     onTuningChange: (FaceTuning) -> Unit,
     /** What the face is running with right now: what Auto picked, or what battery saver forces. */
     live: ResolvedBudget,
+    /** How the face above is running: "60 fps · 4.2 ms per frame · animal resolution 810 px (75%)". */
+    stats: String = "",
     phoneBatterySaver: Boolean,
     desktopSyncs: Boolean,
     onRandomise: () -> Unit,
@@ -142,7 +144,8 @@ internal fun FaceEditor(
 
         SwitchRow(
             title = "Auto adjust",
-            detail = "Picks quality and frame rate for this phone, and steps down if the face runs slow.",
+            detail = "Picks quality and frame rate for this phone, and steps down if the face runs slow. " +
+                "On a capable graphics chip an animal can go up to Maximum.",
             checked = auto,
             onChange = { on ->
                 // Turning Auto off keeps what it had picked, rather than
@@ -163,24 +166,34 @@ internal fun FaceEditor(
             caption = when {
                 saver -> null
                 auto -> "Auto is using ${live.tier.label}. Picking one turns Auto adjust off."
-                else -> "High matches the desktop kit. Low is easiest on the phone."
+                else -> "High matches the desktop kit. Lower is easiest on the phone."
             },
         ) {
-            Choices(
-                options = QualityTier.entries,
-                isSelected = {
-                    when {
-                        saver -> false
-                        auto -> it == live.tier
-                        else -> it == tuning.quality
-                    }
-                },
-                label = { it.label },
-                // Picking one is the kit's "an explicit choice is not
-                // overridden": Auto adjust goes off, so it stays picked.
-                onPick = { onTuningChange(tuning.copy(quality = it, autoAdjust = false)) },
-                enabled = !saver,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Two rows of two: "Maximum" and "Balanced" do not fit four across.
+                QualityTier.entries.chunked(2).forEach { row ->
+                    Choices(
+                        options = row,
+                        isSelected = {
+                            when {
+                                saver -> false
+                                auto -> it == live.tier
+                                else -> it == tuning.quality
+                            }
+                        },
+                        label = { it.label },
+                        // Picking one is the kit's "an explicit choice is not
+                        // overridden": Auto adjust goes off, so it stays picked.
+                        onPick = { onTuningChange(tuning.copy(quality = it, autoAdjust = false)) },
+                        enabled = !saver,
+                    )
+                }
+                // One plain line per level: what it costs - word for word the
+                // desktop's Settings (QualityTier.note, face-tuning.js).
+                for (q in QualityTier.entries) {
+                    Text("${q.label} - ${q.note}", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+                }
+            }
         }
 
         Setting(
@@ -191,29 +204,39 @@ internal fun FaceEditor(
                 "This screen runs at ${live.panelHz.roundToInt()} Hz; the face draws up to ${live.fps} fps."
             },
         ) {
-            Choices(
-                options = FrameRateTarget.entries,
-                isSelected = {
-                    when {
-                        saver -> false
-                        auto -> it == FrameRateTarget.AUTO
-                        else -> it == tuning.frameRate
-                    }
-                },
-                label = { it.label },
-                onPick = {
-                    // Also turns Auto adjust off, keeping the quality it had
-                    // picked (see the Auto adjust switch above).
-                    onTuningChange(
-                        tuning.copy(
-                            frameRate = it,
-                            autoAdjust = false,
-                            quality = if (live.governed) live.tier else tuning.quality,
-                        ),
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                FrameRateTarget.entries.chunked(3).forEach { row ->
+                    Choices(
+                        options = row,
+                        isSelected = {
+                            when {
+                                saver -> false
+                                auto -> it == FrameRateTarget.AUTO
+                                else -> it == tuning.frameRate
+                            }
+                        },
+                        label = { it.label },
+                        onPick = {
+                            // Also turns Auto adjust off, keeping the quality it had
+                            // picked (see the Auto adjust switch above).
+                            onTuningChange(
+                                tuning.copy(
+                                    frameRate = it,
+                                    autoAdjust = false,
+                                    quality = if (live.governed) live.tier else tuning.quality,
+                                ),
+                            )
+                        },
+                        enabled = !saver,
                     )
-                },
-                enabled = !saver,
-            )
+                }
+                Text(FrameRateTarget.NOTE, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+                // How the face above is running right now - the desktop's
+                // Faces window says the same under its full-size face.
+                if (stats.isNotEmpty()) {
+                    Text("Now: $stats", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                }
+            }
         }
 
         Setting(title = "All speeds", caption = "How fast the face moves. Calm motion never goes above 1×.") {
@@ -230,7 +253,7 @@ internal fun FaceEditor(
             detail = if (phoneBatterySaver && !tuning.batterySaver) {
                 "On while your phone's Battery Saver is on."
             } else {
-                "Low detail, no glow, 30 fps, calm motion. Overrides the settings above."
+                "Lower quality, no glow, 30 fps, calm motion. Overrides the settings above."
             },
             checked = saver,
             onChange = { onTuningChange(tuning.copy(batterySaver = it)) },

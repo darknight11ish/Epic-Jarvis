@@ -94,6 +94,7 @@ import {
 } from "./security-settings.js";
 import {
   FRAME_RATES,
+  FRAME_RATE_NOTE,
   loadFaceTuning,
   QUALITIES,
   saveFaceTuning,
@@ -626,6 +627,9 @@ paintTextSize();
    phone. The face frames in the widget and the HUD read the same key. */
 let faceTuning = loadFaceTuning();
 const faceAuto = $("face-auto");
+// "Keep the animal still": every face page on this computer reads it from
+// the same key (faces.html FACE_STILL), eased in over about a second.
+const faceStill = $("face-still");
 const faceStatus = $("face-status");
 
 function choiceRow(box, options, label, onPick) {
@@ -643,6 +647,7 @@ function choiceRow(box, options, label, onPick) {
 
 function paintFaceTuning() {
   if (faceAuto) faceAuto.checked = faceTuning.autoAdjust;
+  if (faceStill) faceStill.checked = faceTuning.still === true;
   const mark = (id, value) => {
     const box = $(id);
     if (!box) return;
@@ -658,8 +663,24 @@ function paintFaceTuning() {
   if (note) {
     note.textContent = faceTuning.autoAdjust
       ? "Auto adjust is choosing. Picking one turns Auto adjust off."
-      : "High matches the reactor kit. Low is easiest on the graphics card.";
+      : "High matches the reactor kit. Lower is easiest on the graphics chip.";
   }
+}
+
+// The level notes and the frame-rate note, written once: they never change.
+{
+  const levels = $("face-quality-levels");
+  if (levels) {
+    for (const q of QUALITIES) {
+      const li = document.createElement("li");
+      const b = document.createElement("strong");
+      b.textContent = q.label;
+      li.append(b, ` - ${q.note}`);
+      levels.append(li);
+    }
+  }
+  const fpsNote = $("face-fps-note");
+  if (fpsNote) fpsNote.textContent = FRAME_RATE_NOTE;
 }
 
 function setFaceTuning(next, said) {
@@ -678,6 +699,12 @@ choiceRow($("face-speed"), SPEEDS, (s) => `${s}×`, (s) =>
 if (faceAuto) {
   faceAuto.addEventListener("change", () =>
     setFaceTuning({ ...faceTuning, autoAdjust: faceAuto.checked }));
+}
+if (faceStill) {
+  faceStill.addEventListener("change", () =>
+    setFaceTuning({ ...faceTuning, still: faceStill.checked },
+      faceStill.checked ? "Saved on this computer. The animal will keep still."
+        : "Saved on this computer. The animal moves as usual."));
 }
 paintFaceTuning();
 

@@ -1,0 +1,361 @@
+// THE MONKEY - its body, its vine, its banana and its colours.
+//
+// One part of three: tools/gen_critters.py builds the full shader as
+// common_head.sksl + this file + common_tail.sksl. Read common_head.sksl
+// first: it explains the scheme and the size rule every animal must keep to
+// (tools/shader_size.py measures it).
+//
+// A cartoon monkey from the owner's picture (2026-09-28): warm brown fur, a
+// big pale peach face shaped like a heart - a round lobe round each eye and
+// a wide lower part over the muzzle - big round ears with peach insides, a
+// small tuft on top, a peach belly, long arms and legs with peach hands and
+// feet, and a long thin tail ending in a curl. It hangs by one arm from a
+// green vine across the top of the picture and swings gently; asleep, it
+// sits on the vine with its tail curled round it. It holds a banana, and
+// THE BANANA IS ITS ORB: it glows in the state colour, lights the monkey
+// and throws the same halo the other animals' orbs do (common_tail.sksl),
+// while staying a banana - yellow, bent, with brown tips.
+//
+// Frames: the body's own frame (toBody) has its origin in the middle of the
+// torso, y up, face toward -z. The head's frame (toHead) has its origin at
+// the neck. The arms, the tail, the vine and the banana arrive in world
+// coordinates - the pose code (critter-monkey.js, MonkeyPose.kt on the phone)
+// works out the swing, so the shader only draws.
+
+uniform float3 uBodyPos;
+uniform float3 uBodyR0;
+uniform float3 uBodyR1;
+uniform float3 uBodyR2;
+uniform float uBreath;
+uniform float3 uNeck;
+uniform float3 uHeadR0;
+uniform float3 uHeadR1;
+uniform float3 uHeadR2;
+uniform float3 uFace;      // eye open L, eye open R, brow
+uniform float3 uMouth;     // open, wide, round - all 0 unless it is speaking
+uniform float2 uLook;      // where the eyes look, -1..1
+uniform float2 uEars;      // each ear's turn toward a sound, left and right
+// The arms (world), each shoulder, elbow and hand: A is the one reaching up
+// to the vine (the viewer's right), B the one holding the banana.
+uniform float3 uShA;
+uniform float3 uElbA;
+uniform float3 uHandA;
+uniform float3 uShB;
+uniform float3 uElbB;
+uniform float3 uHandB;
+// The legs, in the body's frame: each knee and foot (hips are fixed).
+uniform float3 uKneeL;
+uniform float3 uKneeR;
+uniform float3 uFootL;
+uniform float3 uFootR;
+// The tail: five points along it (world), and the thickness of the piece
+// that starts there.
+uniform float4 uTail0;
+uniform float4 uTail1;
+uniform float4 uTail2;
+uniform float4 uTail3;
+uniform float4 uTail4;
+// The vine: its height and depth, and where (x) and how much it dips under
+// the monkey's weight.
+uniform float4 uVine;
+// The banana's own frame: world to banana, row by row. It lies along its x,
+// its ends curving up toward its y. (Its middle is uOrb.xyz.)
+uniform float3 uBan0;
+uniform float3 uBan1;
+uniform float3 uBan2;
+
+const float ID_BODY = 1.0;
+const float ID_LIMB = 2.0;
+const float ID_HEAD = 3.0;
+const float ID_EYE = 4.0;
+const float ID_NOSE = 5.0;
+const float ID_EAR = 6.0;
+const float ID_TAIL = 7.0;
+const float ID_VINE = 8.0;
+// (9 is ID_ORB, which this animal does not use: its orb is a banana.)
+const float ID_BANANA = 10.0;
+
+// The head is modelled at 1 and drawn this much bigger: a cartoon's head is
+// most of the animal.
+const float HEAD_S = 1.10;
+
+// Linear-light colours (sRGB to the power 2.2), from the owner's picture.
+const float3 FUR = float3(0.290, 0.056, 0.019);
+const float3 FUR_DEEP = float3(0.160, 0.030, 0.011);
+const float3 PEACH = float3(0.920, 0.480, 0.200);
+const float3 PEACH_DEEP = float3(0.600, 0.240, 0.085);
+const float3 INK = float3(0.010, 0.004, 0.003);
+const float3 VINE = float3(0.075, 0.170, 0.035);
+const float3 BANANA = float3(0.880, 0.560, 0.030);
+const float3 BANANA_TIP = float3(0.160, 0.075, 0.020);
+
+const float3 CAM_TARGET = float3(-0.08, 0.055, 0.0);
+const float CAM_DIST = 3.31;
+const float CAM_PITCH = 0.0;
+const float BOUND_R = 1.58;
+const int MARCH_STEPS = 36;
+
+float3 toBody(float3 p) {
+    float3 v = p - uBodyPos;
+    return float3(dot(uBodyR0, v), dot(uBodyR1, v), dot(uBodyR2, v));
+}
+float3 toHead(float3 p) {
+    float3 v = p - uNeck;
+    return float3(dot(uHeadR0, v), dot(uHeadR1, v), dot(uHeadR2, v)) / HEAD_S;
+}
+float3 toBanana(float3 p) {
+    float3 v = p - uOrb.xyz;
+    return float3(dot(uBan0, v), dot(uBan1, v), dot(uBan2, v));
+}
+// Where each eye sits: it drifts a little toward where it is looking.
+float2 eyeAt() { return float2(0.118, 0.400) + 0.010 * uLook; }
+
+// --- the parts ----------------------------------------------------------
+
+// A small pear of a body; the belly swells with each breath.
+float partTorso(float3 b) {
+    return sdEllipsoid(b, float3(0.175, 0.215, 0.150) * uBreath + float3(0.0, 0.0, 0.0));
+}
+// The legs: thigh, shin and a round foot on each. Each side is worked out
+// only for its own half (the panda's eyes' trick), which halves the cost.
+float partLegs(float3 b) {
+    bool l = b.x < 0.0;
+    float3 hip = float3(l ? -0.085 : 0.085, -0.13, 0.0);
+    float3 kn = l ? uKneeL : uKneeR;
+    float3 ft = l ? uFootL : uFootR;
+    return min(min(sdCapsule(b, hip, kn, 0.058), sdCapsule(b, kn, ft, 0.050)), length(b - ft) - 0.066);
+}
+// The arms, each ending in a round hand.
+float partArms(float3 p) {
+    float d = min(sdCapsule(p, uShA, uElbA, 0.052), sdCapsule(p, uElbA, uHandA, 0.050));
+    d = min(d, min(sdCapsule(p, uShB, uElbB, 0.052), sdCapsule(p, uElbB, uHandB, 0.050)));
+    return min(d, min(length(p - uHandA), length(p - uHandB)) - 0.066);
+}
+// Four pieces, each as thick as its first point says (the pose code hands
+// the piece's thickness over ready-made); they share their ends, so a plain
+// min joins them without a seam. (Four, not five: the arm's elbow took the
+// fifth's share of the size limit.)
+float partTail(float3 p) {
+    float d = sdCapsule(p, uTail0.xyz, uTail1.xyz, uTail0.w);
+    d = min(d, sdCapsule(p, uTail1.xyz, uTail2.xyz, uTail1.w));
+    d = min(d, sdCapsule(p, uTail2.xyz, uTail3.xyz, uTail2.w));
+    return min(d, sdCapsule(p, uTail3.xyz, uTail4.xyz, uTail3.w));
+}
+// The vine: a long tube across the picture, bowed a little, dipping where
+// the monkey's weight is, with rounded ends. Bending the space rather than
+// the tube keeps it cheap; the bend is gentle enough for the march.
+float partVine(float3 p) {
+    float dx = p.x - uVine.z;
+    float y = uVine.x - 0.035 * p.x * p.x - uVine.w / (1.0 + 18.0 * dx * dx);
+    return length(float3(max(abs(p.x) - 1.25, 0.0), p.y - y, p.z - uVine.y)) - 0.034;
+}
+// The banana: a tube along its x, bent so its ends curve up, fat in the
+// middle and thin at the tips. (Held well short of its true distance - by a third:
+// the bend stretches space near the tips.)
+float partBanana(float3 p) {
+    float3 q = toBanana(p);
+    float x = clamp(q.x, -0.150, 0.150);
+    float r = 0.044 - 0.95 * x * x;
+    return 0.68 * (length(float3(q.x - x, q.y - 2.6 * x * x, q.z)) - r);
+}
+
+// The mouth, drawn (mouthPaint in common_head.sksl) and carved into the
+// muzzle behind the drawing exactly as the red panda's is: open drops the
+// jaw, wide pulls the corners out and flattens it, round draws it in,
+// taller and a little forward.
+// The drawing's size: where the stem meets the lip, how much higher the
+// corners sit, the half-width, and how far the lower lip has dropped.
+float4 mouthSize() {
+    float3 m = uMouth;
+    return float4(0.180, 0.022 + 0.006 * m.y, 0.080 + 0.030 * m.y - 0.030 * m.z + 0.012 * m.x,
+                  m.x * (0.092 - 0.036 * m.y + 0.030 * m.z));
+}
+// The hollow's half-height; it sits just inside the drawing, its top under
+// the upper lip's line, so the drawn line always covers its edge.
+float mouthH() { return 0.0015 + uMouth.x * (0.032 + dot(uMouth.yz, float2(-0.013, 0.011))); }
+// It bends up toward the corners, as the drawn smile does (a parabola, near
+// enough, and cheap: this runs in every march step), and is held to its
+// half-height, which is as deep as the inside of so flat a shape can be.
+float mouthShape(float3 h) {
+    float3 m = uMouth;
+    float a = 0.050 + dot(m, float3(0.010, 0.026, -0.026));
+    float hh = mouthH();
+    float bend = (0.020 + 0.004 * m.y) * h.x * h.x / (a * a);
+    return max(sdEllipsoid(h - float3(0.0, 0.180 - hh + bend, -0.330 - 0.010 * m.z), float3(a, hh, 0.07)), -hh);
+}
+// What is actually carved: nothing while it is shut (pulled back out of the
+// surface by more than the fillet), sinking in over the first quarter of an
+// opening while the drawing is already parting, so nothing pops.
+float mouthCarve(float3 h) { return mouthShape(h) + max(0.02 - 0.08 * uMouth.x, 0.0); }
+// The head (head frame): a round skull, a wide lower face with the muzzle,
+// and a small tuft of hair on top, with the mouth carved out of it.
+float partHead(float3 h) {
+    float d = sdEllipsoid(h - float3(0.0, 0.38, 0.0), float3(0.350, 0.325, 0.315));
+    // The lower face; its chin drops as the jaw opens, and it pushes
+    // forward a little for an "oo".
+    d = smin(d, sdEllipsoid(h - float3(0.0, 0.195, -0.135) + float3(0.0, 0.030, 0.010) * uMouth.xxz,
+                            float3(0.265, 0.150, 0.200) + float3(0.0, 0.030, 0.0) * uMouth.x), 0.09);
+    // The tuft: a flick of hair, bent over to one side at the tip.
+    float3 t = h - float3(0.03, 0.72, 0.0);
+    d = smin(d, sdEllipsoid(t - float3(3.0 * t.y * t.y, 0.0, 0.0), float3(0.040, 0.085, 0.034)), 0.045);
+    return smax(d, -mouthCarve(h), 0.012);
+}
+// Big round ears at the sides, their flat faces turned forward and out;
+// each can turn a little toward a sound.
+float3 earFrame(float3 h) {
+    float s = 0.35 + (h.x < 0.0 ? uEars.x : uEars.y);
+    float3 e = float3(abs(h.x) - 0.375, h.y - 0.385, h.z - 0.04);
+    return float3(e.x + s * e.z, e.y, e.z - s * e.x);
+}
+float partEars(float3 h) { return sdEllipsoid(earFrame(h), float3(0.135, 0.140, 0.045)); }
+float partNose(float3 h) {
+    return sdEllipsoid(h - float3(0.0, 0.262, -0.338), float3(0.050, 0.030, 0.030));
+}
+// Button eyes. Closing is squashing: a shut eye is a thin dark line.
+float partEyes(float3 h) {
+    float open = h.x < 0.0 ? uFace.x : uFace.y;
+    float2 ea = eyeAt();
+    float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.285);
+    return sdEllipsoid(ep, float3(0.052, max(0.007, 0.066 * open), 0.042));
+}
+
+// The whole monkey, its vine and its banana: distance to the nearest
+// surface. The march calls this over and over, so it returns the distance
+// only; which part was hit is asked once, afterwards, by partAt().
+float map(float3 p) {
+    float3 b = toBody(p);
+    float d = min(smin(partTorso(b), partLegs(b), 0.05), partTail(p));
+    // The head is only worked out near it.
+    float3 h = toHead(p);
+    float hd = (length(h - float3(0.0, 0.38, 0.0)) - 0.62) * HEAD_S;
+    if (hd < 0.2) {
+        hd = min(min(smin(partHead(h), partEars(h), 0.04), partNose(h)), partEyes(h)) * HEAD_S;
+    }
+    d = smin(hd, d, 0.08);
+    // The arms join after the neck's thick fillet, with a small one of their
+    // own: the arm reaching up passes beside the head, and the neck's fillet
+    // melted it into the ear, so it read as growing out of the head.
+    d = smin(d, partArms(p), 0.04);
+    // The vine and the banana stand apart: held, not grown.
+    return min(min(d, partVine(p)), partBanana(p));
+}
+
+float partAt(float3 p) {
+    float3 b = toBody(p);
+    float3 h = toHead(p);
+    float best = partTorso(b);
+    float id = ID_BODY;
+    float d = min(partLegs(b), partArms(p));
+    if (d < best) { best = d; id = ID_LIMB; }
+    d = partTail(p);
+    if (d < best) { best = d; id = ID_TAIL; }
+    d = partHead(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_HEAD; }
+    d = partEars(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_EAR; }
+    d = partNose(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_NOSE; }
+    d = partEyes(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_EYE; }
+    d = partVine(p);
+    if (d < best) { best = d; id = ID_VINE; }
+    // (The banana's distance is held short - see partBanana - so it is
+    // compared as short too, or the belly beside its tip counted as banana.)
+    if (partBanana(p) < 0.68 * best) { id = ID_BANANA; }
+    return id;
+}
+
+// A rough monkey for shadows, inside the real one: body, skull and arms.
+float mapLite(float3 p) {
+    float d = partTorso(toBody(p));
+    d = min(d, sdEllipsoid(toHead(p) - float3(0.0, 0.36, 0.0), float3(0.31, 0.29, 0.28)) * HEAD_S);
+    d = min(d, sdCapsule(p, uShA, uElbA, 0.04));
+    return min(d, sdCapsule(p, uShB, uHandB, 0.04));
+}
+
+// --- colours ------------------------------------------------------------
+
+// The face: brown fur with the big peach mask of the picture - a round lobe
+// round each eye, the two meeting in a notch between the brows, over a wide
+// lower part across the cheeks and muzzle. The brow lifts the lobes a touch.
+float3 headColour(float3 h) {
+    float2 q = float2(abs(h.x), h.y);
+    float lobes = length(q - float2(0.118, 0.405 + 0.018 * uFace.z)) - 0.124;
+    float low = (length((q - float2(0.0, 0.215 - 0.02 * uMouth.x)) / float2(0.285, 0.165)) - 1.0) * 0.16;
+    float mask = (1.0 - smoothstep(-0.006, 0.006, smin(lobes, low, 0.06))) * (1.0 - smoothstep(-0.16, -0.06, h.z));
+    return mix(mix(FUR, FUR_DEEP, smoothstep(0.0, 0.3, h.z) * 0.5), PEACH, mask);
+}
+
+float4 material(float id, float3 pos, float3 n) {
+    float3 h = toHead(pos);
+    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_NOSE) return float4(float3(0.080, 0.022, 0.012), 0.6);
+    if (id == ID_HEAD) {
+        // The painted mouth on the front of the head, and the walls of the
+        // hollow behind it - darker the deeper in they are. (The whole front,
+        // as the otter's: wide open, the lower lip reaches round under the
+        // chin. The roof of the hollow takes no line - see mouthPaint.)
+        if (h.z < -0.10) {
+            float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
+            float4 c = mouthPaint(headColour(h), FUR_DEEP * 0.35, h.xy, mouthSize(), 0.06, uMouth.y, carved,
+                                  carved * smoothstep(0.4, 0.8, -dot(uHeadR1, n)));
+            return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.33, -0.28, h.z) * carved), c.w);
+        }
+        return float4(headColour(h), 0.0);
+    }
+    if (id == ID_EAR) {
+        // Peach inside, on the front face; brown rim and back.
+        float3 e = earFrame(h);
+        float inner = (1.0 - smoothstep(0.070, 0.090, length(e.xy / float2(1.0, 1.05)))) * (1.0 - smoothstep(-0.02, 0.005, e.z));
+        return float4(mix(FUR, PEACH_DEEP, inner), 0.0);
+    }
+    if (id == ID_VINE) {
+        // Matte green, faintly striped along its length.
+        return float4(VINE * (0.85 + 0.15 * sin(pos.x * 60.0 + 3.0 * pos.y)), -1.0);
+    }
+    if (id == ID_BANANA) {
+        // Yellow, with brown tips.
+        float x = abs(toBanana(pos).x);
+        return float4(mix(BANANA * 0.5, BANANA_TIP, smoothstep(0.125, 0.150, x)), 0.25);
+    }
+    if (id == ID_LIMB) {
+        // Brown arms and legs, peach hands and feet.
+        float3 b = toBody(pos);
+        float hand = min(min(length(pos - uHandA), length(pos - uHandB)), min(length(b - uFootL), length(b - uFootR)));
+        return float4(mix(PEACH * float3(0.92, 0.86, 0.80), FUR, smoothstep(0.060, 0.080, hand)), 0.0);
+    }
+    if (id == ID_TAIL) return float4(FUR, 0.0);
+    // The body: a peach belly on the front.
+    float3 b = toBody(pos);
+    float belly = (1.0 - smoothstep(0.85, 1.0, length((b.xy - float2(0.0, -0.02)) / float2(0.115, 0.165)))) *
+                  (1.0 - smoothstep(-0.10, -0.04, b.z));
+    return float4(mix(FUR, PEACH_DEEP, belly), 0.0);
+}
+
+// Painted on top of the lighting: a catchlight in each eye, riding with the
+// gaze - and the banana's own glow. The banana is the orb: it glows in the
+// state's colour as much as the orb would (uOrbGlow), brightest where you
+// look into it, so it reads as a banana lit from inside.
+float3 sparkle(float id, float3 pos) {
+    if (id == ID_BANANA) {
+        float3 q = toBanana(pos);
+        float core = 1.0 - smoothstep(0.0, 0.16, abs(q.x));
+        return toLinear(uHot) * uOrbGlow * 0.6 * core * core;
+    }
+    if (id != ID_EYE) return float3(0.0);
+    float3 h = toHead(pos);
+    float2 eyeC = eyeAt();
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float2 q = float2(h.x - side * eyeC.x, h.y - eyeC.y);
+    float2 sparkAt = float2(-0.017 + 0.010 * uLook.x, 0.022 + 0.008 * uLook.y);
+    float spark = 1.0 - smoothstep(0.009, 0.016, length(q - sparkAt));
+    float spark2 = 1.0 - smoothstep(0.004, 0.007, length(q - sparkAt - float2(0.026, -0.028)));
+    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y));
+    return float3(1.6) * max(spark, spark2 * 0.8) * lit * (h.z < -0.26 ? 1.0 : 0.0);
+}
+
+// What a ray that ran out of march steps without reaching anything sees
+// (common_tail.sksl): nothing behind this animal to fill it in.
+float2 stuckRay(float3 ro, float3 rd) {
+    return float2(-1.0, 0.0);
+}

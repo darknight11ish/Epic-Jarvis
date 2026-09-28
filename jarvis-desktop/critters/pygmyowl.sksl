@@ -52,6 +52,7 @@ const float3 CAM_TARGET = float3(0.0, -0.12, 0.0);
 const float CAM_DIST = 3.35;
 const float CAM_PITCH = 0.0;
 const float BOUND_R = 1.38;
+const int MARCH_STEPS = 48;
 
 // The branch it perches on, in world space. It does not move.
 const float3 BRANCH_A = float3(-0.92, -0.99, 0.02);
@@ -172,7 +173,7 @@ float partAt(float3 p) {
     return id;
 }
 
-// A rough owl for shadows and occlusion, sitting inside the real one.
+// A rough owl for shadows, sitting inside the real one.
 float mapLite(float3 p) {
     float d = sdEllipsoid(toBody(p) - float3(0.0, 0.38, 0.02), float3(0.34, 0.42, 0.30));
     d = min(d, sdEllipsoid(toHead(p) - float3(0.0, 0.30, 0.04), float3(0.42, 0.35, 0.34)));
@@ -181,12 +182,32 @@ float mapLite(float3 p) {
 
 // --- colours ------------------------------------------------------------
 
-// White spots in rows, for the crown, back and wings.
+// White spots in rows, for the back and wings.
 float spots(float2 q, float k) {
     float2 c = fract(q * k) - 0.5;
     float2 cell = floor(q * k);
-    float jitter = fract(sin(dot(cell, float2(12.9898, 78.233))) * 43758.5453);
+    float3 hj = fract(float3(cell.xyx) * 0.1031);
+    hj += dot(hj, hj.yzx + 33.33);
+    float jitter = fract((hj.x + hj.y) * hj.z);
     return (1.0 - smoothstep(0.16, 0.26, length(c))) * step(0.35, jitter);
+}
+
+// The crown's spots: the same spots, scattered through space in a grid of
+// cells and cut by the head's surface. (Laid out by angle and height round
+// the head, as the back's are, the rows squeezed together toward the very
+// top and stretched down its slope - seen from above, a starburst of radial
+// dashes.) A pattern in space has no top and no seam. Its cells are
+// narrower across than tall, so on the sides the spots are the same upright
+// dashes as the back's, and on top, where the surface lies flat across the
+// narrow sides, small round dots.
+float spots3(float3 q) {
+    float3 cell = floor(q);
+    float3 hq = fract(cell * 0.1031);
+    hq += dot(hq, hq.yzx + 33.33);
+    float n = fract((hq.x + hq.y) * hq.z);
+    // Each spot nudged off its cell's centre, so no grid shows from above.
+    float3 c = fract(q) - 0.5 - 0.4 * (fract(float3(n * 7.0, n * 13.0, n * 29.0)) - 0.5);
+    return (1.0 - smoothstep(0.20, 0.32, length(c))) * step(0.2, n);
 }
 
 float3 headColour(float3 h) {
@@ -197,11 +218,8 @@ float3 headColour(float3 h) {
     float brow = 1.0 - smoothstep(0.012, 0.024,
         seg2(hs.xy, float2(0.03, 0.43 + 0.02 * uFace.z), float2(0.25, 0.49 + 0.03 * uFace.z)));
     brow *= front;
-    // Spots are laid out by angle round the head, so near the very top the
-    // rows squeeze to a point - a starburst of slivers seen from above.
-    // They fade out before they get there.
-    float crown = spots(float2(atan(h.x, h.z), h.y), 7.0) * smoothstep(-0.1, 0.12, h.z + h.y * 0.3)
-                * smoothstep(0.20, 0.36, length(float2(h.x, h.z - 0.02)));
+    // The crown's spots, on the back and top of the head (not the face).
+    float crown = spots3(h * float3(14.7, 7.0, 14.7)) * smoothstep(-0.1, 0.12, h.z + h.y * 0.3);
     float3 c = mix(BROWN, CREAM, max(disc * 0.85, crown * 0.8));
     return mix(c, CREAM * 1.05, brow);
 }
@@ -272,7 +290,8 @@ float3 sparkle(float id, float3 pos) {
 }
 
 // What a ray that ran out of march steps without reaching anything sees
-// (common_tail.sksl): nothing behind this animal to fill it in.
-float stuckRay(float3 ro, float3 rd) {
-    return -1.0;
+// (common_tail.sksl): nothing behind this animal to fill it in. (Where it
+// meets something, and map() there; -1 for nothing.)
+float2 stuckRay(float3 ro, float3 rd) {
+    return float2(-1.0, 0.0);
 }

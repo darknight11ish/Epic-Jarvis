@@ -497,7 +497,7 @@ await check("every animal's shader is within the size Android's compiler accepts
   }
 });
 
-const ANIMALS = ["redpanda", "pygmyowl", "seaotter"];
+const ANIMALS = ["redpanda", "pygmyowl", "seaotter", "monkey"];
 
 await check("every animal is handed every real state, not a borrowed movement", async () => {
   // Most faces have four motion tables and the shell borrows for the other
@@ -510,20 +510,25 @@ await check("every animal is handed every real state, not a borrowed movement", 
   await page.waitForTimeout(1000);
   const got = await page.evaluate((ids) => ids.map((id) => {
     const th = THEME[id], api = CritterPose.species[id];
-    const pose = (st) => api.uniforms(api.pose(st, st, 9, 3, 0, {}));
-    // "Waving": whichever limb each animal waves with, raised well clear of
-    // where it rests.
-    const wave = {
-      redpanda: () => pose("approval").uPawL[1] - pose("idle").uPawL[1],
-      pygmyowl: () => pose("idle").uWingR0[0] - pose("approval").uWingR0[0],
-      seaotter: () => pose("approval").uPawR[1] - pose("idle").uPawR[1],
-    }[id]();
+    const pose = (st, t = 3) => api.uniforms(api.pose(st, st, 9, t, 0, {}));
+    // Waiting on you: attentive and STILL - eyes wide open on you, and
+    // nothing moving but the breath. (It used to wave; the owner's call,
+    // 2026-09-28: no wave at what may be a serious moment.)
+    let moved = 0;
+    const first = pose("approval", 3);
+    for (let t = 3.1; t < 6; t += 0.1) {
+      const now = pose("approval", t);
+      for (const k of ["uPawL", "uPawR", "uWingL0", "uWingR0", "uHeadR0"]) {
+        if (first[k]) first[k].forEach((v, i) => { moved = Math.max(moved, Math.abs(v - now[k][i])); });
+      }
+    }
+    const waitEyes = Math.max(...[3, 3.5, 4, 4.5, 5].map((t) => pose("approval", t).uFace[0]));
     return {
       id,
       states: th ? Object.keys(th.st) : null,
       standbyEyes: pose("standby").uFace.slice(0, 2),
       idleEyes: pose("idle").uFace.slice(0, 2),
-      wave,
+      moved, waitEyes,
     };
   }), ANIMALS);
   await page.close();
@@ -531,7 +536,10 @@ await check("every animal is handed every real state, not a borrowed movement", 
     assert.deepEqual(a.states, spec.states.map((s) => s.id), `${a.id}: not all eight states`);
     assert.deepEqual(a.standbyEyes, [0, 0], `${a.id}: asleep, but its eyes are open`);
     assert.ok(a.idleEyes[0] > 0.5, `${a.id}: idle, but its eyes are shut`);
-    assert.ok(a.wave > 0.1, `${a.id}: waiting on you, but not waving (${a.wave})`);
+    assert.ok(a.moved < 0.05, `${a.id}: waiting on you, but moving (${a.moved})`);
+    // A little wide, not staring: the owl's are 1.05 (its brows are level
+    // now - wide eyes under its V-shaped brows read as a glare).
+    assert.ok(a.waitEyes > 1.02, `${a.id}: waiting on you, but its eyes are not wide open (${a.waitEyes})`);
   }
 });
 

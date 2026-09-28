@@ -126,7 +126,10 @@ await check("the accent walks the idle colour's own family until it is legible",
 /* ── The face on this computer ───────────────────────────────────────────── */
 
 await check("face settings: slow-down only, and anything unreadable is the default", async () => {
-  assert.deepEqual(tuning.normaliseFaceTuning(null), { quality: "high", frameRate: "auto", speed: 1, autoAdjust: true });
+  assert.deepEqual(tuning.normaliseFaceTuning(null), { quality: "high", frameRate: "auto", speed: 1, autoAdjust: true, still: false });
+  // "Keep the animal still": only a real true turns it on.
+  assert.equal(tuning.normaliseFaceTuning({ still: "yes" }).still, false);
+  assert.equal(tuning.normaliseFaceTuning({ still: true }).still, true);
   assert.equal(tuning.normaliseFaceTuning({ speed: 3 }).speed, 1, "faster than 1x got through");
   assert.equal(tuning.normaliseFaceTuning({ speed: 0.01 }).speed, 0.25);
   assert.equal(tuning.normaliseFaceTuning({ speed: "x" }).speed, 1);
@@ -136,6 +139,25 @@ await check("face settings: slow-down only, and anything unreadable is the defau
   assert.equal(tuning.strideFor("60", 144), 2);
   assert.equal(tuning.strideFor("auto", 144), 1);
   assert.equal(tuning.strideFor("120", 60), 1);
+  // The pick rule: 90 is 72 on a 144 Hz screen, 60 on a 120 Hz one.
+  assert.equal(tuning.strideFor("90", 144), 2);
+  assert.equal(tuning.strideFor("90", 120), 2);
+  assert.equal(tuning.normaliseFaceTuning({ frameRate: "90" }).frameRate, "90");
+  assert.equal(tuning.normaliseFaceTuning({ frameRate: 30 }).frameRate, "30");
+  assert.equal(tuning.normaliseFaceTuning({ frameRate: "75" }).frameRate, "auto");
+});
+
+await check("the quality levels and frame rates use the phone's words (FaceBudget.kt)", async () => {
+  const kt = read("../jarvis-client/app/src/main/java/com/jarvis/client/face/FaceBudget.kt");
+  const phone = [...kt.matchAll(/\n    (?:LOW|MEDIUM|HIGH|MAX)\(\s*"(\w+)", "([^"]+)",[^\n]*\n\s*"([^"]+)",/g)]
+    .map((m) => [m[1], m[2], m[3]]);
+  assert.equal(phone.length, 4, "could not read QualityTier's entries from FaceBudget.kt");
+  assert.deepEqual(tuning.QUALITIES.map((q) => [q.id, q.label, q.note]), phone);
+  const rates = [...kt.matchAll(/\n    (?:AUTO|FPS_\d+|MAX)\("(\w+)", "(\w+)", [0-9.]+f\)/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(tuning.FRAME_RATES.map((f) => [f.id, f.label]), rates);
+  const note = /const val NOTE = "([^"]+)" \+\s*"([^"]+)"/.exec(kt);
+  assert.ok(note, "could not read FrameRateTarget.NOTE");
+  assert.equal(tuning.FRAME_RATE_NOTE, note[1] + note[2]);
 });
 
 /* ── In the windows ──────────────────────────────────────────────────────── */
@@ -172,7 +194,7 @@ await check("Settings: text size buttons, the face section closed, and Open Face
   await page.locator('#face-speed .choice[data-value="0.5"]').click();
   await page.locator('#face-quality .choice[data-value="low"]').click();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("jarvis.faceTuning")));
-  assert.deepEqual(saved, { quality: "low", frameRate: "auto", speed: 0.5, autoAdjust: false },
+  assert.deepEqual(saved, { quality: "low", frameRate: "auto", speed: 0.5, autoAdjust: false, still: false },
     "picking a quality turns Auto adjust off, as on the phone");
   assert.equal(await page.locator("#more-options").evaluate((d) => d.open), false);
   await page.locator("#open-faces").click();

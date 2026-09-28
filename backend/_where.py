@@ -307,6 +307,9 @@ SHIPPED = (
     # "Forget a time frame" (2026-09-28): a checked list, ONE card, 10
     # minutes to undo; GET/POST /api/memory/forget_range (forget-range.patch)
     "jarvis_forget_range.py",
+    # the sun, the moon and the weather behind the animal faces, and the
+    # town list it finds a place in without going online (sky.patch)
+    "jarvis_sky.py", "jarvis_sky_places.py",
 )
 
 

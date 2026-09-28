@@ -217,6 +217,11 @@ data class HomeState(
     val stale: Boolean,
     val activity: Activity,
     val faceState: FaceState,
+    /**
+     * Jarvis cannot be reached (`JarvisRuntime.faceOffline`): the face shows
+     * STANDBY with its hollow ring, and says "Jarvis isn't connected".
+     */
+    val faceOffline: Boolean = false,
     val power: String,
     val status: StatusInfo?,
     val pending: List<PendingItem>,
@@ -315,6 +320,14 @@ data class HomeState(
      * MainActivity (`MotionPref.calmFace`), passed straight to FaceView.
      */
     val calmMotion: Boolean = false,
+    /**
+     * A serious moment (`JarvisRuntime.faceSerious`, the `wellbeing` event,
+     * docs/JARVIS-API.md section 38.1): the animal faces hold a calm, plain
+     * pose while a crisis answer is given or spoken. Passed to FaceView.
+     */
+    val faceSerious: Boolean = false,
+    /** "Keep the animal still" (`Look.stillAnimal`), passed to FaceView. */
+    val stillAnimal: Boolean = false,
     /**
      * The owner's last question, shown as a "You" line above the reply so an
      * answer is never on screen without what it answers. Memory only - see
@@ -1759,6 +1772,7 @@ private fun FaceBlock(
                 ) {
                     FaceView(
                         state = state.faceState,
+                        offline = state.faceOffline,
                         face = state.face,
                         bindings = state.bindings,
                         notches = state.attention.pending,
@@ -1795,6 +1809,9 @@ private fun FaceBlock(
                         // Slower, never faster. MainActivity works it out from
                         // the Motion setting and the phone's own animation scale.
                         calmMotion = state.calmMotion,
+                        // A crisis answer: calm and plain (section 38.1).
+                        serious = state.faceSerious,
+                        stillMotion = state.stillAnimal,
                     )
                     TickRing(
                         minor = wellChrome.hairline,

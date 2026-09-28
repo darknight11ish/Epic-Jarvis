@@ -775,6 +775,14 @@ $PATCHES = @(
     # it, or on any error, the banner says so and the routes are simply not
     # there.
     'forget-range.patch'
+    # The sun, the moon and the weather behind the animal faces (the owner's
+    # decisions of 2026-09-28): GET /api/sky and POST /api/sky. Its
+    # jarvis_hud.py context is answer-sources.patch's own startup install()
+    # block (second-card-suggest.patch, just above, touches a different part
+    # of the file), so it goes last, like every new patch. Needs jarvis_sky.py
+    # and jarvis_sky_places.py copied in; without them, or on any error, the
+    # banner says so and the route answers 503 - the faces are drawn as before.
+    'sky.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -965,6 +973,9 @@ $SHIPPED = @(
     'jarvis_live_photo_test.py'  # the camera's photo test: run once, when the 12 GB card is in; a pass is what lets the camera switch appear on the phone
     # --- "Forget a time frame" (2026-09-28): a checked list, ONE card, 10 minutes to undo ---
     'jarvis_forget_range.py'     # forget-range.patch: GET/POST /api/memory/forget_range, /preview and /undo; jarvis_quick.py (already SHIPPED) calls it for "forget what you learned last week"
+    # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
+    'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
+    'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online
 )
 
 # The settings file. Installed only where none exists; never overwritten.

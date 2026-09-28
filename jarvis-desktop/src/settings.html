@@ -485,11 +485,11 @@
         <details class="more" id="face-tuning">
           <summary>
             <span class="more-title">Face on this computer</span>
-            <span class="more-detail">Quality, frame rate and speed.</span>
+            <span class="more-detail">Quality, frame rate, speed and keeping the animal still.</span>
           </summary>
           <p class="note">
-            For the face in the widget and the HUD on this computer only. The
-            phone has its own.
+            For the faces on this computer only: the widget, the floating face
+            and the HUD. The phone has its own.
           </p>
 
           <label class="toggle">
@@ -498,7 +498,8 @@
               Auto adjust
               <span class="toggle-detail">
                 Picks quality and frame rate for this computer, and steps down
-                if the face runs slow.
+                if the face runs slow. On a capable graphics chip an animal can
+                go up to Maximum.
               </span>
             </span>
           </label>
@@ -506,13 +507,16 @@
           <div class="field">
             <span class="label" id="face-quality-label">Quality</span>
             <div class="choices" id="face-quality" role="group" aria-labelledby="face-quality-label"></div>
-            <p class="note" id="face-quality-note">High matches the reactor kit. Low is easiest on the graphics card.</p>
+            <p class="note" id="face-quality-note">High matches the reactor kit. Lower is easiest on the graphics chip.</p>
+            <!-- One plain line per level: what it costs (face-tuning.js
+                 QUALITIES, the same words as the phone's Face editor). -->
+            <ul class="note face-level-notes" id="face-quality-levels"></ul>
           </div>
 
           <div class="field">
             <span class="label" id="face-fps-label">Frame rate</span>
             <div class="choices" id="face-fps" role="group" aria-labelledby="face-fps-label"></div>
-            <p class="note">How many times a second the face is drawn. Auto uses the screen's own rate.</p>
+            <p class="note" id="face-fps-note">How many times a second the face is drawn.</p>
           </div>
 
           <div class="field">
@@ -520,6 +524,20 @@
             <div class="choices" id="face-speed" role="group" aria-labelledby="face-speed-label"></div>
             <p class="note">How fast the face moves. It never goes above 1×.</p>
           </div>
+
+          <!-- The owner's "Still" option (2026-09-28). Cosmetic, so no card:
+               it only takes movement away. Shown whatever face is worn - the
+               line says it is for the animals, as the phone's does. -->
+          <label class="toggle">
+            <input id="face-still" type="checkbox" />
+            <span>
+              Keep the animal still
+              <span class="toggle-detail">
+                It only breathes and blinks - no looking around. For the animal
+                faces; the others are not changed.
+              </span>
+            </span>
+          </label>
           <span class="status" id="face-status" role="status"></span>
         </details>
 
@@ -541,12 +559,52 @@
           </span>
         </label>
 
+        <!-- The sun, the moon and the weather behind the animal (the owner's
+             decisions of 2026-09-28; sky-settings.js; sky.rs get_sky, set_sky;
+             backend jarvis_sky.py). Kept on the PC and shared with the phone,
+             so it is not inside "Face on this computer". Both off by default.
+             The town is typed here only; Open-Meteo ON raises ONE approval
+             card; off, Home Assistant and forgetting the town are at once. -->
+        <div id="sky" class="sky-settings">
+          <h3 class="subhead" id="sky-title">Sun, moon and weather</h3>
+          <p class="state" id="sky-state" role="status">Asking Jarvis…</p>
+          <div id="sky-body" hidden>
+            <label class="toggle">
+              <input id="sky-show" type="checkbox" />
+              <span>
+                <span id="sky-show-label">Show the sun and moon behind the animal</span>
+                <span class="toggle-detail" id="sky-show-detail"></span>
+              </span>
+            </label>
+            <div class="field">
+              <label class="label" for="sky-place" id="sky-place-label">Your town</label>
+              <div class="row">
+                <input id="sky-place" type="text" maxlength="120" spellcheck="false" autocomplete="off" />
+                <button class="btn" id="sky-place-set" type="button">Set</button>
+                <button class="btn" id="sky-place-forget" type="button" hidden>Forget my town</button>
+              </div>
+              <p class="note" id="sky-place-detail"></p>
+              <p class="note" id="sky-place-now"></p>
+              <p class="note" id="sky-today"></p>
+            </div>
+            <fieldset class="theme-list" id="sky-weather-list">
+              <legend class="label" id="sky-weather-label">Weather in the animal's scene</legend>
+              <p class="note" id="sky-weather-detail"></p>
+              <div id="sky-weather-choices"></div>
+            </fieldset>
+            <p class="note" id="sky-weather-status" role="status"></p>
+            <span class="status" id="sky-status" role="status"></span>
+          </div>
+        </div>
+
         <h3 class="subhead">Shared with your phone</h3>
         <p class="note">
           The face and the state colours — which face Jarvis wears, and the
           colour and pattern for each thing it can be doing — are shared with
-          your phone. A change made there shows up here too. Nothing else on
-          this page leaves this computer.
+          your phone. A change made there shows up here too. So are the sun,
+          moon and weather settings above (your phone is shown your town, but
+          only this PC can set it). Nothing else on this page leaves this
+          computer.
         </p>
         <p class="state" id="appearance-shared">Checking whether they are shared…</p>
         <div class="row">
@@ -963,6 +1021,21 @@
             <div class="row">
               <span class="status" id="cv-face-status" role="status"></span>
             </div>
+          </div>
+
+          <!-- Each animal's voice (the owner's choice, 2026-09-28): for the
+               red panda, pygmy owl, sea otter and monkey, one row each - a voice
+               from the built-in list, a pitch (deeper or higher), a pace,
+               "Try it" and "Reset to its own voice". The PC's `face_voice`
+               block, choices and words its own (custom-voices.js
+               animalVoicesView); the rows are built by voice-panel.js
+               paintAnimals. No card either way; a change is held on a stale
+               link (voice_training.rs set_voice_animal); Try it changes
+               nothing, so it is not. The phone's Voices screen has the same. -->
+          <div id="cv-animals" hidden>
+            <h3 class="subhead" id="cv-animals-title">Each animal's voice</h3>
+            <p class="note" id="cv-animals-detail"></p>
+            <div id="cv-animals-list"></div>
           </div>
 
           <h3 class="subhead">Voices</h3>
@@ -1858,6 +1931,7 @@
       </footer>
     </main>
 
+    <script src="sky.js"></script>
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="pc-help.js"></script>
@@ -1866,6 +1940,7 @@
     <script type="module" src="account-secrets-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>
     <script type="module" src="asks-first-settings.js"></script>
+    <script type="module" src="sky-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
     <script type="module" src="backup-settings.js"></script>

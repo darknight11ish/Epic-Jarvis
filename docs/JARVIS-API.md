@@ -184,9 +184,11 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | the Brain's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
+| `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
-bell (`stream.rs:506-511`).
+bell (`stream.rs:506-511`). `wellbeing` (above) carries one boolean for the
+same reason: there is nothing behind it to re-fetch.
 
 `step` (`backend/jarvis_agent.py`, `_step_event`) is published by the tool
 loop while it answers: `{"phase": "model" | "tool_started" | "tool_finished"
@@ -934,6 +936,16 @@ not in plain words - e.g. the one-time step to run>", "made", "skipped"
 of them got no block), "last_skip_why", "last_ms" (how long the last
 timing took)}`.
 
+**Since 2026-09-28 a crisis answer is said in the plain built-in voice**
+(section 38.1): while a crisis answer is being given or spoken, and for the
+crisis help message's own words at any time, `/api/voice/say` speaks in the
+owner's own built-in voice choice at their own speed - not the animal face's
+voice, no pitch rise ("Voice follows the face" is set aside for those
+sentences; the switch itself is not changed). A recorded custom voice the
+owner chose still speaks as always. The request is unchanged (`{"text"}`
+only), the answer is the same WAV, and the `jmth` mouth chunk is made the
+same way. Nothing for either app to change for the sound.
+
 **The audio format: 16-bit PCM in a WAV container. The two apps send
 different rates, and the server copes with both** (checked against the code
 on 2026-09-24):
@@ -1155,7 +1167,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/digest` | GET | `attention.rs:81`, `routes.rs:35` | `JarvisApi.kt:280` | List key: `digest`. |
 | `/api/config` | GET | `routes.rs:36` | **no** | **Read-only: writing answers 501.** This is why there is no shared place to store a preference — `API-DISAGREEMENTS.md` §11. |
 | `/api/visual-spec` | GET | `spec_drift.rs:50` | **no** | Desktop checks its bundled spec against the server's at startup. The phone never fetches it. |
-| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. |
+| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. Not in this document, on purpose: display choices kept on ONE device - the face's quality, frame rate and speed, and "Keep the animal still" (2026-09-28; the animals only breathe and blink). The desktop keeps them in its own storage (`jarvis.faceTuning`, `face-tuning.js`), the phone in its Look (`still_animal`, `AppearanceStore.kt`); neither is sent to the PC's backend or the other device, and none raises a card. |
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
@@ -2249,7 +2261,7 @@ loaded to answer it). Choosing a voice beyond what a PC's real model has is
 no different from setting `tts_speaker_id` too high by hand today.
 
 **Voice follows the face** (added 2026-09-27, the owner's choice): with one
-of the animal faces showing (red panda, pygmy owl, sea otter -
+of the animal faces showing (red panda, pygmy owl, sea otter, monkey -
 `docs/CRITTERS.md`), the **built-in** voice becomes that animal's: one of
 Kokoro's own voices already installed, its own pace, and a small pitch rise
 (`jarvis_voices.FACE_VOICES`). The face is read from `<config
@@ -2266,6 +2278,58 @@ or remembers - but held on a stale link like every change. While an
 animal's voice stands in, `speaker.note` says so, so choosing a built-in
 voice and hearing no change does not look broken. The animals' voices were
 picked from Kokoro's published descriptions, not listened to.
+
+**Each animal's voice** (added 2026-09-28, the owner's choice "per animal,
+built-in voices"): the `FACE_VOICES` rows are only where each animal
+starts. For each of the three the owner may pick **any of the eleven
+built-in voices** (`speaker.choices`), a **pitch** from 3 steps deeper to 4
+steps higher in half steps (a step is a semitone; below 0 the sound is
+played slower, so it is deeper and longer - Kokoro is asked for faster
+speech first, so the pace still comes out as chosen), and a **pace**
+(Slower / Normal / Faster, still times the owner's own speaking speed).
+`status()` carries every animal's current choice, the lists to choose from
+and all the words (`face_voice.animals`, `animal_choices`, below);
+`POST /api/voice/voices/face_animal` sets one animal, or resets it to its
+own voice. **No card either way**, the switch's own reason; held on a stale
+link like every change. Kept in `<config dir>/voices/state.json`
+(`face_animals`, only for an animal whose choice differs from its own). The
+switch still decides whether any animal voice is used at all: off, every
+face speaks in the owner's single built-in voice, and the per-animal
+choices wait. A recorded voice still wins, and a crisis answer is still
+said in the plain voice. **The mouths keep matching whatever is chosen**:
+the mouth timing (`jmth`) is divided by the same pitch factor the sound is
+played at (docs/LIPSYNC.md). The "One moment." clip and the talk-over
+reference voice follow the choice (both read the voice through
+`jarvis_speech.tts_voice`). **"Try it"**: `POST
+/api/voice/voices/face_animal/try {"face"}` answers a WAV of one fixed line
+the PC says itself ("Hello, it's Jarvis. This is how I sound as the Red
+Panda.") in that animal's voice as it is now - whether or not that face is
+showing or the switch is on - with the `jmth` chunk when the PC makes one.
+It changes and keeps nothing, so it is not held on a stale link; an app
+never sends the words. **One at a time**: a second "Try it" while the PC is
+still making one is refused at once, 429 in words (added 2026-09-28).
+
+**"Try it" never plays over Jarvis, in either app** (2026-09-28). Both
+refuse it while Jarvis is talking or listening ("Jarvis is busy talking or
+listening. Try it again in a moment."), and stop it the moment a question
+or an answer starts ("Stopped, because Jarvis is talking or listening
+now."), so the microphone never hears it. The phone asks its own voice
+session and is stopped by the talk button, "hey Jarvis" being heard and
+Train my voice (`VoiceSession.turnStarting`). The desktop's Rust refuses
+while the talk button records, and Settings stops the clip on the
+`voice-capture-started`, `voice-speech-started`, `voice-heard`, `face-voice`
+(the Jarvis bar speaking) and `stop-everything` events, and on the link's
+activity turning to listening, thinking, working or speaking (not trusted
+on a stale link); a recording in Settings stops it too. Both say the same
+words throughout: "Asking the PC for the sound…", "Playing the Red Panda's
+voice.", "That was the Red Panda's voice.", and on a PC without the route
+"Your PC cannot play an animal's voice yet. Run the patch script on the PC
+first." **Where it plays:** on the phone, through the same speaker as every
+answer, so the face on the phone moves with it. On the desktop, in the
+Settings window only - the faces in the other windows (the Widget, the
+floating face, the HUD) do **not** move with it, because only the Jarvis bar
+may send the `face-voice` lip-sync messages (`face_voice` is in its
+permission set alone), and widening that for a preview was not worth it.
 
 **Where the audio goes: nowhere.** The recording is held in the PC's memory
 until the card is answered; approved, it is kept in
@@ -2284,8 +2348,9 @@ any voice print changes.
 All routes: token + origin, like every other write. A client sends
 `X-Jarvis-Client: hud` as always. **Hold on a stale link (rule 4) every
 POST that raises a card** - adding a voice, switching to a custom one,
-better voice ON - and the speed, the built-in voice choice and "Voice
-follows the face" (a change, though each raises none). Deleting a voice, going back to the built-in one and
+better voice ON - and the speed, the built-in voice choice, "Voice
+follows the face" and each animal's voice (a change, though each raises
+none). "Try it" changes nothing and is never held. Deleting a voice, going back to the built-in one and
 better voice OFF only take something away and always go (both apps). Show every `error` and `why` word for word: they are written for the
 owner.
 
@@ -2298,6 +2363,8 @@ owner.
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
 | `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
+| `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
+| `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey"}`; **429** `{"ok": false, "error": "the PC is still making the sound for the last Try it. Try it again in a moment"}` - one at a time; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window - the faces in its other windows do not move; the phone through its answer speaker), never while Jarvis is talking or listening, and stop it when a question or answer starts (above). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
 Errors from the route itself (not the module): **400** `{"error": "the
@@ -2351,9 +2418,19 @@ request.
                 "default": true,
                 "face": "" | "<face id>",  the face saved in appearance.json ("" if none)
                 "speaking": bool,         an animal's voice is the one speaking now
-                "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter",
+                "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter" | "Monkey",
                 "line": str,              what is happening now, one sentence: show it under the switch
-                "title": "Voice follows the face", "detail": str},   absent on an older PC: show nothing
+                "title": "Voice follows the face", "detail": str,   absent on an older PC: show nothing
+                "animals": [{"face": "redpanda", "name": "Red Panda",   one row each, in this order
+                             "speaker": "1", "voice": "Bella", "semitones": 2.0, "pace": "normal",
+                             "changed": bool,     the owner's choice differs from its own (Reset does something)
+                             "own": {"speaker", "semitones", "pace"},   where it starts
+                             "line": "Bella, 2 steps higher, at normal pace."}, ...],
+                "animals_title": "Each animal's voice", "animals_detail": str,
+                "animal_choices": {"voices": [{"id", "label"}, ... the 11 of speaker.choices],
+                                   "paces": [{"id": "slower", "label": "Slower"}, ...],
+                                   "pitch": {"min": -3.0, "max": 4.0, "step": 0.5}}},
+                                  animals absent on an older PC: show the switch only
  "pending": {"kind": "create" | "switch", "voice": "<id>", "name": str, "expires_in": <seconds>} | null,
  "last": {"kind": "create" | "switch", "voice": "<id>",
           "outcome": "created"|"switched"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",
@@ -7089,6 +7166,91 @@ nothing here approves or acts - it only adds words to an answer, and no
 card is ever raised for it. `backend/test_wellbeing.py` proves the ordering,
 the no-tools behaviour, the failure path, the repeat line, and the
 learner exclusion, with no model and no network.
+
+### 38.1 The serious moment: a neutral face and the plain voice (added 2026-09-28)
+
+The owner's decision, 2026-09-28: "At serious moments the animals drop the
+cute gestures." For a crisis answer the animal faces show a neutral pose,
+and Jarvis speaks in its plain built-in voice - not the animal's voice, no
+pitch rise.
+
+**How the PC knows.** One in-memory window in `jarvis_wellbeing.py`
+(timestamps and a counter only - never a word of the turn, never on disk,
+never logged, gone on restart):
+
+- **Opens** when a crisis turn starts - `jarvis_agent.run_local_turn`, after
+  the reply's headers went out and before the model is asked, so before the
+  first word.
+- **When the turn ends** (answered, or the help message sent alone after a
+  failure) it stays open long enough to SPEAK the whole answer at the
+  slowest speaking speed: 30 s plus one second per 1.2 words of the answer,
+  at most 300 s (`grace_seconds`; the answer's length is used once and not
+  kept). Then it closes by itself.
+- **Closes at once** when the owner's next ordinary question starts - both
+  apps drop whatever of the last answer was still queued to be said when a
+  new question is sent. A crisis answer still being written (asked from the
+  other device) is never closed this way.
+- A crisis turn that never reports its end (a crash) stops counting after
+  600 s.
+
+**The voice - no app change.** `POST /api/voice/say` is unchanged. Every
+sentence said while the window is open is spoken in the owner's own
+built-in voice choice at their own speed, no pitch rise. So are the help
+message's own words (`REPLY`, `REPLY_SPOKEN`, `REPEAT`, `REPEAT_SPOKEN`,
+or any piece naming 988 / "nine eight eight" / the Crisis Lifeline / "call
+911") at ANY time - even spoken long after the window closed (a paused
+answer, "read it again"). A recorded custom voice the owner chose still
+speaks as always. The mouth chunk (`jmth`) is made the same way. While the
+window is open, the PC's "is that the owner talking over Jarvis?" check
+(section 17, `source=barge_in`) also compares against the plain voice.
+
+**The event - what each app reads (built 2026-09-28 on both apps: the
+desktop's `jarvis-link.js` for the widget and the floating face, the HUD
+page's own stream, and `faces.html` for each face frame; the phone's
+`JarvisRuntime.onEvent` -> `faceSerious` -> the Home face).**
+Event kind `wellbeing`, data `{"serious": true}` when the window opens and
+`{"serious": false}` when it closes (by itself, or on the next ordinary
+question). One boolean; no text, no conversation id. A second crisis turn
+while one is open sends `{"serious": true}` again - treat it as idempotent.
+
+- **Start the neutral pose** on `{"serious": true}`. The app that ASKED can
+  also start it one step earlier, from its own reply header: `X-Jarvis-Route`
+  `"wellbeing": "crisis"` (section 38 above; the desktop's
+  `state.turnRoute.wellbeing`, the phone's `ChatSession.crisis`) - but only
+  where `backend/wellbeing.patch` applied, so the event is the one to rely on.
+- **End it** on `{"serious": false}`. As a safety net, an app that has heard
+  no `false` 900 s (600 + 300) after the last `true` ends it itself, so a
+  missed frame can never leave the face neutral for good.
+- **On reconnect** (`hello`, stale or not) keep what you had until the next
+  `wellbeing` frame or the 900 s net - there is no route that reports the
+  window's state (`GET /api/wellbeing`'s `view()` carries `serious` too, but
+  that route is proposed, not confirmed wired - see above).
+- **Neutral means**: no cute gestures - no idle wiggles, tilts, happy or
+  playful poses; the face stays calm, and the mouth still follows the sound
+  (the lip-sync is unchanged). The exact pose is the apps' call
+  (`docs/CRITTERS.md`). Every
+  window that draws a face reads it: on the desktop the frame is fanned
+  out to every window (`stream.rs`); `jarvis-link.js` keeps it for the
+  widget and the floating face, which post `serious` to their face frames
+  with the rest of `faceSignal`, and the HUD page reads it from its own
+  stream and posts it to its frame the same way. On the phone,
+  `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious`, which
+  the Home face reads. ("Floating Jarvis" on the phone is the app's icon,
+  not the animal, so it has nothing to change.) Only a JSON `true` or
+  `false` counts, on both apps - a string such as `"true"` is ignored.
+- **Nothing else changes**: no card, no setting, no off switch (the crisis
+  help line has none), and the chat panel's own crisis styling (section 38)
+  is untouched.
+
+**Erring on the safe side, said plainly.** Anything said inside the window
+that was NOT part of the crisis answer (an alarm's words a minute later) is
+also said plainly, and the faces stay neutral up to 300 s after the answer
+ended. The opposite mistake - an animal's voice reading out the help line -
+is the one this exists to prevent. Not covered: the "One moment." clip
+(section 17) is made ahead of time in the voice in use and is not remade
+plainly for a crisis turn. `backend/test_wellbeing.py` section 7 proves
+the window, the event, the help words, the plain voice with the mouth track,
+and the barge-in reference, with no model and no network.
 
 ## 39. Smartwatch notifications (added 2026-09-27)
 
@@ -12887,3 +13049,117 @@ when Jarvis made the mark).
 
 **Kept in backups and checked by data health** (§45, §49) since the same
 audit: `projects.db` was missing from both.
+
+## 89. The sun, the moon and the weather behind the animals (added 2026-09-28)
+
+> **Renumbered in the audit integration merge (2026-09-28):** this section was §59 on the `claude/jarvis-3d-animal-mascot-8dr0tb` branch; §59 is already Goals on main's side. References that came with that branch were renumbered with it.
+
+The owner's decisions (`CLAUDE.md`, 2026-09-28): "Sun and moon behind the
+animals, optional (off by default)" - the real sun and moon for the date and
+time, worked out on the owner's own devices from a town typed once on the
+PC, nothing online - and "Weather in the animals' scene, optional (off by
+default)": rain, snow or wind, from the owner's own Home Assistant or from
+Open-Meteo online, whose ON is an approval card.
+
+`backend/jarvis_sky.py` (and its town list `jarvis_sky_places.py`), shipped
+whole; `sky.patch` adds the route at start-up the same way `news.patch` does.
+The sun and moon are **not** worked out on the PC: each app does that itself
+(`jarvis-desktop/src/sky.js`, the phone's `face/Sky.kt`, a line-for-line
+copy held equal by `tools/gen_sky.py`'s `sky-golden.json`), from the
+position this route hands over, so the phone's sky keeps moving while the PC
+cannot be reached. `docs/CRITTERS.md`, "The sky behind the animals", has the
+formulas and the look.
+
+### 89.1 The route
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/sky` | - | **200** the view below. Also starts ONE weather read in the background when the source is not off and the last read is older than 20 minutes (a failed one: 30 minutes) - there is no timer of its own, so the weather is read only while an app is asking. |
+| `POST /api/sky` | ONE change: `{"show": true \| false}`, `{"place": "<town, or a position like 39.7, -105.0>"}`, `{"forget_place": true}` or `{"weather": "off" \| "home_assistant" \| "open_meteo"}` | **200** `{"ok": true, "said", "view"}`; **202** `{"ok": true, "waiting": true, "said", "view"}` - Open-Meteo's ONE card is raised; **400** `{"ok": false, "error"}` in words (two changes at once, a town not in the list, a position off the Earth); **403** a town sent from any device but this PC; **409** Open-Meteo without a town; **503** the card's tier is not `ask` |
+
+Behind the token and the origin check, like every route. The town is set
+from **this PC only** (`jarvis_owner_check.from_this_pc`, the rule "Folders
+Jarvis may look in" uses): the phone shows it and can forget it, never set it
+(`docs/ARCHITECTURE.md` §8). Showing, hiding and forgetting need no card
+either way; each app holds a change that ADDS something (showing, a weather
+source) on a stale link and never one that takes something away.
+
+```
+{"available": true, "title": "Sun, moon and weather",
+ "show": bool, "show_label", "show_detail",
+ "place": null | {"name": "Denver, Colorado, United States", "lat": 39.7, "lon": -105.0},
+ "place_label", "place_detail" (this PC: how to type it; another device: "typed on the PC"),
+ "place_none", "forget_label", "can_set_place": bool (true on this PC only),
+ "weather": {"source": "off" | "home_assistant" | "open_meteo",
+             "choices": [{"id", "label", "why"}, ...three],
+             "now": null | {"rain", "snow", "wind", "cloud", "fog": 0..1, "dir": 1 | -1, "at": seconds},
+             "status": one plain sentence ("Off.", "Rain, windy, from Open-Meteo.",
+                       "No weather drawn: Open-Meteo did not answer (TimeoutError). Jarvis tries again in about 30 minutes."),
+             "waiting": bool, "last": null | {"outcome", "message", "why", "at"},
+             "label", "detail"},
+ "why": "" | why the settings could not be read (then all off)}
+```
+
+`dir` is which way the weather drifts ON THE SCREEN (+1 right): the frame
+looks toward the equator (south in the northern half of the world), so a west
+wind drifts left there. `tools/gen_sky_cases.py` writes the real answers in
+six situations to `contract/sky-cases.json` / `tests/fixtures/sky-cases.json`.
+
+### 89.2 The town: offline, rounded, never logged
+
+The name is looked up in `jarvis_sky_places.py`: GeoNames' towns (CC BY 4.0;
+`THIRD-PARTY-NOTICES.txt`) - every town of about 15,000 people or more in the
+US, Canada, the UK, Ireland, Australia and New Zealand, 50,000 or more
+elsewhere, and every capital; about 16,000. Accents and "Saint"/"St." are
+ignored; "Portland" means the bigger one, and "Portland, Maine" or "Portland,
+ME" picks; a town not in the list says so and suggests typing the position.
+**No geocoding service is ever asked.** Only the position rounded to 0.1
+degree (about 11 km) is kept, in `<config dir>/sky.json`, beside the name as
+the list spells it. It is never written to the log or the audit log (counts
+and outcomes only - `test_sky.py` checks), never offered to the AI model, and
+leaves this PC only to the owner's own apps and, if the owner approved it for
+that very position, to Open-Meteo (§89.3). The desktop keeps the rounded
+position (never the name) in its localStorage for the face pages; the phone
+keeps the same in its own settings (`allowBackup` is off).
+
+### 89.3 The weather
+
+* **Off** (the default): nothing is read, and a weather read in progress is
+  dropped.
+* **My Home Assistant**: the morning briefing's own weather device and rules
+  (`jarvis_briefing._weather_source`: set up), read with ONE plain GET of
+  that device's state (`jarvis_home.plan_states` / `run`) through the gate as
+  `home_read`, and only at tier `auto` - at `notify` the owner would be told
+  about a read every 20 minutes, the reasoning "tell me when" gives. Any
+  other tier leaves it out and says why - the scene never raises a card. Choosing it needs no card: it is
+  the owner's-own-accounts lane (ARCHITECTURE §4), already listed.
+* **Open-Meteo (online)**: ONE plain GET of
+  `https://api.open-meteo.com/v1/forecast?latitude=39.7&longitude=-105.0&current=weather_code,cloud_cover,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms`
+  - the rounded position and four value names, nothing else of the owner's.
+  No key, no cookie, no proxy, no redirect followed, 10 seconds, 64 KB at
+  most, and the connection checked to be on the open internet
+  (`jarvis_local_http.public_urlopen`). Switching it ON is ONE card
+  (`change_own_config`, tier `ask` only, `leaves_this_pc: true`) naming the
+  exact numbers sent; the yes covers THAT position - typing another town
+  switches it off again (the answer says so). Switching it off, or to
+  another source, is at once and withdraws a waiting card. ARCHITECTURE §4
+  lists it as its own way out; "What Jarvis can reach" has a row for it.
+
+Whichever source: the answer becomes the five numbers (Home Assistant's
+conditions and WMO weather codes, `HA_WEATHER` / `WMO`; thunder is heavy
+rain - nothing in the scene flashes), wind 14 m/s or more is 1. It is never
+given to the AI model, never learned from, never read aloud. A failure is
+quiet: no weather is drawn, and the status line says why.
+
+### 89.4 What each app draws
+
+Behind the animal faces only (drawn after the ground and before the animal;
+the desktop's GLSL gets `uSeeThrough` so the uncovered part of the picture
+stays see-through - the phone's AGSL already returns it that way), in every
+place the animal is drawn: the desktop's Faces window, Widget, floating face
+and HUD (their frames read localStorage, kept fresh by Settings, the Widget
+and the floating face, `sky-feed.js`), and the phone's Home and Appearance
+preview. It dims with the animal on standby, keeps showing while Jarvis is
+not connected and in a serious moment, is unchanged by "Keep the animal
+still" (it is the sky, not the animal), and under calm (reduced) motion the
+weather holds still. Weather older than 90 minutes is not drawn.

@@ -5061,6 +5061,24 @@ def crisis_shown_before(messages) -> bool:
         return False
 
 
+def serious_moment(step: str, *args) -> None:
+    """The serious moment (jarvis_wellbeing.py; the owner's decision of
+    2026-09-28, "At serious moments the animals drop the cute gestures"):
+    `step` is "begin" (a crisis turn starts), "calm" (an ordinary one
+    starts) or "end" (the crisis turn ended; `args` = its length in words).
+    While it lasts, say() speaks in the plain built-in voice and both apps
+    hear a `wellbeing` event, {"serious": true | false}, for the neutral
+    pose. Cosmetic only: a missing or older module, or anything at all
+    going wrong, changes nothing and never costs the owner their answer."""
+    try:
+        import jarvis_wellbeing
+        fn = getattr(jarvis_wellbeing, "serious_" + str(step), None)
+        if fn is not None:
+            fn(*args)
+    except Exception:
+        pass
+
+
 def keep_rules_first(msgs: list) -> list:
     """A new list whose first message is the Jarvis rules block.
 
@@ -5920,6 +5938,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             watch.stop_mark = sa.begin_turn()
         except Exception:
             sa = None
+    # The serious moment (serious_moment): before the first word, so the
+    # first sentence of a crisis answer is already said plainly and the
+    # faces go neutral before it; an ordinary question ends an earlier
+    # crisis answer's moment. Ended in the `finally` below.
+    serious_moment("begin" if watch.crisis else "calm")
     try:
         # Security audit H1: nothing is sent to a "local" model that is not on
         # this PC - the everyday model, or the second card's lane if one was
@@ -6084,6 +6107,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 sa.end_turn()
             except Exception:
                 pass
+        if watch.crisis:
+            # Kept open until the whole answer can have been spoken - its
+            # length in words, used once and not kept (jarvis_wellbeing.
+            # grace_seconds).
+            serious_moment("end", len("".join(answer).split()))
         stop_beat.set()
         beat.join(timeout=2)
         # After the answer, so counting can never delay it, and in a

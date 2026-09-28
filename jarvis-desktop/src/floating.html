@@ -52,6 +52,18 @@
            could never fire for a mousedown the iframe consumed first. */
         pointer-events: none;
       }
+      /* Heard, not seen: floating.js's sayConnection. */
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+      }
     </style>
   </head>
   <body>
@@ -64,6 +76,11 @@
         src="faces.html?mode=display&feed=parent"
       ></iframe>
     </div>
+    <!-- The face is decorative and hidden from screen readers; the one thing
+         worth saying about it - "Jarvis isn't connected" - is said here. It
+         is present (and empty) from the start, so the first words written
+         into it are announced. -->
+    <p id="face-status" class="sr-only" role="status" aria-live="polite"></p>
     <script type="module" src="floating.js"></script>
   </body>
 </html>

@@ -1593,13 +1593,42 @@
     "shader": "jarvis-desktop/critters/common_head.sksl + seaotter.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py",
     "pose": "see the red panda's entry: the same scheme, in critter-otter.js and OtterPose.kt"
    }
+  },
+  {
+   "id": "monkey",
+   "name": "Monkey",
+   "dim": "3d",
+   "geometry": "sphere-traced soft-body character",
+   "integrates_per_frame": false,
+   "heavy": false,
+   "speed": {
+    "min": 0.05,
+    "max": 6.0,
+    "default": 1.0,
+    "curve": "log",
+    "substeps_max": 1
+   },
+   "render": {
+    "supersample_max": 2.0,
+    "target_fps": 60,
+    "max_px": 1800,
+    "fit": 1.0
+   },
+   "archived": false,
+   "character": {
+    "note": "The fourth animal (2026-09-28), from the owner's picture of a cartoon monkey. Hangs by one arm from a vine across the top of the picture and swings gently round its hand, holding a banana that is its orb - it glows in the state colour and lights the monkey like the others' orbs. A little livelier than the other three, still smooth. All eight states: swings, looks about and does small things when idle, leans in with its ears turned to listen, holds its banana up and looks into it to think, talks with Jarvis's voice, hangs still and looks at you holding its banana out a little for approval (no wave), climbs up and sits on the vine asleep with its tail curled round it for standby, a still, concerned look at an error, dozes where it hangs when banked.",
+    "shader": "jarvis-desktop/critters/common_head.sksl + monkey.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py",
+    "pose": "see the red panda's entry: the same scheme, in critter-monkey.js and MonkeyPose.kt"
+   }
   }
  ],
  "frame_rate": {
   "note": "High refresh is NOT symmetrical across the two renderers, and that asymmetry is the whole reason this block exists. On the web there is no API to ask for a higher rate - requestAnimationFrame already fires at whatever the display is running at, so the only work is measuring it and budgeting against the real number. On Android the opposite is true: many phones render an app at 60Hz until it explicitly asks for more.",
   "targets": [
    "auto",
+   "30",
    "60",
+   "90",
    "120",
    "max"
   ],
@@ -1660,7 +1689,89 @@
    "standby": 15,
    "banked": 2
   },
-  "state_fps_why": "Idle, standby and banked are more than nine tenths of screen-on time and every face drew them at the full display rate. The shell accumulates time and skips vsyncs for these states, handing the accumulated dt to the draw so motion covers the same distance. The first 600ms after any state change, and any tap acknowledgement, run at full rate so no transition stutters. Banked at 2fps is just enough to catch a new notch. Active states are untouched."
+  "state_fps_why": "Idle, standby and banked are more than nine tenths of screen-on time and every face drew them at the full display rate. The shell accumulates time and skips vsyncs for these states, handing the accumulated dt to the draw so motion covers the same distance. The first 600ms after any state change, and any tap acknowledgement, run at full rate so no transition stutters. Banked at 2fps is just enough to catch a new notch. Active states are untouched.",
+  "pick_rule": {
+   "rule": "stride = max(1, round(hz / want)); one more if hz / stride > want * 1.2",
+   "why": "A picked rate is drawn on whole shares of the screen's rate, the nearest one, but never more than a fifth faster than what was picked: 90 becomes 72 on a 144 Hz screen and 60 on a 120 Hz one; 60 is 72 on 144 Hz; 30 is 30 on 60, 90, 120 Hz."
+  },
+  "animals": {
+   "note": "Owner, 2026-09-28: 'Sharp animals on capable hardware'. The four animal faces (red panda, pygmy owl, sea otter, monkey) are ray-traced per pixel, so how many pixels they are traced at decides how sharp their edges are and how much graphics work they cost. Both apps read these numbers: the desktop from this file (faces-spec.js), the phone from Kotlin constants that SpecDriftTest holds to it.",
+   "levels": [
+    {
+     "id": "low",
+     "label": "Lower",
+     "desktop_scale": 0.62,
+     "desktop_supersample": 1,
+     "phone_trace": 0.4,
+     "note": "Softest picture and the least work for the graphics chip. Easiest on battery and heat."
+    },
+    {
+     "id": "medium",
+     "label": "Balanced",
+     "desktop_scale": 0.8,
+     "desktop_supersample": 1,
+     "phone_trace": 0.5,
+     "note": "A little softer than High, with less work for the graphics chip."
+    },
+    {
+     "id": "high",
+     "label": "High",
+     "desktop_scale": 1.0,
+     "desktop_supersample": 1,
+     "phone_trace": 0.75,
+     "note": "Sharp. A fair amount of work for the graphics chip."
+    },
+    {
+     "id": "max",
+     "label": "Maximum",
+     "desktop_scale": 1.0,
+     "desktop_supersample": 2,
+     "phone_trace": 1.0,
+     "note": "The sharpest edges. The most work for the graphics chip, and the most battery and heat."
+    }
+   ],
+   "levels_why": "The ids stay low/medium/high/max so settings saved before the rename still work. The lowest is 'Lower', not 'Battery saver': the phone already has a Battery saver switch, which overrides all of this. desktop_scale is the share of the screen's own pixels the animal is traced at, then enlarged; desktop_supersample 2 traces 2x2 samples per screen pixel and averages them down (the audit measured edge error 9.4 -> 3.2 on 255 for the panda at 240 px). phone_trace is the share of the phone's full resolution the animal is traced at before it is enlarged.",
+   "desktop_max_px": 2400,
+   "auto": {
+    "start": "high",
+    "climb_to_max_below": 0.25,
+    "climb_why": "Auto may go up to Maximum only for an animal, only when its frames take under a quarter of their time budget, and on the phone only when neither Battery saver (the switch or the phone's own) nor heat is holding it back. A level picked by hand stays picked.",
+    "step_down": [
+     "max>high",
+     "fps>60",
+     "high>medium",
+     "fps>30",
+     "medium>low"
+    ],
+    "step_down_why": "Sharpness goes first only from Maximum; then the frame rate halves to 60 before the picture gets softer, then 30, then the lowest level. Frame-rate steps are whole shares of the screen's rate, never below 30. Stepping back up is the same ladder in reverse, held off for a while after each step down.",
+    "raise_rate_below": 0.33,
+    "raise_quality_below": 0.55
+   },
+   "rest_fps": {
+    "states": [
+     "idle",
+     "approval"
+    ],
+    "auto_headroom": 60,
+    "auto_no_headroom": 30,
+    "auto_happening": 0,
+    "picked": "the picked rate: 30, 60, 90 or 120; max is the screen's own rate (0)",
+    "standby": 15,
+    "banked": 2,
+    "why": "An animal at rest still breathes, blinks and looks about, and at 30 frames a second its slow, eased movements can step. With Frame rate on Auto it rests at 60 when the frames are cheap (headroom) and 30 when they are not, and draws every frame while one of its idle happenings (a stretch, a scratch, an ear turning) is playing. Picking 30, 60, 90, 120 or Max sets the resting rate to that. Standby stays 15 and banked 2 whatever is picked. The other faces keep state_fps."
+   },
+   "headroom": {
+    "budget_fps": 60,
+    "on_below": 0.5,
+    "off_above": 0.8,
+    "min_frames": 10,
+    "why": "Headroom: the average frame costs under half of a 60 fps frame's time (8.3 ms); it is lost again above 0.8 of it, so the resting rate does not flap."
+   },
+   "happening_s": 5.5,
+   "happening_why": "The longest idle happening (the otter's roll: 1.4 + 1.8 + 1.8 s) and a little over. Each pose file says whether one is playing (busy(state, t)), and critter-busy-golden.json holds the phone's copy to the desktop's.",
+   "no_shadow_below_px": 200,
+   "no_shadow_why": "The soft shadow is skipped (uNoShadow = 1) when the animal's square is drawn under 200 device pixels, or at Lower: at that size it is a few pixels of shading, and it is about a sixth of the panda's cost."
+  }
  },
  "renderer": {
   "note": "Most faces are meshes of a few thousand quads and a CPU rasteriser draws them fine. A few cannot be drawn sharply that way at phone resolution (and the animals cannot be drawn as meshes at all), and are rendered by a shader instead. The distinction is a property of the face, not of the client, so it is recorded here.",
@@ -1675,6 +1786,12 @@
     "kind": "sdf_raymarch",
     "why": "The same scheme as the red panda, plus a rippling pool of water under the otter.",
     "web": "WebGL2 fragment shader; flat canvas otter as the fallback.",
+    "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda."
+   },
+   "monkey": {
+    "kind": "sdf_raymarch",
+    "why": "The same scheme as the red panda, plus the vine it hangs from and a banana for its orb.",
+    "web": "WebGL2 fragment shader; flat canvas monkey as the fallback.",
     "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda."
    },
    "redpanda": {

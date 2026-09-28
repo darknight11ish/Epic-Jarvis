@@ -244,13 +244,14 @@ class SpeakerMouthTest {
     @Test
     fun `a playing voice shows speaking, and a moment after it stops`() {
         // The answer's text finishes streaming (the PC says idle) before its
-        // last sentences are spoken: while the voice plays, and for 0.6 s
-        // after, a resting face shows SPEAKING - the desktop's lipState.
+        // last sentences are spoken: while the voice plays, and for 2 s after
+        // (VOICE_STATE_HOLD_S - the pause between two spoken sentences), a
+        // resting face shows SPEAKING - the desktop's lipState.
         val h = FaceHost()
         val voice = floatArrayOf(0.7f, 0.6f, 0f, 0f)
         assertEquals(FaceState.SPEAKING, host(30, FaceState.IDLE, voice, h).state)
-        assertEquals(FaceState.SPEAKING, host(18, FaceState.IDLE, null, h).state)  // 0.3 s after
-        assertEquals(FaceState.IDLE, host(30, FaceState.IDLE, null, h).state)      // 0.8 s after
+        assertEquals(FaceState.SPEAKING, host(90, FaceState.IDLE, null, h).state)  // 1.5 s after
+        assertEquals(FaceState.IDLE, host(60, FaceState.IDLE, null, h).state)      // 2.5 s after
         // An approval is never talked over.
         assertEquals(FaceState.APPROVAL, host(30, FaceState.APPROVAL, voice, FaceHost()).state)
     }

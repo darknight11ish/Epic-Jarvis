@@ -527,7 +527,7 @@ window.JARVIS_SPEC = Object.freeze({
         "colour": "The fur keeps its own colours. The bound hot colour is the orb the panda holds, which lights its paws and chin; the dim colour is the rim light round its fur. Recolouring the whole animal per state would read as a different animal, not the same one changing its mind.",
         "fallback_desktop": "Without WebGL2, a flat sticker of the same panda in the same pose.",
         "more_coming": "Built after it: the pygmy owl and the sea otter (the owner's go-ahead, 2026-09-27).",
-        "note": "The first animal face. Unlike the twenty instruments before it, a character needs its own pose for every state, so it receives all eight rather than borrowing four motion tables: asleep for standby, a wave for approval, a head-scratch for error, a doze for banked. The shell's transforms (dim, the approval clock, the error hitch) still apply on top.",
+        "note": "The first animal face. Unlike the twenty instruments before it, a character needs its own pose for every state, so it receives all eight rather than borrowing four motion tables: asleep for standby, sitting up still and attentive for approval (no wave - it may be a serious moment), a still, concerned look for error, a doze for banked. The shell's transforms (dim, the approval clock, the error hitch) still apply on top.",
         "pose": "jarvis-desktop/src/critter-pose.js and jarvis-client CritterPose.kt, held equal by tools/gen_critters.py's fixture and CritterPoseTest",
         "shader": "jarvis-desktop/critters/common_head.sksl + redpanda.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
       },
@@ -554,7 +554,7 @@ window.JARVIS_SPEC = Object.freeze({
     {
       "archived": false,
       "character": {
-        "note": "The second animal. Perches on a branch; its orb floats beside it (owls have no hands). All eight states: turns its head to follow the room, tilts it to listen, tips it right over while the orb circles to think, moves its beak with Jarvis's voice, waves a wing for approval, fluffs up with its eyes shut for standby, squints with a tilted head at an error, dozes when banked.",
+        "note": "The second animal. Perches on a branch; its orb floats beside it (owls have no hands). All eight states: turns its head to follow the room, tilts it to listen, tips it a little to follow the orb circling its head to think, moves its beak with Jarvis's voice, draws itself up still and attentive for approval (no wave), fluffs up with its eyes shut for standby, a still, concerned look with its brows flattened at an error, dozes when banked.",
         "pose": "see the red panda's entry: the same scheme, in critter-owl.js and OwlPose.kt",
         "shader": "jarvis-desktop/critters/common_head.sksl + pygmyowl.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
       },
@@ -581,7 +581,7 @@ window.JARVIS_SPEC = Object.freeze({
     {
       "archived": false,
       "character": {
-        "note": "The third animal. Floats on its back in a small round pool, looked down on, holding a glowing pebble (the orb) on its chest. All eight states: bobs and looks about when idle, paws to its cheeks to listen, taps the pebble to think, talks with Jarvis's voice, waves a paw for approval, covers its eyes with its paws for standby, drops the pebble and scratches its head at an error, dozes when banked.",
+        "note": "The third animal. Floats on its back in a small round pool, looked down on, holding a glowing pebble (the orb) on its chest. All eight states: bobs and looks about when idle, lifts its head and keeps its pebble in its paws to listen, taps the pebble to think, talks with Jarvis's voice, holds the pebble up a little toward you, still, for approval (no wave), covers its eyes with its paws (the pebble resting on its chest) for standby, a still, concerned look holding its pebble at an error, dozes when banked.",
         "pose": "see the red panda's entry: the same scheme, in critter-otter.js and OtterPose.kt",
         "shader": "jarvis-desktop/critters/common_head.sksl + seaotter.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
       },
@@ -591,6 +591,33 @@ window.JARVIS_SPEC = Object.freeze({
       "id": "seaotter",
       "integrates_per_frame": false,
       "name": "Sea Otter",
+      "render": {
+        "fit": 1.0,
+        "max_px": 1800,
+        "supersample_max": 2.0,
+        "target_fps": 60
+      },
+      "speed": {
+        "curve": "log",
+        "default": 1.0,
+        "max": 6.0,
+        "min": 0.05,
+        "substeps_max": 1
+      }
+    },
+    {
+      "archived": false,
+      "character": {
+        "note": "The fourth animal (2026-09-28), from the owner's picture of a cartoon monkey. Hangs by one arm from a vine across the top of the picture and swings gently round its hand, holding a banana that is its orb - it glows in the state colour and lights the monkey like the others' orbs. A little livelier than the other three, still smooth. All eight states: swings, looks about and does small things when idle, leans in with its ears turned to listen, holds its banana up and looks into it to think, talks with Jarvis's voice, hangs still and looks at you holding its banana out a little for approval (no wave), climbs up and sits on the vine asleep with its tail curled round it for standby, a still, concerned look at an error, dozes where it hangs when banked.",
+        "pose": "see the red panda's entry: the same scheme, in critter-monkey.js and MonkeyPose.kt",
+        "shader": "jarvis-desktop/critters/common_head.sksl + monkey.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
+      },
+      "dim": "3d",
+      "geometry": "sphere-traced soft-body character",
+      "heavy": false,
+      "id": "monkey",
+      "integrates_per_frame": false,
+      "name": "Monkey",
       "render": {
         "fit": 1.0,
         "max_px": 1800,
@@ -632,6 +659,84 @@ window.JARVIS_SPEC = Object.freeze({
         "recommended": "Surface.setFrameRate(frameRate, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS)  (3-arg: API 31; 2-arg: API 30)"
       }
     },
+    "animals": {
+      "auto": {
+        "climb_to_max_below": 0.25,
+        "climb_why": "Auto may go up to Maximum only for an animal, only when its frames take under a quarter of their time budget, and on the phone only when neither Battery saver (the switch or the phone's own) nor heat is holding it back. A level picked by hand stays picked.",
+        "raise_quality_below": 0.55,
+        "raise_rate_below": 0.33,
+        "start": "high",
+        "step_down": [
+          "max>high",
+          "fps>60",
+          "high>medium",
+          "fps>30",
+          "medium>low"
+        ],
+        "step_down_why": "Sharpness goes first only from Maximum; then the frame rate halves to 60 before the picture gets softer, then 30, then the lowest level. Frame-rate steps are whole shares of the screen's rate, never below 30. Stepping back up is the same ladder in reverse, held off for a while after each step down."
+      },
+      "desktop_max_px": 2400,
+      "happening_s": 5.5,
+      "happening_why": "The longest idle happening (the otter's roll: 1.4 + 1.8 + 1.8 s) and a little over. Each pose file says whether one is playing (busy(state, t)), and critter-busy-golden.json holds the phone's copy to the desktop's.",
+      "headroom": {
+        "budget_fps": 60,
+        "min_frames": 10,
+        "off_above": 0.8,
+        "on_below": 0.5,
+        "why": "Headroom: the average frame costs under half of a 60 fps frame's time (8.3 ms); it is lost again above 0.8 of it, so the resting rate does not flap."
+      },
+      "levels": [
+        {
+          "desktop_scale": 0.62,
+          "desktop_supersample": 1,
+          "id": "low",
+          "label": "Lower",
+          "note": "Softest picture and the least work for the graphics chip. Easiest on battery and heat.",
+          "phone_trace": 0.4
+        },
+        {
+          "desktop_scale": 0.8,
+          "desktop_supersample": 1,
+          "id": "medium",
+          "label": "Balanced",
+          "note": "A little softer than High, with less work for the graphics chip.",
+          "phone_trace": 0.5
+        },
+        {
+          "desktop_scale": 1.0,
+          "desktop_supersample": 1,
+          "id": "high",
+          "label": "High",
+          "note": "Sharp. A fair amount of work for the graphics chip.",
+          "phone_trace": 0.75
+        },
+        {
+          "desktop_scale": 1.0,
+          "desktop_supersample": 2,
+          "id": "max",
+          "label": "Maximum",
+          "note": "The sharpest edges. The most work for the graphics chip, and the most battery and heat.",
+          "phone_trace": 1.0
+        }
+      ],
+      "levels_why": "The ids stay low/medium/high/max so settings saved before the rename still work. The lowest is 'Lower', not 'Battery saver': the phone already has a Battery saver switch, which overrides all of this. desktop_scale is the share of the screen's own pixels the animal is traced at, then enlarged; desktop_supersample 2 traces 2x2 samples per screen pixel and averages them down (the audit measured edge error 9.4 -> 3.2 on 255 for the panda at 240 px). phone_trace is the share of the phone's full resolution the animal is traced at before it is enlarged.",
+      "no_shadow_below_px": 200,
+      "no_shadow_why": "The soft shadow is skipped (uNoShadow = 1) when the animal's square is drawn under 200 device pixels, or at Lower: at that size it is a few pixels of shading, and it is about a sixth of the panda's cost.",
+      "note": "Owner, 2026-09-28: 'Sharp animals on capable hardware'. The four animal faces (red panda, pygmy owl, sea otter, monkey) are ray-traced per pixel, so how many pixels they are traced at decides how sharp their edges are and how much graphics work they cost. Both apps read these numbers: the desktop from this file (faces-spec.js), the phone from Kotlin constants that SpecDriftTest holds to it.",
+      "rest_fps": {
+        "auto_happening": 0,
+        "auto_headroom": 60,
+        "auto_no_headroom": 30,
+        "banked": 2,
+        "picked": "the picked rate: 30, 60, 90 or 120; max is the screen's own rate (0)",
+        "standby": 15,
+        "states": [
+          "idle",
+          "approval"
+        ],
+        "why": "An animal at rest still breathes, blinks and looks about, and at 30 frames a second its slow, eased movements can step. With Frame rate on Auto it rests at 60 when the frames are cheap (headroom) and 30 when they are not, and draws every frame while one of its idle happenings (a stretch, a scratch, an ear turning) is playing. Picking 30, 60, 90, 120 or Max sets the resting rate to that. Standby stays 15 and banked 2 whatever is picked. The other faces keep state_fps."
+      }
+    },
     "budget": {
       "downgrade_above": 1.45,
       "rule": "budget_ms = 1000 / (hz / stride)",
@@ -645,6 +750,10 @@ window.JARVIS_SPEC = Object.freeze({
       "rule": "divisor",
       "why": "If a face cannot hold the full rate, drop to a whole divisor (120 -> 60 -> 40 -> 30) rather than chasing an uneven number. Every frame then lands on a real vsync. A locked 60 on a 120Hz panel looks better than a floating 75."
     },
+    "pick_rule": {
+      "rule": "stride = max(1, round(hz / want)); one more if hz / stride > want * 1.2",
+      "why": "A picked rate is drawn on whole shares of the screen's rate, the nearest one, but never more than a fifth faster than what was picked: 90 becomes 72 on a 144 Hz screen and 60 on a 120 Hz one; 60 is 72 on 144 Hz; 30 is 30 on 60, 90, 120 Hz."
+    },
     "state_fps": {
       "banked": 2,
       "idle": 30,
@@ -653,7 +762,9 @@ window.JARVIS_SPEC = Object.freeze({
     "state_fps_why": "Idle, standby and banked are more than nine tenths of screen-on time and every face drew them at the full display rate. The shell accumulates time and skips vsyncs for these states, handing the accumulated dt to the draw so motion covers the same distance. The first 600ms after any state change, and any tap acknowledgement, run at full rate so no transition stutters. Banked at 2fps is just enough to catch a new notch. Active states are untouched.",
     "targets": [
       "auto",
+      "30",
       "60",
+      "90",
       "120",
       "max"
     ],
@@ -1924,6 +2035,12 @@ window.JARVIS_SPEC = Object.freeze({
         "kind": "cpu_sim_gpu_mesh",
         "web": "WebGL2 indexed triangle mesh, per-pixel normals, depth buffer, MSAA.",
         "why": "The physics is cheap and stays on the CPU. The drawing was the expensive part: one flat-filled quad per cell, so every cell was visible as a facet and the rim as a staircase."
+      },
+      "monkey": {
+        "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda.",
+        "kind": "sdf_raymarch",
+        "web": "WebGL2 fragment shader; flat canvas monkey as the fallback.",
+        "why": "The same scheme as the red panda, plus the vine it hangs from and a banana for its orb."
       },
       "nucleus": {
         "android": "RuntimeShader (AGSL) on API 33+, which takes essentially the same source; GLES 3.0 through a GLSurfaceView below that.",

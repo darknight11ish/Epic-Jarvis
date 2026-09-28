@@ -76,7 +76,9 @@ Left OUT of "adjust", on purpose, said plainly rather than guessed at:
   * Voice (speed, built-in speaker, the better voice, voice follows the
     face - that last one IS a single on/off, but it lives on the voice
     screen with the rest and has not been offered as a spoken "adjust";
-    "open Jarvis's voice" reaches it), hardware/models, the
+    "open Jarvis's voice" reaches it; each animal's own voice, pitch and
+    pace, 2026-09-28, is a multi-field row, so open-only too),
+    hardware/models, the
     second graphics card, the big model, backups, custom voices, and
     Accounts (credentials) - each is either a multi-field control with no
     single "on/off" a spoken sentence maps to safely, or (Accounts) a

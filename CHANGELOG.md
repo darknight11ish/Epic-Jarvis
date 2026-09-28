@@ -355,6 +355,25 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **Clearer message** when the patch script is pointed at the wrong folder:
   it no longer sends you looking for "OpenJarvis", an unrelated project.
 
+- **Sharper animals, and more frame-rate choices, on both apps.** Quality
+  now reads **Lower, Balanced, High, Maximum**, each with a one-line note on
+  what it costs (your saved choice still works). At Maximum the PC draws an
+  animal at 2x2 samples per pixel and the phone at its full resolution -
+  the edges go from visibly stepped to smooth (measured on the panda: edge
+  error 9.4 -> 3.2 out of 255 on the PC; on the phone High is now 0.75 of
+  full resolution instead of half, 23 -> 13). With Auto adjust on, an
+  animal starts at High and goes up to Maximum by itself only when its
+  frames are very cheap; it steps down Maximum, then 60 fps, then Balanced,
+  then 30 fps, then Lower. Battery saver on the phone still overrides it
+  all. **Frame rate** adds 30 and 90 (on a 144 Hz screen 90 becomes 72).
+  An animal at rest is drawn 60 times a second when there is room (else
+  30), and smoothly at full rate while it stretches or scratches; picking a
+  rate lifts its rest to that. The PC's widget, HUD and floating face now
+  rest too (they drew every frame). Both apps show "fps · ms per frame ·
+  animal resolution" (the Faces window's full-size view; the phone's Face
+  editor). A small face skips its soft shadow. See `docs/CRITTERS.md`,
+  "Resolution and frame rate".
+
 - **A red panda face** - the first animal among Jarvis's faces, on the
   desktop and the phone. It sleeps when Jarvis is on standby, perks its ears
   and tilts its head when listening, gazes into a glowing orb when thinking,
@@ -366,6 +385,23 @@ number as the last part - `0.2.57` is a build of 0.2.
   when something is waiting on you; the otter floats on its back in a
   little pool, taps a glowing pebble while it thinks and covers its eyes
   with its paws to sleep.
+- **A monkey joins the animals**, on both apps - from the owner's own
+  picture: warm brown fur, a big peach heart of a face, round ears, a tuft
+  on top and a long curly tail. It hangs by one arm from a vine and swings
+  gently, a little livelier than the other three; its banana is its orb and
+  glows in your colour for each state. To sleep it climbs up and sits on the
+  vine, tail curled round it. Its voice (with "Voice follows the face") is
+  Michael, one step higher. See `docs/CRITTERS.md`.
+- **The sun, the moon and the weather behind the animals**, on both apps,
+  both off until you switch them on (Settings, Appearance, "Sun, moon and
+  weather" on the PC; Appearance on the phone). Type your town once on the
+  PC and the real sun rises, arcs over the animal and sets at the right
+  times, and at night the moon shows in its real shape - worked out on your
+  own devices, nothing sent anywhere. The weather adds soft rain, slow snow
+  or wind, from your own Home Assistant or from Open-Meteo online (that one
+  asks with an approval card first, because it sends your rough position).
+  It stays dark and calm, dims when Jarvis sleeps, and holds still under
+  reduced motion. See `docs/CRITTERS.md`, "The sky behind the animals".
 - **Animal faces tidied after their audit:** no more see-through specks
   along the otter's outline against its pool; the owl's thinking orb now
   circles clear of its head, and its glow no longer shows through the face;
@@ -382,6 +418,57 @@ number as the last part - `0.2.57` is a build of 0.2.
   slightly higher pitch. A switch in both apps, on to start, right under
   "Jarvis's built-in voice"; it never asks first. A voice you recorded still
   wins.
+- **Choose each animal's voice.** Under "Voice follows the face", the red
+  panda, owl and otter each get their own row: pick any of the eleven
+  built-in voices, make it deeper or higher, and choose Slower, Normal or
+  Faster. **Try it** plays a short line in that voice; **Reset to its own
+  voice** puts it back. The mouths still move in step with whatever you
+  pick. It never asks first. Needs the patch script run again on the PC.
+  **Try it** never plays over Jarvis: it waits while Jarvis is talking or
+  listening, stops the moment you start a question, and says the same
+  words on the PC and the phone. On the PC it plays in the Settings window,
+  so the faces in the other windows stay still while it plays.
+- **The animals move their bodies, calmly.** Each looks at something (often
+  you) and holds the look, its head following its eyes part of the way;
+  blinks, small weight shifts, the panda's tail swish, and a small idle
+  happening about every 20 seconds. While speaking they lean in and gesture
+  now and then - never busy. Built on published MIT work (Spring-It-On,
+  TalkingHead, airi, ChatVRM), credited in THIRD-PARTY-NOTICES.txt. See
+  `docs/CRITTERS.md`, "How they move".
+- **Rising "Zs" while an animal sleeps.** On standby - by the schedule or by
+  hand - small z's float up from beside its head, two or three at a time,
+  on both apps. Not when Jarvis simply cannot be reached: then it is the
+  hollow ring alone. With reduced (calm) motion, one still z instead.
+- **The animals wake up and nod off**, on both apps. Leaving standby, each
+  plays a short, calm wake-up (about two seconds): the panda opens its eyes
+  with a slow double blink, stretches and perks its ears; the owl opens one
+  eye, then the other, and ruffles its feathers; the otter rubs its eyes
+  and stretches in the water. Going to standby, each nods off (about three
+  seconds) before the Zs rise. The mouth never moves (no yawn); waking into
+  an approval or an error, and with calm, serious or "Keep the animal
+  still" on, only the eyes open or close. See `docs/CRITTERS.md`.
+- **"Keep the animal still"**, off to start: the animal only breathes and
+  blinks - no looking around, gestures or idle happenings. On the PC in
+  Settings -> Appearance -> "Face on this computer"; on the phone in
+  Appearance -> More options, under Motion. Each device keeps its own
+  choice. No card.
+- **Serious moments stay calm and plain.** While a crisis answer is being
+  given or spoken, every animal face (the PC's widget, floating face and
+  HUD, and the phone's Home) drops the gestures and tilts and simply
+  listens; waiting on an approval is an attentive, still look (no wave),
+  and an error a still, concerned one.
+- **"Jarvis isn't connected" looks the same everywhere.** Every face shows
+  standby with the same thin hollow ring on both apps (the PC's ring was
+  nearly invisible and breathed; it is now the phone's fixed colour). The
+  tray icon now goes to standby's colour when the link drops, and never
+  shows the approval colour while approvals are blocked.
+- **The PC notices a graphics card that cannot keep up** with a face and
+  draws a flat version instead, trying the card again after a minute; the
+  Faces window's gallery works from the keyboard (Tab, the arrow keys,
+  Enter).
+- **Sharper animals**: fewer see-through or stray specks along their
+  outlines, measured against a slow exact render (`docs/CRITTERS.md`,
+  "Drawing quality").
 
 **New: watches**
 

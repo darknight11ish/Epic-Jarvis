@@ -414,6 +414,14 @@ permissions = [
   # asks first - written by the PC from its settings, never by the model.
   # A read: it changes nothing, and no key or private link is in it.
   "allow-get-reach",
+  # The sun, the moon and the weather behind the animal faces (backend/
+  # sky.patch, the owner's decisions of 2026-09-28): the settings (a read),
+  # and ONE change at a time - show them, the town (this PC only; the PC
+  # checks too), forget the town, the weather source. Open-Meteo ON
+  # approves nothing: the PC raises ONE approval card. Adding is held on a
+  # stale link in Rust; hiding, forgetting and "off" never are.
+  "allow-get-sky",
+  "allow-set-sky",
   # "What asks first" (backend/asks-first.patch, 2026-09-26): every action
   # and whether it asks first, in the PC's words (a read); "Ask me first" on
   # ONE action of the short safe list - stricter at once, looser only as one
@@ -506,6 +514,12 @@ permissions = [
   # "Voice follows the face" (an animal face speaks in its own built-in
   # voice): an on/off switch, the same shape - no card either way.
   "allow-set-voice-face",
+  # Each animal's own voice, pitch and pace, and "Reset to its own voice":
+  # the same shape, no card either way. "Try it" plays one fixed line in
+  # that voice and changes nothing.
+  "allow-set-voice-animal",
+  "allow-reset-voice-animal",
+  "allow-try-voice-animal",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",
@@ -978,6 +992,15 @@ permissions = ["allow-get-appearance", "allow-set-appearance"]
 identifier = "appearance-read"
 description = "Read which face Jarvis wears and whether that choice is shared with the phone. Cosmetic and read-only."
 permissions = ["allow-get-appearance"]
+
+# The sun, the moon and the weather, read only: the Widget and the floating
+# face keep what their face frame draws (the position rounded to 0.1 degree,
+# the weather as five numbers) in this computer's localStorage. Neither may
+# change anything: that is Settings.
+[[set]]
+identifier = "sky-read"
+description = "Read whether the sun and moon show behind the animal, the rough position and the weather now. Cosmetic and read-only."
+permissions = ["allow-get-sky"]
 
 # Settings' "Open Faces" button. Opens a window; changes nothing by itself.
 [[set]]

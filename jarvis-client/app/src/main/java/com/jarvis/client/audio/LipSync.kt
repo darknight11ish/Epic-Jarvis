@@ -2,6 +2,7 @@ package com.jarvis.client.audio
 
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
@@ -11,6 +12,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Lip-sync for the faces: turns one spoken reply (the whole WAV, analysed
@@ -48,7 +50,8 @@ object LipSync {
      * [ONSET_S] of each clip's playback. The lead means t = 0 already reads
      * 50 ms in, and Kokoro often starts sounding 10-50 ms into a clip:
      * without this the mouth jumped from shut to a quarter open in one frame
-     * at the start of a sentence. The desktop's `sample()` does the same.
+     * at the start of a sentence. They also fade out over the track's last
+     * [ONSET_S] ([sample]). The desktop's `sample()` does the same.
      */
     const val ONSET_S = 0.05f
 
@@ -69,7 +72,8 @@ object LipSync {
     /**
      * Reads the track at [tSeconds] of playback (+ [LEAD_S]), linearly
      * between frames, into `out[0..3]` = level, open, wide, round (the mouth
-     * three faded in over the first [ONSET_S] of the clip). Outside the
+     * three faded in over the first [ONSET_S] of the clip, and out over the
+     * track's last [ONSET_S]). Outside the
      * clip (or no track) it writes zeros and returns false.
      */
     fun sample(track: Track?, tSeconds: Float, out: FloatArray): Boolean {
@@ -81,7 +85,12 @@ object LipSync {
         val u = (f - i).toFloat()
         val j = min(i + 1, track.n - 1)
         val td = tSeconds.toDouble()
-        val g = (if (td >= ONSET_S_D) 1.0 else if (td > 0.0) td / ONSET_S_D else 0.0).toFloat()
+        // ...and fades out over the track's last ONSET_S: past the last frame
+        // the mouth is shut, and a clip whose sound runs (nearly) to its end
+        // used to snap from wide open to shut in one frame there. As lipsync.js.
+        val start = if (td >= ONSET_S_D) 1.0 else if (td > 0.0) td / ONSET_S_D else 0.0
+        val end = (track.n - 1 - f) / (ONSET_S_D * track.fps)
+        val g = min(start, end).toFloat()
         out[0] = track.level[i] + (track.level[j] - track.level[i]) * u
         out[1] = (track.open[i] + (track.open[j] - track.open[i]) * u) * g
         out[2] = (track.wide[i] + (track.wide[j] - track.wide[i]) * u) * g
@@ -362,11 +371,81 @@ object LipSync {
         const val dipLo = 7.5; const val dipHi = 12.0; const val dipMix = 0.3
         const val wide0 = 7.0; const val wide1 = 7.0; const val round0 = 1.0; const val round1 = 3.5
         const val round2 = 6.0; const val lipFwdMs = 40.0; const val lipBackMs = 60.0; const val teeth = 0.45
+        // A steady noise floor (see the gate in analyse): the quietest noiseQ
+        // of the frames, +noiseAbove dB, never closer than noiseCap dB under
+        // the peaks.
+        const val noiseQ = 0.02; const val noiseAbove = 7.0; const val noiseCap = 18.0
+        // The speaker's size (see pitchOf): the lip bands move by pitchAlpha x
+        // the voice's pitch in quarter octaves from pitchRef Hz, within
+        // pitchLo..pitchHi quarter octaves; a clip needs pitchN pitched frames.
+        const val pitchRef = 210.0; const val pitchAlpha = 0.6; const val pitchLo = -1.5
+        const val pitchHi = 0.0; const val pitchN = 5
+    }
+
+    /**
+     * The median pitch (Hz) of the vowel frames (`vow > 0.5`), or 0 when
+     * fewer than [K.pitchN] of them have a clear one. Every third vowel frame,
+     * a normalised autocorrelation of the clip averaged down to about 6 kHz,
+     * 32 ms long, over pitches of 70-400 Hz; the shortest period whose peak is
+     * within 85 % of the best one (so not twice the period), refined between
+     * samples by a parabola. As lipsync.js's `pitchOf`, operation for
+     * operation, so the two give the same doubles.
+     */
+    private fun pitchOf(samples: FloatArray, sr: Int, vow: DoubleArray, n: Int): Double {
+        if (sr < 4000) return 0.0 // below any rate Wav.rateOf accepts: no pitch, no move
+        val dec =max(1, floor(sr / 6000.0 + 0.5).toInt())
+        val r = sr.toDouble() / dec
+        val len = samples.size / dec
+        val y = DoubleArray(len)
+        for (k in 0 until len) {
+            var a = 0.0
+            for (t in 0 until dec) a += samples[k * dec + t].toDouble()
+            y[k] = a / dec
+        }
+        val w = floor(0.032 * r + 0.5).toInt()
+        val l0 = floor(r / 400).toInt()
+        val l1 = ceil(r / 70).toInt()
+        val rr = DoubleArray(l1 + 2)
+        val got = DoubleArray(n)
+        var m = 0
+        var c = 0
+        for (i in 0 until n) {
+            if (!(vow[i] > 0.5) || (c++ % 3) != 0) continue
+            val st = floor(i.toDouble() * sr / FPS / dec).toInt() - (w shr 1)
+            if (st < 0 || st + w + l1 + 1 > len) continue
+            var e0 = 0.0
+            var best = -1.0
+            for (t in 0 until w) e0 += y[st + t] * y[st + t]
+            for (l in l0 - 1..l1 + 1) {
+                var xy = 0.0
+                var ee = 0.0
+                for (t in 0 until w) {
+                    val v = y[st + t + l]; xy += y[st + t] * v; ee += v * v
+                }
+                rr[l] = xy / sqrt(e0 * ee + 1e-20)
+            }
+            for (l in l0..l1) if (rr[l] > best) best = rr[l]
+            if (best < 0.6) continue
+            for (l in l0..l1) {
+                if (rr[l] >= 0.85 * best && rr[l] >= rr[l - 1] && rr[l] >= rr[l + 1]) {
+                    val d2 = rr[l - 1] - 2 * rr[l] + rr[l + 1]
+                    got[m++] = r / (l + (if (d2 < 0) 0.5 * (rr[l - 1] - rr[l + 1]) / d2 else 0.0))
+                    break
+                }
+            }
+        }
+        return if (m >= K.pitchN) percentile(got, m, 0.5) else 0.0
     }
 
     /** [samples] in -1..1, mono. */
     fun analyse(samples: FloatArray, sampleRate: Int): Track {
-        val src = if (sampleRate > 0) samples else FloatArray(0)
+        // A sample that is not a number (NaN, Infinity) would make every frame
+        // near it NaN, and a NaN mouth reaches the face. It counts as silence
+        // (as lipsync.js). The ShortArray path never has one.
+        val finite = if (samples.all { it.isFinite() }) samples else FloatArray(samples.size) {
+            if (samples[it].isFinite()) samples[it] else 0f
+        }
+        val src = if (sampleRate > 0) finite else FloatArray(0)
         val f = features(src, sampleRate)
         val n = f.n
         val b = f.bands
@@ -383,7 +462,12 @@ object LipSync {
         // Loudness reference (robust peak) and the gate below which is silence.
         val ref = percentile(tmp, m, 0.95)
         val floorDb = percentile(tmp, m, 0.10)
-        val gate = min(ref - 30, max(ref - 50, floorDb + 8))
+        // A steady noise floor (a custom voice cloned from a noisy recording,
+        // hiss, hum) fills the pauses at one level, which the 30 dB gate can
+        // sit under: the gate goes 7 dB above the quietest 2 % of the frames,
+        // never closer than 18 dB under the peaks. As lipsync.js.
+        val gate = min(ref - K.noiseCap, max(min(ref - 30, max(ref - 50, floorDb + 8)),
+            percentile(tmp, m, K.noiseQ) + K.noiseAbove))
 
         // ---- level: loudness 0..1, fast attack, slower release -------------
         val att = coef(20.0)
@@ -409,14 +493,6 @@ object LipSync {
         val x1000 = bandPos(1000.0)
         val x4000 = bandPos(4000.0)
         val x10k = bandPos(10000.0)
-        val xE = bandPos(K.lmA)
-        val xF = bandPos(K.lmB)
-        val xG = bandPos(K.lmC)
-        val xH = bandPos(K.lmD)
-        val xA = bandPos(K.fbA)
-        val xB = bandPos(K.fbB)
-        val xC = bandPos(K.fbC)
-        val xD = bandPos(K.fbD)
         val xS0 = bandPos(K.shA)
         val xS1 = bandPos(K.shB)
         val xS2 = bandPos(K.shC)
@@ -427,9 +503,8 @@ object LipSync {
             dH[i] = db(bandSum(b, o, x4000, x10k))
             dL[i] = db(bandSum(b, o, x80, x1000))
             sh[i] = db(bandSum(b, o, xS2, xS3)) - db(bandSum(b, o, xS0, xS1))
-            lm[i] = db(bandSum(b, o, xE, xF)) - db(bandSum(b, o, xG, xH))
-            fb[i] = db(bandSum(b, o, xC, xD)) - db(bandSum(b, o, xA, xB))
         }
+        // (lm and fb are worked out further down, once the voice's size is known.)
         m = 0
         for (i in 0 until n) if (f.all[i] > gate) tmp[m++] = dO[i]
         val refO = percentile(tmp, m, 0.95)
@@ -450,6 +525,29 @@ object LipSync {
             } else 0.0
             nas[i] = if (speech[i]) smooth01(K.nasLo, K.nasHi, lo[i]) else 0.0
             vow[i] = smooth01(refO - 22, refO - 10, dO[i]) * (1 - fric[i]) * (1 - nas[i])
+        }
+
+        // The voice's size: the lip bands move down with the voice's pitch - a
+        // deeper voice (a man's, or any voice pitched down) has every
+        // resonance lower, and its "ee" read round. By 0.6 of how far the
+        // pitch is below 210 Hz, at most 3/8 of an octave, never up.
+        // lipsync.js says why pitch and not the spectrum, and why not up.
+        val f0 = pitchOf(src, sampleRate, vow, n)
+        val size = if (f0 > 0) {
+            max(K.pitchLo, min(K.pitchHi, K.pitchAlpha * 4 * ln(f0 / K.pitchRef) / LN2))
+        } else 0.0
+        val xE = bandPos(K.lmA) + size
+        val xF = bandPos(K.lmB) + size
+        val xG = bandPos(K.lmC) + size
+        val xH = bandPos(K.lmD) + size
+        val xA = bandPos(K.fbA) + size
+        val xB = bandPos(K.fbB) + size
+        val xC = bandPos(K.fbC) + size
+        val xD = bandPos(K.fbD) + size
+        for (i in 0 until n) {
+            val o = i * NB
+            lm[i] = db(bandSum(b, o, xE, xF)) - db(bandSum(b, o, xG, xH))
+            fb[i] = db(bandSum(b, o, xC, xD)) - db(bandSum(b, o, xA, xB))
         }
 
         // The voice's own colour, centred on this clip's median vowel - in

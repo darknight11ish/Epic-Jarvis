@@ -428,10 +428,24 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 /// above activity deliberately — a tray icon exists to be glanced at, and the
 /// only thing on this bus that needs the human is an approval.
 fn spec_state(link: &LinkState) -> &'static str {
+    // Not connected: asleep, whatever the last activity was - the icon is
+    // hollow as well (`draw`), which is what says "not connected". The
+    // owner's rule (2026-09-28) for every face surface, and the faces'
+    // own (jarvis-link.js surfaceState): the stream keeps the last activity
+    // it heard when it drops, so without this the hollow icon could stay in
+    // the colour of "speaking" or "waiting on you" for as long as Jarvis
+    // was gone.
+    if !link.connected {
+        return "standby";
+    }
     if link.activity == "error" {
         return "error";
     }
-    if link.approvals > 0 {
+    // Never the approval colour while acting is blocked (rule 4): while the
+    // link is stale nobody can approve from this PC (jarvis-link.js
+    // `decide` refuses), so an icon asking for a decision would be a promise
+    // the buttons break. The faces follow the same rule.
+    if link.approvals > 0 && !link.stale {
         return "approval";
     }
 
@@ -1502,6 +1516,30 @@ mod tests {
         // An error outranks everything.
         l.activity = "error".into();
         assert_eq!(spec_state(&l), "error");
+    }
+
+    /// Never the approval colour while acting is blocked, and not connected
+    /// is asleep (the owner's rule, 2026-09-28) - with the hollow icon.
+    #[test]
+    fn no_approval_while_blocked_and_asleep_when_disconnected() {
+        let mut l = link();
+        l.approvals = 2;
+        l.activity = "speaking".into();
+        assert_eq!(spec_state(&l), "approval");
+        l.stale = true;
+        assert_eq!(
+            spec_state(&l),
+            "speaking",
+            "a stale link asked for a decision"
+        );
+        l.connected = false;
+        assert_eq!(
+            spec_state(&l),
+            "standby",
+            "a dropped link kept its last activity"
+        );
+        l.activity = "error".into();
+        assert_eq!(spec_state(&l), "standby");
     }
 
     /// `banked` replaces a resting face and nothing else — the server's own

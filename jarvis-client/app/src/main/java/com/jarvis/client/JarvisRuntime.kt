@@ -534,6 +534,46 @@ object JarvisRuntime {
      */
     val face: StateFlow<FaceState> = _face.asStateFlow()
 
+    private val _faceOffline = MutableStateFlow(false)
+
+    /**
+     * Jarvis cannot be reached: the link has been down or stale past the
+     * grace ([com.jarvis.client.face.FaceLink]). [face] is STANDBY while this
+     * is true; the face adds its hollow ring and TalkBack says "Jarvis isn't
+     * connected" (FaceView's `offline`).
+     */
+    val faceOffline: StateFlow<Boolean> = _faceOffline.asStateFlow()
+
+    private val _faceSerious = MutableStateFlow(false)
+
+    /**
+     * A serious moment: a crisis answer is being given or spoken
+     * (docs/JARVIS-API.md section 38.1, the `wellbeing` event). The animal
+     * faces hold a calm, plain, neutral pose while this is true (FaceView's
+     * `serious`); the mouth still follows the voice. Set by the event only -
+     * true on `{"serious": true}`, false on `{"serious": false}` - with a
+     * safety net: [SERIOUS_NET_MS] after the last true with no false, it
+     * ends by itself, so a missed frame can never leave the face neutral for
+     * good. A reconnect keeps what it had (section 38.1).
+     */
+    val faceSerious: StateFlow<Boolean> = _faceSerious.asStateFlow()
+    private var seriousNet: Job? = null
+
+    /** The serious moment's safety net: 600 s + 300 s (section 38.1). */
+    private const val SERIOUS_NET_MS = 900_000L
+
+    /** Where the phone keeps its copy of the sky settings (SkySettings.encode). */
+    private const val SKY_PREFS = "jarvis_sky"
+    private const val SKY_KEY = "stored"
+
+    /**
+     * When the link was cut - down, or up but stale - for the face; 0 while
+     * it is healthy. Set from [linkDownSince] when that is earlier (the drop
+     * itself), else from the moment the face job first saw it. Only the face
+     * job touches it.
+     */
+    private var faceCutSince = 0L
+
     private var streamJob: Job? = null
     private var watchdog: Job? = null
     private var faceJob: Job? = null
@@ -688,18 +728,39 @@ object JarvisRuntime {
         stream = EventStream(jarvisApi)
         started = true
 
+        // The sun, moon and weather behind the animals (SkySettings): this
+        // phone's last copy first, so the sky shows at once and while the PC
+        // cannot be reached; then the PC's, every POLL_MS while connected.
+        com.jarvis.client.face.SkyNow.stored = com.jarvis.client.net.SkySettings.decode(
+            runCatching { app.getSharedPreferences(SKY_PREFS, Context.MODE_PRIVATE).getString(SKY_KEY, null) }
+                .getOrNull(),
+        )
+        scope.launch {
+            _link.collectLatest { link ->
+                if (link != LinkState.CONNECTED) return@collectLatest
+                while (true) {
+                    runCatching { sky() }
+                    delay(com.jarvis.client.net.SkySettings.POLL_MS)
+                }
+            }
+        }
+
         faceJob = scope.launch {
+            // `_stale` is in the combine: a stale link is as cut as a dropped
+            // one (rule 4 blocks acting on it), and the face has to hear
+            // about it and about its end.
             combine(_link, _activity, _power, _pending, _attention) { _, _, _, _, _ -> }
                 .combine(voice.phase) { _, _ -> }
+                .combine(_stale) { _, _ -> }
                 .collectLatest {
-                    _face.value = resolveFace()
-                    if (_link.value != LinkState.CONNECTED) {
-                        // Re-evaluate once the grace window is up, so a reconnect
-                        // that does not come back does eventually show as an
-                        // error. collectLatest cancels this the moment anything
+                    val wait = publishFace()
+                    if (wait > 0L) {
+                        // Re-evaluate once the grace is up, so a reconnect that
+                        // does not come back does eventually show as offline.
+                        // collectLatest cancels this the moment anything
                         // changes, so a reconnect that succeeds never reaches it.
-                        delay(RECONNECT_GRACE_MS)
-                        _face.value = resolveFace()
+                        delay(wait)
+                        publishFace()
                     }
                 }
         }
@@ -1329,7 +1390,29 @@ object JarvisRuntime {
                 )
                 _steps.update { com.jarvis.client.net.Steps.append(it, line) }
             }
+            // A serious moment starts or ends (section 38.1): one boolean,
+            // never a word. A second true while one is open just restarts
+            // the safety net.
+            "wellbeing" -> {
+                // A JSON true or false only - never the string "true", as
+                // the desktop (typeof ... === "boolean").
+                val serious = ((event.data as? JsonObject)?.get("serious") as? JsonPrimitive)
+                    ?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull()
+                if (serious != null) onSerious(serious)
+            }
             else -> Log.d(TAG, "unhandled event kind '${event.kind}'")
+        }
+    }
+
+    private fun onSerious(serious: Boolean) {
+        seriousNet?.cancel()
+        seriousNet = null
+        _faceSerious.value = serious
+        if (serious) {
+            seriousNet = scope.launch {
+                delay(SERIOUS_NET_MS)
+                _faceSerious.value = false
+            }
         }
     }
 
@@ -1969,6 +2052,49 @@ object JarvisRuntime {
         return com.jarvis.client.net.Manner.humorReplyLine(api.mannerPost(body), on)
     }
 
+    // ------------------------------------------ sun, moon and weather ----
+
+    /**
+     * `GET /api/sky` (the owner's decisions of 2026-09-28). A good answer is
+     * also kept for the faces ([com.jarvis.client.face.SkyNow]) and in this
+     * phone's own settings - only the rounded position and the weather
+     * numbers, never the town's name - so the sky keeps moving while the PC
+     * cannot be reached. An older PC means nothing is drawn.
+     */
+    suspend fun sky(): ApiResult<JsonObject> {
+        val r = api.sky()
+        when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.SkySettings.parse(r.value)?.let { keepSky(it) }
+            is ApiResult.Failed -> if (com.jarvis.client.net.SkySettings.missing(r.error)) keepSky(null)
+        }
+        return r
+    }
+
+    private fun keepSky(v: com.jarvis.client.net.SkySettings.View?) {
+        val s = com.jarvis.client.net.SkySettings.storedOf(v)
+        com.jarvis.client.face.SkyNow.stored = s
+        runCatching {
+            appContext?.getSharedPreferences(SKY_PREFS, Context.MODE_PRIVATE)?.edit()
+                ?.putString(SKY_KEY, com.jarvis.client.net.SkySettings.encode(s))?.apply()
+        }
+    }
+
+    /**
+     * ONE sky change ([com.jarvis.client.net.SkySettings]'s bodies: show on or
+     * off, forget the town, a weather source). Adding something is held on a
+     * stale link ([actionBlocker], rule 4); hiding, forgetting and "off" never
+     * are - they only make Jarvis do less. Open-Meteo ON approves nothing
+     * here: the PC raises ONE approval card.
+     */
+    suspend fun setSky(body: String): String {
+        if (com.jarvis.client.net.SkySettings.adds(body)) actionBlocker()?.let { return it }
+        val r = api.skyPost(body)
+        if (r is ApiResult.Ok) {
+            (r.value["view"] as? JsonObject)?.let { com.jarvis.client.net.SkySettings.parse(it) }?.let { keepSky(it) }
+        }
+        return com.jarvis.client.net.SkySettings.replyLine(r)
+    }
+
     /** Re-reads `/api/deep`. Starts nothing on the PC. */
     suspend fun refreshDeep() {
         _deep.value = BigModel.deepReadOf(api.deep())
@@ -2312,6 +2438,17 @@ object JarvisRuntime {
     suspend fun setVoiceFace(on: Boolean): CustomVoices.Answer? {
         actionBlocker()?.let { _customVoiceNote.value = it; return null }
         return postCustomVoice(CustomVoices.FACE_PATH, CustomVoices.faceBody(on))
+    }
+
+    /**
+     * One animal's own voice, pitch and pace, or "Reset to its own voice" -
+     * [json] is [CustomVoices.animalBody] or [CustomVoices.animalResetBody].
+     * Same shape as [setVoiceFace]: no card either way, held on a stale link
+     * (rule 4). ("Try it" changes nothing: VoiceSession.tryAnimalVoice.)
+     */
+    suspend fun setVoiceAnimal(json: String): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.ANIMAL_PATH, json)
     }
 
     private val _customVoiceNote = MutableStateFlow<String?>(null)
@@ -5570,34 +5707,42 @@ object JarvisRuntime {
      */
     fun faceState(): FaceState = _face.value
 
-    private fun resolveFace(nowMs: Long = System.currentTimeMillis()): FaceState {
-        if (_link.value != LinkState.CONNECTED) {
-            // A dropped radio on a train is not Jarvis being broken, and the
-            // spec's error face is a *reversed* motion — a deliberately alarming
-            // thing to show for a three-second blip between two cell towers.
-            // Inside the grace window the face holds whatever it was doing; the
-            // link bar already says "Reconnecting" in words, which is the honest
-            // place for that news.
-            //
-            // Time since the link dropped, not which enum we are in: the stream
-            // reports OFFLINE from the second retry onward, and it is still
-            // retrying, so branching on the enum would put the error face up
-            // about a second after the first failure.
+    /**
+     * Works out the face and whether Jarvis is out of reach, and publishes
+     * both. @return how long until that answer changes by itself (the rest
+     * of the reconnect grace), or 0.
+     *
+     * A cut link - down, or up but stale - shows the STANDBY pose with the
+     * offline ring once it has lasted [com.jarvis.client.face.FaceLink.GRACE_MS]
+     * (the owner's decision, 2026-09-28; the rules and the reasons are
+     * FaceLink's). It used to go to the reversed ERROR motion after the
+     * grace and to BANKED after three minutes - which TalkBack read as
+     * "notes saved for later", about a PC nobody could hear.
+     *
+     * The grace itself is kept: a dropped radio on a train is not Jarvis
+     * going away, and inside it the face holds whatever it was doing while
+     * the link bar says "Reconnecting" in words - except an approval face,
+     * which goes at once, since its buttons are already blocked (rule 4).
+     * Timed from when the link dropped, not from which enum it is in: the
+     * stream reports OFFLINE from the second retry onward and is still
+     * retrying.
+     */
+    private fun publishFace(nowMs: Long = System.currentTimeMillis()): Long {
+        val cut = _link.value != LinkState.CONNECTED || _stale.value
+        if (!cut) {
+            faceCutSince = 0L
+        } else if (faceCutSince == 0L) {
             val down = linkDownSince
-            if (down != 0L) {
-                val silentFor = nowMs - down
-                // Long enough that this is almost certainly not a blip - the
-                // laptop lid is closed, or the machine actually went to sleep.
-                // The spec's error face is a deliberately alarming reversed
-                // motion, and a sleeping machine is not a broken one. BANKED
-                // already exists for exactly "nothing is wrong, nothing needs
-                // you right now" - reused rather than inventing a state the
-                // desktop would also need to agree on, since this is a purely
-                // local, phone-side judgement call about how long is "a while".
-                if (silentFor > LONG_SILENCE_MS) return FaceState.BANKED
-                if (silentFor > RECONNECT_GRACE_MS) return FaceState.ERROR
-            }
+            faceCutSince = if (down != 0L && down < nowMs) down else nowMs
         }
+        val shown = com.jarvis.client.face.FaceLink.shown(resolveFace(), faceCutSince, nowMs)
+        _faceOffline.value = shown.offline
+        _face.value = shown.state
+        return if (shown.offline) 0L else com.jarvis.client.face.FaceLink.graceLeftMs(faceCutSince, nowMs)
+    }
+
+    /** The face on a healthy link; [publishFace] decides what a cut one shows. */
+    private fun resolveFace(): FaceState {
         // This device's own microphone is a fact only this device knows: the
         // server has no idea the mic is open until the utterance arrives, so
         // there is nothing to re-derive and nothing to disagree with. The
@@ -5663,24 +5808,8 @@ object JarvisRuntime {
     /** A status line, not a log: anything longer is cut before it is shown. */
     private const val ACTIVITY_DETAIL_MAX = 200
 
-    /**
-     * How long a reconnect may run before the face admits something is wrong.
-     * Long enough to cover a handover between cell towers or a screen-off doze
-     * wakeup; short enough that a desktop that has actually gone away does not
-     * keep pretending to think.
-     */
-    private const val RECONNECT_GRACE_MS = 12_000L
-
     /** When to re-read the second-card switches after a decision: see [recheckSecondCardAfterDecision]. */
     private val SECOND_CARD_RECHECK_MS = longArrayOf(0L, 1_500L, 5_000L)
-
-    /**
-     * Past this, "reconnecting" stops being the honest word for it. Short
-     * enough that checking the phone a few minutes after the desktop actually
-     * went to sleep shows calm rather than alarm; long enough that no real
-     * network blip - a train, a lift, a bad patch of wifi - ever reaches it.
-     */
-    private const val LONG_SILENCE_MS = 180_000L
 
     /** When the link was last lost, or 0 while it is up. */
     @Volatile private var linkDownSince = 0L

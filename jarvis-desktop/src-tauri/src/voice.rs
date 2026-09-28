@@ -859,6 +859,9 @@ pub fn start_voice_capture(
     if auto.0.lock().map_err(poisoned)?.is_some() {
         return Err("automatic listening is already using the microphone".to_string());
     }
+    // Before the microphone opens: an animal's "Try it" playing in Settings
+    // stops now, so it is not recorded with the owner's question.
+    crate::emit_all(&app, crate::events::VOICE_CAPTURE_STARTED, ());
 
     let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
     let (ready_tx, ready_rx) = mpsc::channel();

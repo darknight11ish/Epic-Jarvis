@@ -233,6 +233,51 @@ class SpecDriftTest {
         }
     }
 
+    /**
+     * The animals' levels and pacing (frame_rate.animals, 2026-09-28) - the
+     * desktop reads them from the file itself (face-pace.js), so this is
+     * what keeps the phone's constants the same.
+     */
+    @Test
+    fun `the animals' levels and pacing match the spec`() {
+        val fr = spec.getValue("frame_rate").jsonObject
+        assertEquals(
+            com.jarvis.client.face.FrameRateTarget.entries.map { it.id },
+            fr.getValue("targets").jsonArray.map { it.jsonPrimitive.content },
+        )
+        val a = fr.getValue("animals").jsonObject
+        val levels = a.getValue("levels").jsonArray.map { it.jsonObject }
+        val tiers = com.jarvis.client.face.QualityTier.entries
+        assertEquals(tiers.size, levels.size)
+        for ((i, l) in levels.withIndex()) {
+            val q = tiers[i]
+            assertEquals(l.getValue("id").jsonPrimitive.content, q.id)
+            assertEquals(l.getValue("label").jsonPrimitive.content, q.label)
+            assertEquals(l.getValue("note").jsonPrimitive.content, q.note)
+            assertEquals("${q.id}'s phone trace", l.getValue("phone_trace").jsonPrimitive.float, q.animalTrace, 0f)
+            assertEquals("${q.id}'s scale is the desktop's gpu share", l.getValue("desktop_scale").jsonPrimitive.float, q.gpu, 0f)
+        }
+        val P = com.jarvis.client.face.AnimalPace
+        val auto = a.getValue("auto").jsonObject
+        assertEquals(auto.getValue("climb_to_max_below").jsonPrimitive.float, P.CLIMB_TO_MAX_BELOW, 0f)
+        assertEquals(auto.getValue("raise_rate_below").jsonPrimitive.float, P.RAISE_RATE_BELOW, 0f)
+        assertEquals(auto.getValue("raise_quality_below").jsonPrimitive.float, P.RAISE_QUALITY_BELOW, 0f)
+        assertEquals("high", auto.getValue("start").jsonPrimitive.content)
+        assertEquals(com.jarvis.client.face.QualityTier.HIGH, com.jarvis.client.face.QualityTier.DEFAULT)
+        val rest = a.getValue("rest_fps").jsonObject
+        assertEquals(rest.getValue("auto_headroom").jsonPrimitive.int, P.AUTO_REST_HEADROOM)
+        assertEquals(rest.getValue("auto_no_headroom").jsonPrimitive.int, P.AUTO_REST_NO_HEADROOM)
+        assertEquals(rest.getValue("standby").jsonPrimitive.int, Spec.fpsFor(FaceState.STANDBY))
+        assertEquals(rest.getValue("banked").jsonPrimitive.int, Spec.fpsFor(FaceState.BANKED))
+        val head = a.getValue("headroom").jsonObject
+        assertEquals(head.getValue("budget_fps").jsonPrimitive.int, P.HEADROOM_BUDGET_FPS)
+        assertEquals(head.getValue("on_below").jsonPrimitive.float, P.HEADROOM_ON_BELOW, 0f)
+        assertEquals(head.getValue("off_above").jsonPrimitive.float, P.HEADROOM_OFF_ABOVE, 0f)
+        assertEquals(head.getValue("min_frames").jsonPrimitive.int, P.HEADROOM_MIN_FRAMES)
+        assertEquals(a.getValue("happening_s").jsonPrimitive.float, com.jarvis.client.face.CritterPose.HAPPENING_S, 0f)
+        assertEquals(a.getValue("no_shadow_below_px").jsonPrimitive.int, P.NO_SHADOW_BELOW_PX)
+    }
+
     @Test
     fun `every kind the spec names can be expressed`() {
         // A list of plain strings, not objects.
