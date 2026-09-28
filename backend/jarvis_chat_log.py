@@ -85,6 +85,14 @@ file's free pages until they are reused, so `secure_delete` is on (freed
 content is overwritten with zeros) and VACUUM runs after a delete, at most
 once an hour.
 
+SEARCHING WHAT WAS SAID (docs/JARVIS-API.md section 71, 2026-09-28)
+ChatLog.search, for the apps' History search box only (GET
+/api/history/search, answered by jarvis_brain_reads.py). Each search opens
+every kept turn with the key, in memory, compares it and drops it. There is
+NO index and nothing is written - an index would be a plain-text copy of
+what this module exists to keep encrypted. Not a tool: nothing a model or a
+chat turn can call reaches it.
+
 THE SWITCH (the same shape as jarvis_learning_switch.py)
   ON   one approval card, action `history_enable`, and 202 {"waiting": true}
        at once. Only tier "ask" with outcome "approved" turns it on.

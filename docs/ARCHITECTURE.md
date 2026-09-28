@@ -1164,11 +1164,31 @@ reads from on its own. Three things about it are invariants:
     `GET /api/history`, filtering it in the app - `ChatLog.filtered()` on
     the phone, `paintHistoryList`'s `needle` on the desktop - by
     conversation title only. No new route, no new index, nothing written to
-    disk, and the search words never reach a model or a tool. The waiting
-    rule still stands for anything else: a backend route that searches
-    `chat-history.db`'s words, or a chat turn that can ask Jarvis to search
-    its own past conversations, both still wait on ideas 1-4 and the memory
-    self-test, unbuilt.
+    disk, and the search words never reach a model or a tool.
+- **Searching what was said, for the screen only** (the owner's choice of
+  2026-09-28, "Brain upgrades"; docs/JARVIS-API.md §71). This changes the
+  written rule just above, and says how far: `GET /api/history/search`
+  (`jarvis_chat_log.ChatLog.search`, `brain-reads.patch`) searches the kept
+  turns' WORDS for the apps' History search box. Three invariants hold it
+  to the owner's own words of 2026-09-27, "shown on screen only; nothing
+  saved, nothing handed to the AI":
+  - **No index, ever.** Each search opens every kept turn with the key, in
+    memory, compares it and drops it. An FTS5 table, a word list or a cache
+    between searches would be a plain-text copy of the chats on disk,
+    beside the encrypted one - the "encrypted or not kept" rule above
+    forbids it. The search words are not written, logged or audited
+    (`test_brain_reads.py` compares every byte of the history folder).
+  - **Not a tool, not a chat turn.** Only the apps' History screens call
+    it, behind the token and hidden with the chat history under "Windows
+    Hello for memory lists and chat history" / "Hide memory lists and chat
+    history". `jarvis_agent.py` offers nothing that reaches it, and nothing
+    it returns is put in front of the model.
+  - **What the list shows, no more.** A temporary chat was never kept, so it
+    is never found; what the keep period deleted is gone.
+  "Find in this chat" is in the apps, over a conversation already open.
+  What still waits on the memory self-test is the other half of the
+  2026-09-26 rule: a chat turn that can ask Jarvis to search its own past
+  conversations, or anything that hands past chat words to the model.
 
 ---
 
@@ -1511,7 +1531,9 @@ backend routes, in both directions; the rest are listed here only.
 
 | what | why |
 |---|---|
-| The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
+| The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). Since 2026-09-28 only the desktop's HUD window reads it (the Brain's Galaxy is drawn from people and things instead, privacy finding B1, docs/JARVIS-API.md §71.3), and the HUD's copy loses its fact and person dots while the memory lists are hidden. |
+| Galaxy, made of people and things (Brain -> Advanced, 2026-09-28) | The memory graph, which stays off the phone (`CLAUDE.md`). It reads `/api/memory/entities` (the row below), so no route of its own. |
+| "History of this fact" (`/api/memory/fact-history`, 2026-09-28, docs/JARVIS-API.md §71.2) | The phone lists only facts saved automatically that are still in use ("Saved automatically"). Those are never corrections, so they almost never have an earlier wording, and a view that brings back the retired wordings of any fact is the deep memory editing that stays on the desktop (the rows below about Forget and Erase draw the same line). The phone's "What did I believe on this date?" still shows retired facts as they were on a date. |
 | People and things (`/api/memory/entities`): the names under each fact, "About <name>", and the "are these the same?" card (memory wave 3, 2026-09-25) | The same rule: linking facts to the people and things they name, and joining two entries, is the memory graph, which stays off the phone (`CLAUDE.md`). The phone shows no names and never asks for the merge card (its pending list leaves out `?merge_cards=1`, so the card waits for the desktop). What the layer is for reaches the phone anyway: chat recall runs on the PC, so "where is my sister getting married?" finds Priya's wedding from either app. |
 | Rewording a stored fact (`/api/memory/edit`), and forgetting one from a list of every fact | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone calls it for facts in the "Saved automatically" list (JARVIS-API §19), and since 2026-09-25 for a fact shown under "Used in this answer" or "Jarvis remembered N things" - one the owner just saw Jarvis use or save, not a browse of the whole store. |
 | "Erase the words" beside Forget under "Used in this answer" and "Jarvis remembered N things" | The phone offers Erase in one place only, Brain → Saved automatically, for facts saved automatically that are still in use (the row below). A fact an answer used may be any fact, history included (a question about the past recalls facts that were corrected or have ended - never forgotten ones, since the memory review of 2026-09-27, B15), and erasing any fact at all is deep memory editing. On the phone those two lists offer Forget; the desktop offers both, as it does on every fact. |

@@ -139,6 +139,7 @@ on a throwaway copy instead.
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `brain-reads.patch` | `jarvis_hud.py` | **The Brain upgrades** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §71). One install()-shaped hunk at start-up - `jarvis_brain_reads.install(Handler, ...)` - whose context is `answer-sources.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/history/search?q=` ("search what was said": `jarvis_chat_log.ChatLog.search` opens each kept turn in memory for that one search - no index, nothing written) and `GET /api/memory/fact-history?id=` ("history of this fact": `jarvis_memory.fact_history_view`, an erased version never with its words). Reads for the apps only; nothing reaches the AI model. Needs `jarvis_brain_reads.py`; without it the banner says so and the two routes are not there. See "The Brain upgrades", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -13746,3 +13747,71 @@ has the phone-parity row.
   estimated exist; every top-level section is "open"-able. The exact list
   is in `jarvis_settings_registry.py`'s own module header and
   `docs/JARVIS-API.md` section 58.2/58.3.
+
+# The Brain upgrades: `jarvis_brain_reads.py`, `brain-reads.patch` (2026-09-28)
+
+The owner chose this group on 2026-09-28, from
+`docs/RESEARCH-AUDIT-2026-09-28.md` section 8. The whole contract is
+`docs/JARVIS-API.md` §71; this is the backend's part.
+
+## In plain words
+
+- **Search what was said in old chats.** Until now the History search box
+  only matched titles. Now, from two letters on, the PC looks through what
+  was actually said in every kept chat and sends back the matching chats,
+  each with a short piece of the message where the words were found.
+- **History of this fact.** A fact that was reworded or corrected keeps
+  its earlier wordings. The PC can now list them all, oldest first, for
+  the desktop to show side by side with the changed words marked.
+
+## The rules it keeps (each has a test)
+
+- **No search index.** The chat history is encrypted turn by turn. A
+  search index would be a readable copy of it on disk, so there is none:
+  every search opens each kept turn in memory, compares it and lets it go.
+  Nothing is written - `test_brain_reads.py` compares every byte of the
+  history folder before and after searching - and the search words are
+  never logged or audited.
+- **For the screen only.** Neither route is a tool the AI model can call,
+  and nothing either returns is put in front of the model.
+- **What the list shows, no more.** A temporary chat was never kept, so it
+  is never found. With history off, what is already kept is still searched
+  (the list still lists it), and nothing new is kept.
+- **Erased words never come back.** A fact's history sends no words for an
+  erased version - not even the `[erased]` marker - and the desktop blanks
+  them again twice over.
+- **Bounded.** At most 5,000 conversations or 4 seconds per search; the
+  answer says when it stopped early. At most 50 versions of a fact.
+
+## What changed
+
+- `jarvis_chat_log.py` - `ChatLog.search()`, `search_terms()`, the snippet
+  helpers, `search()` and the `/api/history/search` branch of
+  `handle_get()`. Nothing else in the module changed.
+- `rebuilt/jarvis_memory.py` - `MemoryStore.fact_history()` (adapted from
+  supermemory's `version-chain.ts`, MIT - `THIRD-PARTY-NOTICES.txt`),
+  `fact_history_view()` and `handle_fact_history_get()`.
+- `jarvis_brain_reads.py` - new, shipped whole: `install()` wraps the
+  server's `do_GET` for the two paths only, after the token and origin
+  checks; everything else goes to the original.
+- `brain-reads.patch` - new, last in `scripts/apply-patches.ps1`: the one
+  install call at start-up.
+- `scripts/apply-patches.ps1`, `backend/_where.py` - the patch and the
+  module listed.
+
+## Test it
+
+    python3 backend/test_brain_reads.py
+    python3 backend/test_chat_log.py
+    python3 backend/test_memory_erase.py
+    python3 backend/run_suites.py
+
+## Not checked, said plainly
+
+- **Not run on the owner's PC.** Tested in the dev container only, against
+  a stand-in of `jarvis_hud.py` built from the patch stack, a stand-in key,
+  and small made-up histories. How long a search takes on the owner's real
+  history is not measured.
+- While one search runs, the opened words sit in the backend's memory, as
+  they already do when a conversation is opened. Python cannot wipe them
+  afterwards; it can only let them go.
