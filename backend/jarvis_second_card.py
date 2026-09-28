@@ -320,13 +320,17 @@ it, and never a default (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section
     already does for the second.
 
     WHAT IS DELIBERATELY UNCHANGED. _detect()'s per-row "cards[]" role and
-    "why" text for a third capable card are UNTOUCHED (still "unused,
-    capable, but the {second.name} has more memory") - test_second_card.py
-    already locks that exact sentence in as the reshape pass's own
-    byte-for-byte promise, and it is still true: without an assignment, a
-    third card really is unused. The fuller, up-to-date story (capable,
-    assigned to X, or not assigned) lives in status()'s new "third" key
-    instead, which is purely additive - every existing key in
+    "why" text for a third capable card are UNTOUCHED for the case
+    test_second_card.py's reshape-pass fixture actually covers (still
+    "unused, capable, but the {second.name} has more memory" when the
+    chosen card genuinely has more) - without an assignment, a third card
+    really is unused. Fixed in this pass, not part of the reshape's own
+    promise: the sentence used to say "has more memory" even when the two
+    cards TIE, which is false (2026-09-28 hardware-detection audit,
+    finding #2) - it now says "has the same amount of memory and was
+    already picked" for that case instead. The fuller, up-to-date story
+    (capable, assigned to X, or not assigned) lives in status()'s new
+    "third" key instead, which is purely additive - every existing key in
     GET /api/second-card is untouched. "Combined" stays exactly as it was:
     _combined_rows() still reads only "primary"/"second" from cards[], so
     a third card is automatically left out of it, without any new code.
@@ -1097,7 +1101,11 @@ def _detect(fresh: bool) -> dict:
                 why += (" (a monitor is plugged into it, which uses some of its memory; "
                         "plug the monitors into the main card)")
         elif c in candidates:
-            role, why = "unused", f"capable, but the {second.name} has more memory"
+            if c.total_mb < second.total_mb:
+                role, why = "unused", f"capable, but the {second.name} has more memory"
+            else:
+                role, why = ("unused", f"capable, but the {second.name} has the same "
+                             f"amount of memory and was already picked")
         else:
             role, why = "unused", next(r for (x, r) in reasons if x is c)
         rows.append({"index": c.index, "uuid": c.uuid or None, "name": c.name,

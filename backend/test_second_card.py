@@ -273,6 +273,31 @@ def t_third_card_reshape():
                     "total_mb": 11264, "compute_cap": 7.5}])
     check("a 2-card PC has no extra lanes at all", SC.extra_lanes(det2) == [])
 
+
+#: A second RTX 2060, tying the first one's memory exactly (12,288 MB each) -
+#: for t_third_card_memory_tie below (2026-09-28 hardware-detection audit,
+#: finding #2).
+U_2060_TIE = "GPU-7d2c1e04-9a3b-4f6e-8c15-b0e2a41d7f93"
+
+
+def t_third_card_memory_tie():
+    # Two capable extra cards with the SAME memory (12,288 MB): the 2060 at
+    # index 1 and a second 2060 at index 2. The tie-break (index) still
+    # picks index 1 as "second" - unchanged - but the OTHER one's "why"
+    # must say they tied, never claim the picked card "has more memory"
+    # when it does not.
+    tie = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
+           f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
+           f"2, {U_2060_TIE}, NVIDIA GeForce RTX 2060, 12288, 12010, 7.5, Disabled\n")
+    with G.World(tie):
+        det = SC.detect(fresh=True)
+    check("tied memory: 'second' is still the lower-index card, unchanged",
+          det["second"]["uuid"] == G.U_2060)
+    check("the tied card's 'why' says they tied, never the false 'has more memory'",
+          next(c for c in det["cards"] if c["uuid"] == U_2060_TIE)["why"]
+          == "capable, but the NVIDIA GeForce RTX 2060 has the same amount of "
+             "memory and was already picked")
+
     # A third card that is genuinely NOT capable (below Turing): excluded
     # from _lanes, and cards[] gives its REAL reason, never the generic
     # "more memory" line a merely-smaller capable card would get.
