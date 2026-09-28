@@ -212,6 +212,10 @@ SHIPPED = (
     # The overnight tidy (2026-09-28): "Still true?" and "Which is true
     # now?" review cards only, a kind of job on the one scheduler, no patch
     "jarvis_tidy.py",
+    # Today cards (2026-09-28): the owner's own words shown on the Today
+    # part of both apps at a time, on chosen days - a kind of job on the one
+    # scheduler, no card, no patch
+    "jarvis_today.py",
 )
 
 

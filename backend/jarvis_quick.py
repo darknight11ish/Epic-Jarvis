@@ -104,6 +104,14 @@ reminder; "cancel that" takes it back, as for any reminder set here.
 "Delete the reminder about the dentist" deletes ONE; "what will you remind
 me of next time?" lists them. It is brought up by jarvis_agent.py, not here.
 
+TODAY CARDS (jarvis_today.py, 2026-09-28): "show gym bag on my Today page
+on Mondays and Wednesdays at 7", "put bins out on my today page on Thursday
+evenings", "add a today card saying water the plants every day at 8". The
+owner's own words, shown on the Today part of both apps from that time to
+the end of the day, on those days. No card, like a plain repeating reminder;
+"cancel that" takes it back. "What's on my Today page?" lists them;
+"remove gym bag from my Today page" deletes ONE.
+
 "RING MY PHONE" (jarvis_find_phone.py, 2026-09-28): "ring my phone", "find
 my phone", "where's my phone" - ONE event the phone rings for, on its alarm
 channel, even on silent. No card: it only rings the owner's own phone.
@@ -859,6 +867,11 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- Today cards (jarvis_today.py, 2026-09-28) ------------------------------------
+    got = _today(s, now)
+    if got is not None:
+        return got
+
     # --- "remind me next time I talk about ..." (jarvis_next_time.py) ------------------
     got = _next_time(s)
     if got is not None:
@@ -1044,7 +1057,7 @@ def _snooze(s: str) -> Optional[Intent]:
 #: What "cancel that <noun>" may name, and the nouns each kind answers to.
 _UNDO_NOUNS = {"timer": "timer", "alarm": "alarm", "reminder": "reminder",
                "briefing": "briefing", "snooze": "snooze", "item": "item", "todo": "item",
-               "todo item": "item", "one": None, "": None}
+               "todo item": "item", "card": "card", "one": None, "": None}
 
 
 def _undo(s: str) -> Optional[Intent]:
@@ -1060,7 +1073,7 @@ def _undo(s: str) -> Optional[Intent]:
         return Intent("undo", {"noun": None, "soft": False})
     m = re.fullmatch(r"(?:cancel|undo|scratch|delete|remove|take\s+back)\s+(?:that|it|the\s+last\s+one|"
                      r"what\s+you\s+just\s+(?:set|added|did))(?:\s+(timer|alarm|reminder|briefing|"
-                     r"snooze|item|one|todo(?:\s+item)?))?", t)
+                     r"snooze|item|card|one|todo(?:\s+item)?))?", t)
     if m:
         return Intent("undo", {"noun": _UNDO_NOUNS.get(m.group(1) or ""), "soft": False})
     return None
@@ -1357,6 +1370,130 @@ def _lockdown(s: str) -> Optional[Intent]:
     if _LOCKDOWN_ON.fullmatch(s):
         return Intent("lockdown_on")
     return None
+
+
+#: Today cards (jarvis_today.py, 2026-09-28): "show gym bag on my Today page
+#: on Mondays and Wednesdays at 7", "put 'bins out' on my today page on
+#: Thursday evenings", "add a today card saying water the plants every day at
+#: 8". No card - like a plain repeating reminder. "What's on my Today page?"
+#: lists them; "remove gym bag from my Today page" deletes ONE. "On Monday"
+#: means every Monday here: a Today card always repeats.
+_TD_PAGE = r"(?:my|the)\s+today\s+(?:page|screen|cards?)"
+_TD_VERB = r"(?:show|put|add|pin|stick)"
+_TD_WHEN = r"(?:on|every|each|daily|weekdays?|(?:" + _WD + r")s?)\b.*"
+_TD_PATTERNS = (
+    # "show <text> <when> on my today page"
+    re.compile(_TD_VERB + r"\s+(?P<text>.+?)\s+(?P<when>" + _TD_WHEN + r"?)\s+(?:on|to|in)\s+"
+               + _TD_PAGE),
+    # "show <text> on my today page <when>"
+    re.compile(_TD_VERB + r"\s+(?P<text>.+?)\s+(?:on|to|in)\s+" + _TD_PAGE
+               + r"(?:,?\s+(?P<when>.+))?"),
+    # "add a today card (saying|for|that says) <text> <when>"
+    re.compile(r"(?:add|make|create|set\s+up|put\s+up)\s+(?:a\s+|another\s+)?today\s+card"
+               r"\s*(?:saying|for|that\s+says|reading|:)?\s+(?P<text>.+?)(?:,?\s+(?P<when>"
+               + _TD_WHEN + r"))?"),
+)
+_TD_LIST = re.compile(
+    r"(?:what'?s|what\s+is|whats|what\s+are)\s+(?:on\s+)?" + _TD_PAGE
+    + r"|(?:list|read|tell\s+me|show(?:\s+me)?|open)\s+" + _TD_PAGE
+    + r"|what\s+(?:cards\s+)?(?:do\s+i\s+have|have\s+i\s+got)\s+on\s+" + _TD_PAGE)
+_TD_REMOVE = re.compile(
+    r"(?:remove|delete|take|drop|clear)\s+(?:the\s+card\s+)?(?P<text>.+?)\s+(?:from|off)\s+"
+    + _TD_PAGE)
+_TD_DAYS_ONLY = re.compile(
+    r"(?:on\s+|every\s+|each\s+)?(?P<days>(?:(?:" + _WD + r")s?)(?:(?:\s*,\s*|\s+and\s+)(?:"
+    + _WD + r")s?)*|day|weekdays?|work\s*days?|daily)(?:\s+(?P<part>morning|afternoon|evening|"
+    r"night))?")
+
+
+def today_when(when_s: str, now: float) -> Optional[dict]:
+    """A Today card's repeat from words, or None when it is not one.
+    "on Mondays at 7", "on monday and wednesday at 7am", "every weekday at
+    6pm", "thursday evenings" (18:00 - the same default a reminder uses),
+    "every day at 8". A card always repeats, so "on Monday" is every Monday."""
+    s = when_s.strip().strip(",")
+    s = re.sub(r"\b(morning|afternoon|evening|night)s\b", r"\1", s)
+    m = _TD_DAYS_ONLY.fullmatch(s)
+    if m:
+        days_s, part = m.group("days"), m.group("part")
+        at = f"{DEFAULT_HOUR.get(part, 9):02d}:00"
+        if days_s in ("day", "daily"):
+            return {"every": "day", "at": at}
+        if days_s.startswith(("weekday", "work")):
+            return {"every": "weekday", "at": at}
+        days = sorted({_WEEKDAYS.index(w if w in _WEEKDAYS else w[:-1])
+                       for w in re.findall(r"(?:" + _WD + r")s?", days_s)})
+        return {"every": "week", "at": at, "days": days} if days else None
+    s = re.sub(r"^(?:on|each)\s+", "every ", s)
+    if re.match(r"(?:" + _WD + r")", s):
+        s = "every " + s
+    when = parse_when(s, now, "reminder")
+    if when is None or not isinstance(when.rule, dict):
+        return None
+    if when.rule.get("every") not in ("day", "weekday", "week"):
+        return None
+    return when.rule
+
+
+def _today(s: str, now: float) -> Optional[Intent]:
+    if _TD_LIST.fullmatch(s):
+        return Intent("today_list")
+    m = _TD_REMOVE.fullmatch(s)
+    if m:
+        return Intent("today_remove", {"text": m.group("text").strip()})
+    unclear = None
+    for rx in _TD_PATTERNS:
+        m = rx.fullmatch(s)
+        if not m:
+            continue
+        text = (m.group("text") or "").strip(" ,:")
+        if not text or re.fullmatch(_VAGUE, text) or len(text) > 300:
+            continue
+        when_s = (m.group("when") or "").strip()
+        if not when_s:
+            return Intent("today_set", {"text": text, "rule": None})
+        rule = today_when(when_s, now)
+        if rule is not None:
+            return Intent("today_set", {"text": text, "rule": rule})
+        # About the Today page, but not a time it can show at ("every 2
+        # hours", "tomorrow at 7"): said so, rather than handed to the model.
+        unclear = unclear or Intent("today_set", {"text": text, "rule": None, "bad": True})
+    return unclear
+
+
+TODAY_MISSING = ("Your PC's Jarvis cannot do Today cards yet - run apply-patches.ps1 on the "
+                 "PC.")
+
+
+def _run_today(intent: Intent, sched) -> Optional[Result]:
+    n, f = intent.name, intent.f
+    try:
+        import jarvis_today as T
+    except Exception:
+        return Result(TODAY_MISSING, n)
+    if n == "today_set":
+        if f.get("rule") is None:
+            return Result(T.BAD_RULE if f.get("bad") else T.NO_WHEN, n)
+        try:
+            j = T.add(f["text"], f["rule"], sched=sched, source="quick")
+        except (ValueError, OverflowError) as exc:
+            return Result(T.said_of(exc), n)
+        if j.get("already"):
+            return Result(T.ALREADY, n, [j["id"]])
+        return Result(T.set_words(j, sched.now()), n, [j["id"]], made=[j["id"]],
+                      what="the Today card just set", nouns=("card",))
+    if n == "today_list":
+        items = T.cards(sched=sched)
+        if not items:
+            return Result(T.NONE_SET, n)
+        words = [f"“{i['text']}”, {i['shows']}" for i in items[:5]]
+        head = ("One card on your Today page: " if len(items) == 1
+                else f"{len(items)} cards on your Today page: ")
+        more = f" And {len(items) - 5} more under Coming up." if len(items) > 5 else ""
+        return Result(head + "; ".join(words) + "." + more, n, [i["id"] for i in items[:5]],
+                      private=True)
+    ok, said = T.remove(f["text"], sched=sched)
+    return Result(said, n)
 
 
 NEXT_TIME_MISSING = ("Your PC's Jarvis cannot do reminders for next time yet - run "
@@ -2529,6 +2666,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_media(intent)
     if n.startswith("next_time_"):
         return _run_next_time(intent, sched)
+    if n.startswith("today_"):
+        return _run_today(intent, sched)
     if n in ("phone_ring", "phone_stop"):
         return _run_find_phone(intent)
     if n.startswith("lockdown_"):

@@ -795,6 +795,8 @@ $SHIPPED = @(
     # --- smarter memory dates, "Where did I put ...?" (2026-09-28) ---
     'jarvis_places.py'           # "where is my passport?" answered from the places the owner said, no model; jarvis_quick.py and jarvis_auto_learn.py call it, no patch
     'jarvis_tidy.py'             # the overnight tidy: "Still true?" / "Which is true now?" review cards only, on the one scheduler, only while its switch is on; no patch
+    # --- Today cards (2026-09-28) ---
+    'jarvis_today.py'            # the owner's own words on the Today part of both apps, at a time on chosen days; a kind on jarvis_schedule.py, no card, no patch
 )
 
 # The settings file. Installed only where none exists; never overwritten.
