@@ -1224,6 +1224,34 @@ body {
   flex-wrap: wrap;
 }
 
+/* Today cards (today.js): the words box, the time, and a day per box. */
+.today-form {
+  flex-wrap: wrap;
+}
+
+.today-days {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.today-days legend {
+  float: left;
+  padding: 0 4px 0 0;
+}
+
+.today-days label {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
 /* Focus session (focus.js): the countdown, tinted while the owner is off
    target - the same warn colour the widget's countdown uses. */
 .focus-form {

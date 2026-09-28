@@ -24,6 +24,11 @@
 //!   owner's decision after the approvals audit) the PC sets it up at once,
 //!   with no card, and says the next night. Held on a stale link. Turning it
 //!   off is Delete on its row, like any job.
+//! * [`brain_schedule_add_today`] - `POST /api/schedule/add {"kind":
+//!   "today", "text", "repeat"}` (2026-09-28): one Today card, the owner's
+//!   own words shown on the Work tab's Today card from a time on chosen days
+//!   (backend `jarvis_today.py`). No card; held on a stale link. Its words
+//!   are blanked by [`redact_list`] like every reminder's.
 //!
 //! * [`brain_schedule_clear_list`] - `POST /api/schedule/act {"do":
 //!   "clear_list", "list", "count"}` (2026-09-25): every item on ONE named
@@ -331,6 +336,42 @@ pub(crate) fn standby_body(start: &str, end: &str) -> Result<serde_json::Value, 
         })),
         _ => Err(STANDBY_BAD_TIMES.to_string()),
     }
+}
+
+/// The longest a Today card's words may be (jarvis_today.MAX_TEXT).
+pub(crate) const TODAY_MAX_TEXT: usize = 80;
+
+/// The body of a new Today card (backend jarvis_today.py, 2026-09-28): the
+/// owner's words, shown from `at` ("HH:MM") on `days` (0 = Monday). All
+/// seven days is "every day", Monday to Friday is "every weekday", anything
+/// else "every week" on those days - the scheduler's own rules. The PC
+/// checks the same things and says so; this refuses early, in the words
+/// both apps use (today.js, net/Today.kt).
+pub(crate) fn today_body(text: &str, at: &str, days: &[u8]) -> Result<serde_json::Value, String> {
+    let t = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if t.is_empty() {
+        return Err("A Today card needs some words: what should it say?".to_string());
+    }
+    if t.chars().count() > TODAY_MAX_TEXT {
+        return Err(format!(
+            "A Today card is at most {TODAY_MAX_TEXT} characters - say it more briefly."
+        ));
+    }
+    let at = hhmm(at).ok_or_else(|| "Write the time as HH:MM, like 07:00.".to_string())?;
+    let mut d: Vec<u8> = days.iter().copied().filter(|x| *x <= 6).collect();
+    d.sort_unstable();
+    d.dedup();
+    if d.is_empty() {
+        return Err("Pick at least one day.".to_string());
+    }
+    let repeat = if d.len() == 7 {
+        serde_json::json!({ "every": "day", "at": at })
+    } else if d == [0, 1, 2, 3, 4] {
+        serde_json::json!({ "every": "weekday", "at": at })
+    } else {
+        serde_json::json!({ "every": "week", "at": at, "days": d })
+    };
+    Ok(serde_json::json!({ "kind": "today", "text": t, "repeat": repeat }))
 }
 
 /// Whether a `schedule` event that went off should be shown at all. The PC
@@ -808,6 +849,22 @@ pub async fn brain_schedule_add_standby(
     post(&app, "/api/schedule/add", body).await
 }
 
+/// One Today card: the owner's words, from `at` on `days`. The PC sets it
+/// up at once, with no card (it only shows the owner's own words back to
+/// them). Held on a stale link. Deleting it is Delete on its row, like any
+/// job.
+#[tauri::command]
+pub async fn brain_schedule_add_today(
+    app: AppHandle,
+    text: String,
+    at: String,
+    days: Vec<u8>,
+) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    let body = today_body(&text, &at, &days)?;
+    post(&app, "/api/schedule/add", body).await
+}
+
 async fn post(
     app: &AppHandle,
     path: &str,
@@ -929,6 +986,41 @@ mod tests {
         for bad in ["delete_all", "clear", "approve", ""] {
             assert!(act_body("s0123456789", bad, None).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_today_card_is_the_owners_words_at_a_time_on_days() {
+        assert_eq!(
+            today_body("  Gym   bag ", "7:00", &[2, 0, 0]).unwrap(),
+            serde_json::json!({ "kind": "today", "text": "Gym bag",
+                "repeat": { "every": "week", "at": "07:00", "days": [0, 2] } })
+        );
+        assert_eq!(
+            today_body("Bins", "18:30", &[0, 1, 2, 3, 4, 5, 6]).unwrap()["repeat"],
+            serde_json::json!({ "every": "day", "at": "18:30" })
+        );
+        assert_eq!(
+            today_body("Pills", "08:00", &[4, 3, 2, 1, 0]).unwrap()["repeat"],
+            serde_json::json!({ "every": "weekday", "at": "08:00" })
+        );
+        assert!(today_body("   ", "07:00", &[0]).is_err());
+        assert!(today_body(&"x".repeat(TODAY_MAX_TEXT + 1), "07:00", &[0]).is_err());
+        assert!(today_body(&"x".repeat(TODAY_MAX_TEXT), "07:00", &[0]).is_ok());
+        assert!(today_body("Gym", "25:00", &[0]).is_err());
+        assert!(today_body("Gym", "07:00", &[]).is_err());
+        assert!(today_body("Gym", "07:00", &[7, 9]).is_err());
+    }
+
+    #[test]
+    fn hidden_lists_blank_a_today_cards_words_too() {
+        let list = serde_json::json!({ "available": true,
+            "jobs": [{ "id": "s0123456789", "kind": "today", "text": "Gym bag",
+                       "today": "showing", "shows_at": "07:00" }],
+            "todo": [] });
+        let hidden = redact_list(list);
+        assert!(!hidden.to_string().contains("Gym"));
+        assert_eq!(hidden["jobs"][0]["today"], "showing");
+        assert_eq!(hidden["jobs"][0]["shows_at"], "07:00");
     }
 
     #[test]

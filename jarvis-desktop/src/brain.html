@@ -473,6 +473,31 @@
               <p class="note">Or say "focus for 30 minutes". While one runs: "lock on this", "snooze", "I'm doing research", "I need a minute", "pause", "how am I doing?".</p>
               <div id="focus-report"></div>
             </div>
+            <div class="card card-wide" id="today-card">
+              <h2>Today</h2>
+              <p class="note">Your own cards, shown at the times and on the days you choose, and the parts of your latest briefing. Kept on your PC; nothing new is read for this page, and adding a card needs no approval card.</p>
+              <div id="today"></div>
+              <h3 class="subhead">Add a card</h3>
+              <form id="today-form" class="todo-form today-form" autocomplete="off">
+                <input id="today-text" class="field todo-text" type="text" maxlength="80"
+                       placeholder="What the card says, like Gym bag" aria-label="What the card says">
+                <label class="standby-time">From
+                  <input id="today-at" class="field" type="time" value="07:00" required>
+                </label>
+                <fieldset id="today-days" class="today-days">
+                  <legend>On</legend>
+                  <label><input type="checkbox" value="0" checked> Mon</label>
+                  <label><input type="checkbox" value="1" checked> Tue</label>
+                  <label><input type="checkbox" value="2" checked> Wed</label>
+                  <label><input type="checkbox" value="3" checked> Thu</label>
+                  <label><input type="checkbox" value="4" checked> Fri</label>
+                  <label><input type="checkbox" value="5"> Sat</label>
+                  <label><input type="checkbox" value="6"> Sun</label>
+                </fieldset>
+                <button id="today-add" class="btn small" type="submit">Add</button>
+              </form>
+              <p class="note" id="today-hint">Or say "show gym bag on my Today page on Mondays and Wednesdays at 7". Delete removes a card at once; it is also under Coming up, where Pause skips it.</p>
+            </div>
             <div class="card card-wide" id="coming-up-card">
               <h2>Coming up</h2>
               <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. A repeating reminder or alarm is set up at once, with no card; a repeating briefing or "tell me when" waits for your yes on an approval card.</p>

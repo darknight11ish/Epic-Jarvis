@@ -1438,6 +1438,18 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { ok: true, waiting: true, job,
                      said: "It repeats, so it waits for your yes on the card." };
           }
+          // A Today card (jarvis_today.add_route): set up at once, no card.
+          case "brain_schedule_add_today": {
+            window.__scheduleCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const sc = window.__schedule;
+            const job = { id: "s" + (0xd000000000 + sc.jobs.length).toString(16), kind: "today",
+                          text: args.text, state: "active", repeats: true, today: "later",
+                          shows_at: args.at, repeat: `every chosen day at ${args.at}` };
+            sc.jobs.push(job);
+            return { ok: true, waiting: false, job,
+                     said: `Set: “${args.text}” shows on your Today page.` };
+          }
           // brain/briefing.rs (the morning briefing). `window.__briefing` is
           // null - a PC without it, which Rust answers {available: false}
           // for - unless the scenario names `briefing: {...}`. Lines are

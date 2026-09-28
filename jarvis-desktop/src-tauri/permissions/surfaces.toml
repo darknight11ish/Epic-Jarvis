@@ -731,12 +731,13 @@ permissions = [
 # with the count it showed - never the to-do list itself.
 [[set]]
 identifier = "brain-schedule"
-description = "Read Coming up (timers, alarms, reminders, the to-do list and named lists), change ONE job at a time (pause, resume, delete, done, add time, snooze), add one to-do item, ask for a standby schedule (the PC raises one approval card), and clear ONE named list after the page's are-you-sure (never the to-do list)."
+description = "Read Coming up (timers, alarms, reminders, the to-do list and named lists), change ONE job at a time (pause, resume, delete, done, add time, snooze), add one to-do item, set up a standby schedule or one Today card (no approval card), and clear ONE named list after the page's are-you-sure (never the to-do list)."
 permissions = [
   "allow-brain-schedule",
   "allow-brain-schedule-act",
   "allow-brain-schedule-add-todo",
   "allow-brain-schedule-add-standby",
+  "allow-brain-schedule-add-today",
   "allow-brain-schedule-clear-list",
 ]
 
