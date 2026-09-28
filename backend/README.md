@@ -11773,6 +11773,58 @@ mentioned in another language is not caught.
 - **No off switch, and no card, ever** - the owner's own instruction. It
   only adds words to an answer; it never approves or acts (rule 4).
 
+## The serious moment: a neutral face and the plain voice (2026-09-28)
+
+The owner's decision: "At serious moments the animals drop the cute
+gestures." For a crisis answer the animal faces show a neutral pose, and
+Jarvis speaks in its plain built-in voice - not the animal's voice
+("Voice follows the face", `jarvis_voices.py`), no pitch rise.
+
+**Why a window on the PC, not a flag on each spoken sentence.** Both apps
+speak an answer one sentence at a time through `POST /api/voice/say
+{"text"}`, and that route hands `jarvis_speech.say()` the text and nothing
+else - a per-request flag would need both apps and the route changed first.
+So `jarvis_wellbeing.py` keeps ONE in-memory window instead (two
+timestamps and a counter; never a word of the turn, never on disk, never
+logged):
+
+- `serious_begin()` - `jarvis_agent.run_local_turn` calls it (through
+  `serious_moment("begin")`) for a crisis turn, before the model is asked,
+  so before the first word. An ordinary turn calls `serious_calm()`
+  instead, which closes an ENDED crisis answer's window at once (both apps
+  drop the rest of the last answer's queued sentences when a new question
+  is sent); a crisis answer still being written is never closed that way.
+- `serious_end(words)` - in `run_local_turn`'s `finally`, for a crisis
+  turn: the window stays open `grace_seconds(words)` more - 30 s plus one
+  second per 1.2 words (the slowest speaking speed, with room), at most
+  300 s - then a timer closes it. The length is used once, not kept.
+- A crisis turn that never reports its end stops counting after 600 s.
+- Both apps are told by a `wellbeing` event, `{"serious": true | false}` -
+  one boolean. `view()` (`GET /api/wellbeing`, proposed) carries
+  `serious` too.
+
+**The voice.** `jarvis_speech.say()` asks `plain_voice_now(text)` (which
+asks `jarvis_wellbeing.speak_plainly`) for each sentence: True inside the
+window, and for the help message's own words at any time (`help_words`:
+`REPLY`, `REPLY_SPOKEN`, `REPEAT`, `REPEAT_SPOKEN`, or a piece naming 988,
+"nine eight eight", the Crisis Lifeline or "call 911" - however the app
+cut the sentence). Then `_synthesise(..., plain=True)` speaks through
+`tts_voice(plain=True)`: the owner's own built-in choice and speed
+(`jarvis_voices.speaker()`/`speed()`), no pitch rise. A recorded custom voice
+still speaks first, as always; the mouth chunk is made the same way. While
+the window is open, `jarvis_voice_flow`'s barge-in check also compares
+against the plain voice (`_reference_sources`), so Jarvis's own plain voice
+is not taken for the owner talking over it.
+
+**Not touched:** the request and answer of `/api/voice/say`, the "Voice
+follows the face" switch, the "One moment." clip (made ahead in the voice
+in use, not remade plainly for a crisis turn), and every non-voice part of
+the crisis help line above. **Erring on the safe side**: anything else said
+inside the window (an alarm a minute later) is plain too, and the faces may
+stay neutral up to 300 s after the answer. **The app side - the neutral
+pose - is not built here**: `docs/JARVIS-API.md` section 38.1 says exactly
+what each app must read, and when it starts and ends.
+
 ## `wellbeing.patch` - the one piece that is NOT confirmed
 
 Every other patch in the table above was checked against real, cited lines
@@ -11812,12 +11864,19 @@ be edited by hand from a guess.
 python3 backend/test_wellbeing.py
 ```
 
-122 checks, no model and no network: the crisis phrases and the false-alarm
+200 checks, no model and no network: the crisis phrases and the false-alarm
 list, the fixed texts (the US numbers only, no invented feeling), the note
 never first and the rules block staying first, no tools offered, the help
 message following the model's answer and sent alone on a failure, the
-repeat line on a second mention, the learner exclusion, and that the module
-itself never opens a file, a socket or a log.
+repeat line on a second mention, the learner exclusion, that the module
+itself never opens a file, a socket or a log - and (section 7, 2026-09-28)
+the serious moment: the window opening before the first word and lasting
+until the answer can have been spoken, the next ordinary question closing
+it, an old timer never closing a newer one, the `wellbeing` event (one
+boolean), the help words recognised however a sentence is cut, `say()`
+speaking the owner's plain built-in voice instead of the panda's inside it
+(the mouth track still made) and the panda's again outside it, and the
+barge-in check knowing the plain voice while it lasts.
 
 ## Not checked, said plainly
 

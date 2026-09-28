@@ -184,8 +184,11 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | the Brain's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
+| `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. The animal faces hold a neutral pose while it is true. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. The face pages' own use of it is **not built yet** | **Not built yet** - falls through to "unhandled" until `JarvisRuntime.onEvent` has a branch for it (section 38.1 says what it must do) |
+
 `attention` is the one kind that carries its own state instead of ringing a
-bell (`stream.rs:506-511`).
+bell (`stream.rs:506-511`). `wellbeing` (above) carries one boolean for the
+same reason: there is nothing behind it to re-fetch.
 
 `step` (`backend/jarvis_agent.py`, `_step_event`) is published by the tool
 loop while it answers: `{"phase": "model" | "tool_started" | "tool_finished"
@@ -905,6 +908,16 @@ not in plain words - e.g. the one-time step to run>", "made", "skipped"
 (sentences the timing was tried on since the backend started, and how many
 of them got no block), "last_skip_why", "last_ms" (how long the last
 timing took)}`.
+
+**Since 2026-09-28 a crisis answer is said in the plain built-in voice**
+(section 38.1): while a crisis answer is being given or spoken, and for the
+crisis help message's own words at any time, `/api/voice/say` speaks in the
+owner's own built-in voice choice at their own speed - not the animal face's
+voice, no pitch rise ("Voice follows the face" is set aside for those
+sentences; the switch itself is not changed). A recorded custom voice the
+owner chose still speaks as always. The request is unchanged (`{"text"}`
+only), the answer is the same WAV, and the `jmth` mouth chunk is made the
+same way. Nothing for either app to change for the sound.
 
 **The audio format: 16-bit PCM in a WAV container. The two apps send
 different rates, and the server copes with both** (checked against the code
@@ -6759,6 +6772,84 @@ nothing here approves or acts - it only adds words to an answer, and no
 card is ever raised for it. `backend/test_wellbeing.py` proves the ordering,
 the no-tools behaviour, the failure path, the repeat line, and the
 learner exclusion, with no model and no network.
+
+### 38.1 The serious moment: a neutral face and the plain voice (added 2026-09-28)
+
+The owner's decision, 2026-09-28: "At serious moments the animals drop the
+cute gestures." For a crisis answer the animal faces show a neutral pose,
+and Jarvis speaks in its plain built-in voice - not the animal's voice, no
+pitch rise.
+
+**How the PC knows.** One in-memory window in `jarvis_wellbeing.py`
+(timestamps and a counter only - never a word of the turn, never on disk,
+never logged, gone on restart):
+
+- **Opens** when a crisis turn starts - `jarvis_agent.run_local_turn`, after
+  the reply's headers went out and before the model is asked, so before the
+  first word.
+- **When the turn ends** (answered, or the help message sent alone after a
+  failure) it stays open long enough to SPEAK the whole answer at the
+  slowest speaking speed: 30 s plus one second per 1.2 words of the answer,
+  at most 300 s (`grace_seconds`; the answer's length is used once and not
+  kept). Then it closes by itself.
+- **Closes at once** when the owner's next ordinary question starts - both
+  apps drop whatever of the last answer was still queued to be said when a
+  new question is sent. A crisis answer still being written (asked from the
+  other device) is never closed this way.
+- A crisis turn that never reports its end (a crash) stops counting after
+  600 s.
+
+**The voice - no app change.** `POST /api/voice/say` is unchanged. Every
+sentence said while the window is open is spoken in the owner's own
+built-in voice choice at their own speed, no pitch rise. So are the help
+message's own words (`REPLY`, `REPLY_SPOKEN`, `REPEAT`, `REPEAT_SPOKEN`,
+or any piece naming 988 / "nine eight eight" / the Crisis Lifeline / "call
+911") at ANY time - even spoken long after the window closed (a paused
+answer, "read it again"). A recorded custom voice the owner chose still
+speaks as always. The mouth chunk (`jmth`) is made the same way. While the
+window is open, the PC's "is that the owner talking over Jarvis?" check
+(section 17, `source=barge_in`) also compares against the plain voice.
+
+**The event - what each app must read (the app side is NOT built yet).**
+Event kind `wellbeing`, data `{"serious": true}` when the window opens and
+`{"serious": false}` when it closes (by itself, or on the next ordinary
+question). One boolean; no text, no conversation id. A second crisis turn
+while one is open sends `{"serious": true}` again - treat it as idempotent.
+
+- **Start the neutral pose** on `{"serious": true}`. The app that ASKED can
+  also start it one step earlier, from its own reply header: `X-Jarvis-Route`
+  `"wellbeing": "crisis"` (section 38 above; the desktop's
+  `state.turnRoute.wellbeing`, the phone's `ChatSession.crisis`) - but only
+  where `backend/wellbeing.patch` applied, so the event is the one to rely on.
+- **End it** on `{"serious": false}`. As a safety net, an app that has heard
+  no `false` 900 s (600 + 300) after the last `true` ends it itself, so a
+  missed frame can never leave the face neutral for good.
+- **On reconnect** (`hello`, stale or not) keep what you had until the next
+  `wellbeing` frame or the 900 s net - there is no route that reports the
+  window's state (`GET /api/wellbeing`'s `view()` carries `serious` too, but
+  that route is proposed, not confirmed wired - see above).
+- **Neutral means**: no cute gestures - no idle wiggles, tilts, happy or
+  playful poses; the face stays calm, and the mouth still follows the sound
+  (the lip-sync is unchanged). The exact pose is the apps' call
+  (`docs/CRITTERS.md`). Every
+  window that draws a face reads it: on the desktop the frame is already
+  fanned out to every window (`stream.rs`), so the face, floating, HUD and
+  widget pages each need only to read it; on the phone, `JarvisRuntime.
+  onEvent` needs a `"wellbeing"` branch that sets one state both the Home
+  face and "Floating Jarvis" read.
+- **Nothing else changes**: no card, no setting, no off switch (the crisis
+  help line has none), and the chat panel's own crisis styling (section 38)
+  is untouched.
+
+**Erring on the safe side, said plainly.** Anything said inside the window
+that was NOT part of the crisis answer (an alarm's words a minute later) is
+also said plainly, and the faces stay neutral up to 300 s after the answer
+ended. The opposite mistake - an animal's voice reading out the help line -
+is the one this exists to prevent. Not covered: the "One moment." clip
+(section 17) is made ahead of time in the voice in use and is not remade
+plainly for a crisis turn. `backend/test_wellbeing.py` section 7 proves
+the window, the event, the help words, the plain voice with the mouth track,
+and the barge-in reference, with no model and no network.
 
 ## 39. Smartwatch notifications (added 2026-09-27)
 

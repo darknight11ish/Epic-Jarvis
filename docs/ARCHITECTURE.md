@@ -1177,7 +1177,7 @@ reads from on its own. Three things about it are invariants:
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
 changes from it and from nowhere else. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
-`deep`, `memory_saved`, `schedule`, `focus`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
+`deep`, `memory_saved`, `schedule`, `focus`, `wellbeing`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
 and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.
 `deep` is a deep question finishing, `{"id", "state"}` only -
@@ -1216,7 +1216,13 @@ line waiting to be said, `{"state": "callout", "seq"}` - never what was in
 front on the PC - `jarvis_focus.py`; added 2026-09-25. Both apps read `GET
 /api/focus` again on it; on `callout` only the desktop's Rust fetches the
 line, as sound, from the PC itself (the phone is refused it). JARVIS-API
-§31.)
+§31.
+`wellbeing` is the serious moment of a crisis answer, `{"serious": true |
+false}` - one boolean, never a word - `jarvis_wellbeing.py`; added
+2026-09-28 (the owner's "At serious moments the animals drop the cute
+gestures"). The animal faces hold a neutral pose while it is true; the
+PC's spoken sound turns plain by itself (no app change). The apps' side is
+not built yet - JARVIS-API §38.1 says what each must read.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. That includes `activity`'s sentence: while Jarvis drives a

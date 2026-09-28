@@ -25,6 +25,16 @@ Runs anywhere; no model and no network are needed. What it proves:
 5. Nothing here writes to disk or logs anything: read straight off the
    module's own source, which has no `open(`, `write(`, `print(` or
    `logging` at all.
+7. The serious moment (the owner's decision, 2026-09-28: "At serious
+   moments the animals drop the cute gestures"): a crisis turn opens a
+   window before its first word and tells both apps (a `wellbeing` event,
+   {"serious": true} - one boolean); it stays open after the turn until the
+   answer can have been spoken, then closes and tells them again; the
+   owner's next ordinary question closes it at once; say() speaks inside
+   it - and the help message's own words at any time - in the owner's
+   plain built-in voice, not the face's animal voice, with the mouth track
+   still made; an ordinary sentence outside it keeps the animal's voice;
+   and the barge-in check also knows the plain voice while it lasts.
 """
 from __future__ import annotations
 
@@ -53,6 +63,15 @@ AG._manner_now = lambda *a, **k: None
 # does the same for the same reason).
 AG._record_chain = lambda steps: None
 AG._publish_step = lambda step: None
+# The serious moment (section 7): its event, its timer and its clock are
+# captured here for every test, so a crisis turn in any test below never
+# reaches a real event bus or leaves a real timer running.
+SERIOUS_EVENTS: list = []
+SERIOUS_TIMERS: list = []
+CLOCK = [1000.0]
+WB._publish = lambda serious: SERIOUS_EVENTS.append({"serious": serious})
+WB._later = lambda seconds, fn: SERIOUS_TIMERS.append((seconds, fn))
+WB._now = lambda: CLOCK[0]
 
 FAILED, PASSED = [], []
 
@@ -264,6 +283,8 @@ def t_view_matches_the_fixed_texts():
     check("view()'s repeat is REPEAT word for word", v.get("repeat") == WB.REPEAT)
     check("view()'s help_number is 988", v.get("help_number") == "988")
     check("view()'s emergency_number is 911", v.get("emergency_number") == "911")
+    check("view()'s serious is a plain boolean (the serious moment, section 7)",
+          isinstance(v.get("serious"), bool))
 
 
 # --------------------------------------------------------------------------
@@ -507,6 +528,284 @@ def t_the_patch_flags_a_crisis_message_not_an_older_one():
     check("no messages at all: no crash, nothing flagged", run([]) is None)
 
 
+# --------------------------------------------------------------------------
+#   7. The serious moment (the owner's decision, 2026-09-28)
+# --------------------------------------------------------------------------
+
+def _serious_reset():
+    WB._reset_serious_for_tests()
+    SERIOUS_EVENTS.clear()
+    SERIOUS_TIMERS.clear()
+    CLOCK[0] = 1000.0
+
+
+def t_the_serious_window_opens_lasts_and_closes():
+    _serious_reset()
+    check("nothing serious to begin with", WB.serious_now() is False)
+    WB.serious_begin()
+    check("a crisis turn starting opens it", WB.serious_now() is True)
+    check("... and tells both apps: one boolean, nothing else",
+          SERIOUS_EVENTS == [{"serious": True}], SERIOUS_EVENTS)
+    CLOCK[0] += 45.0
+    check("still open while the turn is being answered", WB.serious_now() is True)
+    WB.serious_end(120)
+    grace = WB.grace_seconds(120)
+    check("the grace covers 120 words at the slowest pace, within limits",
+          abs(grace - (WB.SERIOUS_GRACE_MIN_SECONDS + 120 / WB.SLOWEST_WORDS_PER_SECOND)) < 1e-9
+          and WB.SERIOUS_GRACE_MIN_SECONDS <= grace <= WB.SERIOUS_GRACE_MAX_SECONDS, grace)
+    check("one timer was set, for exactly that long",
+          len(SERIOUS_TIMERS) == 1 and SERIOUS_TIMERS[0][0] == grace, SERIOUS_TIMERS)
+    CLOCK[0] += grace - 1.0
+    check("after the turn ends it stays open while the answer may still be spoken",
+          WB.serious_now() is True)
+    CLOCK[0] += 2.0
+    check("... and not a moment past it", WB.serious_now() is False)
+    SERIOUS_TIMERS[0][1]()
+    check("the timer tells both apps it is over",
+          SERIOUS_EVENTS == [{"serious": True}, {"serious": False}], SERIOUS_EVENTS)
+    check("limits: nothing counted is at least the minimum, a huge answer at most the maximum",
+          WB.grace_seconds(0) == WB.SERIOUS_GRACE_MIN_SECONDS
+          and WB.grace_seconds(10 ** 6) == WB.SERIOUS_GRACE_MAX_SECONDS
+          and WB.grace_seconds("x") == WB.SERIOUS_GRACE_MIN_SECONDS)
+
+
+def t_the_next_ordinary_question_ends_it_at_once():
+    _serious_reset()
+    WB.serious_calm()
+    check("an ordinary question with nothing open tells nobody anything",
+          SERIOUS_EVENTS == [], SERIOUS_EVENTS)
+    WB.serious_begin()
+    WB.serious_calm()
+    check("an ordinary question while a crisis answer is STILL being written "
+          "(another device) leaves it open", WB.serious_now() is True)
+    WB.serious_end(40)
+    WB.serious_calm()
+    check("once that answer has ended, the next ordinary question closes it",
+          WB.serious_now() is False)
+    check("... and both apps are told",
+          SERIOUS_EVENTS == [{"serious": True}, {"serious": False}], SERIOUS_EVENTS)
+    SERIOUS_TIMERS[-1][1]()
+    check("the old timer, firing later, says nothing a second time",
+          SERIOUS_EVENTS == [{"serious": True}, {"serious": False}], SERIOUS_EVENTS)
+    _serious_reset()
+    WB.serious_begin()
+    WB.serious_end(0)
+    CLOCK[0] += WB.grace_seconds(0) + 0.5    # the time ran out; the timer is late
+    WB.serious_calm()
+    SERIOUS_TIMERS[-1][1]()
+    check("a question arriving just after the time ran out, before the late timer, "
+          "still sends the closing false - exactly once",
+          SERIOUS_EVENTS == [{"serious": True}, {"serious": False}], SERIOUS_EVENTS)
+
+
+def t_an_old_timer_never_closes_a_newer_crisis_answer():
+    _serious_reset()
+    WB.serious_begin()
+    WB.serious_end(10)
+    old_timer = SERIOUS_TIMERS[-1][1]
+    WB.serious_begin()          # the owner says more, and it is a crisis again
+    old_timer()
+    check("the first answer's timer does not end the second answer's moment",
+          WB.serious_now() is True and SERIOUS_EVENTS[-1] == {"serious": True}, SERIOUS_EVENTS)
+
+
+def t_a_turn_that_never_ended_stops_counting_eventually():
+    _serious_reset()
+    WB.serious_begin()
+    CLOCK[0] += WB.SERIOUS_OPEN_MAX_SECONDS + 1.0
+    check("a crisis turn that never reported its end (a crash) is not serious for ever",
+          WB.serious_now() is False)
+
+
+def _unmark(text: str) -> str:
+    return text.replace("**", "")
+
+
+def t_the_help_words_are_always_said_plainly():
+    _serious_reset()
+    import re as _re
+    for label, whole in (("typed", _unmark(WB.REPLY)), ("spoken", WB.REPLY_SPOKEN),
+                         ("repeat", WB.REPEAT), ("spoken repeat", WB.REPEAT_SPOKEN)):
+        check(f"the whole {label} help message", WB.help_words(whole) is True)
+        for sentence in [x for x in _re.split(r"(?<=[.!?])\s+|\n+", whole) if x.strip()]:
+            check(f"{label}, sentence by sentence: {sentence[:48]!r}",
+                  WB.help_words(sentence) is True)
+    # Both apps start speaking at the first comma: the pieces that name the
+    # line are recognised however the sentence was cut.
+    for piece in ("Call nine eight eight,", "that's the Suicide and Crisis Lifeline,",
+                  "call nine one one.", "**988** (Suicide & Crisis Lifeline),",
+                  "The model's last words. Call nine eight eight, that's the line."):
+        check(f"a cut piece that names the line: {piece!r}", WB.help_words(piece) is True)
+    for ordinary in ("I'm still here.", "Of course, the dentist is on Tuesday at ten.",
+                     "Have you watched Suicide Squad?", "It's 98.8 degrees.", "", None, 42):
+        check(f"ordinary words are not the help message: {ordinary!r}",
+              WB.help_words(ordinary) is False)
+    check("speak_plainly: the help words, even with no window open",
+          WB.speak_plainly(WB.REPEAT_SPOKEN) is True and WB.serious_now() is False)
+    check("speak_plainly: ordinary words with no window open keep the face's voice",
+          WB.speak_plainly("Of course, the dentist is on Tuesday.") is False)
+    WB.serious_begin()
+    check("speak_plainly: any words while a crisis answer is being given",
+          WB.speak_plainly("I'm really glad you told me.") is True)
+    _serious_reset()
+
+
+def t_a_crisis_turn_opens_the_moment_before_its_first_word():
+    _serious_reset()
+    seen = []
+
+    def opener(url, payload):
+        # The model is asked only after the moment began.
+        seen.append(WB.serious_now())
+        return W.FakeResponse(W.stream([("content", "I'm really glad you told me."),
+                                        ("done", "stop")]))
+    messages = [{"role": "user", "content": "I want to kill myself", "provenance": "typed"}]
+    streamed, _, result = turn(messages, opener=opener)
+    words = len(answer_text(streamed).split())
+    check("run_local_turn opened the moment before asking the model",
+          seen == [True], seen)
+    check("... told both apps once", SERIOUS_EVENTS == [{"serious": True}], SERIOUS_EVENTS)
+    check("GET /api/wellbeing's view() says so too, for an app that missed the event",
+          WB.view()["serious"] is True)
+    check("... and left it open after the turn, for the whole answer to be spoken",
+          WB.serious_now() is True and len(SERIOUS_TIMERS) == 1
+          and SERIOUS_TIMERS[0][0] == WB.grace_seconds(words), (SERIOUS_TIMERS, words))
+    check("the crisis turn itself is unchanged (the help message still follows)",
+          result.get("crisis") is True and WB.SHOWN_MARKER in answer_text(streamed))
+    opener2, _ = scripted_stream("It is sunny.")
+    turn([{"role": "user", "content": "what's the weather like", "provenance": "typed"}],
+         opener=opener2)
+    check("the owner's next ordinary question ends it, and says so",
+          WB.serious_now() is False
+          and SERIOUS_EVENTS == [{"serious": True}, {"serious": False}], SERIOUS_EVENTS)
+    turn([{"role": "user", "content": "and tomorrow?", "provenance": "typed"}],
+         opener=scripted_stream("Rain.")[0])
+    check("an ordinary turn with nothing serious open publishes nothing",
+          SERIOUS_EVENTS == [{"serious": True}, {"serious": False}], SERIOUS_EVENTS)
+
+
+def t_the_moment_holds_even_when_the_model_fails():
+    _serious_reset()
+    turn([{"role": "user", "content": "I want to end my life", "provenance": "typed"}],
+         opener=failing_stream())
+    check("the help message sent alone is still said plainly (window open, timer set)",
+          WB.serious_now() is True and len(SERIOUS_TIMERS) == 1, SERIOUS_TIMERS)
+    _serious_reset()
+
+
+class _FakeKokoro:
+    def __init__(self):
+        self.calls = []
+
+    def generate(self, text, sid=0, speed=1.0):
+        import numpy as np
+        import types
+        self.calls.append((int(sid), float(speed)))
+        return types.SimpleNamespace(samples=(0.05 * np.ones(24000)).astype(np.float32),
+                                     sample_rate=24000)
+
+
+def _with_panda(fn):
+    """Run fn(S, kokoro, mouths) with the red panda's voice showing (Kokoro
+    voice 1, pitch +2), the owner's own built-in choice being voice 7 at
+    normal speed, no recorded voice chosen, and a stand-in Kokoro."""
+    require_shipped("jarvis_speech.py", "jarvis_voices.py")
+    import jarvis_speech as S
+    import jarvis_voices as V
+    saved_v = {n: getattr(V, n) for n in ("builtin_voice", "speaker", "speed", "speak")}
+    saved_s = {n: getattr(S, n) for n in ("_tts_cache", "_cfg", "kokoro_speak")}
+    kokoro = _FakeKokoro()
+    mouths = []
+    real_speak = S.kokoro_speak
+
+    def spy(engine, text, sid, speed, semitones=0.0, mouth=None):
+        mouths.append(mouth is not None)
+        return real_speak(engine, text, sid, speed, semitones, mouth=mouth)
+    try:
+        V.builtin_voice = lambda: (1, 1.0, 2.0, "redpanda")
+        V.speaker = lambda: 7
+        V.speed = lambda: 1.0
+        V.speak = lambda *a, **k: None
+        S._tts_cache = kokoro
+        S._cfg = lambda k, default=None: default
+        S.kokoro_speak = spy
+        fn(S, kokoro, mouths)
+    finally:
+        for n, v in saved_v.items():
+            setattr(V, n, v)
+        for n, v in saved_s.items():
+            setattr(S, n, v)
+
+
+def t_say_speaks_a_crisis_answer_in_the_plain_voice():
+    _serious_reset()
+
+    def body(S, kokoro, mouths):
+        f = 2 ** (2 / 12)
+        S.say("Of course, the dentist is on Tuesday at ten.")
+        check("CONTROL: an ordinary sentence is the panda's voice, slowed for its pitch rise",
+              kokoro.calls == [(1, 1.0 / f)], kokoro.calls)
+        kokoro.calls.clear()
+        WB.serious_begin()
+        wav = S.say("I'm really glad you told me.")
+        check("inside the serious moment: the owner's own built-in voice (7), "
+              "at their own speed, no pitch rise", kokoro.calls == [(7, 1.0)], kokoro.calls)
+        check("... and it is still a sound (a WAV)", isinstance(wav, (bytes, bytearray))
+              and wav[:4] == b"RIFF")
+        check("... with the mouth track still asked for, as for any sentence",
+              mouths and all(mouths), mouths)
+        check("tts_voice(plain=True) is that same plain voice", S.tts_voice(plain=True)
+              == (7, 1.0, 0.0), S.tts_voice(plain=True))
+        check("CONTROL: tts_voice() is still the panda's", S.tts_voice() == (1, 1.0, 2.0))
+        _serious_reset()
+        kokoro.calls.clear()
+        S.say(WB.REPEAT_SPOKEN)
+        check("the help line's own words are plain even with no window open",
+              kokoro.calls == [(7, 1.0)], kokoro.calls)
+        kokoro.calls.clear()
+        S.say("Anything else?")
+        check("CONTROL: and the voice after it is the panda's again",
+              kokoro.calls == [(1, 1.0 / f)], kokoro.calls)
+    _with_panda(body)
+    _serious_reset()
+
+
+def t_plain_voice_now_never_breaks_speech():
+    require_shipped("jarvis_speech.py")
+    import jarvis_speech as S
+    real = WB.speak_plainly
+    try:
+        def boom(text=""):
+            raise RuntimeError("broken")
+        WB.speak_plainly = boom
+        check("a failing check answers False (the voice as before), never raises",
+              S.plain_voice_now("anything") is False)
+    finally:
+        WB.speak_plainly = real
+
+
+def t_barge_in_knows_the_plain_voice_while_it_lasts():
+    _serious_reset()
+    require_shipped("jarvis_voice_flow.py")
+    import jarvis_voice_flow as F
+
+    def body(S, kokoro, mouths):
+        real_paths = S._sherpa_tts_paths
+        try:
+            S._sherpa_tts_paths = lambda: dict(real_paths(), model=__file__)
+            keys = [k for k, _l, _f in F._reference_sources() if k[0] == "builtin"]
+            check("CONTROL: normally only the panda's voice is compared against",
+                  [(k[1], k[4]) for k in keys] == [("1", "2.0")], keys)
+            WB.serious_begin()
+            keys = [k for k, _l, _f in F._reference_sources() if k[0] == "builtin"]
+            check("during a crisis answer the plain voice is compared against too",
+                  [(k[1], k[4]) for k in keys] == [("1", "2.0"), ("7", "0.0")], keys)
+        finally:
+            S._sherpa_tts_paths = real_paths
+    _with_panda(body)
+    _serious_reset()
+
+
 if __name__ == "__main__":
     for fn in (t_crisis_phrases_match,
                t_false_alarms_do_not_fire,
@@ -528,7 +827,17 @@ if __name__ == "__main__":
                t_an_ordinary_correction_is_still_counted_as_a_control,
                t_wellbeing_skip_matches_crisis_exactly,
                t_the_module_writes_nothing_and_logs_nothing,
-               t_the_patch_flags_a_crisis_message_not_an_older_one):
+               t_the_patch_flags_a_crisis_message_not_an_older_one,
+               t_the_serious_window_opens_lasts_and_closes,
+               t_the_next_ordinary_question_ends_it_at_once,
+               t_an_old_timer_never_closes_a_newer_crisis_answer,
+               t_a_turn_that_never_ended_stops_counting_eventually,
+               t_the_help_words_are_always_said_plainly,
+               t_a_crisis_turn_opens_the_moment_before_its_first_word,
+               t_the_moment_holds_even_when_the_model_fails,
+               t_say_speaks_a_crisis_answer_in_the_plain_voice,
+               t_plain_voice_now_never_breaks_speech,
+               t_barge_in_knows_the_plain_voice_while_it_lasts):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
