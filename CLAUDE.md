@@ -554,6 +554,20 @@ testers, scouts and integration scouts; `.claude/agents/`):
 - **A thumbs-down on a crisis answer stops counting toward "suggest the
   bigger model"** (owner, 2026-09-28) - closes the gap written down in the
   Opus 5.5 re-check above.
+- **Build the chatbot driver first** (owner, 2026-09-28), ahead of easier
+  setup, voice upgrades and the other new abilities. It is **versatile**:
+  one driver with a separate "adapter" per chatbot website, Gemini first,
+  others added one at a time (each new chatbot is a new named way out of
+  the PC and gets the owner's OK first, since each company's terms differ).
+  **Two versions by hardware:** with both graphics cards, the full version
+  (long, flexible sessions, the driver model on the 12 GB card); with one
+  card, a limited version (shorter sessions, sharing the main card, waiting
+  while the owner chats). The two-card version is switched on only once
+  the second card is installed and measured.
+- **Phone: tap to talk, stopping at a pause** (owner, 2026-09-28), instead
+  of only hold-to-talk. The phone detects the pause (Smart Turn); the words
+  are still worked out on the PC after the voice check. A Stop button and a
+  time limit stay.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
