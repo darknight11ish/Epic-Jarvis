@@ -478,7 +478,7 @@ here rather than patched blind:
   checked the fixture against the app, never the app against the fixture -
   a phrase added straight to the phone's list, in neither direction, would
   have passed silently.
-- **Written down, not fixed:** marking a crisis answer "wrong" (the thumbs-
+- **Written down, not fixed (owner said fix it, 2026-09-28 - see below):** marking a crisis answer "wrong" (the thumbs-
   down button) still counts toward "suggest the bigger model" - the crisis
   exclusion above only covers the live phrase-based signal and the
   struggle count. Fixing it needs the turn's crisis flag and its id joined
@@ -544,6 +544,16 @@ testers, scouts and integration scouts; `.claude/agents/`):
   for every voice in both apps. The saved choice moves from a number to the
   voice's name, and the owner's current choice carries over. A 350 MB
   download on the PC, checksum-pinned. Not built yet.
+- **A "sneaky instruction" (prompt-injection) detector: test two, keep the
+  winner** (owner, 2026-09-28) - Meta's Prompt Guard 2 (Llama 4 Community
+  Licence: credit "Built with Llama", licence file, the owner downloads it
+  after accepting Meta's terms) and an Apache-licensed one (Horizon Labs
+  guard-small). Both run on Jarvis's own attack tests on the owner's PC;
+  whichever wins is kept, and it only ever adds a warning - it never removes
+  or replaces an approval card.
+- **A thumbs-down on a crisis answer stops counting toward "suggest the
+  bigger model"** (owner, 2026-09-28) - closes the gap written down in the
+  Opus 5.5 re-check above.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
