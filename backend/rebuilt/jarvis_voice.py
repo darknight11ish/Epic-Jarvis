@@ -633,6 +633,17 @@ LIVE_TRUST_FULLY = "live_trust_fully"
 LIVE_BUTTON_START_ONLY = "live_button_start_only"
 LIVE_LIKE_WAKE = "live_like_hey_jarvis"
 HANDS_FREE_LIVE = (LIVE_TRUST_FULLY, LIVE_BUTTON_START_ONLY, LIVE_LIKE_WAKE)
+#: When App lock ends a Jarvis Live session on the PC (the owner's decision of
+#: 2026-09-28): `live_end_app_lock` - when App lock would ask again ("Lock
+#: again after", 1 minute after the owner last touched a Jarvis window;
+#: talking does not count) - is the default and the stricter; and
+#: `live_end_windows_lock` - only when Windows itself locks - is the looser,
+#: an approval card. The desktop app reads it from GET /api/voice/live's
+#: `end_on` (jarvis_live.py). It does nothing without App lock on, and
+#: nothing on the phone (App lock's own rule there).
+LIVE_END_APP_LOCK = "live_end_app_lock"
+LIVE_END_WINDOWS_LOCK = "live_end_windows_lock"
+LIVE_END = (LIVE_END_APP_LOCK, LIVE_END_WINDOWS_LOCK)
 #: The one source the talk button sends (jarvis_speech.hear's `source`).
 PUSH_TO_TALK = "push_to_talk"
 #: The source a Jarvis Live clip is sent with (jarvis_speech.SOURCE_LIVE),
@@ -648,14 +659,16 @@ LIVE_VOICE_STARTED = "live_voice"
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
             "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN,
             "hands_free": SAME_AS_BUTTON, "hands_free_screen": SCREEN_ON_SCREEN,
-            "hands_free_live": LIVE_TRUST_FULLY}
+            "hands_free_live": LIVE_TRUST_FULLY, "live_end": LIVE_END_APP_LOCK}
 _CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
             "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE,
-            "hands_free_screen": HANDS_FREE_SCREEN, "hands_free_live": HANDS_FREE_LIVE}
+            "hands_free_screen": HANDS_FREE_SCREEN, "hands_free_live": HANDS_FREE_LIVE,
+            "live_end": LIVE_END}
 #: The LOOSER value of each: choosing it needs an approval card.
 LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
           "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON,
-          "hands_free_screen": SCREEN_ALOUD, "hands_free_live": LIVE_TRUST_FULLY}
+          "hands_free_screen": SCREEN_ALOUD, "hands_free_live": LIVE_TRUST_FULLY,
+          "live_end": LIVE_END_WINDOWS_LOCK}
 #: Settings with MORE than two choices, strictest first: choosing a value
 #: further along than the current one loosens it (a card); nearer the
 #: start tightens it (at once). LOOSER above names the loosest.
@@ -760,7 +773,8 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
                "memory": cur["memory"], "sensitive_memory": cur["sensitive_memory"],
                "hands_free": cur["hands_free"],
                "hands_free_screen": cur["hands_free_screen"],
-               "hands_free_live": cur["hands_free_live"], key: value}
+               "hands_free_live": cur["hands_free_live"],
+               "live_end": cur["live_end"], key: value}
         if new["strictness"] != VERY_STRICT:
             new["privacy"] = PRIVATE_ON_SCREEN
         new["changed"] = time.time()
@@ -2132,12 +2146,15 @@ def status() -> dict:
         # Since 2026-09-28: how far a Jarvis Live turn is trusted under
         # "only trust the talk button".
         "hands_free_live": s["hands_free_live"],
+        # Since 2026-09-28: when App lock ends Jarvis Live on the PC.
+        "live_end": s["live_end"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
             "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
             "hands_free": s["hands_free"],
             "hands_free_screen": s["hands_free_screen"],
             "hands_free_live": s["hands_free_live"],
+            "live_end": s["live_end"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],
@@ -2146,7 +2163,8 @@ def status() -> dict:
                         "sensitive_memory": list(SENSITIVE_MEMORY),
                         "hands_free": list(HANDS_FREE),
                         "hands_free_screen": list(HANDS_FREE_SCREEN),
-                        "hands_free_live": list(HANDS_FREE_LIVE)},
+                        "hands_free_live": list(HANDS_FREE_LIVE),
+                        "live_end": list(LIVE_END)},
             "defaults": dict(DEFAULTS),
         },
         "models": {

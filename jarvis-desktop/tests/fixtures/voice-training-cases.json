@@ -353,6 +353,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -372,6 +373,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -391,6 +393,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -539,6 +542,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -637,6 +641,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -658,6 +666,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -666,6 +675,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 1.5,
           "privacy": "private_on_screen",
@@ -722,6 +732,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -822,6 +833,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -843,6 +858,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -851,6 +867,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 1.5,
         "privacy": "private_on_screen",
@@ -1069,6 +1086,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -1162,6 +1180,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -1183,6 +1205,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -1191,6 +1214,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -1245,6 +1269,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -1340,6 +1365,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -1361,6 +1390,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -1369,6 +1399,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -1587,6 +1618,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -1685,6 +1717,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -1706,6 +1742,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -1714,6 +1751,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -1781,6 +1819,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -1881,6 +1920,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -1902,6 +1945,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -1910,6 +1954,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -2128,6 +2173,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -2226,6 +2272,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -2247,6 +2297,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -2255,6 +2306,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -2305,6 +2357,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -2405,6 +2458,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -2426,6 +2483,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -2434,6 +2492,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -2652,6 +2711,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -2745,6 +2805,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -2766,6 +2830,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -2774,6 +2839,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -2824,6 +2890,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -2919,6 +2986,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -2940,6 +3011,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -2948,6 +3020,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -3166,6 +3239,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -3259,6 +3333,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -3280,6 +3358,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -3288,6 +3367,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -3352,6 +3432,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -3447,6 +3528,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -3468,6 +3553,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -3476,6 +3562,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -3694,6 +3781,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -3792,6 +3880,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -3813,6 +3905,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -3821,6 +3914,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -3885,6 +3979,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -3985,6 +4080,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -4006,6 +4105,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -4014,6 +4114,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -4232,6 +4333,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -4330,6 +4432,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -4351,6 +4457,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -4359,6 +4466,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -4416,6 +4524,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -4516,6 +4625,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -4537,6 +4650,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -4545,6 +4659,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -4763,6 +4878,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -4861,6 +4977,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -4882,6 +5002,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -4890,6 +5011,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -4940,6 +5062,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -5040,6 +5163,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -5061,6 +5188,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -5069,6 +5197,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -5287,6 +5416,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -5390,6 +5520,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -5411,6 +5545,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -5419,6 +5554,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -5469,6 +5605,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -5574,6 +5711,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -5595,6 +5736,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -5603,6 +5745,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -5821,6 +5964,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -5919,6 +6063,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -5940,6 +6088,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -5948,6 +6097,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -6004,6 +6154,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -6104,6 +6255,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -6125,6 +6280,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -6133,6 +6289,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -6351,6 +6508,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -6453,6 +6611,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -6474,6 +6636,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -6482,6 +6645,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -6544,6 +6708,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -6648,6 +6813,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -6669,6 +6838,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -6677,6 +6847,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -6895,6 +7066,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -7001,6 +7173,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -7022,6 +7198,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -7030,6 +7207,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -7102,6 +7280,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -7210,6 +7389,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -7231,6 +7414,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -7239,6 +7423,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -7457,6 +7642,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -7550,6 +7736,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -7571,6 +7761,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -7579,6 +7770,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -7633,6 +7825,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -7728,6 +7921,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -7749,6 +7946,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -7757,6 +7955,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -7975,6 +8174,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -8068,6 +8268,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -8089,6 +8293,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -8097,6 +8302,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -8178,6 +8384,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -8273,6 +8480,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -8294,6 +8505,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -8302,6 +8514,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -8520,6 +8733,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -8618,6 +8832,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -8639,6 +8857,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -8647,6 +8866,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -8700,6 +8920,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -8800,6 +9021,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -8821,6 +9046,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -8829,6 +9055,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -9047,6 +9274,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -9145,6 +9373,10 @@
               "screen_on_screen",
               "screen_aloud"
             ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -9166,6 +9398,7 @@
             "hands_free": "same_as_button",
             "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -9174,6 +9407,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "voice_is_enough",
@@ -9230,6 +9464,7 @@
         "device": null,
         "on": false
       },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -9330,6 +9565,10 @@
             "screen_on_screen",
             "screen_aloud"
           ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -9351,6 +9590,7 @@
           "hands_free": "same_as_button",
           "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -9359,6 +9599,7 @@
         "hands_free": "same_as_button",
         "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "voice_is_enough",

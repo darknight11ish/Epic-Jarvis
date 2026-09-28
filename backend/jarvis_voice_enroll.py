@@ -89,6 +89,7 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
     {"mode": "hands_free_screen", "value": "screen_on_screen"|"screen_aloud"}
     {"mode": "hands_free_live", "value": "live_trust_fully"|"live_button_start_only"|
                                          "live_like_hey_jarvis"}
+    {"mode": "live_end", "value": "live_end_app_lock"|"live_end_windows_lock"}
         Tightening applies at once. Loosening raises ONE card
         (change_own_config), and changes nothing until it is approved.
         `voice_is_enough` is refused unless the check is very strict;
@@ -629,7 +630,7 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
         # The same: scores, no card.
         return measure(doc, measure_fn=measure_fn)
     if mode in ("strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-                "hands_free_screen", "hands_free_live"):
+                "hands_free_screen", "hands_free_live", "live_end"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
     if mode not in ("enroll", "threshold", "train"):
@@ -981,6 +982,17 @@ _SETTING_WORDS = {
         "talk\" keeps the extra caution.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes."),
+    # The owner's decision of 2026-09-28: with App lock on, the PC ends Jarvis
+    # Live when App lock would ask again, by default; this card lets it end
+    # only when Windows itself locks. Going back is immediate.
+    ("live_end", "live_end_windows_lock"): (
+        "Keep Jarvis Live going on this PC until Windows itself locks, even after App "
+        "lock would ask for Windows Hello again?\n\n"
+        "Then someone else who sits down at this PC before Windows locks could talk to "
+        "Jarvis through the open microphone. Every sentence is still checked for your "
+        "voice, but that check cannot tell a recording of you from you.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - Live ends when App lock would ask again."),
 }
 
 
@@ -1004,6 +1016,7 @@ def settings_view() -> dict:
             "hands_free": s.get("hands_free", ""),
             "hands_free_screen": s.get("hands_free_screen", ""),
             "hands_free_live": s.get("hands_free_live", ""),
+            "live_end": s.get("live_end", ""),
             "voice_is_enough_allowed": s["strictness"] == v.VERY_STRICT}
 
 

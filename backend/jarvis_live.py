@@ -77,10 +77,15 @@ IN PLAIN WORDS, WHAT HAPPENS
 THE RULES ADDED BY THE RULES REVIEW (2026-09-28, before anything shipped):
   * NO LIVE WITHOUT A REAL VOICE CHECK: owner mode, a trained voice print for
     that microphone and the voice-ID model installed (voice_ready) - else
-    "Jarvis Live needs your voice trained first - Settings -> Voice check."
+    "Jarvis Live didn't start: it needs your voice trained first - " and
+    where that app trains it (needs_voice_words).
   * A CRISIS TURN (note_crisis, from jarvis_agent.note_crisis_turn) turns the
-    quiet timeout off for the rest of the session. Live's own numbers
-    (turns, refusals) feed no other counter.
+    quiet timeout and the "minutes left" warning off for the rest of the
+    session, and Live does not end at its time limit until at least
+    CRISIS_MORE_S (30 minutes) after the last crisis turn (the owner's
+    answer of 2026-09-28). Live's own numbers (turns, refusals) feed no
+    other counter. (Ordinary Live turns DO feed "suggest the bigger model",
+    like any turn; crisis and side-talk turns do not.)
   * "WATCH WITH ME" + LIVE: a screen picture may go with a Live question
     asked AT THE PC only (screen_picture_allowed).
   * Quiet and a focus session do not end Live - it is a conversation the
@@ -170,6 +175,16 @@ TICK_S = 1.0
 SLEEP_GAP_S = 30.0
 #: A card raised this long before Live started still counts as new (clocks).
 CARD_SLACK_S = 2.0
+#: After a crisis turn (the owner's answer of 2026-09-28): Live does not end
+#: at its time limit until at least this long after the LAST crisis turn, and
+#: says no "minutes left" warning for the rest of that session. The quiet end
+#: is off for the rest of the session too. The owner can still end it at any
+#: time (End Live, "that's all", Stop everything), and App lock, Windows'
+#: lock, the PC sleeping and Standby still end it.
+CRISIS_MORE_S = 30 * 60
+#: How long the apps show "Jarvis Live ended" (and why) after an end that
+#: cannot be resumed. A resumable end shows "Resume Live" for RESUME_S.
+ENDED_SHOW_S = 15
 #: How long a side-talk sentence's hash is kept for the learner to skip.
 SIDE_TALK_KEEP_S = 24 * 3600
 SIDE_TALK_MAX = 500
@@ -205,11 +220,14 @@ OFF, ON, PAUSED, ENDED = "off", "on", "paused", "ended"
 #   Fixed words - the apps show and say these, never anything heard
 # --------------------------------------------------------------------------
 
+#: Every pause line says what happens next, or what to do (the review of
+#: 2026-09-28). Neither "tap" nor "click": the same words go to both apps.
 PAUSE_WORDS = {
-    "card": "Waiting for your tap on the card",
-    "cards_unknown": "Paused: can't check for cards",
-    "other_voices": "Paused: other voices",
-    "voice_trouble": "Paused: I'm having trouble recognising your voice - move closer or retrain",
+    "card": "Waiting for the card - approve or deny it, and Live carries on",
+    "cards_unknown": "Paused: can't check for cards - Live carries on when it can, or use End Live",
+    "other_voices": "Paused: other voices - just talk to carry on, or use Carry on",
+    "voice_trouble": ("Paused: I'm having trouble recognising your voice - move closer or "
+                      "retrain, then talk to carry on"),
 }
 #: The pauses the owner's own voice ends by itself (the clip is CHECKED, never
 #: transcribed, while paused; the owner's voice carries on without a tap).
@@ -223,22 +241,24 @@ HINT_WORDS = {
 #: Why the microphone is closed: the owner muted, or a call (the apps see it:
 #: the phone's call state, another program using the PC's microphone).
 MUTE_WORDS = {
-    "owner": "Muted",
-    "call": "Paused: you're on a call",
-    "mic_in_use": "Paused: another program is using the microphone",
+    "owner": "Mic off - Jarvis can't hear you. Use Mic on to carry on",
+    "call": "Paused: you're on a call - Live carries on after it, or use Listen anyway",
+    "mic_in_use": ("Paused: another program is using the microphone - Live carries on when "
+                   "it lets go, or use Listen anyway"),
 }
 MUTE_WHYS = tuple(MUTE_WORDS)
+#: Why it ended, as whole sentences - shown under "Jarvis Live ended".
 END_WORDS = {
-    "owner": "you ended it",
-    "bye": "you said that's all",
-    "quiet": "it was quiet",
-    "time": "the time was up",
-    "stop_all": "Stop everything",
-    "other_device": "Live moved to your other device",
-    "locked": "Windows locked",
-    "slept": "the PC slept",
-    "app_lock": "App lock came on",
-    "standby": "Jarvis went on standby",
+    "owner": "You ended it.",
+    "bye": "You said that's all.",
+    "quiet": "It was quiet for a while.",
+    "time": "The time was up.",
+    "stop_all": "Stop everything ended it.",
+    "other_device": "It moved to your other device.",
+    "locked": "Windows locked.",
+    "slept": "The PC went to sleep.",
+    "app_lock": "App lock came on.",
+    "standby": "Jarvis went on standby.",
 }
 #: The end reasons an APP may report (POST {"do": "stop", "why": ...}). The
 #: rest are the PC's own.
@@ -255,6 +275,18 @@ SAY_BYE = "Okay. Live ended."
 SAY_EXTENDED = "Okay, {n} more minutes."
 SAY_WARN = "Two minutes left. To keep going, say: give me twenty more minutes."
 SAY_QUIET = "Live ended - it was quiet."
+#: What the device the session was on SAYS when Live ended by itself (the
+#: review of 2026-09-28: it used to end without a word for most reasons).
+#: None for the owner's own End (a short end tone only), "that's all"
+#: (SAY_BYE already), Stop everything (the owner asked for quiet), or a
+#: locked or sleeping PC (nobody is there to hear it).
+END_SAID = {
+    "quiet": SAY_QUIET,
+    "time": "Live ended - the time was up.",
+    "app_lock": "Live ended - App lock came on.",
+    "standby": "Live ended - Jarvis is on standby.",
+    "other_device": "Live moved to your other device.",
+}
 #: Every fixed line, for the apps' shared fixture (tools/gen_live_cases.py).
 LINES = {"started": SAY_STARTED, "waking": SAY_WAKING, "short": SAY_SHORT, "bye": SAY_BYE,
          "extended": SAY_EXTENDED, "warn": SAY_WARN, "quiet": SAY_QUIET}
@@ -266,27 +298,64 @@ QUIET_KEEPS = frozenset({SAY_SHORT})
 SEEN = {
     "short": "Didn't catch that - say a bit more",
     "heard": "Heard you - thinking",
-    "quiet_warn": "Live ends soon - it's quiet",
-    "end_hint": "To end, say \"Okay Jarvis, that's all for now\", or press End.",
-    "call_unknown": "Jarvis can't tell when you're on a call - use Mute",
+    "quiet_warn": "Live ends soon - it's quiet. Say something to keep going",
+    "end_hint": "To end, say \"Okay Jarvis, that's all for now\", or use End Live.",
+    "call_unknown": "Jarvis can't tell when you're on a call - use Mic off",
     "move": "Live is on your {device} - move it here?",
+    "elsewhere": "Jarvis Live is on your {device}",
     "not_for_me": "(not for Jarvis)",
+    "trouble": "Heard you, but the words couldn't be made out - say it again",
+    "busy_mic": "Jarvis Live is already listening - just talk",
 }
+#: How each device is named in words ("Live is on your PC") - never
+#: "desktop" in anything the owner reads or hears.
+DEVICE_WORDS = {"desktop": "PC", "phone": "phone"}
+
+
+def device_words(device) -> str:
+    """"PC", "phone", or "other device"."""
+    return DEVICE_WORDS.get(str(device or ""), "other device")
+
 
 #: Why Live will not start: no real voice check (broad mode, no voice print
-#: for this microphone, or no voice-ID model).
-NEEDS_VOICE = "Jarvis Live needs your voice trained first - Settings -> Voice check."
+#: for this microphone, or no voice-ID model). Each app's own place to train
+#: it is added (needs_voice_words); both apps also offer a button there.
+NEEDS_VOICE = "Jarvis Live didn't start: it needs your voice trained first."
+NEEDS_VOICE_WHERE = {"desktop": "Settings, then Voice", "phone": "Settings, then Train my voice"}
 #: Why a `live` clip was refused before anything looked at it.
 NOT_ON = "Jarvis Live is not on for this device"
 NOT_ON_OTHER = "Jarvis Live is on your {device}"
+
+# --------------------------------------------------------------------------
+#   When App lock ends a session on the PC (the owner's decision of
+#   2026-09-28): by default when App lock would ask again ("Lock again
+#   after", 1 minute after the owner last touched a Jarvis window - talking
+#   does not count), with the voice setting `live_end` to end it only when
+#   Windows itself locks. The looser choice is an approval card
+#   (jarvis_voice_enroll); the stricter one is immediate. The desktop app
+#   reads it from status()["end_on"]. The phone keeps App lock's own rule.
+# --------------------------------------------------------------------------
+
+END_ON_APP_LOCK = "app_lock"
+END_ON_WINDOWS_LOCK = "windows_lock"
+#: jarvis_voice's `live_end` values, and what each means here.
+_END_ON = {"live_end_app_lock": END_ON_APP_LOCK, "live_end_windows_lock": END_ON_WINDOWS_LOCK}
+
+
+def needs_voice_words(device) -> str:
+    """NEEDS_VOICE, with where to train the voice on `device`."""
+    where = NEEDS_VOICE_WHERE.get(str(device or ""))
+    return f"{NEEDS_VOICE[:-1]} - {where}." if where else NEEDS_VOICE
 
 # --------------------------------------------------------------------------
 #   Side talk (the owner's answer of 2026-09-28): the owner talking to
 #   someone else. The model is told (MODEL_NOTE, added by jarvis_agent to a
 #   spoken Live turn only) to answer with the marker alone; both apps then
 #   say nothing and show at most "(not for Jarvis)", and the turn is never
-#   learned from or counted. The turn stays in chat history like any turn,
-#   its answer being the marker - both apps show it as "(not for Jarvis)".
+#   learned from or counted. It is NOT kept in chat history at all (the
+#   owner's answer of 2026-09-28): jarvis_chat_log.record_turn drops a turn
+#   whose `side_talk` is true, and both apps leave it out of the
+#   conversation they send next.
 # --------------------------------------------------------------------------
 
 SIDE_TALK_MARK = "[not for me]"
@@ -362,12 +431,18 @@ START_PHRASES = frozenset({
     "let's talk", "lets talk", "let us talk", "go live", "start live",
     "start jarvis live", "start a live conversation",
 })
+#: Not here, on purpose (the review of 2026-09-28): a bare "that's it",
+#: "I'm done", "we're done" or "all done" - everyday confirmations ("Right,
+#: that's it.", "Okay, I'm done." about a task) that used to end Live. Each
+#: counts only with "for now" or with Live named.
 END_PHRASES = frozenset({
     "that's all", "that is all", "thats all", "that's all for now", "that is all for now",
     "that's all for now bye", "that's all bye", "that's all thanks bye",
-    "that's it", "that is it", "thats it", "that's it for now", "that is it for now",
+    "that's it for now", "that is it for now", "thats it for now",
     "that'll be all", "that will be all", "thatll be all",
-    "i'm done", "i am done", "im done", "we're done", "we are done", "all done",
+    "i'm done for now", "i am done for now", "im done for now",
+    "we're done for now", "we are done for now",
+    "i'm done with live", "we're done with live", "that's it for live",
     "bye", "goodbye", "good bye", "bye bye", "bye for now", "bye then",
     "stop live", "end live", "stop jarvis live", "end jarvis live", "exit live",
     "end the conversation", "end this conversation",
@@ -507,6 +582,17 @@ def _default_windows_locked() -> Optional[bool]:
     return ntpath.basename(str(front.get("exe") or "")).lower() == "lockapp.exe"
 
 
+def _default_end_on() -> str:
+    """END_ON_APP_LOCK or END_ON_WINDOWS_LOCK, from jarvis_voice's `live_end`
+    setting. The stricter one when it cannot be read (an older
+    jarvis_voice.py, a damaged file)."""
+    try:
+        import jarvis_voice as V
+        return _END_ON.get(str(V.settings().get("live_end") or ""), END_ON_APP_LOCK)
+    except Exception:
+        return END_ON_APP_LOCK
+
+
 def _norm_device(device) -> str:
     d = str(device or "").strip().lower()
     return d if d in DEVICES else ""
@@ -530,6 +616,7 @@ class Live:
                  voice_ready: Optional[Callable[[str], Optional[str]]] = None,
                  power_mode: Optional[Callable[[], str]] = None,
                  warm: Optional[Callable[[], None]] = None,
+                 end_on: Optional[Callable[[], str]] = None,
                  run_loop: bool = True):
         self.clock = clock
         self.publish = publish or _default_publish
@@ -538,7 +625,11 @@ class Live:
         self.voice_ready = voice_ready or _default_voice_ready
         self.power_mode = power_mode or _default_power_mode
         self.warm = warm or _default_warm
+        self.end_on = end_on or _default_end_on
         self.run_loop = run_loop
+        # Whether the session's own loop ticks (so a gap in its ticks means
+        # the PC slept). The tests set it without starting the thread.
+        self.loop_ticks = run_loop
         self._lock = threading.RLock()
         self.state = OFF
         self.device = ""
@@ -552,7 +643,12 @@ class Live:
         self.ended_device = ""
         self.ended_at = 0.0
         self.last_tick = 0.0
-        self.session = 0              # numbered, so an app can tell a new session
+        # The session's own loop's last tick - only the loop sets it, so a
+        # status read after the PC slept cannot hide the gap (B8 of the
+        # review, 2026-09-28).
+        self.last_loop_tick = 0.0
+        self.crisis_at = 0.0
+        self.session = 0             # numbered, so an app can tell a new session
         self.turns = 0                # clips that became words - a number only
         self.refused_row = 0
         self.near_row = 0
@@ -606,6 +702,8 @@ class Live:
         except Exception:
             why = NEEDS_VOICE
         if why:
+            if why == NEEDS_VOICE:
+                why = needs_voice_words(dev)
             return {"ok": False, "error": why, "needs": "voice"}
         try:
             m = int(minutes) if minutes is not None else DEFAULT_MINUTES
@@ -624,8 +722,9 @@ class Live:
             self.ended_device, self.ended_at = "", 0.0
             self.started_at = now
             self.ends_at = now + m * 60
-            self.active_at = self.last_tick = now
+            self.active_at = self.last_tick = self.last_loop_tick = now
             self.warned = self.crisis = False
+            self.crisis_at = 0.0
             self.muted, self.muted_why = False, ""
             self.started_by = by
             self.refused_row, self.near_row, self.refused_since = 0, 0, 0.0
@@ -688,8 +787,10 @@ class Live:
             if not self._on():
                 return {"ok": False, "error": "Jarvis Live is not on."}
             now = self.clock()
-            # Never more than MAX_MINUTES from now, whatever is asked.
-            self.ends_at = min(self.ends_at + m * 60, now + MAX_MINUTES * 60)
+            # Never more than MAX_MINUTES from now, whatever is asked - but
+            # never sooner than a crisis turn's extra time either.
+            self.ends_at = max(min(self.ends_at + m * 60, now + MAX_MINUTES * 60),
+                               self.ends_at if self.crisis else 0.0)
             self.active_at = now
             if self.ends_at - now > WARN_BEFORE_S:
                 self.warned = False
@@ -742,6 +843,21 @@ class Live:
             self._emit()
         return {"ok": True, "status": self.status()}
 
+    def note_active(self, device=None) -> dict:
+        """The owner typed, or tapped a quick answer, in Live on `device` (B4
+        of the review, 2026-09-28): that is the conversation going on too,
+        so the quiet clock starts again - as a spoken sentence does. Nothing
+        else changes, and nothing typed comes here (the words go to the chat
+        route as usual). Not held on a stale link: it can only keep open a
+        session the owner started, never start or widen anything."""
+        dev = _norm_device(device)
+        with self._lock:
+            if not self._on() or (dev and dev != self.device):
+                return {"ok": False, "error": "Jarvis Live is not on."}
+            if self.pause not in CARD_PAUSES and not self.muted:
+                self.active_at = max(self.active_at, self.clock())
+        return {"ok": True, "status": self.status()}
+
     # -- the check, once a second ----------------------------------------------------
     def _new_cards(self) -> int:
         """Approval cards raised since this session started (a card with no
@@ -767,7 +883,14 @@ class Live:
             mode = self._mode()
             if mode and mode != "standby":
                 self.awake_seen = True
-            if loop and self.last_tick and now - self.last_tick > SLEEP_GAP_S:
+            # The PC slept: the session's own loop could not tick for a
+            # while. Checked on EVERY tick (a status read or a clip after the
+            # PC woke may come before the loop's next one), against the
+            # loop's own last tick - which only the loop moves - so a read
+            # cannot hide the gap. Only when the loop runs at all (the tests
+            # drive the clock without it).
+            if (loop or self.loop_ticks) and self.last_loop_tick \
+                    and now - self.last_loop_tick > SLEEP_GAP_S:
                 self._end("slept")
                 changed = True
             elif now >= self.ends_at:
@@ -779,6 +902,8 @@ class Live:
                 changed = True
             else:
                 self.last_tick = now
+                if loop:
+                    self.last_loop_tick = now
                 locked = None
                 if self.device == "desktop":
                     try:
@@ -814,7 +939,9 @@ class Live:
                             and not self.crisis and now - self.active_at >= QUIET_S):
                         self._end("quiet")
                         changed = True
-                    elif self._on() and not self.warned and self.ends_at - now <= WARN_BEFORE_S:
+                    elif (self._on() and not self.warned and not self.crisis
+                          and self.ends_at - now <= WARN_BEFORE_S):
+                        # No "minutes left" warning after a crisis turn.
                         self.warned = True
                         changed = True
             ended = self.state == ENDED
@@ -826,10 +953,21 @@ class Live:
 
     def note_crisis(self) -> None:
         """A crisis turn while Live is on (jarvis_agent.note_crisis_turn): no
-        quiet-timeout end for the rest of this session."""
+        quiet-timeout end and no "minutes left" warning for the rest of this
+        session, and the time limit moves to at least CRISIS_MORE_S after
+        this turn (the owner's answer of 2026-09-28) - quietly: nothing is
+        said or shown about it beyond the minutes left."""
+        changed = False
         with self._lock:
             if self._on():
-                self.crisis = True
+                now = self.clock()
+                self.crisis, self.crisis_at = True, now
+                self.warned = False
+                if self.ends_at < now + CRISIS_MORE_S:
+                    self.ends_at = now + CRISIS_MORE_S
+                changed = True
+        if changed:
+            self._emit()
 
     def trust_source(self, device) -> str:
         """What a Live clip from `device` asks jarvis_voice.hands_free_trusted
@@ -854,7 +992,8 @@ class Live:
             if not self._on() or not dev or dev != self.device:
                 if self._on() and dev and dev != self.device:
                     return {"ok": False, "state": OFF, "code": "",
-                            "words": NOT_ON_OTHER.format(device=self.device), "check": False}
+                            "words": NOT_ON_OTHER.format(device=device_words(self.device)),
+                            "check": False}
                 return {"ok": False, "state": OFF, "code": "", "words": NOT_ON, "check": False}
             if self.muted:
                 return {"ok": False, "state": PAUSED, "code": "muted",
@@ -969,6 +1108,12 @@ class Live:
                           and not self.muted and not self.crisis else None)
             resumable = (self.state == ENDED and self.ended_why in ("quiet", "time")
                          and now - self.ended_at <= RESUME_S)
+            ended = self.state == ENDED
+            # Seconds since it ended, as the PC counts them: the apps show
+            # "Jarvis Live ended" for ENDED_SHOW_S (or "Resume Live" while
+            # resumable) from this, counting on by themselves - a status
+            # read once is never taken as "just now" (the review's #4, #5).
+            ended_ago = int(max(0, round(now - self.ended_at))) if ended else None
             out = {
                 "state": self.state,
                 "on": on,
@@ -987,19 +1132,29 @@ class Live:
                 "hint": self.hint if on else None,
                 "hint_words": HINT_WORDS.get(self.hint) if on and self.hint else None,
                 "ending_soon": bool(on and self.warned),
-                "ended": self.ended_why if self.state == ENDED else None,
-                "ended_words": END_WORDS.get(self.ended_why) if self.state == ENDED else None,
-                "ended_device": self.ended_device if self.state == ENDED else None,
+                "ended": self.ended_why if ended else None,
+                "ended_words": END_WORDS.get(self.ended_why) if ended else None,
+                "ended_say": END_SAID.get(self.ended_why) if ended else None,
+                "ended_device": self.ended_device if ended else None,
+                "ended_ago_s": ended_ago,
                 "resumable": resumable,
                 "turns": self.turns,
                 "refused_in_a_row": self.refused_row if on else 0,
                 "limits": {"default_minutes": DEFAULT_MINUTES, "max_minutes": MAX_MINUTES,
                            "extend_minutes": EXTEND_DEFAULT_MIN, "quiet_s": QUIET_S,
                            "quiet_warn_s": QUIET_WARN_S, "warn_s": WARN_BEFORE_S,
-                           "resume_s": RESUME_S},
+                           "resume_s": RESUME_S, "ended_show_s": ENDED_SHOW_S,
+                           "crisis_more_s": CRISIS_MORE_S},
                 "lines": dict(LINES),
                 "seen": dict(SEEN),
             }
+        try:
+            end_on = str(self.end_on() or END_ON_APP_LOCK)
+        except Exception:
+            end_on = END_ON_APP_LOCK
+        # When App lock ends a session on the PC (the `live_end` setting).
+        out["end_on"] = end_on if end_on in (END_ON_APP_LOCK, END_ON_WINDOWS_LOCK) \
+            else END_ON_APP_LOCK
         out["camera"] = camera_status()
         return out
 
@@ -1149,9 +1304,10 @@ def handle_get(query: str = "") -> tuple:
 def handle_post(body) -> tuple:
     """{"do": "start", "device", "minutes"?} | {"do": "stop", "why"?, "device"?}
     | {"do": "extend", "minutes"?} | {"do": "resume"} | {"do": "mute"|"unmute",
-    "device"?, "why"?: "owner"|"call"|"mic_in_use"}. Start, extend and resume
-    are held by both apps on a stale link (rule 4); stop, mute and unmute
-    always go."""
+    "device"?, "why"?: "owner"|"call"|"mic_in_use"} | {"do": "active",
+    "device"?} (the owner typed or tapped in Live: the quiet clock starts
+    again). Start, extend and resume are held by both apps on a stale link
+    (rule 4); stop, mute, unmute and active always go."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "send a JSON object"}
     do = str(body.get("do") or "").strip().lower()
@@ -1175,7 +1331,11 @@ def handle_post(body) -> tuple:
         out = ENGINE.mute(do == "mute", device=body.get("device"),
                           why=why if why in MUTE_WHYS else "owner")
         return (200 if out.get("ok") else 409), out
-    return 400, {"ok": False, "error": "do must be start, stop, extend, resume, mute or unmute"}
+    if do == "active":
+        out = ENGINE.note_active(body.get("device"))
+        return (200 if out.get("ok") else 409), out
+    return 400, {"ok": False,
+                 "error": "do must be start, stop, extend, resume, mute, unmute or active"}
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
