@@ -1382,6 +1382,12 @@ Decided 2026-09-28, the owner's answers after the post-change audits
   handed over, a key per device listed in both apps with its own Remove.
   Designed first in `docs/PAIRING-DESIGN.md`, checked against the real code,
   then built.
+- **Each animal keeps its own answer to "Use its own voice?"** (owner, the
+  same day, after the feature audit found one "Use it" turned every animal's
+  voice on): an animal speaks in its own voice only when "Voice follows the
+  face" is on AND the owner said "Use it" for that animal; every animal asks
+  once, even after another said yes; until answered it keeps the normal
+  voice. The switch stays the master (off = no animal voice).
 - **The app builder's projects join Projects**: an app is a coding project
   whose tests are its benchmarks - one list, not two.
 
