@@ -85,6 +85,7 @@ import com.jarvis.client.ui.screens.BrainScreen
 import com.jarvis.client.ui.screens.ConnectionInfo
 import com.jarvis.client.ui.screens.CrashScreen
 import com.jarvis.client.ui.screens.FaceSpecimen
+import com.jarvis.client.ui.screens.FaceVoiceOfferFromPc
 import com.jarvis.client.ui.screens.FaqScreen
 import com.jarvis.client.ui.screens.HistoryScreen
 import com.jarvis.client.ui.screens.HomeActions
@@ -1776,6 +1777,7 @@ class MainActivity : FragmentActivity() {
                             setSpeed = { id -> JarvisRuntime.setVoiceSpeed(id) },
                             setSpeaker = { id -> JarvisRuntime.setVoiceSpeaker(id) },
                             setFace = { on -> JarvisRuntime.setVoiceFace(on) },
+                            answerFaceOffer = { f, use -> JarvisRuntime.answerFaceVoiceOffer(f, use) },
                             setAnimal = { json -> JarvisRuntime.setVoiceAnimal(json) },
                             tryAnimal = { face, name, playing ->
                                 JarvisRuntime.voice.tryAnimalVoice(face, name, playing)
@@ -2204,7 +2206,12 @@ class MainActivity : FragmentActivity() {
                         // face and its bindings are the shared vocabulary.
                         onPickFace = {
                             appearance.setFace(it.id)
-                            scope.launch { JarvisRuntime.pushAppearance() }
+                            scope.launch {
+                                JarvisRuntime.pushAppearance()
+                                // An animal picked for the first time: the PC
+                                // may now ask "Use its own voice?" - read it.
+                                JarvisRuntime.refreshCustomVoices()
+                            }
                         },
                         // Randomise and Reset do NOT push straight away any more.
                         // The screen offers ten seconds of Undo, and the desktop
@@ -2245,6 +2252,9 @@ class MainActivity : FragmentActivity() {
                         // Still pictures, one per face, instead of name-only chips.
                         faceTile = { f, selected, onClick ->
                             FaceSpecimen(face = f, bindings = bindings, isSelected = selected, onClick = onClick)
+                        },
+                        faceVoiceOffer = {
+                            FaceVoiceOfferFromPc(linkBlocker = remember(link, stale) { JarvisRuntime.actionBlocker() })
                         },
                     )
 

@@ -2469,6 +2469,18 @@ object JarvisRuntime {
     }
 
     /**
+     * The one-time "The panda has its own voice. Use it?" (owner,
+     * 2026-09-28): [use] true is "Use it", false "Keep my voice"; the PC
+     * remembers the answer per face. Same shape as [setVoiceFace]: no card,
+     * held on a stale link (rule 4). Re-reads the voices afterwards, so the
+     * question goes away and the switch shows its new state.
+     */
+    suspend fun answerFaceVoiceOffer(face: String, use: Boolean): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.FACE_OFFER_PATH, CustomVoices.faceOfferBody(face, use))
+    }
+
+    /**
      * One animal's own voice, pitch and pace, or "Reset to its own voice" -
      * [json] is [CustomVoices.animalBody] or [CustomVoices.animalResetBody].
      * Same shape as [setVoiceFace]: no card either way, held on a stale link
