@@ -40,6 +40,7 @@ pub mod proctree;
 pub mod pyfind;
 pub mod reach;
 pub mod sidecar;
+pub mod sky;
 pub mod spec;
 pub mod spec_drift;
 pub mod sse;
@@ -895,6 +896,8 @@ pub fn run() {
             plain_errors::set_manner,
             plain_errors::set_humor,
             plain_errors::open_fix_place,
+            sky::get_sky,
+            sky::set_sky,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,

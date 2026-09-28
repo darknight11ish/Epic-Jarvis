@@ -626,6 +626,14 @@ $PATCHES = @(
     # rest of this feature as ordinary code, needing no patch (they are
     # whole shipped modules, copied in like every other one in this list).
     'second-card-suggest.patch'
+    # The sun, the moon and the weather behind the animal faces (the owner's
+    # decisions of 2026-09-28): GET /api/sky and POST /api/sky. Its
+    # jarvis_hud.py context is answer-sources.patch's own startup install()
+    # block (second-card-suggest.patch, just above, touches a different part
+    # of the file), so it goes last, like every new patch. Needs jarvis_sky.py
+    # and jarvis_sky_places.py copied in; without them, or on any error, the
+    # banner says so and the route answers 503 - the faces are drawn as before.
+    'sky.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -759,6 +767,9 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
+    # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
+    'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
+    'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online
 )
 
 # The settings file. Installed only where none exists; never overwritten.

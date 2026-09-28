@@ -133,6 +133,30 @@ object DimRule {
     }
 
     /**
+     * The dim an animal is drawn with: [awake] (the dim of the state before
+     * standby, or of the state shown when it is not standby) blended toward
+     * standby's own dim by how far asleep the animal's pose is, 0..1 (its
+     * overlay's `asleep`, what the Zs fade with). So the animal darkens in
+     * step with nodding off and brightens in step with waking, instead of
+     * all at once while its pose takes ~3 s to fall asleep (and ~2 s to
+     * wake). Banked and error keep their own dims. The desktop's
+     * `sleepDim` (faces.html).
+     */
+    fun sleep(awake: Float, asleep: Float): Float {
+        val k = if (asleep.isNaN()) 0f else asleep.coerceIn(0f, 1f)
+        val standby = Spec.transformFor(FaceState.STANDBY).dim
+        return awake + (standby - awake) * k
+    }
+
+    /**
+     * [FaceFrame.awakeDim] after a frame showing [state]: that state's own
+     * dim, or on standby the one it already had (standby's is laid over it
+     * by [sleep]). The desktop's faceDim, which also eases it.
+     */
+    fun awakeAfter(held: Float, state: FaceState): Float =
+        if (state == FaceState.STANDBY) held else Spec.transformFor(state).dim
+
+    /**
      * What [matrix] does to one colour (0..1 channels, unpremultiplied), for
      * the tests: the same arithmetic the colour filter runs per pixel.
      */
@@ -140,6 +164,26 @@ object DimRule {
         val o = row * 5
         (m[o] * rgba[0] + m[o + 1] * rgba[1] + m[o + 2] * rgba[2] + m[o + 3] * rgba[3] + m[o + 4] / 255f)
             .coerceIn(0f, 1f)
+    }
+}
+
+/**
+ * The animals' sleeping Zs while Jarvis cannot be reached (FaceHost's
+ * `zsRamp`, [FaceFrame.zsW]).
+ */
+object ZsRule {
+    /**
+     * The Zs' weight one step of [k] on: down while [offline], back up only
+     * while the state is [standby], and held otherwise. Back up only on
+     * standby because a link that returns straight into an awake state
+     * starts the animal waking at the same moment - fading back in then,
+     * while the pose's own asleep weight was still falling, flashed the Zs
+     * for ~0.7 s. The desktop's `zsStep` (faces.html).
+     */
+    fun step(r: Float, offline: Boolean, standby: Boolean, k: Float): Float = when {
+        offline -> maxOf(0f, r - k)
+        standby -> minOf(1f, r + k)
+        else -> r
     }
 }
 

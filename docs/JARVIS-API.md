@@ -2059,7 +2059,7 @@ loaded to answer it). Choosing a voice beyond what a PC's real model has is
 no different from setting `tts_speaker_id` too high by hand today.
 
 **Voice follows the face** (added 2026-09-27, the owner's choice): with one
-of the animal faces showing (red panda, pygmy owl, sea otter -
+of the animal faces showing (red panda, pygmy owl, sea otter, monkey -
 `docs/CRITTERS.md`), the **built-in** voice becomes that animal's: one of
 Kokoro's own voices already installed, its own pace, and a small pitch rise
 (`jarvis_voices.FACE_VOICES`). The face is read from `<config
@@ -2161,8 +2161,8 @@ owner.
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
 | `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
-| `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl or the Sea Otter", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
-| `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl or the Sea Otter"}`; **429** `{"ok": false, "error": "the PC is still making the sound for the last Try it. Try it again in a moment"}` - one at a time; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window - the faces in its other windows do not move; the phone through its answer speaker), never while Jarvis is talking or listening, and stop it when a question or answer starts (above). |
+| `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
+| `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey"}`; **429** `{"ok": false, "error": "the PC is still making the sound for the last Try it. Try it again in a moment"}` - one at a time; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window - the faces in its other windows do not move; the phone through its answer speaker), never while Jarvis is talking or listening, and stop it when a question or answer starts (above). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
 Errors from the route itself (not the module): **400** `{"error": "the
@@ -2216,7 +2216,7 @@ request.
                 "default": true,
                 "face": "" | "<face id>",  the face saved in appearance.json ("" if none)
                 "speaking": bool,         an animal's voice is the one speaking now
-                "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter",
+                "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter" | "Monkey",
                 "line": str,              what is happening now, one sentence: show it under the switch
                 "title": "Voice follows the face", "detail": str,   absent on an older PC: show nothing
                 "animals": [{"face": "redpanda", "name": "Red Panda",   one row each, in this order
@@ -8991,3 +8991,115 @@ second version of any of it.
   before it: tested in the dev container only, against a real Windows
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
+
+## 59. The sun, the moon and the weather behind the animals (added 2026-09-28)
+
+The owner's decisions (`CLAUDE.md`, 2026-09-28): "Sun and moon behind the
+animals, optional (off by default)" - the real sun and moon for the date and
+time, worked out on the owner's own devices from a town typed once on the
+PC, nothing online - and "Weather in the animals' scene, optional (off by
+default)": rain, snow or wind, from the owner's own Home Assistant or from
+Open-Meteo online, whose ON is an approval card.
+
+`backend/jarvis_sky.py` (and its town list `jarvis_sky_places.py`), shipped
+whole; `sky.patch` adds the route at start-up the same way `news.patch` does.
+The sun and moon are **not** worked out on the PC: each app does that itself
+(`jarvis-desktop/src/sky.js`, the phone's `face/Sky.kt`, a line-for-line
+copy held equal by `tools/gen_sky.py`'s `sky-golden.json`), from the
+position this route hands over, so the phone's sky keeps moving while the PC
+cannot be reached. `docs/CRITTERS.md`, "The sky behind the animals", has the
+formulas and the look.
+
+### 59.1 The route
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/sky` | - | **200** the view below. Also starts ONE weather read in the background when the source is not off and the last read is older than 20 minutes (a failed one: 30 minutes) - there is no timer of its own, so the weather is read only while an app is asking. |
+| `POST /api/sky` | ONE change: `{"show": true \| false}`, `{"place": "<town, or a position like 39.7, -105.0>"}`, `{"forget_place": true}` or `{"weather": "off" \| "home_assistant" \| "open_meteo"}` | **200** `{"ok": true, "said", "view"}`; **202** `{"ok": true, "waiting": true, "said", "view"}` - Open-Meteo's ONE card is raised; **400** `{"ok": false, "error"}` in words (two changes at once, a town not in the list, a position off the Earth); **403** a town sent from any device but this PC; **409** Open-Meteo without a town; **503** the card's tier is not `ask` |
+
+Behind the token and the origin check, like every route. The town is set
+from **this PC only** (`jarvis_owner_check.from_this_pc`, the rule "Folders
+Jarvis may look in" uses): the phone shows it and can forget it, never set it
+(`docs/ARCHITECTURE.md` §8). Showing, hiding and forgetting need no card
+either way; each app holds a change that ADDS something (showing, a weather
+source) on a stale link and never one that takes something away.
+
+```
+{"available": true, "title": "Sun, moon and weather",
+ "show": bool, "show_label", "show_detail",
+ "place": null | {"name": "Denver, Colorado, United States", "lat": 39.7, "lon": -105.0},
+ "place_label", "place_detail" (this PC: how to type it; another device: "typed on the PC"),
+ "place_none", "forget_label", "can_set_place": bool (true on this PC only),
+ "weather": {"source": "off" | "home_assistant" | "open_meteo",
+             "choices": [{"id", "label", "why"}, ...three],
+             "now": null | {"rain", "snow", "wind", "cloud", "fog": 0..1, "dir": 1 | -1, "at": seconds},
+             "status": one plain sentence ("Off.", "Rain, windy, from Open-Meteo.",
+                       "No weather drawn: Open-Meteo did not answer (TimeoutError). Jarvis tries again in about 30 minutes."),
+             "waiting": bool, "last": null | {"outcome", "message", "why", "at"},
+             "label", "detail"},
+ "why": "" | why the settings could not be read (then all off)}
+```
+
+`dir` is which way the weather drifts ON THE SCREEN (+1 right): the frame
+looks toward the equator (south in the northern half of the world), so a west
+wind drifts left there. `tools/gen_sky_cases.py` writes the real answers in
+six situations to `contract/sky-cases.json` / `tests/fixtures/sky-cases.json`.
+
+### 59.2 The town: offline, rounded, never logged
+
+The name is looked up in `jarvis_sky_places.py`: GeoNames' towns (CC BY 4.0;
+`THIRD-PARTY-NOTICES.txt`) - every town of about 15,000 people or more in the
+US, Canada, the UK, Ireland, Australia and New Zealand, 50,000 or more
+elsewhere, and every capital; about 16,000. Accents and "Saint"/"St." are
+ignored; "Portland" means the bigger one, and "Portland, Maine" or "Portland,
+ME" picks; a town not in the list says so and suggests typing the position.
+**No geocoding service is ever asked.** Only the position rounded to 0.1
+degree (about 11 km) is kept, in `<config dir>/sky.json`, beside the name as
+the list spells it. It is never written to the log or the audit log (counts
+and outcomes only - `test_sky.py` checks), never offered to the AI model, and
+leaves this PC only to the owner's own apps and, if the owner approved it for
+that very position, to Open-Meteo (§59.3). The desktop keeps the rounded
+position (never the name) in its localStorage for the face pages; the phone
+keeps the same in its own settings (`allowBackup` is off).
+
+### 59.3 The weather
+
+* **Off** (the default): nothing is read, and a weather read in progress is
+  dropped.
+* **My Home Assistant**: the morning briefing's own weather device and rules
+  (`jarvis_briefing._weather_source`: set up), read with ONE plain GET of
+  that device's state (`jarvis_home.plan_states` / `run`) through the gate as
+  `home_read`, and only at tier `auto` - at `notify` the owner would be told
+  about a read every 20 minutes, the reasoning "tell me when" gives. Any
+  other tier leaves it out and says why - the scene never raises a card. Choosing it needs no card: it is
+  the owner's-own-accounts lane (ARCHITECTURE §4), already listed.
+* **Open-Meteo (online)**: ONE plain GET of
+  `https://api.open-meteo.com/v1/forecast?latitude=39.7&longitude=-105.0&current=weather_code,cloud_cover,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms`
+  - the rounded position and four value names, nothing else of the owner's.
+  No key, no cookie, no proxy, no redirect followed, 10 seconds, 64 KB at
+  most, and the connection checked to be on the open internet
+  (`jarvis_local_http.public_urlopen`). Switching it ON is ONE card
+  (`change_own_config`, tier `ask` only, `leaves_this_pc: true`) naming the
+  exact numbers sent; the yes covers THAT position - typing another town
+  switches it off again (the answer says so). Switching it off, or to
+  another source, is at once and withdraws a waiting card. ARCHITECTURE §4
+  lists it as its own way out; "What Jarvis can reach" has a row for it.
+
+Whichever source: the answer becomes the five numbers (Home Assistant's
+conditions and WMO weather codes, `HA_WEATHER` / `WMO`; thunder is heavy
+rain - nothing in the scene flashes), wind 14 m/s or more is 1. It is never
+given to the AI model, never learned from, never read aloud. A failure is
+quiet: no weather is drawn, and the status line says why.
+
+### 59.4 What each app draws
+
+Behind the animal faces only (drawn after the ground and before the animal;
+the desktop's GLSL gets `uSeeThrough` so the uncovered part of the picture
+stays see-through - the phone's AGSL already returns it that way), in every
+place the animal is drawn: the desktop's Faces window, Widget, floating face
+and HUD (their frames read localStorage, kept fresh by Settings, the Widget
+and the floating face, `sky-feed.js`), and the phone's Home and Appearance
+preview. It dims with the animal on standby, keeps showing while Jarvis is
+not connected and in a serious moment, is unchanged by "Keep the animal
+still" (it is the sky, not the animal), and under calm (reduced) motion the
+weather holds still. Weather older than 90 minutes is not drawn.

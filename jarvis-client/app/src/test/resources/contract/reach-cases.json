@@ -187,6 +187,16 @@
      "state": "off",
      "state_words": "Off",
      "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "sky_weather",
+     "line": "Off: no weather is drawn behind the animal. The sun and moon never go online - they are worked out on your own devices.",
+     "name": "Weather for the animal's scene",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
     }
    ],
    "title": "What Jarvis can reach",
@@ -391,6 +401,16 @@
      "state": "off",
      "state_words": "Off",
      "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "sky_weather",
+     "line": "Off: no weather is drawn behind the animal. The sun and moon never go online - they are worked out on your own devices.",
+     "name": "Weather for the animal's scene",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
     }
    ],
    "title": "What Jarvis can reach",
@@ -587,6 +607,16 @@
      "id": "big_model",
      "line": "Off. Switching it on asks you with an approval card.",
      "name": "Big model (slow)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "sky_weather",
+     "line": "Off: no weather is drawn behind the animal. The sun and moon never go online - they are worked out on your own devices.",
+     "name": "Weather for the animal's scene",
      "on": false,
      "state": "off",
      "state_words": "Off",
@@ -815,6 +845,16 @@
      "state": "on",
      "state_words": "On",
      "where": "this PC (colibri)"
+    },
+    {
+     "asks": "-",
+     "id": "sky_weather",
+     "line": "Off: no weather is drawn behind the animal. The sun and moon never go online - they are worked out on your own devices.",
+     "name": "Weather for the animal's scene",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
     }
    ],
    "title": "What Jarvis can reach",
@@ -1107,6 +1147,16 @@
      "state": "off",
      "state_words": "Off",
      "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "sky_weather",
+     "line": "Off: no weather is drawn behind the animal. The sun and moon never go online - they are worked out on your own devices.",
+     "name": "Weather for the animal's scene",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
     }
    ],
    "title": "What Jarvis can reach",
@@ -1137,7 +1187,8 @@
   "shell",
   "plugins",
   "second_card",
-  "big_model"
+  "big_model",
+  "sky_weather"
  ],
  "missing": "Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 on the PC.",
  "states": {

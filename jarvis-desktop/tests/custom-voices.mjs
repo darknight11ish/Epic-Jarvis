@@ -426,7 +426,7 @@ await check("each animal's voice: the PC's rows, choices and words, from every r
   for (const [name, st] of Object.entries(V)) {
     const av = CV.animalVoicesView(st);
     assert.equal(av.show, true, `${name}: no animals`);
-    assert.deepEqual(av.animals.map((a) => a.face), ["redpanda", "pygmyowl", "seaotter"], name);
+    assert.deepEqual(av.animals.map((a) => a.face), ["redpanda", "pygmyowl", "seaotter", "monkey"], name);
     assert.equal(av.voices.length, 11, name);
     assert.deepEqual(av.paces.map((p) => p.id), ["slower", "normal", "faster"], name);
     assert.deepEqual(av.pitch, { min: -3, max: 4, step: 0.5 }, name);
@@ -435,7 +435,7 @@ await check("each animal's voice: the PC's rows, choices and words, from every r
   }
   const own = CV.animalVoicesView(V.face_showing).animals;
   assert.deepEqual(own.map((a) => [a.speaker, a.semitones, a.pace, a.changed]),
-    [["1", 2, "normal", false], ["2", 1, "slower", false], ["4", 3, "faster", false]]);
+    [["1", 2, "normal", false], ["2", 1, "slower", false], ["4", 3, "faster", false], ["6", 1, "normal", false]]);
   assert.equal(own[0].line, "Bella, 2 steps higher, at normal pace.");
   const panda = CV.animalVoicesView(V.animal_changed).animals[0];
   assert.deepEqual([panda.speaker, panda.semitones, panda.pace, panda.changed], ["3", -1.5, "faster", true]);
@@ -450,7 +450,7 @@ await check("each animal's voice: the PC's rows, choices and words, from every r
   assert.equal(CV.voiceReply(P("animal_bad"), WHERE).text,
     "The pitch must be from 3 steps deeper to 4 steps higher, in half steps.");
   assert.equal(CV.voiceReply(P("animal_try_bad"), WHERE).text,
-    "Choose the Red Panda, the Pygmy Owl or the Sea Otter.");
+    "Choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey.");
   assert.deepEqual([2, -1.5, 0, 1, 0.5].map(CV.pitchWords),
     ["2 steps higher", "1.5 steps deeper", "Normal pitch", "1 step higher", "0.5 steps higher"]);
   assert.deepEqual([2, -1.5, 0].map(CV.pitchShort), ["+2", "-1.5", "0"]);
@@ -477,7 +477,7 @@ await check("each animal's voice: pick, slide, pace, Try it and Reset - at once,
     };
   });
   assert.equal(shown.hidden, false);
-  assert.deepEqual(shown.faces, ["redpanda", "pygmyowl", "seaotter"]);
+  assert.deepEqual(shown.faces, ["redpanda", "pygmyowl", "seaotter", "monkey"]);
   assert.equal(shown.name, "Red Panda");
   assert.equal(shown.line, "Bella, 2 steps higher, at normal pace.");
   assert.equal(shown.voice, "1");

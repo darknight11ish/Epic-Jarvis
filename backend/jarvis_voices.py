@@ -514,6 +514,14 @@ FACE_VOICES = {
     "redpanda": {"name": "Red Panda", "speaker": "1", "speed": 1.0, "semitones": 2.0},
     "pygmyowl": {"name": "Pygmy Owl", "speaker": "2", "speed": 0.85, "semitones": 1.0},
     "seaotter": {"name": "Sea Otter", "speaker": "4", "speed": 1.15, "semitones": 3.0},
+    # The fourth animal (owner, 2026-09-28): "a male voice, a touch
+    # energetic". Michael, one step higher at normal pace. Made with the real
+    # Kokoro model (kokoro-en-v0_19) and MEASURED, not judged by ear: his
+    # middle pitch goes from about 123 to 132 Hz - still plainly a man's
+    # voice, a little brighter, the same kind of lift that makes the other
+    # three sound small - and his pitch moves over a slightly wider range.
+    # ("Faster" was made too: about a tenth quicker, same pitch.)
+    "monkey": {"name": "Monkey", "speaker": "6", "speed": 1.0, "semitones": 1.0},
 }
 #: The pitch the owner may pick for an animal, in semitones ("steps" on
 #: screen): 3 deeper to 4 higher, in half steps.
@@ -686,7 +694,7 @@ def face_voice_view() -> dict:
     elif row is None:
         if (_config_dir() / "appearance.json").is_file():
             line = ("The face showing has no voice of its own. Choose the Red Panda, "
-                    "Pygmy Owl or Sea Otter face to hear one.")
+                    "Pygmy Owl, Sea Otter or Monkey face to hear one.")
         else:
             line = "No face is saved on this PC yet, so there is no animal voice to use."
     elif not builtin_speaks:
@@ -729,7 +737,7 @@ def set_face_voice(body) -> tuple:
                  "face_voice": face_voice_view()}
 
 
-_NO_ANIMAL = "choose the Red Panda, the Pygmy Owl or the Sea Otter"
+_NO_ANIMAL = "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey"
 
 
 def set_face_animal(body) -> tuple:

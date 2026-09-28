@@ -412,6 +412,26 @@ ChatVRM (pixiv), MIT - https://github.com/pixiv/ChatVRM
   Read at commit b542aa00e19dccf9fc48ba340cf7eee011d2329a. Copyright (c)
   2023 pixiv Inc.
 
+THE SKY BEHIND THE ANIMALS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+"Show the sun and moon behind the animal" (backend/jarvis_sky.py and
+jarvis_sky_places.py; jarvis-desktop/src/sky.js and the phone's Sky.kt;
+2026-09-28).
+GeoNames (https://www.geonames.org), Creative Commons Attribution 4.0
+  (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  The list of towns and their latitudes and longitudes in
+  backend/jarvis_sky_places.py: GeoNames' "cities15000" table, cut to the
+  towns tools/gen_sky_places.py keeps, the coordinates rounded to two
+  decimals. Taken through the geonamescache Python package, 3.0.2 (MIT,
+  Copyright (C) 2021 Ramiro Gómez), which is used only to make that file and is
+  not shipped. Data (c) GeoNames.
+The astronomy is Jarvis's own code, written from published formulas, with
+nothing copied: NOAA Global Monitoring Division's Solar Calculator
+("General Solar Position Calculations"); Jean Meeus, "Astronomical
+Algorithms", 2nd ed., Willmann-Bell, 1998 (chapters 12, 14, 15, 22, 25 and
+48); and the low-precision lunar formulas of "The Astronomical Almanac"
+(US Naval Observatory and HM Nautical Almanac Office, section D).
+
 OFFERS NOBODY ASKED FOR (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Leon (leon-ai/leon), MIT - https://github.com/leon-ai/leon

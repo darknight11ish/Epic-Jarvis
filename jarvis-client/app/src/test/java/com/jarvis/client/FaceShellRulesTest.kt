@@ -11,10 +11,12 @@ import com.jarvis.client.face.FaceHost
 import com.jarvis.client.face.FaceLink
 import com.jarvis.client.face.FaceWords
 import com.jarvis.client.face.FlashGovernor
+import com.jarvis.client.face.MonkeyPose
 import com.jarvis.client.face.OtterPose
 import com.jarvis.client.face.OwlPose
 import com.jarvis.client.face.Spec
 import com.jarvis.client.face.Swatch
+import com.jarvis.client.face.ZsRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -254,6 +256,7 @@ class FaceShellRulesTest {
             "redpanda" to CritterPose.uniforms(CritterPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist), f.mouth),
             "pygmyowl" to OwlPose.uniforms(OwlPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist), f.mouth),
             "seaotter" to OtterPose.uniforms(OtterPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist), f.mouth),
+            "monkey" to MonkeyPose.uniforms(MonkeyPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist), f.mouth),
         )
     }
 
@@ -327,5 +330,97 @@ class FaceShellRulesTest {
         val want = floatArrayOf(0x46 / 255f, 0x56 / 255f, 0x6A / 255f).map { it + (1f - it) * CritterPose.Zs.LIGHTEN }
         val got = rgb(f.zsTint)
         for (i in 0..2) assertEquals(want[i], got[i], 4e-3f)   // 8 bits a channel
+    }
+
+    // --- the Zs and the dim follow the pose's own sleep (ZsRule, DimRule.sleep)
+
+    /** The panda's pose for a frame, exactly as CritterFaces works it out. */
+    private fun pandaPose(f: FaceFrame): FloatArray {
+        val hist = CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp, prevAmp2 = f.prevAmp2, past = f.past)
+        return CritterPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist, opts = CritterPose.Opts(f.calmW, f.seriousW, f.stillW))
+    }
+
+    /** How asleep the panda's pose is (its overlay's `asleep`, what the Zs fade with). */
+    private fun pandaAsleep(f: FaceFrame) = CritterPose.overlay(pandaPose(f))[0]
+
+    /** The dim the panda is drawn with, exactly as CritterFaces works it out. */
+    private fun pandaDim(f: FaceFrame) = DimRule.sleep(f.awakeDim, pandaAsleep(f))
+
+    @Test
+    fun `the Zs' offline weight comes back only on standby, and is held while awake`() {
+        assertEquals(0.4f, ZsRule.step(0.5f, offline = true, standby = true, k = 0.1f), 1e-6f)
+        assertEquals(0.4f, ZsRule.step(0.5f, offline = true, standby = false, k = 0.1f), 1e-6f)
+        assertEquals(0.6f, ZsRule.step(0.5f, offline = false, standby = true, k = 0.1f), 1e-6f)
+        assertEquals(0.5f, ZsRule.step(0.5f, offline = false, standby = false, k = 0.1f), 0f)
+        assertEquals(0f, ZsRule.step(0.05f, offline = true, standby = true, k = 0.1f), 0f)
+        assertEquals(1f, ZsRule.step(0.95f, offline = false, standby = true, k = 0.1f), 0f)
+    }
+
+    @Test
+    fun `a link that comes back straight into an awake state never flashes the Zs while the animal wakes`() {
+        // Asleep on standby, then the link drops (standby shown, not
+        // connected) until the Zs are gone, then it comes back into idle:
+        // the panda wakes, and the Zs must not reappear on the way.
+        val host = FaceHost()
+        fun step(s: FaceState, offline: Boolean): FaceFrame {
+            host.advance(1f / 60f, s, null, null, Bindings.DEFAULTS, Arc, offline = offline)
+            return host.snapshot()
+        }
+        repeat(300) { step(FaceState.STANDBY, false) }
+        var f = step(FaceState.STANDBY, true)
+        repeat(60) { f = step(FaceState.STANDBY, true) }
+        assertEquals("gone while not connected", 0f, f.zsW, 0f)
+        var worst = 0f
+        repeat(180) {
+            f = step(FaceState.IDLE, false)
+            worst = maxOf(worst, pandaAsleep(f) * f.zsW)
+        }
+        assertTrue("the Zs came back while it woke ($worst)", worst <= 0.002f)
+        // And the next time it nods off, they do come back.
+        repeat(300) { f = step(FaceState.STANDBY, false) }
+        assertEquals(1f, f.zsW, 0f)
+        assertTrue(pandaAsleep(f) * f.zsW > 0.99f)
+    }
+
+    @Test
+    fun `standby's dim follows the animal nodding off and waking, and banked and error are unchanged`() {
+        val standby = Spec.transformFor(FaceState.STANDBY).dim
+        assertEquals(1f, DimRule.sleep(1f, 0f), 0f)
+        assertEquals(standby, DimRule.sleep(1f, 1f), 1e-6f)
+        assertEquals(standby, DimRule.sleep(0.45f, 1f), 1e-6f)
+        assertEquals(1f, DimRule.sleep(1f, Float.NaN), 0f)
+        assertEquals(0.45f, DimRule.awakeAfter(0.45f, FaceState.STANDBY), 0f)
+        assertEquals(Spec.transformFor(FaceState.BANKED).dim, DimRule.awakeAfter(1f, FaceState.BANKED), 0f)
+        assertEquals(Spec.transformFor(FaceState.ERROR).dim, DimRule.awakeAfter(1f, FaceState.ERROR), 0f)
+
+        val host = FaceHost()
+        fun step(s: FaceState): FaceFrame {
+            host.advance(1f / 60f, s, null, null, Bindings.DEFAULTS, Arc)
+            return host.snapshot()
+        }
+        repeat(120) { step(FaceState.IDLE) }
+        // Nodding off (~3 s): still full brightness half a second in, never
+        // brighter from one frame to the next, standby's own dim at the end.
+        val off = List(240) { pandaDim(step(FaceState.STANDBY)) }
+        assertTrue("dimmed before it nodded off (${off[30]})", off[30] > 0.97f)
+        for (i in 1 until off.size) assertTrue("brighter at frame $i while nodding off", off[i] <= off[i - 1] + 1e-5f)
+        assertEquals(standby, off.last(), 1e-4f)
+        // Waking (~2 s): still dim on the first frame, never darker from one
+        // frame to the next, full brightness at the end.
+        val wake = List(180) { pandaDim(step(FaceState.IDLE)) }
+        assertTrue("brightened at once on waking (${wake[0]})", wake[0] < standby + 0.05f)
+        for (i in 1 until wake.size) assertTrue("darker at frame $i while waking", wake[i] >= wake[i - 1] - 1e-5f)
+        assertEquals(1f, wake.last(), 1e-4f)
+        // Banked straight away, as before; and banked -> standby goes from
+        // banked's dim to standby's without jumping to full brightness.
+        val banked = pandaDim(step(FaceState.BANKED))
+        assertEquals(Spec.transformFor(FaceState.BANKED).dim, banked, 1e-6f)
+        repeat(60) { step(FaceState.BANKED) }
+        val toSleep = List(240) { pandaDim(step(FaceState.STANDBY)) }
+        assertTrue("jumped on falling asleep from banked: $toSleep", toSleep.all { it in 0.449f..standby + 1e-4f })
+        assertEquals(standby, toSleep.last(), 1e-4f)
+        // Error from awake: straight away, as before.
+        repeat(180) { step(FaceState.IDLE) }
+        assertEquals(Spec.transformFor(FaceState.ERROR).dim, pandaDim(step(FaceState.ERROR)), 0f)
     }
 }

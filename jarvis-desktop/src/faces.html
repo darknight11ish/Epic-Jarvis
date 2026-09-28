@@ -192,15 +192,17 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
   <pre id="exout">—</pre>
 </div>
 
-<footer>Most faces are hand-written Canvas 2D; Nucleus, Membrane, Tokamak and the three animals are drawn by the graphics card through WebGL 2, and fall back to Canvas 2D when WebGL is missing or the card cannot keep up. No three.js, nothing fetched at runtime. Speed ranges differ per face because nine of these integrate their state every frame and cannot simply be handed a faster clock; those are sub-stepped instead.</footer>
+<footer>Most faces are hand-written Canvas 2D; Nucleus, Membrane, Tokamak and the four animals are drawn by the graphics card through WebGL 2, and fall back to Canvas 2D when WebGL is missing or the card cannot keep up. No three.js, nothing fetched at runtime. Speed ranges differ per face because nine of these integrate their state every frame and cannot simply be handed a faster clock; those are sub-stepped instead.</footer>
 </div>
 
 <script src="faces-spec.js"></script>
 <script src="critter-pose.js"></script>
 <script src="critter-owl.js"></script>
 <script src="critter-otter.js"></script>
+<script src="critter-monkey.js"></script>
 <script src="critters-gen.js"></script>
 <script src="lipsync.js"></script>
+<script src="sky.js"></script>
 <script>
 "use strict";
 // The spec is loaded from `faces-spec.js`, generated from
@@ -1263,8 +1265,8 @@ void main(){
 
 
 /* ============================== the faces ============================= */
-/* THE ANIMAL FACES ("critters") - the red panda, the pygmy owl and the
-   sea otter.
+/* THE ANIMAL FACES ("critters") - the red panda, the pygmy owl, the sea
+   otter and the monkey.
 
    Every other face here is an instrument: rings, orbits, a drum skin. These
    are characters, so they are built differently in two ways.
@@ -1279,12 +1281,13 @@ void main(){
    exactly as they do for every other face.
 
    And the pose is worked out outside the shader, once a frame, by the
-   animal's pose code (critter-pose.js, critter-owl.js, critter-otter.js) -
+   animal's pose code (critter-pose.js, critter-owl.js, critter-otter.js,
+   critter-monkey.js) -
    the same maths the phone runs, checked against it by a fixture. The
    shader (critters/, one source for both apps) only draws the animal in
    whatever pose it is given.
 
-   critterFace() is everything the three share; each passes its own name,
+   critterFace() is everything the four share; each passes its own name,
    words and flat fallback. */
 const CRITTER_TIME_WRAP = (2 * Math.PI / 1.3) * 1000;
 // Seconds an animal's option weight (calm, serious, still) takes to ease
@@ -1298,6 +1301,42 @@ const OPTION_EASE_S = 1;
 // (see applyFaceStill). Off by default; the animals only.
 let FACE_STILL = false;
 function applyFaceStill(tune){ FACE_STILL = !!(tune && tune.still === true); }
+// THE SKY BEHIND THE ANIMALS (the owner's decisions of 2026-09-28, both off
+// by default): the real sun and moon for the owner's town, and the weather.
+// sky.js works them out and draws them; this reads what Settings, the Widget
+// and the floating face keep in this computer's localStorage (sky-feed.js:
+// on or off, the position rounded to 0.1 degree, the weather as five
+// numbers) - this page holds no command of its own - and paints it right
+// after the ground, BEFORE an animal is drawn, so the animal is in front and
+// its dim (dimOver) covers the sky too. Only for the animals. Moves with
+// real time; under calm (reduced) motion the weather holds still.
+let SKY_DOC = null;
+// Whether the surface being drawn has the sky under it this frame.
+let SKY_UNDER = false;
+function readSkyDoc(){
+  try { SKY_DOC = JSON.parse(localStorage.getItem("jarvis.sky.v1") || "null"); }
+  catch(e){ SKY_DOC = null; }
+}
+readSkyDoc();
+window.addEventListener("storage", (event) => {
+  if(event.key === "jarvis.sky.v1" || event.key === null) readSkyDoc();
+});
+function paintSky(g, w, h){
+  window.__faceSky = null;
+  SKY_UNDER = false;
+  if(typeof JarvisSky === "undefined") return;
+  const now = Date.now();
+  const live = JarvisSky.liveInput(SKY_DOC, now);
+  if(!live) return;
+  const k = Math.min(w, h);
+  const sc = JarvisSky.scene(now, now / 1000, live.place, live.weather,
+                             { calm: CALM.matches, ax: w / k, ay: h / k });
+  JarvisSky.draw(g, w, h, sc);
+  SKY_UNDER = true;
+  // For tests: what this frame drew.
+  window.__faceSky = { drawn: true, sun: sc.sun ? sc.sun.alpha : 0, moon: sc.moon ? sc.moon.alpha : 0,
+                       rain: sc.rain.length, snow: sc.snow.length, clouds: sc.clouds.length };
+}
 // Whether the surface being drawn cannot reach Jarvis (drawSurface sets it
 // from the surface's own `offline`). An animal on standby then shows the
 // hollow ring alone and no sleeping Zs - "not connected" is not "asleep".
@@ -1305,6 +1344,16 @@ let FACE_OFFLINE = false;
 // Seconds the Zs take to fade out (or back in) when the link drops (or
 // comes back) while the animal sleeps.
 const ZS_FADE_S = 0.5;
+/** The Zs' offline weight one step on: down while not connected, back up
+ *  only while the state is standby, and held otherwise. Back up only on
+ *  standby because a link that returns straight into an awake state starts
+ *  the animal waking at the same moment - fading back in then, while the
+ *  pose's own asleep weight was still falling, flashed the Zs for ~0.7 s.
+ *  The phone's ZsRule.step (FaceShellRules.kt). */
+function zsStep(r, offline, standby, k){
+  if(offline) return Math.max(0, r - k);
+  return standby ? Math.min(1, r + k) : r;
+}
 /** The colour the owner bound to `state` (its pattern's own colour if the
  *  binding names none), as a fixed #hex - never the pattern's colour of the
  *  moment, so what is drawn in it does not breathe or pulse. The neutral
@@ -1401,7 +1450,7 @@ function critterFace(o){
       m.seriousR = ramp(m.seriousR, faceSerious());
       m.stillR = ramp(m.stillR, FACE_STILL);
       // The Zs fade out while Jarvis cannot be reached (and back in).
-      m.zsR = ramp(m.zsR, !FACE_OFFLINE, dt / ZS_FADE_S);
+      m.zsR = zsStep(m.zsR, FACE_OFFLINE, st === "standby", dt / ZS_FADE_S);
       return m;
     },
     look(m){
@@ -1453,6 +1502,9 @@ function critterFace(o){
         G.uniform3f(L.uHot, hot[0]/255, hot[1]/255, hot[2]/255);
         G.uniform3f(L.uCool, cool[0]/255, cool[1]/255, cool[2]/255);
         G.uniform3f(L.uBg, bg[0]/255, bg[1]/255, bg[2]/255);
+        // The sky is drawn behind (paintSky): leave the picture's uncovered
+        // part see-through so it shows, instead of laying it over uBg.
+        if(L.uSeeThrough) G.uniform1f(L.uSeeThrough, SKY_UNDER ? 1 : 0);
         G.uniform1f(L.uYaw, VIEW.yaw);
         G.uniform1f(L.uPit, VIEW.pitch);
         G.uniform1f(L.uZoom, VIEW.zoom || 1);
@@ -1473,6 +1525,8 @@ function critterFace(o){
     },
     draw(g, w, h, t, st, amp){
       const P = this.pose(t, st, amp);
+      // Standby's dim follows the pose nodding off and waking (sleepDim).
+      FACE_DIM = sleepDim(FACE_DIM_AWAKE, P ? Math.max(0, Math.min(1, +P.asleep || 0)) : (st === "standby" ? 1 : 0));
       if(this.gpu(g, w, h, t, st, amp, P)){
         this.dimOver(g, w, h, this.swatch[0]);
         this.drawZs(g, w, h, t, st, P);
@@ -3492,6 +3546,110 @@ critterFace({
     ell(ox, oy, or, or, lift(p.hot, .25));
   }
 }),
+critterFace({
+  id:"monkey", name:"Monkey", tagline:"Hanging around, banana in hand",
+  // Idle, hanging still (critter-monkey.js at rest) - used only if that
+  // script did not load.
+  rest:{ swing:0, headRoll:0, eyeL:1, eyeR:1, lookX:0, lookY:0, orbGlow:.55, orbR:.09 },
+  // Where its parts are at rest, for the same case: critter-monkey.js's
+  // uniforms() for that pose, rounded.
+  restU:{ uBodyPos:[-.14,-.203,.05], uNeck:[-.14,-.018,.038], uShA:[.02,-.083,.069], uElbA:[.372,.336,.127],
+          uHandA:[.46,.876,.13], uShB:[-.29,-.093,.049], uElbB:[-.39,-.213,.02], uHandB:[-.45,-.334,-.039],
+          uKneeL:[-.101,-.287,-.029], uKneeR:[.101,-.287,-.029], uFootL:[-.116,-.44,.014], uFootR:[.116,-.44,.014],
+          uTail0:[-.14,-.362,.162,.034], uTail1:[-.12,-.532,.153,.031], uTail2:[-.12,-.702,.115,.029],
+          uTail3:[-.05,-.823,.076,.027], uTail4:[0,-.743,.066,.026],
+          uVine:[.93,.16,.46,.035], uOrb:[-.371,-.352,-.055,.09], uBan0:[.964,.102,.245] },
+  swatch:["#04060b","#ffc14d","#1d6f8a","#f6cf9c"],
+  spec:"A cartoon monkey from the owner's own picture, made of maths rather than a model file and ray-traced with soft shadows: warm brown fur, a big peach heart of a face, round ears, a tuft on top and a long tail ending in a curl. It hangs by one arm from a vine across the top and swings gently round its hand, like a slow pendulum. Its banana is its orb: it glows in the state colour and is a real light on the monkey. A little livelier than the other animals - it kicks its legs, curls its tail, looks at its banana - but still smooth. It holds its banana up and looks into it while it thinks, hangs still and looks at you, banana held out a little, while something is waiting on you, and climbs up to sit on the vine, tail curled round it, to sleep.",
+  // Without a GPU: a flat monkey on a flat vine, in the same pose, without
+  // the lighting. Where its parts are comes from its own pose code (its
+  // uniforms), so it swings and climbs exactly as the 3D one does.
+  flat(g, w, h, st, P, M){
+    if(!P) return;
+    M = M || [0, 0, 0];
+    const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1) * 3.1 / 3.31;
+    const sp = this.species;
+    const U = sp ? sp.uniforms(P, null) : this.restU;
+    const X = x => w / 2 + (x + 0.08) * S, Y = y => h / 2 - (y - 0.055) * S, R = r => r * S;
+    const FUR = "#b85a32", DEEP = "#7a3518", PEACH = "#f6cf9c", PDEEP = "#e0a06a", INK = "#1a0c08";
+    const ell = (x, y, rx, ry, col, rot) => {
+      g.fillStyle = col; g.beginPath(); g.ellipse(X(x), Y(y), R(rx), R(ry), rot || 0, 0, TAU); g.fill();
+    };
+    const line = (pts, width, col) => {
+      g.strokeStyle = col; g.lineWidth = R(width); g.lineCap = "round"; g.lineJoin = "round";
+      g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(X(q[0]), Y(q[1])) : g.moveTo(X(q[0]), Y(q[1]))); g.stroke();
+    };
+    // The body's frame: its x and y axes in the world (uBodyR* are its
+    // columns), for the legs, which the pose gives in that frame.
+    const B = U.uBodyR0 ? [U.uBodyR0, U.uBodyR1] : [[1, 0, 0], [0, 1, 0]];
+    const onBody = v => [U.uBodyPos[0] + v[0] * B[0][0] + v[1] * B[0][1], U.uBodyPos[1] + v[0] * B[1][0] + v[1] * B[1][1]];
+    // The vine, bowed a little, dipping under its hand.
+    const vine = [];
+    for(let i = 0; i <= 24; i++){
+      const x = -1.3 + i * 2.6 / 24, dx = x - U.uVine[2];
+      vine.push([x, U.uVine[0] - 0.035 * x * x - U.uVine[3] / (1 + 18 * dx * dx)]);
+    }
+    line(vine, .068, "#557a2e");
+    line([0, 1, 2, 3, 4].map(i => U["uTail" + i]), .06, DEEP);
+    for(const s of ["L", "R"]){
+      const hip = onBody([s === "L" ? -.085 : .085, -.13]);
+      line([hip, onBody(U["uKnee" + s]), onBody(U["uFoot" + s])], .1, FUR);
+      const ft = onBody(U["uFoot" + s]); ell(ft[0], ft[1], .066, .066, PEACH);
+    }
+    line([U.uShA, U.uElbA || U.uShA, U.uHandA], .1, FUR);
+    // The body, with a soft halo in the state's second colour for the rim light.
+    const bc = onBody([0, 0]);
+    g.save(); g.shadowColor = rgba(p.glow, .9); g.shadowBlur = S * .09;
+    ell(bc[0], bc[1], .175 * (P.breath || 1), .215, FUR);
+    g.restore();
+    const bl = onBody([0, -.02]); ell(bl[0], bl[1], .11, .155, PDEEP);
+    // The head: it tips with the body's swing and its own roll.
+    const up = U.uHeadR0 ? [U.uHeadR0[1], U.uHeadR1[1]] : [0, 1];
+    const hs = 1.1, hc = [U.uNeck[0] + up[0] * .38 * hs, U.uNeck[1] + up[1] * .38 * hs];
+    g.save();
+    g.translate(X(hc[0]), Y(hc[1])); g.rotate(Math.atan2(up[0], up[1])); g.translate(-X(hc[0]), -Y(hc[1]));
+    const hx = hc[0], hy = hc[1];
+    for(const side of [-1, 1]){
+      ell(hx + side * .41 * hs, hy, .15 * hs, .155 * hs, FUR);
+      ell(hx + side * .41 * hs, hy, .09 * hs, .095 * hs, PDEEP);
+    }
+    ell(hx, hy, .36 * hs, .34 * hs, FUR);
+    ell(hx - .03 * hs, hy + .36 * hs, .04 * hs, .07 * hs, FUR, -.3);
+    // The peach heart of a face: a lobe round each eye over a wide lower part.
+    ell(hx - .118 * hs, hy + .025 * hs, .128 * hs, .128 * hs, PEACH);
+    ell(hx + .118 * hs, hy + .025 * hs, .128 * hs, .128 * hs, PEACH);
+    ell(hx, hy - .165 * hs, .285 * hs, .165 * hs, PEACH);
+    for(const side of [-1, 1]){
+      const open = Math.max(.08, Math.min(1.2, side < 0 ? P.eyeL : P.eyeR));
+      const ex = hx + side * .118 * hs + .01 * (P.lookX || 0) * hs, ey = hy + .02 * hs + .01 * (P.lookY || 0) * hs;
+      ell(ex, ey, .052 * hs, .066 * hs * open, INK);
+      if(open > .3) ell(ex - .017 * hs, ey + .022 * hs, .014 * hs, .014 * hs, "#ffffff");
+    }
+    ell(hx, hy - .118 * hs, .05 * hs, .03 * hs, "#4a1c10");
+    // The mouth: the smile, or open with the voice's shape.
+    if(M[0] > .05) ell(hx, hy - .2 * hs, .08 * hs * (1 + .4 * M[1] - .35 * M[2]), .05 * hs * M[0], "#4a0d10");
+    else {
+      g.strokeStyle = "#4a1c10"; g.lineWidth = Math.max(1, R(.012));
+      g.beginPath(); g.ellipse(X(hx), Y(hy - .178 * hs), R(.08 * hs), R(.03 * hs), 0, 0, Math.PI); g.stroke();
+    }
+    g.restore();
+    // The banana arm, then the hands, then the banana - its orb - and its glow.
+    line([U.uShB, U.uElbB, U.uHandB], .1, FUR);
+    ell(U.uHandA[0], U.uHandA[1], .066, .066, PEACH);
+    const ox = U.uOrb[0], oy = U.uOrb[1], or = U.uOrb[3];
+    const og = g.createRadialGradient(X(ox), Y(oy), 0, X(ox), Y(oy), R(or * 3.2));
+    og.addColorStop(0, rgba(p.hot, .55 * Math.min(1, (P.orbGlow || .55) + .2))); og.addColorStop(1, rgba(p.hot, 0));
+    g.fillStyle = og; g.beginPath(); g.arc(X(ox), Y(oy), R(or * 3.2), 0, TAU); g.fill();
+    const a = Math.atan2(U.uBan0[1], U.uBan0[0]);
+    g.save(); g.translate(X(ox), Y(oy)); g.rotate(-a);
+    g.strokeStyle = "#e8c030"; g.lineWidth = R(.075); g.lineCap = "round";
+    g.beginPath(); g.moveTo(-R(.14), -R(.05)); g.quadraticCurveTo(0, R(.07), R(.14), -R(.05)); g.stroke();
+    g.strokeStyle = lift(p.hot, .35); g.lineWidth = R(.03);
+    g.beginPath(); g.moveTo(-R(.06), R(.005)); g.quadraticCurveTo(0, R(.03), R(.06), R(.005)); g.stroke();
+    g.restore();
+    ell(U.uHandB[0], U.uHandB[1], .066, .066, PEACH);
+  }
+}),
 ];
 
 /* ====================================================================== *
@@ -4009,21 +4167,39 @@ const MIC_STALE_S = 0.3;
 // Where the next frame will draw the animals' mouth from; see drawSurface.
 let FACE_MOUTH = null;
 // How bright the next frame draws an animal's whole picture, 0..1 - see
-// faceDim.
+// faceDim and sleepDim.
 let FACE_DIM = 1;
-/** The state's `dim` (STATE_FX: error 0.9, standby 0.6, banked 0.45; 1 for
- *  the rest), eased per surface over the same ~0.3 s as the colour fade so a
- *  change of state never steps the brightness in one frame. Every other face
- *  gets this dim on its state colours (drawSurface); an animal's colours are
- *  its fur, so it gets it on the whole picture instead: pixel = mix(bg,
- *  pixel, dim), the same blend. The phone uses the same rule. */
+// faceDim's answer for this surface: the dim of the awake state before
+// standby's is laid over it (sleepDim).
+let FACE_DIM_AWAKE = 1;
+/** The state's `dim` (STATE_FX: error 0.9, banked 0.45; 1 for the rest),
+ *  eased per surface over the same ~0.3 s as the colour fade so a change of
+ *  state never steps the brightness in one frame. Every other face gets its
+ *  dim on its state colours (drawSurface); an animal's colours are its fur,
+ *  so it gets it on the whole picture instead: pixel = mix(bg, pixel, dim),
+ *  the same blend. The phone uses the same rule.
+ *
+ *  Standby is not eased here: on standby this holds the dim of the state
+ *  before it, and standby's own 0.6 is laid over that by sleepDim, as far
+ *  as the animal has nodded off. */
 function faceDim(s, state, dt){
   const fx = STATE_FX[state];
-  const want = fx && fx.dim < 1 ? fx.dim : 1;
+  if(state !== "standby") s.dimWant = fx && fx.dim < 1 ? fx.dim : 1;
+  const want = typeof s.dimWant === "number" ? s.dimWant : 1;
   if(typeof s.dimShown !== "number" || !(dt > 0)) s.dimShown = typeof s.dimShown === "number" ? s.dimShown : want;
   else s.dimShown += (want - s.dimShown) * (1 - Math.exp(-dt / (COLOR_EASE_S / 3)));
   if(Math.abs(s.dimShown - want) < 0.002) s.dimShown = want;
   return s.dimShown;
+}
+/** The dim an animal is drawn with: `awake` (faceDim's) blended toward
+ *  standby's own dim by how far asleep its pose is, 0..1 (the pose's
+ *  `asleep`, what the Zs fade with). So it darkens in step with nodding off
+ *  and brightens in step with waking, instead of all at once while the pose
+ *  takes ~3 s to fall asleep (and ~2 s to wake). Banked and error are
+ *  faceDim's, unchanged. The phone's DimRule.sleep (FaceShellRules.kt). */
+function sleepDim(awake, asleep){
+  const k = Math.max(0, Math.min(1, +asleep || 0));
+  return awake + (STATE_FX.standby.dim - awake) * k;
 }
 
 /** One message from face-voice.js: a clip's track and/or clock, or {mic}. */
@@ -4379,7 +4555,7 @@ function sizeSurface(s){
   // upscaled nine times and reads as blocky. Matching the backing store to
   // what the face can actually produce is what makes it look sharp.
   const px = Math.min(s.f.render.max_px || 1800, Math.round(css * scale));
-  if(s.canvas.width !== px){ s.canvas.width = px; s.canvas.height = px; }
+  if(s.canvas.width !== px || s.canvas.height !== px){ s.canvas.width = px; s.canvas.height = px; }
   s.w = px; s.h = px;
   // What the screen can actually show. Note this uses the REAL device pixel
   // ratio, not the capped one above: the cap exists to stop CPU faces
@@ -4592,6 +4768,9 @@ function drawSurface(s, dt, state){
   const paintBg = () => {
     g.fillStyle = BG;
     g.fillRect(0,0,w,h);
+    // The sky behind an animal, when the owner has switched it on (paintSky).
+    if(th.family === "critter") paintSky(g, w, h);
+    else SKY_UNDER = false;
   };
   if(!th.persistent) paintBg();
   // GLOW SPRITE - the canvas-side answer to bloom. Bloom on a GPU is a blur of
@@ -4686,7 +4865,10 @@ function drawSurface(s, dt, state){
   FACE_MOUTH = faceMouth(state, s);
   // FACE_DIM: how far the animals blend their whole picture toward the
   // background - see critterFace's draw.
-  FACE_DIM = faceDim(s, state, dt);
+  FACE_DIM_AWAKE = faceDim(s, state, dt);
+  // What anything but an animal's own draw sees: standby's dim at once. An
+  // animal replaces it with its pose's (critterFace's draw, sleepDim).
+  FACE_DIM = sleepDim(FACE_DIM_AWAKE, state === "standby" ? 1 : 0);
   // Not connected: an animal on standby shows no Zs (critterFace.drawZs).
   FACE_OFFLINE = s.offline === true;
   const timed = GPUOK && isShaderFace(th) && typeof GPU !== "undefined";

@@ -1,18 +1,18 @@
 # Animal faces ("critters")
 
 Jarvis had twenty faces: animated pictures that show what it is doing, all
-of them instruments - rings, orbits, a drum skin. Now it also has **three
-animals**, small cartoon characters that sleep, listen, think, talk and
-wave: a **red panda**, a **pygmy owl** and a **sea otter**.
+of them instruments - rings, orbits, a drum skin. Now it also has **four
+animals**, small cartoon characters that sleep, listen, think and talk: a
+**red panda**, a **pygmy owl**, a **sea otter** and a **monkey**.
 
 The owner's choice, 2026-09-27: all three animals Gemini suggested, panda
 first; the owl and the otter once the panda worked (go-ahead given the same
-day).
+day). The monkey followed on 2026-09-28, from the owner's own picture.
 
 ## How to switch to one
 
-- **Desktop:** open the Faces window, click the Red Panda, Pygmy Owl or Sea
-  Otter card, then choose it as Jarvis's face - the same as picking any
+- **Desktop:** open the Faces window, click the Red Panda, Pygmy Owl, Sea
+  Otter or Monkey card, then choose it as Jarvis's face - the same as picking any
   other face. The widget, the floating face and the HUD all show whatever
   face is chosen there.
 - **Phone:** Appearance, then pick the animal from the faces.
@@ -20,7 +20,7 @@ day).
   your PC has the updated `jarvis-visual-spec.json`** (see "One thing to
   check on the PC" below).
 
-## The three animals
+## The four animals
 
 In each picture, top row: idle, listening, thinking, speaking. Bottom row:
 waiting on you (approval), asleep (standby), confused (error), dozing
@@ -115,7 +115,50 @@ nothing of the phone's size limit (below):
 | Something went wrong | A still, concerned look: head tipped a little, eyes lowered, holding its pebble. |
 | Keeping things for later | Dozing with half-closed eyes, blinking slowly; now and then its head sinks and it catches itself. |
 
-### What all three share
+### Monkey
+
+![The monkey in all eight states](critters/monkey-states.png)
+
+The owner's fourth animal (2026-09-28), from their own picture of a cartoon
+monkey, in the same style as the other three: warm brown fur, a big peach
+face shaped like a heart - a round patch round each eye over a wide one
+across the cheeks and muzzle - big round ears with peach insides, a small
+tuft on top, a peach belly, long arms and legs with peach hands and feet,
+and a long thin tail ending in a curl. It hangs by one arm from a green vine
+across the top of the picture - the arm rises from its shoulder beside its
+head, bent a little at the elbow, and passes behind the edge of its ear, as
+in the picture - and swings gently round its hand, like a slow pendulum. **Its banana is its orb**: the banana's ends stay banana-yellow,
+its middle glows in the state's colour with the same halo the other orbs
+have, and it lights the monkey the same way. The owner asked for it to be
+"more energetic than the other animal models to a degree", so it is a
+little livelier - see "How they move" for the numbers - but smooth, and
+the serious moments are as still as the others'. The owner then set how
+much: **about 1.5 times the panda's resting movement** (2026-09-28).
+Measured with the comfort review's harness over half an hour of idle, the
+middle of its head travels at most 6.6 percent of the animal's height
+(the panda's, 4.5: 1.47 times); the swing itself is about 1 degree each
+way, 1.4 at its widest.
+
+| Jarvis is... | The monkey... |
+|---|---|
+| Idle | Hangs and swings gently (one swing every 3.5 seconds, about 1 degree each way), its legs and tail trailing the swing a moment behind. Looks at one thing, then another, a little more often than the others, with a curious tilt of its head. About every 19 seconds it does one small thing - most often kicks its legs, turns to something with one ear first, or curls its tail tip; now and then looks at its banana (lifts it, tips its head, turns it) or swings a little wider for a few swings; once in a while scratches the top of its head. |
+| Listening | Leans in, its head tilted about 15 degrees, its ears turned forward to you, its eyes on you; its swing settles to about half. |
+| Thinking | Brings its banana up in front of its chest and looks into it - it glows its brightest - tapping it in little bursts, glancing up and away now and then. |
+| Speaking | Its mouth makes the shapes of the words it is saying. It talks with its eyes and, now and then, a nod, its banana lifted a little, or a tilt of the head - never two alike in a row, and never just as its eyes move. |
+| Waiting on you | Hangs still, leans in and looks straight at you, ears forward, its banana held out a little toward you. No wave. |
+| Asleep | Has climbed up and sits on the vine, its legs hanging in front, its tail curled round the vine, hugging its banana, head drooped, eyes shut, breathing slowly; now and then a sigh. |
+| Something went wrong | A still, concerned look: head tipped a little and lowered, eyes down, brows drawn, ears back a touch; it hangs almost still. |
+| Keeping things for later | Dozes where it hangs, half-lidded, swinging a little; now and then its head sinks and it catches itself. |
+
+Because it sleeps sitting ON the vine and hangs from it awake, going to
+sleep it climbs up, and waking it slides back down. The picture follows the
+monkey, so on screen it is the vine that moves - down past the monkey as it
+climbs, and **always behind it**, so it never cuts through the monkey. That
+move is not an extra: it is the difference between its two poses, so it
+happens under calm, still and serious too (plainly, without the extras
+below).
+
+### What all four share
 
 In the desktop's Faces window each animal also turns to follow the mouse
 pointer for a few seconds after it moves over the face (the widget, HUD and
@@ -188,6 +231,7 @@ on a desk, not a busy mascot. What they do, and the limits they keep to:
   | Red panda | Its eyes open with a slow double blink; its head lifts a little past and settles; a small stretch (leans back, paws up and out, chin up, a deeper breath); its ears perk with a flick. | Heavy eyes and a slow blink; its head nods as it drifts, it catches itself (eyes open a little, ears up), another heavy blink - then its head goes down and its tail curls round. |
   | Pygmy owl | One eye opens, then the other; a quick ruffle of its feathers with a small shiver; its head draws up a little and settles with a small shake. | Its eyes half close, one last slow blink, then it fluffs up round (a touch past, and settles) and tucks its head in. |
   | Sea otter | Its paws stay over its eyes a moment and rub them; then they come away into a small stretch in the water (paws up and apart, chin up, toes out) and go back to the pebble, picking it up. | A slow stretch in the water, then its paws come up over its eyes, leaving the pebble on its chest, and it settles. |
+  | Monkey | It takes hold of the vine and slides down off it to hang by one hand again (the vine going back up, behind it); as it hangs, its eyes open, it has a small stretch (legs out, a deeper breath) and its ears flick. | It looks up at the vine and climbs up it, the vine passing down behind it; its hand keeps hold until the vine is down at its middle, then it lifts its legs over, curls its tail round the vine, hugs its banana, and its head droops. |
 
   - **Waking straight into "waiting on you", "something went wrong" or a
     doze**, only the eyes open, gently - no stretch, rub or ruffle - so
@@ -276,7 +320,9 @@ so they read on the dark ground beside the dimmed animal.
 - **Never while Jarvis cannot be reached.** Then the face shows standby
   with the hollow ring alone - "not connected" is not "asleep". If the link
   drops while the animal sleeps, the Zs fade out in half a second, and come
-  back when it returns.
+  back when it returns - but only if it returns to standby. A link that
+  comes back straight into an awake state leaves them off while the animal
+  wakes (before, they flashed back for about 0.7 s during the wake-up).
 - **Calm** (the desktop's reduced motion, the phone's calm motion): one
   still z beside the head instead, nothing drifting across the screen.
 - **Screen readers** hear nothing more: the face already says standby.
@@ -428,10 +474,16 @@ the error shake that every face gets still happen on top.
 **Dimming.** In standby (0.6), banked (0.45) and error (0.9) the **whole
 animal** is blended toward its background by that state's `dim`: pixel =
 mix(background, pixel, dim) - the same blend every other face's colours
-get, eased over the same third of a second - and the orb and rim colours
-are handed to the shader undimmed, so the orb is not dimmed twice. Both
-apps use this rule. (Before, only the orb and rim dimmed: a sleeping panda
-was as bright as an awake one.)
+get - and the orb and rim colours are handed to the shader undimmed, so
+the orb is not dimmed twice. Both apps use this rule. (Before, only the
+orb and rim dimmed: a sleeping panda was as bright as an awake one.)
+Banked and error dim at once (the desktop eases it over about a third of a
+second; the phone steps). **Standby's dim follows the animal's own sleep**:
+it is laid over the dim of the state before, as far as the pose is asleep
+(its `asleep` weight, the one the Zs fade with - `sleepDim` on the desktop,
+`DimRule.sleep` on the phone). So the animal darkens as its eyes close and
+the Zs appear, at the end of nodding off, and brightens as its eyes open,
+in the first ~0.7 s of waking - not the moment standby starts or ends.
 
 **Colour.** Each animal keeps its own fur or feather colours in every state.
 The colour you choose for a state goes to **the orb** - which is also a real
@@ -460,10 +512,10 @@ The files, and each app gets its copy from the same place:
 
 | File | What it does |
 |---|---|
-| `jarvis-desktop/critters/common_head.sksl`, `common_tail.sksl` | **What all three share**: the camera, the lighting, the orb and its glow, the soft outline, and the size-safe march. |
-| `jarvis-desktop/critters/redpanda.sksl`, `pygmyowl.sksl`, `seaotter.sksl` | **Each animal's own part**: its shapes and its colours. |
-| `jarvis-desktop/src/critter-pose.js` (+ `critter-owl.js`, `critter-otter.js`) | **The poses** on the desktop: where the head, ears, eyes, paws, wings, tail and orb are on each frame. |
-| `jarvis-client/.../face/CritterPose.kt` (+ `OwlPose.kt`, `OtterPose.kt`) | The same pose maths on the phone, line for line. |
+| `jarvis-desktop/critters/common_head.sksl`, `common_tail.sksl` | **What all four share**: the camera, the lighting, the orb and its glow, the soft outline, and the size-safe march. |
+| `jarvis-desktop/critters/redpanda.sksl`, `pygmyowl.sksl`, `seaotter.sksl`, `monkey.sksl` | **Each animal's own part**: its shapes and its colours. |
+| `jarvis-desktop/src/critter-pose.js` (+ `critter-owl.js`, `critter-otter.js`, `critter-monkey.js`) | **The poses** on the desktop: where the head, ears, eyes, paws, wings, tail and orb are on each frame. |
+| `jarvis-client/.../face/CritterPose.kt` (+ `OwlPose.kt`, `OtterPose.kt`, `MonkeyPose.kt`) | The same pose maths on the phone, line for line. |
 | `jarvis-client/.../face/CritterFaces.kt` | How the phone draws any animal (at reduced resolution - see "Cost" below). |
 
 `tools/gen_critters.py` builds each animal's full shader (shared start +
@@ -527,6 +579,21 @@ files and the animals' `.sksl`; nothing the animals do changed.
   picture enlarged: 0.24 / 0.15 / 0.14 before, 0.17 / 0.09 / 0.09 after.
   At the phone's lowest tier the enlarged edge is a touch crisper than it
   was, with no more stepping.
+- **Edges between two parts are not smoothed.** The soft outline smooths
+  an animal's edge against the background only. Where one part passes in
+  front of another - an arm or a leg over the body, the banana over the
+  belly, the panda's paw over its leg - the edge is a plain one-pixel
+  step, the same on all four animals (checked on the monkey and the panda
+  at 540 px against a picture made with 16 rays a pixel: they differ from
+  it about equally, 0.51 and 0.47 of a level on average). The owner saw the
+  monkey as "a bit pixelated" in 320-pixel preview videos, enlarged; most
+  of that was the video's small size and its compression - the 540-pixel
+  renders are cleaner - and the rest is these inside edges, which the
+  monkey has more of than the others (thin arms, legs and tail in front of
+  its body). Smoothing them would mean several rays a pixel, two to four
+  times the work; not done. One real fault was found and fixed on the way:
+  the belly right beside the banana's tip was coloured as banana, a few
+  yellow slivers.
 - **No ambient occlusion.** It was shading from the simplified shadow
   shapes, and came out exactly "no shading" on 83 to 97 percent of each
   animal. Taking it out changes the default pictures by 0.01 to 0.08 of a
@@ -546,16 +613,34 @@ files and the animals' `.sksl`; nothing the animals do changed.
   head's surface: round dots on top, upright dashes on the sides like the
   back's.
 
-### Adding a fourth animal
+### Adding another animal
 
-A new `.sksl` beside the others (it must supply `map`, `mapLite`, `partAt`,
-`material`, `sparkle`, `stuckRay`, the camera constants and `MARCH_STEPS`,
-its number of march steps - see `common_tail.sksl`; give it as many as the
-size limit allows), a
-pose file on each side registering itself the way `critter-owl.js` and
-`OwlPose.kt` do, a line in `tools/gen_critters.py`'s `ANIMALS`, a face entry
-in the spec, and one `critterFace({...})` / one `object ... : CritterFace` in
-each app. Then measure it: `python3 tools/shader_size.py`.
+The monkey (2026-09-28) was the fourth, added by this list:
+
+- **Shader:** a new `.sksl` beside the others. It must supply `map`,
+  `mapLite`, `partAt`, `material`, `sparkle`, `stuckRay`, the camera
+  constants and `MARCH_STEPS` (see `common_tail.sksl`; give it as many as
+  the size limit allows). The orb's glow and light come from `uOrb`; the
+  orb can be another shape (the monkey's banana is its own part, glowing
+  through `sparkle`).
+- **Pose:** a file on each side registering itself the way
+  `critter-owl.js` / `OwlPose.kt` do, with its own `wakeSleep` and its own
+  salts (the numbers its dice use - no two animals may share one), slots
+  that divide `PERIOD` (16 or 32 seconds), and the Zs' `overlay`.
+- **Generator:** a line in `tools/gen_critters.py`'s `ANIMALS`, the pose
+  file in `POSE_JS`, and its moments in `MOMENTS` (a blink, a double blink,
+  each happening, each speaking gesture - found by scanning its pose code).
+- **Tests:** the animal in every list in `CritterPoseTest`,
+  `FaceShellRulesTest` and the desktop's `faces.mjs` / `face-watchdog.mjs`.
+- **Both apps:** a face entry in `jarvis-visual-spec.json` (both copies,
+  then `python3 jarvis-desktop/scripts/build-faces-spec.py`), one
+  `critterFace({...})` with its flat drawing and a `<script>` tag in
+  `faces.html`, one `object ... : CritterFace` in `CritterFaces.kt`, listed
+  in `Faces.all` and `warmCritterShaders()`.
+- **Voice:** a row in `backend/jarvis_voices.py` `FACE_VOICES` and
+  `voice_training.rs` `ANIMALS`, then `gen_voice_training_cases.py` and
+  `gen_phone_voice_cases.py`.
+- **Measure:** `python3 tools/shader_size.py`, and render it.
 
 ### On a PC without a working graphics card
 
@@ -590,6 +675,83 @@ by the app's minimum Android version.
 
 If the pose script itself fails to load, the flat sticker still draws the
 animal, still and neutral, rather than an empty square.
+
+## The sky behind the animals (sun, moon and weather)
+
+Two options, both **off** until the owner switches them on (the owner's
+decisions of 2026-09-28). In plain words:
+
+- **"Show the sun and moon behind the animal"** draws the real sun and moon
+  for the owner's town behind whichever animal is showing: the sun comes up
+  on the east side of the picture at sunrise, arcs over the animal and goes
+  down at sunset, with a warm glow near the ground at dawn and dusk; at night
+  the moon does the same at its own times, drawn in its real shape (a thin
+  crescent, a half, a full moon) with its lit side turned the right way.
+- **"Weather in the animal's scene"** adds soft rain, slow snow, or a few
+  faint lines of wind and drifting clouds.
+
+Where to switch them on: the desktop's Settings, Appearance, "Sun, moon and
+weather" (the town is typed there, once); the phone's Appearance, "Sun, moon
+and weather" (it shows the town the PC has, and can switch the sky on or
+off, forget the town, or choose the weather source). docs/JARVIS-API.md
+section 59 has the route; ARCHITECTURE section 4 the one part that goes
+online (Open-Meteo, only if chosen, after an approval card).
+
+**How the sky is worked out.** On each device, from the town's rough
+position (0.1 degree, about 11 km) and the clock - `jarvis-desktop/src/sky.js`
+and its line-for-line phone copy `face/Sky.kt`, held equal by
+`tools/gen_sky.py` (`sky-golden.json`, checked by the phone's `SkyTest`). The
+formulas, implemented from their published form (no code copied): the sun
+from NOAA's Solar Calculator (Meeus, "Astronomical Algorithms", 1998, ch. 22
+and 25); the moon from the low-precision formulas of "The Astronomical
+Almanac"; its lit fraction and the angle of its bright edge from Meeus ch.
+48, turned to the screen by the parallactic angle (ch. 14); rising and
+setting by the standard altitudes of Meeus ch. 15. Checked in
+`jarvis-desktop/tests/sky.mjs` against NASA's published moon phases, the
+published London solstice sunrise and sunset, and an independent program
+(PyEphem) for New York, Denver, Sydney and Singapore: the sun within 2
+minutes, the moon within 6.
+
+**How it looks, and why.**
+
+- The picture looks toward the equator (south in the northern half of the
+  world, north in the southern), so the sun rises on the left in New York
+  and on the right in Sydney, as it does to someone standing outside.
+- Each body follows one fixed arc round the animal, timed by its real hour
+  angle: rising at the side, at the top at noon (the sun) or at its own
+  highest point (the moon), setting at the other side. The arc is a picture
+  of the day, not a camera view: at its top the sun or moon sits ABOVE every
+  animal's head and above the monkey's vine, so a noon sun or a midnight
+  moon is seen rather than hidden; the vine passes in front of it twice a
+  day, like a real branch. The season shows in when it rises and sets.
+- The sky tint is dark by design - at most about a fifth over the app's own
+  ground (tested) - so the animal and the dark themes stay readable: a
+  quiet blue by day, a warm low band at dawn and dusk, deep blue at twilight,
+  nearly nothing at night. Cloud dims the sun and moon.
+- Rain is soft, slanting streaks at low opacity; snow drifts slowly (over ten
+  seconds to cross the picture) with a gentle sway; wind is a few faint lines
+  and a sideways drift of everything else. Thunder is drawn as heavy rain:
+  nothing in the sky ever flashes. The weather is a pure function of the
+  clock, the weather and a hash - never of the frame before - so both apps
+  draw the same rain at the same moment. **The animals themselves move no
+  more in wind than in calm** - the owner asked for calm, so the weather
+  never reaches the pose.
+- It is drawn BEHIND the animal, as a flat 2D picture on the face's own
+  canvas - not in the animal's shader, which is at its size budget. On the
+  desktop the shader leaves its uncovered part see-through while the sky is
+  on (`uSeeThrough`); the phone's shader always did.
+- Calm (reduced) motion: the weather holds still; the sun and moon move only
+  with the real clock anyway (a day to cross the picture). "Keep the animal
+  still": unchanged - it is the sky, not the animal. Not connected, and
+  serious moments: the sky stays (it is calm). Standby: it dims with the
+  animal. Stale weather (over 90 minutes old) is not drawn.
+
+**Known limits.** At a polar day's midnight the sun's arc wraps from one side
+to the other; it fades out for about three quarters of an hour either side
+of that moment rather than jump. Positions are to about 0.3 degree for the
+moon (a few minutes in its rising time) - far finer than the picture shows.
+Not yet seen on a real phone: the phone's drawing (`SkyDraw.kt`) is checked
+by CI's compiler and the emulator only.
 
 ## What was used from Gemini's notes, and what was not
 
@@ -637,12 +799,23 @@ Sketchfab). Four reasons:
   afford on march steps: **panda 59,637 (36 steps), owl 48,520 (48
   steps), otter 55,497 (48 steps)**. The mouth-drawing fixes (see "Mouth
   drawing" under "How the mouths talk") paid for themselves with a one-division smooth minimum:
-  now **panda 58,730, owl 48,158, otter 54,124** (the owl after its sine-free spots, the otter after its fur and water). The panda has about
-  1,270 to spare, so any change to it must still save as much as it adds. CI runs that check on
-  every push, so none of them can quietly grow over.
+  now **panda 58,730, owl 48,113, otter 54,594** (the owl is 48,158 since its sine-free spots). The otter's added detail (fur, wavelets, rings, foam) is all
+  painted once a pixel, and its water's surface became flat in the march
+  (the old rings there were barely visible): it went down, to **54,124**. The panda has about
+  1,270 to spare, so any change to it must still save as much as it adds.
+  The **monkey** is at **58,263 with 36 steps**: it has the most parts (a
+  vine, two arms with elbows, two legs, a four-piece tail, a banana), so
+  its legs are worked out one side at a time (the panda's eyes' trick), its
+  tail's pieces join with a plain minimum, and its tail's thicknesses come
+  ready-made from the pose code. Rendered against 400 small steps it shows
+  no more wrongly drawn pixels than the panda (at 256 px, 8 states by 6
+  views: 55 see-through, 1,767 wrongly opaque - the opaque ones along its
+  outline, mostly seen side-on). CI runs that check on every push, so none
+  of them can quietly grow over.
 - **Cost.** Measured through Skia (the engine Android draws with), per
   pixel: the **panda about 4 to 5 times Nucleus's work**, the **owl about
-  2.3 times** and the **otter about 2.8 times**. (The panda was 10 to 12
+  2.3 times**, the **otter about 2.8 times** and the **monkey about 4
+  times** (measured against the panda: about nine tenths of its work). (The panda was 10 to 12
   times before its rebuild; an even earlier version of this page said "a
   little more than Nucleus", which was a guess, and wrong.) Most of it is
   finding the animal's surface for each pixel; the shadows are the rest.

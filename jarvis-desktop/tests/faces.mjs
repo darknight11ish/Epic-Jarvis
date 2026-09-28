@@ -497,7 +497,7 @@ await check("every animal's shader is within the size Android's compiler accepts
   }
 });
 
-const ANIMALS = ["redpanda", "pygmyowl", "seaotter"];
+const ANIMALS = ["redpanda", "pygmyowl", "seaotter", "monkey"];
 
 await check("every animal is handed every real state, not a borrowed movement", async () => {
   // Most faces have four motion tables and the shell borrows for the other

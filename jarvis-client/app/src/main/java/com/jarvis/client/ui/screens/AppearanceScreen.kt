@@ -207,7 +207,7 @@ fun AppearanceScreen(
     // what battery saver forces. Changes rarely (at most every two seconds).
     val liveBudget by FaceQuality.live.collectAsState()
 
-    // The picker below draws a still of every face, three of them animals
+    // The picker below draws a still of every face, four of them animals
     // whose shaders are large. Built here, on a background thread, as the
     // screen opens, instead of on the main thread in the one frame that first
     // draws those stills - the picker sits further down the list, so this has
@@ -458,8 +458,9 @@ fun AppearanceScreen(
                     "Shared with your desktop",
                     if (desktopSyncs) {
                         "The face and the state colours are sent to your desktop, and a " +
-                            "change made there shows up here too. Nothing else on this " +
-                            "screen leaves the phone."
+                            "change made there shows up here too. The sun, moon and weather " +
+                            "settings are kept on your PC and shared the same way. Nothing " +
+                            "else on this screen leaves the phone."
                     } else {
                         "Not synced: your desktop doesn't support it yet. For now the face " +
                             "and the state colours stay on this phone."
@@ -605,6 +606,11 @@ fun AppearanceScreen(
                     }
                 }
             }
+
+            // The sun, moon and weather behind the animal (the owner's
+            // decisions of 2026-09-28): kept on the PC and shared by both
+            // apps, so next to the face, not in this phone's own "More".
+            item(key = "sky") { SkySection() }
 
             item(key = "colours") {
                 Section("State colours") {

@@ -196,6 +196,9 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # the sun, the moon and the weather behind the animal faces, and the
+    # town list it finds a place in without going online (sky.patch)
+    "jarvis_sky.py", "jarvis_sky_places.py",
 )
 
 

@@ -535,12 +535,52 @@
           </span>
         </label>
 
+        <!-- The sun, the moon and the weather behind the animal (the owner's
+             decisions of 2026-09-28; sky-settings.js; sky.rs get_sky, set_sky;
+             backend jarvis_sky.py). Kept on the PC and shared with the phone,
+             so it is not inside "Face on this computer". Both off by default.
+             The town is typed here only; Open-Meteo ON raises ONE approval
+             card; off, Home Assistant and forgetting the town are at once. -->
+        <div id="sky" class="sky-settings">
+          <h3 class="subhead" id="sky-title">Sun, moon and weather</h3>
+          <p class="state" id="sky-state" role="status">Asking Jarvis…</p>
+          <div id="sky-body" hidden>
+            <label class="toggle">
+              <input id="sky-show" type="checkbox" />
+              <span>
+                <span id="sky-show-label">Show the sun and moon behind the animal</span>
+                <span class="toggle-detail" id="sky-show-detail"></span>
+              </span>
+            </label>
+            <div class="field">
+              <label class="label" for="sky-place" id="sky-place-label">Your town</label>
+              <div class="row">
+                <input id="sky-place" type="text" maxlength="120" spellcheck="false" autocomplete="off" />
+                <button class="btn" id="sky-place-set" type="button">Set</button>
+                <button class="btn" id="sky-place-forget" type="button" hidden>Forget my town</button>
+              </div>
+              <p class="note" id="sky-place-detail"></p>
+              <p class="note" id="sky-place-now"></p>
+              <p class="note" id="sky-today"></p>
+            </div>
+            <fieldset class="theme-list" id="sky-weather-list">
+              <legend class="label" id="sky-weather-label">Weather in the animal's scene</legend>
+              <p class="note" id="sky-weather-detail"></p>
+              <div id="sky-weather-choices"></div>
+            </fieldset>
+            <p class="note" id="sky-weather-status" role="status"></p>
+            <span class="status" id="sky-status" role="status"></span>
+          </div>
+        </div>
+
         <h3 class="subhead">Shared with your phone</h3>
         <p class="note">
           The face and the state colours — which face Jarvis wears, and the
           colour and pattern for each thing it can be doing — are shared with
-          your phone. A change made there shows up here too. Nothing else on
-          this page leaves this computer.
+          your phone. A change made there shows up here too. So are the sun,
+          moon and weather settings above (your phone is shown your town, but
+          only this PC can set it). Nothing else on this page leaves this
+          computer.
         </p>
         <p class="state" id="appearance-shared">Checking whether they are shared…</p>
         <div class="row">
@@ -915,7 +955,7 @@
           </div>
 
           <!-- Each animal's voice (the owner's choice, 2026-09-28): for the
-               red panda, pygmy owl and sea otter, one row each - a voice
+               red panda, pygmy owl, sea otter and monkey, one row each - a voice
                from the built-in list, a pitch (deeper or higher), a pace,
                "Try it" and "Reset to its own voice". The PC's `face_voice`
                block, choices and words its own (custom-voices.js
@@ -1780,6 +1820,7 @@
       </footer>
     </main>
 
+    <script src="sky.js"></script>
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="briefing-settings.js"></script>
@@ -1787,6 +1828,7 @@
     <script type="module" src="account-secrets-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>
     <script type="module" src="asks-first-settings.js"></script>
+    <script type="module" src="sky-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
     <script type="module" src="backup-settings.js"></script>

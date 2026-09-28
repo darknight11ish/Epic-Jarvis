@@ -7,8 +7,8 @@ import com.jarvis.client.FaceState
 
 /**
  * An animal face - a CHARACTER, where the other twenty faces are
- * instruments (rings, orbits, a drum skin). Three of them: [RedPanda],
- * [PygmyOwl] and [SeaOtter], each only its shader and its pose; everything
+ * instruments (rings, orbits, a drum skin). Four of them: [RedPanda],
+ * [PygmyOwl], [SeaOtter] and [Monkey], each only its shader and its pose; everything
  * about how an animal is drawn on the phone lives here, once.
  *
  * A character needs its own pose for every state, so an animal reads the
@@ -172,9 +172,10 @@ abstract class CritterFace(
 
     /**
      * [draw], with the whole picture dimmed for the state (DimRule): every
-     * pixel blended toward [ground] by [FaceFrame.dim] - the shell's own
-     * per-state factor, the same one every other face's colours are dimmed
-     * by. FaceView's `drawFace` calls this, handing [hot] and [cool]
+     * pixel blended toward [ground] by the shell's own per-state factor, the
+     * same one every other face's colours are dimmed by - standby's laid
+     * over [FaceFrame.awakeDim] as far as the pose has nodded off
+     * ([DimRule.sleep]). FaceView's `drawFace` calls this, handing [hot] and [cool]
      * UNdimmed, since the picture's dim covers the orb as well. A null
      * [ground] dims nothing (a caller that has already dimmed the colours).
      *
@@ -182,12 +183,21 @@ abstract class CritterFace(
      * matrix per pixel of the small traced picture, and the software path
      * gets exactly the same picture.
      */
+    /**
+     * The dim this animal is drawn with in frame [f] - [drawDimmed]'s own,
+     * standby's laid over [FaceFrame.awakeDim] as far as the pose has nodded
+     * off ([DimRule.sleep]) - for what is drawn BEHIND it (the sun, moon and
+     * weather, `drawSkyBehind`), which darkens and brightens with it.
+     */
+    fun dimFor(f: FaceFrame): Float = DimRule.sleep(f.awakeDim, overlayOf(pose(f), f.yaw, f.pitch)[0])
+
     fun drawDimmed(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame, ground: Color?,
     ) = with(scope) {
-        paint.colorFilter = filterFor(f.dim, ground)
         val p = pose(f)
+        // Standby's dim follows the pose nodding off and waking (DimRule.sleep).
+        paint.colorFilter = filterFor(DimRule.sleep(f.awakeDim, overlayOf(p, f.yaw, f.pitch)[0]), ground)
         for ((name, v) in uniformsOf(p, f.mouth)) {
             when (v.size) {
                 1 -> shader.setFloatUniform(name, v[0])
@@ -347,10 +357,21 @@ object SeaOtter : CritterFace("seaotter", "Sea Otter", CritterShaders.SEA_OTTER)
 }
 
 /**
- * Compiles all three animals' shaders on the calling thread - meant for a
+ * The monkey, hanging by one arm from its vine and swinging gently, its
+ * banana - its orb - in the other hand; asleep, it sits on the vine.
+ */
+object Monkey : CritterFace("monkey", "Monkey", CritterShaders.MONKEY) {
+    override fun pose(f: FaceFrame) =
+        MonkeyPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f), opts = opts(f))
+    override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = MonkeyPose.uniforms(p, mouth)
+    override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = MonkeyPose.overlay(p, yaw, pitch, 1f)
+}
+
+/**
+ * Compiles all four animals' shaders on the calling thread - meant for a
  * background one ([kotlinx.coroutines.Dispatchers.Default]). Appearance
  * calls it when it opens: its picker draws a still of every face, and
- * compiling three large animal shaders on the main thread the first time
+ * compiling four large animal shaders on the main thread the first time
  * those stills are drawn cost the frame. Drawing is unchanged; each
  * animal's first draw just finds its shader already built.
  */
@@ -358,4 +379,5 @@ fun warmCritterShaders() {
     RedPanda.warm()
     PygmyOwl.warm()
     SeaOtter.warm()
+    Monkey.warm()
 }

@@ -42,6 +42,7 @@ import { EMAIL_APPROVE, EMAIL_DETAIL, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
 import { isHeavy } from "./heavy-approve.js";
 import { relayFaceVoice } from "./face-voice.js";
+import { startSkyFeed } from "./sky-feed.js";
 import {
   actionsOf as focusActionsOf,
   clock as focusClock,
@@ -1453,6 +1454,10 @@ startLink();
   relayFaceVoice(dom.faceFrame, listen);
   listen("appearance-changed", () => readFaceAppearance(false));
   readFaceAppearance(true);
+  // The sun, the moon and the weather behind the animal (sky-feed.js): kept
+  // in this computer's localStorage for the face frame, which holds no
+  // command of its own (capability sky-read).
+  startSkyFeed();
 
   // Ollama and the LiteLLM proxy are not on the bus, so their dots still need
   // one probe. Once, at boot — there is no timer here any more.

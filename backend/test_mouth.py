@@ -655,7 +655,7 @@ REAL_SENTENCES = [
     "Who's there? Oh, it's you!",
 ]
 VOICES = {"default": (0, 1.0, 0.0), "panda": (1, 1.0, 2.0), "owl": (2, 0.85, 1.0),
-          "otter": (4, 1.15, 3.0),
+          "otter": (4, 1.15, 3.0), "monkey": (6, 1.0, 1.0),
           # The deepest an owner may make an animal (2026-09-28), at a quick pace.
           "deep": (9, 1.15, -3.0)}
 

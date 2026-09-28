@@ -652,7 +652,7 @@ private fun FaceVoicePlate(
  * changes nothing, so it is not held.
  *
  * The voice list is folded away behind "Voice: <name>" (eleven chips for
- * each of three animals would bury the rest of the screen); the pitch is two
+ * each of four animals would bury the rest of the screen); the pitch is two
  * buttons either side of its value, which TalkBack reads as words ("2 steps
  * higher") - the desktop draws it as a slider.
  */

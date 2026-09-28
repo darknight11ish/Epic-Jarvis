@@ -262,6 +262,7 @@ pitch rise is the real one:
 | red panda | 1 | 1.0 | +2 semitones |
 | pygmy owl | 2 | 0.85 | +1 |
 | sea otter | 4 | 1.15 | +3 |
+| monkey (added 2026-09-28; not in these clips - `backend/test_mouth.py`'s real-model run covers it) | 6 | 1.0 | +1 |
 
 (`backend/jarvis_voices.py` `FACE_VOICES`.) 24 kHz, 16-bit mono.
 

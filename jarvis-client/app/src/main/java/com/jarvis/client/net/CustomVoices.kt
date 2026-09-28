@@ -36,8 +36,8 @@ import java.util.Locale
  *   becomes that animal's - an on/off switch (`face_voice`), on by default,
  *   the PC's own words and line, no card either way; held on a stale link
  *   like every change sent to the PC.
- * - EACH ANIMAL'S VOICE: under that switch, for the red panda, pygmy owl and
- *   sea otter, one of the built-in voices, a pitch (deeper or higher) and a
+ * - EACH ANIMAL'S VOICE: under that switch, for the red panda, pygmy owl,
+ *   sea otter and monkey, one of the built-in voices, a pitch (deeper or higher) and a
  *   pace - the PC's own choices and words (`face_voice.animals`), no card
  *   either way, held on a stale link; "Reset to its own voice"; "Try it"
  *   plays one fixed line the PC says in that voice, and changes nothing.

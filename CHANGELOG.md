@@ -17,6 +17,23 @@ number as the last part - `0.2.57` is a build of 0.2.
   when something is waiting on you; the otter floats on its back in a
   little pool, taps a glowing pebble while it thinks and covers its eyes
   with its paws to sleep.
+- **A monkey joins the animals**, on both apps - from the owner's own
+  picture: warm brown fur, a big peach heart of a face, round ears, a tuft
+  on top and a long curly tail. It hangs by one arm from a vine and swings
+  gently, a little livelier than the other three; its banana is its orb and
+  glows in your colour for each state. To sleep it climbs up and sits on the
+  vine, tail curled round it. Its voice (with "Voice follows the face") is
+  Michael, one step higher. See `docs/CRITTERS.md`.
+- **The sun, the moon and the weather behind the animals**, on both apps,
+  both off until you switch them on (Settings, Appearance, "Sun, moon and
+  weather" on the PC; Appearance on the phone). Type your town once on the
+  PC and the real sun rises, arcs over the animal and sets at the right
+  times, and at night the moon shows in its real shape - worked out on your
+  own devices, nothing sent anywhere. The weather adds soft rain, slow snow
+  or wind, from your own Home Assistant or from Open-Meteo online (that one
+  asks with an approval card first, because it sends your rough position).
+  It stays dark and calm, dims when Jarvis sleeps, and holds still under
+  reduced motion. See `docs/CRITTERS.md`, "The sky behind the animals".
 - **Animal faces tidied after their audit:** no more see-through specks
   along the otter's outline against its pool; the owl's thinking orb now
   circles clear of its head, and its glow no longer shows through the face;

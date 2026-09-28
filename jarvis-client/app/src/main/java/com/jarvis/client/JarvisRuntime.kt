@@ -519,6 +519,10 @@ object JarvisRuntime {
     /** The serious moment's safety net: 600 s + 300 s (section 38.1). */
     private const val SERIOUS_NET_MS = 900_000L
 
+    /** Where the phone keeps its copy of the sky settings (SkySettings.encode). */
+    private const val SKY_PREFS = "jarvis_sky"
+    private const val SKY_KEY = "stored"
+
     /**
      * When the link was cut - down, or up but stale - for the face; 0 while
      * it is healthy. Set from [linkDownSince] when that is earlier (the drop
@@ -655,6 +659,23 @@ object JarvisRuntime {
         voice = voiceSession
         stream = EventStream(jarvisApi)
         started = true
+
+        // The sun, moon and weather behind the animals (SkySettings): this
+        // phone's last copy first, so the sky shows at once and while the PC
+        // cannot be reached; then the PC's, every POLL_MS while connected.
+        com.jarvis.client.face.SkyNow.stored = com.jarvis.client.net.SkySettings.decode(
+            runCatching { app.getSharedPreferences(SKY_PREFS, Context.MODE_PRIVATE).getString(SKY_KEY, null) }
+                .getOrNull(),
+        )
+        scope.launch {
+            _link.collectLatest { link ->
+                if (link != LinkState.CONNECTED) return@collectLatest
+                while (true) {
+                    runCatching { sky() }
+                    delay(com.jarvis.client.net.SkySettings.POLL_MS)
+                }
+            }
+        }
 
         faceJob = scope.launch {
             // `_stale` is in the combine: a stale link is as cut as a dropped
@@ -1744,6 +1765,49 @@ object JarvisRuntime {
         actionBlocker()?.let { return it }
         val body = com.jarvis.client.net.Manner.humorBody(on)
         return com.jarvis.client.net.Manner.humorReplyLine(api.mannerPost(body), on)
+    }
+
+    // ------------------------------------------ sun, moon and weather ----
+
+    /**
+     * `GET /api/sky` (the owner's decisions of 2026-09-28). A good answer is
+     * also kept for the faces ([com.jarvis.client.face.SkyNow]) and in this
+     * phone's own settings - only the rounded position and the weather
+     * numbers, never the town's name - so the sky keeps moving while the PC
+     * cannot be reached. An older PC means nothing is drawn.
+     */
+    suspend fun sky(): ApiResult<JsonObject> {
+        val r = api.sky()
+        when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.SkySettings.parse(r.value)?.let { keepSky(it) }
+            is ApiResult.Failed -> if (com.jarvis.client.net.SkySettings.missing(r.error)) keepSky(null)
+        }
+        return r
+    }
+
+    private fun keepSky(v: com.jarvis.client.net.SkySettings.View?) {
+        val s = com.jarvis.client.net.SkySettings.storedOf(v)
+        com.jarvis.client.face.SkyNow.stored = s
+        runCatching {
+            appContext?.getSharedPreferences(SKY_PREFS, Context.MODE_PRIVATE)?.edit()
+                ?.putString(SKY_KEY, com.jarvis.client.net.SkySettings.encode(s))?.apply()
+        }
+    }
+
+    /**
+     * ONE sky change ([com.jarvis.client.net.SkySettings]'s bodies: show on or
+     * off, forget the town, a weather source). Adding something is held on a
+     * stale link ([actionBlocker], rule 4); hiding, forgetting and "off" never
+     * are - they only make Jarvis do less. Open-Meteo ON approves nothing
+     * here: the PC raises ONE approval card.
+     */
+    suspend fun setSky(body: String): String {
+        if (com.jarvis.client.net.SkySettings.adds(body)) actionBlocker()?.let { return it }
+        val r = api.skyPost(body)
+        if (r is ApiResult.Ok) {
+            (r.value["view"] as? JsonObject)?.let { com.jarvis.client.net.SkySettings.parse(it) }?.let { keepSky(it) }
+        }
+        return com.jarvis.client.net.SkySettings.replyLine(r)
     }
 
     /** Re-reads `/api/deep`. Starts nothing on the PC. */

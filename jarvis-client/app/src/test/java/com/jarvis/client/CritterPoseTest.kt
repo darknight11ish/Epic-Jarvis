@@ -3,6 +3,7 @@ package com.jarvis.client
 import com.jarvis.client.face.CritterPose
 import com.jarvis.client.face.CritterShaders
 import com.jarvis.client.face.Faces
+import com.jarvis.client.face.MonkeyPose
 import com.jarvis.client.face.OtterPose
 import com.jarvis.client.face.OwlPose
 import kotlinx.serialization.json.Json
@@ -44,6 +45,7 @@ class CritterPoseTest {
             "redpanda" -> CritterPose::pose
             "pygmyowl" -> OwlPose::pose
             "seaotter" -> OtterPose::pose
+            "monkey" -> MonkeyPose::pose
             else -> error("no Kotlin pose for '$species' - add one, or drop it from tools/gen_critters.py")
         }
 
@@ -51,6 +53,7 @@ class CritterPoseTest {
         "redpanda" -> CritterPose::overlay
         "pygmyowl" -> OwlPose::overlay
         "seaotter" -> OtterPose::overlay
+        "monkey" -> MonkeyPose::overlay
         else -> error("no Kotlin pose for '$species'")
     }
 
@@ -58,14 +61,15 @@ class CritterPoseTest {
         "redpanda" -> CritterPose::uniforms
         "pygmyowl" -> OwlPose::uniforms
         "seaotter" -> OtterPose::uniforms
+        "monkey" -> MonkeyPose::uniforms
         else -> error("no Kotlin pose for '$species'")
     }
 
     @Test
     fun `every pose matches the desktop's`() {
         val species = cases.map { it.jsonObject["species"]!!.jsonPrimitive.content }.toSet()
-        assertEquals("the fixture should cover every animal", setOf("redpanda", "pygmyowl", "seaotter"), species)
-        assertTrue("the fixture should cover every state", cases.size >= 3 * 8 * 5)
+        assertEquals("the fixture should cover every animal", setOf("redpanda", "pygmyowl", "seaotter", "monkey"), species)
+        assertTrue("the fixture should cover every state", cases.size >= 4 * 8 * 5)
         for (c in cases) {
             val o = c.jsonObject
             val sp = o["species"]!!.jsonPrimitive.content
@@ -154,6 +158,9 @@ class CritterPoseTest {
             "SEA_OTTER" to (CritterShaders.SEA_OTTER to OtterPose.uniforms(
                 OtterPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),
             ).keys),
+            "MONKEY" to (CritterShaders.MONKEY to MonkeyPose.uniforms(
+                MonkeyPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),
+            ).keys),
         )
         for ((const, pair) in shaders) {
             val (src, names) = pair
@@ -179,6 +186,7 @@ class CritterPoseTest {
         Animal("redpanda", { s, p, since -> CritterPose.pose(s, p, since, 2f, 0.3f) }, CritterPose::uniforms, CritterPose::speakingWeight),
         Animal("pygmyowl", { s, p, since -> OwlPose.pose(s, p, since, 2f, 0.3f) }, OwlPose::uniforms, OwlPose::speakingWeight),
         Animal("seaotter", { s, p, since -> OtterPose.pose(s, p, since, 2f, 0.3f) }, OtterPose::uniforms, OtterPose::speakingWeight),
+        Animal("monkey", { s, p, since -> MonkeyPose.pose(s, p, since, 2f, 0.3f) }, MonkeyPose::uniforms, MonkeyPose::speakingWeight),
     )
 
     @Test
@@ -268,6 +276,8 @@ class CritterPoseTest {
             OwlPose.uniforms(OwlPose.pose(s, p, since, t, 0.3f, hist = h)) },
         "seaotter" to { s: FaceState, p: FaceState, since: Float, t: Float, h: CritterPose.Hist ->
             OtterPose.uniforms(OtterPose.pose(s, p, since, t, 0.3f, hist = h)) },
+        "monkey" to { s: FaceState, p: FaceState, since: Float, t: Float, h: CritterPose.Hist ->
+            MonkeyPose.uniforms(MonkeyPose.pose(s, p, since, t, 0.3f, hist = h)) },
     )
 
     // The eyelids and pupils may be quick (a blink, a glance) and the water's
@@ -409,8 +419,8 @@ class CritterPoseTest {
     }
 
     @Test
-    fun `all three animals are offered`() {
-        for (id in listOf("redpanda", "pygmyowl", "seaotter")) {
+    fun `all four animals are offered`() {
+        for (id in listOf("redpanda", "pygmyowl", "seaotter", "monkey")) {
             assertTrue("$id is not in Faces.all", Faces.all.any { it.id == id })
         }
     }
@@ -440,6 +450,8 @@ class CritterPoseTest {
             OwlPose.uniforms(OwlPose.pose(s, s, 99f, t, 0.3f, opts = o)) },
         "seaotter" to { s: FaceState, t: Float, o: CritterPose.Opts ->
             OtterPose.uniforms(OtterPose.pose(s, s, 99f, t, 0.3f, opts = o)) },
+        "monkey" to { s: FaceState, t: Float, o: CritterPose.Opts ->
+            MonkeyPose.uniforms(MonkeyPose.pose(s, s, 99f, t, 0.3f, opts = o)) },
     )
     // The head's own tilt (its roll, relative to the body): the head's turn
     // is ry(yaw) rx(pitch) rz(roll) in every animal, so the roll is read off
@@ -583,6 +595,8 @@ class CritterPoseTest {
                 OwlPose.overlay(OwlPose.pose(s, p, since, 30f, 0f)) },
             "seaotter" to { s: FaceState, p: FaceState, since: Float ->
                 OtterPose.overlay(OtterPose.pose(s, p, since, 30f, 0f)) },
+            "monkey" to { s: FaceState, p: FaceState, since: Float ->
+                MonkeyPose.overlay(MonkeyPose.pose(s, p, since, 30f, 0f)) },
         )
         for ((id, ov) in sleepers) {
             val asleep = ov(FaceState.STANDBY, FaceState.STANDBY, 99f)
@@ -680,6 +694,9 @@ class CritterPoseTest {
         Sleeper("seaotter", OtterPose::pose, { s, p, since, t, amp, h, o ->
             CritterPose.blend(OtterPose::stateTargets, OtterPose.HALF, s, p, since, t, amp, CritterPose.Look(), h, o)
         }, OtterPose::uniforms, OtterPose::overlay),
+        Sleeper("monkey", MonkeyPose::pose, { s, p, since, t, amp, h, o ->
+            CritterPose.blend(MonkeyPose::stateTargets, MonkeyPose.HALF, s, p, since, t, amp, CritterPose.Look(), h, o)
+        }, MonkeyPose::uniforms, MonkeyPose::overlay),
     )
     // Asleep for 9 s (awake for 20 before that), and awake for 20 s.
     private val asleep9 = CritterPose.Hist(past = listOf(
@@ -691,11 +708,20 @@ class CritterPoseTest {
         FaceState.LISTENING, FaceState.APPROVAL -> 0.28f
         else -> 0f
     }
-    /** The biggest difference between two poses' uniforms, leaving out the eyelids (and, if asked, the pupils). */
-    private fun bodyGap(a: Map<String, FloatArray>, b: Map<String, FloatArray>): Float {
+    /**
+     * The biggest difference between two poses' uniforms, leaving out the
+     * eyelids - and, with [vine], how far back the monkey's vine is (and its
+     * hand on it, and so that arm's elbow). The monkey sleeps sitting ON its vine and hangs from it
+     * awake, so the plain settling alone would draw the vine straight through
+     * it; it always sends the vine behind while it passes (critter-monkey.js's
+     * wakeSleep). That is part of the move, not an extra, so it stays under
+     * calm, serious and still, and waking into waiting on you.
+     */
+    private fun bodyGap(a: Map<String, FloatArray>, b: Map<String, FloatArray>, vine: Boolean = false): Float {
         var worst = 0f
         for ((name, v) in a) for (i in v.indices) {
             if (name == "uFace" && i < 2) continue
+            if (vine && ((name == "uVine" && i == 1) || (name == "uHandA" && i == 2) || name == "uElbA")) continue
             worst = maxOf(worst, abs(v[i] - b.getValue(name)[i]))
         }
         return worst
@@ -752,7 +778,7 @@ class CritterPoseTest {
                 val x = f * 0.05f
                 val got = a.uniforms(a.pose(s, FaceState.STANDBY, x, 160f + x, ampOf(s), CritterPose.Look(), asleep9, opts()), null)
                 val was = a.uniforms(a.plain(s, FaceState.STANDBY, x, 160f + x, ampOf(s), asleep9, opts()), null)
-                val gap = bodyGap(got, was)
+                val gap = bodyGap(got, was, a.id == "monkey")
                 assertTrue("${a.id} $s: the body moved ${gap} more than it used to, ${x} s after waking", gap < 1e-4f)
             }
         }
@@ -766,7 +792,7 @@ class CritterPoseTest {
                     val x = f * 0.05f
                     val got = a.uniforms(a.pose(s, p, x, 190f + x, 0f, CritterPose.Look(), h, o), null)
                     val was = a.uniforms(a.plain(s, p, x, 190f + x, 0f, h, o), null)
-                    val gap = bodyGap(got, was)
+                    val gap = bodyGap(got, was, a.id == "monkey")
                     assertTrue("${a.id} $s from $p $o: the body moved ${gap} more than it used to at ${x} s", gap < 1e-4f)
                 }
             }

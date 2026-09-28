@@ -905,10 +905,20 @@ data class FaceFrame(
     /**
      * How much of the animals' sleeping Zs to show, 0..1: 1 unless Jarvis
      * cannot be reached (FaceView's `offline`), when the host eases it to 0
-     * over [ZS_FADE_S] - not connected is the hollow ring alone, never Zs.
-     * The Zs themselves only show asleep (standby); see `CritterFace.drawZs`.
+     * over [ZS_FADE_S] - not connected is the hollow ring alone, never Zs -
+     * and eases it back in only on standby (`ZsRule.step`), so a link that
+     * returns straight into an awake state never flashes the Zs while the
+     * animal wakes. The Zs themselves only show asleep; see `CritterFace.drawZs`.
      */
     val zsW: Float = 1f,
+    /**
+     * The dim of the state shown, or on standby of the state before it: what
+     * an animal is dimmed by while awake. Its standby dim is laid over this
+     * as far as its pose has nodded off (`DimRule.sleep`), so it darkens and
+     * brightens in step with falling asleep and waking. [dim] stays the
+     * state's own, for every other face.
+     */
+    val awakeDim: Float = 1f,
     /**
      * The Zs' colour: the colour bound to the state shown (its fixed tint,
      * never the pattern's colour of the moment), lightened toward white by
@@ -1040,6 +1050,8 @@ class FaceHost {
     private var stillRamp = 0f
     // The Zs' weight (FaceFrame.zsW), eased; starts shown.
     private var zsRamp = 1f
+    // FaceFrame.awakeDim: the dim standby's is laid over (DimRule.awakeAfter).
+    private var awakeDim = 1f
     private var zsTint: Color = Color.White
 
     // The voice's mouth this frame (see FaceFrame.mouth); meaningful only
@@ -1208,7 +1220,8 @@ class FaceHost {
         calmRamp = ramp(calmRamp, calm, step)
         seriousRamp = ramp(seriousRamp, serious, step)
         stillRamp = ramp(stillRamp, still, step)
-        zsRamp = ramp(zsRamp, !offline, dtIn / ZS_FADE_S)
+        zsRamp = ZsRule.step(zsRamp, offline, state == FaceState.STANDBY, dtIn / ZS_FADE_S)
+        awakeDim = DimRule.awakeAfter(awakeDim, state)
         zsTint = lift(bindings.of(state).tint ?: Palette.NEUTRAL_3, CritterPose.Zs.LIGHTEN)
         // Seen only by a face left on screen for about nine hours without a
         // break - otherwise the loop's restart has already done it, unseen.
@@ -1372,6 +1385,7 @@ class FaceHost {
             amp = drive,
             speechPush = if (state == FaceState.SPEAKING) voice else mic,
             dim = tf.dim,
+            awakeDim = awakeDim,
             overlay = tf.overlay,
             clockFrac = clockFrac,
             hitchPhase = sinceChange,
@@ -1464,6 +1478,10 @@ private fun DrawScope.drawFace(
     // keeps that single-ground guarantee while letting the ground itself be
     // themed, since a theme applies to every face identically or not at all.
     drawRect(background, size = Size(size.width, size.height))
+    // The sun, moon and weather behind an animal, when the owner has switched
+    // them on (the owner's decisions of 2026-09-28; SkyDraw.kt). Before the
+    // animal, so it is in front; never on a picker's still thumbnail.
+    if (face is CritterFace && !f.still) drawSkyBehind(face, f, background)
 
     val hot = dimmed(f.swatch.a, f.dim, background)
     val cool = dimmed(f.swatch.b, f.dim, background)

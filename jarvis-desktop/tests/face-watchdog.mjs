@@ -279,12 +279,18 @@ await check("standby and banked dim the whole animal, as much as they dim other 
   const got = await page.evaluate((SRC) => {
     const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
     const out = {};
-    for (const id of ["redpanda", "pygmyowl", "seaotter", "arc"]) {
+    for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey", "arc"]) {
       out[id] = {};
       for (const st of ["idle", "standby", "banked"]) {
         const s = (0, eval)(SRC)(id);
         s.gpuOk = false; sizeSurface(s);     // the flat drawing: the same on any machine
-        for (let i = 0; i < 40; i++) drawSurface(s, 1 / 30, st);
+        // Five seconds on the pose's clock: standby's dim follows the animal
+        // nodding off (sleepDim), which takes about three.
+        const realNow = performance.now, t0 = realNow.call(performance);
+        let fake = t0;
+        performance.now = () => fake;
+        for (let i = 0; i < 150; i++) { fake += 1000 / 30; drawSurface(s, 1 / 30, st); }
+        performance.now = realNow;
         const d = s.ctx.getImageData(0, 0, s.w, s.h).data;
         let sum = 0;
         for (let i = 0; i < d.length; i += 4) sum += 0.2126 * lin(d[i]) + 0.7152 * lin(d[i + 1]) + 0.0722 * lin(d[i + 2]);
@@ -297,7 +303,7 @@ await check("standby and banked dim the whole animal, as much as they dim other 
   }, SURFACE.toString());
   await page.close();
   console.log("      standby/idle, banked/idle:", JSON.stringify(got));
-  for (const id of ["redpanda", "pygmyowl", "seaotter"]) {
+  for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey"]) {
     assert.ok(got[id].standby < 0.6, `${id} standby is ${got[id].standby} of idle`);
     assert.ok(got[id].banked < got[id].standby, `${id} banked is not dimmer than standby`);
   }
@@ -313,7 +319,13 @@ await check("the animal's orb is not dimmed twice", async () => {
     let hot = null;
     const th = THEME.redpanda, real = th.flat;
     th.flat = function (g, w, h, st) { hot = this.st[st].hot; return real.apply(this, arguments); };
-    for (let i = 0; i < 40; i++) drawSurface(s, 1 / 30, "standby");
+    // Five seconds on the pose's clock: standby's dim follows the animal
+    // nodding off (sleepDim), which takes about three.
+    const realNow = performance.now;
+    let fake = realNow.call(performance);
+    performance.now = () => fake;
+    for (let i = 0; i < 150; i++) { fake += 1000 / 30; drawSurface(s, 1 / 30, "standby"); }
+    performance.now = realNow;
     th.flat = real;
     return { hot, colour: s.colShown.a, dim: FACE_DIM };
   }, SURFACE.toString());
@@ -323,10 +335,10 @@ await check("the animal's orb is not dimmed twice", async () => {
 });
 
 await check("an animal whose pose script failed still draws, still and neutral", async () => {
-  const page = await editor((p) => p.route(/critter-(pose|owl|otter)\.js$/, (r) => r.abort()));
+  const page = await editor((p) => p.route(/critter-(pose|owl|otter|monkey)\.js$/, (r) => r.abort()));
   const got = await page.evaluate((SRC) => {
     const out = {};
-    for (const id of ["redpanda", "pygmyowl", "seaotter"]) {
+    for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey"]) {
       const s = (0, eval)(SRC)(id);
       drawSurface(s, 1 / 30, "idle");
       const d = s.ctx.getImageData(0, 0, s.w, s.h).data;

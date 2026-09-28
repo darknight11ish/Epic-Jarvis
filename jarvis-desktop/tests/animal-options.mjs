@@ -172,6 +172,76 @@ await check("reduced motion: one still z, no rising ones", async () => {
   assert.ok(got.every((n) => n === 1), `under reduced motion: ${JSON.stringify(got)}`);
 });
 
+await check("a link that comes back straight into an awake state never flashes the Zs while the animal wakes", async () => {
+  // The host's offline fade used to come back in (over half a second) at the
+  // same moment the waking pose's own asleep weight was falling (over ~0.7
+  // s): the Zs showed again for a moment during the wake-up. The offline
+  // weight now comes back only on standby (zsStep).
+  const page = await editor();
+  const got = await page.evaluate(() => {
+    const s = __surface("redpanda");
+    __run(s, "standby", 8);
+    s.offline = true;
+    __run(s, "standby", 1.5);
+    const gone = window.__faceZs.asleep;
+    s.offline = false;
+    const waking = __run(s, "idle", 3, () => ({ a: window.__faceZs.asleep, n: window.__faceZs.shown }));
+    const zsR = THEME.redpanda.mem.get(s.view).zsR;
+    __run(s, "standby", 6);
+    const again = { a: window.__faceZs.asleep, n: window.__faceZs.shown };
+    const rule = [zsStep(0.5, true, true, 0.1), zsStep(0.5, false, true, 0.1), zsStep(0.5, false, false, 0.1)];
+    return { gone, worst: Math.max(...waking.map((w) => w.a)), shown: Math.max(...waking.map((w) => w.n)), zsR, again, rule };
+  });
+  const errors = page.__errors;
+  await page.close();
+  assert.ok(got.gone < 0.002, `Zs while not connected: ${JSON.stringify(got)}`);
+  assert.ok(got.worst <= 0.002 && got.shown === 0, `the Zs came back while it woke: ${JSON.stringify(got)}`);
+  assert.equal(got.zsR, 0, "the offline weight came back while awake");
+  assert.ok(got.again.a > 0.99 && got.again.n >= 1, `no Zs the next time it slept: ${JSON.stringify(got)}`);
+  assert.deepEqual(got.rule.map((x) => +x.toFixed(6)), [0.4, 0.6, 0.5]);
+  assert.deepEqual(errors || [], []);
+});
+
+await check("standby's dim follows the animal nodding off and waking; banked and error are unchanged", async () => {
+  // The whole animal used to dim as soon as standby started, while its pose
+  // took ~3 s to nod off, and brighten at once on waking while it took ~2 s
+  // to wake. Standby's dim now follows the pose's asleep weight (sleepDim).
+  const page = await editor();
+  const got = await page.evaluate(() => {
+    const out = {};
+    for (const id of ["redpanda", "pygmyowl", "seaotter"]) {
+      const s = __surface(id);
+      const dim = () => FACE_DIM;
+      __run(s, "idle", 3);
+      const off = __run(s, "standby", 4, dim);
+      const wake = __run(s, "idle", 3, dim);
+      const banked = __run(s, "banked", 1, dim);
+      const toSleep = __run(s, "standby", 4, dim);
+      __run(s, "idle", 3);
+      const error = __run(s, "error", 1, dim);
+      out[id] = { off, wake, banked: banked[banked.length - 1], toSleep, error: error[error.length - 1] };
+    }
+    return { out, standby: STATE_FX.standby.dim, bankedDim: STATE_FX.banked.dim, errorDim: STATE_FX.error.dim,
+             rule: [sleepDim(1, 0), sleepDim(1, 1), sleepDim(0.45, 1), sleepDim(1, 0.5)] };
+  });
+  const errors = page.__errors;
+  await page.close();
+  const sb = got.standby;
+  for (const [id, d] of Object.entries(got.out)) {
+    assert.ok(d.off[15] > 0.97, `${id} dimmed before it nodded off: ${d.off[15]}`);
+    for (let i = 1; i < d.off.length; i++) assert.ok(d.off[i] <= d.off[i - 1] + 1e-6, `${id} brighter at frame ${i} while nodding off`);
+    assert.ok(Math.abs(d.off[d.off.length - 1] - sb) < 1e-4, `${id} asleep at ${d.off[d.off.length - 1]}`);
+    assert.ok(d.wake[0] < sb + 0.05, `${id} brightened at once on waking: ${d.wake[0]}`);
+    for (let i = 1; i < d.wake.length; i++) assert.ok(d.wake[i] >= d.wake[i - 1] - 1e-6, `${id} darker at frame ${i} while waking`);
+    assert.ok(Math.abs(d.wake[d.wake.length - 1] - 1) < 1e-4, `${id} awake at ${d.wake[d.wake.length - 1]}`);
+    assert.ok(Math.abs(d.banked - got.bankedDim) < 1e-3, `${id} banked at ${d.banked}`);
+    assert.ok(d.toSleep.every((x) => x >= got.bankedDim - 1e-3 && x <= sb + 1e-4), `${id} jumped on falling asleep from banked`);
+    assert.ok(Math.abs(d.error - got.errorDim) < 1e-3, `${id} error at ${d.error}`);
+  }
+  assert.deepEqual(got.rule.map((x) => +x.toFixed(6)), [1, sb, sb, 0.8]);
+  assert.deepEqual(errors || [], []);
+});
+
 await check("Keep the animal still: saved in Settings, read by every face page, eased into the pose", async () => {
   // Settings writes it, to this computer's storage...
   const settings = await K.open(browser, base, "settings.html", {}, { width: 760, height: 1400 });
@@ -207,6 +277,49 @@ await check("Keep the animal still: saved in Settings, read by every face page, 
   assert.equal(start, true, "the Faces window did not read the saved choice");
   assert.ok(eased.first >= 0.99 && eased.last === 1, `still did not reach the pose: ${JSON.stringify(eased)}`);
   assert.equal(after, false, "an open face page did not hear the change");
+});
+
+await check("the monkey does what every animal does: sleeps with Zs, none offline, wakes, Still and serious ease in", async () => {
+  // The owner (2026-09-28): the fourth animal must do everything the other
+  // three can. Its own face page, its own pose: nodding off and waking,
+  // the Zs (and none while not connected), Still and a serious moment eased
+  // into its pose, and no errors along the way.
+  const page = await editor();
+  const got = await page.evaluate(() => {
+    const s = __surface("monkey");
+    const m = () => THEME.monkey.mem.get(s.view);
+    __run(s, "idle", 2);
+    const awake = window.__faceZs ? window.__faceZs.shown : 0;
+    const early = __run(s, "standby", 1.5, () => window.__faceZs.shown);
+    __run(s, "standby", 5);
+    const asleep = { shown: window.__faceZs.shown, a: window.__faceZs.asleep };
+    s.offline = true;
+    __run(s, "standby", 1.5);
+    const offline = { shown: window.__faceZs.shown, a: window.__faceZs.asleep };
+    s.offline = false;
+    __run(s, "standby", 1.5);
+    const back = window.__faceZs.shown;
+    __run(s, "idle", 3);
+    const woke = { shown: window.__faceZs.shown, a: window.__faceZs.asleep };
+    FACE_STILL = true;
+    const still = __run(s, "idle", 1.2, () => m().stillR);
+    FACE_STILL = false;
+    setSerious(true);
+    const serious = __run(s, "idle", 1.2, () => m().seriousR);
+    setSerious(false);
+    return { awake, early: Math.max(...early), asleep, offline, back, woke,
+             still: [still[0], still[still.length - 1]], serious: [serious[0], serious[serious.length - 1]] };
+  });
+  const errors = page.__errors;
+  await page.close();
+  assert.equal(got.early, 0, `Zs before it was asleep: ${JSON.stringify(got)}`);
+  assert.ok(got.asleep.shown >= 1 && got.asleep.a > 0.99, `no Zs asleep: ${JSON.stringify(got)}`);
+  assert.ok(got.offline.shown === 0 && got.offline.a < 0.002, `Zs while not connected: ${JSON.stringify(got)}`);
+  assert.ok(got.back >= 1, `the Zs did not come back: ${JSON.stringify(got)}`);
+  assert.ok(got.woke.shown === 0 && got.woke.a < 0.05, `Zs after waking: ${JSON.stringify(got)}`);
+  assert.ok(got.still[0] < 0.1 && got.still[1] === 1, `Still did not ease in: ${JSON.stringify(got)}`);
+  assert.ok(got.serious[0] < 0.1 && got.serious[1] === 1, `serious did not ease in: ${JSON.stringify(got)}`);
+  assert.deepEqual(errors || [], []);
 });
 
 await check("Keep the animal still changes nothing on a face that is not an animal", async () => {

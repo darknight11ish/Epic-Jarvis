@@ -359,7 +359,9 @@ def t_face_voice_needs_an_animal_face():
     _show_face(d, "nucleus")
     check("a face that is not an animal: still the owner's own voice",
           V.face_voice() is None and V.builtin_voice()[2] == 0.0)
-    check("... and the line names the three animals",
+    check("... and the line names the four animals",
+          "Monkey" in V.face_voice_view()["line"])
+    check("... the panda among them",
           "Red Panda" in V.face_voice_view()["line"])
     _show_face(d, ["redpanda"])
     check("a damaged face in appearance.json is no face", V.appearance_face() == "")
@@ -369,7 +371,7 @@ def t_face_voice_needs_an_animal_face():
 def t_each_animal_speaks_in_its_own_voice():
     d = reset()
     for face, sid, pace, semis in (("redpanda", 1, 1.0, 2.0), ("pygmyowl", 2, 0.85, 1.0),
-                                   ("seaotter", 4, 1.15, 3.0)):
+                                   ("seaotter", 4, 1.15, 3.0), ("monkey", 6, 1.0, 1.0)):
         _show_face(d, face)
         check(f"{face}: its own voice, pace and pitch",
               V.builtin_voice() == (sid, pace, semis, face), V.builtin_voice())
@@ -531,14 +533,15 @@ def t_each_animal_voice_can_be_changed():
                                                 "semitones": -1.5, "pace": "faster"})],
           (EVENTS, AUDIT))
     rows = {r["face"]: r for r in out["face_voice"]["animals"]}
-    check("the view lists all three animals, the panda marked changed",
-          list(rows) == ["redpanda", "pygmyowl", "seaotter"] and rows["redpanda"]["changed"]
+    check("the view lists all four animals, the panda marked changed",
+          list(rows) == ["redpanda", "pygmyowl", "seaotter", "monkey"] and rows["redpanda"]["changed"]
           and not rows["pygmyowl"]["changed"] and rows["redpanda"]["voice"] == "Sarah"
           and rows["redpanda"]["own"] == {"speaker": "1", "semitones": 2.0, "pace": "normal"},
           rows)
     check("each row has a line in words",
           rows["redpanda"]["line"] == "Sarah, 1.5 steps deeper, a little faster."
-          and rows["pygmyowl"]["line"] == "Nicole, 1 step higher, a little slower.",
+          and rows["pygmyowl"]["line"] == "Nicole, 1 step higher, a little slower."
+          and rows["monkey"]["line"] == "Michael, 1 step higher, at normal pace.",
           [r["line"] for r in rows.values()])
     ch = out["face_voice"]["animal_choices"]
     check("the choices come from the PC: the 11 voices, three paces, the pitch range",

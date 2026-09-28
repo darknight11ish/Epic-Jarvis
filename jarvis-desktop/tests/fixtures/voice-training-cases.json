@@ -8972,6 +8972,21 @@
               "semitones": 3.0,
               "speaker": "4",
               "voice": "Sky"
+            },
+            {
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
             }
           ],
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -9105,6 +9120,21 @@
               "semitones": 3.0,
               "speaker": "4",
               "voice": "Sky"
+            },
+            {
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
             }
           ],
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -9125,7 +9155,7 @@
     },
     "animal_try_bad": {
       "body": {
-        "error": "choose the Red Panda, the Pygmy Owl or the Sea Otter",
+        "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey",
         "ok": false
       },
       "code": 400
@@ -9356,6 +9386,21 @@
               "semitones": 3.0,
               "speaker": "4",
               "voice": "Sky"
+            },
+            {
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
             }
           ],
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -9489,6 +9534,21 @@
               "semitones": 3.0,
               "speaker": "4",
               "voice": "Sky"
+            },
+            {
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
             }
           ],
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -9779,6 +9839,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -10078,6 +10153,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -10377,6 +10467,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -10649,6 +10754,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -10917,6 +11037,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -11185,6 +11320,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -11453,6 +11603,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -11727,6 +11892,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -12026,6 +12206,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -12325,6 +12520,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -12622,6 +12832,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -12921,6 +13146,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -13230,6 +13470,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -13529,6 +13784,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -13818,6 +14088,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -14102,6 +14387,21 @@
             "semitones": 3.0,
             "speaker": "4",
             "voice": "Sky"
+          },
+          {
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",

@@ -604,6 +604,33 @@ window.JARVIS_SPEC = Object.freeze({
         "min": 0.05,
         "substeps_max": 1
       }
+    },
+    {
+      "archived": false,
+      "character": {
+        "note": "The fourth animal (2026-09-28), from the owner's picture of a cartoon monkey. Hangs by one arm from a vine across the top of the picture and swings gently round its hand, holding a banana that is its orb - it glows in the state colour and lights the monkey like the others' orbs. A little livelier than the other three, still smooth. All eight states: swings, looks about and does small things when idle, leans in with its ears turned to listen, holds its banana up and looks into it to think, talks with Jarvis's voice, hangs still and looks at you holding its banana out a little for approval (no wave), climbs up and sits on the vine asleep with its tail curled round it for standby, a still, concerned look at an error, dozes where it hangs when banked.",
+        "pose": "see the red panda's entry: the same scheme, in critter-monkey.js and MonkeyPose.kt",
+        "shader": "jarvis-desktop/critters/common_head.sksl + monkey.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
+      },
+      "dim": "3d",
+      "geometry": "sphere-traced soft-body character",
+      "heavy": false,
+      "id": "monkey",
+      "integrates_per_frame": false,
+      "name": "Monkey",
+      "render": {
+        "fit": 1.0,
+        "max_px": 1800,
+        "supersample_max": 2.0,
+        "target_fps": 60
+      },
+      "speed": {
+        "curve": "log",
+        "default": 1.0,
+        "max": 6.0,
+        "min": 0.05,
+        "substeps_max": 1
+      }
     }
   ],
   "frame_rate": {
@@ -1924,6 +1951,12 @@ window.JARVIS_SPEC = Object.freeze({
         "kind": "cpu_sim_gpu_mesh",
         "web": "WebGL2 indexed triangle mesh, per-pixel normals, depth buffer, MSAA.",
         "why": "The physics is cheap and stays on the CPU. The drawing was the expensive part: one flat-filled quad per cell, so every cell was visible as a facet and the rim as a staircase."
+      },
+      "monkey": {
+        "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda.",
+        "kind": "sdf_raymarch",
+        "web": "WebGL2 fragment shader; flat canvas monkey as the fallback.",
+        "why": "The same scheme as the red panda, plus the vine it hangs from and a banana for its orb."
       },
       "nucleus": {
         "android": "RuntimeShader (AGSL) on API 33+, which takes essentially the same source; GLES 3.0 through a GLSurfaceView below that.",

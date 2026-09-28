@@ -139,6 +139,7 @@ on a throwaway copy instead.
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -6947,7 +6948,7 @@ with those two - see `jarvis_voices.KOKORO_VOICES`'s own comment for the
 full reasoning and the caveat.
 
 **Also new (2026-09-27, the owner's choice): "Voice follows the face"** -
-with the red panda, pygmy owl or sea otter face showing, the built-in voice
+with the red panda, pygmy owl, sea otter or monkey face showing, the built-in voice
 becomes that animal's: one of the Kokoro voices already installed, its own
 pace, and a small pitch rise (`jarvis_voices.FACE_VOICES`; the face is read
 from `appearance.json`). An on/off switch, **on by default**, right under
@@ -13927,3 +13928,61 @@ With the real voice files (`JARVIS_KOKORO_DIR` = a kokoro-en-v0_19 folder)
   48,424 lines (this repository's docs and the 36 test sentences) it
   matched piper-phonemize on all but 8 odd code fragments; any mismatch makes that sentence's length check
   fail, and it simply has no mouth block.
+
+# The sky behind the animals: `jarvis_sky.py`, `sky.patch` (2026-09-28)
+
+## In plain words
+
+Two options for the animal faces, both off until switched on: the real sun
+and moon for your town behind the animal, and rain, snow or wind. You type
+your town once on the PC (Settings, Appearance, "Sun, moon and weather");
+the PC finds it in a list of towns it carries and keeps only a rough
+position. Nothing goes online for the sun and moon - each app works them out
+itself. The weather comes from your own Home Assistant, or from Open-Meteo
+on the internet if you choose it and approve its card.
+
+## Owner steps (one line each, in PowerShell)
+
+Nothing new to install: `apply-patches.ps1` copies the two modules and
+applies `sky.patch`, like every other feature. Then, in the desktop's
+Settings, Appearance: switch on "Show the sun and moon behind the animal",
+type your town and press Set. For the weather from Home Assistant, it must
+already be set up for Jarvis (the same device the morning briefing reads).
+
+## What the code does
+
+- `jarvis_sky.py`: the settings (`<config dir>/sky.json`: on or off, the town
+  with its position rounded to 0.1 degree, the weather source and the
+  position an Open-Meteo card approved), the town search (offline, accents
+  and "St." ignored, a state or country after a comma, or a typed position),
+  the two weather reads, the cache (read again after 20 minutes, a failure
+  after 30, and only while an app asks), the Open-Meteo card, and the route.
+- `jarvis_sky_places.py`: about 16,000 towns from GeoNames (CC BY 4.0),
+  made by `tools/gen_sky_places.py` - one long string, no code.
+- Home Assistant: the morning briefing's own rules (`jarvis_briefing.
+  _weather_source`) and weather device (`jarvis_home.weather_entity`), one
+  GET of its state through the gate as `home_read`, at tier auto only.
+- Open-Meteo: one fixed address, the rounded position and four value names,
+  no proxy, no redirect, 10 s, 64 KB; ON is a `change_own_config` card that
+  names the exact numbers, good for that position only.
+- `jarvis_reach.py`: a row, "Weather for the animal's scene".
+- Never: the town or position in a log line, the audit log or anything the
+  AI model sees.
+
+## Test it
+
+    python3 backend/test_sky.py
+    python3 tools/gen_sky_cases.py --check
+    python3 backend/run_suites.py
+
+## Not checked, said plainly
+
+- **Not run on the owner's PC, and Open-Meteo was never actually called**:
+  every read in the tests is injected (no network in the container's tests).
+  The address and the four value names follow Open-Meteo's published API
+  (`/v1/forecast`, `current=`, `wind_speed_unit=ms`); if Open-Meteo changes
+  it, the status line says it could not read the answer and no weather is
+  drawn.
+- A Home Assistant weather device whose attributes run past 500 characters
+  (`jarvis_home`'s cap) loses its wind; the condition still draws.
+

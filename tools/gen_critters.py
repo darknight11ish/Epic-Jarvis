@@ -36,11 +36,11 @@ ROOT = Path(__file__).resolve().parent.parent
 CRITTERS = ROOT / "jarvis-desktop" / "critters"
 # Each animal: its face id (also its .sksl file name), and the name of its
 # shader constant on the phone. The desktop's copy is keyed by the face id.
-ANIMALS = [("redpanda", "RED_PANDA"), ("pygmyowl", "PYGMY_OWL"), ("seaotter", "SEA_OTTER")]
+ANIMALS = [("redpanda", "RED_PANDA"), ("pygmyowl", "PYGMY_OWL"), ("seaotter", "SEA_OTTER"), ("monkey", "MONKEY")]
 # The pose code, in load order: critter-pose.js holds the shared helpers and
 # the panda; each other animal's file registers itself with it.
 POSE_JS = [ROOT / "jarvis-desktop" / "src" / f
-           for f in ("critter-pose.js", "critter-owl.js", "critter-otter.js")]
+           for f in ("critter-pose.js", "critter-owl.js", "critter-otter.js", "critter-monkey.js")]
 OUT_JS = ROOT / "jarvis-desktop" / "src" / "critters-gen.js"
 OUT_KT = (ROOT / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
           / "client" / "face" / "CritterShaders.kt")
@@ -62,12 +62,16 @@ precision highp float;
 GLSL_MAIN = """
 uniform vec2 uRes;
 uniform vec3 uBg;
+// 1 while a picture is drawn BEHIND the animal (the sun, moon and weather,
+// sky.js): the uncovered part is left see-through (premultiplied, as the
+// phone's AGSL main always returns it). 0: laid over uBg, as before.
+uniform float uSeeThrough;
 out vec4 oCol;
 void main() {
     // gl_FragCoord counts y UP the screen, which is what critter() wants.
     vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / min(uRes.x, uRes.y) * 2.0;
     vec4 c = critter(p);
-    oCol = vec4(uBg * (1.0 - c.a) + c.rgb, 1.0);
+    oCol = uSeeThrough > 0.5 ? c : vec4(uBg * (1.0 - c.a) + c.rgb, 1.0);
 }
 """
 
@@ -96,17 +100,18 @@ STATES = ["idle", "listening", "thinking", "speaking", "approval", "standby", "e
 MOMENTS = {
     # A blink starting (each animal blinks on its own clock), and one of the
     # double blinks.
-    "blink": {"redpanda": 4.0, "pygmyowl": 7.285, "seaotter": 5.45},
-    "double": {"redpanda": 54.9, "pygmyowl": 18.32, "seaotter": 24.26},
+    "blink": {"redpanda": 4.0, "pygmyowl": 7.285, "seaotter": 5.45, "monkey": 3.465},
+    "double": {"redpanda": 54.9, "pygmyowl": 18.32, "seaotter": 24.26, "monkey": 6.71},
     # The middle of each idle happening, in the order of its kinds.
     "happen": {
         "redpanda": [117.15, 81.4, 70.3, 150.1, 132.51],              # stretch, tail flick, scratch, hears L, R
         "pygmyowl": [85.13, 342.55, 306.45, 101.58, 133.49, 65.74],  # ruffle, wing L, R, tilt L, R, slow blink
         "seaotter": [101.83, 56.48, 23.65, 39.48, 163.71],           # face wash, roll L, R, kick, pebble rub
+        "monkey": [5.26, 83.68, 101.51, 70.01, 17.96, 214.61],      # scratch, banana, kick, swing, look round, tail
     },
     # Half a second into each speaking gesture: a nod, a paw (wing) lifted, a tilt.
     "gesture": {"redpanda": [44.78, 52.85, 12.84], "pygmyowl": [64.77, 12.88, 16.7],
-                "seaotter": [18.64, 55.01, 65.06]},
+                "seaotter": [18.64, 55.01, 65.06], "monkey": [3.09, 32.78, 127.06]},
 }
 # Clock values exactly representable as 32-bit floats (the phone's clock is
 # one): a day, and three. (Much past a week the phone's own clock only
