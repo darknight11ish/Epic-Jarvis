@@ -11,14 +11,19 @@ package com.jarvis.client.data
  *
  * A REGEX HEURISTIC, SAID PLAINLY - it is a good-faith reduction of risk,
  * never a guarantee. What it catches:
- *   - a plain run of 4 to 8 digits ("482913", "2026") that sits anywhere in
- *     a message carrying a trigger word in English ("code", "otp",
- *     "verification", "passcode", "authenticat...", "2fa", "security
- *     code", "access code", "login code", "one-time"/"one time",
- *     "confirmation code");
+ *   - a plain run of 4 to 8 digits ("482913", "2026") anywhere in a
+ *     notification whose title OR text carries a trigger word: in English
+ *     ("code", "otp", "verification", "passcode", "PIN", "authenticat...",
+ *     "2fa", "log in"/"login", "sign in", "one-time"/"one time"...), or the
+ *     word for "code" in Spanish/Portuguese ("código"), Italian ("codice"),
+ *     Polish/Turkish ("kod") and Russian ("код"). Title and text are
+ *     checked TOGETHER: a title "Verification code" over a text "Use 482913
+ *     to sign in" hides the code in the text (the 2026-09-28 audits found
+ *     the two checked apart let exactly that through);
  *   - the common "NNN NNN" / "NNN-NNN" six-digit grouping (Google's,
  *     Microsoft's and Apple's own display style for a 6-digit code), with
- *     or without a trigger word;
+ *     or without a trigger word - but never a group that is part of a
+ *     longer run of groups, such as a phone number "555-123-4567";
  *   - a run of 4 to 8 digits, with an optional single leading letter and
  *     dash (Google's "G-123456" shape), when it is the ENTIRE notification
  *     text on its own (nothing else but ordinary trailing punctuation) -
@@ -33,10 +38,10 @@ package com.jarvis.client.data
  *   - a bare digit run with NO trigger word, embedded in a longer
  *     sentence - "call me at 482913 today" cannot be told apart from a
  *     real code without one, so it is left alone;
- *   - a trigger word in a language other than English (the phrase list is
- *     English-only, the same limit this project's other pattern checks
- *     already state - `jarvis_mail_mask.py`'s own docstring says the same
- *     of its list);
+ *   - a trigger word in a language the list does not know (it knows
+ *     English and the few words for "code" above, no more - the same
+ *     limit this project's other pattern checks already state;
+ *     `jarvis_mail_mask.py`'s own docstring says the same of its list);
  *   - a code split some OTHER way than "NNN NNN"/"NNN-NNN" (three groups,
  *     an odd split, digits interleaved with letters);
  *   - a code that is genuinely longer than 8 digits or shorter than 4.
@@ -52,10 +57,13 @@ object NotificationRedactor {
 
     const val MASK = "[hidden code]"
 
+    // (?iu): case-insensitive, and for letters outside plain English too
+    // ("CÓDIGO", "КОД") - RegexOption.IGNORE_CASE alone only folds ASCII.
     private val TRIGGER = Regex(
-        "code|otp|one[- ]time|passcode|verification|verify|authenticat|2fa|" +
-            "security code|access code|login code|confirmation code",
-        RegexOption.IGNORE_CASE,
+        "(?iu)code|otp|one[- ]time|passcode|verification|verify|authenticat|2fa|" +
+            "security code|access code|login code|confirmation code|" +
+            "\\bpin\\b|\\blog[- ]?in|\\bsign[- ]?in|two[- ]factor|2-step|" +
+            "c[oó]digo|codice|\\bkod\\b|код",
     )
 
     /**
@@ -68,15 +76,31 @@ object NotificationRedactor {
      */
     private val CODE = Regex("""\b\d{3}[- ]\d{3}\b|\b\d{4,8}\b""")
 
+    /**
+     * The "NNN NNN" / "NNN-NNN" grouping on its own - hidden even with no
+     * trigger word. Not when it is part of a longer run of groups (the
+     * lookarounds): "555-123-4567" is a phone number, not a code.
+     */
+    private val GROUPED = Regex("""(?<!\d[- ])(?<!\d)\d{3}[- ]\d{3}(?!\d)(?![- ]\d)""")
+
     /** [text] with anything that looks like a one-time code blanked out. */
-    fun redact(text: String): String {
+    fun redact(text: String): String = redact(text, triggered = TRIGGER.containsMatchIn(text))
+
+    private fun redact(text: String, triggered: Boolean): String {
         if (text.isBlank()) return text
-        if (!TRIGGER.containsMatchIn(text) && !isBareCode(text)) return text
-        return CODE.replace(text) { MASK }
+        if (triggered || isBareCode(text)) return CODE.replace(text) { MASK }
+        return GROUPED.replace(text) { MASK }
     }
 
-    /** [title] and [text] redacted independently - a code can be in either. */
-    fun redactBoth(title: String, text: String): Pair<String, String> = redact(title) to redact(text)
+    /**
+     * [title] and [text] redacted TOGETHER: a trigger word in either one
+     * counts for both, because a code often sits in the text while the
+     * word that marks it ("Verification code") is only in the title.
+     */
+    fun redactBoth(title: String, text: String): Pair<String, String> {
+        val triggered = TRIGGER.containsMatchIn(title) || TRIGGER.containsMatchIn(text)
+        return redact(title, triggered) to redact(text, triggered)
+    }
 
     /**
      * True when [text], once a leading single-letter-and-dash prefix
