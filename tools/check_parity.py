@@ -261,22 +261,27 @@ CLASSIFICATION = {
     "/api/backup/list": ("deliberate", "The kept backup files, by name and date - PC-only, the same reason as the folder above: a phone has nothing to do with a list of files on the PC's disk. ARCHITECTURE.md section 8."),
     "/api/backup/restore/preview": ("deliberate", "Decrypts a backup to show counts and a date, PC-only - the backup file is on the PC's disk, and the recovery code is typed there. ARCHITECTURE.md section 8."),
     "/api/backup/restore": ("deliberate", "Restoring replaces memory, chat history, settings and notes with an older backup: PC-only, ONE approval card that always needs Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from any other device too, whatever the gate's own risk table says). ARCHITECTURE.md section 8."),
-    # Projects, build steps 1 and 2 (the owner's decision of 2026-09-28;
-    # backend/jarvis_projects.py, projects.patch; JARVIS-API section 61).
-    # Built on the backend first; both apps' screens are build step 3. Both
-    # apps will call these; choosing a folder and writing a coding
-    # benchmark's command are refused by the PC from any other device (a
-    # field of the body, not a separate route - docs/PROJECTS-DESIGN.md
-    # section 6).
-    "/api/projects": ("planned", "Projects: the list (GET) and creating one (POST). Both apps, build step 3."),
-    "/api/projects/{id}": ("planned", "One project: read it (GET) or change what the owner typed (POST). Both apps, build step 3; its folder is chosen on the PC only."),
-    "/api/projects/{id}/delete": ("planned", "Delete one project after \"are you sure?\". Both apps, build step 3."),
-    "/api/projects/{id}/shareable": ("planned", "The Shareable switch: ON is one approval card, OFF is instant. Both apps, build step 3."),
-    "/api/projects/{id}/benchmarks": ("planned", "Define a benchmark. Both apps for a number; a coding command is PC only. Build step 3."),
-    "/api/projects/{id}/benchmarks/{id}": ("planned", "One benchmark: its chart points (GET) or a change (POST). Both apps, build step 3."),
-    "/api/projects/{id}/benchmarks/{id}/delete": ("planned", "Delete one benchmark. Both apps, build step 3."),
-    "/api/projects/{id}/benchmarks/{id}/log": ("planned", "Log one number, the owner's own tap, no card. Both apps, build step 3."),
-    "/api/projects/{id}/benchmarks/{id}/results/{id}/delete": ("planned", "Remove one logged number (a typo). Both apps, build step 3."),
+    # Projects (the owner's decision of 2026-09-28; backend/jarvis_projects.py,
+    # projects.patch; JARVIS-API section 61). Both apps since build step 3:
+    # desktop Brain -> Projects (brain/projects.rs projects_read /
+    # projects_write / projects_choose_folder, Brain window only;
+    # projects.js, projects-panel.js), phone Brain -> Projects
+    # (ProjectsPlate.kt, net/Projects.kt, JarvisRuntime.projectsRead /
+    # projectsWrite). Choosing a coding project's folder and writing a
+    # benchmark's command are fields of a body, not routes: the phone never
+    # sends them and shows "Set on your PC", and the PC refuses them from any
+    # other device (ARCHITECTURE section 8). Every change is held on a stale
+    # link in both apps except Shareable OFF.
+    "/api/projects": ("ported", "Projects: the list (GET) and creating one (POST). Both apps; the phone creates life projects only (a coding project's folder is chosen on the PC)."),
+    "/api/projects/{id}": ("ported", "One project: read it (GET) or change what the owner typed (POST) - instructions, notes, and clearing the folder. Both apps; choosing the folder is the desktop's (the Windows picker, projects_choose_folder)."),
+    "/api/projects/{id}/delete": ("ported", "Delete one project after \"are you sure?\". Both apps."),
+    "/api/projects/{id}/shareable": ("ported", "The Shareable switch: ON is one approval card on the PC, OFF is instant and never held on a stale link. Both apps."),
+    "/api/projects/{id}/benchmarks": ("ported", "Define a benchmark. Both apps for a number; a coding command is the desktop's (the PC refuses it from anywhere else)."),
+    "/api/projects/{id}/benchmarks/{id}": ("ported", "One benchmark: its chart points (GET) or a change (POST) - both apps use it for \"Mark private\"."),
+    "/api/projects/{id}/benchmarks/{id}/delete": ("ported", "Delete one benchmark after \"are you sure?\". Both apps."),
+    "/api/projects/{id}/benchmarks/{id}/log": ("ported", "Log one number, the owner's own tap, no card. Both apps; a private number's answer stays out of anything spoken."),
+    "/api/projects/{id}/benchmarks/{id}/results/{id}/delete": ("ported", "Remove one logged number (a typo). Both apps."),
+    "/api/projects/{id}/benchmarks/{id}/unmark": ("ported", "Take a private mark off a benchmark (the owner, 2026-09-28): the owner's own mark at once; a mark Jarvis made from the name raises ONE change_own_config card. Both apps."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 

@@ -7446,9 +7446,11 @@ the phone - see `docs/ARCHITECTURE.md` section 8.
 
 One `.jbak` file: a zip archive, encrypted, holding -
 
-- The four real SQLite databases this backend has, snapshotted with
+- The five real SQLite databases this backend has, snapshotted with
   SQLite's own online backup API (safe while Jarvis keeps them open):
-  `memory.db`, `chat-history.db`, `schedule.db`, `feedback.db`.
+  `memory.db`, `chat-history.db`, `schedule.db`, `feedback.db`, and
+  `projects.db` (projects and every number logged; added 2026-09-28 by
+  the Projects feature audit).
 - Every `*.json` file directly in the Jarvis settings folder (never a
   subfolder), `jarvis-framework.toml`, and the `notes/` and `voice/`
   folders (the owner's own voice-print - not `voice-models/`, downloaded
@@ -7831,11 +7833,12 @@ healthy?" (§ "Build order", `docs/FEASIBILITY-AUDIT-2026-09-26.md`).
 
 ### 49.1 What it checks, and why each is read-only
 
-- **The chat history database** (`chat-history.db`, §29) and **the memory
-  database** (`memory.db`) each open `mode=ro` (never created, never
+- **The chat history database** (`chat-history.db`, §29), **the memory
+  database** (`memory.db`) and, since 2026-09-28, **the projects
+  database** (`projects.db`, §61) each open `mode=ro` (never created, never
   written to) and pass SQLite's own `PRAGMA integrity_check`. A file that
-  does not exist yet - history off, or nothing learned yet - is `ok`, never
-  a warning.
+  does not exist yet - history off, nothing learned yet, no project made
+  yet - is `ok`, never a warning.
 - **Free disk space** where those two databases (and the locked backup
   file, when it exists) live: `warn` under 1 GiB free.
 - **Every `*.json` settings file** directly in that same folder parses as
@@ -7884,7 +7887,7 @@ single WARN naming `apply-patches.ps1`, the same fallback shape as §35's
   `--preflight`'s output, not for either app's UI. See `docs/
   ARCHITECTURE.md` §8, "One-sided on purpose."
 - **Does not check `approvals.db`, `holds.db` or `feedback.db`.** Only the
-  two databases and the settings files named above; a real incident with
+  three databases and the settings files named above; a real incident with
   one of those is the trigger to add its own check, per `CLAUDE.md`'s
   "ADD ONE CHECK PER REAL INCIDENT."
 
@@ -9022,10 +9025,10 @@ self-check above).
 
 The owner's decision of 2026-09-28 (`CLAUDE.md`, "Projects, like Claude's
 Projects and more"), designed in `docs/PROJECTS-DESIGN.md`; this section is
-its **build steps 1 and 2 only**. `backend/jarvis_projects.py` (shipped
+its **build steps 1 to 3**. `backend/jarvis_projects.py` (shipped
 whole), `projects.patch`, `projects.db` in the settings folder.
-**Neither app calls these routes yet** (step 3); `tools/check_parity.py`
-lists them as `planned`.
+**Both apps call these routes since build step 3 (2026-09-28)** - see
+61.6; `tools/check_parity.py` lists them as `ported`.
 
 Numbered 61: section 59 is Goals on the continuation branch
 (`claude/jarvis-continuation-03kls1`, not merged here yet) and 60 the
@@ -9053,6 +9056,8 @@ measure come after that branch merges.
 | Shareable off | no, instant (a waiting card is withdrawn) | either app |
 | Define, edit, delete a number benchmark; log a number; remove one number | no | either app, or the owner's own words ("I ran 5 km", 60.4) |
 | Write or change a coding benchmark's command | no card (nothing runs); the words are kept | **PC only** |
+| Take the owner's own private mark off a benchmark | no card, instant | either app |
+| Take off a private mark Jarvis made from the name ("5k time" read as money) | **one card**, `change_own_config` at tier `ask` - afterwards its numbers may be read aloud (the owner, 2026-09-28) | either app |
 
 "No card" rows are the owner writing down their own things, like a to-do
 item. Every other action still follows ARCHITECTURE §3.
@@ -9079,6 +9084,7 @@ bad field), `403` (PC only), `404` (no such project, benchmark or number),
 | `/api/projects/<id>/benchmarks/<bid>/delete` | POST | `{}` | `{"ok", "deleted": true}` |
 | `/api/projects/<id>/benchmarks/<bid>/log` | POST | `{"value", "at"?}` (`at`: seconds since 1970, at most a day ahead) | `{"ok", "benchmark": view + "logged"}` |
 | `/api/projects/<id>/benchmarks/<bid>/results/<rid>/delete` | POST | `{}` | `{"ok", "deleted": true}` (a typo) |
+| `/api/projects/<id>/benchmarks/<bid>/unmark` | POST | `{}` | the owner's own mark comes off at once: `200` `{"ok", "changed", "benchmark", "message"}`; a mark Jarvis made from the name: `202` `{"ok", "waiting": true, "changed", "benchmark", "message"}` and ONE card (a waiting card: `409`). Both marks: the owner's comes off at once and the card is for Jarvis's. Nothing to take off: `200` with `changed: false` |
 
 **A project** (`full`; the list's `summary` leaves out `instructions`,
 `notes` and `benchmark_list`): `id`, `name`, `kind`, `instructions`,
@@ -9096,8 +9102,12 @@ ids), `benchmarks` (a count), `benchmark_list`, `created`, `changed`,
 sensitive topic, or `"you marked it"`), `marked_by_you`,
 `keep_on_screen`, `keep_on_screen_words`, `results` (a count), `latest`
 (`{"id", "value", "at"}` or `null`), `change` (60.3), `created`,
-`changed`; a command benchmark adds `command`, `"runnable": false` and
-`not_runnable_why`.
+`changed`, and the private mark's state (2026-09-28): `mark_auto` (the
+topic the name looks like, or `""`), `mark_auto_removed` (the owner took
+it off with a card), `unmark` (`"card"`, `"instant"` or `""` - how the
+mark would come off), `unmark_waiting`, `unmark_last` (`{"outcome",
+"why", "at", "message"}` or `null`); a command benchmark adds `command`,
+`"runnable": false` and `not_runnable_why`.
 
 **Limits:** 30 projects; a name 60 characters; instructions 1,500
 characters (the design's hard limit for what a project chat can carry on
@@ -9140,8 +9150,60 @@ rate", "calories", "sleep", "savings", "spending", a currency sign, ...)
 and then `jarvis_sensitive.topic()` - or by the owner (`"sensitive":
 true`). `keep_on_screen` then says: never read aloud, and never sent
 anywhere (nothing here sends anything; a later Shareable send refuses
-these). The owner can take off their own mark with no card. **Known false alarm:**
-`jarvis_sensitive` reads "5k" as money, so a "5k time" benchmark is marked
-money. The owner decided (2026-09-28) that an automatic mark may be removed
-by the owner **with a card first** - being built with the Projects screens
-(step 3).
+these). The owner can take their own mark off at once. **A mark made from
+the name comes off only with ONE card** (the owner's answer of
+2026-09-28: `jarvis_sensitive` reads "5k" as money, so a "5k time"
+benchmark is marked money). The card (`jarvis_projects.unmark_card`) names
+the benchmark, the project and why it was marked, says the numbers may be
+read aloud afterwards, and "If you say no: nothing changes." The yes is
+written only if the benchmark still has the words the card showed; a
+rename, a new unit, the owner's own new mark or a delete while it waits
+makes a late yes change nothing. **Renaming a benchmark or changing its
+unit checks the name again**: a mark taken off comes back when the new
+words still look like health or money. The quick command (61.4) follows
+the same marks.
+
+### 61.6 The apps (build step 3, 2026-09-28)
+
+**Desktop: Brain -> Projects** (`jarvis-desktop/src/projects.js`,
+`projects-panel.js`, `projects.css`; `src-tauri/src/brain/projects.rs`).
+Three commands, Brain window only (`brain-projects` in
+`permissions/surfaces.toml`): `projects_read` (a read, hidden in Rust while
+the private lists are hidden, keeping only how many projects there are),
+`projects_write` (ONE change named by an action from a fixed list - the page
+never names a URL; held on a stale link except Shareable OFF; a folder typed
+into a body is refused) and `projects_choose_folder` (the Windows folder
+picker, then `{"folder"}` to this PC's Jarvis; held on a stale link).
+
+**Phone: Brain -> Projects** (`ProjectsPlate.kt`, `net/Projects.kt`,
+`JarvisRuntime.projectsRead` / `projectsWrite`). The same screen, minus
+what is the PC's: a coding project and its folder, and a benchmark's
+command, show "Set on your PC" (the PC refuses them from the phone too:
+ARCHITECTURE section 8). It creates life projects only.
+
+Both show: the list and New project; instructions and notes (Save); the
+Shareable switch (ON asks with a card, OFF is instant and works on a stale
+link); the work list's name; each benchmark with its latest number,
+"better or worse than last time", a chart of dated points with the target
+as a dashed line, Log, the numbers with Remove, "private - not read aloud"
+on a private one (the line after logging one says only "Logged.", so the
+number is never spoken), the private-mark button (a card for Jarvis's own
+mark, instant for the owner's) or Mark private, and Delete; deleting a
+project or a benchmark asks "are you sure?" first.
+
+**One contract file** for both apps: `tools/gen_projects_cases.py` writes
+the backend's real answers, the screens' shared `words`, how a number is
+written (`numbers`) and where a chart's bottom and top go (`scales`) to
+`jarvis-desktop/tests/fixtures/projects-cases.json` and
+`jarvis-client/app/src/test/resources/contract/projects-cases.json`.
+`tests/projects.mjs`, `brain/projects.rs`'s tests and `ProjectsTest`
+build against it; `test_projects.py` fails when it is out of date.
+
+**"What asks first" (§32)** has a Projects group since 2026-09-28 (the
+feature audit): three fixed rows, decided in the code - making, changing
+and deleting a project and logging your own numbers (no card), making a
+project Shareable (asks every time), and taking a private mark off (asks
+when Jarvis made the mark).
+
+**Kept in backups and checked by data health** (§45, §49) since the same
+audit: `projects.db` was missing from both.

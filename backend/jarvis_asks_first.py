@@ -281,6 +281,10 @@ GROUPS = (
                             "write_notes_after_outside_text", "wiki_update"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "schedule_repeat"]),
     ("Your smart home", ["fixed:lights", "home_control"]),
+    # Projects (the owner's decision of 2026-09-28; jarvis_projects.py). Its
+    # two cards are change_own_config cards, decided in the code; these rows
+    # say so in plain words (the Projects feature audit, 2026-09-28).
+    ("Projects", ["fixed:projects", "fixed:project_share", "fixed:project_unmark"]),
     ("Email and calendar", ["draft_email", "send_email", "edit_calendar_event",
                             "delete_calendar_event"]),
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
@@ -304,6 +308,18 @@ GROUPS = (
 
 #: The fixed rows: (title, says, note).
 FIXED = {
+    "fixed:projects": ("Make, change or delete a project, and log your own numbers",
+                       SAYS_NO_CARD,
+                       "Your own taps or words. Deleting asks \"are you sure?\" in the app. A "
+                       "coding project's folder and a benchmark's command are set on the PC "
+                       "only."),
+    "fixed:project_share": ("Make a project Shareable", "Asks you first, every time",
+                            "Turning it off is instant. Nothing from a project is sent "
+                            "anywhere yet."),
+    "fixed:project_unmark": ("Take a private mark off a benchmark",
+                             "Asks when Jarvis made the mark",
+                             "A mark you added yourself comes off at once. Afterwards its "
+                             "numbers may be read aloud."),
     "fixed:timers": ("Set a timer, or a reminder or alarm that goes off once", SAYS_NO_CARD,
                      "Your own words only; deleting is immediate."),
     "fixed:repeats": ("Set up a repeating reminder or alarm, or the standby schedule",

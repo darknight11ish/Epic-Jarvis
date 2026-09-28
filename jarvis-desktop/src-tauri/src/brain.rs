@@ -41,6 +41,7 @@ pub mod chatbot;
 pub mod focus;
 pub mod history;
 pub mod profile;
+pub mod projects;
 mod routes;
 pub mod schedule;
 pub mod shared;

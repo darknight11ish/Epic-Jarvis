@@ -1,7 +1,7 @@
 # Projects: design (2026-09-28)
 
-Status: **build steps 1 and 2 built on the backend (2026-09-28); see
-"Build notes" at the end. Nothing in the apps yet.** For the owner's decision "Projects,
+Status: **build steps 1 and 2 built on the backend, and step 3 - the
+screens in both apps - built (2026-09-28); see "Build notes" at the end.** For the owner's decision "Projects,
 like Claude's Projects and more" (`CLAUDE.md`, 2026-09-28): both coding and
 life projects, and Jarvis does real work on the PC with a card for every
 change. Queued after the chatbot driver. Written by the studio's designer;
@@ -358,3 +358,27 @@ money, so a benchmark named "5k time" is marked sensitive (money) and
 kept on screen. The owner can take off their own mark but not one made
 from the name. Should an automatic mark be clearable, and should
 clearing it ask first (it would let a number be read aloud)?
+**Answered 2026-09-28: yes, with a card first** - built in step 3, below.
+
+### Step 3 (2026-09-28, both apps' screens)
+
+**Built:** Brain -> Projects on the desktop (`projects.js`,
+`projects-panel.js`, `projects.css`, `brain/projects.rs`) and on the phone
+(`ProjectsPlate.kt`, `net/Projects.kt`), in the same words from one
+contract file (`tools/gen_projects_cases.py`). `docs/JARVIS-API.md` 61.6
+says what each shows. The chart is drawn by the apps (an inline SVG on the
+desktop, a Compose Canvas on the phone) from the benchmark's own points,
+with the scale both apps share.
+
+**The owner's answer, built with it:** an automatic private mark comes off
+with ONE `change_own_config` card (`POST .../unmark`); the owner's own
+mark comes off at once. Renaming a benchmark or changing its unit checks
+its name again.
+
+**The feature audit (step 8's rule, run now for what exists):** backups
+(`jarvis_backup.SOURCE_DBS`) and the data-health check now include
+`projects.db`. See the CHANGELOG for the rest.
+
+**Still not built:** the chat-history `project` column and project chat
+context (step 4), `project_edit` (steps 5 and 7), running a benchmark
+(step 6), the goals.db link (after the continuation branch merges).

@@ -357,6 +357,15 @@ fn main() {
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",
+            // Projects (backend/projects.patch; JARVIS-API section 61; the
+            // owner's decision of 2026-09-28): read the projects, ONE change
+            // named by an action from a fixed list (the PC raises the only
+            // cards: Shareable ON, and taking off a mark Jarvis made), and a
+            // coding project's folder by the Windows picker. Every change
+            // held on a stale link except Shareable OFF. Brain only.
+            "projects_read",
+            "projects_write",
+            "projects_choose_folder",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on

@@ -31,6 +31,23 @@ number as the last part - `0.2.57` is a build of 0.2.
   card; the summary stays on screen at the end and is never read aloud. The
   phone also shows "Talking to Gemini, 3 of 5" with a Stop button. Gemini's
   part is still being built, so today Start says so and does nothing.
+- **New: Projects in both apps.** Brain now has Projects on the PC and on
+  the phone. Make a project, write how Jarvis should help with it and a
+  few notes, and track numbers ("benchmarks") - log a number with a tap,
+  see a small chart of your numbers over time with your target as a
+  dashed line, and whether each one is better or worse than last time.
+  Health and money numbers show "private - not read aloud". Deleting asks
+  "are you sure?" first. A coding project's folder is chosen on the PC
+  (from "Folders Jarvis may look in"); the phone says "Set on your PC" for
+  that. The "Shareable" switch asks you with a card to turn on, and turns
+  off at once.
+- **New: take a wrong private mark off.** Jarvis sometimes marks a number
+  private by mistake - it reads "5k time" as money. You can now remove
+  that mark; because the numbers may then be read aloud, it asks you with
+  one approval card first. A mark you added yourself comes off at once.
+  Renaming the benchmark checks its name again.
+- **Backups and the data-health check now include your projects**
+  (`projects.db`). Before this, a backup would not have kept them.
 - **The core of the chatbot driver - not usable yet.** The part of Jarvis
   that will hold a conversation with an AI chatbot for you (Gemini first)
   is written and tested on the PC side: one approval card per

@@ -456,6 +456,19 @@ fun BrainScreen(
                 )
             }
 
+            // "Projects" (the owner's decision of 2026-09-28): projects,
+            // their notes and benchmarks with a chart (ProjectsPlate.kt) -
+            // the desktop's Brain -> Projects. It reads and acts through
+            // JarvisRuntime directly.
+            item(key = "projects") {
+                ProjectsSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
             item(key = "attention") {
                 Section("Attention budget") { AttentionPlate(attention) }
             }

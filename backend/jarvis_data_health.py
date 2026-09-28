@@ -11,8 +11,9 @@ N fail, N warn" line.
 
 WHAT THIS CHECKS, and why each one is read-only:
 
-  * The chat history database (chat-history.db) and the memory database
-    (memory.db) each open, read-only (`mode=ro` - this never creates either
+  * The chat history database (chat-history.db), the memory database
+    (memory.db) and the projects database (projects.db, since 2026-09-28)
+    each open, read-only (`mode=ro` - this never creates either
     file), and pass SQLite's own `PRAGMA integrity_check`. A file that does
     not exist yet is not a problem: history may be off, or Jarvis may never
     have learned anything yet.
@@ -141,6 +142,19 @@ def check(*, config_dir=None, disk_usage=None) -> list:
             rows.append((OK, "the memory store database opens and checks out", ""))
         else:
             rows.append((WARN, "the memory store database may be damaged", problem))
+
+    # Projects (jarvis_projects.py): projects, benchmarks and the numbers the
+    # owner logged. Added 2026-09-28 by the Projects feature audit.
+    proj_env = (os.environ.get("JARVIS_PROJECTS_DB") or "").strip()
+    proj_db = Path(os.path.expanduser(proj_env)) if proj_env else d / "projects.db"
+    if not proj_db.is_file():
+        rows.append((OK, "projects: no database file yet (no project made yet)", ""))
+    else:
+        problem = _sqlite_problem(proj_db)
+        if problem is None:
+            rows.append((OK, "the projects database opens and checks out", ""))
+        else:
+            rows.append((WARN, "the projects database may be damaged", problem))
 
     # -- disk space -------------------------------------------------------------
     probe = d if d.exists() else d.parent

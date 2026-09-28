@@ -256,6 +256,32 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
+    },
+    {
+     "rows": [
+      {
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
@@ -1038,6 +1064,32 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
+    },
+    {
+     "rows": [
+      {
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
@@ -1816,6 +1868,32 @@
       }
      ],
      "title": "Your smart home"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
     },
     {
      "rows": [
@@ -2607,6 +2685,32 @@
       }
      ],
      "title": "Your smart home"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
     },
     {
      "rows": [

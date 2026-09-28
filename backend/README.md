@@ -13904,8 +13904,20 @@ the routes. **Not in either app yet** (step 3).
   apps' screens (step 3).
 - The goals.db `project` column and a goal step's measure: after the
   continuation branch merges.
-- Backups do not include `projects.db` yet (`jarvis_backup.SOURCE_DBS` is
-  unchanged) - for the feature audit (step 8).
+- ~~Backups do not include `projects.db` yet~~ - done 2026-09-28 by the
+  feature audit: `jarvis_backup.SOURCE_DBS` and `jarvis_data_health` both
+  include it.
+
+## Step 3 additions (2026-09-28)
+
+- `POST /api/projects/<id>/benchmarks/<bid>/unmark`: the owner's own
+  private mark comes off at once; a mark Jarvis made from the name raises
+  ONE `change_own_config` card (`unmark_card`), in the Shareable card's
+  words and shape. A new `auto_cleared` column (an older `projects.db`
+  gains it when opened); renaming or a new unit clears it.
+- Both apps' screens call every route (JARVIS-API 61.6);
+  `tools/gen_projects_cases.py` writes the contract file they share, and
+  `test_projects.py` fails when it is stale.
 - Not run on the owner's PC: tested in the dev container only, with a
   stand-in approval gate.
 - ~~The gate's `_RISK` table has no line for `chatbot_session` yet~~ -

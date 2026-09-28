@@ -808,6 +808,46 @@ class JarvisApi(
         }
 
     /**
+     * Projects (docs/JARVIS-API.md section 61): a read (`json` null, a GET)
+     * or ONE change (a POST of `json`). The path comes from [Projects] -
+     * [Projects.PATH], [Projects.projectPath], [Projects.benchPath] or
+     * [Projects.writePath] - and nothing outside `/api/projects` is sent.
+     * The status and body come back whole ([Projects.Reply]): a 404 that
+     * says "no such project" and a 404 from a PC without Projects read
+     * differently, and a 403 that carries `pc_only` is the PC saying "on the
+     * PC only", not a bad token.
+     */
+    suspend fun projectsCall(path: String, json: String?): ApiResult<Projects.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != Projects.PATH && !path.startsWith(Projects.PATH + "/")) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a projects route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    val pcOnly = (obj?.get("pc_only") as? JsonPrimitive)?.booleanOrNull == true
+                    if (resp.code == 401 || (resp.code == 403 && !pcOnly)) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Projects.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `POST /api/memory/shared`: tag or untag ONE fact "Between us" (the
      * owner's decision, 2026-09-27). The status and body come back whole
      * ([MemoryShared.Reply]), like [pinFact]: a 404 that says "no such

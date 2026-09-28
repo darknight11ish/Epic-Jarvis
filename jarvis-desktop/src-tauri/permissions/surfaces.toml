@@ -717,6 +717,26 @@ permissions = [
   "allow-brain-schedule-clear-list",
 ]
 
+# Projects (backend/projects.patch; JARVIS-API section 61; the owner's
+# decision of 2026-09-28, docs/PROJECTS-DESIGN.md build step 3). Reading is a
+# read - hidden in Rust while "Windows Hello for memory lists and chat
+# history" hides the private lists. A change is ONE action from a fixed list
+# (brain/projects.rs ACTIONS) - the page never names a URL - and the PC
+# decides which raise a card: Shareable ON and taking off a private mark
+# Jarvis made itself, one change_own_config card each. Every change is held
+# while the event stream is stale, except Shareable OFF. A coding project's
+# folder comes only from the Windows folder picker (a typed path is
+# refused in Rust), and the PC accepts only one on "Folders Jarvis may look
+# in". Nothing here runs a benchmark's command: that is a later step.
+[[set]]
+identifier = "brain-projects"
+description = "Read the projects, make ONE change at a time (a project, its Shareable switch, a benchmark, one number, a private mark - the PC raises any card), and choose a coding project's folder with the Windows picker. Runs nothing."
+permissions = [
+  "allow-projects-read",
+  "allow-projects-write",
+  "allow-projects-choose-folder",
+]
+
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
 # timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
 # is a read. ONE thing per call to the running session - pause, resume, +10
