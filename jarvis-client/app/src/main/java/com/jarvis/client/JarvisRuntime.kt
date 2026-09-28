@@ -3401,6 +3401,130 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * ONE scheduler job by id - the same read a notification uses to get its
+     * words ([com.jarvis.client.net.Schedule.parseOne]). Goals uses this to
+     * re-check its own weekly check-in while its card might still be
+     * waiting: Goals has no route of its own that hands that state out
+     * again once the [acceptGoal] answer that first carried it is gone (see
+     * [com.jarvis.client.net.Goals]'s own doc comment). A read: never held.
+     */
+    suspend fun scheduleJob(id: String): com.jarvis.client.net.Schedule.Job? {
+        if (!com.jarvis.client.net.Schedule.validId(id)) return null
+        return when (val r = api.scheduleJob(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+            is ApiResult.Failed -> null
+        }
+    }
+
+    // -------------------------------------------------------------- Goals ----
+    // "Goals: a plan the owner edits, one card per acting step" (the
+    // owner's "build it now", 2026-09-27) - see [com.jarvis.client.net.Goals]
+    // and ui/screens/GoalsPlate.kt.
+
+    private val _goalsTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one after every change made from this phone, so Brain's
+     * "Goals" reads itself again - the same shape as [sharedTick]: there is
+     * no push event for a goal changing, so the other app's own edit shows
+     * on the next read, Refresh.
+     */
+    val goalsTick: StateFlow<Int> = _goalsTick.asStateFlow()
+
+    /** `GET /api/goals`. A read: never held. */
+    suspend fun goals(): ApiResult<JsonObject> = api.goals()
+
+    /**
+     * A new draft, in the owner's own words - with their own plan once they
+     * have typed one (or asked Jarvis to suggest one first, in ordinary
+     * chat, and pasted it in). No card: a draft is content, not action,
+     * exactly like an email draft. Held on a stale link (rule 4), like
+     * every change. @return whether it was started, the new goal if so, and
+     * the sentence to show.
+     */
+    suspend fun createGoal(
+        text: String,
+        plan: List<com.jarvis.client.net.Goals.Step>? = null,
+    ): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        val result = when (val r = api.goalsWrite(com.jarvis.client.net.Goals.PATH,
+            com.jarvis.client.net.Goals.createBody(text, plan))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.createdSaid(r.value)
+            is ApiResult.Failed -> Triple(false, null, "Not started. " + describe(r.error))
+        }
+        if (result.first) _goalsTick.update { n -> n + 1 }
+        return result
+    }
+
+    /**
+     * Keeps the owner's edited plan (or the draft exactly as it stood) and
+     * starts the weekly check-in - the PC's ONE approval card, the same
+     * mechanism a repeating reminder already raises. Held on a stale link;
+     * the freshly-raised card is read into [pending] at once, rather than
+     * waiting for the next `pending` event, so the Approvals list shows it
+     * without a delay. @return whether it was accepted, the accepted goal
+     * with its check-in job if so, and the sentence to show.
+     */
+    suspend fun acceptGoal(
+        id: String,
+        plan: List<com.jarvis.client.net.Goals.Step>? = null,
+    ): Triple<Boolean, com.jarvis.client.net.Goals.Accepted?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
+        val result = when (val r = api.goalsWrite("${com.jarvis.client.net.Goals.PATH}/$id/accept",
+            com.jarvis.client.net.Goals.acceptBody(plan))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.acceptedSaid(r.value)
+            is ApiResult.Failed -> Triple(false, null, "Not accepted. " + describe(r.error))
+        }
+        if (result.first) {
+            _goalsTick.update { n -> n + 1 }
+            refreshPending()
+        }
+        return result
+    }
+
+    /**
+     * Marks one step of an active goal done or not - no card, the same
+     * shape as ticking off a to-do item. Held on a stale link. @return
+     * whether it changed, the updated goal if so, and the sentence to show.
+     */
+    suspend fun setGoalStep(
+        id: String,
+        index: Int,
+        done: Boolean,
+    ): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
+        val result = when (val r = api.goalsWrite("${com.jarvis.client.net.Goals.PATH}/$id/step",
+            com.jarvis.client.net.Goals.stepBody(index, done))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value)
+            is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
+        }
+        if (result.first) _goalsTick.update { n -> n + 1 }
+        return result
+    }
+
+    /**
+     * Stops tracking a goal and deletes its check-in job. No card,
+     * immediate - the same rule every "stop tracking this" control in this
+     * project follows - and no confirm dialog: the backend's own design
+     * requires stopping to be one tap. Held on a stale link, like every
+     * change. @return whether it stopped, the stopped goal if so, and the
+     * sentence to show.
+     */
+    suspend fun stopGoal(id: String): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
+        val result = when (val r = api.goalsWrite("${com.jarvis.client.net.Goals.PATH}/$id/stop",
+            com.jarvis.client.net.Goals.STOP_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value, doneWord = "Stopped.")
+            is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
+        }
+        if (result.first) _goalsTick.update { n -> n + 1 }
+        return result
+    }
+
     private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?, eventId: String? = null) {
         _scheduleTick.update { it + 1 }
         val obj = data as? JsonObject

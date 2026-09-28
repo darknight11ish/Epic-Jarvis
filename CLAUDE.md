@@ -543,10 +543,18 @@ the feasibility audit's I63/I64; `docs/JARVIS-API.md` §59).
   exactly what "do not claim more than the evidence supports" (above)
   warns against. Drafting a plan happens in ordinary chat instead, already
   built and already safe.
-- Backend only so far (`backend/jarvis_goals.py`, `goals.patch`,
-  `test_goals.py`, 57 checks). Desktop and phone UI queued next - Brain ->
-  Work, beside Coming up, is the natural place, matching the briefing and
-  the to-do list.
+- Backend (`backend/jarvis_goals.py`, `goals.patch`, `test_goals.py`, 57
+  checks) and the **phone's UI** (`net/Goals.kt`, `ui/screens/GoalsPlate.kt`,
+  Brain -> Goals, beside Coming up) are built. The weekly check-in's row is
+  left showing on Coming up too (its scheduler kind keeps `owner_listed=True`,
+  the backend's own default) - the only place its live "waiting" state can
+  still be read once the phone's own copy of one `accept` answer is gone,
+  since no Goals route hands that state out again; Coming up itself offers
+  it no Pause/Delete (`Schedule.actionsOf`), since only Stop tracking, on
+  the goal, can take the check-in down cleanly. `tools/check_parity.py`
+  carries `/api/goals` as `desktop-todo` until the desktop side is built -
+  Brain -> Work, beside Coming up, is the natural place there too, matching
+  the briefing and the to-do list.
 
 ## Every new feature gets its own audit, without being asked
 

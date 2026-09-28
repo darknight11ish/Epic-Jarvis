@@ -210,6 +210,11 @@ object Schedule {
     fun tag(kind: String): String = when (kind) {
         "todo" -> "to-do"
         TELLME -> "tell me when"
+        // Goals' own weekly check-in (backend jarvis_goals.KIND) - the
+        // literal is repeated rather than imported, so this file (which
+        // Goals.kt itself depends on for [job] and [Job]) never depends
+        // back on Goals.kt.
+        "goal_checkin" -> "goal check-in"
         else -> kind
     }
 
@@ -515,8 +520,18 @@ object Schedule {
         return "{\"kind\":\"standby\",\"repeat\":{\"every\":\"day\",\"at\":\"$at\",\"until\":\"$until\"}}"
     }
 
-    /** The buttons one row offers, as action names, in order. Never "all". */
+    /**
+     * The buttons one row offers, as action names, in order. Never "all".
+     *
+     * A goal's own weekly check-in ("goal_checkin") offers NONE: pausing or
+     * deleting it here, directly, would leave the goal itself `active` with
+     * no way to bring the check-in back (Goals has no route that
+     * re-creates one for an existing goal - see net/Goals.kt's own doc
+     * comment). Stop tracking, on the goal itself, is the one control that
+     * takes both down together.
+     */
     fun actionsOf(job: Job): List<String> = when {
+        job.kind == "goal_checkin" -> emptyList()
         job.kind == "todo" -> listOf("done", "delete")
         job.state == "waiting" -> listOf("delete")
         job.state == "paused" -> listOf("resume", "delete")

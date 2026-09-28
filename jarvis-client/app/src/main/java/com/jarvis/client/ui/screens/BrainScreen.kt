@@ -416,6 +416,20 @@ fun BrainScreen(
                 )
             }
 
+            // "Goals" (the owner's "build it now", 2026-09-27): a plan the
+            // owner writes and edits, one approval card for its weekly
+            // check-in, no card for ticking a step or Stop tracking
+            // (GoalsPlate.kt) - the desktop's Brain -> Work, beside Coming
+            // up, docs/JARVIS-API.md section 59.
+            item(key = "goals") {
+                GoalsSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
             // "Focus session" (the owner's decision of 2026-09-25): start and
             // stop one, the countdown, the counts and the report card
             // (FocusPlate.kt) - the desktop's Brain -> Work -> Focus session.

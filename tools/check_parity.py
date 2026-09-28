@@ -266,6 +266,7 @@ STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 # "desktop-todo"  - the desktop should have it too, and nobody has built it
 PHONE_ONLY = {
     "/api/notifications/watch": ("phone-only", "The smartwatch notification setting (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). A smartwatch pairs with a phone, never a Windows PC; the setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or writes it (docs/ARCHITECTURE.md §8)."),
+    "/api/goals": ("desktop-todo", "Goals: a plan the owner edits, one card per acting step (the owner's \"build it now\", 2026-09-27; backend/jarvis_goals.py; docs/JARVIS-API.md section 59). GET/POST /api/goals and the id-in-path routes it lists (.../accept, .../step, .../stop - built with a dynamic id, so this text-matching tool sees only the base path) are all shipped on the backend and ported to the phone (net/Goals.kt, ui/screens/GoalsPlate.kt). The desktop half was queued, not yet built as of this phone work - CLAUDE.md's own decision log says so. Reclassify as \"ported\" once jarvis-desktop calls it too."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 

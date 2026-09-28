@@ -755,6 +755,46 @@ class JarvisApi(
         }
 
     /**
+     * `GET /api/goals`: every goal, draft or active or stopped ([Goals.parse]).
+     * A 404 or 501 is a PC without Goals ([Goals.missing]). A read.
+     */
+    suspend fun goals(): ApiResult<JsonObject> = probe(Goals.PATH)
+
+    /** `GET /api/goals/<id>`: one goal ([Goals.parseOne]). A read. */
+    suspend fun goal(id: String): ApiResult<JsonObject> {
+        if (!Goals.validId(id)) return ApiResult.Failed(ApiError.Malformed("not a goal id"))
+        return probe("${Goals.PATH}/$id")
+    }
+
+    /**
+     * `POST /api/goals` (a new draft), `.../accept`, `.../step` or
+     * `.../stop`. The status and body come back whole ([Goals.Reply]), like
+     * [scheduleWrite]: a 404 that says "no such goal" and a 404 from a PC
+     * without Goals at all must read differently ([Goals.createdSaid] /
+     * [Goals.acceptedSaid] / [Goals.changedSaid]).
+     */
+    suspend fun goalsWrite(path: String, json: String): ApiResult<Goals.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Goals.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/memory/used?ids=`: the words of the few facts an answer used
      * (its `X-Jarvis-Route` names them by id only), or that automatic
      * learning just saved (the `memory_saved` event's ids) - the owner's
