@@ -412,8 +412,8 @@ Decided 2026-09-27, the owner's answers to `docs/OWNER-QUESTIONS-2026-09-27.md`
 - **The plan card is allowed later**, only after the multi-step safety tests
   pass; risky steps still get their own card.
 - **"From now on, ..." style requests apply at once, with Undo, no card.**
-- **Phone: allow home-network addresses** (private addresses and `.local`)
-  as the 2026-09-26 own-networks decision says; never the open internet.
+- ~~Phone: allow home-network addresses~~ - **replaced 2026-09-28** (see
+  the studio review block below): the phone stays on Tailscale/Meshnet.
 - **Focus report card: drop the streak line.**
 - **12 GB card:** longer conversations with picture understanding first, and
   making pictures too (swapped in when asked, since both cannot sit on the
@@ -525,6 +525,14 @@ testers, scouts and integration scouts; `.claude/agents/`):
   moves to Trash. The card says when the choice came from reading email
   (outside text). A new named way out of the PC (ARCHITECTURE §4) and its
   own gate action, like sending email. Not built yet.
+- **The phone connects through Tailscale or NordVPN Meshnet only** (owner,
+  2026-09-28), replacing "Phone: allow home-network addresses" of
+  2026-09-27. Allowing a home address would mean the PC also answering on
+  home Wi-Fi, where the pairing key travels unscrambled; the mesh networks
+  work at home too and scramble it.
+- **A "listening" sound after a bare "Hey Jarvis"** (owner, 2026-09-28):
+  only as part of the existing "I heard you" switch, which stays off by
+  default.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`

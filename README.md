@@ -78,8 +78,10 @@ needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
   the screen lock on the phone.
 - **"What asks first"**: a page in both apps listing every action and
   whether it asks you, with switches to make it stricter.
-- **Your own networks only**: the apps connect to Jarvis only on this PC,
-  your home network, Tailscale or NordVPN Meshnet. Anything else is refused.
+- **Your own networks only**: the desktop app connects to Jarvis on this PC,
+  your home network, Tailscale or NordVPN Meshnet; the phone connects
+  through Tailscale or NordVPN Meshnet, which also work at home and keep
+  the pairing key scrambled. Anything else is refused.
 - A live check of the whole setup, "N pass, N fail, N warn". Run this one
   line in PowerShell from this repository's folder, with your own backend
   folder (the one holding `jarvis_hud.py`) between the first quotes; the
