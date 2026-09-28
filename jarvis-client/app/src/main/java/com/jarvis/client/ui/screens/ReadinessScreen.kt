@@ -34,6 +34,7 @@ import com.jarvis.client.net.VoiceStatus
 import com.jarvis.client.net.VoiceStrict
 import com.jarvis.client.net.WakeWord
 import com.jarvis.client.platform.DisplayRate
+import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.ReadinessItem
 import com.jarvis.client.service.WakeListen
 import com.jarvis.client.ui.parts.Dot
@@ -74,6 +75,8 @@ data class ConnectionInfo(
     val link: LinkState,
     val stale: Boolean,
     val detail: String?,
+    /** "Tailscale (or Meshnet) is off on this phone", or null ([com.jarvis.client.LinkWords.vpnOffLine]). */
+    val vpnLine: String? = null,
 )
 
 /**
@@ -197,7 +200,7 @@ fun ReadinessScreen(
             }
         ReadinessItem.Fix.BATTERY ->
             if (item.state == ReadinessItem.State.WARN) {
-                CardFix("Keep link alive", warn = true, onClick = onRequestBatteryExemption)
+                CardFix(PlatformReadiness.KEEP_LINK_ALIVE, warn = true, onClick = onRequestBatteryExemption)
             } else {
                 null
             }
@@ -338,6 +341,14 @@ private fun ConnectionCard(
         Text(line, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         Gap(6)
         Field("Desktop", info.host.ifBlank { "Not set" }, machine = info.host.isNotBlank())
+
+        // The likeliest reason the link is down, and the one fix the owner can
+        // make in one tap: switch Tailscale or Meshnet back on.
+        val vpnLine = info.vpnLine?.takeIf { info.paired && info.link != LinkState.CONNECTED }
+        if (vpnLine != null) {
+            Gap(6)
+            Text(vpnLine, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
 
         if (problem != null) {
             Gap(6)

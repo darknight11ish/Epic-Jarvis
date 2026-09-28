@@ -110,6 +110,7 @@ import com.jarvis.client.net.Attention
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
+import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.approval.ApprovalCard
 import com.jarvis.client.ui.parts.AppearanceIcon
@@ -206,6 +207,11 @@ private class PaneHeight {
 data class HomeState(
     val link: LinkState,
     val linkDetail: String?,
+    /**
+     * "Tailscale (or Meshnet) is off on this phone", or null - shown under
+     * a link that is down ([com.jarvis.client.LinkWords.vpnOffLine]).
+     */
+    val vpnLine: String? = null,
     val stale: Boolean,
     val activity: Activity,
     val faceState: FaceState,
@@ -387,6 +393,13 @@ data class HomeState(
      */
     val updateLine: String? = null,
     /**
+     * The one-time "Background restart" offer after the first pairing
+     * (phone walk-through C9, 2026-09-27), in the Checks card's own words, or
+     * null. A line under the status line with two buttons; it never blocks
+     * anything, and either button ends it for good.
+     */
+    val keepAliveOffer: String? = null,
+    /**
      * A temporary chat is on ([com.jarvis.client.net.TemporaryChat], the
      * owner's decision of 2026-09-25): the marker above the chat box, and
      * its one line while the chat is empty.
@@ -555,6 +568,10 @@ data class HomeActions(
     val onShowPrivate: () -> Unit = {},
     /** "Try again" under a failed question: ask the same question again. */
     val onRetryQuestion: () -> Unit = {},
+    /** The offer's "Keep link alive": Android's own battery dialog. */
+    val onKeepLinkAlive: () -> Unit = {},
+    /** The offer's "Not now". */
+    val onDismissKeepAlive: () -> Unit = {},
 )
 
 /**
@@ -765,6 +782,7 @@ fun HomeScreen(
             NavRow(state, actions)
         }
         state.updateLine?.let { UpdateLine(it, actions.onOpenUpdate) }
+        state.keepAliveOffer?.let { KeepAliveOffer(it, actions.onKeepLinkAlive, actions.onDismissKeepAlive) }
 
         val listState = rememberLazyListState()
         // Where "Open the approval →" actually lands. The id used to be set and
@@ -1235,6 +1253,19 @@ private fun StatusLine(
                 // line, clipped - it is a status, not a log. Only on a live
                 // link, because "Step 2/3" under "Stale" would be a claim
                 // about work the phone cannot see.
+                // Why the link is most likely down, when Android says no
+                // VPN is up at all (phone walk-through N1, 2026-09-27): the
+                // phone reaches the PC only through Tailscale or Meshnet.
+                val vpnLine = state.vpnLine
+                if (vpnLine != null && !linked) {
+                    Text(
+                        vpnLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.warnInk,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 val detail = state.activityDetail
                 if (detail != null && linked && !state.stale) {
                     Text(
@@ -1365,6 +1396,32 @@ private fun UpdateLine(line: String, onOpen: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
         Quiet("Release page", onClick = onOpen)
+    }
+}
+
+/**
+ * The one-time "Background restart" offer, after the first pairing (phone
+ * walk-through C9, 2026-09-27). The same words and button as the Checks
+ * card ([PlatformReadiness]), where it can still be found later. Where
+ * [UpdateLine] sits, for the same reason: it is about this phone, and it
+ * must not push the approval cards down.
+ */
+@Composable
+private fun KeepAliveOffer(line: String, onKeep: () -> Unit, onNotNow: () -> Unit) {
+    val chrome = LocalChrome.current
+    Column(
+        Modifier.fillMaxWidth().background(chrome.surface1).padding(start = 16.dp, end = 8.dp, top = 6.dp),
+    ) {
+        Text(
+            PlatformReadiness.BACKGROUND_RESTART,
+            style = MaterialTheme.typography.labelMedium,
+            color = chrome.textHi,
+        )
+        Text(line, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Quiet(PlatformReadiness.KEEP_LINK_ALIVE, onClick = onKeep)
+            Quiet("Not now", color = chrome.textMid, onClick = onNotNow)
+        }
     }
 }
 

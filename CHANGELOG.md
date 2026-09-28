@@ -6,6 +6,27 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **New (phone): reconnects as soon as the network changes.** Walking out
+  of Wi-Fi, or switching Tailscale on, used to leave the phone on a dead
+  connection for up to about a minute and a half. Now it reconnects within
+  a couple of seconds. Approving still waits until the link is trusted.
+- **New (phone): "Tailscale (or Meshnet) is off on this phone".** When the
+  link is down and the phone has no VPN running at all, Home and Checks
+  say so under the link.
+- **New (phone): Show token on the pairing screen.** The 43-character token no
+  longer has to be typed blind. It starts hidden, is never saved anywhere
+  new, and screenshots and screen recording are blocked while it is shown.
+- **New (phone): "Background restart" is offered once after pairing.** A
+  line on Home, in the same words as the Checks card, with "Keep link
+  alive" and "Not now". It never comes back after either.
+- **New (PC): the live check asks "Can your phone reach Jarvis?"**
+  (`selftest.py --preflight`): is a phone address set, is it a Tailscale or
+  Meshnet one, is Tailscale or Meshnet on this PC, is Jarvis listening
+  there, and is there a Windows Firewall rule - each with the one line or
+  the one setting that fixes it.
+- **Docs: a Quick start at the top of `docs/INSTALL.md`** - the shortest
+  way to a first typed chat, with the desktop app starting Jarvis, then
+  pairing the phone.
 - **Fixed (phone): "open help", "connection", "the morning briefing",
   "about" and "Jarvis's voices" opened Settings at the top.** Each now opens
   the phone's own place for it - Help, Checks, Brain or "Jarvis's voice" -

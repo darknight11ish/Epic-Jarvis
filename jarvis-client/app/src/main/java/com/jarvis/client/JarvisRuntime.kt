@@ -753,9 +753,13 @@ object JarvisRuntime {
     // ----------------------------------------------------------- stream ----
 
     /**
-     * @param force true only for a reconnect the owner asked for by tapping.
-     *   Automatic callers must leave it false: the early return when a stream is
-     *   already running is what stops the retry paths stacking connections.
+     * @param force true only for a reconnect the owner asked for by tapping,
+     *   or one of the two automatic cases that replace a connection known to
+     *   be dead: coming back to a link that is catching up (MainActivity's
+     *   onResume) and a change of network ([reconnectForNetworkChange],
+     *   which waits for the network to settle). Every other automatic caller
+     *   must leave it false: the early return when a stream is already
+     *   running is what stops the retry paths stacking connections.
      */
     fun startStream(force: Boolean = false) {
         if (!started) return
@@ -947,7 +951,52 @@ object JarvisRuntime {
         }
     }
 
+    /** A reconnect waiting for the network to settle ([reconnectForNetworkChange]). */
+    @Volatile private var networkReconnect: Job? = null
+
+    /**
+     * The phone's network changed - Wi-Fi to mobile data, Tailscale or
+     * Meshnet switched on or off - so the connection the stream holds is
+     * very likely dead, and replacing it now beats noticing ~70 seconds of
+     * silence plus up to 30 seconds of back-off later (phone walk-through,
+     * 2026-09-27). Called by [com.jarvis.client.platform.NetworkWatch].
+     *
+     * Waits [NETWORK_SETTLE_MS] first, and a second change inside that wait
+     * starts the wait again: leaving the house hands Wi-Fi to mobile data
+     * and the VPN re-attaches a moment later, and one reconnect after the
+     * last of those is enough - so a network that flaps cannot turn into a
+     * reconnect loop, and the last change is never dropped.
+     *
+     * Only while the link is meant to be running: a stream that was stopped
+     * is never started from here. It approves nothing: a replaced stream
+     * starts stale, and acting stays blocked until it is trusted again
+     * (rule 4).
+     */
+    fun reconnectForNetworkChange() {
+        if (!started) return
+        networkReconnect?.cancel()
+        networkReconnect = scope.launch(Dispatchers.Main) {
+            delay(NETWORK_SETTLE_MS)
+            if (streamJob?.isActive != true) return@launch
+            Log.i(TAG, "the phone's network changed; reconnecting now")
+            startStream(force = true)
+        }
+    }
+
+    private val _vpnUp = MutableStateFlow<Boolean?>(null)
+
+    /**
+     * Whether this phone's default network is a VPN (Tailscale and NordVPN
+     * Meshnet both are): true, false, or null when not known - no network,
+     * or the watch is not running. For [LinkWords.vpnOffLine] only; nothing
+     * is decided on it.
+     */
+    val vpnUp: StateFlow<Boolean?> = _vpnUp.asStateFlow()
+
+    fun noteVpn(up: Boolean?) { _vpnUp.value = up }
+
     fun stopStream() {
+        networkReconnect?.cancel(); networkReconnect = null
         restartJob?.cancel(); restartJob = null
         streamJob?.cancel(); streamJob = null
         watchdog?.cancel(); watchdog = null
@@ -4137,6 +4186,9 @@ object JarvisRuntime {
 
     private const val KEEPALIVE_GAP_MS = 70_000L
     private const val WATCHDOG_TICK_MS = 10_000L
+
+    /** How long a change of network settles before the reconnect ([reconnectForNetworkChange]). */
+    private const val NETWORK_SETTLE_MS = 1_500L
 
     /** A status line, not a log: anything longer is cut before it is shown. */
     private const val ACTIVITY_DETAIL_MAX = 200

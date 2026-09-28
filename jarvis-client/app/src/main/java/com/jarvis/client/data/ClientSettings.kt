@@ -86,6 +86,33 @@ class ClientSettings(context: Context) {
         _heardSound.value = value
     }
 
+    private val _keepAliveOfferPending = MutableStateFlow(prefs.getBoolean(KEY_KEEP_ALIVE_PENDING, false))
+
+    /**
+     * True while the one-time "Background restart" offer waits on Home
+     * (phone walk-through C9, 2026-09-27): queued by the first successful
+     * pairing ([queueKeepAliveOffer]), gone once the owner taps either of
+     * its buttons ([answerKeepAliveOffer]). Two plain yes/no values on this
+     * phone, nothing secret.
+     */
+    val keepAliveOfferPending: StateFlow<Boolean> = _keepAliveOfferPending.asStateFlow()
+
+    /** Queues the offer - once ever, on this phone. A later pairing never queues it again. */
+    fun queueKeepAliveOffer() {
+        if (prefs.getBoolean(KEY_KEEP_ALIVE_OFFERED, false)) return
+        prefs.edit {
+            putBoolean(KEY_KEEP_ALIVE_OFFERED, true)
+            putBoolean(KEY_KEEP_ALIVE_PENDING, true)
+        }
+        _keepAliveOfferPending.value = true
+    }
+
+    /** The owner answered the offer (either button): it does not come back. */
+    fun answerKeepAliveOffer() {
+        prefs.edit { putBoolean(KEY_KEEP_ALIVE_PENDING, false) }
+        _keepAliveOfferPending.value = false
+    }
+
     private val _watchNotifications = MutableStateFlow(prefs.getBoolean(KEY_WATCH_NOTIFICATIONS, false))
 
     /**
@@ -202,6 +229,8 @@ class ClientSettings(context: Context) {
         const val KEY_ONE_MOMENT = "one_moment"
         const val KEY_HEARD_SOUND = "heard_sound"
         const val KEY_WATCH_NOTIFICATIONS = "watch_notifications"
+        const val KEY_KEEP_ALIVE_OFFERED = "keep_alive_offered"
+        const val KEY_KEEP_ALIVE_PENDING = "keep_alive_pending"
         const val KEY_FLOATING_AVATAR = "floating_avatar"
         const val KEY_UPDATE_CHECKS = "update_checks"
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
