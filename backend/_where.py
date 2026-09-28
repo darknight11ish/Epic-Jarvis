@@ -194,6 +194,9 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # The Brain upgrades (2026-09-28, brain-reads.patch): GET
+    # /api/history/search and /api/memory/fact-history, for the apps only
+    "jarvis_brain_reads.py",
 )
 
 

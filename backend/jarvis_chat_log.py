@@ -324,6 +324,117 @@ def _hash(text: str) -> str:
     return hashlib.sha256(_norm(text).encode("utf-8")).hexdigest()
 
 
+# ------------------------------------------------------------- the search
+#
+# "Search what was said in old chats" (docs/JARVIS-API.md section 71,
+# ChatLog.search). The helpers below are pure: they see one conversation's
+# opened words, in memory, and return a short snippet in PARTS - plain text
+# and matched text, never character offsets - so an app highlights a match
+# without counting characters (Python counts code points, JavaScript UTF-16
+# units, and an emoji would put every mark after it in the wrong place).
+
+SEARCH_MIN_CHARS = 2         # a search word shorter than this is skipped
+SEARCH_MAX_CHARS = 100       # the whole search, after spaces are tidied
+SEARCH_MAX_WORDS = 8
+SEARCH_DEFAULT, SEARCH_MAX = 20, 50
+SEARCH_SCAN_MAX = 5000       # conversations looked at per search, newest first
+SEARCH_SECONDS = 4.0         # and no longer than this
+SNIPPET_BEFORE = 60          # characters shown before the first match
+SNIPPET_CHARS = 180          # characters in a snippet at most
+
+SEARCH_TOO_SHORT = "Type at least two letters to search what was said."
+SEARCH_TOO_LONG = (f"That search is too long. Use up to {SEARCH_MAX_WORDS} words, "
+                   f"{SEARCH_MAX_CHARS} characters in all.")
+
+
+def search_terms(query):
+    """(the search words, None) or (None, why in plain words). Each word
+    once, in the order typed; words shorter than SEARCH_MIN_CHARS are
+    skipped ("a", "I" would match every chat)."""
+    q = _norm(query if isinstance(query, str) else "")
+    if len(q) > SEARCH_MAX_CHARS:
+        return None, SEARCH_TOO_LONG
+    terms = []
+    for w in q.split(" "):
+        if len(w) >= SEARCH_MIN_CHARS and w.casefold() not in (t.casefold() for t in terms):
+            terms.append(w)
+    if not terms:
+        return None, SEARCH_TOO_SHORT
+    if len(terms) > SEARCH_MAX_WORDS:
+        return None, SEARCH_TOO_LONG
+    return terms, ""
+
+
+def _spans(rx, text: str) -> list:
+    """Every match of every search word in `text`, overlapping ones merged:
+    [(start, end)], in order."""
+    spans = sorted((m.start(), m.end()) for r in rx for m in r.finditer(text)
+                   if m.end() > m.start())
+    merged = []
+    for s, e in spans:
+        if merged and s <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+        else:
+            merged.append((s, e))
+    return merged
+
+
+def _snippet(rx, role, at, text: str) -> dict:
+    """A short piece of `text` around its first match, as parts:
+    {"role", "at", "before": cut at the start, "after": cut at the end,
+    "parts": [{"text", "hit"}]}. Cut on a space where one is near, so a word
+    is never shown half."""
+    spans = _spans(rx, text)
+    first = spans[0][0] if spans else 0
+    start = max(0, first - SNIPPET_BEFORE)
+    if start > 0:
+        space = text.find(" ", start, first)
+        start = space + 1 if space != -1 else start
+    end = min(len(text), start + SNIPPET_CHARS)
+    if end < len(text):
+        space = text.rfind(" ", max(first + 1, start + SNIPPET_CHARS // 2), end)
+        end = space if space != -1 else end
+    parts, at_ = [], start
+    for s, e in spans:
+        if e <= start or s >= end:
+            continue
+        s, e = max(s, start), min(e, end)
+        if s > at_:
+            parts.append({"text": text[at_:s], "hit": False})
+        parts.append({"text": text[s:e], "hit": True})
+        at_ = e
+    if at_ < end:
+        parts.append({"text": text[at_:end], "hit": False})
+    return {"role": role if role in ("user", "assistant", "title") else "user",
+            "at": int(at or 0), "before": start > 0, "after": end < len(text),
+            "parts": parts}
+
+
+def _conversation_hit(rx, title: str, texts: list):
+    """(snippet, hits) when EVERY search word is somewhere in the
+    conversation - its title or any of its messages - else None. `hits` is
+    how many messages hold at least one of them. The snippet is from the
+    message that holds the most different search words (the earliest of
+    those), or from the title when no message does."""
+    seen = [False] * len(rx)
+    best, best_n, hits = None, 0, 0
+    for role, at, text in texts:
+        have = [bool(r.search(text)) for r in rx]
+        n = sum(have)
+        if n:
+            hits += 1
+            seen = [a or b for a, b in zip(seen, have)]
+            if n > best_n:
+                best, best_n = (role, at, text), n
+    title_has = [bool(r.search(title or "")) for r in rx]
+    seen = [a or b for a, b in zip(seen, title_has)]
+    if not all(seen):
+        return None
+    if best is None:
+        return _snippet(rx, "title", 0, title), 0
+    return _snippet(rx, *best), hits
+
+
 # ------------------------------------------------------------------ the log
 
 class ChatLog:
@@ -968,6 +1079,105 @@ class ChatLog:
         return {"id": cid, "title": self._title(aead, cid, conv[0]),
                 "tainted": any(bool(r[4]) for r in rows), "turns": turns}
 
+    def search(self, query, limit=SEARCH_DEFAULT) -> dict:
+        """Search what was said in the kept conversations (GET
+        /api/history/search, docs/JARVIS-API.md section 71; the owner's
+        choice of 2026-09-28, under their answer of 2026-09-27: "A search
+        box in History for the owner's own old chats is allowed now (shown
+        on screen only; nothing saved, nothing handed to the AI)").
+
+        UNLOCK AND SCAN, IN MEMORY, FOR EACH SEARCH. Every turn is opened
+        with the key, compared with the search words, and dropped. There is
+        NO search index - not FTS5, not a word list, not a cache between
+        searches: an index would be a plain-text copy of the chats on disk,
+        beside the encrypted one, and "encrypted or not kept" (ARCHITECTURE
+        section 5) allows no such thing. The search words are not written
+        anywhere, not logged and not audited; nothing in this method writes
+        to the database except the keep-period sweep list() already runs.
+
+        The words are matched as the owner typed them, each one anywhere in
+        the conversation (so "dentist tuesday" finds a chat that says both,
+        in any order, in any message), case ignored. Newest conversations
+        first; at most `limit` of them come back, and `more` says there
+        were others. The scan stops at SEARCH_SCAN_MAX conversations or
+        SEARCH_SECONDS, whichever comes first, and `partial` says so.
+
+        What it reaches is exactly what the History list shows: what is
+        still kept. A temporary chat was never kept, so it is never found.
+        With history OFF the kept conversations are still searched, as the
+        list still lists them - and nothing new is kept by searching.
+
+        Returns status() plus {"query_ok", "conversations": [a list() row
+        plus "snippet" and "hits"], "more", "partial", "searched"}; or, for
+        search words that are too short or too long, {"query_ok": false,
+        "why": "<plain sentence>"} and no conversation."""
+        self._housekeeping()
+        out = self.status()
+        out.update(query_ok=True, why="", conversations=[], more=False,
+                   partial=False, searched=0)
+        terms, why = search_terms(query)
+        if terms is None:
+            out.update(query_ok=False, why=why)
+            return out
+        try:
+            limit = max(1, min(SEARCH_MAX, int(limit)))
+        except (TypeError, ValueError):
+            limit = SEARCH_DEFAULT
+        if not self.db_path.exists():
+            return out
+        try:
+            aead = self._cipher()
+        except KeyUnavailable as exc:
+            out["why_not"] = out["why_not"] or str(exc)
+            return out
+        with self._lock, closing(self._connect()) as c:
+            convs = c.execute(
+                "SELECT c.id, c.title, c.started, c.updated, c.device FROM conversations c"
+                " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
+                (SEARCH_SCAN_MAX + 1,)).fetchall()
+        if len(convs) > SEARCH_SCAN_MAX:
+            convs = convs[:SEARCH_SCAN_MAX]
+            out["partial"] = True
+        rx = [re.compile(re.escape(t), re.IGNORECASE) for t in terms]
+        deadline = time.monotonic() + SEARCH_SECONDS
+        found = []
+        with closing(self._connect()) as c:
+            for n, (cid, title_blob, started, updated, device) in enumerate(convs):
+                if time.monotonic() > deadline:
+                    out["partial"] = True
+                    break
+                out["searched"] = n + 1
+                rows = c.execute(
+                    "SELECT idx, at, role, provenance, read_outside, text FROM turns"
+                    " WHERE conversation_id=? ORDER BY idx", (cid,)).fetchall()
+                title = self._title(aead, cid, title_blob)
+                texts = []   # (role, at, words) - only while this conversation is looked at
+                voice = outside = False
+                for idx, at, role, prov, ro, blob in rows:
+                    voice = voice or prov in ("voice", "voice_unverified")
+                    outside = outside or bool(ro)
+                    try:
+                        words = self._open(aead, blob, self._aad(cid, idx)).decode("utf-8")
+                    except Exception:
+                        continue
+                    texts.append((role, at, words))
+                hit = _conversation_hit(rx, title, texts)
+                texts = None
+                if hit is None:
+                    continue
+                if len(found) >= limit:
+                    out["more"] = True
+                    break
+                snippet, hits = hit
+                found.append({
+                    "id": cid, "title": title,
+                    "started": int(started or 0), "updated": int(updated or 0),
+                    "turns": len(rows), "device": device or "unknown",
+                    "has_voice": voice, "tainted": outside,
+                    "snippet": snippet, "hits": hits})
+        out["conversations"] = found
+        return out
+
     def tainted_from(self, cid):
         """The number of the first turn that read outside text, or None. Every
         turn from that one on is tainted (for the later learning build)."""
@@ -1061,6 +1271,13 @@ def delete(conversation_id) -> bool:
 
 def status() -> dict:
     return _log().status()
+
+
+def search(query, limit=SEARCH_DEFAULT) -> dict:
+    """GET /api/history/search's answer (ChatLog.search). For the apps'
+    History screens only: nothing a model or a chat turn can call reaches
+    this (docs/JARVIS-API.md section 71)."""
+    return _log().search(query, limit=limit)
 
 
 # ------------------------------------------------------ turning it back on
@@ -1267,8 +1484,14 @@ def _query(qs: str) -> dict:
         return {}
 
 
+#: GET /api/history/search (section 71). jarvis_brain_reads.py answers it;
+#: chat-history.patch's own dispatch in jarvis_hud.py never sees it.
+SEARCH_PATH = "/api/history/search"
+
+
 def handle_get(path: str, query: str = "") -> tuple:
-    """GET /api/history and /api/history/conversation. (code, body)."""
+    """GET /api/history, /api/history/conversation and /api/history/search.
+    (code, body)."""
     q = _query(query)
     log = _log()
     if path == "/api/history":
@@ -1285,6 +1508,16 @@ def handle_get(path: str, query: str = "") -> tuple:
         except (TypeError, ValueError):
             before = None
         return 200, log.list(limit=limit, before=before)
+    if path == SEARCH_PATH:
+        # "Search what was said" (section 71). The words arrive in ?q=, are
+        # used for this one scan and dropped: never logged, never audited,
+        # never kept. A too-short or too-long search is a 200 with
+        # query_ok false and a sentence, not an error.
+        try:
+            limit = int(q.get("limit", SEARCH_DEFAULT))
+        except (TypeError, ValueError):
+            limit = SEARCH_DEFAULT
+        return 200, log.search(q.get("q", ""), limit=limit)
     if path == "/api/history/conversation":
         cid = q.get("id", "")
         if not _CID.fullmatch(cid or ""):

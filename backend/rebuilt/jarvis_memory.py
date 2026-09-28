@@ -1642,6 +1642,58 @@ class MemoryStore:
                         todo.append(i)
         return chain
 
+    def fact_history(self, fact_id: int, limit: Optional[int] = None) -> Optional[list]:
+        """"History of this fact" (docs/JARVIS-API.md section 71): every
+        version of one fact - the wordings it replaced and the ones that
+        replaced it - oldest first, as raw rows. None if there is no such
+        fact. At most FACT_HISTORY_MAX rows (or `limit`); a loop in the
+        links (which add() cannot make, but a hand-edited file could) is
+        walked once.
+
+        A "version" is a row joined to this one by `retired_by`, the column
+        add(supersedes=...) and the Reword route write: the old row's
+        `retired_by` is the id of the row that replaced it. Every row reached
+        that way, in either direction, is part of the history - including a
+        correction kept as older news (ARCHITECTURE section 5, "Real true
+        from dates"), which points at the newer fact it did NOT replace.
+
+        Adapted from supermemory's VersionChainIndex.getChain
+        (packages/memory-graph/src/canvas/version-chain.ts, read 2026-09-28),
+        MIT License, Copyright (c) 2025 supermemory - the full notice is in
+        THIRD-PARTY-NOTICES.txt. What changed: supermemory's link points
+        back (a memory names its parent), Jarvis's points forward (an old
+        fact names what replaced it); supermemory follows the first branch
+        only, this walks every link both ways, because a Jarvis fact can
+        have two earlier versions; and the rows are read from this store by
+        id instead of from a map built once per render.
+
+        Reads only. The words of an ERASED row are the marker, and callers
+        must never show them - fact_history_view() sends "" in their place."""
+        cap = FACT_HISTORY_MAX if limit is None else max(1, int(limit))
+        fid = int(fact_id)
+        with _LOCK, closing(self._connect()) as c:
+            first = c.execute("SELECT * FROM facts WHERE id=?", (fid,)).fetchone()
+            if first is None:
+                return None
+            rows = {fid: dict(first)}
+            todo = [fid]
+            while todo and len(rows) < cap:
+                cur = rows[todo.pop(0)]
+                # Backward: the rows this one replaced.
+                near = c.execute("SELECT * FROM facts WHERE retired_by=? ORDER BY id",
+                                 (int(cur["id"]),)).fetchall()
+                # Forward: the row that replaced this one.
+                if cur.get("retired_by") is not None:
+                    nxt = c.execute("SELECT * FROM facts WHERE id=?",
+                                    (int(cur["retired_by"]),)).fetchone()
+                    if nxt is not None:
+                        near.append(nxt)
+                for r in near:
+                    if r["id"] not in rows and len(rows) < cap:
+                        rows[r["id"]] = dict(r)
+                        todo.append(r["id"])
+        return sorted(rows.values(), key=_version_order)
+
     # Counted rather than logged: this module has no logger, and a print on a
     # background thread in a windowed app goes to a closed handle. status() is
     # where it becomes visible.
@@ -3479,6 +3531,93 @@ def handle_used_get(query: str) -> tuple:
         return 200, used_view(ids)
     except Exception as exc:
         return 500, {"error": type(exc).__name__}
+
+
+# --------------------------------------------------------------------------
+#   "History of this fact" (docs/JARVIS-API.md section 71, 2026-09-28)
+# --------------------------------------------------------------------------
+
+#: The most versions one answer carries. A fact reworded more often than
+#: this is very unlikely; the answer says `more` when it happens.
+FACT_HISTORY_MAX = 50
+
+
+def _version_order(r) -> tuple:
+    """Oldest version first: by when it was TRUE from, then when Jarvis was
+    told, then id. Not by `created` alone - a correction kept as older news
+    is written after the fact it did not replace, but was true before it."""
+    return (float(r.get("valid_from") or r.get("created") or 0),
+            float(r.get("created") or 0), int(r["id"]))
+
+
+def fact_history_view(fact_id: int, st: Optional["MemoryStore"] = None,
+                      now: Optional[float] = None) -> Optional[dict]:
+    """GET /api/memory/fact-history's answer, or None for no such fact:
+
+        {"id", "versions": [{"id", "text", "this", "current", "forgotten",
+          "erased_at", "created", "valid_from", "valid_to", "retired_at",
+          "retired_by", "source"}], "count", "more"}
+
+    Oldest first. `this` marks the fact that was asked about. AN ERASED
+    VERSION NEVER COMES WITH WORDS: `text` is "" (never the "[erased]"
+    marker) and `erased_at` says when - "Erase the words" stays true in a
+    history view too. `forgotten` is Forget's own mark (meta.forgotten_at);
+    `current` is the rule every reader uses (valid_to empty or still ahead,
+    and not erased). No meta, no conversation id, nothing else."""
+    st = st or store()
+    now = time.time() if now is None else float(now)
+    rows = st.fact_history(fact_id, limit=FACT_HISTORY_MAX + 1)
+    if rows is None:
+        return None
+    more = len(rows) > FACT_HISTORY_MAX
+    if more:
+        # Keep the asked-about fact whatever happens; drop the oldest.
+        keep = [r for r in rows if int(r["id"]) == int(fact_id)]
+        rest = [r for r in rows if int(r["id"]) != int(fact_id)][-(FACT_HISTORY_MAX - 1):]
+        rows = sorted(keep + rest, key=_version_order)
+    out = []
+    for r in rows:
+        erased = r.get("erased_at")
+        vt = r.get("valid_to")
+        source = r.get("source")
+        out.append({
+            "id": int(r["id"]),
+            "text": "" if erased is not None else str(r.get("text") or ""),
+            "this": int(r["id"]) == int(fact_id),
+            "current": bool(erased is None and (vt is None or float(vt) > now)),
+            "forgotten": bool(_meta_dict(r.get("meta")).get("forgotten_at")),
+            "erased_at": erased,
+            "created": r.get("created"),
+            "valid_from": r.get("valid_from"),
+            "valid_to": vt,
+            "retired_at": r.get("retired_at"),
+            "retired_by": r.get("retired_by"),
+            "source": source if isinstance(source, str) and _META_LABEL.match(source) else "",
+        })
+    return {"id": int(fact_id), "versions": out, "count": len(out), "more": more}
+
+
+def handle_fact_history_get(query: str) -> tuple:
+    """GET /api/memory/fact-history?id=<fact id> -> (http status, reply).
+
+    jarvis_brain_reads.py hands the route here after the token and origin
+    checks every memory read has. 400 for anything but one whole-number id
+    above 0; 404 for no such fact. A read: nothing is written, and the
+    fact's words are never logged."""
+    try:
+        from urllib.parse import parse_qs
+        raw = (parse_qs(query or "", keep_blank_values=True).get("id") or [""])[0]
+    except Exception:
+        raw = ""
+    if not re.fullmatch(r"[0-9]{1,12}", raw or "") or int(raw) <= 0:
+        return 400, {"error": "need ?id=<one fact id>, a whole number (for example ?id=12)"}
+    try:
+        view = fact_history_view(int(raw))
+    except Exception as exc:
+        return 500, {"error": type(exc).__name__}
+    if view is None:
+        return 404, {"error": "no such fact - it may never have been saved"}
+    return 200, view
 
 
 # --------------------------------------------------------------------------
