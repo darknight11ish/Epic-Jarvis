@@ -176,13 +176,13 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voice` | Fanned out verbatim | Ignored (`JarvisRuntime.kt:690`) |
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
-| `step` | Rendered in Brain → Live (`brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read`, `read_screen` or `read_camera` (§16, §62, §63; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
+| `step` | Rendered in Brain → Now (the tab was "Live" until 2026-09-28; `brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read`, `read_screen` or `read_camera` (§16, §62, §63; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
 | `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on the phone's Brain screen; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
 | `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed" \| "ready", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on) - except for a briefing, whose toast comes on `ready` (`brain/briefing.rs` `toast_ready`, always only "Jarvis: your morning briefing is ready.", section 22); the Brain reads Coming up again, and the briefing too for kind `briefing` (`brain.js`) | the Brain's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`). For kind `briefing`: the Brain's Morning briefing reads itself again, and on `ready` (not `fired`) a notification with only the fixed words, which opens the Brain (`JarvisRuntime.onBriefingReady`) |
 | `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | the Brain's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
-| `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`) | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
+| `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
@@ -2251,7 +2251,7 @@ mode only when `gate.training` says the PC understands it:
 |---|---|
 | `calibrate: true` | `calibrate`, `threshold` (since 2026-09-24, earlier) |
 | `rounds: true` | `train` (rounds, `add`, `finish`, `cancel`) |
-| `settings: true` | `strictness`, `privacy`; and `memory`, `sensitive_memory`, `hands_free` or `hands_free_screen` when `gate.settings` has it (an older PC answers that mode with 503) |
+| `settings: true` | `strictness`, `privacy`; and `memory`, `sensitive_memory`, `hands_free`, `hands_free_screen`, `hands_free_live` or `live_end` when `gate.settings` has it (an older PC answers that mode with 503) |
 | `measure: true` | `measure` |
 
 ### What changed for every app, even one that changes nothing
@@ -2330,7 +2330,11 @@ sends (both apps do).
 "sensitive_memory": "sensitive_on_screen" | "sensitive_aloud",   "" from an older PC: do not offer it
 "hands_free": "same_as_button" | "button_only",                   "" from an older PC: do not offer it
 "hands_free_screen": "screen_on_screen" | "screen_aloud",         "" from an older PC: do not offer it
+"hands_free_live": "live_trust_fully" | "live_button_start_only" | "live_like_hey_jarvis",
+                                                                  "" from an older PC: do not offer it (§63.5)
+"live_end": "live_end_app_lock" | "live_end_windows_lock",        "" from an older PC: do not offer it (§63.5)
 "settings": {"strictness", "privacy", "memory", "sensitive_memory", "hands_free", "hands_free_screen",
+             "hands_free_live", "live_end",
              "changed": epoch,
              "voice_is_enough_allowed": bool,        true only while very strict
              "min_command_seconds": 2.0 | 1.5,
@@ -2339,10 +2343,15 @@ sends (both apps do).
                          "memory": ["memory_aloud", "memory_on_screen"],
                          "sensitive_memory": ["sensitive_on_screen", "sensitive_aloud"],
                          "hands_free": ["same_as_button", "button_only"],
-                         "hands_free_screen": ["screen_on_screen", "screen_aloud"]},
+                         "hands_free_screen": ["screen_on_screen", "screen_aloud"],
+                         "hands_free_live": ["live_trust_fully", "live_button_start_only",
+                                             "live_like_hey_jarvis"],
+                         "live_end": ["live_end_app_lock", "live_end_windows_lock"]},
              "defaults": {"strictness": "very_strict", "privacy": "private_on_screen",
                           "memory": "memory_aloud", "sensitive_memory": "sensitive_on_screen",
-                          "hands_free": "same_as_button", "hands_free_screen": "screen_on_screen"}},
+                          "hands_free": "same_as_button", "hands_free_screen": "screen_on_screen",
+                          "hands_free_live": "live_trust_fully",
+                          "live_end": "live_end_app_lock"}},
 "models": {"small":  {"installed", "name", "label": "the small voice-ID model", "bars_measured", "path"},
            "strong": {"installed", "name", "label": "the stronger voice-ID model", "bars_measured",
                       "path", "why"},
@@ -2429,7 +2438,21 @@ as it is.
 {"mode": "sensitive_memory", "value": "sensitive_on_screen" | "sensitive_aloud"}
 {"mode": "hands_free", "value": "same_as_button" | "button_only"}
 {"mode": "hands_free_screen", "value": "screen_on_screen" | "screen_aloud"}
+{"mode": "hands_free_live", "value": "live_trust_fully" | "live_button_start_only" | "live_like_hey_jarvis"}
+{"mode": "live_end", "value": "live_end_app_lock" | "live_end_windows_lock"}
 ```
+
+`hands_free_live` and `live_end` (both added 2026-09-28, for Jarvis Live)
+are described in §63.5. For `hands_free_live` a stricter choice is
+immediate and a looser one is the voice card; for `live_end` (a PC
+setting, the phone does not offer it) `live_end_windows_lock` is the looser
+one and raises the card, `live_end_app_lock` applies at once. On the PC a
+settings file that never had the key reads as the default
+(`live_trust_fully`, `live_end_app_lock`); a damaged or unknown value reads
+as the strict one (`live_like_hey_jarvis`, `live_end_app_lock`). In the
+apps, a `hands_free_live` value they do not know (an older PC's `""`) means
+"do not offer it" - on both apps since 2026-09-28 (the phone used to show
+it as the strictest choice).
 
 `hands_free_screen` (added 2026-09-28, the owner's decision: "under 'Only
 trust the talk button', screen answers stay on screen", with a voice
@@ -2506,7 +2529,7 @@ A settings file with no `memory` in it (every file from before) reads as
 | `200 {"ok": true, "changed": true, "pending": false, "settings": {"strictness", "privacy", "voice_is_enough_allowed"}, "message": "Done - that applies now."}` | tightening (`very_strict`, `private_on_screen`): immediate, no card. It also makes a waiting card that would loosen the same setting do nothing (`last.outcome = "withdrawn"`). |
 | `200 {"ok": true, "changed": false, ...}` | it was already that |
 | `202 {"ok": true, "pending": true, "setting", "value", "message"}` | loosening: ONE card (`change_own_config`). **Nothing changes until it is approved.** `last.outcome` becomes `"setting_changed"`, `"denied"`, `"timed_out"`, `"refused"`, `"withdrawn"` or `"failed"`. |
-| `503` | this PC's voice check is too old for that setting (`memory`, `sensitive_memory`, `hands_free` or `hands_free_screen` on a PC from before them) |
+| `503` | this PC's voice check is too old for that setting (`memory`, `sensitive_memory`, `hands_free`, `hands_free_screen`, `hands_free_live` or `live_end` on a PC from before them) |
 | `409` | `voice_is_enough` while balanced ("private answers can only be read aloud while the voice check is very strict"), a voice card already waiting, or the tier is not `ask` |
 
 Choosing `balanced` also puts private answers back on screen
@@ -2685,7 +2708,9 @@ this repository.)
 The three switches are `[voice]` lines in `jarvis-framework.toml`, read and
 never written by a route - the same as `turn_enabled`. No app can change
 them; each app keeps its own per-device switch for whether to use them (both
-apps already have "Interrupt Jarvis while it talks"). None is an approval
+apps had "Interrupt Jarvis while it talks"; since 2026-09-28 it is the
+three-choice "Interrupting Jarvis" setting, §63.4 - "Interrupt by voice" is
+the old switch on). None is an approval
 card: interrupting only stops Jarvis's own speech, the clip is Jarvis's own
 words, the warm-up loads what is already installed, and none of them sends
 anything anywhere.
@@ -9935,6 +9960,16 @@ always-on-top badge. Phone: `voice/LiveRules.kt`, `service/LiveService.kt`,
 apps until the 12 GB card is in and `jarvis_live_photo_test.py` passes
 (`camera` in the status, below). Nothing sends a picture yet.
 
+**Changed by the review fixes of 2026-09-28** (`docs/studio-2026-09-28/
+live-review-*.md`; branch `studio-live-fixes`): the new status fields
+`started_at`, `ended_say`, `ended_ago_s`, `end_on` and two new `limits`;
+`{"do": "active"}`; every pause line says what to do next; the end reasons
+are whole sentences; the start refusal names each app's own place to train
+the voice; a crisis turn gives Live more time; side talk is not kept in
+chat history; bare "that's it" / "I'm done" / "all done" / "we're done" no
+longer end Live (everyday confirmations did); and the `live_end` voice
+setting (63.5).
+
 ### 63.1 `GET /api/voice/live`
 
 The session, as fixed words and numbers only - never anything said. Also
@@ -9946,18 +9981,58 @@ sent as the `live` event on every change (the same object).
  "quiet_left_s": int|null, "quiet_warn": bool,
  "paused": "card"|"cards_unknown"|"other_voices"|"voice_trouble"|null, "pause_words": str|null,
  "muted": bool, "muted_why": "owner"|"call"|"mic_in_use"|null, "muted_words": str|null,
- "started_by": "button"|"tray"|"hotkey"|"voice"|null,
+ "started_by": "button"|"tray"|"hotkey"|"voice"|null, "started_at": float|null,
  "hint": "other_voices"|"voice_trouble"|null, "hint_words": str|null,
- "ending_soon": bool, "ended": str|null, "ended_words": str|null, "ended_device": str|null,
+ "ending_soon": bool, "ended": str|null, "ended_words": str|null,
+ "ended_say": str|null, "ended_device": str|null, "ended_ago_s": int|null,
  "resumable": bool, "turns": int, "refused_in_a_row": int,
- "limits": {...}, "lines": {...}, "seen": {...},
+ "limits": {..., "ended_show_s": 15, "crisis_more_s": 1800},
+ "lines": {...}, "seen": {...},
+ "end_on": "app_lock"|"windows_lock",
  "camera": {"ready": bool, "why": str}}
 ```
+
+- `started_at` - when this session started, on the PC's clock (the same
+  clock as an approval card's `created`). An app uses it to tell a card
+  raised in THIS session (which pauses Live and hides the tap buttons) from
+  one that was already waiting (which does neither).
+- `ended_words` - why it ended, as a whole sentence ("You ended it.", "App
+  lock came on.", "The PC went to sleep."...). `ended_say` - the fixed line
+  the device the session was on SAYS when Live ended by itself ("Live
+  ended - the time was up."); null for the owner's own End (an end tone
+  only), "that's all" (already answered), Stop everything, and a locked or
+  sleeping PC.
+- `ended_ago_s` - seconds since it ended, as the PC counts them. The apps
+  show "Jarvis Live ended" for `limits.ended_show_s` (15 s), or "Resume
+  Live" while `resumable` (10 minutes after a quiet or time-up end), and
+  count on from this number by themselves - a status read once is never
+  taken as "just now".
+- `end_on` - the PC's `live_end` voice setting (63.5): whether App lock
+  ends Live when it would ask again (default) or only when Windows locks.
+  The phone ignores it (it keeps App lock's own rule).
+- After a crisis turn in the session (`jarvis_agent.note_crisis_turn` ->
+  `note_crisis`), `left_s` never runs out sooner than
+  `limits.crisis_more_s` (30 minutes) after the LAST crisis turn,
+  `ending_soon` stays false (no "minutes left" warning), and
+  `quiet_left_s` is null (the quiet end is off for the session). The
+  owner's End, "that's all", Stop everything, App lock, Windows' lock, the
+  PC sleeping and Standby still end it. Nothing in the status says a
+  crisis turn happened.
 
 `lines` are the fixed lines an app SAYS ("I'm listening.", "Two minutes
 left. To keep going, say: give me twenty more minutes.", "Live ended - it
 was quiet."...); `seen` the fixed words an app SHOWS ("Heard you -
-thinking", "Didn't catch that - say a bit more", "(not for Jarvis)"...).
+thinking", "Didn't catch that - say a bit more", "(not for Jarvis)",
+"Jarvis Live is on your {device}", "Heard you, but the words couldn't be
+made out - say it again", "Jarvis Live is already listening - just
+talk"...). A device is named "PC" or "phone" in words, never "desktop".
+Every `pause_words` / `muted_words` line says what happens next or what to
+do ("Mic off - Jarvis can't hear you. Use Mic on to carry on"; "Paused:
+you're on a call - Live carries on after it, or use Listen anyway"). The
+buttons are named the same in both apps: **End Live**, **Mic off** / **Mic
+on**, **Listen anyway** (a call or another program's pause), **Carry on**,
+**20 more minutes** (only in the last 5 minutes), **Resume Live**, **Stop
+talking** - all in `live-cases.json`.
 
 ### 63.2 `POST /api/voice/live`
 
@@ -9965,8 +10040,9 @@ One action per request; only these fixed words are read.
 
 | Body | What it does | Held on a stale link? |
 |---|---|---|
-| `{"do": "start", "device", "by"?: "button"\|"tray"\|"hotkey", "minutes"?}` | Starts Live on that device (ends one on the other). **No card.** 409 with `"needs": "voice"` and "Jarvis Live needs your voice trained first - Settings -> Voice check." until the owner's voice print and the better voice model are there. On Standby it starts and says "Waking up, a few seconds"; otherwise it loads the everyday model. Returns `status` and the `say` line | Yes |
+| `{"do": "start", "device", "by"?: "button"\|"tray"\|"hotkey", "minutes"?}` | Starts Live on that device (ends one on the other). **No card** ("What asks first" lists it as a fixed row, "Start Jarvis Live - does it without asking"). 409 with `"needs": "voice"` and, in `error`, "Jarvis Live didn't start: it needs your voice trained first - Settings, then Voice." (the phone's: "- Settings, then Train my voice.") until the owner's voice print and the better voice model are there; both apps add a button that goes there. On Standby it starts and says "Waking up, a few seconds"; otherwise it loads the everyday model. Returns `status` and the `say` line | Yes |
 | `{"do": "stop", "why"?: "owner"\|"app_lock"\|"locked", "device"?}` | Ends it | **Never** |
+| `{"do": "active", "device"?}` | The owner typed, or tapped a quick answer, in Live: the quiet clock starts again, as a spoken sentence does. Nothing typed comes here (the words go to the chat route as usual); it can only keep open a session that is already on | **Never** |
 | `{"do": "extend", "minutes"?}` | More time (20 by default), never more than 2 hours ahead | Yes |
 | `{"do": "resume"}` | "Carry on" after a voice pause | Yes |
 | `{"do": "mute"\|"unmute", "why"?: "owner"\|"call"\|"mic_in_use", "device"?}` | The microphone closes; the session and its time carry on; the quiet clock stands still. A call or another program ending never undoes the OWNER's Mute | **Never** |
@@ -9974,8 +10050,11 @@ One action per request; only these fixed words are read.
 Voice commands do the same (only from a clip that passed the owner check):
 "Hey Jarvis, let's talk" starts it (`started_by: "voice"`); "Okay Jarvis,
 that's all for now", "thanks, that's all", "that'll be all", "goodbye
-Jarvis" and similar end it; "give me twenty more minutes" extends it. Plain
-"stop" still only stops Jarvis talking. Stop everything ends Live.
+Jarvis", "I'm done for now" and similar end it; "give me twenty more
+minutes" extends it. Everyday confirmations - a bare "that's it", "I'm
+done", "all done", "we're done" - do NOT end it (the review of 2026-09-28:
+"that's it, thanks" to a question ended the session). Plain "stop" still
+only stops Jarvis talking. Stop everything ends Live.
 
 ### 63.3 `POST /api/voice/utterance?source=live`
 
@@ -9987,10 +10066,13 @@ speech-to-text. Extra reply fields: `live` (the session after the clip, or
 a too-short clip is checked, never turned into words, to tell "say a bit
 more" from someone else - at most one spoken line a minute, and it does not
 reset the quiet clock), `live_elsewhere` (on a "hey Jarvis" clip while Live
-is on the OTHER device: nothing answered; the app offers "Live is on your
-phone - move it here?"). Clips that are not the owner's count towards
+is on the OTHER device: nothing answered; the app shows AND says "Live is
+on your PC - move it here?" for 30 seconds). Clips that are not the owner's count towards
 "Paused: other voices"; the microphone stays open then, and a clip that is
-the owner's carries on.
+the owner's carries on. A Live clip that passed the owner check but whose
+words could not be made out (speech-to-text missing or failed) still
+carries the `live` fields, so Live stays open: the app shows "Heard you, but
+the words couldn't be made out - say it again" and keeps listening.
 
 ### 63.4 What the apps must do
 
@@ -9998,17 +10080,34 @@ the owner's carries on.
   phone - the Live screen and a notification that stays on the phone
   (`setLocalOnly`), shows fixed words only and has End and Mute.
 - **Close the microphone** (release it, not just ignore it) while a card
-  raised during this session waits or the queue cannot be read, while a card
-  is on screen, on a stale link, while muted or on a call, and on the PC
-  while it cannot tell whether Windows is locked. Keep it open through a
-  voice pause. Under "Interrupt by tap only", close it while Jarvis talks.
+  raised during this session waits or the queue cannot be read, while such
+  a card is on screen, on a stale link, while muted or on a call, and on the
+  PC while it cannot tell whether Windows is locked. Keep it open through a
+  voice pause. A card that was waiting before Live started neither pauses
+  Live nor hides the tap buttons (`started_at`). Under "By button only" or
+  "Don't interrupt" (below), close it while Jarvis talks.
+- **One "Interrupting Jarvis" setting** (the owner's answer of 2026-09-28),
+  for Live and ordinary voice alike, kept on the device (no card either
+  way): **Interrupt by voice** (recommended), **By button only**, **Don't
+  interrupt**. It replaced "Interrupt Jarvis while it talks" and
+  "Interrupting Jarvis in Live"; an old switch turned off carries over as
+  "Don't interrupt", Live's "tap only" as "By button only"
+  (`interrupt_choice` in `live-cases.json`). Desktop: Settings -> Voice,
+  where the old switch was; phone: the Readiness screen.
+- **The talk button during Live** says "Jarvis Live is already listening -
+  just talk" and does not open a second microphone (both apps).
+- **Typing or tapping a quick answer** in Live sends `{"do": "active"}`.
 - **Cards are decided by tapping only** - a spoken "yes" is not even sent.
 - **Mark a Live question** `live: true` on the newest user message (with
   `provenance: "voice"`); the PC adds its Live note to the model (short
   answers, choices in words, never a bare yes/no question) and the side-talk
   rule. An answer that is only `[not for me]` is **never spoken**, shown as
-  "(not for Jarvis)", and left out of the app's conversation; the PC never
-  learns from it or counts it.
+  "(not for Jarvis)" (the answer before it stays on screen), and left out of
+  the app's conversation; the PC never learns from it, never counts it, and
+  **does not keep it in chat history** (the owner's answer of 2026-09-28:
+  `jarvis_chat_log.record_turn` answers `{"recorded": false, "why": ...}`).
+  An older history that still holds the marker shows it as "(not for
+  Jarvis)" in both apps.
 - **Tap buttons** after a spoken answer that ends with a question, sent as
   the owner's TYPED words; never while a card is on screen. **Typed
   questions** during Live keep typed-answer rules.
@@ -10022,7 +10121,11 @@ the owner's carries on.
   reads Windows' record of which program uses the microphone. Either mutes
   Live with `why` `call`/`mic_in_use` and unmutes after.
 - **App lock**: Live ends when App lock would ask again, and cannot start
-  while it would.
+  while it would - on the PC unless `end_on` is `windows_lock` (63.5), when
+  it ends only when Windows locks. The phone always keeps App lock's rule.
+- **Ending**: the device the session was on plays a short end tone when the
+  owner ends it, and says `ended_say` when it ended by itself. Each session
+  is a new conversation in the app; "Resume Live" continues the old one.
 
 ### 63.5 Trust: `hands_free_live`
 
@@ -10032,7 +10135,18 @@ Live is trusted like the talk button however it started),
 caution), `live_like_hey_jarvis` (every Live turn does). `mode:
 "hands_free_live"` on `POST /api/voice/enroll`; a stricter choice is
 immediate, a looser one is the voice card. Under "Same as the talk button"
-it changes nothing.
+it changes nothing. The desktop heading is "How far Jarvis Live is
+trusted"; the strictest choice reads 'Be as careful as with "Hey Jarvis"'.
+
+**`live_end` - when App lock ends Live on the PC** (the owner's decision of
+2026-09-28): `live_end_app_lock` (default: when App lock would ask again,
+counted from when the owner last touched a Jarvis window - talking does not
+count) or `live_end_windows_lock` (only when Windows itself locks). `mode:
+"live_end"` on `POST /api/voice/enroll`; the looser `live_end_windows_lock`
+is the voice card ("Keep Jarvis Live going on this PC until Windows itself
+locks..."), going back is immediate. Shown in the voice status (§16) and as
+`end_on` in 63.1. A PC setting only: the phone has no equivalent on purpose
+(`docs/ARCHITECTURE.md` section 8).
 
 ### 63.6 The camera gate and the photo test
 

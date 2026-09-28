@@ -1,13 +1,17 @@
 # Jarvis Live: talking back and forth, and showing the camera (design)
 
-Status: **built 2026-09-28 (branch `studio-live`) on the PC, the desktop app
-and the phone - except the camera, which is built switched OFF** until the
-12 GB card is in and passes the photo test (the owner's answer 3). What was
-built, what the owner answered, and what changed from the design below are
-in "What was built, and what changed" right after this paragraph; the
-sections after it are the design as it was written, corrected where the
-owner's answers or the reviews changed it. Nothing here has run on the
-owner's PC or phone yet. For the owner's decision of
+Status: **built 2026-09-28 on the PC, the desktop app and the phone -
+except the camera, which is built switched OFF** until the 12 GB card is in
+and passes the photo test (the owner's answer 3). **Reviewed and fixed the
+same day** (branch `studio-live-fixes`): four studio reviews
+(`docs/studio-2026-09-28/live-review-{bugs,desktop,phone,audit}.md`) and
+the owner's answers to their questions - see "What the reviews fixed"
+below. What was built, what the owner answered, and what changed from the
+design are in "What was built, and what changed" right after this
+paragraph; the sections after it are the design as it was written,
+corrected where the owner's answers or the reviews changed it. Nothing here
+has run on the owner's PC or phone yet, and the phone's code has not been
+compiled yet (only CI can build it). For the owner's decision of
 2026-09-28 in `CLAUDE.md` ("Jarvis Live": design voice and camera together
 now). Written by the studio's designer against
 `claude/jarvis-ai-assistant-research-ff37vy` (commit `2860995d`). Every
@@ -46,13 +50,18 @@ the gate):
   gate (`camera_status`) and the photo test program
   (`jarvis_live_photo_test.py`).
 - **The desktop app**: a Live button in the Jarvis bar and a sign under it,
-  an always-on-top badge ("Jarvis Live · 24 min left", Mute, Stop, Carry
-  on, Resume Live), a tray row, the microphone in Live mode (`live.rs`,
-  `voice.rs`), the rules in `live-rules.js`, and two settings in Settings ->
-  Voice. There is **no hotkey** (Alt+Shift+L was proposed; not built).
-- **The phone**: a Live screen (Home -> Live), the Live microphone service
-  with its notification (End, Mute; stays on the phone), the rules in
-  `voice/LiveRules.kt`, and the same two settings on the Voice check screen.
+  an always-on-top badge ("Jarvis Live · 24 min left", Mic off, End Live,
+  Carry on, Resume Live), a tray row and a red mark on the tray icon, the
+  microphone in Live mode (`live.rs`, `voice.rs`), the rules in
+  `live-rules.js`, "How far Jarvis Live is trusted" and "End Live when" in
+  Settings -> Voice, and the one "Interrupting Jarvis" setting there. There
+  is **no hotkey** (Alt+Shift+L was proposed; not built).
+- **The phone**: a Live screen (Home -> Live, a strip on Home while Live is
+  on, and a "Live" app-icon shortcut - long-press Jarvis's icon), the Live
+  microphone service with its notification (End Live, Mic off, Stop
+  talking; stays on the phone), the rules in `voice/LiveRules.kt`, the Live
+  trust setting on the Voice check screen and "Interrupting Jarvis" on the
+  Readiness screen.
 - Both apps are held to one table, `live-cases.json`
   (`tools/gen_live_cases.py`).
 
@@ -77,34 +86,70 @@ the gate):
    buttons cover quick answers.
 5. **Side talk is ignored**: the model answers with the marker "[not for
    me]" when the owner is clearly talking to someone else; Jarvis says
-   nothing, shows at most "(not for Jarvis)", and the turn is never learned
-   from and never counted. Chat history keeps the turn, with the marker as
-   its answer (the simplest honest record; it is shown as "(not for
-   Jarvis)").
+   nothing, shows at most "(not for Jarvis)" (the answer before it stays on
+   screen), and the turn is never learned from and never counted. **It is
+   not kept in chat history at all** (the owner's answer of 2026-09-28,
+   after the review: keeping it had been the builder's choice, not the
+   owner's). An older history that still holds the marker shows it as
+   "(not for Jarvis)".
 6. **Live pauses itself during a phone or video call** and carries on after.
    Phone: Android's audio mode (in a call or in communication) - no phone
    permission is needed for that. PC: Windows' own record of which program
    is using the microphone (`CapabilityAccessManager\ConsentStore\microphone`);
    when that cannot be read, the sign says "Jarvis can't tell when you're on
-   a call - use Mute".
+   a call - use Mic off". "Listen anyway" opens the microphone during a
+   call pause; a call or another program ending never undoes the owner's
+   own Mic off.
+7. **After a crisis turn, Live quietly gets more time** (the owner's answer
+   of 2026-09-28, after the review): it does not end at its time limit
+   until at least 30 minutes after the LAST crisis turn, skips the "minutes
+   left" warning, and the quiet end is off for the rest of the session.
+   Nothing is said or shown about it. The owner's End, "that's all", Stop
+   everything, App lock, Windows' lock, the PC sleeping and Standby still
+   end it. Both apps.
+8. **One interrupt setting** (the owner's answer of 2026-09-28): "Interrupting
+   Jarvis" with **Interrupt by voice** (recommended), **By button only** and
+   **Don't interrupt**, for Live and ordinary voice alike, where the old
+   "Interrupt Jarvis while it talks" switch was (desktop: Settings -> Voice;
+   phone: the Readiness screen). It replaced that switch and "Interrupting
+   Jarvis in Live". Old choices carry over: the old switch turned off
+   becomes "Don't interrupt", Live's "tap only" becomes "By button only". A
+   setting of this device, no card either way; the words are in
+   `live-cases.json`.
+9. **"End Live when"** (the owner's decision of 2026-09-28, after the
+   build): with App lock on, the PC ends Live **when App lock would ask
+   again** (1 minute after the owner last touched a Jarvis window; talking
+   does not count) by default, or **only when Windows locks** - the looser
+   choice raises an approval card, going back is immediate. The voice
+   setting `live_end`, in Settings -> Voice. The phone has no such setting
+   on purpose (`docs/ARCHITECTURE.md` section 8): it keeps App lock's own
+   rule, which is already the stricter choice.
+10. **Brain's old "Live" tab is now "Now"** on the desktop, so it is not
+   confused with Jarvis Live, and a Live change shows there as one readable
+   line ("Jarvis Live on this PC · 24 min left") instead of raw data.
 
 **Also from the Gemini Live comparison:** tap buttons after a spoken
 question ("Yes"/"No", or the choices it named), sent as TYPED words, never
 on or for a card; "Heard you - thinking" at once when a sentence passes; a
-Mute button (sign "Muted"; the session and its time carry on); "Interrupt by
-voice" (default) or "Interrupt by tap only" (then the microphone is closed
-while Jarvis talks, and "Stop talking" cuts it off); a text box during Live
-(typed answers stay typed); a test that a long answer after a tool call is
-spoken to the end. "Continue in Live" from History was **not** added: History
+Mic off button (sign "Mic off - Jarvis can't hear you. Use Mic on to carry
+on"; the session and its time carry on); interrupting by voice, or by
+button only (then the microphone is closed while Jarvis talks, and "Stop
+talking" cuts it off) - since the review one setting with a third choice,
+"Don't interrupt" (answer 8); a text box during Live (typed answers stay
+typed); a test that a long answer after a tool call is spoken to the end. "Continue in Live" from History was **not** added: History
 has no per-chat action row to put it in.
 
 **The rules review (A-M), as built:** A - no Live without a trained voice
-print and the better voice model ("Jarvis Live needs your voice trained
-first - Settings -> Voice check."); C - desktop App lock ends Live and stops
+print and the better voice model ("Jarvis Live didn't start: it needs your
+voice trained first - Settings, then Voice." on the PC; "- Settings, then
+Train my voice." on the phone; both with a button that goes there); C - desktop App lock ends Live and stops
 it starting, Stop always works; D - a locked phone's "let's talk" is ended at
 once and says nothing; E - after a crisis turn the quiet timer does not end
-Live, the help panel stays, and Live never feeds "suggest the bigger model"
-or any counter; F/G - the microphone is really closed (the recorder released)
+Live, the help panel stays, and (answer 7) Live gets more time; a crisis
+turn never feeds "suggest the bigger model" or any counter (an ordinary Live
+turn counts like any turn - an earlier version of this line said no Live
+turn did, which was wrong: `jarvis_agent.py` counts struggles for every
+turn but crisis and side-talk ones); F/G - the microphone is really closed (the recorder released)
 for a card, a stale link, Mute, a call and the lock - but NOT for a voice
 pause (see "decisions" below); H - "Watch with me" pictures only for
 questions asked at the PC; I - keeping the model loaded never overrides
@@ -156,7 +201,71 @@ stops it.
 **Left for later (not built):** checking each piece of a clip so a guest's
 words overlapping the owner's are never turned into words (voice review
 finding 8); a voice on the 2060; a hotkey; the phone's camera capture;
-measuring anything on the owner's PC and phone (step 5).
+measuring anything on the owner's PC and phone (step 5). From the reviews'
+idea lists, also not built: a Quick Settings tile, a "Live ended - Resume"
+notification, headset-button and Bluetooth-microphone handling, a dim
+"pocket" mode, and "Talk about this in Live" from the share sheet.
+
+## What the reviews fixed (2026-09-28, branch `studio-live-fixes`)
+
+Four studio reviews looked at the build: a bug hunt, a desktop play-test, a
+phone play-test and the feature audit
+(`docs/studio-2026-09-28/live-review-*.md`). Every finding was checked
+against the code first; all of them were real. In plain words:
+
+- **Live ended for the wrong reasons, or silently.** "That's it, thanks"
+  or "I'm done" in answer to a question ended the session - bare
+  confirmations no longer do (the ending phrases need "for now" or "with
+  Live"). A status read could hide the PC having slept - the sleep check
+  now runs every tick. Every end now says why in a whole sentence ("App
+  lock came on."), the device says it aloud when Live ended by itself, and
+  the owner's own End plays a short end tone.
+- **Words with next steps.** "End Live" (never "Stop"), "Mic off"/"Mic on"
+  (never "Mute"), "Listen anyway" during a call pause; every pause line
+  says what happens next; "your PC", never "your desktop"; the start
+  refusal names each app's own Settings place and has a button there.
+- **Cards.** A card raised during this session - including one already on
+  screen - closes the microphone on both apps; a card that was waiting
+  before Live started neither pauses Live nor hides the tap buttons (the
+  PC now sends `started_at`). The phone's "Show the card" opens Home, where the card is, instead of resetting the app.
+- **Tap buttons** no longer come out garbled ("- the red", "One you
+  mean"): a new rule, with the garbled examples in the shared table.
+- **The phone**: interrupting by voice keeps what the owner said; one
+  words-couldn't-be-made-out answer no longer stops the microphone; Unmute
+  during a call is no longer undone; End from the notification is retried
+  until it lands, and the screen never claims Live is on after it; after a
+  link drop Live says "I'm back" or gives up plainly; typing and tapping
+  count as the conversation going on; the Live screen lets the phone sleep
+  and lock once Live has ended; "Hey Jarvis" while Live is on the PC says
+  so and offers to move it; the talk button during Live says "Jarvis Live
+  is already listening - just talk"; a strip on Home, an app-icon shortcut,
+  and screen-reader announcements.
+- **The desktop**: Esc hides the bar but keeps the conversation; side talk
+  keeps the answer on screen (the crisis help panel included); the badge
+  shows why Live is paused on a second row, follows the theme and text
+  size, and opens the bar when clicked; "Resume Live" shows after the bar
+  reopens; the "ended" strip goes away after 15 seconds; "One moment" goes
+  through the same once-per-question rule and closes the microphone while
+  it plays; the "I heard you" sound plays in Live (under its switch); a
+  "20 more minutes" button in the last 5 minutes; "Hey Jarvis" listening
+  is restored exactly as it was when Live ends or fails to start; Live on
+  the phone shows in the Jarvis bar; the 200% text size no longer squeezes
+  the typing box.
+- **Both apps' settings and lists**: one "Interrupting Jarvis" setting
+  (answer 8); "How far Jarvis Live is trusted" as the heading; "Start
+  Jarvis Live - does it without asking" is a fixed row in "What asks
+  first" (it never asks: starting a conversation you can end at any time
+  is not an action).
+- **Docs**: JARVIS-API section 16 lists `hands_free_live` and `live_end`;
+  the wrong "no Live turn feeds suggest the bigger model" line is fixed;
+  JARVIS-TODAY no longer says Live is being built.
+
+**Still to check on the real devices** (code written, not run): whether
+the bar shows answers without taking focus on Windows (review finding 10),
+whether Android notices a call that starts while Jarvis talks (B6), and
+"let's talk" from a pocket (B7). TalkBack's own voice can reach the open
+microphone during Live; the voice check refuses it, but it can cause
+"Paused: other voices" - not fixable from the app.
 
 ## Four things to know first (some are bad news, said plainly)
 
@@ -309,7 +418,9 @@ next Live clip. It needs the device's echo canceller: on the phone Live uses
 the voice-call microphone path the barge-in listener already uses
 (`WakeWordService.kt:464-478`); on a phone without an echo canceller,
 interrupting works only with "stop" or the End button, and the Live screen
-says so.
+says so. **As built after the review:** one "Interrupting Jarvis" setting
+decides this for Live and ordinary voice alike - by voice, by button only,
+or not at all (the owner's answer 8, above).
 
 ### 3.3 The TV, other people, and Jarvis's own voice
 
@@ -387,12 +498,15 @@ shared read-aloud table (`private-aloud-cases.json`).
   from it without a card (`jarvis_auto_learn.py:568`). The spoken-style
   answer still applies to it: that reads the app's own `voice` tag
   (`jarvis_agent.py:2872`), not the picture mark.
-- **Side talk** (the owner's answer, 2026-09-28): a remark to someone else
+- **Side talk** (the owner's answers, 2026-09-28): a remark to someone else
   gets the marker "[not for me]" from the model; it is never spoken, never
-  learned from and never counted, and the chat keeps the turn with the
-  marker as its answer, shown as "(not for Jarvis)".
-- **After a crisis turn** the quiet timer does not end Live, and no Live
-  turn ever feeds "suggest the bigger model" or any other counter.
+  learned from, never counted, and **not kept in chat history at all**
+  (`jarvis_chat_log.record_turn` leaves it out). An older history that
+  still holds the marker shows it as "(not for Jarvis)".
+- **After a crisis turn** the quiet timer does not end Live, Live gets at
+  least 30 more minutes from the last crisis turn with no "minutes left"
+  warning, and the crisis turn never feeds "suggest the bigger model" or any
+  other counter. An ordinary Live turn counts like any turn.
 - **Never kept:** the audio (as today), camera pictures, and the words read
   from them - only your question's words and Jarvis's answer
   (`jarvis_chat_log.py:48`: "A picture: its words only ... The picture

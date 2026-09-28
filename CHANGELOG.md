@@ -39,6 +39,42 @@ number as the last part - `0.2.57` is a build of 0.2.
   so a month can end slightly over. Limits and prices can only be set on
   the PC; the apps only show them. Not yet tried against the real services.
 
+- **Jarvis Live, fixed after four reviews - and your three answers built.**
+  - **After a crisis answer, Live gets more time.** It does not end at its
+    time limit until at least 30 minutes after the last such answer, and
+    it does not say "minutes left". It is quiet about it. You can still end
+    it any time. Both apps.
+  - **One "Interrupting Jarvis" setting** instead of two, for Live and
+    everyday voice alike: "Interrupt by voice" (recommended), "By button
+    only", or "Don't interrupt". On the PC: Settings -> Voice, where the old
+    switch was. On the phone: the Readiness screen. Your old choice carries
+    over (the old switch off becomes "Don't interrupt"; Live's "tap only"
+    becomes "By button only").
+  - **Remarks to someone else are not kept in chat history at all** (they
+    were kept, marked "(not for Jarvis)"). An old one still in your history
+    shows as "(not for Jarvis)".
+  - **"End Live when"** (PC, Settings -> Voice): with App lock on, Live ends
+    when App lock would ask again (the default), or only when Windows locks
+    - the looser choice asks with an approval card. The phone keeps App
+    lock's own rule.
+  - **Clearer words:** "End Live" (not "Stop"), "Mic off" / "Mic on" (not
+    "Mute"), "Listen anyway" during a call; every pause says what to do
+    next; "your PC", never "your desktop"; when Live ends it says why, in
+    a sentence, and says it aloud when it ended by itself.
+  - **Fewer surprises:** "that's it" or "I'm done" in answer to a question
+    no longer ends Live; only a card raised during Live pauses it (an old
+    waiting card does not); tap buttons no longer come out garbled; typing
+    counts as talking for the quiet timer; Esc on the PC hides the bar but
+    keeps the conversation; a remark to someone else no longer wipes the
+    answer (or the crisis help) off the screen.
+  - **Easier to find:** the phone has a strip on Home while Live is on and
+    a "Live" shortcut when you long-press the app icon; the PC's tray icon
+    gets a red mark; "What asks first" lists "Start Jarvis Live - does it
+    without asking" in both apps; Brain's old "Live" tab on the PC is now
+    called "Now".
+  - Said plainly: none of this has run on your PC or phone yet, and the
+    phone's part is only compiled by GitHub.
+
 - **Jarvis Live: talk back and forth, on the PC and the phone.** Press
   Live (the Jarvis bar, the tray, or Home -> Live on the phone) or say "Hey
   Jarvis, let's talk", then just talk - no "Hey Jarvis" before each

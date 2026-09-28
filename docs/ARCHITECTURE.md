@@ -1121,9 +1121,17 @@ JARVIS-API §63) is trusted like the talk button by default however Live
 was started; the voice setting `hands_free_live` gives it the "Hey Jarvis"
 caution when Live was started by voice, or always (owner, 2026-09-28; a
 stricter choice at once, a looser one a card). A Live turn the model marked
-as side talk (`[not for me]`) is never learned from and never counted
-(`jarvis_intake.owner_turns`, `jarvis_agent`), and after a crisis turn no
-Live turn feeds any counter.
+as side talk (`[not for me]`) is never learned from, never counted and not
+kept in chat history at all (owner, 2026-09-28; `jarvis_intake.owner_turns`,
+`jarvis_agent`, `jarvis_chat_log.record_turn`). An ordinary Live turn counts
+toward "suggest the bigger model" like any turn; a crisis turn never does,
+and after one Live quietly gets more time (it does not end until at least
+30 minutes after the last crisis turn) and skips the "minutes left" warning
+(owner, 2026-09-28; `jarvis_live.Engine.note_crisis`). **When Live ends on
+a PC with App lock on** is the voice setting `live_end`: by default when App
+lock would ask again (talking does not count as being at the PC), or, the
+looser choice, only when Windows itself locks - that one raises an approval
+card; going back is immediate (owner, 2026-09-28).
 
 **Jarvis's own words are never the owner's.** Since 2026-09-25 an app sends
 the last sentence of a spoken answer the owner cut off (`interrupted` on the
@@ -1192,7 +1200,9 @@ changes from it and from nowhere else. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
 `deep`, `memory_saved`, `schedule`, `focus`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
-and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.
+and nothing else; `jarvis_agent._step_event`. Brain → Now renders it (the
+tab was called "Live" until 2026-09-28, renamed so it is not confused with
+Jarvis Live).
 `deep` is a deep question finishing, `{"id", "state"}` only -
 `jarvis_big_model.py`; added 2026-09-24. Both apps handle it: the desktop's
 Brain reads `GET /api/deep` again (`brain.js`, Deep questions), and the
@@ -1573,7 +1583,8 @@ backend routes, in both directions; the rest are listed here only.
 | Signing in to the other chatbot websites (ChatGPT, Claude, Copilot, Perplexity, DeepSeek, Grok, Le Chat, Meta AI) and their self-checks: `py -3 jarvis_chatbot_<site>.py sign-in` / `check`, 2026-09-28 | **PC only**, the same reason as Gemini's: each website's window, and its browser profile holding that site's sign-in cookie, are on the PC, and the owner signs in to each spare account there, by hand - a phone cannot sign a PC's browser in, and Jarvis never types or keeps a password. Both apps still see which are set up, through the same "Chatbot conversations" row. |
 | Saving a chatbot API key (`py -3 jarvis_chatbot_api.py key <service>`) and choosing "a second AI on this PC" (`local_model` under `[chatbot]` in `jarvis-framework.toml`), 2026-09-28 | A key is entered on the PC only, like the web-search keys: sending it from the phone would send it somewhere other than its own service (rule 3). Neither app has a screen for entering a key or choosing the local model; once either is done on the PC, both apps' chatbot screens can start a conversation with it (`/api/chatbot/*`), and both apps see whether a key is saved, in "What Jarvis can reach" ("Chatbot conversations with a key (API)"). The local model is a settings-file line, as the other second-card settings are. |
 | Setting an API chatbot's monthly money limit, or correcting its price (`py -3 jarvis_chatbot_api.py limit <service> <dollars>`, `price <service> <in> <out>`, `spent`), 2026-09-28 | Set on the PC only, the same place a key is added, as the owner decided ("a monthly amount per service, set on the PC"). Raising a limit or lowering a price is a loosening - more money can leave - and a person typing at the PC's own command line is how every other loosening of this feature is done (a key, the model line); there is no route for either, so no app, and nothing that holds the pairing token, can raise one. Both apps READ it: the chooser shows "About $X of $Y left this month for <company> (prices are estimates you can correct on the PC)" under each API service with a limit, and the approval card (written on the PC) says the same. Lowering is on the PC too, to keep ONE place for the numbers. |
-| Jarvis Live's always-on-top badge, its tray row, and ending Live when Windows locks (and pausing it when the lock cannot be read) | The badge is the PC's always-visible Live sign (docs/LIVE-DESIGN.md); the phone's sign is its Live screen and an ongoing notification (the row in the phone table). Windows' lock is a PC thing; on the phone, App lock and the screen do that job. |
+| Jarvis Live's always-on-top badge, its tray row and the red mark on the tray icon, and ending Live when Windows locks (and pausing it when the lock cannot be read) | The badge is the PC's always-visible Live sign (docs/LIVE-DESIGN.md); the phone's sign is its Live screen, a strip on Home and an ongoing notification (the row in the phone table). Windows' lock is a PC thing; on the phone, App lock and the screen do that job. |
+| Jarvis Live's "End Live when" voice setting (`live_end`: when App lock would ask again, or - looser, with a card - only when Windows locks) | The owner's decision of 2026-09-28 is about the PC, where Live can outlast App lock while the owner walks away from a desk. **The phone has no such setting on purpose:** it keeps App lock's own rule - Live ends when App lock would lock the app again ("Lock again after") - which is already the stricter choice, and a phone is carried, not left at a desk. If the owner wants the looser choice on the phone too, it is a new decision. |
 | Jarvis Live noticing "another program is using the microphone" (Windows' own record) and muting itself | The PC's way of noticing a call (the owner's answer, 2026-09-28). The phone notices a call from Android's audio mode instead (the phone row). When Windows' record cannot be read, the PC's sign says "Jarvis can't tell when you're on a call - use Mute". |
 
 **On the phone, kept off the desktop:**
@@ -1987,7 +1998,7 @@ they landed):
   its model is there; otherwise it asks Ollama about the everyday model, as
   before. Pictures never go to a cloud lane (`jarvis_router.choose()`
   keeps any turn with an image local, and the second card is on this PC).
-- **A reasoning trace.** Brain → Live shows each tool Jarvis starts and
+- **A reasoning trace.** Brain → Now shows each tool Jarvis starts and
   finishes (the `step` event, from `jarvis_agent.py`, only when tools are
   switched on), but not the model's private reasoning: that text can quote
   email or files, and the event bus reaches a phone's lock screen (§6), so

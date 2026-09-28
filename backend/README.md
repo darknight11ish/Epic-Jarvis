@@ -14965,13 +14965,16 @@ design). Built on the backend and in both apps (`docs/JARVIS-API.md` section
   the phone), or say "Hey Jarvis, let's talk". From then on you just talk:
   no "Hey Jarvis" before each sentence. Every sentence is still checked to
   be your voice on the PC before any words are made of it.
-- It ends when you press Stop/End, say "Okay Jarvis, that's all for now",
+- It ends when you press End Live, say "Okay Jarvis, that's all for now",
   after 90 quiet seconds, at the time limit (30 minutes; "give me twenty
   more minutes" adds time), or on Stop everything. The sign ("Jarvis Live ·
-  24 min left") is on screen the whole time.
-- Cards still need a tap: while a card waits, Jarvis stops listening.
-- **It needs your voice trained first** (Settings -> Voice check), and the
-  better voice model installed - otherwise it says so and does not start.
+  24 min left") is on screen the whole time. After a crisis answer it gets
+  at least 30 more minutes and does not warn about time.
+- Cards still need a tap: while a card raised during Live waits, Jarvis
+  stops listening.
+- **It needs your voice trained first** (Settings, then Voice on the PC;
+  Settings, then Train my voice on the phone), and the better voice model
+  installed - otherwise it says so and does not start.
 - **The camera is built but switched off**, and stays hidden, until the
   12 GB card is in and passes the photo test below.
 
@@ -15015,11 +15018,41 @@ model.
   the patch listed.
 - `tools/gen_live_cases.py` (new): `live-cases.json` for both apps.
 
+## The review fixes (2026-09-28, branch `studio-live-fixes`)
+
+Four studio reviews (`docs/studio-2026-09-28/live-review-*.md`) and the
+owner's answers to them. On the backend side (no `.patch` file changed -
+all of it is in the files shipped whole):
+
+- `jarvis_live.py`: plain ending phrases (a bare "that's it" / "I'm done"
+  no longer ends Live); the sleep check runs on every tick, so a status
+  read cannot hide the PC having slept; `{"do": "active"}` (typing keeps
+  Live open); pause and mute lines with next steps; whole-sentence end
+  reasons and the line said when Live ends by itself (`ended_say`);
+  `started_at`, `ended_ago_s` and `end_on` in the status; more time after
+  a crisis turn (`CRISIS_MORE_S`, no warning); "your PC", never "your
+  desktop"; the start refusal names each app's own Settings place.
+- `jarvis_speech.py`: a Live clip whose words could not be made out keeps
+  Live open (it used to look like Live had stopped).
+- `rebuilt/jarvis_voice.py`, `jarvis_voice_enroll.py`: the `live_end`
+  voice setting ("End Live when"; the looser "only when Windows locks" is
+  the voice card).
+- `jarvis_chat_log.py`: a side-talk turn is not kept in chat history at
+  all (`{"recorded": false}`), the owner's answer of 2026-09-28.
+- `jarvis_asks_first.py`: the fixed row "Start Jarvis Live - does it
+  without asking".
+- `tools/gen_live_cases.py`: the new words, buttons and rules for both
+  apps, including the tap-button examples that used to come out garbled
+  and the one "Interrupting Jarvis" setting's carry-over rule.
+
+Nothing new to run on the PC beyond `apply-patches.ps1` as usual.
+
 ## Test it
 
 ```
 python3 backend/test_live.py
 python3 backend/test_voice_strict.py
+python3 backend/test_chat_log.py
 python3 tools/gen_live_cases.py --check
 ```
 
