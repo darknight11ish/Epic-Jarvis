@@ -598,6 +598,11 @@ testers, scouts and integration scouts; `.claude/agents/`):
   with a card first** (owner, 2026-09-28), because afterwards those numbers
   may be read aloud. A mark the owner added comes off with no card, as
   built.
+- **Swiping on approval cards is a setting that can be turned off**
+  (owner, 2026-09-28): "Swipe to approve or deny" on the phone's Security
+  screen, on by default. Off, every card is decided with its buttons only.
+  Turning it off is instant; turning it back on asks for the fingerprint or
+  PIN, like every other loosening there. The desktop has no swipe.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`

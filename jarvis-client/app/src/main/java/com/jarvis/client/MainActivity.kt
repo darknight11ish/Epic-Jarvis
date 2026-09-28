@@ -2090,6 +2090,7 @@ class MainActivity : FragmentActivity() {
                             answerTurnId = answerTurnId,
                             crisisAnswer = crisisAnswer,
                             memoryHidden = privateHidden,
+                            swipeDecides = security.swipeDecides,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
                         ),

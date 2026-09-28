@@ -432,6 +432,8 @@ data class HomeState(
      * notice is anything else.
      */
     val noticeProblem: com.jarvis.client.net.PlainErrors.Shown? = null,
+    /** Security's "Swipe to approve or deny" (on by default). */
+    val swipeDecides: Boolean = true,
 )
 
 /**
@@ -1062,6 +1064,7 @@ private fun ConversationList(
                     onApprove = { actions.onApprove(item) },
                     onDeny = { actions.onDeny(item) },
                     onAmend = { note -> actions.onAmend(item.id, note) },
+                    swipeAllowed = state.swipeDecides,
                     showFooter = state.pending.size == 1,
                     // UI-AUDIT-2026-09-26 item 6: a new card fades in, and the
                     // cards below glide up to fill the gap left by one that

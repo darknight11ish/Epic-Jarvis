@@ -6,6 +6,10 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **A switch to turn off swiping on approval cards** (phone, Security).
+  Swiping right to approve and left to deny stays on unless you turn it
+  off; off, every card is decided with its buttons only. Turning it back on
+  asks for your fingerprint or PIN.
 - **The core of the chatbot driver - not usable yet.** The part of Jarvis
   that will hold a conversation with an AI chatbot for you (Gemini first)
   is written and tested on the PC side: one approval card per

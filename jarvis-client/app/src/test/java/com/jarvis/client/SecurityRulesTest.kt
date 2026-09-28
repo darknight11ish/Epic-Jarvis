@@ -353,4 +353,39 @@ class SecurityRulesTest {
         val desktop = Regex("\"([^\"]*)\"").findAll(m!!.groupValues[1]).joinToString("") { it.groupValues[1] }
         org.junit.Assert.assertEquals(desktop, says)
     }
+
+    // --- "Swipe to approve or deny" (the owner, 2026-09-28) ---
+
+    @Test
+    fun `swiping is on by default, as it was before the setting existed`() {
+        assertTrue(Security().swipeDecides)
+    }
+
+    @Test
+    fun `turning swiping off is stricter, so it needs no check`() {
+        assertFalse(SecurityRules.loosens(Security(), Security(swipeDecides = false)))
+    }
+
+    @Test
+    fun `turning swiping back on loosens, so it needs the check`() {
+        assertTrue(SecurityRules.loosens(Security(swipeDecides = false), Security()))
+    }
+
+    @Test
+    fun `swiping off is saved, and a phone with nothing saved reads it as on`() {
+        val stored = SecurityRules.toStored(Security(swipeDecides = false))
+        assertEquals("false", stored[SecurityRules.KEY_SWIPE])
+        assertFalse(SecurityRules.fromStored { stored[it] }.swipeDecides)
+        assertTrue(SecurityRules.fromStored { null }.swipeDecides)
+        // Anything unreadable falls back to on - today's behaviour, never looser.
+        assertTrue(SecurityRules.fromStored { if (it == SecurityRules.KEY_SWIPE) "maybe" else null }.swipeDecides)
+    }
+
+    @Test
+    fun `the Checks line says when swiping is off, and says nothing new when it is on`() {
+        assertTrue(SecurityRules.summary(Security(swipeDecides = false)).endsWith(SecurityRules.SWIPE_OFF_SUMMARY))
+        assertFalse(SecurityRules.summary(Security()).contains(SecurityRules.SWIPE_OFF_SUMMARY))
+        val locked = Security(appLock = true, swipeDecides = false)
+        assertTrue(SecurityRules.summary(locked).endsWith(SecurityRules.SWIPE_OFF_SUMMARY))
+    }
 }
