@@ -1390,6 +1390,14 @@ Decided 2026-09-28, the owner's answers after the post-change audits
   voice. The switch stays the master (off = no animal voice).
 - **The app builder's projects join Projects**: an app is a coding project
   whose tests are its benchmarks - one list, not two.
+- **An animal's answer can be changed later** (owner, 2026-09-28, after PR
+  #25 merged): in the voice settings of both apps, an animal answered "Keep
+  my voice" gets a button "Use its own voice", and one answered "Use it"
+  gets "Keep my voice". No card (the switch it can turn on has none); held
+  on a stale link. The backend route already took a new answer.
+- **The update guide is kept true after each merge** (owner, 2026-09-28): it
+  said QR pairing was "for later" after it was built; it now says what is on
+  `main`, which of its steps are old, and adds the half-hour pairing test.
 
 ## Every new feature gets its own audit, without being asked
 
