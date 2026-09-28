@@ -14645,5 +14645,5 @@ and drops names that were not asked; the routes.
 
 - **Not tried against any real chatbot**, and the summary's quality with the
   real local model on real answers is not measured.
-- The numbers (3 on one card, 4 on two) are a first proposal, not measured.
+- The numbers (3 on one card, 4 on two) are confirmed by the owner (2026-09-28); the times are not measured.
 - A comparison is kept in memory only: a backend restart loses it.

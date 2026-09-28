@@ -623,6 +623,11 @@ testers, scouts and integration scouts; `.claude/agents/`):
   that service when it is reached, and the approval card shows how much is
   left. Prices change, so the amount is an estimate from a price list the
   owner can see and correct, and the card says "about".
+  **Compare, as built, is confirmed** (owner, 2026-09-28): up to 3 chatbots
+  per comparison on one graphics card and 4 on two, asked one after
+  another; a chatbot that shows a captcha or sign-in page is left out and
+  the others carry on (the summary says who and why), rather than pausing
+  the whole comparison.
 - **Customer-support chats** (Groupon's and similar, owner 2026-09-28) are a
   separate mode of the driver, because the other side is a company acting
   on the owner's real account, often a real person: **one card before each

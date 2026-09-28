@@ -9287,7 +9287,7 @@ limits (the form's most messages and most minutes apply to each chatbot on
 its own). When the last one ends, Jarvis's own model on this PC writes ONE
 summary.
 
-**How many chatbots (proposed - the owner can change them):** 2 to 3 on one
+**How many chatbots (confirmed by the owner, 2026-09-28):** 2 to 3 on one
 graphics card, 2 to 4 on two (`jarvis_chatbot_compare.MAX_AIS`); one after
 another in both. The numbers are in `tier.compare_min` / `tier.compare_max`.
 

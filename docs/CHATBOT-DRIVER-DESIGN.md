@@ -327,7 +327,7 @@ dropped out and why.
 - **Kept in memory only**, like single conversations: a backend restart
   loses it.
 
-### The limits (proposed - the owner can change them)
+### The limits (confirmed by the owner, 2026-09-28)
 
 | | one graphics card | two graphics cards |
 |---|---|---|
