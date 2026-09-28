@@ -34,6 +34,11 @@ the `jarvis-memory-eval` folder in your home folder
 (`C:\Users\pcadmin\jarvis-memory-eval`). Send back the `.md` file in that
 folder, and its numbers go in the table below.
 
+**Trying other memory-search models** (a different meaning model or
+re-ranker, 2026-09-28): `tools/model_tryout/README.md`, section 2. It runs
+this same self-test once per model, never switches anything, and ends with
+rows in this table's format ("Tryout: ...").
+
 ## The numbers
 
 "Words only" means the search that does not use the meaning model. It is all

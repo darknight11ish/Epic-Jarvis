@@ -157,6 +157,18 @@ number as the last part - `0.2.57` is a build of 0.2.
   now ends with "(Nothing was actually done - no action ran in this
   answer.)" - and says so aloud on voice.
 
+**New: model tryouts (tools only - nothing switches by itself)**
+
+- **Try other chat models overnight** against Jarvis's own: tools, learning,
+  speed and how much fits on the graphics card, with a plain verdict for each
+  (`tools/model_tryout/README.md`).
+- **Try other memory-search models and re-rankers** with the memory
+  self-test. New `JARVIS_MEMORY_EMBED_MODEL` / `JARVIS_MEMORY_RERANK_MODEL`
+  switches; the defaults are unchanged.
+- **The preflight check warns about a hidden llama.cpp `config.ini`,** and
+  docs/MODEL-TOPOLOGY.md has two engine settings to try, with how to measure
+  and undo each.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

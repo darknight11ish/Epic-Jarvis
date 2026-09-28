@@ -10393,6 +10393,7 @@ chat even while tools are switched on.
 | calendar, email, web search | calendar and email: says whether each is set up, and reads nothing unless `--with-reads`. Web search: tested ONLY when it is switched on and a provider is chosen, and then through the Test search button's own route (one search for the word "wikipedia") |
 | the PC stays awake | Windows puts the PC to sleep on mains power (a WARN only: alarms, reminders and "tell me when" go off by the PC's clock, and nothing goes off while it sleeps). Read with `powercfg /query` (read-only); the WARN gives the one line that keeps it awake while plugged in, `powercfg /change standby-timeout-ac 0`. Skipped off Windows (ease-of-use audit 2026-09-27, #8d) |
 | Windows Credential Manager | it does not answer |
+| a hidden llama.cpp settings file | `%PROGRAMDATA%\llama.cpp\config.ini` or `%APPDATA%\llama.cpp\config.ini` exists (a WARN only). Ollama's engine reads settings from those files on top of Jarvis's own (the research audit, 2026-09-28, section 6 - read in llama.cpp's source, not tried on the PC), and nothing else in Jarvis shows them. The WARN lists the settings' names (never their values) and gives the one line that renames the file. Skipped off Windows |
 
 **The wrong folder is one message, not a FAIL per check** (ease-of-use
 audit 2026-09-27, #8b). Before anything is checked, `selftest.py` (both
