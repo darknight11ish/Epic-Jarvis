@@ -775,6 +775,20 @@ testers, scouts and integration scouts; `.claude/agents/`):
   alike; **side remarks are not kept in chat history at all**) so it is
   not confused with
   Jarvis Live.
+- **After the second chat audit** (owner, 2026-09-28;
+  `docs/studio-2026-09-28/chat-audit2-*.md`): **the PC re-registers a
+  continued chat's own typed and spoken messages from its encrypted record**,
+  so facts learned after "Continue this chat" or a restart save on their own
+  again instead of waiting as cards for about 10 questions. This loosens the
+  "only messages seen arriving live count" rule for the owner's own typed or
+  spoken words in a chat the PC already holds - never for shared, pasted,
+  chatbot, support or outside text, and the outside-text mark still decides.
+  **The scrollable thread hides under "Hide memory lists and chat history"**
+  on both apps, like the "Used" list. Not yet decided by the owner, built
+  the careful way meanwhile: the delete dialogs say facts stay and backups
+  keep copies; the thread shows a "Jarvis reads from here" line; a chat that
+  spills over the days in "Forget a time frame" starts unticked; the bigger
+  re-send caps for two cards wait until the second card is measured.
 - **"Forget a time frame"** (owner, 2026-09-28): the owner may ask, by
   voice or typing, to forget what Jarvis learned or said in a time frame
   ("forget what you learned last week", "delete my chats from 1 to 15
