@@ -376,12 +376,18 @@ SERIOUS_OPEN_MAX_SECONDS = 600.0
 #: After the turn ends: at least this long, at most SERIOUS_GRACE_MAX.
 SERIOUS_GRACE_MIN_SECONDS = 30.0
 SERIOUS_GRACE_MAX_SECONDS = 300.0
-#: The slowest built-in speaking pace ("Slower", 0.5x of Kokoro's ~2.5
-#: words a second), a little under, so the window outlasts the speech.
+#: The slowest pace an answer can be spoken at (0.5x of Kokoro's ~2.5
+#: words a second - the lowest speed the settings file allows; the app's
+#: own "Slower" is 0.85x), a little under, so the window outlasts the speech.
 SLOWEST_WORDS_PER_SECOND = 1.2
 
 _SERIOUS_LOCK = threading.Lock()
-_SERIOUS = {"gen": 0, "open": False, "since": 0.0, "until": 0.0}
+#: `open` counts the crisis turns still being answered - two can overlap (a
+#: second upset message while the first is answered, on either device), and
+#: the moment must last until the LAST of them has been spoken. `since` is
+#: when the newest began (the safety cap counts from it); `until` is when an
+#: ended moment's speech is over; `gen` tells a late timer it is stale.
+_SERIOUS = {"gen": 0, "open": 0, "since": 0.0, "until": 0.0}
 
 #: Stand-ins for tests: the clock, a timer and the event bus.
 _now: Callable[[], float] = time.monotonic
@@ -394,7 +400,10 @@ def _later(seconds: float, fn: Callable[[], None]) -> None:
 
 
 def _publish(serious: bool) -> None:
-    """The `wellbeing` event, best-effort: a missing bus changes nothing."""
+    """The `wellbeing` event, best-effort: a missing bus changes nothing.
+    Called with _SERIOUS_LOCK held, so two changes racing each other can
+    never reach the apps in the wrong order (the bus only takes its own
+    lock and calls nobody back)."""
     try:
         import jarvis_events
         jarvis_events.BUS.publish(SERIOUS_EVENT, {"serious": bool(serious)})
@@ -402,11 +411,20 @@ def _publish(serious: bool) -> None:
         pass
 
 
-def _serious_locked(now: float) -> bool:
+def _settle_locked(now: float) -> None:
+    """A moment whose newest crisis turn began more than the safety cap ago,
+    and never reported its end (a crash mid-turn), is over: close it and
+    tell both apps once, so an ordinary question afterwards is not left
+    waiting on the apps' own 900 s net."""
     s = _SERIOUS
-    if s["open"]:
-        return now - s["since"] < SERIOUS_OPEN_MAX_SECONDS
-    return now < s["until"]
+    if s["open"] and now - s["since"] >= SERIOUS_OPEN_MAX_SECONDS:
+        s.update(gen=s["gen"] + 1, open=0, until=0.0)
+        _publish(False)
+
+
+def _serious_locked(now: float) -> bool:
+    _settle_locked(now)
+    return bool(_SERIOUS["open"]) or now < _SERIOUS["until"]
 
 
 def serious_now() -> bool:
@@ -432,27 +450,37 @@ def grace_seconds(words: int) -> float:
 
 def serious_begin() -> None:
     """A crisis turn starts (jarvis_agent.run_local_turn, before its first
-    word): the window opens and both apps are told. Never raises."""
+    word): the window opens (or stays open, one more turn in it) and both
+    apps are told. Never raises."""
     try:
         with _SERIOUS_LOCK:
-            _SERIOUS.update(gen=_SERIOUS["gen"] + 1, open=True, since=_now(), until=0.0)
+            now = _now()
+            _settle_locked(now)
+            _SERIOUS.update(gen=_SERIOUS["gen"] + 1, open=_SERIOUS["open"] + 1, since=now)
+            _publish(True)
     except Exception:
         return
-    _publish(True)
 
 
 def serious_end(words: int = 0) -> None:
-    """The crisis turn ended, `words` long: the window stays open until the
-    answer can have been spoken (grace_seconds), then closes by itself and
-    both apps are told. Never raises."""
+    """A crisis turn ended, `words` long: the window stays open until the
+    answer can have been spoken (grace_seconds) - and while any other crisis
+    turn is still being answered - then closes by itself and both apps are
+    told. Never raises."""
     try:
         grace = grace_seconds(words)
         with _SERIOUS_LOCK:
+            now = _now()
+            _settle_locked(now)
             if not _SERIOUS["open"]:
-                return
+                return          # the safety cap already closed it
+            # Whichever is later: this answer's speech, or an earlier one's.
+            wait = max(grace, _SERIOUS["until"] - now)
+            _SERIOUS.update(open=_SERIOUS["open"] - 1, until=now + wait)
+            if _SERIOUS["open"]:
+                return          # another crisis turn is still being answered
             gen = _SERIOUS["gen"]
-            _SERIOUS.update(open=False, until=_now() + grace)
-        _later(grace, lambda: _expire(gen))
+        _later(wait, lambda: _expire(gen))
     except Exception:
         pass
 
@@ -465,9 +493,9 @@ def _expire(gen: int) -> None:
             if _SERIOUS["gen"] != gen or _SERIOUS["open"] or not _SERIOUS["until"]:
                 return
             _SERIOUS.update(until=0.0)
+            _publish(False)
     except Exception:
         return
-    _publish(False)
 
 
 def serious_calm() -> None:
@@ -477,6 +505,7 @@ def serious_calm() -> None:
     Tells both apps only when something was open. Never raises."""
     try:
         with _SERIOUS_LOCK:
+            _settle_locked(_now())
             # `until` still set means the closing `false` has not been sent
             # yet (_expire clears it when it sends one) - even if the time
             # just ran out and the timer is a moment late - so it is sent
@@ -485,14 +514,14 @@ def serious_calm() -> None:
             if _SERIOUS["open"] or not _SERIOUS["until"]:
                 return
             _SERIOUS.update(gen=_SERIOUS["gen"] + 1, until=0.0)
+            _publish(False)
     except Exception:
         return
-    _publish(False)
 
 
 def _reset_serious_for_tests() -> None:
     with _SERIOUS_LOCK:
-        _SERIOUS.update(gen=0, open=False, since=0.0, until=0.0)
+        _SERIOUS.update(gen=0, open=0, since=0.0, until=0.0)
 
 
 def _plain_words(text: str) -> str:

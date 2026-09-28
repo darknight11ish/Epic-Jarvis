@@ -615,6 +615,48 @@ def t_a_turn_that_never_ended_stops_counting_eventually():
     CLOCK[0] += WB.SERIOUS_OPEN_MAX_SECONDS + 1.0
     check("a crisis turn that never reported its end (a crash) is not serious for ever",
           WB.serious_now() is False)
+    check("... and both apps are told it is over, once (not left to their 900 s net)",
+          SERIOUS_EVENTS == [{"serious": True}, {"serious": False}], SERIOUS_EVENTS)
+    WB.serious_calm()
+    WB.serious_now()
+    check("... never twice", SERIOUS_EVENTS == [{"serious": True}, {"serious": False}],
+          SERIOUS_EVENTS)
+    WB.serious_end(200)
+    check("the stuck turn ending late does not quietly reopen it",
+          WB.serious_now() is False and len(SERIOUS_EVENTS) == 2, SERIOUS_EVENTS)
+    _serious_reset()
+
+
+def t_overlapping_crisis_turns_keep_the_moment_until_the_last_is_spoken():
+    # The audit's case: a second upset message while the first is still
+    # being answered (the same app or the other device).
+    _serious_reset()
+    WB.serious_begin()                          # turn A
+    CLOCK[0] += 5.0
+    WB.serious_begin()                          # turn B, while A is answered
+    CLOCK[0] += 1.0
+    WB.serious_end(3)                           # A ends, short
+    check("the first turn ending leaves the moment open while the second is answered",
+          WB.serious_now() is True and not SERIOUS_TIMERS, SERIOUS_TIMERS)
+    CLOCK[0] += 40.0                            # past A's own grace
+    check("... even past the first turn's own grace",
+          WB.serious_now() is True and SERIOUS_EVENTS[-1] == {"serious": True}, SERIOUS_EVENTS)
+    WB.serious_calm()
+    check("an ordinary question elsewhere does not close a turn still being answered",
+          WB.serious_now() is True and SERIOUS_EVENTS[-1] == {"serious": True}, SERIOUS_EVENTS)
+    WB.serious_end(200)                         # B ends, long
+    check("the last turn ending starts ONE timer, for its own speech",
+          len(SERIOUS_TIMERS) == 1 and SERIOUS_TIMERS[0][0] == WB.grace_seconds(200),
+          SERIOUS_TIMERS)
+    CLOCK[0] += WB.grace_seconds(200) - 1.0
+    check("... and the moment lasts until it can have been spoken", WB.serious_now() is True)
+    CLOCK[0] += 2.0
+    SERIOUS_TIMERS[0][1]()
+    check("... then closes, telling both apps once",
+          WB.serious_now() is False
+          and SERIOUS_EVENTS == [{"serious": True}, {"serious": True}, {"serious": False}],
+          SERIOUS_EVENTS)
+    _serious_reset()
 
 
 def _unmark(text: str) -> str:
@@ -832,6 +874,7 @@ if __name__ == "__main__":
                t_the_next_ordinary_question_ends_it_at_once,
                t_an_old_timer_never_closes_a_newer_crisis_answer,
                t_a_turn_that_never_ended_stops_counting_eventually,
+               t_overlapping_crisis_turns_keep_the_moment_until_the_last_is_spoken,
                t_the_help_words_are_always_said_plainly,
                t_a_crisis_turn_opens_the_moment_before_its_first_word,
                t_the_moment_holds_even_when_the_model_fails,

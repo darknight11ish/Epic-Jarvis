@@ -11864,7 +11864,7 @@ be edited by hand from a guess.
 python3 backend/test_wellbeing.py
 ```
 
-200 checks, no model and no network: the crisis phrases and the false-alarm
+209 checks, no model and no network: the crisis phrases and the false-alarm
 list, the fixed texts (the US numbers only, no invented feeling), the note
 never first and the rules block staying first, no tools offered, the help
 message following the model's answer and sent alone on a failure, the
