@@ -284,7 +284,7 @@ GROUPS = (
                             "delete_calendar_event"]),
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
                       "control_browser", "post_to_external_service", "open_public_tunnel",
-                      "news_read", "page_read"]),
+                      "news_read", "page_read", "github_read"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage"]),

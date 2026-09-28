@@ -93,6 +93,8 @@ TITLES = {
     # --- news feeds and "tell me when this page changes" (2026-09-27)
     "news_read": "read a news feed you added",
     "page_read": "fetch a web page you're watching",
+    # --- GitHub watches in "tell me when" (2026-09-28)
+    "github_read": "check GitHub for a \"tell me when\"",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",

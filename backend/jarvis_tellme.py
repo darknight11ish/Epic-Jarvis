@@ -152,6 +152,46 @@ day after it for a PC that was off: then it tells, marked as missed, and it
 does not ring (the owner's rule for anything more than 10 minutes late).
 Same ONE card, same list, same notification - it only notifies.
 
+WATCHES, 2026-09-28 (the owner chose the "Watches" group of
+docs/RESEARCH-AUDIT-2026-09-28.md section 3, ideas 1, 2 and 5). Three more
+sources, each ONE card like the others, each only notifying:
+  * "search" - "tell me when a search for <words> shows something new". The
+    owner's own words are searched once a day (every 6 hours at the most
+    often, once a week at the least) through the web search the owner chose
+    in Settings (jarvis_search.plan/run: SearXNG by default; never another
+    provider by itself - if the chosen one is down, the look says so and
+    offers to switch, as a chat search does). Only a short fingerprint of
+    each result's ADDRESS is kept; a match is "an address not seen before".
+    Titles, snippets and the addresses themselves are never kept, shown or
+    sent to the AI model - the results are outside text, never learned
+    from and never acted on. If the owner switches provider, the next look
+    only re-records (another provider's results are not comparable).
+    "Ask before every web search" on, or web search set to "never", and a
+    search watch cannot run - it cannot ask every day.
+  * "price" - "tell me when the price on <url> drops below 25". The same
+    one GET as a page watch (page_read, the private-address checks, the
+    redirect rule), and the price is read by PLAIN CODE, never the AI model:
+    the price a shop marks for machines (schema.org's JSON-LD "price", or
+    a price <meta> tag), else the first price shown on the page. Only that
+    number is kept. It never buys, never presses anything on the page.
+  * "github" - "tell me when CI finishes/fails on owner/repo [branch]" and
+    "tell me when PR #N on owner/repo merges". One read-only GET to
+    api.github.com per look (gate action github_read, tier "auto" only),
+    with the GitHub key Jarvis already has for github_search
+    (JARVIS_GITHUB_TOKEN) when one is set - sent to api.github.com only,
+    never with a redirect, never logged, never put in a card or an error.
+    Kept: the newest commit's first 12 characters and "running/done,
+    failed/ok", or "open/merged/closed".
+And a watch that BREAKS tells the owner once: a look that could not happen
+("Could not look: ...") used to be written only under the watch, so an
+urgent watch could be dead for days unseen. Now failures are grouped by
+(watch, kind of problem - the sentence without its bracketed detail); the
+owner is told once (an ordinary notification, never ringing), repeats of
+the same problem are held back for BROKEN_AGAIN_HOURS, and the next good
+look clears it silently. The Hermes agent's cron/incidents.py (MIT) was the
+idea; no code is copied. The event is `schedule` {"id", "kind": "tellme",
+"state": "broken"} - no words; the apps read `broken` by id.
+
 WHAT IS KEPT
 The watch (the owner's words: a sender's name or a device) is in the job's
 rule in schedule.db, like a reminder's words. This module's own table,
@@ -249,6 +289,54 @@ PAGE_MAX_BYTES = 2 * 1024 * 1024
 PAGE_TIMEOUT = 15.0
 PAGE_MAX_URL = 500
 
+#: "Tell me when a search shows something new" (2026-09-28). Once a day by
+#: default: a search leaves this PC for a search service (Brave's can cost
+#: money past its free credit), and "something new" on the web is rarely
+#: worth knowing within the hour. Every 6 hours at the most often, once a
+#: week at the least.
+SEARCH_MINUTES = 6 * 60
+SEARCH_DEFAULT_MINUTES = 24 * 60
+SEARCH_MAX_MINUTES = 7 * 24 * 60
+MAX_SEARCH_WATCHES = 5
+SEARCH_MAX_WORDS = 200
+#: Fingerprints of result addresses remembered, at most (newest first).
+SEARCH_KEEP = 200
+#: jarvis_search.PROVIDERS, written out so check_watch needs no import.
+SEARCH_PROVIDERS = ("searxng", "duckduckgo", "exa", "tavily", "brave")
+
+#: "Tell me when the price on <url> drops below X" (2026-09-28): a page watch
+#: that reads one number. Hourly by default; the page's own floor and ceiling.
+PRICE_MINUTES = 60
+PRICE_MAX = 1_000_000_000
+#: The currency signs the owner may say; only for the words - the number
+#: alone is compared.
+CURRENCIES = ("", "£", "$", "€")
+
+#: GitHub watches (2026-09-28): CI finishing or failing, a pull request
+#: merging. Every 10 minutes at the most often - GitHub allows 60 requests an
+#: hour without a key, shared with GitHub research; 5 watches at once.
+GITHUB_ACTION = "github_read"
+GITHUB_API = "https://api.github.com"
+GITHUB_MINUTES = 10
+GITHUB_MAX_MINUTES = 24 * 60
+MAX_GITHUB_WATCHES = 5
+GITHUB_EVENTS = ("ci_done", "ci_failed", "pr_merged")
+GITHUB_TOKEN_ENV = "JARVIS_GITHUB_TOKEN"
+GITHUB_TIMEOUT = 15.0
+GITHUB_MAX_BYTES = 1_000_000
+#: A workflow run's conclusions that count as "failed".
+CI_FAILED = ("failure", "timed_out", "startup_failure")
+
+#: A watch that cannot look: told once, then not again about the same
+#: problem for this many hours; cleared by itself at the next good look.
+BROKEN_AGAIN_HOURS = 12
+#: A watch that looks more often than hourly is told on its second failed
+#: look in a row - one dropped connection is not "broken".
+BROKEN_AFTER_LOOKS = 2
+#: What a lock screen (and either app, while App lock or "Hide memory lists
+#: and chat history" is on) shows for it.
+BROKEN_LOCK_SCREEN = "Jarvis: a \"tell me when\" cannot look right now."
+
 #: What the owner may say a device does, and the Home Assistant states that
 #: count as it. The card lists the states in full.
 STATE_WORDS = {
@@ -268,6 +356,10 @@ _NOT_A_STATE = ("unavailable", "unknown", "")
 _TOKEN = re.compile(r"[a-z0-9_]{1,30}")
 _ENTITY = re.compile(r"[a-z0-9_]+\.[a-z0-9_]+")
 _NAME_OK = re.compile(r"[\w .@'&+-]{1,60}", re.UNICODE)
+#: GitHub's own rules, near enough: an owner (letters, digits, hyphens) and
+#: a repository name (letters, digits, ".", "_", "-"), never starting with ".".
+_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}")
+_BRANCH = re.compile(r"[A-Za-z0-9._/-]{1,100}")
 
 # --------------------------------------------------------------------------
 #   Settings, the gate and the bus - replaceable, so the tests open no socket
@@ -332,6 +424,15 @@ class Deps:
     #: None: the real one (_default_page_fetch) - one GET, no proxy, capped,
     #: hashed; a test never opens a real socket.
     page_fetch: Optional[Callable[[str], str]] = None
+    #: (url) -> the price read from the page (a float), or None when there is
+    #: none, or raises. None: the real one (_default_price_fetch).
+    price_fetch: Optional[Callable[[str], Optional[float]]] = None
+    #: (jarvis_search.Plan) -> jarvis_search.run's answer. None: the real
+    #: run(plan, approved=True) - one provider, never another.
+    search_run: Optional[Callable] = None
+    #: (url) -> (HTTP status, the parsed JSON or None). None: the real one
+    #: (_default_github_get) - api.github.com only, no redirect.
+    github_get: Optional[Callable[[str], tuple]] = None
 
 
 DEPS = Deps()
@@ -382,7 +483,43 @@ def readiness(source: str, deps: Optional[Deps] = None) -> str:
         # minutes.
         return _tier_words(deps.tier_of(PAGE_ACTION), "a web page", "every 30 minutes",
                            "a web page")
-    return "Jarvis can watch for an email from someone, a Home Assistant device, or a web page."
+    if source == "price":
+        # The same one GET as a page watch, under the same action.
+        return _tier_words(deps.tier_of(PAGE_ACTION), "a web page", "every hour",
+                           "a price on a web page")
+    if source == "search":
+        return _search_readiness(deps)
+    if source == "github":
+        why = _tier_words(deps.tier_of(GITHUB_ACTION), "GitHub", "every 10 minutes", "GitHub")
+        if why:
+            why += (" To allow it, add the line github_read = \"auto\" under [autonomy.tiers] "
+                    "in jarvis-framework.toml on the PC.")
+        return why
+    return ("Jarvis can watch for an email from someone, a Home Assistant device, a web page, "
+            "a price, a web search, or GitHub.")
+
+
+def _search_readiness(deps: "Deps") -> str:
+    """"" when a search watch could search now, else the sentence why not.
+    Settings only - no socket. The provider is the one the owner chose; the
+    words are never sent anywhere else."""
+    try:
+        import jarvis_search as WS
+    except Exception:
+        return ("Web search is not on this PC's Jarvis yet - run apply-patches.ps1 on the "
+                "PC.")
+    if deps.tier_of(WS.ACTION_SEARCH) == "never":
+        return ("Web search is switched off on this PC (your settings say never), so there "
+                "is nothing to search with.")
+    try:
+        s = WS.settings()
+    except Exception:
+        return "Jarvis could not read the web search settings on this PC."
+    if s.get("ask_every_time"):
+        return ("You chose \"Ask before every web search\", and a \"tell me when\" cannot ask "
+                "you every day - so it cannot watch a search.")
+    state, said = WS.readiness(s.get("provider"), s)
+    return said if state else ""
 
 
 def _tier_words(tier: str, what: str, often: str, watched: str) -> str:
@@ -471,8 +608,123 @@ def check_watch(w) -> dict:
         if any(ord(ch) < 0x20 for ch in url):
             raise ValueError("that is not a web address")
         return {"source": "page", "url": url, "urgent": urgent, "once": once}
-    raise ValueError("Jarvis can watch for an email from someone, a Home Assistant device, or "
-                     "a web page")
+    if source == "price":
+        url = _check_url(w.get("url"))
+        below = w.get("below")
+        if isinstance(below, str):
+            below = parse_number(below)
+        if (not isinstance(below, (int, float)) or isinstance(below, bool)
+                or not below == below or below <= 0 or below > PRICE_MAX):
+            raise ValueError("say the price to watch for as a number, like \"drops below 25\"")
+        currency = str(w.get("currency") or "").strip()
+        if currency not in CURRENCIES:
+            currency = ""
+        return {"source": "price", "url": url, "below": round(float(below), 2),
+                "currency": currency, "urgent": urgent, "once": once}
+    if source == "search":
+        words = clean_search_words(w.get("words"))
+        provider = str(w.get("provider") or "").strip().lower()
+        if provider and provider not in SEARCH_PROVIDERS:
+            raise ValueError("that is not a web search Jarvis knows")
+        return {"source": "search", "words": words, "provider": provider, "urgent": urgent,
+                "once": once}
+    if source == "github":
+        repo = str(w.get("repo") or "").strip().strip("/")
+        if repo.lower().startswith(("https://github.com/", "http://github.com/")):
+            repo = repo.split("github.com/", 1)[1].strip("/")
+        if repo.lower().endswith(".git"):
+            repo = repo[:-4]
+        if not _REPO.fullmatch(repo) or ".." in repo:
+            raise ValueError("say the repository as owner/name, like darknight11ish/Epic-Jarvis")
+        event = str(w.get("event") or "").strip().lower()
+        if event not in GITHUB_EVENTS:
+            raise ValueError("say what to watch on GitHub: CI finishing, CI failing, or a pull "
+                             "request merging")
+        out = {"source": "github", "repo": repo, "event": event, "urgent": urgent}
+        if event == "pr_merged":
+            pr = w.get("pr")
+            if isinstance(pr, str) and pr.strip().lstrip("#").isdigit():
+                pr = int(pr.strip().lstrip("#"))
+            if not isinstance(pr, int) or isinstance(pr, bool) or not 0 < pr < 10 ** 8:
+                raise ValueError("say which pull request, by its number, like PR #12")
+            # A pull request merges once: there is no "every time".
+            out.update(pr=pr, once=True)
+            return out
+        branch = str(w.get("branch") or "").strip()
+        if branch and (not _BRANCH.fullmatch(branch) or ".." in branch
+                       or branch.startswith(("-", "/")) or branch.endswith("/")):
+            raise ValueError("that is not a branch name GitHub would have, like main")
+        out.update(branch=branch, once=once)
+        return out
+    raise ValueError("Jarvis can watch for an email from someone, a Home Assistant device, a web "
+                     "page, a price, a web search, or GitHub")
+
+
+def _check_url(v) -> str:
+    """A web address the owner typed, for a page or a price watch."""
+    url = str(v or "").strip()
+    if not url or len(url) > PAGE_MAX_URL or not re.match(r"^https?://", url, re.IGNORECASE):
+        raise ValueError("a page to watch is a web address starting with http:// or "
+                         "https://")
+    if any(ord(ch) < 0x20 or ch.isspace() for ch in url):
+        raise ValueError("that is not a web address")
+    return url
+
+
+def clean_search_words(v) -> str:
+    """The owner's search words, tidied: one line, no quotes around them."""
+    t = "".join(ch if ch.isprintable() else " " for ch in str(v or ""))
+    t = " ".join(t.split()).strip(" \"'“”‘’")
+    if not t:
+        raise ValueError("say what to search for, like \"tell me when a search for "
+                         "Kokoro voices shows something new\"")
+    if len(t) > SEARCH_MAX_WORDS:
+        raise ValueError(f"the search words can be up to {SEARCH_MAX_WORDS} characters")
+    return t
+
+
+def parse_number(v) -> Optional[float]:
+    """A price as people and pages write it: "25", "1,299.99", "1.299,99",
+    "24,99", "£ 1 299" - or None. Plain code: no model reads a price."""
+    t = str(v or "").strip()
+    t = re.sub(r"^(?:[£$€]|us\$|usd|gbp|eur)\s*|\s*(?:[£$€]|usd|gbp|eur)$", "", t,
+               flags=re.IGNORECASE)
+    t = t.replace(" ", " ").replace(" ", " ").strip()
+    if not re.fullmatch(r"\d[\d ,.']*", t) or len(t) > 20:
+        return None
+    t = t.replace(" ", "").replace("'", "")
+    last_dot, last_comma = t.rfind("."), t.rfind(",")
+    if last_dot >= 0 and last_comma >= 0:
+        dec = "." if last_dot > last_comma else ","
+        thou = "," if dec == "." else "."
+        t = t.replace(thou, "").replace(dec, ".")
+    elif last_comma >= 0:
+        # "24,99" is a decimal comma; "1,299" and "1,299,000" are thousands.
+        if len(t) - last_comma - 1 == 2 and t.count(",") == 1:
+            t = t.replace(",", ".")
+        else:
+            t = t.replace(",", "")
+    elif t.count(".") > 1:
+        t = t.replace(".", "")
+    elif last_dot >= 0 and len(t) - last_dot - 1 == 3 and not t.startswith("0"):
+        # "1.299" on a European page is a thousand, not one and a bit.
+        t = t.replace(".", "")
+    try:
+        n = float(t)
+    except ValueError:
+        return None
+    return n if 0 <= n <= PRICE_MAX else None
+
+
+#: Each source's (most often, least often, default), in minutes.
+_MINUTES = {
+    "email": (EMAIL_MINUTES, MAX_MINUTES, EMAIL_MINUTES),
+    "home": (HOME_MINUTES, MAX_MINUTES, HOME_MINUTES),
+    "page": (PAGE_MINUTES, PAGE_MAX_MINUTES, PAGE_MINUTES),
+    "price": (PAGE_MINUTES, PAGE_MAX_MINUTES, PRICE_MINUTES),
+    "search": (SEARCH_MINUTES, SEARCH_MAX_MINUTES, SEARCH_DEFAULT_MINUTES),
+    "github": (GITHUB_MINUTES, GITHUB_MAX_MINUTES, GITHUB_MINUTES),
+}
 
 
 def check_rule(rule, now: float) -> dict:
@@ -482,20 +734,16 @@ def check_rule(rule, now: float) -> dict:
     if not isinstance(rule, dict):
         raise ValueError("a \"tell me when\" needs what to watch")
     watch = check_watch(rule.get("watch"))
-    if watch["source"] == "email":
-        floor, ceiling = EMAIL_MINUTES, MAX_MINUTES
-    elif watch["source"] == "page":
-        floor, ceiling = PAGE_MINUTES, PAGE_MAX_MINUTES
-    else:
-        floor, ceiling = HOME_MINUTES, MAX_MINUTES
-    n = rule.get("minutes", floor)
+    floor, ceiling, default = _MINUTES[watch["source"]]
+    n = rule.get("minutes", default)
     if not isinstance(n, int) or isinstance(n, bool):
         raise ValueError("how often is a whole number of minutes")
     if n < floor:
-        raise ValueError(f"the most often it can look is every {floor} minute"
-                         + ("s" if floor != 1 else ""))
+        raise ValueError("the most often it can look is "
+                         + S.rule_words({"every": "minutes", "minutes": floor}))
     if n > ceiling:
-        raise ValueError(f"the least often it can look is every {ceiling} minutes")
+        raise ValueError("the least often it can look is "
+                         + S.rule_words({"every": "minutes", "minutes": ceiling}))
     start = rule.get("start")
     if not isinstance(start, (int, float)) or isinstance(start, bool):
         start = now
@@ -541,12 +789,42 @@ def what_words(watch: dict) -> str:
         return f"an email from {watch['sender']} arrives"
     if watch.get("source") == "page":
         return f"{watch['url']} changes"
+    if watch.get("source") == "price":
+        return f"the price on {watch['url']} drops below {money(watch['below'], watch)}"
+    if watch.get("source") == "search":
+        return f"a search for “{watch['words']}” shows something new"
+    if watch.get("source") == "github":
+        return _github_what(watch)
     subject = f"the {watch['name']}" if watch.get("name") else watch.get("entity", "")
     return f"{subject} {watch.get('say') or 'changes'}"
 
 
-def alert_words(watch: dict, count: int = 1) -> str:
-    """What the notification says - from the owner's words only."""
+def money(n, watch: Optional[dict] = None) -> str:
+    """25 -> "25", 24.5 -> "24.50", with the owner's currency sign if they
+    said one ("£25")."""
+    n = float(n)
+    words = f"{n:,.0f}" if n == int(n) else f"{n:,.2f}"
+    return f"{(watch or {}).get('currency') or ''}{words}"
+
+
+def _branch_words(watch: dict) -> str:
+    return f" (branch {watch['branch']})" if watch.get("branch") else ""
+
+
+def _github_what(watch: dict) -> str:
+    repo = watch["repo"]
+    if watch["event"] == "pr_merged":
+        return f"pull request #{watch['pr']} on {repo} is merged"
+    verb = "fails" if watch["event"] == "ci_failed" else "finishes"
+    return f"CI {verb} on {repo}{_branch_words(watch)}"
+
+
+def alert_words(watch: dict, count: int = 1, st: Optional[dict] = None) -> str:
+    """What the notification says - from the owner's words only. `st`: what
+    this module kept for the watch (a price read, a CI or pull request
+    outcome - numbers and fixed words chosen by code, never a page's or
+    GitHub's own text)."""
+    st = st or {}
     if watch.get("source") == "email":
         if watch.get("missing"):
             return (f"No email from {watch['sender']} arrived by "
@@ -556,6 +834,16 @@ def alert_words(watch: dict, count: int = 1) -> str:
         return f"An email from {watch['sender']} arrived."
     if watch.get("source") == "page":
         return f"The page you're watching changed: {watch['url']}"
+    if watch.get("source") == "price":
+        now = _price_of_state(st.get("last_state"))
+        tail = f" It is now {money(now, watch)}." if now is not None else ""
+        return (f"The price on {watch['url']} is below {money(watch['below'], watch)}."
+                + tail)
+    if watch.get("source") == "search":
+        new = f"{count} new results" if count > 1 else "a new result"
+        return f"Your search for “{watch['words']}” shows {new}."
+    if watch.get("source") == "github":
+        return _github_alert(watch, st.get("last_state"))
     subject = f"The {watch['name']}" if watch.get("name") else watch.get("entity", "")
     say = watch.get("say") or ""
     if say in PAST:
@@ -628,6 +916,25 @@ def card(rule: dict, text: str, now: float) -> str:
             "address, checked again on every look (never only when you add it), so a web "
             "address can never become a way to reach your own network.",
         ]
+    elif w["source"] == "price":
+        lines += [
+            f"Watching for: the price on {w['url']} - when it drops below "
+            f"{money(w['below'], w)}.",
+            f"How: {every}, Jarvis fetches that address (a plain GET, never a link on the "
+            "page) and reads the price with plain code, never the AI model: the price the "
+            "page marks for shops' machines (schema.org), or else the first price shown on the "
+            "page. Only that number is kept. It never buys anything and never presses "
+            "anything on the page.",
+            "It tells you when the price it reads is below that - straight away, if it "
+            "already is at the first look. The number is shown under the watch after each "
+            "look, so you can check Jarvis read the right one.",
+            "Refused if that address turns out to lead to this PC or a private network "
+            "address, checked again on every look.",
+        ]
+    elif w["source"] == "search":
+        lines += _search_card_lines(w, every)
+    elif w["source"] == "github":
+        lines += _github_card_lines(w, every)
     else:
         try:
             import jarvis_home as HOME
@@ -661,15 +968,85 @@ def card(rule: dict, text: str, now: float) -> str:
         "",
         "It runs on this PC, by this PC's clock. Each look is a request to "
         + {"email": "your own mail server", "home": "your own Home Assistant",
-           "page": "that one address on the internet"}[w["source"]]
-        + (", under the same settings as asking Jarvis to read it" if w["source"] != "page"
-           else "") + "; the notification goes only to your own apps. Nothing else is sent "
-          "anywhere.",
+           "page": "that one address on the internet",
+           "price": "that one address on the internet",
+           "search": "the web search service you chose",
+           "github": "GitHub (api.github.com)"}[w["source"]]
+        + (", under the same settings as asking Jarvis to read it"
+           if w["source"] in ("email", "home") else "")
+        + "; the notification goes only to your own apps. Nothing else is sent anywhere.",
+        "If a look cannot happen (a server down, a setting changed), Jarvis tells you once, "
+        f"not at every look, and at most every {BROKEN_AGAIN_HOURS} hours after that while it "
+        "stays that way.",
         "Stopping or deleting it is immediate, from either app.",
         "",
         "If you say no: nothing is set up, and nothing is watched.",
     ]
     return "\n".join(lines)
+
+
+def _search_card_lines(w: dict, every: str) -> list:
+    try:
+        import jarvis_search as WS
+        s = WS.settings()
+        provider = s.get("provider")
+        label = WS.LABEL.get(provider or "", "no search")
+        p = WS.plan(w["words"], s=s)
+        if provider == "searxng":
+            where = (f"your SearXNG at {p.searxng_url or WS.DEFAULT_SEARXNG_URL}, which asks "
+                     "several search engines for you - they see the words and your internet "
+                     "address")
+        elif provider == "duckduckgo":
+            where = f"DuckDuckGo ({p.host}), which sees them and your internet address"
+        elif provider in WS.NEEDS_KEY:
+            where = (f"{label} ({p.host}), with your {label} key - so {label} knows the "
+                     f"search is yours. The key goes to {p.host} only")
+            if provider == "brave":
+                where += (". Brave charges your payment card past its free monthly credit, "
+                          "so this watch can cost money")
+        else:
+            where = label
+    except Exception:
+        label, where = "the web search you chose", "the web search you chose in Settings"
+    return [
+        f"Watching for: new results when Jarvis searches the web for “{w['words']}”.",
+        f"How: {every}, Jarvis searches for exactly those words with {label} - the web search "
+        f"you chose in Settings - the same way as when you ask it. What leaves this PC: those "
+        f"words, and nothing else, to {where}.",
+        "It compares the addresses of the results (up to 5) with the ones it has seen before, "
+        "and keeps only a short fingerprint of each address - never the titles, text or the "
+        "addresses themselves. The results are outside text: never learned from, never acted "
+        "on, and never sent to the AI model.",
+        "The first look only notes what is there now. If you choose another web search later, "
+        "the watch uses that one from then on (and starts afresh); it never switches by "
+        "itself - if the search service is down, it says so under the watch and tells you.",
+    ]
+
+
+def _github_card_lines(w: dict, every: str) -> list:
+    keyed = bool(_env(GITHUB_TOKEN_ENV))
+    if w["event"] == "pr_merged":
+        what = (f"Watching for: pull request #{w['pr']} on {w['repo']} - when it is merged "
+                "(or closed without being merged, which Jarvis tells you too, and then stops).")
+    elif w["event"] == "ci_failed":
+        what = (f"Watching for: CI (GitHub Actions) on {w['repo']}"
+                + (f", branch {w['branch']}" if w.get("branch") else ", any branch")
+                + " - when a run for the newest commit fails.")
+    else:
+        what = (f"Watching for: CI (GitHub Actions) on {w['repo']}"
+                + (f", branch {w['branch']}" if w.get("branch") else ", any branch")
+                + " - when every run for the newest commit has finished (it says whether they "
+                  "passed or something failed).")
+    return [
+        what,
+        f"How: {every}, Jarvis asks GitHub one read-only question: GET {github_url(w)}. "
+        "Nothing on GitHub is changed, and nothing goes to the AI model.",
+        ("Your GitHub key (saved on this PC for GitHub research) goes with each request, to "
+         "api.github.com only - never anywhere else, never written down, never shown."
+         if keyed else
+         "No GitHub key is set on this PC, so only public repositories can be seen, and GitHub "
+         "allows 60 looks an hour between all of them."),
+    ]
 
 
 # --------------------------------------------------------------------------
@@ -689,6 +1066,14 @@ CREATE TABLE IF NOT EXISTS tellme (
     alert_count INTEGER NOT NULL DEFAULT 0
 );
 """
+#: Added 2026-09-28, for a watch that breaks - added to an older table in
+#: place (ALTER TABLE), so a PC that had watches keeps them. The kind of
+#: problem (the "Could not look" sentence without its bracketed detail),
+#: when it started, how many looks in a row, and when the owner was told.
+_BROKEN_COLUMNS = (("broken_kind", "TEXT"), ("broken_since", "REAL"),
+                   ("broken_n", "INTEGER NOT NULL DEFAULT 0"), ("broken_told", "REAL"))
+_KEYS = ("base_uid", "uidvalidity", "last_state", "looked_at", "look_said", "matched_at",
+         "matched_n", "alert_count") + tuple(n for n, _t in _BROKEN_COLUMNS)
 _LOCK = threading.RLock()
 
 
@@ -698,6 +1083,13 @@ def _db(sched=None):
     c = sqlite3.connect(path, timeout=30)
     c.row_factory = sqlite3.Row
     c.executescript(_SCHEMA)
+    have = {r["name"] for r in c.execute("PRAGMA table_info(tellme)").fetchall()}
+    for name, typ in _BROKEN_COLUMNS:
+        if name not in have:
+            try:
+                c.execute(f"ALTER TABLE tellme ADD COLUMN {name} {typ}")
+            except sqlite3.OperationalError:
+                pass    # another process added it a moment ago
     return c
 
 
@@ -717,8 +1109,7 @@ def _save(job_id: str, sched=None, **fields) -> None:
         try:
             c.execute("INSERT OR IGNORE INTO tellme (id) VALUES (?)", (job_id,))
             for key, value in fields.items():
-                if key not in ("base_uid", "uidvalidity", "last_state", "looked_at",
-                               "look_said", "matched_at", "matched_n", "alert_count"):
+                if key not in _KEYS:
                     raise KeyError(key)
                 c.execute(f"UPDATE tellme SET {key} = ? WHERE id = ?", (value, job_id))
             c.commit()
@@ -1073,6 +1464,399 @@ def _look_page(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
     return (1 if digest != before else 0), ""
 
 
+# --------------------------------------------------------------------------
+#   "Tell me when the price on <url> drops below X" (2026-09-28)
+# --------------------------------------------------------------------------
+
+#: A JSON-LD block (schema.org, what shops mark up for search engines).
+_LD_JSON = re.compile(r"<script\b[^>]*type\s*=\s*[\"']?application/ld\+json[^>]*>(.*?)</script>",
+                      re.IGNORECASE | re.DOTALL)
+_META = re.compile(r"<meta\b[^>]{0,500}>", re.IGNORECASE)
+_ATTR = r"\b{name}\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s\"'>]+))"
+_META_PRICE = ("price", "product:price:amount", "og:price:amount")
+#: A price shown on the page: a currency sign before or after a number.
+_SHOWN_PRICE = re.compile(
+    r"(?:[£$€]|US\$)\s?(?P<a>\d[\d.,']{0,15}\d|\d)"
+    r"|(?P<b>\d[\d.,']{0,15}\d|\d)\s?(?:€|EUR\b|GBP\b|USD\b)", re.IGNORECASE)
+_OFFER_TYPES = ("Offer", "AggregateOffer", "PriceSpecification", "UnitPriceSpecification",
+                "CompoundPriceSpecification")
+
+
+def _decode_body(body: bytes, content_type: str = "") -> str:
+    charset = "utf-8"
+    m = re.search(r"charset=([\w.-]+)", content_type or "", re.I)
+    if m:
+        charset = m.group(1)
+    try:
+        return body.decode(charset, errors="replace")
+    except LookupError:
+        return body.decode("utf-8", errors="replace")
+
+
+def _attr(tag: str, name: str) -> str:
+    m = re.search(_ATTR.format(name=re.escape(name)), tag, re.IGNORECASE)
+    if not m:
+        return ""
+    import html as _html
+    return _html.unescape(next(g for g in m.groups() if g is not None)).strip()
+
+
+def _as_price(v) -> Optional[float]:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        n = float(v)
+    elif isinstance(v, str):
+        n = parse_number(v)
+    else:
+        return None
+    return n if n is not None and 0 < n <= PRICE_MAX else None
+
+
+def _ld_price(node, depth: int = 0) -> Optional[float]:
+    """The first offer's price in a JSON-LD document - or None."""
+    if depth > 8:
+        return None
+    if isinstance(node, list):
+        for x in node[:50]:
+            p = _ld_price(x, depth + 1)
+            if p is not None:
+                return p
+        return None
+    if not isinstance(node, dict):
+        return None
+    t = node.get("@type")
+    types = [str(x) for x in (t if isinstance(t, list) else [t])]
+    if any(x in _OFFER_TYPES for x in types):
+        for key in ("price", "lowPrice"):
+            p = _as_price(node.get(key))
+            if p is not None:
+                return p
+    for key in ("offers", "@graph", "mainEntity", "priceSpecification", "itemOffered"):
+        if key in node:
+            p = _ld_price(node[key], depth + 1)
+            if p is not None:
+                return p
+    return None
+
+
+def price_of(body: bytes, content_type: str = "") -> Optional[float]:
+    """The price on a page, read by plain code - never the AI model. First
+    the price the page marks for machines (schema.org JSON-LD, then a price
+    <meta> tag), else the first price SHOWN on the page (a currency sign
+    beside a number, in its visible words). None when there is none."""
+    body = body[:PAGE_MAX_BYTES]
+    text = _decode_body(body, content_type)
+    for m in _LD_JSON.finditer(text):
+        try:
+            doc = json.loads(m.group(1).strip())
+        except ValueError:
+            continue
+        p = _ld_price(doc)
+        if p is not None:
+            return p
+    for m in _META.finditer(text):
+        tag = m.group(0)
+        name = (_attr(tag, "itemprop") or _attr(tag, "property") or _attr(tag, "name")).lower()
+        if name in _META_PRICE:
+            p = _as_price(_attr(tag, "content"))
+            if p is not None:
+                return p
+    m = _SHOWN_PRICE.search(_visible_text(body, content_type))
+    if m:
+        return _as_price(m.group("a") or m.group("b"))
+    return None
+
+
+def _page_get(url: str, agent: str) -> tuple:
+    """(body bytes, Content-Type): ONE GET, the same way as _default_page_fetch
+    (jarvis_local_http.public_urlopen, _PageRedirect, capped)."""
+    import jarvis_local_http as LH
+    req = urllib.request.Request(url, headers={"User-Agent": agent})
+    with LH.public_urlopen(req, PAGE_TIMEOUT, _PageRedirect()) as resp:
+        body = resp.read(PAGE_MAX_BYTES + 1)
+        content_type = resp.headers.get("Content-Type", "") if resp.headers else ""
+    return body[:PAGE_MAX_BYTES], content_type
+
+
+def _default_price_fetch(url: str) -> Optional[float]:
+    body, content_type = _page_get(url, "Jarvis (tell me when a price drops)")
+    return price_of(body, content_type)
+
+
+#: What a price watch keeps: "p1:" and the price it last read.
+PRICE_PRINT = "p1:"
+
+
+def _price_of_state(state) -> Optional[float]:
+    if isinstance(state, str) and state.startswith(PRICE_PRINT):
+        try:
+            return float(state[len(PRICE_PRINT):])
+        except ValueError:
+            return None
+    return None
+
+
+def _look_price(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
+    """(1 when the price is now below the owner's number and was not at the
+    look before, the sentence for Coming up). The same checks as a page."""
+    import jarvis_local_http as LH
+    url = watch["url"]
+    problem = LH.private_fetch_problem(url)
+    if problem:
+        return 0, f"Could not look: {problem}"
+    text = (f"Jarvis would like to fetch {url} for a \"tell me when\": one plain GET, to read "
+            "the price on it with plain code - never a link on the page, never a purchase; "
+            "only the number is kept.")
+    if not _ok_to_read(PAGE_ACTION, "read a price on a web page for a \"tell me when\"", text,
+                       deps):
+        return 0, ("Could not look: your settings ask for a yes each time Jarvis fetches a "
+                   "web page.")
+    fetch = deps.price_fetch or _default_price_fetch
+    try:
+        price = fetch(url)
+    except Exception as exc:
+        return 0, f"Could not look: the page did not answer ({type(exc).__name__})."
+    if price is None:
+        return 0, "Could not look: Jarvis could not find a price on that page."
+    before = _price_of_state(st.get("last_state"))
+    _save(job_id, sched, last_state=f"{PRICE_PRINT}{float(price):.2f}")
+    below = float(watch["below"])
+    was_below = before is not None and before < below
+    return (1 if float(price) < below and not was_below else 0), ""
+
+
+# --------------------------------------------------------------------------
+#   "Tell me when a search shows something new" (2026-09-28)
+# --------------------------------------------------------------------------
+
+#: What a search watch keeps: "s1:", the provider, and a short fingerprint
+#: of each result address seen (never the address itself).
+SEARCH_PRINT = "s1:"
+_TRACKING = ("fbclid", "gclid", "msclkid", "ref", "ref_src", "mc_cid", "mc_eid")
+
+
+def address_print(url) -> str:
+    """A short fingerprint of a result's address - the same page gives the
+    same one whatever "www.", "https", a closing "/" or tracking tags say.
+    "" for something that is not an http(s) address."""
+    import hashlib
+    import urllib.parse
+    try:
+        parts = urllib.parse.urlsplit(str(url or "").strip())
+    except ValueError:
+        return ""
+    if parts.scheme.lower() not in ("http", "https") or not parts.netloc:
+        return ""
+    host = parts.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    path = parts.path.rstrip("/") or "/"
+    query = sorted((k, v) for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+                   if not k.lower().startswith("utm_") and k.lower() not in _TRACKING)
+    norm = host + path + ("?" + urllib.parse.urlencode(query) if query else "")
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
+
+
+def _search_said(problem: str, offer: str = "") -> str:
+    said = " ".join(str(problem or "The search did not work.").split())
+    if offer:
+        said += " " + " ".join(str(offer).split())
+    return "Could not look: " + said
+
+
+def _look_search(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
+    """(how many result addresses are new, the sentence for Coming up). The
+    owner's words, through the ONE web search they chose - jarvis_search's
+    own plan and run, so the secret check, the one-provider rule and "no
+    silent fallback" are the same as in a chat. Nothing read goes to the AI
+    model; only fingerprints of the addresses are kept."""
+    import jarvis_search as WS
+    try:
+        s = WS.settings()
+    except Exception:
+        return 0, "Could not look: Jarvis could not read the web search settings on this PC."
+    provider = s.get("provider") or ""
+    p = WS.plan(watch["words"], s=s)
+    if p.problem:
+        return 0, _search_said(p.problem, p.offer)
+    run = deps.search_run or (lambda plan: WS.run(plan, approved=True))
+    try:
+        out = run(p) or {}
+    except Exception as exc:
+        return 0, f"Could not look: the search failed ({type(exc).__name__})."
+    _audit("tellme.search", {"id": job_id, "provider": provider, "ok": bool(out.get("ok"))})
+    if not out.get("ok") and out.get("state") != "no_results":
+        return 0, _search_said(out.get("error"), out.get("offer") or "")
+    prints = []
+    for r in out.get("results") or []:
+        a = address_print((r or {}).get("url")) if isinstance(r, dict) else ""
+        if a and a not in prints:
+            prints.append(a)
+    before = str(st.get("last_state") or "")
+    head = f"{SEARCH_PRINT}{provider}:"
+    if not before.startswith(head):
+        # The first look - or the owner chose another web search since: its
+        # results are not comparable with the last one's, so only record.
+        _save(job_id, sched, last_state=head + ",".join(prints[:SEARCH_KEEP]))
+        return 0, ""
+    seen = [x for x in before[len(head):].split(",") if x]
+    new = [a for a in prints if a not in seen]
+    _save(job_id, sched, last_state=head + ",".join((new + seen)[:SEARCH_KEEP]))
+    return len(new), ""
+
+
+# --------------------------------------------------------------------------
+#   GitHub watches (2026-09-28): CI finishing or failing, a pull request merging
+# --------------------------------------------------------------------------
+
+#: What a GitHub watch keeps: "g1:" and either "pr:<open|merged|closed>" or
+#: "<first 12 of the newest commit>:<running|done>:<failed|ok>" (or "none").
+GITHUB_PRINT = "g1:"
+
+
+def github_url(w: dict) -> str:
+    """The ONE address a GitHub watch asks - on the card in full."""
+    import urllib.parse
+    repo = urllib.parse.quote(w["repo"], safe="/._-")
+    if w["event"] == "pr_merged":
+        return f"{GITHUB_API}/repos/{repo}/pulls/{int(w['pr'])}"
+    q = {"per_page": "20"}
+    if w.get("branch"):
+        q["branch"] = w["branch"]
+    return f"{GITHUB_API}/repos/{repo}/actions/runs?" + urllib.parse.urlencode(q)
+
+
+class _GitHubNoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is refused, never followed: urllib copies every header -
+    the GitHub key included - onto the redirect target, another host too
+    (jarvis_research._RefuseRedirect's reason)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "refused to follow a redirect",
+                                     headers, fp)
+
+
+def _default_github_get(url: str) -> tuple:
+    """(HTTP status, the parsed answer or None). api.github.com only; the
+    key, when one is set, is read fresh, handed to the log scrubber by value,
+    and sent in this one request's header only."""
+    if not url.startswith(GITHUB_API + "/"):
+        raise ValueError("not a GitHub API address")
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "jarvis-tellme",
+               "X-GitHub-Api-Version": "2022-11-28"}
+    token = _env(GITHUB_TOKEN_ENV)
+    if token:
+        try:
+            import jarvis_scrub
+            jarvis_scrub.register_secret(token)
+        except Exception:
+            pass
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
+    import jarvis_local_http as LH
+    opener = LH.opener_for(url, _GitHubNoRedirect)
+    try:
+        with opener.open(req, timeout=GITHUB_TIMEOUT) as r:
+            status = r.status
+            body = r.read(GITHUB_MAX_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        return exc.code, None
+    if len(body) > GITHUB_MAX_BYTES:
+        raise ValueError("GitHub's answer was too large")
+    try:
+        return status, json.loads(body.decode("utf-8", "replace"))
+    except ValueError:
+        return status, None
+
+
+def _github_state(w: dict, doc: dict) -> str:
+    """What is kept from GitHub's answer - fixed words chosen here."""
+    if w["event"] == "pr_merged":
+        if doc.get("merged") is True or doc.get("merged_at"):
+            return GITHUB_PRINT + "pr:merged"
+        return GITHUB_PRINT + ("pr:closed" if doc.get("state") == "closed" else "pr:open")
+    runs = [r for r in (doc.get("workflow_runs") or []) if isinstance(r, dict)]
+    if not runs:
+        return GITHUB_PRINT + "none"
+    sha = str(runs[0].get("head_sha") or "")
+    group = [r for r in runs if str(r.get("head_sha") or "") == sha]
+    done = all(r.get("status") == "completed" for r in group)
+    failed = any(r.get("status") == "completed" and r.get("conclusion") in CI_FAILED
+                 for r in group)
+    short = re.sub(r"[^0-9a-f]", "", sha.lower())[:12] or "unknown"
+    return (f"{GITHUB_PRINT}{short}:{'done' if done else 'running'}:"
+            f"{'failed' if failed else 'ok'}")
+
+
+def _github_parts(state) -> list:
+    if isinstance(state, str) and state.startswith(GITHUB_PRINT):
+        return state[len(GITHUB_PRINT):].split(":")
+    return []
+
+
+def _github_matches(w: dict, before, now: str) -> bool:
+    b, n = _github_parts(before), _github_parts(now)
+    if w["event"] == "pr_merged":
+        # Told when it is merged - or closed without merging, since then it
+        # never will be. Already merged at the first look: told too.
+        return n[-1:] in (["merged"], ["closed"]) and b != n
+    if not b or len(n) != 3:
+        return False    # the first look only records; no runs yet is nothing
+    same = len(b) == 3 and b[0] == n[0]
+    if w["event"] == "ci_failed":
+        return n[2] == "failed" and not (same and b[2] == "failed")
+    return n[1] == "done" and not (same and b[1] == "done")
+
+
+def _github_alert(w: dict, state) -> str:
+    n = _github_parts(state)
+    repo = w["repo"]
+    if w["event"] == "pr_merged":
+        if n[-1:] == ["closed"]:
+            return f"Pull request #{w['pr']} on {repo} was closed without being merged."
+        return f"Pull request #{w['pr']} on {repo} was merged."
+    where = f"{repo}{_branch_words(w)}"
+    if w["event"] == "ci_failed":
+        return f"CI failed on {where}."
+    if len(n) == 3 and n[1] == "done":
+        return (f"CI finished on {where}: something failed." if n[2] == "failed"
+                else f"CI finished on {where}: everything passed.")
+    return f"CI finished on {where}."
+
+
+def _look_github(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
+    """(1 on the change the owner asked about, the sentence for Coming up).
+    One read-only GET to api.github.com, through the gate as github_read.
+    Errors are said in fixed words - never GitHub's own text, never the key."""
+    url = github_url(watch)
+    text = (f"Jarvis would like to ask GitHub one read-only question for a \"tell me when\": "
+            f"GET {url}. Nothing on GitHub is changed.")
+    if not _ok_to_read(GITHUB_ACTION, "read one GitHub status for a \"tell me when\"", text,
+                       deps):
+        return 0, "Could not look: your settings ask for a yes each time Jarvis reads GitHub."
+    get = deps.github_get or _default_github_get
+    try:
+        status, doc = get(url)
+    except Exception as exc:
+        return 0, f"Could not look: GitHub did not answer ({type(exc).__name__})."
+    if status == 404:
+        return 0, ("Could not look: GitHub says there is no such repository or pull request "
+                   "- or it is private and no GitHub key that can see it is saved on this PC.")
+    if status == 401:
+        return 0, ("Could not look: GitHub refused the GitHub key saved on this PC (it may have "
+                   "expired).")
+    if status in (403, 429):
+        return 0, ("Could not look: GitHub said no for now - usually too many looks in an hour "
+                   "(its limit). It tries again at the next look.")
+    if status != 200 or not isinstance(doc, dict):
+        return 0, f"Could not look: GitHub answered with an error (HTTP {status})."
+    now = _github_state(watch, doc)
+    before = st.get("last_state")
+    _save(job_id, sched, last_state=now)
+    return (1 if _github_matches(watch, before, now) else 0), ""
+
+
 _JOB_LOCKS: dict = {}
 _JOB_LOCKS_LOCK = threading.Lock()
 #: When each email watch last really signed in to look (this process only:
@@ -1149,8 +1933,15 @@ def _look(job_id: str, deps: Deps, sched, nudged: bool) -> dict:
             _FULL[job_id] = time.time()
     elif watch["source"] == "page":
         n, said = _look_page(job_id, watch, st, deps, sched)
+    elif watch["source"] == "price":
+        n, said = _look_price(job_id, watch, st, deps, sched)
+    elif watch["source"] == "search":
+        n, said = _look_search(job_id, watch, st, deps, sched)
+    elif watch["source"] == "github":
+        n, said = _look_github(job_id, watch, st, deps, sched)
     else:
         n, said = _look_home(job_id, watch, st, deps, sched)
+    _incident(job_id, rule or {}, watch, st, said, now, deps, sched)
     if missing:
         return _missing_after(job_id, watch, st, n, said, now, deps, sched)
     _save(job_id, sched, looked_at=now, look_said=said)
@@ -1193,6 +1984,55 @@ def _missing_after(job_id: str, watch: dict, st: dict, n: int, said: str, now: f
     return {"ok": True, "matched": 1, "late": late}
 
 
+def broken_kind(said: str) -> str:
+    """The kind of problem a "Could not look" sentence names: the sentence
+    without its bracketed detail ("(TimeoutError)", "(HTTP 502)"), so a
+    timeout and a refused connection to the same server are one problem."""
+    return " ".join(re.sub(r"\s*\([^()]*\)", "", str(said or "")).split()).casefold()[:300]
+
+
+def _incident(job_id: str, rule: dict, watch: dict, st: dict, said: str, now: float,
+              deps: Deps, sched) -> None:
+    """A watch that cannot look tells the owner ONCE (the Hermes agent's
+    grouped-failure idea, cron/incidents.py, MIT - no code copied): grouped
+    by the kind of problem, told when it has lasted (BROKEN_AFTER_LOOKS looks
+    in a row for a watch that looks more often than hourly, else at once),
+    told again about the same problem only after BROKEN_AGAIN_HOURS, and
+    cleared silently by the next look that works."""
+    if not said.startswith("Could not look"):
+        if st.get("broken_kind"):
+            _save(job_id, sched, broken_kind=None, broken_since=None, broken_n=0,
+                  broken_told=None)
+            _audit("tellme.broken.cleared", {"id": job_id, "source": watch.get("source")})
+        return
+    kind = broken_kind(said)
+    same = st.get("broken_kind") == kind
+    n = (int(st.get("broken_n") or 0) + 1) if same else 1
+    since = float(st.get("broken_since") or now) if same else now
+    told = st.get("broken_told") if same else None
+    needed = 1 if int(rule.get("minutes") or 0) >= 60 else BROKEN_AFTER_LOOKS
+    tell = n >= needed and (told is None or now - float(told) >= BROKEN_AGAIN_HOURS * 3600)
+    fields = {"broken_kind": kind, "broken_since": since, "broken_n": n,
+              "broken_told": now if tell else told,
+              # Saved before the doorbell rings: the apps read `broken` by id.
+              "looked_at": now, "look_said": said}
+    _save(job_id, sched, **fields)
+    if tell:
+        _audit("tellme.broken", {"id": job_id, "source": watch.get("source"),
+                                 "again": told is not None})
+        deps.publish("schedule", {"id": job_id, "kind": KIND, "state": "broken"})
+
+
+def broken_words(watch: dict, said: str) -> str:
+    """The notification for a watch that cannot look: what is watched (the
+    owner's words) and why, in the fixed words of the look."""
+    why = str(said or "")
+    if why.startswith("Could not look: "):
+        why = why[len("Could not look: "):]
+    why = why[:1].upper() + why[1:] if why else "Jarvis could not look."
+    return f"Your \"tell me when\" ({what_words(watch)}) cannot look right now. {why}"
+
+
 def _on_fire(job_id: str) -> None:
     look(job_id)
 
@@ -1226,6 +2066,14 @@ def note(job_id: str) -> str:
         parts.append(st["look_said"])
     elif st.get("looked_at"):
         parts.append(f"Last looked at {S.clock(float(st['looked_at']))} - nothing yet.")
+    if watch.get("source") == "price" and not st.get("look_said"):
+        # The number it read, so the owner can check it read the right one.
+        seen = _price_of_state(st.get("last_state"))
+        if seen is not None:
+            parts.append(f"Price at the last look: {money(seen, watch)}.")
+    if st.get("broken_kind") and st.get("broken_told"):
+        parts.append(f"Jarvis told you at {S.clock(float(st['broken_told']))} that it cannot "
+                     "look; that clears by itself at the next look that works.")
     if watch.get("source") == "email" and row["state"] == "active":
         line = IDLE.note_words()
         if line:
@@ -1243,10 +2091,18 @@ def fields(job_id: str) -> dict:
     out = {"watches": watch.get("source", "")}
     if st.get("matched_at"):
         try:
-            out["alert"] = alert_words(check_watch(watch), int(st.get("alert_count") or 1))
+            out["alert"] = alert_words(check_watch(watch), int(st.get("alert_count") or 1), st)
         except ValueError:
             pass
         out["alert_at"] = float(st["matched_at"])
+    if st.get("broken_kind") and st.get("broken_told"):
+        # A watch that cannot look (2026-09-28): the notice's words, and when
+        # the owner was told - one notification per telling.
+        try:
+            out["broken"] = broken_words(check_watch(watch), st.get("look_said") or "")
+        except ValueError:
+            pass
+        out["broken_at"] = float(st["broken_told"])
     return out
 
 
@@ -1289,7 +2145,7 @@ def matched_since(since: float, now: Optional[float] = None, *, sched=None) -> l
         if row is None:
             continue
         try:
-            alert = alert_words(check_watch(watch), int(st.get("alert_count") or 1))
+            alert = alert_words(check_watch(watch), int(st.get("alert_count") or 1), st)
         except ValueError:
             continue
         out.append({"id": jid, "matched_at": matched_at, "alert": alert,
@@ -1301,6 +2157,15 @@ def matched_since(since: float, now: Optional[float] = None, *, sched=None) -> l
 # --------------------------------------------------------------------------
 #   Setting one up - from an app (the route) or the fast path
 # --------------------------------------------------------------------------
+
+def _count(listed: list, sched, sources: tuple) -> int:
+    n = 0
+    for j in listed:
+        _r, _rule, jw = _watch_of(j["id"], sched)
+        if jw and jw.get("source") in sources:
+            n += 1
+    return n
+
 
 def add(watch: dict, *, ends: Optional[float] = None, minutes: Optional[int] = None,
         source: str = "app", sched=None, deps: Optional[Deps] = None) -> dict:
@@ -1326,7 +2191,7 @@ def add(watch: dict, *, ends: Optional[float] = None, minutes: Optional[int] = N
             raise OverflowError(f"there are already {MAX_EMAIL_WATCHES} watching email - each "
                                 "signs in to your mail server every few minutes; delete one "
                                 "first")
-    if w["source"] == "page":
+    if w["source"] in ("page", "price"):
         # Checked BEFORE the card is ever raised, not only on each look
         # (jarvis_local_http.private_fetch_problem's own docstring says
         # why it is checked again on every look too).
@@ -1334,14 +2199,27 @@ def add(watch: dict, *, ends: Optional[float] = None, minutes: Optional[int] = N
         problem = LH.private_fetch_problem(w["url"])
         if problem:
             raise ValueError(problem)
-        pages = 0
-        for j in listed:
-            _r, _rule, jw = _watch_of(j["id"], sched)
-            if jw and jw.get("source") == "page":
-                pages += 1
+        pages = _count(listed, sched, ("page", "price"))
         if pages >= MAX_PAGE_WATCHES:
             raise OverflowError(f"there are already {MAX_PAGE_WATCHES} watching a web page - "
                                 "each fetches someone else's server; delete one first")
+    if w["source"] == "search":
+        import jarvis_search as WS
+        s = WS.settings()
+        # The words are checked the way a chat search's are (a password or
+        # key in them is refused) BEFORE any card; the provider is the one
+        # chosen in Settings now - never one an app sent.
+        p = WS.plan(w["words"], s=s)
+        if p.problem:
+            raise ValueError(p.problem.rstrip("."))
+        w["provider"] = s.get("provider") or ""
+        if _count(listed, sched, ("search",)) >= MAX_SEARCH_WATCHES:
+            raise OverflowError(f"there are already {MAX_SEARCH_WATCHES} watching a web search "
+                                "- delete one first")
+    if w["source"] == "github":
+        if _count(listed, sched, ("github",)) >= MAX_GITHUB_WATCHES:
+            raise OverflowError(f"there are already {MAX_GITHUB_WATCHES} watching GitHub - "
+                                "delete one first")
     rule = {"every": "minutes", "watch": w}
     if minutes is not None:
         rule["minutes"] = minutes
@@ -1353,12 +2231,17 @@ def add(watch: dict, *, ends: Optional[float] = None, minutes: Optional[int] = N
 def add_route(body: dict) -> tuple:
     """POST /api/schedule/add {"kind": "tellme", "source": "email", "sender"}
     or {"kind": "tellme", "source": "home", "entity", "say" | "states",
-    "name"?} or {"kind": "tellme", "source": "page", "url"}, with "urgent"?,
-    "once"?, "days"? (up to 90), "minutes"?. 202 and ONE card, like any repeat."""
+    "name"?} or {"kind": "tellme", "source": "page", "url"}, or (2026-09-28)
+    {"source": "price", "url", "below", "currency"?}, {"source": "search",
+    "words"}, {"source": "github", "repo", "event": "ci_done" | "ci_failed" |
+    "pr_merged", "branch"? | "pr"}, with "urgent"?, "once"?, "days"? (up to
+    90), "minutes"?. 202 and ONE card, like any repeat. A search watch's
+    provider is the one chosen in Settings - never one sent here."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "Need a JSON object."}
     watch = {k: body.get(k) for k in ("source", "sender", "entity", "say", "states", "name",
-                                      "urgent", "once", "missing", "by", "url")}
+                                      "urgent", "once", "missing", "by", "url", "below",
+                                      "currency", "words", "repo", "event", "branch", "pr")}
     ends = None
     days = body.get("days")
     if days is not None:

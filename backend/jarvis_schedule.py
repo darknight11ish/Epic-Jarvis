@@ -711,6 +711,13 @@ def rule_words(rule: Optional[dict]) -> str:
         return "every hour" if n == 1 else f"every {n} hours"
     if every == "minutes":
         n = rule.get("minutes")
+        # Whole days and hours said as such (2026-09-28: a "tell me when" on
+        # a search looks once a day - "every 1440 minutes" is no way to say it).
+        if isinstance(n, int) and not isinstance(n, bool) and n >= 60:
+            if n % 1440 == 0:
+                return "every day" if n == 1440 else f"every {n // 1440} days"
+            if n % 60 == 0:
+                return "every hour" if n == 60 else f"every {n // 60} hours"
         return "every minute" if n == 1 else f"every {n} minutes"
     return ""
 
