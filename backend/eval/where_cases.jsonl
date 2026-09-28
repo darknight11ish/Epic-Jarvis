@@ -1,0 +1,26 @@
+{"id": "s01", "say": "Owner's passport is in the top drawer", "days_ago": 40}
+{"id": "s02", "say": "Owner put the spare key under the blue pot", "days_ago": 30}
+{"id": "s03", "say": "Owner's glasses are on the hall table", "days_ago": 20}
+{"id": "s04", "say": "Owner's car keys are on the hook by the door", "days_ago": 12}
+{"id": "s05", "say": "Owner moved the passport to the filing cabinet", "days_ago": 5}
+{"id": "s06", "say": "Owner left their umbrella at work", "days_ago": 3}
+{"id": "s07", "say": "Owner put the glasses on the kitchen counter", "days_ago": 1}
+{"id": "s08", "say": "Owner's wedding is in May", "days_ago": 50}
+{"id": "s09", "say": "Owner lives in Leeds", "days_ago": 60}
+{"id": "s10", "say": "Owner's sister is called Priya", "days_ago": 60}
+{"id": "s11", "say": "Owner put the winter coats in the loft in January 2026", "days_ago": 8}
+{"id": "s12", "say": "Owner put the winter coats in the spare room in March 2026", "days_ago": 7}
+{"id": "s13", "say": "Owner put the winter coats under the stairs in February 2026", "days_ago": 2}
+{"id": "q01", "ask": "where is my passport?", "want": "in the filing cabinet", "never": "top drawer"}
+{"id": "q02", "ask": "Where did I put the spare key?", "want": "under the blue pot"}
+{"id": "q03", "ask": "where are my glasses", "want": "on the kitchen counter", "never": "hall table"}
+{"id": "q04", "ask": "Jarvis, where are my car keys?", "want": "on the hook by the door"}
+{"id": "q05", "ask": "do you know where my umbrella is?", "want": "at work"}
+{"id": "q06", "ask": "where are my keys?", "want": "on the hook by the door", "also": "under the blue pot"}
+{"id": "q07", "ask": "where did I leave my phone?", "want": null}
+{"id": "q08", "ask": "where is my wedding?", "want": null}
+{"id": "q09", "ask": "where do I live?", "want": null}
+{"id": "q10", "ask": "where is my sister?", "want": null}
+{"id": "q11", "ask": "where is Paris?", "want": null}
+{"id": "q12", "ask": "where are the winter coats?", "want": "in the spare room", "never": "under the stairs"}
+{"id": "q13", "ask": "I put my passport in the safe", "want": null}

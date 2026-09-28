@@ -1,4 +1,4 @@
-"""jarvis_brain_reads.py - the Brain upgrades' two read-only routes.
+"""jarvis_brain_reads.py - the Brain's read-only routes (the Brain upgrades, and a chat's facts).
 
 The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
 8, "Brain upgrades"); docs/JARVIS-API.md section 71 is the contract.
@@ -15,7 +15,15 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         fact, oldest first. jarvis_memory.fact_history_view() does the work;
         an erased version never comes with its words.
 
-Both are READS for the apps' Brain screens, behind the pairing token and
+    GET /api/memory/conversation-facts?conversation_id=<id>
+        (2026-09-28; JARVIS-API section 79) "Facts this chat taught": the
+        facts still in use whose meta says they were learned in that
+        conversation, for History's "delete this chat" to offer forgetting
+        them. jarvis_memory.conversation_facts_view() does the work. It
+        forgets nothing: each ticked fact is then forgotten through the
+        ordinary Forget route, one at a time.
+
+All three are READS for the apps' Brain screens, behind the pairing token and
 the origin check like every memory and history read. Neither is a tool: no
 model and no chat turn can call them (jarvis_agent.py offers nothing that
 reaches here), so what they return never reaches the AI model. Neither
@@ -34,7 +42,8 @@ from urllib.parse import urlsplit
 
 SEARCH_PATH = "/api/history/search"
 FACT_HISTORY_PATH = "/api/memory/fact-history"
-PATHS = (SEARCH_PATH, FACT_HISTORY_PATH)
+CONVERSATION_FACTS_PATH = "/api/memory/conversation-facts"
+PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH)
 
 UPDATE = ("This PC's Jarvis is missing part of this feature. Run apply-patches.ps1 on the PC "
           "to update it.")
@@ -66,6 +75,18 @@ def handle_get(path: str, query: str = "") -> tuple:
             return handler(query)
         except Exception as exc:
             return 500, {"error": type(exc).__name__}
+    if path == CONVERSATION_FACTS_PATH:
+        try:
+            import jarvis_memory
+        except Exception:
+            return 503, {"error": "memory layer not importable"}
+        handler = getattr(jarvis_memory, "handle_conversation_facts_get", None)
+        if handler is None:
+            return 501, {"error": UPDATE}
+        try:
+            return handler(query)
+        except Exception as exc:
+            return 500, {"error": type(exc).__name__}
     return 404, {"error": "no such route"}
 
 
@@ -73,9 +94,9 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     """Wrap `handler_cls.do_GET` so PATHS are answered here, after the
     server's own origin and token checks; every other request goes straight
     to the original `do_GET`. `read_body` is taken only for the signature
-    the other install() functions share (both routes are GET-only)."""
+    the other install() functions share (every route here is GET-only)."""
     if getattr(handler_cls.do_GET, "_jarvis_brain_reads", False):
-        return "  brain      Search old chats and fact history (already on)"
+        return "  brain      Search old chats, fact history and a chat's facts (already on)"
     get0 = handler_cls.do_GET
 
     def _allowed(self) -> bool:
@@ -103,4 +124,4 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
 
     do_GET._jarvis_brain_reads = True
     handler_cls.do_GET = do_GET
-    return "  brain      Search old chats and fact history: on"
+    return "  brain      Search old chats, fact history and a chat's facts: on"

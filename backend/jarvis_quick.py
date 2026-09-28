@@ -650,6 +650,14 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "where did I put ...?" (jarvis_places.py, 2026-09-28) ----------------
+    # A QUESTION only: "where is my passport?". The owner saying where a
+    # thing is ("I put the spare key under the blue pot") is never ours - it
+    # goes to the model, and the learner learns it like any fact.
+    got = _where_put(s)
+    if got is not None:
+        return got
+
     # --- "what did I miss?", snooze and "cancel that" (2026-09-25) -------------
     got = _missed(s) or _snooze(s) or _undo(s)
     if got is not None:
@@ -958,6 +966,17 @@ def _list_whole(s: str) -> Optional[Intent]:
                     r"|what\s+are\s+my\s+lists|my\s+lists", s):
         return Intent("lists_which")
     return None
+
+
+def _where_put(s: str) -> Optional[Intent]:
+    """"where is my passport?", "where did I put the spare key?" - the thing
+    asked about, from jarvis_places' grammar. None without that module."""
+    try:
+        import jarvis_places
+        thing = jarvis_places.where_question(s)
+    except Exception:
+        return None
+    return Intent("where_put", {"thing": thing}) if thing else None
 
 
 def _missed(s: str) -> Optional[Intent]:
@@ -2127,6 +2146,12 @@ class Result:
     # the section id both apps already use for their own settings screen, so
     # they can jump there. None for every other answer made here.
     open_settings: Optional[str] = None
+    # "Where did I put ...?" (2026-09-28): the saved facts the answer quotes,
+    # by id, and how many of them are sensitive - so X-Jarvis-Route says the
+    # answer used memory, both apps show "Used 1 memory" with Forget, and a
+    # sensitive one stays on screen like any memory answer (route_fields).
+    facts: list = field(default_factory=list)
+    facts_sensitive: int = 0
 
 
 def _join(items: list) -> str:
@@ -2166,6 +2191,41 @@ def _pick_timer(timers: list, f: dict):
 
 SETTINGS_MISSING = ("Your PC's Jarvis does not have the settings registry yet - run "
                     "apply-patches.ps1 on the PC.")
+
+
+def _memory_k() -> int:
+    """JARVIS_MEMORY_K: 0 means no memory at all (ARCHITECTURE section 5),
+    which the fast path honours too."""
+    import os
+    try:
+        return int(os.environ.get("JARVIS_MEMORY_K", "5"))
+    except ValueError:
+        return 5
+
+
+def _run_where_put(f: dict, now: float, temporary: bool) -> Optional[Result]:
+    """"Where is my passport?" from memory, without the model (2026-09-28;
+    JARVIS-API section 77). None - the model answers, as before - in a
+    temporary chat (it uses no memory), with memory switched off
+    (JARVIS_MEMORY_K=0), without jarvis_places.py or the memory store, and
+    when no saved place is in use for that thing."""
+    if temporary or _memory_k() <= 0:
+        return None
+    try:
+        import jarvis_memory
+        import jarvis_places
+        found = jarvis_places.lookup(jarvis_memory.store(), f.get("thing") or "", now=now)
+    except Exception:
+        return None
+    if not found:
+        return None
+    try:
+        import jarvis_auto_learn
+        sensitive = sum(1 for x in found if jarvis_auto_learn.is_sensitive_fact(x.get("text")))
+    except Exception:
+        sensitive = len(found)            # fail closed: may all be sensitive
+    return Result(jarvis_places.answer_words(found, now), "where_put",
+                  facts=[int(x["id"]) for x in found], facts_sensitive=sensitive)
 
 
 def _run_settings_open(f: dict) -> Result:
@@ -2210,8 +2270,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     same way owner-check.patch's do_POST wrapper reads it - so a setting on
     jarvis_owner_check.PC_ONLY_ACTIONS can refuse a request that did not
     truly come from this PC (jarvis_settings_registry.py, 2026-09-27)."""
-    import jarvis_schedule as S
     n, f = intent.name, intent.f
+    if n == "where_put":
+        return _run_where_put(f, now, temporary)
+    import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
     if n == "settings_bool":
@@ -3028,6 +3090,15 @@ def route_fields(res: Result) -> dict:
            "injected_sensitive": 0}
     if res.private:
         out["gate"] = "private"
+    if res.facts:
+        # "Where did I put ...?" (2026-09-28): the answer quotes saved facts,
+        # so it says so exactly as a model answer that used memory does -
+        # the same "mem:<id>" ids, and how many are sensitive (both apps
+        # keep such an answer on screen unless the owner allowed it).
+        out["inject_memory"] = True
+        out["injected_facts"] = len(res.facts)
+        out["injected_ids"] = [f"mem:{int(i)}" for i in res.facts]
+        out["injected_sensitive"] = max(0, min(int(res.facts_sensitive), len(res.facts)))
     if res.open_settings:
         # "open <a settings section>" (jarvis_settings_registry.py,
         # 2026-09-27): the section id both apps' Settings screens already

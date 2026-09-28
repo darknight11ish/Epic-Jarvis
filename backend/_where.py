@@ -198,7 +198,15 @@ SHIPPED = (
     "jarvis_sources.py",
     # The Brain upgrades (2026-09-28, brain-reads.patch): GET
     # /api/history/search and /api/memory/fact-history, for the apps only
+    # (and, since the memory dates group, /api/memory/conversation-facts)
     "jarvis_brain_reads.py",
+    # "Where did I put ...?" (2026-09-28): the places the owner said,
+    # answered without the model; jarvis_quick.py and jarvis_auto_learn.py
+    # call it, no patch
+    "jarvis_places.py",
+    # The overnight tidy (2026-09-28): "Still true?" and "Which is true
+    # now?" review cards only, a kind of job on the one scheduler, no patch
+    "jarvis_tidy.py",
 )
 
 

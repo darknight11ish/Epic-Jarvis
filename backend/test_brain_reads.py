@@ -389,6 +389,60 @@ def t_fact_history_route():
     check("no such fact is a 404 in words", code == 404 and "no such fact" in out["error"])
 
 
+def t_conversation_facts():
+    """"Facts this chat taught" (2026-09-28; JARVIS-API section 79): only the
+    facts STILL IN USE whose own meta says that conversation - never a
+    forgotten, erased or corrected one, never another chat's - and the route
+    forgets nothing."""
+    st = store("conv-facts")
+    cid, other = "conv-teach-0001", "conv-other-0002"
+    a = st.add("Owner's passport is in the top drawer", source="auto",
+               meta={"auto": True, "conversation_id": cid})
+    b = st.add("Owner likes green tea", source="auto",
+               meta={"auto": True, "conversation_id": cid})
+    gone = st.add("Owner's bike is red", source="auto",
+                  meta={"auto": True, "conversation_id": cid})
+    erased = st.add("Owner's locker code is Zyxwvut 9", source="auto",
+                    meta={"auto": True, "conversation_id": cid})
+    old = st.add("Owner works at Initech", source="auto",
+                 meta={"auto": True, "conversation_id": cid})
+    st.add("Owner works at Globex", source="edited", supersedes=old)
+    st.add("Owner's cat is called Miso", source="auto",
+           meta={"auto": True, "conversation_id": other})
+    st.add("Owner is learning the harp", source="extracted", meta={"proposal_id": 3})
+    lookalike = st.add("Owner plays chess", source="auto",
+                       meta={"auto": True, "conversation_id": cid + "x"})
+    st.retire(gone)
+    st.erase(erased)
+    before = [tuple(r) for r in _rows(st)]
+    v = M.conversation_facts_view(cid, st=st)
+    ids = [f["id"] for f in v["facts"]]
+    check("only that chat's facts still in use, newest first", ids == [b, a], v)
+    check("never a forgotten, erased or corrected one, or another chat's",
+          gone not in ids and erased not in ids and old not in ids and lookalike not in ids)
+    check("each is its id, words, when and source - no meta, no conversation id",
+          all(set(f) == {"id", "text", "created", "source"} for f in v["facts"]), v)
+    check("the erased words are nowhere in the answer", "Zyxwvut" not in json.dumps(v))
+    code, out = M.handle_conversation_facts_get(f"conversation_id={cid}")
+    check("the route: 200 with the list", code == 200 and out["count"] == 2, (code, out))
+    for bad in ("", "conversation_id=", "conversation_id=short", "conversation_id=a%20b%20cdefgh",
+                "conversation_id=" + "x" * 65):
+        code, out = M.handle_conversation_facts_get(bad)
+        check(f"{bad[:30]!r} is a 400 in words", code == 400 and "conversation id" in out["error"],
+              (code, out))
+    code, out = M.handle_conversation_facts_get("conversation_id=conv-nothing-99")
+    check("a chat that taught nothing: an empty list", code == 200 and out["facts"] == [])
+    check("reading it changes nothing", [tuple(r) for r in _rows(st)] == before)
+    code, out = B.handle_get(B.CONVERSATION_FACTS_PATH, f"conversation_id={cid}")
+    check("jarvis_brain_reads answers it", code == 200 and out["count"] == 2, (code, out))
+
+
+def _rows(st):
+    from contextlib import closing
+    with closing(st._connect()) as c:
+        return c.execute("SELECT * FROM facts ORDER BY id").fetchall()
+
+
 # ------------------------------------------------------ routes and the patch
 
 class FakeHandler:
@@ -443,12 +497,20 @@ def t_an_older_module_says_update():
               and "apply-patches.ps1" in out["error"], (code, out))
     finally:
         M.handle_fact_history_get = real
+    real = getattr(M, "handle_conversation_facts_get")
+    try:
+        delattr(M, "handle_conversation_facts_get")
+        code, out = B.handle_get(B.CONVERSATION_FACTS_PATH, "conversation_id=conv-abcdefgh")
+        check("an older jarvis_memory.py: a chat's facts is a 501 and a sentence",
+              code == 501 and "apply-patches.ps1" in out["error"], (code, out))
+    finally:
+        M.handle_conversation_facts_get = real
 
 
 def t_not_a_tool_the_model_can_call():
     agent = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
     for needle in ("history/search", "fact-history", "jarvis_brain_reads", ".search(",
-                   "fact_history"):
+                   "fact_history", "conversation-facts", "conversation_facts"):
         if needle == ".search(":
             # jarvis_agent may search memory for recall; what must not be
             # there is the chat log's search.

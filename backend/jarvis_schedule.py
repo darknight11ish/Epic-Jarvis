@@ -307,7 +307,11 @@ KINDS: dict = {}
 #: A module that is missing is skipped: its jobs still go off, as a doorbell.
 #: jarvis_focus (2026-09-25): the end of a focus session - not listed in
 #: Coming up (the focus panel counts down), and it tells nobody.
-KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus")
+#: jarvis_tidy (2026-09-28): the overnight tidy's hourly look - not listed in
+#: Coming up, tells nobody, and runs at most once a day, only while the
+#: owner's "Overnight memory tidying" switch is on; it only raises cards.
+KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus",
+                "jarvis_tidy")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,
@@ -1548,6 +1552,15 @@ class Scheduler:
         self._changed(jid, row["kind"])
         return True
 
+    def jobs_of(self, kind: str) -> list:
+        """The ids of the jobs of one kind still on the list (active, paused
+        or waiting for a card) - for a kind that manages its own one job
+        (jarvis_tidy.py). Reads only."""
+        with self._lock, self._db() as c:
+            return [r["id"] for r in c.execute(
+                "SELECT id FROM jobs WHERE kind = ? AND state IN ('active','paused','waiting')"
+                " ORDER BY created", (str(kind),)).fetchall()]
+
     def next_due(self) -> Optional[float]:
         with self._lock, self._db() as c:
             r = c.execute("SELECT MIN(due) FROM jobs WHERE state = 'active' "
@@ -1753,17 +1766,41 @@ _SCHED_LOCK = threading.Lock()
 
 
 
+#: Called once, on their own thread, after the scheduler first starts in
+#: this process (after_start). For a kind that keeps ONE job of its own in
+#: step with a setting (jarvis_tidy.py: the overnight tidy's look, only
+#: while its switch is on) - it cannot add that job while get() is still
+#: importing it.
+_AFTER_START: list = []
+
+
+def after_start(fn: Callable[[], None]) -> None:
+    """Run `fn()` once the scheduler has started (at once, on its own
+    thread, when it already has). Nothing it raises reaches anyone."""
+    _AFTER_START.append(fn)
+    if _SCHED is not None and _SCHED.running:
+        threading.Thread(target=lambda: _safe(lambda _j: fn(), ""), daemon=True,
+                         name="jarvis-schedule-after-start").start()
+
+
 def get() -> Scheduler:
     """The scheduler, started. Every way in comes through here - the boot
     line in jarvis_hud.py, the routes, the fast path, the model's tools - so
     whichever is first starts the loop, once."""
     global _SCHED
+    first = False
     with _SCHED_LOCK:
         if _SCHED is None:
             _load_kind_modules()
             _SCHED = Scheduler()
+            first = True
         s = _SCHED
-    return s.start()
+    s.start()
+    if first:
+        for fn in list(_AFTER_START):
+            threading.Thread(target=lambda fn=fn: _safe(lambda _j: fn(), ""), daemon=True,
+                             name="jarvis-schedule-after-start").start()
+    return s
 
 
 def _load_kind_modules() -> None:
