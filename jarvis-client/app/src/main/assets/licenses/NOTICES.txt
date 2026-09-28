@@ -93,6 +93,14 @@ Pipecat's Whisper features (Daily), BSD 2-Clause License -
   Copyright The HuggingFace Team).
 
 
+Inigo Quilez's distance formulas -
+  https://iquilezles.org/articles/distfunctions/ and
+  https://iquilezles.org/articles/distfunctions2d/
+  The animal faces (face/CritterShaders.kt) and the Nucleus face
+  (face/Faces.kt) use his published formulas: the ellipsoid bound, the
+  capsule, the smooth minimum and the distance to a 2D ellipse, each named
+  in a comment beside it.
+
 LICENCE TEXTS
 =============
 

@@ -517,6 +517,16 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   default: the animal sits calmly and only breathes - no looking around,
   no gestures or idle events.
 
+Decided 2026-09-28, after checking two Gemini reviews of the outside
+projects Jarvis names (`docs/AUDIT-2026-09-28-REPO-REFS.md` - read it
+before acting on any outside review; its disproven findings stay closed):
+- **Three separate milestones are queued, none started**, in this order:
+  (1) Silero speech detection in the apps for "stopped talking" and
+  interruptions (wake-up stays with the wake-word model); (2) Prompt Guard 2
+  as a warning only, after the owner gets Meta's access and it is measured;
+  (3) "quiz me on my notes" with FSRS, deferred until a note-review screen
+  is designed. Details and limits are in that audit, section 6.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

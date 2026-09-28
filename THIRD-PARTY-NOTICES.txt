@@ -402,6 +402,29 @@ MarkItDown (Microsoft), MIT - https://github.com/microsoft/markitdown
   magika (Apache-2.0), beautifulsoup4 and markdownify (MIT), defusedxml
   (PSFL) and charset-normalizer (MIT).
 
+THE FACES' SHAPE MATHS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Inigo Quilez - https://iquilezles.org/articles/distfunctions/ and
+https://iquilezles.org/articles/distfunctions2d/
+  The animal faces (jarvis-desktop/critters/common_head.sksl, generated into
+  jarvis-desktop/src/critters-gen.js and the phone's face/CritterShaders.kt)
+  use his published distance formulas: the ellipsoid bound, the capsule, the
+  polynomial smooth minimum and the Newton-step distance to a 2D ellipse.
+  The Nucleus face (jarvis-desktop/src/faces.html, the phone's
+  face/Faces.kt) uses the same smooth minimum. Each is a few lines of maths
+  written out here, with a comment naming him and the address above. The
+  licence on those pages was NOT checked (the site could not be reached from
+  where this was written); this build is non-commercial either way (rule 5).
+
+LAUNCH VIDEO FONTS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Inter (The Inter Project Authors, https://github.com/rsms/inter) and
+Fraunces (The Fraunces Project Authors, https://github.com/undercasetype/Fraunces),
+SIL Open Font License 1.1. Used only in the launch videos
+(videos/v5 and videos/v6, composition/assets/fonts/, each with its
+licence file beside it), not in either app. The OFL text is the one given
+under FONTS below.
+
 FONTS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Chakra Petch (The Chakra Petch Project Authors), IBM Plex Sans and IBM Plex
