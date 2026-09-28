@@ -46,6 +46,15 @@ true, as for every other `*_aloud` - the answer stays on screen. It is
 asked right after the sensitive-fact step, before anything can say "read
 aloud", so nothing else lets it through.
 
+And `read_camera` (the owner's answer of 2026-09-28 to docs/LIVE-DESIGN.md:
+"answers about what the camera sees are read aloud, like screen answers,
+unless a sensitive fact was used or the strict setting says otherwise"). The
+name a Jarvis Live question sent with a camera picture records
+(jarvis_live.CAMERA_TOOL), and it is governed by exactly the same rule as
+`read_screen`, `screen_aloud` included: both are "a look". The camera is
+switched off until the second card passes the photo test, so nothing sends
+it yet - the apps are ready for it.
+
 This writes the SAME table into
 
     jarvis-desktop/tests/fixtures/private-aloud-cases.json
@@ -76,11 +85,12 @@ ON_SCREEN = "It's on your screen."
 #: The only tools whose answers may be read aloud (owner, 2026-09-27; and
 #: read_screen, owner, 2026-09-28). Exact names, as the `step` event carries
 #: them (jarvis_agent._step_event).
-READ_ALOUD_TOOLS = ("home_read", "read_screen", "web_search")
+READ_ALOUD_TOOLS = ("home_read", "read_camera", "read_screen", "web_search")
 
 #: Names on READ_ALOUD_TOOLS that are recorded reads, not model tools, and
 #: the module constant that defines each one (checked in build()).
-RECORDED_READS = {"read_screen": ("jarvis_screen", "SCREEN_TOOL")}
+RECORDED_READS = {"read_screen": ("jarvis_screen", "SCREEN_TOOL"),
+                  "read_camera": ("jarvis_live", "CAMERA_TOOL")}
 
 
 def tool_names() -> list:
@@ -107,11 +117,17 @@ def is_private_tool_run(step) -> bool:
 
 #: The recorded read that is an answer about the screen (jarvis_screen.SCREEN_TOOL).
 SCREEN_READ = "read_screen"
+#: The recorded read that is an answer about what the camera sees
+#: (jarvis_live.CAMERA_TOOL) - the same rule as the screen.
+CAMERA_READ = "read_camera"
+#: Every "look": an answer about something Jarvis was shown.
+LOOK_READS = (SCREEN_READ, CAMERA_READ)
 
 
 def is_screen_read(step) -> bool:
-    """The screen was read: a tool step named exactly `read_screen`."""
-    return is_tool_run(step) and step.get("tool") == SCREEN_READ
+    """The screen or the camera was read: a tool step named exactly
+    `read_screen` or `read_camera`."""
+    return is_tool_run(step) and step.get("tool") in LOOK_READS
 
 
 def _count(route, key):
@@ -298,6 +314,26 @@ def build_cases() -> list:
         ran("read_screen"), drop=("screen_aloud",))
     add("an older PC's reply with no screen_aloud field: web_search is read aloud",
         ran("web_search"), drop=("screen_aloud",))
+
+    # The camera in Jarvis Live (owner, 2026-09-28): read aloud like an
+    # answer about the screen, under the same screen_aloud, with every
+    # earlier rule first.
+    add("the camera was read (read_camera)", ran("read_camera"))
+    add("the camera was read, then email_check", ran("read_camera") + ran("email_check"))
+    add("the camera was read, with a sensitive saved fact",
+        ran("read_camera"), route={"gate": "offer", "injected_facts": 1, "injected_sensitive": 1})
+    add("the camera was read, but the PC marked the question private",
+        ran("read_camera"), heard={"question_private": True})
+    add("the camera was read, stream dropped", ran("read_camera"), stream="dropped")
+    add("a name that is not exact (Read_Camera) counts as unknown", ran("Read_Camera"))
+    add("Live with the 'Hey Jarvis' caution under 'Only trust the talk button': the camera "
+        "was read, stays on screen", ran("read_camera"), heard=STRICT_WAKE)
+    add("Live with the 'Hey Jarvis' caution, screen answers allowed aloud: the camera is "
+        "read aloud", ran("read_camera"), heard=STRICT_WAKE_SCREEN_ALLOWED)
+    add("an older PC's reply with no screen_aloud field: the camera was read, on screen",
+        ran("read_camera"), drop=("screen_aloud",))
+    add("a refused read_camera did not run",
+        [{"phase": "tool_refused", "tool": "read_camera"}], heard=STRICT_WAKE)
     return cases
 
 
@@ -318,7 +354,9 @@ def build() -> dict:
                      "(read_screen) are read aloud too, with every earlier rule first - "
                      "and under 'Only trust the talk button' a 'Hey Jarvis' turn's screen "
                      "answer stays on screen unless the utterance reply says "
-                     "screen_aloud: true (missing = false)."),
+                     "screen_aloud: true (missing = false). Owner, 2026-09-28: answers "
+                     "about what the camera sees in Jarvis Live (read_camera) follow "
+                     "exactly the same rule as the screen."),
         "on_screen": ON_SCREEN,
         "read_aloud_tools": list(READ_ALOUD_TOOLS),
         "cases": build_cases(),

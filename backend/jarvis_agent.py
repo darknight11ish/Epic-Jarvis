@@ -3162,7 +3162,12 @@ _STEP_PHASES = ("model", "tool_started", "tool_finished", "tool_refused", "answe
 #: list by the owner's answer of 2026-09-28, so it must reach them by name,
 #: not as "unknown". Nothing sends it yet: the chat route's screen wiring is
 #: the next build step.
-STEP_READS = frozenset({"read_screen"})
+#: "read_camera" is a Jarvis Live question sent with a camera picture
+#: (jarvis_live.CAMERA_TOOL, docs/LIVE-DESIGN.md section 5) - read aloud like
+#: a screen answer by the owner's answer of 2026-09-28, under the same
+#: `screen_aloud`. The camera is switched off until the second card passes
+#: the photo test (jarvis_live.camera_status), so nothing sends it yet.
+STEP_READS = frozenset({"read_screen", "read_camera"})
 
 
 def _step_event(phase: str, tool: Optional[str] = None, *,

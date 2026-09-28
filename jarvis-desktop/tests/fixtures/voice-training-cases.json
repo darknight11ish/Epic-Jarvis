@@ -351,6 +351,7 @@
         "pending": false,
         "settings": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -369,6 +370,7 @@
         "pending": false,
         "settings": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -387,6 +389,7 @@
         "pending": false,
         "settings": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -534,6 +537,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -624,6 +628,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -647,6 +655,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -654,6 +663,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 1.5,
@@ -697,6 +707,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -704,6 +715,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -796,6 +812,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -819,6 +839,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -826,6 +847,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 1.5,
@@ -1035,6 +1057,7 @@
         "enabled": true,
         "enrolled": false,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -1120,6 +1143,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -1143,6 +1170,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -1150,6 +1178,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -1191,6 +1220,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -1198,6 +1228,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -1285,6 +1320,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -1308,6 +1347,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -1315,6 +1355,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -1524,6 +1565,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -1614,6 +1656,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -1637,6 +1683,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -1644,6 +1691,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -1698,6 +1746,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -1705,6 +1754,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -1797,6 +1851,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -1820,6 +1878,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -1827,6 +1886,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -2036,6 +2096,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -2126,6 +2187,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -2149,6 +2214,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -2156,6 +2222,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -2193,6 +2260,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -2200,6 +2268,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -2292,6 +2365,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -2315,6 +2392,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -2322,6 +2400,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -2531,6 +2610,7 @@
         "enabled": true,
         "enrolled": false,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -2616,6 +2696,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -2639,6 +2723,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -2646,6 +2731,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -2683,6 +2769,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -2690,6 +2777,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -2777,6 +2869,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -2800,6 +2896,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -2807,6 +2904,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -3016,6 +3114,7 @@
         "enabled": true,
         "enrolled": false,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -3101,6 +3200,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -3124,6 +3227,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -3131,6 +3235,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -3182,6 +3287,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -3189,6 +3295,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -3276,6 +3387,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -3299,6 +3414,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -3306,6 +3422,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -3515,6 +3632,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -3605,6 +3723,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -3628,6 +3750,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -3635,6 +3758,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -3686,6 +3810,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -3693,6 +3818,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -3785,6 +3915,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -3808,6 +3942,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -3815,6 +3950,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -4024,6 +4160,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -4114,6 +4251,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -4137,6 +4278,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -4144,6 +4286,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -4188,6 +4331,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -4195,6 +4339,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -4287,6 +4436,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -4310,6 +4463,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -4317,6 +4471,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -4526,6 +4681,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -4616,6 +4772,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -4639,6 +4799,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -4646,6 +4807,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -4683,6 +4845,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -4690,6 +4853,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -4782,6 +4950,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -4805,6 +4977,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -4812,6 +4985,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -5021,6 +5195,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -5116,6 +5291,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -5139,6 +5318,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -5146,6 +5326,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -5183,6 +5364,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -5190,6 +5372,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -5287,6 +5474,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -5310,6 +5501,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -5317,6 +5509,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -5526,6 +5719,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -5616,6 +5810,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -5639,6 +5837,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -5646,6 +5845,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -5689,6 +5889,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -5696,6 +5897,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -5788,6 +5994,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -5811,6 +6021,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -5818,6 +6029,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -6027,6 +6239,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -6121,6 +6334,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -6144,6 +6361,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -6151,6 +6369,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -6200,6 +6419,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -6207,6 +6427,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -6303,6 +6528,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -6326,6 +6555,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -6333,6 +6563,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -6542,6 +6773,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -6640,6 +6872,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -6663,6 +6899,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -6670,6 +6907,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -6729,6 +6967,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -6736,6 +6975,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -6836,6 +7080,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -6859,6 +7107,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -6866,6 +7115,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -7075,6 +7325,7 @@
         "enabled": true,
         "enrolled": false,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -7160,6 +7411,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -7183,6 +7438,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -7190,6 +7446,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -7231,6 +7488,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -7238,6 +7496,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -7325,6 +7588,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -7348,6 +7615,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -7355,6 +7623,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -7564,6 +7833,7 @@
         "enabled": true,
         "enrolled": false,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -7649,6 +7919,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -7672,6 +7946,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -7679,6 +7954,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -7747,6 +8023,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -7754,6 +8031,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -7841,6 +8123,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -7864,6 +8150,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -7871,6 +8158,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -8080,6 +8368,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -8170,6 +8459,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -8193,6 +8486,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -8200,6 +8494,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -8240,6 +8535,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -8247,6 +8543,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -8339,6 +8640,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -8362,6 +8667,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -8369,6 +8675,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
@@ -8578,6 +8885,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
@@ -8668,6 +8976,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_same_as_button",
+              "live_like_hey_jarvis"
+            ],
             "hands_free_screen": [
               "screen_on_screen",
               "screen_aloud"
@@ -8691,6 +9003,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_same_as_button",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -8698,6 +9011,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -8741,6 +9055,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_same_as_button",
       "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
@@ -8748,6 +9063,11 @@
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
       },
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
@@ -8840,6 +9160,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_same_as_button",
+            "live_like_hey_jarvis"
+          ],
           "hands_free_screen": [
             "screen_on_screen",
             "screen_aloud"
@@ -8863,6 +9187,7 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_same_as_button",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
@@ -8870,6 +9195,7 @@
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_same_as_button",
         "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,

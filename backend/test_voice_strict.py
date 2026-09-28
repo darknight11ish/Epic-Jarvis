@@ -754,6 +754,122 @@ def t_hands_free_screen_setting():
               and gate_state["settings"]["hands_free_screen"] == "screen_on_screen", gate_state)
 
 
+LIVE_CARD = (
+    "Trust what you say in Jarvis Live like the talk button again, even while "
+    "\"Only trust the talk button\" is chosen?\n\n"
+    "During Jarvis Live the microphone stays open. A recording or a copy of your voice "
+    "played near it could pass the voice check, and would then be trusted like you "
+    "pressing the talk button: Jarvis could remember things from it, or read memory and "
+    "private answers aloud.\n\n"
+    "If you did not just do this, say no.\n\n"
+    "If you say no: nothing changes - Jarvis Live keeps the extra caution of \"Hey Jarvis\".")
+
+
+def t_hands_free_live_setting():
+    """The owner's answer of 2026-09-28 (docs/LIVE-DESIGN.md): under "only
+    trust the talk button", a Jarvis Live turn (`source=live`) is trusted
+    like the talk button BY DEFAULT, with a seventh setting to give it the
+    "hey Jarvis" caution instead. The caution applies at once; going back to
+    trusted is the voice card. A damaged value is the cautious one. Under
+    "same as the talk button" it changes nothing."""
+    with Temp():
+        check("no settings file: live_same_as_button (the owner's default)",
+              V.settings()["hands_free_live"] == "live_same_as_button")
+        check("under the default hands-free choice, a Live turn is trusted",
+              V.hands_free_trusted("live"))
+        V.settings_path().write_text(json.dumps({"strictness": "very_strict",
+                                                 "hands_free": "button_only"}))
+        check("a file from before this setting: live_same_as_button",
+              V.settings()["hands_free_live"] == "live_same_as_button")
+        check("button_only: a Live turn is STILL trusted like the talk button (the owner "
+              "pressed Start)", V.hands_free_trusted("live") and V.hands_free_trusted("LIVE "))
+        check("...while hey Jarvis and an unknown source are not",
+              not V.hands_free_trusted("wake_word") and not V.hands_free_trusted("carrier_pigeon")
+              and not V.hands_free_trusted(""))
+        check("...and its screen answers are read aloud (the trust decides)",
+              V.screen_aloud("live") and not V.screen_aloud("wake_word"))
+        for bad in ("trust_everything", None, 1, True):
+            V.settings_path().write_text(json.dumps({"hands_free": "button_only",
+                                                     "hands_free_live": bad}))
+            check(f"a damaged value ({bad!r}): live_like_hey_jarvis (fail closed)",
+                  V.settings()["hands_free_live"] == "live_like_hey_jarvis"
+                  and not V.hands_free_trusted("live"))
+        V.settings_path().write_text("{not json", encoding="utf-8")
+        check("an unreadable file: the caution, and hands-free button_only",
+              V.settings()["hands_free_live"] == "live_like_hey_jarvis"
+              and not V.hands_free_trusted("live"))
+        V.settings_path().unlink()
+        st = V.status()
+        check("status: hands_free_live at the top, in settings, choices and defaults",
+              st["hands_free_live"] == "live_same_as_button"
+              and st["settings"]["hands_free_live"] == "live_same_as_button"
+              and st["settings"]["choices"]["hands_free_live"]
+              == ["live_same_as_button", "live_like_hey_jarvis"]
+              and st["settings"]["defaults"]["hands_free_live"] == "live_same_as_button", st)
+        V.set_setting("hands_free", "button_only")
+        check("is_loosening: trusted loosens only once the caution is chosen",
+              not V.is_loosening("hands_free_live", "live_same_as_button")
+              and not V.is_loosening("hands_free_live", "live_like_hey_jarvis"))
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_live", "live_like_hey_jarvis")
+        check("the caution: immediate, no card",
+              code == 200 and out["changed"] and not gate.calls
+              and V.settings()["hands_free_live"] == "live_like_hey_jarvis"
+              and out["settings"]["hands_free_live"] == "live_like_hey_jarvis", (code, out))
+        check("...and a Live turn now gets the hey Jarvis caution",
+              not V.hands_free_trusted("live") and not V.screen_aloud("live"))
+        check("...the talk button is untouched", V.hands_free_trusted("push_to_talk"))
+        check("is_loosening: going back to trusted loosens",
+              V.is_loosening("hands_free_live", "live_same_as_button"))
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_live", "live_same_as_button",
+                                   Verdict(False, outcome="denied"))
+        check("going back raises ONE card; denied: the caution stays",
+              code == 202 and len(gate.calls) == 1
+              and V.settings()["hands_free_live"] == "live_like_hey_jarvis", (code, out))
+        check("the card: the agreed words", gate.calls and gate.calls[0][2] == LIVE_CARD,
+              gate.calls)
+        check("the card names the setting and the value",
+              gate.calls and gate.calls[0][1]["setting"] == "hands_free_live"
+              and gate.calls[0][1]["to"] == "live_same_as_button", gate.calls)
+        E._reset_for_tests()
+        _setting("hands_free_live", "live_same_as_button", Verdict(False, outcome="timed_out"))
+        check("timed out: the caution stays",
+              V.settings()["hands_free_live"] == "live_like_hey_jarvis")
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_live", "live_same_as_button", Verdict(True))
+        check("approved: trusted again", V.settings()["hands_free_live"] == "live_same_as_button"
+              and V.hands_free_trusted("live"), (code, out))
+        check("...and the other settings are kept",
+              V.settings()["hands_free"] == "button_only"
+              and V.settings()["hands_free_screen"] == "screen_on_screen"
+              and V.settings()["memory"] == "memory_aloud")
+        V.set_setting("hands_free_live", "live_like_hey_jarvis")
+        try:
+            V.set_setting("hands_free_live", "live_same_as_button")
+            ok = False
+        except ValueError:
+            ok = True
+        check("set_setting refuses to loosen it without approval", ok)
+        V.set_setting("hands_free", "same_as_button", approved=True)
+        check("under 'same as the talk button' the caution changes nothing",
+              V.hands_free_trusted("live"))
+        E._reset_for_tests()
+        with mock.patch.object(V, "_CHOICES", {k: c for k, c in V._CHOICES.items()
+                                               if k != "hands_free_live"}):
+            code, out, gate = _setting("hands_free_live", "live_like_hey_jarvis")
+        check("a voice module older than the setting: 503 in words, no card",
+              code == 503 and "too old" in out["error"] and not gate.calls, (code, out))
+        gate_state = S._strict_state({"strictness": "very_strict", "hands_free": "button_only"})
+        check("an older PC's status: hands_free_live is \"\" (the apps do not offer it)",
+              gate_state["hands_free_live"] == "", gate_state)
+        gate_state = S._strict_state(V.status())
+        check("gate.hands_free_live is the PC's setting",
+              gate_state["hands_free_live"] == "live_like_hey_jarvis"
+              and gate_state["settings"]["hands_free_live"] == "live_like_hey_jarvis",
+              gate_state)
+
+
 def t_nothing_private_aloud_without_a_real_check():
     """Broad mode lets every voice in without checking it. "Voice check is
     enough" and "read memories aloud" must then read nothing private aloud:
@@ -1578,7 +1694,7 @@ if __name__ == "__main__":
                t_training_in_rounds, t_rounds_make_subprints_and_add_adds,
                t_repeat_counters, t_measure_and_someone_else, t_minimum_command_length,
                t_private_fields_on_the_reply, t_hands_free_on_the_reply,
-               t_screen_aloud_on_the_reply, t_no_audio_is_written,
+               t_screen_aloud_on_the_reply, t_hands_free_live_setting, t_no_audio_is_written,
                t_real_models):
         print(f"\n--- {fn.__name__} ---")
         try:

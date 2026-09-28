@@ -498,7 +498,7 @@ def note_heard(t0: float, steps: dict, *, source: str, mic: str, waited_ms=None,
         row = {k: None for k in FIELDS}
         row.update({"at": int(time.time()),
                     "mic": mic if mic in ("phone", "desktop") else "",
-                    "source": source if source in ("push_to_talk", "wake_word") else "",
+                    "source": source if source in ("push_to_talk", "wake_word", "live") else "",
                     "cold": bool(cold), "end_wait_ms": clean_wait(waited_ms),
                     "turn_ms": smart, "heard_ms": _ms((now - t0) * 1000.0)})
         for k in ("vad", "wake", "owner_check", "stt"):

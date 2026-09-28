@@ -87,6 +87,7 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
     {"mode": "sensitive_memory", "value": "sensitive_on_screen"|"sensitive_aloud"}
     {"mode": "hands_free", "value": "same_as_button"|"button_only"}
     {"mode": "hands_free_screen", "value": "screen_on_screen"|"screen_aloud"}
+    {"mode": "hands_free_live", "value": "live_same_as_button"|"live_like_hey_jarvis"}
         Tightening applies at once. Loosening raises ONE card
         (change_own_config), and changes nothing until it is approved.
         `voice_is_enough` is refused unless the check is very strict;
@@ -627,7 +628,7 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
         # The same: scores, no card.
         return measure(doc, measure_fn=measure_fn)
     if mode in ("strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-                "hands_free_screen"):
+                "hands_free_screen", "hands_free_live"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
     if mode not in ("enroll", "threshold", "train"):
@@ -955,6 +956,20 @@ _SETTING_WORDS = {
         "is watching your screen could hear it too.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - those answers stay on your screen."),
+    # The owner's answer of 2026-09-28 (docs/LIVE-DESIGN.md): under "only
+    # trust the talk button", Jarvis Live is trusted like the talk button by
+    # default, with a setting to give it the "Hey Jarvis" caution instead.
+    # Choosing the caution is immediate; going back to trusted is this card.
+    ("hands_free_live", "live_same_as_button"): (
+        "Trust what you say in Jarvis Live like the talk button again, even while "
+        "\"Only trust the talk button\" is chosen?\n\n"
+        "During Jarvis Live the microphone stays open. A recording or a copy of your "
+        "voice played near it could pass the voice check, and would then be trusted "
+        "like you pressing the talk button: Jarvis could remember things from it, or "
+        "read memory and private answers aloud.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - Jarvis Live keeps the extra caution of "
+        "\"Hey Jarvis\"."),
 }
 
 
@@ -977,6 +992,7 @@ def settings_view() -> dict:
             "sensitive_memory": s.get("sensitive_memory", ""),
             "hands_free": s.get("hands_free", ""),
             "hands_free_screen": s.get("hands_free_screen", ""),
+            "hands_free_live": s.get("hands_free_live", ""),
             "voice_is_enough_allowed": s["strictness"] == v.VERY_STRICT}
 
 
@@ -994,7 +1010,7 @@ def _withdraw(key: str) -> None:
 def stage_setting(doc: dict, key: str, *, gate: Callable, tier_of: Callable,
                   spawn: Callable) -> tuple:
     """{"mode": "strictness"|"privacy"|"memory"|"sensitive_memory"|"hands_free"|
-    "hands_free_screen", "value": ...}.
+    "hands_free_screen"|"hands_free_live", "value": ...}.
     Tightening applies at once; loosening raises ONE card and changes nothing
     itself. A jarvis_voice.py older than the setting: 503, in words."""
     global _PENDING

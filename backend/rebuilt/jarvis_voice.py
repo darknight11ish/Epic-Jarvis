@@ -614,27 +614,44 @@ HANDS_FREE = (SAME_AS_BUTTON, BUTTON_ONLY)
 SCREEN_ON_SCREEN = "screen_on_screen"
 SCREEN_ALOUD = "screen_aloud"
 HANDS_FREE_SCREEN = (SCREEN_ON_SCREEN, SCREEN_ALOUD)
+#: Jarvis LIVE (docs/LIVE-DESIGN.md: a conversation the owner starts and
+#: stops, `source=live`) while the owner chose `button_only` above. The
+#: owner's answer of 2026-09-28: "under 'Only trust the talk button', a Live
+#: session is trusted like the talk button by default (the owner pressed
+#: Start), with a voice setting to give Live the extra 'Hey Jarvis' caution
+#: instead; choosing the extra caution is immediate, going back raises an
+#: approval card". So the DEFAULT is the looser value here (like `memory`
+#: and `hands_free`), and a damaged value falls back to the strict one.
+#: Under `same_as_button` this setting changes nothing: every voice turn is
+#: trusted like the talk button already.
+LIVE_SAME_AS_BUTTON = "live_same_as_button"
+LIVE_LIKE_WAKE = "live_like_hey_jarvis"
+HANDS_FREE_LIVE = (LIVE_SAME_AS_BUTTON, LIVE_LIKE_WAKE)
 #: The one source the talk button sends (jarvis_speech.hear's `source`).
 PUSH_TO_TALK = "push_to_talk"
+#: The source a Jarvis Live clip is sent with (jarvis_speech.SOURCE_LIVE).
+LIVE = "live"
 #: The default of each setting. For strictness, privacy, sensitive_memory
 #: and hands_free_screen it is the strict value, also used for a missing,
-#: unreadable or unknown one. For memory and hands_free the default is the
-#: owner's looser choice; an unknown VALUE (a damaged file) still falls back
-#: to the strict one - see settings().
+#: unreadable or unknown one. For memory, hands_free and hands_free_live the
+#: default is the owner's looser choice; an unknown VALUE (a damaged file)
+#: still falls back to the strict one - see settings().
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
             "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN,
-            "hands_free": SAME_AS_BUTTON, "hands_free_screen": SCREEN_ON_SCREEN}
+            "hands_free": SAME_AS_BUTTON, "hands_free_screen": SCREEN_ON_SCREEN,
+            "hands_free_live": LIVE_SAME_AS_BUTTON}
 _CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
             "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE,
-            "hands_free_screen": HANDS_FREE_SCREEN}
+            "hands_free_screen": HANDS_FREE_SCREEN, "hands_free_live": HANDS_FREE_LIVE}
 #: The LOOSER value of each: choosing it needs an approval card.
 LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
           "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON,
-          "hands_free_screen": SCREEN_ALOUD}
+          "hands_free_screen": SCREEN_ALOUD, "hands_free_live": LIVE_SAME_AS_BUTTON}
 #: The settings whose DEFAULT is the looser value, and the strict value each
 #: falls back to when the file is unreadable or holds a value that is not
 #: one of its choices. Only a file that never had the key gets the default.
-_STRICT_WHEN_DAMAGED = {"memory": MEMORY_ON_SCREEN, "hands_free": BUTTON_ONLY}
+_STRICT_WHEN_DAMAGED = {"memory": MEMORY_ON_SCREEN, "hands_free": BUTTON_ONLY,
+                        "hands_free_live": LIVE_LIKE_WAKE}
 _SETTINGS_LOCK = threading.Lock()
 
 #: The least speech a COMMAND must have, in seconds (the VAD's span, which
@@ -654,10 +671,12 @@ def settings_path() -> Path:
 
 def settings() -> dict:
     """{"strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-    "hands_free_screen", "changed"}. The strict value for anything missing, unreadable or
-    unknown - except that a file with no "memory" or no "hands_free" in it
-    (every file written before 2026-09-24, and no file at all) gets the
-    owner's default for it: MEMORY_ALOUD, SAME_AS_BUTTON. The one rule
+    "hands_free_screen", "hands_free_live", "changed"}. The strict value for
+    anything missing, unreadable or unknown - except that a file with no
+    "memory", no "hands_free" or no "hands_free_live" in it (every file
+    written before 2026-09-24 or 2026-09-28, and no file at all) gets the
+    owner's default for it: MEMORY_ALOUD, SAME_AS_BUTTON,
+    LIVE_SAME_AS_BUTTON. The one rule
     applied on every read as well as every write: private answers may be
     read aloud only while the check is very strict."""
     out = {**DEFAULTS, "changed": 0.0}
@@ -714,7 +733,8 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
         new = {"strictness": cur["strictness"], "privacy": cur["privacy"],
                "memory": cur["memory"], "sensitive_memory": cur["sensitive_memory"],
                "hands_free": cur["hands_free"],
-               "hands_free_screen": cur["hands_free_screen"], key: value}
+               "hands_free_screen": cur["hands_free_screen"],
+               "hands_free_live": cur["hands_free_live"], key: value}
         if new["strictness"] != VERY_STRICT:
             new["privacy"] = PRIVATE_ON_SCREEN
         new["changed"] = time.time()
@@ -1909,10 +1929,23 @@ def hands_free_trusted(source) -> bool:
 
     The talk button (`push_to_talk`): always. Anything else - `wake_word`,
     and a source that is missing or not known (fail closed) - only while
-    the owner keeps the default, `same_as_button`."""
-    if str(source or "").strip().lower() == PUSH_TO_TALK:
+    the owner keeps the default, `same_as_button`.
+
+    Jarvis LIVE (`live`, the owner's answer of 2026-09-28): the owner pressed
+    Start, so under `button_only` a Live turn is still trusted like the talk
+    button - unless the owner chose `live_like_hey_jarvis`, which gives Live
+    the "hey Jarvis" caution. Under `same_as_button`, trusted as every turn
+    is. Before that answer, `live` was a source this did not know, and so
+    was treated like "hey Jarvis" (fail closed); it is named now."""
+    src = str(source or "").strip().lower()
+    if src == PUSH_TO_TALK:
         return True
-    return settings()["hands_free"] == SAME_AS_BUTTON
+    s = settings()
+    if s["hands_free"] == SAME_AS_BUTTON:
+        return True
+    if src == LIVE:
+        return s["hands_free_live"] == LIVE_SAME_AS_BUTTON
+    return False
 
 
 def screen_aloud(source) -> bool:
@@ -2066,11 +2099,15 @@ def status() -> dict:
         # Since 2026-09-28: answers about the screen after "hey Jarvis",
         # under "only trust the talk button".
         "hands_free_screen": s["hands_free_screen"],
+        # Since 2026-09-28: how far a Jarvis Live turn is trusted under
+        # "only trust the talk button".
+        "hands_free_live": s["hands_free_live"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
             "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
             "hands_free": s["hands_free"],
             "hands_free_screen": s["hands_free_screen"],
+            "hands_free_live": s["hands_free_live"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],
@@ -2078,7 +2115,8 @@ def status() -> dict:
                         "memory": list(MEMORY),
                         "sensitive_memory": list(SENSITIVE_MEMORY),
                         "hands_free": list(HANDS_FREE),
-                        "hands_free_screen": list(HANDS_FREE_SCREEN)},
+                        "hands_free_screen": list(HANDS_FREE_SCREEN),
+                        "hands_free_live": list(HANDS_FREE_LIVE)},
             "defaults": dict(DEFAULTS),
         },
         "models": {

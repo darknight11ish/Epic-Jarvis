@@ -607,13 +607,16 @@ def check_voice(entry: dict) -> str:
         return ("said aloud, but the voice check was not at its strictest "
                 "(very strict, the stronger voice model)")
     if not _source_trusted(vc.get("source")):
-        return HANDS_FREE_WHY
+        return LIVE_WHY if str(vc.get("source") or "") == "live" else HANDS_FREE_WHY
     return ""
 
 
 #: The card's reason when the owner's "hands-free" voice setting is "only
 #: trust the talk button" and the turn was not started with the button.
 HANDS_FREE_WHY = "said hands-free - your setting only trusts the talk button"
+#: The same for a Jarvis Live turn, when the owner also gave Live the "Hey
+#: Jarvis" caution (the voice setting `hands_free_live`, 2026-09-28).
+LIVE_WHY = "said in Jarvis Live - your setting gives Live the same caution as \"Hey Jarvis\""
 
 
 def _source_trusted(source) -> bool:

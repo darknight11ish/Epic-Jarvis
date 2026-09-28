@@ -657,6 +657,14 @@ $PATCHES = @(
     # without them, or on any error, the banner says so and the routes are
     # simply not there.
     'chatbot-routes.patch'
+    # Jarvis Live (the owner's decision and answers of 2026-09-28;
+    # docs/LIVE-DESIGN.md, JARVIS-API section 63): GET and POST
+    # /api/voice/live - start, stop, extend and resume a Live conversation
+    # (no card: the owner's own act). Its jarvis_hud.py context is
+    # chatbot-routes.patch's own install block, so it goes after it - last,
+    # like every new patch. Needs jarvis_live.py copied in; without it, or
+    # on any error, the banner says so and the route is simply not there.
+    'live.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -811,6 +819,9 @@ $SHIPPED = @(
     # --- looking at the screen, build steps 1 and 2 (2026-09-28): the session rules only; no route, no Windows readers yet ---
     'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list; not reachable from the apps yet
     'jarvis_chatbot_compare.py'  # "Ask several and compare": 2 or more chatbots, ONE card listing every one, one after another, ONE summary; routes in jarvis_chatbot_routes.py
+    # --- Jarvis Live (2026-09-28): talking back and forth; the camera off until the second card passes the photo test ---
+    'jarvis_live.py'             # the Live session (start, stop, time limit, quiet, pauses), the source=live rules jarvis_speech follows, GET/POST /api/voice/live (live.patch)
+    'jarvis_live_photo_test.py'  # the camera's photo test: run once, when the 12 GB card is in; a pass is what lets the camera switch appear on the phone
 )
 
 # The settings file. Installed only where none exists; never overwritten.
