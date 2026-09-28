@@ -771,6 +771,12 @@ def _capability_probe() -> dict:
         # on" from the handshake; the `lockdown` event says when it changes.
         # False on a backend without it.
         "lockdown": _lockdown(),
+        # Pairing a phone by QR code, with a key per device (devices.patch,
+        # jarvis_devices.py; docs/PAIRING-DESIGN.md 5.5): {"version": 1}
+        # once the running server checks device keys and answers
+        # /api/pair/* and /api/devices. False on an older backend: both
+        # apps then show neither pairing nor Devices.
+        "pairing": _pairing(),
         "connectors": {},
     }
 
@@ -821,6 +827,16 @@ def _stop_all() -> bool:
     try:
         import jarvis_stop_all
         return bool(jarvis_stop_all.armed())
+    except Exception:
+        return False
+
+
+def _pairing():
+    """{"version": 1} once jarvis_devices has wrapped the running server
+    (devices.patch), else False. Importable is not installed."""
+    try:
+        import jarvis_devices
+        return jarvis_devices.capability()
     except Exception:
         return False
 

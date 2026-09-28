@@ -326,6 +326,14 @@ CLASSIFICATION = {
     "/api/projects/{id}/benchmarks/{id}/log": ("ported", "Log one number, the owner's own tap, no card. Both apps; a private number's answer stays out of anything spoken."),
     "/api/projects/{id}/benchmarks/{id}/results/{id}/delete": ("ported", "Remove one logged number (a typo). Both apps."),
     "/api/projects/{id}/benchmarks/{id}/unmark": ("ported", "Take a private mark off a benchmark (the owner, 2026-09-28): the owner's own mark at once; a mark Jarvis made from the name raises ONE change_own_config card. Both apps."),
+    # Pairing a phone by QR code, with a key per device (docs/PAIRING-DESIGN.md
+    # phase 1, docs/JARVIS-API.md section 90; backend/jarvis_devices.py).
+    "/api/devices": ("ported", "The device list (docs/JARVIS-API.md section 90.4): This PC, every paired device with its own Remove, and the old shared key's row - never a key or a hash. Desktop: Settings, Devices. Phone: Settings, Devices (DevicesPlate.kt)."),
+    "/api/devices/remove": ("ported", "Remove ONE device, immediate, no card (it only takes access away, like Forget); a list is refused. Both apps ask \"Remove <name>?\" first."),
+    "/api/devices/shared": ("ported", "Retire the old shared key for other devices ({\"retired\": true}): immediate, from either app; refused (409 uses_it_yourself) when the request itself used the shared key from another device. Bring it back ({\"retired\": false}) is the desktop's only: PC only, ONE unretire_shared_key card with Windows Hello, refused under Lockdown - the phone never sends it (docs/PAIRING-DESIGN.md 7.2, ARCHITECTURE section 8)."),
+    "/api/pair/start": ("deliberate", "Starting a pairing is the PC's alone (docs/PAIRING-DESIGN.md 6.1 and section 12): the QR code and the typed code are shown on the PC and the pair_device card is approved there with Windows Hello; the backend refuses the route from any other device (403 pc_only). ARCHITECTURE section 8."),
+    "/api/pair/session": ("deliberate", "Watching a pairing is the PC's alone: the Devices panel that shows the QR code reads it every 2 s; PC only on the backend (403 pc_only). ARCHITECTURE section 8."),
+    "/api/pair/cancel": ("deliberate", "Cancelling a pairing is the PC's alone (the panel's Cancel); PC only on the backend. ARCHITECTURE section 8."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 
@@ -335,6 +343,8 @@ STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 # "desktop-todo"  - the desktop should have it too, and nobody has built it
 PHONE_ONLY = {
     "/api/notifications/watch": ("phone-only", "The smartwatch notification setting (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). A smartwatch pairs with a phone, never a Windows PC; the setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or writes it (docs/ARCHITECTURE.md §8)."),
+    "/api/pair/claim": ("phone-only", "The phone's half of pairing (docs/PAIRING-DESIGN.md 6.2): the phone that scanned the QR code or typed the code asks for its own key, with no key of its own yet; mesh only on the backend, and refused from the PC itself (\"this PC already has its own key\"). ARCHITECTURE section 8."),
+    "/api/pair/collect": ("phone-only", "The phone collects its new key, once, after the pair_device card was approved on the PC (docs/PAIRING-DESIGN.md 6.2); mesh only, refused from the PC itself. ARCHITECTURE section 8."),
     "/api/notifications/phone": ("phone-only", "Reading phone notifications (the owner's decision, CLAUDE.md 2026-09-26; built 2026-09-28; docs/JARVIS-API.md §61). A Windows desktop has no equivalent to \"which app posted a notification\" - NotificationListenerService is Android-only. The setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or acts on it (docs/ARCHITECTURE.md §8)."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
