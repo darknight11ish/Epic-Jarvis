@@ -120,6 +120,15 @@ number as the last part - `0.2.57` is a build of 0.2.
   chosen until it is measured on your PC - in a first test it let other
   voices through more often than the one used today.
 
+**New: Today cards**
+
+- **Your own words on a Today section** in both apps (above Coming up), at a
+  time and on the days you choose: "show gym bag on my Today page on Mondays
+  at 7". Set by saying it or with a small form; no approval card; Delete is
+  immediate.
+- **The Today section also shows today's briefing** - weather, calendar,
+  email and what is still to come - without reading anything new.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

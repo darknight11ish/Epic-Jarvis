@@ -208,6 +208,15 @@ object Schedule {
             "Jarvis brings it up in the chat when your own words mention it - at most 3 times, a day " +
             "apart at least - and it is gone after 90 days. No card; Delete stops it."
 
+    /**
+     * A Today card (backend jarvis_today.py, 2026-09-28): the owner's own
+     * words on the Today section of Brain at a time, on chosen days
+     * ([Today]). Its row here is like a repeating reminder's: Pause skips it,
+     * Delete removes it. It never notifies. Both apps' words (coming-up.js).
+     */
+    const val TODAY_CARD = "today"
+    const val TODAY_CARD_TITLE = "Today card"
+
     /** The line naming the subject: `When you talk about "the dentist"`. */
     fun nextTimeAbout(about: String): String = "When you talk about \u201c$about\u201d"
 
@@ -238,6 +247,7 @@ object Schedule {
         "todo" -> "to-do"
         TELLME -> "tell me when"
         NEXT_TIME -> "next time"
+        TODAY_CARD -> "today card"
         else -> kind
     }
 
@@ -311,6 +321,12 @@ object Schedule {
         val ruleDays: List<Int> = emptyList(),
         /** A reminder for next time's subject ("the dentist") - the owner's words. */
         val about: String = "",
+        /**
+         * A Today card (2026-09-28): whether it shows today - "showing",
+         * "later" or "" - and from when ("07:00"), by the PC's own clock.
+         */
+        val today: String = "",
+        val showsAt: String = "",
     )
 
     /** A named list: its name as the PC keeps it, its title, how many open items. */
@@ -360,6 +376,8 @@ object Schedule {
                 (d as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.toInt()
             } ?: emptyList(),
             about = o.text("about") ?: "",
+            today = o.text("today") ?: "",
+            showsAt = o.text("shows_at") ?: "",
         )
     }
 
@@ -494,6 +512,7 @@ object Schedule {
         // "When an email from Alex arrives" - what is watched, in the owner's words.
         if (job.kind == TELLME) return if (job.hidden || words.isEmpty()) TELLME_TITLE else "When $words"
         if (job.kind == NEXT_TIME) return if (job.hidden || words.isEmpty()) NEXT_TIME_TITLE else words
+        if (job.kind == TODAY_CARD) return if (job.hidden || words.isEmpty()) TODAY_CARD_TITLE else words
         if (words.isNotEmpty()) return words
         return when (job.kind) {
             "alarm" -> "Alarm"

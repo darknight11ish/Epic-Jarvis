@@ -797,6 +797,8 @@ $SHIPPED = @(
     'jarvis_tidy.py'             # the overnight tidy: "Still true?" / "Which is true now?" review cards only, on the one scheduler, only while its switch is on; no patch
     # --- "Better voice" (2026-09-28, no patch of its own) ---
     'jarvis_microwake.py'        # the second "hey Jarvis" detector (microWakeWord), off unless the owner chooses both; jarvis_speech.py calls it
+    # --- Today cards (2026-09-28) ---
+    'jarvis_today.py'            # the owner's own words on the Today part of both apps, at a time on chosen days; a kind on jarvis_schedule.py, no card, no patch
 )
 
 # The settings file. Installed only where none exists; never overwritten.

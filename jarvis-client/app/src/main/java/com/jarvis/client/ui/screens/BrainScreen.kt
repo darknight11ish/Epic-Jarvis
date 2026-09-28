@@ -403,6 +403,19 @@ fun BrainScreen(
             // Brain → Live. Reads JarvisRuntime directly.
             item(key = "steps") { StepsSection() }
 
+            // "Today" (the owner's choice of 2026-09-28): the owner's own
+            // cards shown at a time on chosen days, and the parts of the
+            // latest briefing made today (TodayPlate.kt) - the desktop's
+            // Brain -> Work -> Today, just above Coming up. Nothing new is read.
+            item(key = "today") {
+                TodaySection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
             // "Coming up" (the owner's decisions of 2026-09-25): timers,
             // alarms, reminders and the to-do list, each with its own
             // buttons (ComingUpPlate.kt) - the desktop's Brain -> Work ->

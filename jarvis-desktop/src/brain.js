@@ -95,6 +95,21 @@ import {
   readMissed,
 } from "./briefing.js";
 import {
+  addArgs as todayAddArgs,
+  briefingCards,
+  cardMeta as todayCardMeta,
+  cardsOf,
+  cardTitle as todayCardTitle,
+  DELETE_LABEL as TODAY_DELETE_LABEL,
+  EMPTY_CARDS as TODAY_EMPTY,
+  FROM_BRIEFING as TODAY_FROM_BRIEFING,
+  LATER_TITLE as TODAY_LATER_TITLE,
+  MISSING as TODAY_MISSING,
+  NO_BRIEFING_TODAY,
+  TAG as TODAY_TAG,
+  todayCards,
+} from "./today.js";
+import {
   HISTORY_BUTTON,
   HISTORY_BUTTON_TITLE,
   hasOtherVersions,
@@ -390,6 +405,12 @@ const dom = {
   standbyEnd: $("standby-end"),
   standbyAdd: $("standby-add"),
   standbyIsSet: $("standby-is-set"),
+  today: $("today"),
+  todayForm: $("today-form"),
+  todayText: $("today-text"),
+  todayAt: $("today-at"),
+  todayDays: $("today-days"),
+  todayAdd: $("today-add"),
   briefing: $("briefing"),
   briefingNow: $("briefing-now"),
   briefingMissed: $("briefing-missed"),
@@ -4564,6 +4585,7 @@ function tick() {
 }
 
 function paintComingUp() {
+  paintToday();
   const box = dom.comingUp;
   if (!box) return;
   ticking.clear();
@@ -4666,6 +4688,118 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
 }
 
 /* ==========================================================================
+   Today (the owner's choice of 2026-09-28; JARVIS-API.md section 82;
+   today.js).
+
+   The owner's own cards that show today (jobs of kind "today" on the one
+   scheduler, from the Coming up read) and the parts of the latest briefing
+   made today (from the Morning briefing read). Nothing new is read here.
+   Delete is ONE card; Add is one card - both held on a stale link, neither
+   raises a card. While the private lists are hidden, Rust already took the
+   words out of both reads.
+   ========================================================================== */
+
+function todayDays() {
+  const boxes = dom.todayDays ? [...dom.todayDays.querySelectorAll("input[type=checkbox]")] : [];
+  return boxes.filter((b) => b.checked).map((b) => Number(b.value));
+}
+
+async function addToday() {
+  const args = todayAddArgs(dom.todayText && dom.todayText.value,
+    dom.todayAt && dom.todayAt.value, todayDays());
+  if (args.error) {
+    toast(args.error, "bad");
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_schedule_add_today", args);
+    if (out && out.ok === false) {
+      toast(String(out.error || "Refused."), "bad");
+    } else {
+      toast(String((out && out.said) || "Done."), "ok");
+      if (dom.todayText) dom.todayText.value = "";
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadComingUp();
+}
+
+function todayRow(card) {
+  const item = row({
+    tag: TODAY_TAG,
+    state: card.today === "showing" ? "ok" : "",
+    title: todayCardTitle(card),
+    meta: [todayCardMeta(card)],
+    actions: [button(TODAY_DELETE_LABEL, () => scheduleAct(card, "delete"),
+      { live: true, danger: true })],
+  });
+  item.dataset.id = card.id;
+  return item;
+}
+
+function paintToday() {
+  const box = dom.today;
+  if (!box) return;
+  const out = [];
+  const v = upL.view;
+  if (!v) {
+    out.push(el("p", "empty", upL.error ? `Could not read Today: ${upL.error}` : "Reading…"));
+  } else if (!v.available) {
+    out.push(el("p", "empty", v.why || TODAY_MISSING));
+  } else {
+    const { showing, later } = todayCards(cardsOf(v));
+    const list = el("div", "rows");
+    for (const c of showing) list.append(todayRow(c));
+    out.push(showing.length ? list : el("p", "empty", TODAY_EMPTY));
+    if (later.length) {
+      out.push(el("h3", "subhead", TODAY_LATER_TITLE));
+      const rest = el("div", "rows");
+      for (const c of later) rest.append(todayRow(c));
+      out.push(rest);
+    }
+    if (v.hidden) out.push(hiddenNode(0, "words"));
+  }
+  if (dom.todayForm) dom.todayForm.hidden = Boolean(v && !v.available);
+  // The briefing's own parts, from the latest one made today - never a new read.
+  const bv = brief.view;
+  if (bv && bv.available) {
+    out.push(el("h3", "subhead", TODAY_FROM_BRIEFING));
+    const parts = briefingCards(bv);
+    if (!parts) {
+      out.push(el("p", "empty", NO_BRIEFING_TODAY));
+    } else {
+      const list = el("div", "rows");
+      for (const s of parts) {
+        list.append(row({
+          tag: s.title,
+          state: s.state === "ok" ? "ok" : s.state === "empty" ? "" : "warn",
+          title: s.summary,
+          meta: s.items,
+        }));
+      }
+      out.push(list);
+    }
+  }
+  box.replaceChildren(...out);
+}
+
+if (dom.todayForm) {
+  dom.todayForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    addToday();
+  });
+}
+if (dom.todayAdd) {
+  liveButtons.add(dom.todayAdd);
+  syncLiveButton(dom.todayAdd);
+}
+
+/* ==========================================================================
    Morning briefing (the owner's decisions of 2026-09-25; JARVIS-API.md
    section 22; briefing.js).
 
@@ -4741,6 +4875,7 @@ async function briefNow() {
 }
 
 function paintBriefing() {
+  paintToday();
   const box = dom.briefing;
   if (!box) return;
   if (dom.briefingNow) {

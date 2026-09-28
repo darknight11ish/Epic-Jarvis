@@ -365,6 +365,9 @@ fn main() {
             "brain_schedule_act",
             "brain_schedule_add_todo",
             "brain_schedule_add_standby",
+            // One Today card (2026-09-28, jarvis_today.py): no card, held
+            // on a stale link. Brain only.
+            "brain_schedule_add_today",
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",

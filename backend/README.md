@@ -14692,3 +14692,64 @@ verdicts by their rules, and that its new parts run only when asked. With
 `$env:JARVIS_TEST_VOICE_MODELS` set to your `voice-models` folder (and step
 1 done) it also loads both speech detector files and has the real second
 detector hear a built-in voice's "hey Jarvis".
+
+# Today cards: `jarvis_today.py` (2026-09-28)
+
+The owner chose this on 2026-09-28 (`docs/RESEARCH-AUDIT-2026-09-28.md`
+section 3, idea 6). The contract is `docs/JARVIS-API.md` §82. No new patch
+and no new route: one new shipped module, a kind of job on the one
+scheduler.
+
+## In plain words
+
+- **Cards in your own words, at a time, on your days.** "Show gym bag on my
+  Today page on Mondays and Wednesdays at 7" puts a card saying "gym bag" on
+  the Today section of both apps from 07:00 on those days, until the end of
+  the day. Or use the small form there: the words, a time, the days.
+- **Beside them, your briefing's parts:** the weather (from your own Home
+  Assistant), the calendar, new email and what is still to come today - from
+  the latest briefing made today. Nothing new is read for this.
+- **No approval card**, like a plain repeating reminder. Delete is at once.
+- **Where it is.** The Today page was designed but never built, and the
+  feasibility audit said it may only grow out of what is there. So it is one
+  section just above Coming up: Brain -> Work on the PC, Brain on the phone.
+
+## The rules it keeps (each has a test)
+
+- **The one scheduler.** Kind `today` on `jarvis_schedule.py`
+  (`KIND_MODULES`), `plain_repeat` (no card), `silent` and `notify: false`:
+  its time rings no doorbell - only a `changed` event, ids and the kind -
+  and it is never in "Just went off", "What did I miss?" or the briefing's
+  "Coming up" (`test_today.py`).
+- **Shown by the clock.** `today` ("showing" / "later" / "") is worked out
+  from the PC's clock at each read, so a PC that slept through 07:00 still
+  shows the card; a paused card does not show.
+- **A time of day only.** Every day, every weekday or chosen days at HH:MM;
+  "every N hours" and one-offs are refused in plain words. At most 80
+  characters, at most 20 cards; the same card twice is one.
+- **No new way out.** `jarvis_today.py` opens no socket and talks to no
+  model (`test_today.py` reads its source). The words are never logged.
+- **By words, without the model.** Set, list (a private answer), remove ONE,
+  "cancel that"; never learned as a fact.
+
+## What changed
+
+- `jarvis_today.py` - new, shipped whole: the kind, `add`, `add_route`
+  (the scheduler's `POST /api/schedule/add` hands kind "today" here),
+  `cards`, `remove`, `state_of`, the words.
+- `jarvis_schedule.py` - `jarvis_today` in `KIND_MODULES`.
+- `jarvis_quick.py` - the Today sentences (`_today`, `today_when`,
+  `_run_today`); "cancel that card".
+- `jarvis_briefing.py` - `_next_section` leaves Today cards out.
+- `scripts/apply-patches.ps1`, `backend/_where.py` - the module listed.
+
+## Test it
+
+    python3 backend/test_today.py
+
+## Not checked, said plainly
+
+- The phone half is not compiled here; CI compiles it. The desktop's Rust
+  tests compile but run only on Windows.
+- Not run on the owner's PC: the scheduler's firing at a card's time was
+  driven by the test's own clock.

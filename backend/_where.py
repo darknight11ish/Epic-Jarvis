@@ -215,6 +215,10 @@ SHIPPED = (
     # "Better voice" (2026-09-28): the second "hey Jarvis" detector
     # (microWakeWord); jarvis_speech.py and jarvis_voice.py call it
     "jarvis_microwake.py",
+    # Today cards (2026-09-28): the owner's own words shown on the Today
+    # part of both apps at a time, on chosen days - a kind of job on the one
+    # scheduler, no card, no patch
+    "jarvis_today.py",
 )
 
 

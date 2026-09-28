@@ -1262,9 +1262,12 @@ def _next_line(j: dict, now: float) -> str:
 def _next_section(sched, now: float) -> dict:
     # A kind whose `due` is the day it ENDS (Kind.ends - "remind me next time
     # ...", jarvis_next_time.py) has no time it goes off: never "the next".
+    # A Today card (jarvis_today.py, 2026-09-28) does not go off either: it
+    # shows on the Today page, so it is not "the next" thing.
     jobs = [j for j in sched.listed() if j.get("state") == "active"
             and isinstance(j.get("due"), (int, float))
-            and not getattr(S.KINDS.get(j.get("kind")), "ends", False)]
+            and not getattr(S.KINDS.get(j.get("kind")), "ends", False)
+            and j.get("kind") != "today"]
     if not jobs:
         return _section("next", "Coming up", "empty", "Nothing coming up.")
     first = jobs[0]

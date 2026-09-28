@@ -318,8 +318,11 @@ KINDS: dict = {}
 #: jarvis_tidy (2026-09-28): the overnight tidy's hourly look - not listed in
 #: Coming up, tells nobody, and runs at most once a day, only while the
 #: owner's "Overnight memory tidying" switch is on; it only raises cards.
+#: jarvis_today (2026-09-28): Today cards - the owner's own words shown on
+#: the Today part of both apps at a time, on chosen days; no card (like a
+#: plain repeat), and going off only tells the apps the list changed.
 KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus",
-                "jarvis_next_time", "jarvis_tidy")
+                "jarvis_next_time", "jarvis_tidy", "jarvis_today")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,

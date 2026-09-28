@@ -147,6 +147,14 @@ export function nextTimeAbout(about) {
   return `When you talk about \u201c${about}\u201d`;
 }
 
+/**
+ * A Today card (backend jarvis_today.py, 2026-09-28): the owner's own words
+ * on the Today card of the Work tab at a time, on chosen days (today.js).
+ * Its row here is like a repeating reminder's: Pause skips it, Delete
+ * removes it. It never notifies. Both apps' words (net/Schedule.kt).
+ */
+export const TODAY_CARD_TITLE = "Today card";
+
 /** A notification's title, by kind (brain/schedule.rs toast_title). */
 export const TOAST_TITLES = Object.freeze({
   timer: "Timer done",
@@ -175,6 +183,7 @@ export const KIND_TAGS = Object.freeze({
   briefing: "briefing",
   tellme: "tell me when",
   nexttime: "next time",
+  today: "today card",
 });
 
 /** A snoozed copy's tag ends with this ("alarm, snoozed"). */
@@ -258,6 +267,10 @@ export function readSchedule(answer) {
     // A reminder for next time's subject - the owner's words, blanked with
     // `text` while the private lists are hidden (brain/schedule.rs).
     about: text(j.about),
+    // A Today card (jarvis_today.py, 2026-09-28): whether it shows today
+    // ("showing" / "later" / ""), and from when - by the PC's own clock.
+    today: text(j.today),
+    showsAt: text(j.shows_at),
     snoozed: j.snoozed === true,
     wentOffAt: text(j.went_off_at),
   });
@@ -346,6 +359,7 @@ export function titleOf(job) {
     return job.hidden || !words ? TELLME_TITLE : `When ${words}`;
   }
   if (job.kind === "nexttime") return job.hidden || !words ? NEXT_TIME_TITLE : words;
+  if (job.kind === "today") return job.hidden || !words ? TODAY_CARD_TITLE : words;
   if (words) return words;
   return job.kind === "alarm" ? "Alarm" : job.kind === "todo" ? "To-do" : "Reminder";
 }
