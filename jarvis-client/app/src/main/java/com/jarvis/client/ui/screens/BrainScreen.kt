@@ -117,7 +117,7 @@ fun BrainScreen(
      */
     onKeepBothMemory: (id: Long) -> Unit = {},
     /**
-     * The daily overnight-tidy card ("not built yet"), or null to show none.
+     * The daily overnight-tidy card, or null to show none.
      *
      * Passed in already decided rather than read fresh from `brain.memory`
      * every recomposition: the server marks the day's offer as made the
@@ -1540,7 +1540,7 @@ private fun SleepOfferCard(
     val canWrite = !busy && canAct
     Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Text(
-            offer.str("title") ?: "Overnight memory tidying - not built yet",
+            offer.str("title") ?: "Overnight memory tidying",
             style = MaterialTheme.typography.titleSmall,
             color = chrome.textHi,
         )
