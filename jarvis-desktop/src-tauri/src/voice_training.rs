@@ -716,6 +716,12 @@ pub(crate) fn voice_setting(
         ("hands_free_live", "live_trust_fully") => {
             Ok(("hands_free_live", "live_trust_fully", true))
         }
+        // When App lock ends Jarvis Live on this PC (the owner's decision,
+        // 2026-09-28): when App lock would ask again (the default, applies
+        // at once), or only when Windows itself locks (the voice card, held
+        // on a stale link).
+        ("live_end", "live_end_app_lock") => Ok(("live_end", "live_end_app_lock", false)),
+        ("live_end", "live_end_windows_lock") => Ok(("live_end", "live_end_windows_lock", true)),
         _ => Err("That is not one of the voice settings.".to_string()),
     }
 }
@@ -1326,6 +1332,17 @@ mod tests {
             Ok(("hands_free_live", "live_like_hey_jarvis", false))
         );
         assert!(voice_setting("hands_free_live", "screen_aloud").is_err());
+        // When App lock ends Jarvis Live on this PC: only when Windows locks
+        // is the looser choice (a card).
+        assert_eq!(
+            voice_setting("live_end", "live_end_windows_lock"),
+            Ok(("live_end", "live_end_windows_lock", true))
+        );
+        assert_eq!(
+            voice_setting("live_end", "live_end_app_lock"),
+            Ok(("live_end", "live_end_app_lock", false))
+        );
+        assert!(voice_setting("live_end", "live_trust_fully").is_err());
         assert!(voice_setting("hands_free_screen", "live_trust_fully").is_err());
         assert!(live_trust_loosens(
             "live_trust_fully",

@@ -239,6 +239,23 @@
           </details>
 
           <details class="faq-item">
+            <summary class="faq-q">What is Jarvis Live, and how do I end it?</summary>
+            <p class="faq-a">
+              A back-and-forth voice conversation. Click <strong>Live</strong>
+              in the Jarvis bar (or say "Hey Jarvis, let's talk") and just
+              talk: no "Hey Jarvis" before each sentence. Every sentence is
+              still checked for your voice on this PC before any words are
+              made of it, and a card that comes up still waits for your
+              click. A red dot on the tray icon and a small sign at the top
+              of the screen show while it is on. To end it, click
+              <strong>End Live</strong> on the sign, say "Okay Jarvis,
+              that's all for now", or just stop talking for 90 seconds.
+              <strong>Mic off</strong> closes the microphone without ending
+              it. Live needs your voice trained first (Settings, then Voice).
+            </p>
+          </details>
+
+          <details class="faq-item">
             <summary class="faq-q">Why is there no "approve everything" button?</summary>
             <p class="faq-a">
               On purpose. Anything Jarvis wants to do that is not
@@ -598,14 +615,18 @@
               <p class="note" id="vt-screen-note"></p>
             </div>
             <div id="vt-live-box" hidden>
-              <h3 class="subhead">Jarvis Live</h3>
-              <div class="choices" id="vt-live" role="group" aria-label="Jarvis Live: how far it is trusted, under Only trust the talk button"></div>
+              <h3 class="subhead">How far Jarvis Live is trusted</h3>
+              <div class="choices" id="vt-live" role="group" aria-label="How far Jarvis Live is trusted, under Only trust the talk button"></div>
               <p class="note" id="vt-live-note"></p>
             </div>
-            <div id="vt-live-interrupt-box">
-              <h3 class="subhead" id="vt-live-interrupt-title">Interrupting Jarvis in Live</h3>
-              <div class="choices" id="vt-live-interrupt" role="group" aria-label="Interrupting Jarvis in Live"></div>
-              <p class="note" id="vt-live-interrupt-note"></p>
+            <!-- When App lock ends Jarvis Live on this PC (the owner's
+                 decision, 2026-09-28): a PC setting, kept by Jarvis on the
+                 PC (the voice setting `live_end`), so the looser choice can
+                 be an approval card. The phone keeps App lock's own rule. -->
+            <div id="vt-live-end-box" hidden>
+              <h3 class="subhead">End Jarvis Live on this PC</h3>
+              <div class="choices" id="vt-live-end" role="group" aria-label="When Jarvis Live ends on this PC, with App lock on"></div>
+              <p class="note" id="vt-live-end-note"></p>
             </div>
             <p class="sc-line" id="vt-setting-waiting" data-tone="warn" hidden></p>
             <p class="note">
@@ -644,19 +665,19 @@
         </div>
 
         <!-- A setting of this PC's, not the server's, so it works whether
-             or not Jarvis answered above (barge-in.js; the phone has its
-             own switch for its own microphone). -->
-        <h3 class="subhead">Interrupting Jarvis</h3>
-        <label class="toggle">
-          <input id="voice-barge-in" type="checkbox" />
-          <span>
-            Interrupt Jarvis while it talks
-            <span class="toggle-detail" id="voice-barge-in-detail"></span>
-          </span>
-        </label>
+             or not Jarvis answered above (live-rules.js, barge-in.js; the
+             phone has the same setting for its own microphone). ONE
+             setting for ordinary replies and Jarvis Live alike (the
+             owner's answer of 2026-09-28): it replaced "Interrupt Jarvis
+             while it talks" and "Interrupting Jarvis in Live", and an
+             older choice carries over. -->
+        <h3 class="subhead" id="voice-interrupt-title">Interrupting Jarvis</h3>
+        <div class="choices" id="voice-interrupt" role="group" aria-labelledby="voice-interrupt-title"></div>
+        <p class="note" id="voice-interrupt-note"></p>
         <p class="note">
-          This PC only; your phone has its own switch. It matters only while
-          this PC is listening for "hey Jarvis".
+          This PC only; your phone has its own. It matters while this PC
+          listens for "hey Jarvis", and in Jarvis Live. No card either way:
+          it only changes when this PC listens.
         </p>
 
         <!-- Also this PC's own (voice-flow.js); the phone has the same

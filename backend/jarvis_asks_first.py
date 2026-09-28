@@ -297,6 +297,10 @@ GROUPS = (
                                       "switch_model", "rollback_model", "models_create",
                                       "second_card_enable", "second_card_browser_enable",
                                       "second_card_combined_enable", "big_model_enable"]),
+    # Jarvis Live (the owner's decision of 2026-09-28; jarvis_live.py): the
+    # page promises every action, and starting Live is one (the review of
+    # 2026-09-28). Decided in the code: no card, ever.
+    ("Talking with Jarvis", ["fixed:live"]),
     ("Jarvis's own settings, memory and voice", [
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
@@ -329,6 +333,10 @@ FIXED = {
                       "still ask (below)."),
     # The plug-in programs (jarvis_mcp.py): a program someone else wrote,
     # running as the owner - every use asks, in code, whatever the file says.
+    "fixed:live": ("Start Jarvis Live (a back-and-forth voice conversation)", SAYS_NO_CARD,
+                   "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still "
+                   "checked for your voice, and a card that comes up during Live still waits "
+                   "for your tap. How far Live is trusted is a Voice setting."),
     "fixed:plugin_use": ("Use a tool from a plug-in program on this PC (MCP)",
                          "Asks you first, every time",
                          "Always asks, whatever your settings file says: it is someone "

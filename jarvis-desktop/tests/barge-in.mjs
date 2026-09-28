@@ -74,45 +74,53 @@ await check("the setting: on unless saved off, and on when storage cannot be rea
   assert.doesNotMatch(B.describeBargeIn(false), /not listen/);
 });
 
-await check("Settings: the switch is on by default, says what it does, and turning it off is saved", async () => {
+await check("Settings: ONE Interrupting Jarvis setting, three choices, by voice by default, and a choice is saved", async () => {
   const page = await settings();
-  const before = await page.evaluate(() => ({
-    checked: document.getElementById("voice-barge-in").checked,
-    label: document.getElementById("voice-barge-in").closest("label").innerText,
+  const read = () => page.evaluate(() => ({
+    choices: [...document.querySelectorAll("#voice-interrupt button")].map((b) => [b.dataset.value, b.getAttribute("aria-pressed")]),
+    note: document.getElementById("voice-interrupt-note").textContent,
+    old: document.getElementById("voice-barge-in"),
   }));
-  assert.equal(before.checked, true);
-  assert.match(before.label, /Interrupt Jarvis while it talks/);
-  assert.ok(before.label.includes(B.describeBargeIn(true)));
-  await page.locator("#voice-barge-in").click();
+  const before = await read();
+  assert.deepEqual(before.choices, [["voice", "true"], ["tap", "false"], ["off", "false"]]);
+  assert.equal(before.old, null, "the old switch is gone: one setting");
+  assert.match(before.note, /stops for your voice/);
+  await page.locator('#voice-interrupt button[data-value="off"]').click();
   await page.waitForTimeout(100);
-  const after = await page.evaluate((key) => ({
-    checked: document.getElementById("voice-barge-in").checked,
-    saved: localStorage.getItem(key),
-    label: document.getElementById("voice-barge-in").closest("label").innerText,
-  }), B.BARGE_IN_KEY);
+  const saved = await page.evaluate(() => localStorage.getItem("jarvis.interrupt"));
   await page.reload();
   await page.waitForTimeout(300);
-  const reopened = await page.evaluate(() => document.getElementById("voice-barge-in").checked);
+  const after = await read();
   const errors = page.__errors;
   await page.close();
-  assert.equal(after.checked, false);
-  assert.equal(after.saved, "off");
-  assert.ok(after.label.includes(B.describeBargeIn(false)));
-  assert.equal(reopened, false, "the setting did not survive reopening Settings");
+  assert.equal(saved, "off");
+  assert.deepEqual(after.choices, [["voice", "false"], ["tap", "false"], ["off", "true"]]);
+  assert.equal(B.loadBargeIn({ getItem: (k) => (k === "jarvis.interrupt" ? "off" : null) }), false);
   assert.deepEqual(errors, []);
 });
 
-await check("Settings: the switch works even when Jarvis could not be asked about voice", async () => {
+await check("Settings: an old switch turned off carries over as Don't interrupt", async () => {
+  const page = await settings();
+  await page.evaluate((key) => { localStorage.removeItem("jarvis.interrupt"); localStorage.setItem(key, "off"); }, B.BARGE_IN_KEY);
+  await page.reload();
+  await page.waitForTimeout(300);
+  const pressed = await page.evaluate(() =>
+    document.querySelector('#voice-interrupt button[aria-pressed="true"]').dataset.value);
+  await page.close();
+  assert.equal(pressed, "off");
+});
+
+await check("Settings: the setting works even when Jarvis could not be asked about voice", async () => {
   const page = await K.open(browser, base, "settings.html",
     { voice: { getFails: "Jarvis is not answering at http://127.0.0.1:4719. Is it running?" } },
     { width: 760, height: 1400 });
   const s = await page.evaluate(() => ({
-    hidden: document.getElementById("voice-barge-in").closest("label").offsetParent === null,
-    disabled: document.getElementById("voice-barge-in").disabled,
+    hidden: document.getElementById("voice-interrupt").offsetParent === null,
+    count: document.querySelectorAll("#voice-interrupt button").length,
   }));
   await page.close();
   assert.equal(s.hidden, false);
-  assert.equal(s.disabled, false);
+  assert.equal(s.count, 3);
 });
 
 /* ── The Jarvis bar ─────────────────────────────────────────────────────── */

@@ -836,6 +836,12 @@ pub fn start_voice_capture(
     if training.recording() {
         return Err(crate::voice_training::MIC_IN_SETTINGS.to_string());
     }
+    // Jarvis Live has the microphone - even while it is closed for a pause:
+    // the talk button does not open a second recorder beside it. The same
+    // words as the phone's (the Live audit, fit 3).
+    if LIVE_MODE.load(Ordering::SeqCst) {
+        return Err(crate::live::BUSY_MIC.to_string());
+    }
     let mut guard = state.0.lock().map_err(poisoned)?;
     if guard.is_some() {
         return Err("already recording".to_string());
@@ -1211,6 +1217,14 @@ pub(crate) fn live_held(card_paused: bool, stale: bool) -> bool {
     card_paused || stale
 }
 
+/// Jarvis Live: may a sentence that is ready be sent? One that began while
+/// the bar was playing an answer only when the PC said, over barge-in, that
+/// it was the owner (the review's bug 9: an "mm-hm" over an answer made the
+/// bar say "Say a bit more..." on top of it).
+pub(crate) fn live_over_answer_sent(live: bool, began_over_answer: bool, owner: bool) -> bool {
+    !live || !began_over_answer || owner
+}
+
 /// [`pause_step`] in Live: the same rule, but a pause inside a sentence
 /// Smart Turn called unfinished may last [`LIVE_TURN_MAX_PAUSE`].
 pub(crate) fn live_pause_step(
@@ -1280,8 +1294,22 @@ pub(crate) async fn open_for_live(app: &AppHandle) -> Result<ListenInfo, String>
     if let Some(why) = live_audio_refusal(&base) {
         return Err(why);
     }
-    if take_listener(app) {
+    // Only a "hey Jarvis" listener counts as one to bring back later: a
+    // second start while Live already holds the microphone (a double click,
+    // the tray and the bar at once) must not record the LIVE listener as a
+    // wake one, or ending Live would switch "hey Jarvis" on unasked (the
+    // review's bug 6).
+    let already_live = LIVE_MODE.load(Ordering::SeqCst);
+    let took_wake = !already_live && take_listener(app);
+    if took_wake {
         WAKE_WAS_ON.store(true, Ordering::SeqCst);
+    }
+    if already_live && listener_open(app) {
+        return Ok(ListenInfo {
+            echo_cancelling: false,
+            microphone: None,
+            note: None,
+        });
     }
     let use_turn = turn_ready(app).await;
     LIVE_USE_TURN.store(use_turn, Ordering::SeqCst);
@@ -1290,6 +1318,20 @@ pub(crate) async fn open_for_live(app: &AppHandle) -> Result<ListenInfo, String>
         Ok(info) => Ok(info),
         Err(why) => {
             LIVE_MODE.store(false, Ordering::SeqCst);
+            // The Live microphone would not open: "hey Jarvis" listening,
+            // taken for it a moment ago, comes back (it used to be left dead).
+            if took_wake {
+                WAKE_WAS_ON.store(false, Ordering::SeqCst);
+                if let Some(use_turn) = wake_ready_now(app).await {
+                    let _ = open_listener(
+                        app,
+                        &app.state::<AutoListenState>(),
+                        &app.state::<VoiceCaptureState>(),
+                        &app.state::<crate::voice_training::SampleState>(),
+                        use_turn,
+                    );
+                }
+            }
             Err(why)
         }
     }
@@ -1557,6 +1599,14 @@ enum VadPhase {
         told: bool,
         /// Its first seconds were sent as `source=barge_in`.
         barge_sent: bool,
+        /// Jarvis Live: it began while the bar was playing an answer (or a
+        /// fixed line). Such a sentence is sent only if the PC said, over
+        /// barge-in, that it was the owner (`owner_over`) - an "mm-hm" over
+        /// an answer is not a new question (the review's bug 9; the phone
+        /// does the same, LiveService.window).
+        over_answer: bool,
+        /// The PC's barge-in answer for it was "the owner" (or "stop").
+        owner_over: bool,
     },
 }
 
@@ -1923,6 +1973,9 @@ fn run_vad_loop(
                         id: crate::voice_flow::next_utterance_id(),
                         told: false,
                         barge_sent: false,
+                        over_answer: LIVE_MODE.load(Ordering::SeqCst)
+                            && crate::live::answer_playing(),
+                        owner_over: false,
                     };
                     // No barge-in here any more. In this mode the trigger
                     // fires on the TV, on other people, and on Jarvis's own
@@ -1951,6 +2004,8 @@ fn run_vad_loop(
                 id,
                 told,
                 barge_sent,
+                over_answer,
+                owner_over,
             } => {
                 if voiced {
                     *last_voiced_at = now;
@@ -1994,6 +2049,7 @@ fn run_vad_loop(
                     let verdict = tauri::async_runtime::block_on(crate::voice_flow::post_barge_in(
                         app, &base, spec, &clip, *id,
                     ));
+                    *owner_over |= verdict.stop;
                     let _ = app.emit(VOICE_BARGE_VERDICT, verdict);
                     buf = samples
                         .lock()
@@ -2105,6 +2161,8 @@ fn run_vad_loop(
                             true,
                         );
                     let barge_id = *id;
+                    let began_over_answer = *over_answer;
+                    let owner_over_answer = *owner_over;
                     // Reset for the next utterance. Everything captured
                     // during this cut's own send() is preserved - it just
                     // starts the next utterance's buffer, since `buf` here
@@ -2115,11 +2173,18 @@ fn run_vad_loop(
                     drop(buf); // release the lock before the blocking POST
 
                     let app = app.clone();
+                    let mut owner_over_answer = owner_over_answer;
                     if barge_now {
                         let verdict = tauri::async_runtime::block_on(
                             crate::voice_flow::post_barge_in(&app, &base, spec, &clip, barge_id),
                         );
+                        owner_over_answer |= verdict.stop;
                         let _ = app.emit(VOICE_BARGE_VERDICT, verdict);
+                    }
+                    if !live_over_answer_sent(live, began_over_answer, owner_over_answer) {
+                        // Jarvis Live: a sentence that began over an answer
+                        // and was not the owner's interruption goes nowhere.
+                        continue;
                     }
                     let heard = tauri::async_runtime::block_on(post_utterance(
                         &app,

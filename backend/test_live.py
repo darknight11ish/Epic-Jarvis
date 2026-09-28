@@ -626,6 +626,10 @@ def t_review_fixes_2026_09_28():
               L._default_end_on() == L.END_ON_WINDOWS_LOCK)
         V.set_setting("live_end", "live_end_app_lock")
         check("...and back at once", L._default_end_on() == L.END_ON_APP_LOCK)
+    import jarvis_asks_first as AF
+    check("'What asks first' lists starting Live: does it without asking",
+          AF.FIXED["fixed:live"][1] == AF.SAYS_NO_CARD
+          and any("fixed:live" in rows for _, rows in AF.GROUPS))
     # The words.
     check("no fixed line says 'desktop' (it is 'your PC')",
           all("desktop" not in str(v).lower() for d in (L.SEEN, L.PAUSE_WORDS, L.MUTE_WORDS,
@@ -700,7 +704,7 @@ def t_status_and_events_carry_no_words():
     e.stop()
     allowed = {"state", "on", "device", "session", "left_s", "minutes_left", "quiet_left_s",
                "quiet_warn", "paused", "pause_words", "muted", "muted_why", "muted_words",
-               "started_by", "hint", "hint_words", "ending_soon", "ended", "ended_words",
+               "started_by", "started_at", "hint", "hint_words", "ending_soon", "ended", "ended_words",
                "ended_say", "ended_device", "ended_ago_s", "resumable", "turns",
                "refused_in_a_row", "limits", "lines", "seen", "camera", "end_on"}
     check("every event is the status and nothing else", w.events and all(

@@ -387,6 +387,7 @@ const SETTING_NAMES = {
   hands_free: "how far \"Hey Jarvis\" is trusted",
   hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
   hands_free_live: "how far Jarvis Live is trusted",
+  live_end: "when Jarvis Live ends on this PC",
 };
 
 /** The choices, in the order they are shown, with plain words for each. */
@@ -527,6 +528,31 @@ export const HANDS_FREE_LIVE = Object.freeze([
   },
 ]);
 
+/**
+ * When App lock ends Jarvis Live on this PC (the owner's decision of
+ * 2026-09-28): by default when App lock would ask again ("Lock again
+ * after", counted from when you last touched a Jarvis window - talking does
+ * not count); the looser choice, only when Windows itself locks, is the
+ * voice card, held on a stale link. A PC setting - the phone keeps App
+ * lock's own rule (docs/ARCHITECTURE.md section 8).
+ */
+export const LIVE_END = Object.freeze([
+  {
+    id: "live_end_app_lock",
+    label: "When App lock would ask again",
+    recommended: true,
+    detail: "With App lock on, Jarvis Live ends when App lock would ask for Windows Hello again (\"Lock again after\" in Security), counted from when you last touched a Jarvis window. Talking does not count.",
+  },
+  {
+    id: "live_end_windows_lock",
+    label: "Only when Windows locks",
+    detail: "Jarvis Live keeps going until Windows itself locks, even after App lock would ask again. Someone who sits down at this PC before then could talk to Jarvis.",
+  },
+]);
+
+/** Under the Live end choices: what they depend on. */
+export const LIVE_END_NOTE = "This only matters while App lock is on (Settings, Security).";
+
 /** Under the Live choices while "Same as the talk button" is chosen. */
 export const LIVE_ONLY_WHEN_STRICT_NOTE =
   "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", Jarvis Live is trusted like the talk button already.";
@@ -552,7 +578,7 @@ function choiceWords(setting, value) {
   const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY
     : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY
       : setting === "hands_free" ? HANDS_FREE : setting === "hands_free_screen" ? HANDS_FREE_SCREEN
-        : setting === "hands_free_live" ? HANDS_FREE_LIVE : [];
+        : setting === "hands_free_live" ? HANDS_FREE_LIVE : setting === "live_end" ? LIVE_END : [];
   return list.find((c) => c.id === value) || null;
 }
 
@@ -605,7 +631,8 @@ export function currentSetting(status, setting) {
     : setting === "memory" ? view.memory : setting === "sensitive_memory" ? view.sensitiveMemory
       : setting === "hands_free" ? view.handsFree
         : setting === "hands_free_screen" ? view.handsFreeScreen
-          : setting === "hands_free_live" ? view.handsFreeLive : "";
+          : setting === "hands_free_live" ? view.handsFreeLive
+            : setting === "live_end" ? view.liveEnd : "";
 }
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule.
@@ -623,7 +650,8 @@ export function loosens(setting, value, current = "") {
     || (setting === "memory" && value === "memory_aloud")
     || (setting === "sensitive_memory" && value === "sensitive_aloud")
     || (setting === "hands_free" && value === "same_as_button")
-    || (setting === "hands_free_screen" && value === "screen_aloud");
+    || (setting === "hands_free_screen" && value === "screen_aloud")
+    || (setting === "live_end" && value === "live_end_windows_lock");
 }
 
 /**
@@ -663,6 +691,11 @@ export function settingsView(status) {
   // PC that does not have it - not offered.
   const rawLive = s.hands_free_live !== undefined ? s.hands_free_live : gate.hands_free_live;
   const handsFreeLive = HANDS_FREE_LIVE.some((c) => c.id === rawLive) ? rawLive : "";
+  // The eighth, when App lock ends Jarvis Live on this PC (the owner's
+  // decision of 2026-09-28): `gate.settings.live_end` (or `gate.live_end`).
+  // "" from a PC that does not have it - not offered.
+  const rawEnd = s.live_end !== undefined ? s.live_end : gate.live_end;
+  const liveEnd = LIVE_END.some((c) => c.id === rawEnd) ? rawEnd : "";
   return {
     strictness,
     privacy,
@@ -671,6 +704,7 @@ export function settingsView(status) {
     handsFree,
     handsFreeScreen,
     handsFreeLive,
+    liveEnd,
     voiceIsEnoughAllowed: yes(s.voice_is_enough_allowed) && strictness === "very_strict",
     minSeconds: min,
     waiting: waiting && waiting.name ? { setting: String(waiting.name), value: String(waiting.value || "") } : null,

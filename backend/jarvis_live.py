@@ -1129,6 +1129,12 @@ class Live:
                 "muted_why": self.muted_why if on and self.muted else None,
                 "muted_words": (MUTE_WORDS.get(self.muted_why) if on and self.muted else None),
                 "started_by": self.started_by if on else None,
+                # When it started, by the PC's clock - the same clock an
+                # approval card's `created` is on, so an app can tell a card
+                # raised in THIS session from one that was already waiting
+                # (the design's C8; the review's B8: an old card must not
+                # hold Live, nor hide the tap buttons).
+                "started_at": self.started_at if on else None,
                 "hint": self.hint if on else None,
                 "hint_words": HINT_WORDS.get(self.hint) if on and self.hint else None,
                 "ending_soon": bool(on and self.warned),

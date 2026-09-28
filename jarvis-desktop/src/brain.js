@@ -270,18 +270,20 @@ const VIEWS = {
   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
   projects: { title: "Projects", sub: "what you are working on, and the numbers you track" },
   galaxy: { title: "Galaxy", sub: "what Jarvis knows" },
-  live: { title: "Live", sub: "what Jarvis is doing" },
+  // "Now" - called "Live" until 2026-09-28, renamed by the owner so it is
+  // not confused with Jarvis Live (the voice conversation).
+  now: { title: "Now", sub: "what Jarvis is doing" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
   watch: { title: "Watch", sub: "the GitHub watchlist" },
 };
 
 /** Views tucked behind the "Advanced" disclosure until it is opened. */
-const ADVANCED_VIEWS = ["galaxy", "live", "trust", "watch"];
+const ADVANCED_VIEWS = ["galaxy", "now", "trust", "watch"];
 
 /** Which sections each view needs, so a switch reads only what it will show. */
 const VIEW_SECTIONS = {
   galaxy: ["graph"],
-  live: ["attention", "status"],
+  now: ["attention", "status"],
   faculties: ["models", "compute", "skills", "memory", "memory_pending"],
   // memory_entities: the names under each fact, for "About <name>"
   // (memory-entities.js). Hidden with the other memory lists.
@@ -414,7 +416,7 @@ const dom = {
   watchAddOpen: $("watch-add-open"),
   watchCancel: $("watch-cancel"),
   watchSeen: $("watch-seen"),
-  countLive: $("count-live"),
+  countLive: $("count-now"),
   countWork: $("count-work"),
   countTrust: $("count-trust"),
   countWatch: $("count-watch"),
@@ -742,7 +744,7 @@ function render(name) {
     case "galaxy":
       renderGraph();
       break;
-    case "live":
+    case "now":
       renderLive();
       break;
     case "faculties":
@@ -5586,6 +5588,11 @@ function pushTrace(frame) {
   } else if (kind === "deep") {
     // The id and how it ended - never the question or the answer.
     body = `question ${String(data.id || "?")} ${String(data.state || "")}`.trim();
+  } else if (kind === "live") {
+    // Jarvis Live's session (jarvis_live.status(): fixed words and numbers,
+    // never anything said), in one readable line rather than raw JSON (the
+    // Live review, 2026-09-28).
+    body = liveTraceLine(data);
   } else if (kind === "hello") {
     body = `resumed from ${data.resumed_from ?? 0}${data.stale ? " · STALE" : ""}`;
   } else {
@@ -5598,7 +5605,7 @@ function pushTrace(frame) {
   // DOM nodes is a leak with a nice name.
   if (state.trace.length > 300) state.trace.splice(0, state.trace.length - 300);
 
-  if (state.view !== "live") return;
+  if (state.view !== "now") return;
   const li = el("li");
   li.append(
     el("span", "trace-time", time),
@@ -5608,6 +5615,21 @@ function pushTrace(frame) {
   dom.trace.append(li);
   while (dom.trace.childElementCount > 300) dom.trace.firstElementChild.remove();
   dom.trace.scrollTop = dom.trace.scrollHeight;
+}
+
+/** A `live` event (Jarvis Live's status) as one line. */
+function liveTraceLine(s) {
+  const d = s && typeof s === "object" ? s : {};
+  if (d.on === true) {
+    const where = d.device === "desktop" ? "this PC" : d.device === "phone" ? "the phone" : "a device";
+    const parts = [`Jarvis Live on ${where}`];
+    if (Number.isInteger(d.minutes_left)) parts.push(`${d.minutes_left} min left`);
+    const why = d.muted ? d.muted_words : d.paused ? d.pause_words : d.hint_words;
+    if (why) parts.push(String(why));
+    return parts.join(" · ");
+  }
+  if (d.state === "ended") return `Jarvis Live ended${d.ended_words ? `: ${d.ended_words}` : ""}`;
+  return "Jarvis Live off";
 }
 
 // stepText now lives in step-words.js, shared with the Jarvis bar
@@ -6627,7 +6649,7 @@ onLink((link) => {
   dom.reconnectLink.hidden = link.connected;
   syncLiveButtons();
   paintFreshness();
-  if (state.view === "live") renderLive();
+  if (state.view === "now") renderLive();
   renderCounts();
 });
 

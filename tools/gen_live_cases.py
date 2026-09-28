@@ -380,6 +380,25 @@ def camera_shown(st: dict, me: str) -> bool:
     return me == "phone" and on_here(st, me) and cam.get("ready") is True
 
 
+def card_in_session(created, st: dict) -> bool:
+    """Does a card the app shows hold Live? Only one raised in THIS session
+    (the design's C8, the PC's own rule): a card that was already waiting
+    before Live started does not. Fail closed: a card whose time cannot be
+    read, or a status without `started_at`, counts."""
+    started = st.get("started_at")
+    if isinstance(created, bool) or not isinstance(created, (int, float)):
+        return True
+    if isinstance(started, bool) or not isinstance(started, (int, float)):
+        return True
+    return created >= started - L.CARD_SLACK_S
+
+
+#: The short sound both apps play when Live ends on them (the review of
+#: 2026-09-28: there was none): the "I heard you" sound's two notes the other
+#: way round, a little longer. (hz, ms); made like that sound.
+END_TONE = [[990, 75], [660, 90]]
+
+
 def interrupt_choice(saved, old_barge_in, old_live, echo: bool) -> str:
     """The ONE interrupt setting, from what is stored. `saved`: the new
     setting, when chosen; `old_barge_in`: the older "Interrupt Jarvis while
@@ -717,6 +736,18 @@ def build() -> dict:
          "want": fold("", "hello there", False)},
     ]
     moves = [{"device": d, "want": move_words(d)} for d in ("desktop", "phone")]
+    started = S["phone_on"]["started_at"]
+    card_cases = [
+        {"name": n, "created": created, "status": status,
+         "want": card_in_session(created, S[status])}
+        for n, created, status in (
+            ("raised after Live started", started + 30, "phone_on"),
+            ("raised a second before (clocks)", started - 1, "phone_on"),
+            ("waiting from long before Live", started - 3600, "phone_on"),
+            ("no readable time: counts", None, "phone_on"),
+            ("a time that is words: counts", "yesterday", "phone_on"),
+            ("Live not on (no started_at): counts", started - 3600, "off"),
+        )]
     interrupt_cases = []
     for saved in (None, INTERRUPT_VOICE, INTERRUPT_TAP, INTERRUPT_OFF, "nonsense"):
         for old_barge in (None, True, False):
@@ -753,6 +784,8 @@ def build() -> dict:
         "mute_words": dict(L.MUTE_WORDS),
         "end_words": dict(L.END_WORDS),
         "end_said": dict(L.END_SAID),
+        "needs_voice": L.NEEDS_VOICE,
+        "needs_voice_where": dict(L.NEEDS_VOICE_WHERE),
         "app_end_reasons": list(L.APP_END_REASONS),
         "voice_pauses": list(L.VOICE_PAUSES),
         "card_pauses": list(L.CARD_PAUSES),
@@ -779,6 +812,9 @@ def build() -> dict:
         "barge": barges,
         "fold": folds,
         "move": moves,
+        "card_in_session": card_cases,
+        "card_slack_s": L.CARD_SLACK_S,
+        "end_tone": END_TONE,
         "camera": cameras,
         "interrupt_choice": interrupt_cases,
     }

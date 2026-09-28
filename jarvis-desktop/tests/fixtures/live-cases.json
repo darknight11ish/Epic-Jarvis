@@ -73,6 +73,11 @@
     "standby": "Live ended - Jarvis is on standby.",
     "other_device": "Live moved to your other device."
   },
+  "needs_voice": "Jarvis Live didn't start: it needs your voice trained first.",
+  "needs_voice_where": {
+    "desktop": "Settings, then Voice",
+    "phone": "Settings, then Train my voice"
+  },
   "app_end_reasons": [
     "owner",
     "app_lock",
@@ -140,6 +145,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": null,
+      "started_at": null,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -204,6 +210,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -268,6 +275,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -332,6 +340,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -396,6 +405,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": "other_voices",
       "hint_words": "Hearing other voices - only yours counts",
       "ending_soon": false,
@@ -460,6 +470,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": "other_voices",
       "hint_words": "Hearing other voices - only yours counts",
       "ending_soon": false,
@@ -524,6 +535,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": "voice_trouble",
       "hint_words": "I'm having trouble recognising your voice - move closer or retrain",
       "ending_soon": false,
@@ -588,6 +600,7 @@
       "muted_why": "owner",
       "muted_words": "Mic off - Jarvis can't hear you. Use Mic on to carry on",
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -652,6 +665,7 @@
       "muted_why": "call",
       "muted_words": "Paused: you're on a call - Live carries on after it, or use Listen anyway",
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -716,6 +730,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -780,6 +795,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -844,6 +860,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": true,
@@ -908,6 +925,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": null,
+      "started_at": null,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -972,6 +990,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1036,6 +1055,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": null,
+      "started_at": null,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1100,6 +1120,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": null,
+      "started_at": null,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1164,6 +1185,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1228,6 +1250,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1292,6 +1315,7 @@
       "muted_why": "mic_in_use",
       "muted_words": "Paused: another program is using the microphone - Live carries on when it lets go, or use Listen anyway",
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1356,6 +1380,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": null,
+      "started_at": null,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1420,6 +1445,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": null,
+      "started_at": null,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1484,6 +1510,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1548,6 +1575,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": null,
+      "started_at": null,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1612,6 +1640,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1676,6 +1705,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1740,6 +1770,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -1804,6 +1835,7 @@
       "muted_why": null,
       "muted_words": null,
       "started_by": "button",
+      "started_at": 1800000000.0,
       "hint": null,
       "hint_words": null,
       "ending_soon": false,
@@ -17312,6 +17344,55 @@
       "device": "phone",
       "want": "Live is on your phone - move it here?"
     }
+  ],
+  "card_in_session": [
+    {
+      "name": "raised after Live started",
+      "created": 1800000030.0,
+      "status": "phone_on",
+      "want": true
+    },
+    {
+      "name": "raised a second before (clocks)",
+      "created": 1799999999.0,
+      "status": "phone_on",
+      "want": true
+    },
+    {
+      "name": "waiting from long before Live",
+      "created": 1799996400.0,
+      "status": "phone_on",
+      "want": false
+    },
+    {
+      "name": "no readable time: counts",
+      "created": null,
+      "status": "phone_on",
+      "want": true
+    },
+    {
+      "name": "a time that is words: counts",
+      "created": "yesterday",
+      "status": "phone_on",
+      "want": true
+    },
+    {
+      "name": "Live not on (no started_at): counts",
+      "created": 1799996400.0,
+      "status": "off",
+      "want": true
+    }
+  ],
+  "card_slack_s": 2.0,
+  "end_tone": [
+    [
+      990,
+      75
+    ],
+    [
+      660,
+      90
+    ]
   ],
   "camera": [
     {

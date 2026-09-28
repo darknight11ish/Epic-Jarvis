@@ -8,6 +8,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.float
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -68,6 +70,50 @@ class LiveRulesTest {
         assertEquals(turn["max_pause_ms"]!!.jsonPrimitive.int.toLong(), LiveRules.TURN_MAX_PAUSE_MS)
         assertEquals(table["duck_volume"]!!.jsonPrimitive.float, LiveRules.DUCK_VOLUME, 0.0001f)
         assertEquals(table["max_chips"]!!.jsonPrimitive.int, LiveRules.MAX_CHIPS)
+        assertEquals(table.s("link_back_said"), LiveRules.LINK_BACK_SAID)
+        assertEquals(strings(table["device_words"]!!.jsonObject), LiveRules.DEVICE_WORDS)
+        assertEquals(table["pause_words"]!!.jsonObject.s("card"), LiveRules.CARD_WORDS)
+        assertEquals(table["end_said"]!!.jsonObject.s("other_device"), LiveRules.MOVED_SAID)
+        assertTrue(table.s("needs_voice").startsWith(LiveRules.NEEDS_VOICE))
+        val buttons = table["buttons"]!!.jsonObject
+        assertEquals(buttons.s("end_live"), LiveRules.END_LIVE)
+        assertEquals(buttons.s("mic_off"), LiveRules.MIC_OFF)
+        assertEquals(buttons.s("mic_on"), LiveRules.MIC_ON)
+        assertEquals(buttons.s("listen_anyway"), LiveRules.LISTEN_ANYWAY)
+        assertEquals(buttons.s("more_time"), LiveRules.MORE_TIME)
+        assertEquals(table["more_time_within_min"]!!.jsonPrimitive.int, LiveRules.MORE_TIME_WITHIN_MIN)
+        val limits = table["limits"]!!.jsonObject
+        assertEquals(limits["ended_show_s"]!!.jsonPrimitive.int, LiveRules.ENDED_SHOW_S)
+        assertEquals(limits["resume_s"]!!.jsonPrimitive.int, LiveRules.RESUME_S)
+        assertEquals(table["card_slack_s"]!!.jsonPrimitive.float.toDouble(), LiveRules.CARD_SLACK_S, 0.0001)
+        val tone = table["end_tone"]!!.jsonArray.map {
+            it.jsonArray[0].jsonPrimitive.int to it.jsonArray[1].jsonPrimitive.int
+        }
+        assertEquals(tone, LiveRules.END_TONE)
+    }
+
+    private fun optInt(o: JsonObject, key: String): Int? = (o[key] as? JsonPrimitive)?.intOrNull
+
+    private fun optStr(o: JsonObject, key: String): String? =
+        (o[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+    private fun optBool(o: JsonObject, key: String): Boolean? = (o[key] as? JsonPrimitive)?.booleanOrNull
+
+    @Test
+    fun `move it here, which cards hold Live, and the one interrupt setting, every case`() {
+        for (c in cases("move")) assertEquals(c.s("want"), LiveRules.moveWords(c.s("device")))
+        for (c in cases("card_in_session")) {
+            val created = (c["created"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
+            assertEquals(c.s("name"), c.b("want"), LiveRules.cardInSession(created, status(c.s("status"))))
+        }
+        val all = cases("interrupt_choice")
+        assertTrue("only ${all.size} cases", all.size > 50)
+        for (c in all) {
+            assertEquals(
+                c.toString(), c.s("want"),
+                LiveRules.interruptChoice(optStr(c, "saved"), optBool(c, "old_barge_in"), optStr(c, "old_live"), c.b("echo")),
+            )
+        }
     }
 
     @Test
@@ -79,8 +125,12 @@ class LiveRulesTest {
             val want = LiveRules.Sign(
                 show = w.b("show"), title = w.s("title"), detail = w.s("detail"), stop = w.s("stop"),
                 mute = w.s("mute"), carryOn = w.b("carry_on"), resume = w.b("resume"),
+                moreTime = w.b("more_time"), showCard = w.b("show_card"), move = w.b("move"),
             )
-            val got = LiveRules.sign(status(c.s("status")), c.s("me"), c.b("stale"), c.b("thinking"), c.b("short"))
+            val got = LiveRules.sign(
+                status(c.s("status")), c.s("me"), c.b("stale"), c.b("thinking"), c.b("short"),
+                cardShown = c.b("card_shown"), endedAgo = optInt(c, "ended_ago"),
+            )
             assertEquals(c.s("name"), want, got)
         }
     }
@@ -177,6 +227,9 @@ class LiveRulesTest {
         assertEquals(null, LiveRules.callMuteChange(call, onCall = true))
         assertEquals(null, LiveRules.callMuteChange(owner, onCall = false))
         assertEquals(null, LiveRules.callMuteChange(owner, onCall = true))
+        // "Listen anyway" during a call: not muted again while the mode
+        // still reads as a call (the review's bug 4).
+        assertEquals(null, LiveRules.callMuteChange(on, onCall = true, overridden = true))
     }
 
     @Test
