@@ -623,6 +623,11 @@ testers, scouts and integration scouts; `.claude/agents/`):
   that service when it is reached, and the approval card shows how much is
   left. Prices change, so the amount is an estimate from a price list the
   owner can see and correct, and the card says "about".
+  **Built 2026-09-28; the owner then chose to make it a hard stop too:**
+  Jarvis also asks each service to cap how long an answer can be, so one
+  long answer cannot carry a month past the limit. Each service names that
+  setting differently, so each one's own documentation is checked before
+  it is used.
   **Compare, as built, is confirmed** (owner, 2026-09-28): up to 3 chatbots
   per comparison on one graphics card and 4 on two, asked one after
   another; a chatbot that shows a captcha or sign-in page is left out and
@@ -678,7 +683,7 @@ testers, scouts and integration scouts; `.claude/agents/`):
   and everything stays on the owner's own devices. Not full-duplex (that
   skips the voice check), so a turn takes about 2-4 seconds (estimated; corrected by the design). The camera
   understands pictures only with the 12 GB card (Qwen 3.5 9B or Qwen3-VL
-  8B, unmeasured); with one card it reads text only. The camera part stays
+  8B, unmeasured); with one card there is no camera (see the owner's answers below). The camera part stays
   off until the card is in and a photo test passes. Designed in
   `docs/LIVE-DESIGN.md` and brought back to the owner before anything is
   built.
