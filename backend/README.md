@@ -4057,6 +4057,40 @@ settings folder (`%USERPROFILE%\.openjarvis\` unless you moved it):
   it does not. It needs an Ollama new enough to report the reused count;
   an older one leaves `cached_tokens` out.
 
+**How much of the conversation was reused, on screen** (milestone 7,
+2026-09-28). Ollama keeps the start of the last prompt it read (the "prompt
+cache"). When the next question starts the same way, it skips reading that
+part again, and the answer starts sooner. Both apps' speed line (Brain →
+Model) now ends with it, for example: "Recent answers: about 14 words a
+second, first word after 0.8 s, 90% of the conversation reused, not read
+again (middle of the last 30 answers)."
+
+- **What the number is, exactly.** For each answer, `cached_tokens` out of
+  `prompt_tokens`, as a percentage (`jarvis_speed.reused_percent`). Jarvis
+  talks to Ollama's OpenAI-style endpoint, `/v1/chat/completions`. There,
+  `prompt_tokens` is Ollama's `prompt_eval_count` and `cached_tokens` is its
+  `prompt_eval_cached_count` (Ollama's `openai/openai.go`). The first counts
+  the **whole** prompt, cached part included: Ollama's own `--verbose`
+  printout works out the part it really read as the difference (Ollama's
+  `api/types.go`). Read in Ollama's source on 2026-09-28, not run against a
+  real Ollama. For a tool answer, both counts are added up over all its
+  requests to the model. The screen shows the middle value over recent
+  answers (`by_model[model].median_reused_percent`, and `reused_answers` -
+  how many answers had the numbers).
+- **When there is no number.** Rows written before 2026-09-26 have no
+  counts; they still load and are skipped, never counted as 0%. So is an
+  answer from an Ollama too old to report the reused count. **And so is an
+  answer with no tools switched on** (`[tools].enabled` empty): that answer
+  is passed straight through from Ollama in the form the app asked for, and
+  neither app asks for the counts. Adding the request there would change the
+  stream the apps receive (an extra last piece), and an app that hangs up
+  after the answer's final piece could then cut off the relay before it
+  records the answer at all (not checked whether either app does) - so it
+  was left alone. Answers with tools on
+  (the tool loop, `jarvis_agent.run_local_turn`) always ask.
+- **Numbers only.** The same `_clean()` filter keeps every row free of
+  words; the share is worked out from two counts when the screen asks.
+
 **What it never records: any words of the conversation.** Not the question,
 not the answer, not a summary. That is enforced in code: every row goes
 through a filter (`_clean()`). It keeps only a fixed list of field names, and
@@ -4109,7 +4143,7 @@ would be noise.
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_speed_record.py
 ```
 
-Sixty-three checks with no network (opening a socket fails the test) and a
+Eighty-seven checks with no network (opening a socket fails the test) and a
 fake clock. The main one: an answer full of a distinctive secret sentence is
 timed, then every word of it is searched for in the file, and none is found.
 Also checked:
@@ -4118,6 +4152,9 @@ Also checked:
 - all three stream shapes are handled;
 - a broken or unwritable file never raises;
 - the slowdown warning, with a control where nothing changed;
+- the reused share: worked out from a fake Ollama usage piece, older rows
+  without the counts still load and have no share (not 0%), and no word of
+  the conversation reaches the file or the screen's block;
 - the patch rehearsed against what `gpu-offload.patch` and
   `tool-calling-wiring.patch` wrote.
 
