@@ -271,6 +271,67 @@ class LipSyncTest {
         }
     }
 
+    /**
+     * The voice-speed check (2026-09-28): the same sentence at the slowest
+     * pace the apps offer (0.7225, an animal's Slower times the owner's) and
+     * the fastest (1.3225), each carrying the PC's mouth timing. The phone
+     * plays exactly what the desktop plays at both, and at both the mouth
+     * still shuts between the words and for m / b / p (the desktop's
+     * lipsync.mjs checks the same clips in more detail).
+     */
+    @Test
+    fun `at the slowest and the fastest pace the phone's mouth is the desktop's`() {
+        val paces = golden["paces"]!!.jsonArray
+        assertEquals("the fixture should hold the slowest and the fastest pace", 2, paces.size)
+        for (p in paces) {
+            val o = p.jsonObject
+            val name = o["file"]!!.jsonPrimitive.content
+            val wav = clip(name)
+            val pcm = Wav.decode(wav)
+            val rate = Wav.rateOf(wav)
+            val audio = LipSync.analyse(pcm, rate)
+            val track = LipSync.forClip(wav, pcm, rate)
+            assertTrue("$name: the PC's mouth was not taken", o["merged"]!!.jsonPrimitive.boolean)
+            assertFalse("$name: the PC's mouth was not taken", audio.open.contentEquals(track.open))
+            assertEquals("$name: frames", o["n"]!!.jsonPrimitive.int, track.n)
+            for ((key, got) in listOf("level" to track.level, "open" to track.open,
+                "wide" to track.wide, "round" to track.round)) {
+                val want = o[key]!!.jsonArray
+                assertEquals("$name: $key length", want.size, got.size)
+                for (i in got.indices) {
+                    val w = want[i].jsonPrimitive.float
+                    assertTrue("$name: $key[$i] is ${got[i]}, the desktop says $w", abs(got[i] - w) <= tol)
+                }
+            }
+            val out = FloatArray(4)
+            for (r in o["reads"]!!.jsonArray) {
+                val t = r.jsonObject["t"]!!.jsonPrimitive.float
+                val want = r.jsonObject["out"]!!.jsonArray.map { it.jsonPrimitive.float }
+                LipSync.sample(track, t, out)
+                for (k in 0..3) assertTrue("$name: sample($t)[$k] is ${out[k]}, the desktop says ${want[k]}", abs(out[k] - want[k]) <= tol)
+            }
+            // "Okay. Maybe Bob made a map.": the pause and the lips close the
+            // mouth between openings - from the sound alone and from the PC's timing.
+            assertTrue("$name: ${closures(audio.open)} closures from the sound", closures(audio.open) >= 5)
+            assertTrue("$name: ${closures(track.open)} closures from the PC's timing", closures(track.open) >= 4)
+        }
+    }
+
+    /** Times the mouth drops below 0.12 between two openings above 0.25 (lipsync.mjs `closures`). */
+    private fun closures(open: FloatArray): Int {
+        var count = 0
+        var low = 1f
+        var armed = false
+        for (o in open) {
+            if (o > 0.25f) {
+                if (armed && low < 0.12f) count++
+                armed = true
+                low = 1f
+            } else if (armed) low = minOf(low, o)
+        }
+        return count
+    }
+
     @Test
     fun `every good and broken chunk is read as the desktop reads it, and a broken one changes nothing`() {
         val src = clip(mouth["source"]!!.jsonPrimitive.content)

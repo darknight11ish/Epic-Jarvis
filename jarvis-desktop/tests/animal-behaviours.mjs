@@ -147,6 +147,40 @@ if (!K) {
     assert.ok(!("heardN" in o) || o.heardN >= 0);
   });
 
+  await check("a face drawn before the stored switches are read takes them at once, never easing from the defaults", async () => {
+    // A slow start: hold the page's read of the stored options back until
+    // the face has been drawing for a while (the race that once left a
+    // switched-off behaviour at 9% on a busy machine).
+    const ctx = await browser.newContext({ viewport: { width: 300, height: 300 } });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => localStorage.setItem("jarvis.animal.v1",
+      JSON.stringify({ nods: false, cute_moments: false, still: true })));
+    await page.route("**/animal-shared.js", async (route) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.continue();
+    });
+    await page.goto(`${base}/faces.html?mode=display&feed=parent&face=redpanda`);
+    await page.waitForFunction(() => window.__faceOpts, null, { timeout: 60000 });
+    const early = await opts(page);
+    // Every value the pose is handed, frame by frame, until the read lands.
+    await page.evaluate(() => {
+      window.__nodsSeen = [];
+      const tick = () => { if (window.__faceOpts) window.__nodsSeen.push(window.__faceOpts.nods);
+                           requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+    await page.waitForFunction(() => window.__faceOpts && window.__faceOpts.nods === 0, null, { timeout: 8000 });
+    await page.waitForTimeout(200);
+    const seen = await page.evaluate(() => window.__nodsSeen);
+    const late = await opts(page);
+    await ctx.close();
+    assert.equal(early.nods, 1, "drawn before the read, with the defaults");
+    assert.equal(late.nods, 0);
+    assert.equal(late.cute_moments, 0);
+    const between = seen.filter((v) => v > 0 && v < 1);
+    assert.deepEqual(between, [], "no eased values on the way from the defaults to the stored switches");
+  });
+
   await check("a fact saved and a long answer ready reach the pose as seconds since, never closer than the pose allows", async () => {
     const { page, done } = await open();
     await post(page, { type: "jarvis-face-moment", kind: "fact" });

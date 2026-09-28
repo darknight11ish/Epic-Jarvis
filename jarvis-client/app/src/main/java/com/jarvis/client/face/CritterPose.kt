@@ -611,7 +611,10 @@ object CritterPose {
     /**
      * The pause finder's numbers - the desktop's PAUSE: the owner's pauses
      * (a nod at most every 3 s) and Jarvis's phrase ends (a gesture at most
-     * every 2 s).
+     * every 2 s). [PHRASE_QUIET] is 0.05 s, not 0.15 s: at 0.15 s the
+     * quiet between two of Jarvis's sentences at the normal pace and faster
+     * was too short to find (the voice-speed check, 2026-09-28; the
+     * desktop's PAUSE says more).
      */
     object Pause {
         const val ON = 0.10f
@@ -619,7 +622,7 @@ object CritterPose {
         const val TALK_MIN = 0.6f
         const val NOD_QUIET = 0.3f
         const val NOD_GAP = 3.0f
-        const val PHRASE_QUIET = 0.15f
+        const val PHRASE_QUIET = 0.05f
         const val PHRASE_GAP = 2.0f
     }
     /** What the pause finder remembers between frames; the host keeps one and hands it back. */

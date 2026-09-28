@@ -1306,6 +1306,13 @@ const OPTION_EASE_S = 1;
 // animals only.
 let FACE_STILL = false;
 function applyFaceStill(tune){ FACE_STILL = !!(tune && tune.still === true); }
+/* How many times the stored options have been read (the read at the end of
+ * this file is an import, so a face's first frames can come before it). A
+ * face drawn before the first read snaps to the owner's values when it lands
+ * rather than easing there from the defaults - otherwise a face set to Still,
+ * or with a behaviour switched off, would move for a moment as the page
+ * opened, then settle. Changes after that still ease. */
+let FACE_OPTS_READS = 0;
 /* THE NEW BEHAVIOURS (the owner's decisions of 2026-09-28; docs/CRITTERS.md
  * "New behaviours" says what each does, and "What each app feeds them" where
  * every input below comes from). The pose code already knows how to play
@@ -1549,7 +1556,7 @@ function critterFace(o){
               lookW: 0, lookAt: now, tx: TOUCH.x, ty: TOUCH.y,
               // The option weights start where they are, not eased in from 0.
               calmR: CALM.matches ? 1 : 0, seriousR: faceSerious() ? 1 : 0, stillR: FACE_STILL ? 1 : 0,
-              zsR: FACE_OFFLINE ? 0 : 1, optAt: now,
+              zsR: FACE_OFFLINE ? 0 : 1, optAt: now, optsRead: FACE_OPTS_READS > 0,
               // The new behaviours' switches and weights, starting where
               // they are; the pause finders (CritterPose.pauseStep) for the
               // owner's voice and Jarvis's; whether this answer's gestures
@@ -1583,19 +1590,22 @@ function critterFace(o){
       // `wellbeing` event) and the "Still" option, each eased over about a
       // second so switching one never snaps the animal (CritterPose's opts).
       const dt = Math.min(0.25, Math.max(0, now - m.optAt)); m.optAt = now;
-      const step = dt / OPTION_EASE_S;
+      // Started before the stored options were read: take them at once.
+      const snap = !m.optsRead && FACE_OPTS_READS > 0;
+      if(snap) m.optsRead = true;
+      const step = dt / OPTION_EASE_S, stored = snap ? 1 : step;
       const ramp = (r, on, k = step) => on ? Math.min(1, r + k) : Math.max(0, r - k);
       m.calmR = ramp(m.calmR, CALM.matches);
       m.seriousR = ramp(m.seriousR, faceSerious());
-      m.stillR = ramp(m.stillR, FACE_STILL);
+      m.stillR = ramp(m.stillR, FACE_STILL, stored);
       // The Zs fade out while Jarvis cannot be reached (and back in).
       m.zsR = zsStep(m.zsR, FACE_OFFLINE, st === "standby", dt / ZS_FADE_S);
       // The owner's behaviour switches and a focus session, eased the same way.
-      m.nodsR = ramp(m.nodsR, FACE_ANIMAL.nods);
-      m.focusBuddyR = ramp(m.focusBuddyR, FACE_ANIMAL.focus_buddy);
-      m.acksR = ramp(m.acksR, FACE_ANIMAL.acks);
-      m.pettingR = ramp(m.pettingR, FACE_ANIMAL.petting);
-      m.cuteR = ramp(m.cuteR, FACE_ANIMAL.cute_moments);
+      m.nodsR = ramp(m.nodsR, FACE_ANIMAL.nods, stored);
+      m.focusBuddyR = ramp(m.focusBuddyR, FACE_ANIMAL.focus_buddy, stored);
+      m.acksR = ramp(m.acksR, FACE_ANIMAL.acks, stored);
+      m.pettingR = ramp(m.pettingR, FACE_ANIMAL.petting, stored);
+      m.cuteR = ramp(m.cuteR, FACE_ANIMAL.cute_moments, stored);
       m.focusR = ramp(m.focusR, FACE_MOMENTS.focusOn);
       // The stretch as a focus session ends, once Jarvis is idle again.
       if(FACE_MOMENTS.focusEndDue && st === "idle"){
@@ -7117,6 +7127,7 @@ Promise.all([import("./face-tuning.js"), import("./animal-shared.js")]).then(([t
     // The behaviour switches and the seasonal touches (FACE_ANIMAL): the
     // PC's values once heard, its defaults before.
     applyFaceAnimal(shared || a.DEFAULTS);
+    FACE_OPTS_READS++;
   };
   read();
   window.addEventListener("storage", (event) => {

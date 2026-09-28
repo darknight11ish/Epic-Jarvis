@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import androidx.compose.ui.geometry.Offset
+import com.jarvis.client.face.AnimalNow
 import com.jarvis.client.face.Arc
 import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.CritterFace
@@ -37,6 +38,34 @@ class FaceSwitchTest {
             if (host.advance(1f / 60f, FaceState.IDLE, null, null, Bindings.DEFAULTS, face, still = still, pace = pace)) drawn++
         }
         return drawn
+    }
+
+    @Test
+    fun `a Still animal opens still, and a Still read late is taken at once`() {
+        val before = AnimalNow.reads
+        try {
+            // Opened with Still already known: still from the first frame.
+            AnimalNow.reads = 1
+            val a = FakeAnimal()
+            val h1 = FaceHost()
+            run(h1, a, 0.05f, still = true)
+            assertEquals(1f, h1.snapshot().stillW, 1e-4f)
+            // Opened before the stored options were read, Still arriving with them.
+            AnimalNow.reads = 0
+            val h2 = FaceHost()
+            run(h2, a, 0.3f, still = false)
+            assertEquals(0f, h2.snapshot().stillW, 1e-4f)
+            AnimalNow.reads = 1
+            run(h2, a, 0.1f, still = true)
+            assertEquals("taken at once, not eased in", 1f, h2.snapshot().stillW, 1e-4f)
+            // Once settled, turning it off eases as always.
+            run(h2, a, 0.6f, still = true)
+            run(h2, a, 0.5f, still = false)
+            val mid = h2.snapshot().stillW
+            assertTrue("eases out: $mid", mid > 0.2f && mid < 0.8f)
+        } finally {
+            AnimalNow.reads = before
+        }
     }
 
     @Test

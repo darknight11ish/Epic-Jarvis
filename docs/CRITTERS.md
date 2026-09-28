@@ -628,8 +628,13 @@ Helpers for the host, in the same files:
   opts. A pause counts when the level has stayed under 0.05 for `quietMin`
   seconds after at least 0.6 s over 0.10, and the last one counted was at
   least `gapMin` seconds before. Use `PAUSE.NOD_QUIET`/`NOD_GAP` (0.3 s, 3 s)
-  for the microphone and `PAUSE.PHRASE_QUIET`/`PHRASE_GAP` (0.15 s, 2 s) for
-  Jarvis's voice. The gap is what keeps a nod or a gesture from starting
+  for the microphone and `PAUSE.PHRASE_QUIET`/`PHRASE_GAP` (0.05 s, 2 s) for
+  Jarvis's voice. (`PHRASE_QUIET` was 0.15 s until the voice-speed check,
+  2026-09-28: two sentences spoken back to back leave only about 0.1 s of
+  quiet at the normal pace and faster, and 0.15 s found 10 of 36 of them at
+  1.0x and 1 of 36 at 1.3225x; 0.05 s finds 34 and 25 - the rest are
+  one-word sentences under `TALK_MIN` - and still never fires inside a
+  sentence at any pace the apps offer. docs/LIPSYNC.md "At every pace".) The gap is what keeps a nod or a gesture from starting
   again before the last one has finished - a host that counts moments its
   own way must keep them at least that far apart too (and a fact's nod, and
   the glow, at least 1.2 and 1.8 s apart).
@@ -702,6 +707,16 @@ apps do the same thing, they do it the same way; the phone's side is
 `face/AnimalNow.kt` (`AnimalNow`, `AnimalFeed`), checked on the JVM by
 `AnimalFeedTest` and `FaceSwitchTest`; the desktop's is checked by
 `jarvis-desktop/tests/animal-behaviours.mjs`.
+
+**Opening a face.** The option weights (Still, calm, serious and the
+behaviour switches) start where they are, never eased in from 0. The stored
+options load a moment after the page or screen opens, so a face drawn
+before they arrive takes them at once when they do (`FACE_OPTS_READS` on
+the desktop, `AnimalNow.reads` on the phone, where Still is also taken at
+once for half a second after, since it reaches the face through the
+composition a frame apart); every later change eases as usual. Without
+this, a face set to Still, or with a behaviour switched off, moved for a
+moment as it opened and then settled.
 
 | Input | Desktop | Phone |
 |---|---|---|

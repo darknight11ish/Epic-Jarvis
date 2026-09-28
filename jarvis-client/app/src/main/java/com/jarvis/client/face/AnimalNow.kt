@@ -36,6 +36,12 @@ object AnimalNow {
     @Volatile var acks: Boolean = true
     @Volatile var petting: Boolean = true
     @Volatile var cute: Boolean = true
+    /**
+     * How many times the switches have been applied. A face that started
+     * before the first ([AnimalFeed]) takes them at once when it comes, rather
+     * than easing there from the defaults - the desktop's FACE_OPTS_READS.
+     */
+    @Volatile var reads: Int = 0
 
     /** When the last fact was saved / long answer was ready ([System.nanoTime]); 0: none yet. */
     @Volatile var factAt: Long = 0L
@@ -53,6 +59,7 @@ object AnimalNow {
 
     /** The shared switches, by their ids in `jarvis_animal.SWITCHES` - anything missing keeps its value. */
     fun apply(values: Map<String, Boolean>) {
+        reads++
         values["nods"]?.let { nods = it }
         values["focus_buddy"]?.let { focusBuddy = it }
         values["acks"]?.let { acks = it }
@@ -117,6 +124,8 @@ class AnimalFeed {
     private var pettingW = if (AnimalNow.petting) 1f else 0f
     private var cuteW = if (AnimalNow.cute) 1f else 0f
     private var focusW = if (AnimalNow.focusOn) 1f else 0f
+    // Whether the weights above began from the stored switches.
+    private var switchesRead = AnimalNow.reads > 0
 
     private var heard: CritterPose.PauseRec? = null
     private var phrase: CritterPose.PauseRec? = null
@@ -148,12 +157,16 @@ class AnimalFeed {
         val d = max(0f, dt)
         clock += d
         val k = d / easeS
-        fun ramp(r: Float, on: Boolean) = if (on) min(1f, r + k) else max(0f, r - k)
-        nodsW = ramp(nodsW, AnimalNow.nods)
-        focusBuddyW = ramp(focusBuddyW, AnimalNow.focusBuddy)
-        acksW = ramp(acksW, AnimalNow.acks)
-        pettingW = ramp(pettingW, AnimalNow.petting)
-        cuteW = ramp(cuteW, AnimalNow.cute)
+        // Started before the stored switches were read: take them at once.
+        val snap = !switchesRead && AnimalNow.reads > 0
+        if (snap) switchesRead = true
+        val ks = if (snap) 1f else k
+        fun ramp(r: Float, on: Boolean, by: Float = k) = if (on) min(1f, r + by) else max(0f, r - by)
+        nodsW = ramp(nodsW, AnimalNow.nods, ks)
+        focusBuddyW = ramp(focusBuddyW, AnimalNow.focusBuddy, ks)
+        acksW = ramp(acksW, AnimalNow.acks, ks)
+        pettingW = ramp(pettingW, AnimalNow.petting, ks)
+        cuteW = ramp(cuteW, AnimalNow.cute, ks)
         focusW = ramp(focusW, AnimalNow.focusOn)
         val on = petting()
         petW = if (on) min(1f, petW + d / PET_IN_S) else max(0f, petW - d / PET_OUT_S)

@@ -1096,6 +1096,14 @@ internal const val VOICE_STATE_HOLD_S = 2.0f
 
 /** Seconds an option weight (calm, serious, still) takes to ease fully on or off. */
 private const val OPTION_EASE_S = 1.0f
+/**
+ * For this long after a face first sees the stored animal options read
+ * ([AnimalNow.reads]), Still is taken at once rather than eased: the phone's
+ * Still reaches the face through the composition, a frame or so apart from
+ * the options themselves, and a face opened before either must not move and
+ * then settle. After it, turning Still on or off eases as always.
+ */
+private const val STILL_SETTLE_S = 0.5
 
 /** Seconds the Zs take to fade out when the link drops (or back in) - the desktop's ZS_FADE_S. */
 private const val ZS_FADE_S = 0.5f
@@ -1190,6 +1198,12 @@ class FaceHost {
     private var calmRamp = 0f
     private var seriousRamp = 0f
     private var stillRamp = 0f
+    // Seeded from the first advance's values ("start where they are", as the
+    // desktop's faces.html does), not eased in from 0 every time a face opens.
+    private var rampsSeeded = false
+    // When this host first saw the stored animal options read (its own
+    // clock); negative: not yet. See [STILL_SETTLE_S].
+    private var optionsReadAt = -1.0
     // The Zs' weight (FaceFrame.zsW), eased; starts shown.
     private var zsRamp = 1f
     // The new behaviours' side of this face (FaceFrame.behave).
@@ -1420,9 +1434,19 @@ class FaceHost {
         // OPTION_EASE_S of real time, every advance (drawn or not), so a
         // switch is never a snap whatever the frame rate.
         val step = dtIn / OPTION_EASE_S
+        if (!rampsSeeded) {
+            rampsSeeded = true
+            calmRamp = if (calm) 1f else 0f
+            seriousRamp = if (serious) 1f else 0f
+            stillRamp = if (still) 1f else 0f
+        }
+        if (optionsReadAt < 0.0 && AnimalNow.reads > 0) optionsReadAt = clock
+        val settling = optionsReadAt >= 0.0 && clock - optionsReadAt < STILL_SETTLE_S
         calmRamp = ramp(calmRamp, calm, step)
         seriousRamp = ramp(seriousRamp, serious, step)
-        stillRamp = ramp(stillRamp, still, step)
+        // Still is taken at once while the stored options are settling: a face
+        // drawn before they were read must not move, then settle.
+        stillRamp = if (settling) (if (still) 1f else 0f) else ramp(stillRamp, still, step)
         zsRamp = ZsRule.step(zsRamp, offline, state == FaceState.STANDBY, dtIn / ZS_FADE_S)
         // The owner's behaviour switches, a focus session and being stroked,
         // eased the same way (AnimalFeed).

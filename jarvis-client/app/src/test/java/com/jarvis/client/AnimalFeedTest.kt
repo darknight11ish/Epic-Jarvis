@@ -77,6 +77,26 @@ class AnimalFeedTest {
     }
 
     @Test
+    fun aFaceStartedBeforeTheSwitchesWereReadTakesThemAtOnce() {
+        // A face opened before the stored switches load (the defaults: on)...
+        AnimalNow.reads = 0
+        val f = AnimalFeed()
+        f.stepWeights(0.1f)
+        assertEquals(1f, f.opts(0f, 0f, 0f).nods)
+        // ...takes them the frame they arrive, never easing from the defaults
+        // (a switched-off behaviour must not play for a moment as it opens).
+        AnimalNow.apply(mapOf("nods" to false, "cute_moments" to false))
+        f.stepWeights(1f / 60f)
+        assertEquals(0f, f.opts(0f, 0f, 0f).nods)
+        assertEquals(0f, f.opts(0f, 0f, 0f).cute)
+        // A later change still eases.
+        AnimalNow.apply(mapOf("nods" to true))
+        f.stepWeights(0.5f)
+        val half = f.opts(0f, 0f, 0f).nods
+        assertTrue("a later change eases: $half", half > 0.2f && half < 0.8f)
+    }
+
+    @Test
     fun aSwitchTurnedOffEasesOutOverASecond() {
         val f = AnimalFeed()
         AnimalNow.apply(mapOf("nods" to false))
