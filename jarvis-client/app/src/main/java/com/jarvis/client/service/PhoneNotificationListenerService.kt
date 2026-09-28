@@ -65,16 +65,28 @@ class PhoneNotificationListenerService : NotificationListenerService() {
         if (rawTitle.isBlank() && rawText.isBlank()) return
 
         val (title, text) = NotificationRedactor.redactBoth(rawTitle, rawText)
-        store.add(
-            CapturedNotification(
-                id = "${pkg}:${notification.key}:${notification.postTime}",
-                packageName = pkg,
-                appLabel = appLabel(pkg),
-                title = title,
-                text = text,
-                postedAtMs = notification.postTime,
-            ),
+        val row = CapturedNotification(
+            id = "${pkg}:${notification.key}:${notification.postTime}",
+            packageName = pkg,
+            appLabel = appLabel(pkg),
+            title = title,
+            text = text,
+            postedAtMs = notification.postTime,
         )
+        // Gate 1 again, against the PC itself this time (at most every few
+        // seconds): switched off on the PC means nothing is stored, even if
+        // this phone's cached copy had not heard yet.
+        JarvisRuntime.storeIfPhoneNotificationsStillOn { store.add(row) }
+    }
+
+    /**
+     * Android can bind this service in a process nothing else has started
+     * yet; without this the cached switch reads as off there and nothing is
+     * ever captured (audit A2). Starting the runtime connects nothing.
+     */
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        runCatching { JarvisRuntime.initialize(applicationContext) }
     }
 
     // No onNotificationRemoved override: removals are not read, kept or

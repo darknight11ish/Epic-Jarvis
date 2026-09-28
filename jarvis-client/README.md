@@ -64,8 +64,7 @@ Android SDK installed:
 CI (`.github/workflows/jarvis-client.yml`) builds, unit-tests, signs, and
 runs an emulator smoke test on every push; a build is published to
 `client-latest` only once that smoke test has actually installed and
-started that exact file, and only from `main` or the owner's working
-branch.
+started that exact file, and only from `main`.
 
 ## Connecting to a backend
 

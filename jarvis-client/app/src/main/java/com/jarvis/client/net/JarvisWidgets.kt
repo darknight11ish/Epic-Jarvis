@@ -65,8 +65,9 @@ object JarvisWidgets {
     const val SLOT_NOTE =
         "The home screen can be seen without unlocking Jarvis: with App lock or \"Hide memory lists " +
             "and chat history\" on, a home-screen widget shows counts but not the words of your " +
-            "reminders, to-do items or what is playing. Its buttons follow the Quick Settings tiles' " +
-            "rules: nothing but Stop everything works while the connection is catching up."
+            "reminders, to-do items or what is playing. With App lock on, its buttons only open " +
+            "Jarvis, which asks you to unlock it first - except Stop everything. Nothing but " +
+            "Stop everything works while the connection is catching up."
 
     // The home-screen widget's own lines.
     const val W_NOT_STARTED = "Jarvis could not start"

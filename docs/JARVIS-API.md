@@ -9836,6 +9836,18 @@ private, per-device `SharedPreferences` file, capped at 200 rows and 7
 days, NEVER sent anywhere on its own. `android:allowBackup="false"` on
 this whole app already keeps it out of any phone backup.
 
+**When the switch goes off, the copies go too** (2026-09-28, audit A3):
+whenever the phone's cached switch reads as off - pressed on the phone,
+or learned from the PC - every captured row is deleted. Removing an app
+from the allow list deletes that app's rows, a notification updated in
+place replaces its row instead of repeating it, and the plate has
+"Delete captured notifications", which asks "are you sure?" first, like
+Forget. **How the phone hears the PC's switch** (there is no event for
+it): it reads `GET /api/notifications/phone` on every (re)connect, when a
+`phone_notifications_read` card leaves the queue, and - at most every 15
+seconds - before storing a captured notification, which is stored only if
+the PC still says on. With no link, the last answer stands.
+
 ### 61.5 Reading one into a chat - no new backend plumbing, on purpose
 
 **"Shown or summarised only when the owner asks"** is met by reusing the
@@ -12364,7 +12376,12 @@ and events.
   every private block shows its label and "Hidden - open Jarvis to see it."
   Buttons follow the tiles exactly (`QuickTiles.decide`,
   `QuickTileService.perform`): held on a stale link except Stop everything;
-  Brief me only opens the app. Nothing of the widget is kept on the phone.
+  Brief me only opens the app. **Under App lock** (the owner, 2026-09-28)
+  every button but Stop everything only opens Jarvis, which asks for the
+  unlock, and never acts on its own (`QuickTiles.widgetOpensApp`); the
+  widget also redraws at once when App lock or "Hide memory lists" changes.
+  The Quick Settings tiles keep their own rule (they can ask Android for
+  the phone's unlock). Nothing of the widget is kept on the phone.
 
 Both apps draw a filled-in widget by one rule, held with the PC's by
 `tools/gen_widget_cases.py` (`tests/fixtures/widget-cases.json` and the
