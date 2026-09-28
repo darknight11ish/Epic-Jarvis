@@ -3337,6 +3337,23 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    replace, shown as "Would replace: ..." like any correction - and its
    reason is "it would change a fact you already have - accepting it
    replaces that one". Nothing is retired unless the owner keeps the card.
+   **And never a fact the owner forgot** (2026-09-28, the research audit's
+   gap A): a proposal with a forgotten fact's words - the same words, or,
+   once the real meaning model is loaded, the same statement worded a
+   little differently - is a card, never saved on its own: "you asked me to
+   forget this before - it waits for your yes this time". An erased fact
+   has no words left to compare with, by design, so this check cannot
+   catch it being said again later. **The same conversation is stricter**:
+   after a Forget or an Erase, anything the learner proposes again from
+   turns it had ALREADY read in that conversation is dropped with no card
+   at all. A Forget's copy is turned down; an Erase's is deleted, so the
+   erased words are not kept again. That applies with automatic learning
+   on or off. Turns said after the Forget are learned from as usual.
+   Held in memory only, like the live-turn registry it relies on, so it
+   ends with a restart - as does any automatic saving from those turns.
+   `after_pass` then also returns `"dropped": [proposal ids]`
+   (`jarvis_auto_learn.forgotten_in`, `hushed`, `like_forgotten`;
+   `test_auto_learn.py`, "forgotten stays forgotten").
 9. **Not sensitive**, unless "Also remember sensitive topics automatically"
    is on (GUARDS L7). **With it on**, only one narrow check runs:
    passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses still wait

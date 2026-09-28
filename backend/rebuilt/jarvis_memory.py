@@ -1402,6 +1402,7 @@ class MemoryStore:
             # ends later (a lease to December) could never be forgotten, and
             # a "stop using this fact?" card on it did nothing (the bug fixed
             # with memory idea 4, 2026-09-26).
+            forgot_in = None
             cur = c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
                             " WHERE id=? AND (valid_to IS NULL OR valid_to > ?)",
                             (vt, ra, replaced_by, fact_id, now))
@@ -1413,6 +1414,8 @@ class MemoryStore:
                 # never deleted. A correction is not a Forget: add(supersedes=)
                 # clears this mark when it links a fact retired here first.
                 _set_meta(c, int(fact_id), forgotten_at=now)
+                got = c.execute("SELECT meta FROM facts WHERE id=?", (int(fact_id),)).fetchone()
+                forgot_in = _fact_conversation_id(got[0] if got else None)
             if cur.rowcount and ra is not None:
                 # Forget (or a correction) takes the fact's links and the
                 # aliases it taught with it: "sister" stops meaning Priya the
@@ -1421,10 +1424,16 @@ class MemoryStore:
                 # then - and every lookup checks the fact is current anyway.
                 self._unlink_safely(c, int(fact_id))
             c.commit()
-            # rowcount, not None. "Retired a fact that was already retired" and
-            # "retired the fact" have to be distinguishable, or the caller
-            # cannot tell a no-op from a change.
-            return cur.rowcount > 0
+            done = cur.rowcount > 0
+        # After the commit, outside the store's lock: the learner stops
+        # learning this again from the turns it has already read
+        # (jarvis_auto_learn.forgotten_in, research audit 2026-09-28 §8.6 A).
+        if forgot_in:
+            _tell_learner_forgotten(forgot_in, erased=False)
+        # rowcount, not None. "Retired a fact that was already retired" and
+        # "retired the fact" have to be distinguishable, or the caller
+        # cannot tell a no-op from a change.
+        return done
 
     def edit(self, fact_id: int, text: str) -> bool:
         """Correct a fact's wording in place. Used by the memory pane.
@@ -1631,6 +1640,8 @@ class MemoryStore:
         # Chat history is a different file with its own lock (jarvis_chat_log
         # .py) - done after this store's own transaction and scrub, so a slow
         # or failing chat-history delete can never leave a fact half-erased.
+        if conversation_id:
+            _tell_learner_forgotten(conversation_id, erased=True)
         chat_deleted = False
         if also_delete_conversation and conversation_id and _chat_log is not None:
             try:
@@ -2938,6 +2949,20 @@ def _meta_dict(raw) -> dict:
     except (TypeError, ValueError):
         return {}
     return meta if isinstance(meta, dict) else {}
+
+
+def _tell_learner_forgotten(conversation_id, *, erased: bool) -> None:
+    """Forget and Erase tell the learner, if it is loaded, which conversation
+    the fact came from (jarvis_auto_learn.forgotten_in). Looked up in
+    sys.modules, never imported here: without the learner running there is
+    no automatic learning to stop. Never raises."""
+    try:
+        learner = sys.modules.get("jarvis_auto_learn")
+        fn = getattr(learner, "forgotten_in", None)
+        if fn is not None:
+            fn(conversation_id, erased=erased)
+    except Exception:
+        pass
 
 
 def _fact_conversation_id(raw) -> Optional[str]:

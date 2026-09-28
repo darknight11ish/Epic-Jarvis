@@ -17,6 +17,11 @@ number as the last part - `0.2.57` is a build of 0.2.
   by default. Jarvis now switches them off before any model loads. One copy
   inside the speech engine can't be reached this way; Windows' own "Send
   optional diagnostic data" switch covers that one (docs/ARCHITECTURE.md §4).
+- **A fact you forget no longer comes back by itself.** Jarvis re-reads the
+  whole chat when it learns, so about a minute after you pressed Forget (or
+  Erase), the same sentence could be saved again without asking. Now nothing
+  is learned again from the lines it had already read in that chat, and if
+  you say a forgotten fact again later, it waits for your yes.
 
 ## 0.2.0 - 26 September 2026
 
