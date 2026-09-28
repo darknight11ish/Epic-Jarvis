@@ -659,6 +659,10 @@ def voices_cases():
         # apps keep the face), its own voice stands in.
         (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
                                                encoding="utf-8")
+        # It ships OFF (the owner's 2026-09-28 decision): the owner turns it
+        # on first, as they would, before the face's voice can stand in.
+        status["face_default_off"] = scrub(VS.status(), w)
+        vpost(VS.set_face_voice, {"enabled": True})
         status["face_showing"] = scrub(VS.status(), w)
         answers["face_off"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": False})), w)
         status["face_off"] = scrub(VS.status(), w)

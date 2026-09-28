@@ -534,6 +534,10 @@ def voices_cases():
         # place both apps keep the face), its own voice stands in.
         (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
                                                encoding="utf-8")
+        # It ships OFF (the owner's 2026-09-28 decision): the owner turns it
+        # on first, as they would, before the face's voice can stand in.
+        keep(w, "face_default_off", VO.status(), statuses)
+        post("/api/voice/voices/face", {"enabled": True})
         keep(w, "face_showing", VO.status(), statuses)
         keep(w, "face_off", post("/api/voice/voices/face", {"enabled": False}), posts)
         keep(w, "face_voice_off", VO.status(), statuses)

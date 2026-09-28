@@ -362,11 +362,14 @@ await check("voice follows the face: the PC's switch, words and line, from every
     noRaw([fv.title, fv.detail, fv.line].join(" "));
     assert.match(fv.line, /[.!?)]$/, `${name}: "${fv.line}" is not a sentence`);
   }
-  // No face saved yet: on by default, nothing to follow, and it says so.
-  const none = CV.faceVoiceView(V.builtin_nothing_installed);
-  assert.equal(none.enabled, true, "on by default");
-  assert.equal(none.speaking, false);
-  assert.equal(none.line, "No face is saved on this PC yet, so there is no animal voice to use.");
+  // OFF by default (the owner's 2026-09-28 decision), and it says so -
+  // with no face saved, and with one showing: a face alone never turns it on.
+  for (const st of [V.builtin_nothing_installed, V.face_default_off]) {
+    const fv = CV.faceVoiceView(st);
+    assert.equal(fv.enabled, false, "off by default");
+    assert.equal(fv.speaking, false);
+    assert.equal(fv.line, "Off: the built-in voice stays the same whatever the face.");
+  }
   const panda = CV.faceVoiceView(V.face_showing);
   assert.equal(panda.speaking, true);
   assert.equal(panda.line, "Speaking as the Red Panda: Bella, a little higher.");
@@ -435,7 +438,7 @@ await check("each animal's voice: the PC's rows, choices and words, from every r
   }
   const own = CV.animalVoicesView(V.face_showing).animals;
   assert.deepEqual(own.map((a) => [a.speaker, a.semitones, a.pace, a.changed]),
-    [["1", 2, "normal", false], ["2", 1, "slower", false], ["4", 3, "faster", false], ["6", 1, "normal", false]]);
+    [["1", 2, "normal", false], ["2", 1, "slower", false], ["3", 3, "faster", false], ["6", 1, "normal", false]]);
   assert.equal(own[0].line, "Bella, 2 steps higher, at normal pace.");
   const panda = CV.animalVoicesView(V.animal_changed).animals[0];
   assert.deepEqual([panda.speaker, panda.semitones, panda.pace, panda.changed], ["3", -1.5, "faster", true]);
@@ -513,7 +516,7 @@ await check("each animal's voice: pick, slide, pace, Try it and Reset - at once,
   assert.deepEqual(sent, [
     { face: "redpanda", speaker: "3", semitones: 2, pace: "normal" },
     { face: "pygmyowl", speaker: "2", semitones: 1, pace: "faster" },
-    { face: "seaotter", speaker: "4", semitones: -1.5, pace: "faster" },
+    { face: "seaotter", speaker: "3", semitones: -1.5, pace: "faster" },
   ]);
   assert.equal(said, "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster.");
   assert.doesNotMatch(said, /approv/i, "no card for an animal's voice");
