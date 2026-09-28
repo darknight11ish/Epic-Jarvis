@@ -506,6 +506,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -1400,6 +1418,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -2290,6 +2326,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -3174,6 +3228,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -4058,6 +4130,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -4955,6 +5045,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -5845,6 +5953,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"

@@ -199,6 +199,10 @@
       "title": "Jarvis wants to fetch a web page you're watching"
     },
     {
+      "action": "pair_device",
+      "title": "Jarvis wants to connect a new device"
+    },
+    {
       "action": "phone_notifications_read",
       "title": "Jarvis wants to start reading notifications from apps you choose on your phone"
     },
@@ -289,6 +293,10 @@
     {
       "action": "unclassified_tool",
       "title": "Jarvis wants to use a tool it has no plain name for"
+    },
+    {
+      "action": "unretire_shared_key",
+      "title": "Jarvis wants to let the old shared key work from other devices again"
     },
     {
       "action": "user_profile_manage",
