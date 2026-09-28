@@ -105,6 +105,13 @@ news_read                 = "auto"
 # Must be "auto", exactly like email_read/home_read above, or a look every
 # 30 minutes would mean a card every 30 minutes.
 page_read                 = "auto"
+# GitHub watches in "tell me when" (jarvis_tellme.py "github" source, the
+# owner's choice of 2026-09-28): one read-only GET to api.github.com per look
+# - a workflow run list or one pull request - for a watch the owner already
+# approved with its own card (schedule_repeat). Must be "auto", like
+# page_read above, or a look every 10 minutes would mean a card every 10
+# minutes. Without this line GitHub watches are refused, with the reason.
+github_read               = "auto"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval

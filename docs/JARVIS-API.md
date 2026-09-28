@@ -5509,7 +5509,7 @@ one scheduler (section 21), kind `"tellme"`, loaded by
 |---|---|---|
 | **An email from a named sender** | `{"source": "email", "sender": "Alex"}` (a name, 1-60 plain characters, or an address) | ONE connection to the mail server `jarvis_email.plan()` names: LOGIN, EXAMINE (read-only), `UID SEARCH UID <n>:*`, `UID FETCH <new uids> (BODY.PEEK[HEADER.FIELDS (FROM)])`, CLOSE, LOGOUT. The From line only, of mail that arrived since the last look (at most 50), with PEEK so nothing is marked as read. The first look only notes where the mailbox is. The name is matched ON THIS PC (every word of it a whole word of the sender's name or address; an address compared whole) and never sent to the server. |
 | **A Home Assistant device reaching a state** | `{"source": "home", "entity": "switch.washing_machine", "say": "finishes" \| "opens" \| "closes" \| "turns on" \| "turns off"}` or `"states": ["off"]`, and `"name"?` (the owner's word for it) | `jarvis_home.plan_states([entity])`: one GET of one entity. It matches when the state CHANGES into a wanted one - already there when the watch starts is not a match; `unavailable` / `unknown` are skipped. "finishes" = off, idle, finished, complete(d), done, stopped or standby; "opens" = on, open, opening or unlocked; "closes" = off, closed, closing or locked. |
-| **A web page's text changing** (I67, added 2026-09-27) | `{"source": "page", "url": "https://example.com/product"}` | ONE plain GET of `url` - never a link on the page, never anywhere else - and a SHA-256 fingerprint of the bytes read is kept (reusing the same column a device's state uses); a match is "the fingerprint changed", never a diff or a quote of the page. Refused - at setup, and again immediately before every GET - if `url` resolves, by a real DNS lookup, to this PC or a private network address (`jarvis_local_http.private_fetch_problem`; see `docs/ARCHITECTURE.md` §4's new egress row). |
+| **A web page's text changing** (I67, added 2026-09-27) | `{"source": "page", "url": "https://example.com/product"}` | ONE plain GET of `url` - never a link on the page, never anywhere else - and a SHA-256 fingerprint of the page's *visible words* is kept (reusing the same column a device's state uses; since 2026-09-27 the text inside `head`, `script`, `style`, `noscript`, `template`, `svg`, `iframe`, `object` and `canvas` is left out, so a security token or ad id that changes on every load no longer counts as a change, and a fingerprint an older Jarvis took over the raw bytes is re-recorded once, silently, rather than compared); a match is "the fingerprint changed", never a diff or a quote of the page. Refused - at setup, and again immediately before every GET - if `url` resolves, by a real DNS lookup, to this PC or a private network address (`jarvis_local_http.private_fetch_problem`; see `docs/ARCHITECTURE.md` §4's new egress row). |
 
 Both add `"urgent"?: bool` (default false) and `"once"?: bool` (default
 true: tell once, then end; false: every time until the end date).
@@ -5742,9 +5742,13 @@ private). The phone does not say timers aloud (ARCHITECTURE section 8).
   reminder, an alarm, a morning briefing or a standby schedule; setting it
   up sends nothing anywhere, ..."), which does not name "tell me when".
 - The GitHub watchlist (Brain -> Watch) is NOT merged into this: it lives
-  in the owner's own backend files, which this repository does not hold,
-  and a GitHub source would need a key and a new way out of the PC. Left
-  for later.
+  in the owner's own backend files, which this repository does not hold.
+  Since 2026-09-28 "tell me when" has its own GitHub source (§70) - CI and
+  pull requests on a repository the owner names, read-only, with the key
+  GitHub research already uses - which is a different thing from the
+  watchlist's "new repositories for a topic".
+- Since 2026-09-28 a watch that cannot look tells the owner once (§70.3);
+  before, it only wrote "Could not look: ..." under the row.
 
 ### 30.7 Instant email, and "hasn't replied by ..." (added 2026-09-26)
 
@@ -8855,3 +8859,179 @@ second version of any of it.
   before it: tested in the dev container only, against a real Windows
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
+
+## 70. Watches: a search, a price, GitHub, and a watch that breaks (added 2026-09-28)
+
+The owner chose the "Watches" group of `docs/RESEARCH-AUDIT-2026-09-28.md`
+section 3 (ideas 1, 2 and 5; the research is in
+`docs/research-audit-2026-09-28/report-commercial.md` and
+`report-oss-agents.md`, item 3). Everything here extends §30 - the same kind
+(`"tellme"`), the same ONE `schedule_repeat` card per watch, the same
+`POST /api/schedule/add` and `/api/schedule/act`, the same Coming up rows in
+both apps. **No new route, and no new setting.** A match still only
+notifies: nothing here buys, replies, clicks or acts, and nothing read goes
+to the AI model. Before it, the page fingerprint fix (§30.1, "visible
+words") was ported unchanged from the research branch, because a price
+watch relies on a page not "changing" on every load.
+
+### 70.1 Three more sources
+
+| Source | Set up with | Each look |
+|---|---|---|
+| **A search shows something new** | `{"source": "search", "words": "Kokoro voices"}` (1-200 characters) | ONE search of exactly those words through the web search the owner chose in Settings (`jarvis_search.plan/run` - SearXNG by default). Never another provider by itself: if the chosen one is down, the look says so under the watch, with the usual offer to switch, and the owner is told once (70.3). If the owner switches provider, the next look only re-records (another service's results are not comparable). Only a 16-character fingerprint of each result's ADDRESS is kept (at most 200); "www.", `https`, a closing `/` and tracking tags (`utm_*`, `fbclid`, ...) do not make an address new. Titles, snippets and the addresses themselves are never kept, shown or sent to the model - the results are outside text, never learned from, never acted on. The first look only notes what is there. |
+| **A price drops below a number** | `{"source": "price", "url": "https://shop.example.com/kettle", "below": 25, "currency"?: "£" \| "$" \| "€"}` | The same ONE plain GET as a page watch (`page_read`, the private-address checks before the card and before every look, the redirect rule, the size cap). The price is read by PLAIN CODE (`jarvis_tellme.price_of`): the price a shop marks for machines (schema.org JSON-LD `offers.price`/`lowPrice`, including inside `@graph`), else a price `<meta>` tag (`price`, `product:price:amount`, `og:price:amount`), else the first price shown in the page's visible words (a currency sign beside a number - never one inside a script). Only that number is kept, and it is shown under the watch ("Price at the last look: £30.") so the owner can check the right one was read. It matches when the price is below the number and was not at the look before - so it tells at once if it already is. It never buys anything and never presses anything on the page. |
+| **GitHub: CI finishes or fails, a pull request merges** | `{"source": "github", "repo": "owner/name", "event": "ci_done" \| "ci_failed", "branch"?}` or `{"source": "github", "repo": "owner/name", "event": "pr_merged", "pr": 12}` | ONE read-only GET to `api.github.com`: `/repos/<repo>/actions/runs?per_page=20[&branch=...]` or `/repos/<repo>/pulls/<n>`, through the gate as the new action **`github_read`** (tier `"auto"` only, like `page_read`). "Finishes": every workflow run for the newest commit has completed (the notice says "everything passed" or "something failed"); "fails": a run for the newest commit concluded `failure`, `timed_out` or `startup_failure`; a pull request: merged - or closed without merging, which is told too since it never will merge. The first CI look only records. Kept: the commit's first 12 characters and fixed words (`running`/`done`, `failed`/`ok`, or `open`/`merged`/`closed`). |
+
+**How often.** A search: once a day by default, every 6 hours at the most
+often, once a week at the least (each look leaves this PC for a search
+service; Brave's can cost money). A price: every hour by default, the page
+watch's own floor and ceiling (30 minutes to a day). GitHub: every 10
+minutes by default and at the most often, up to once a day (GitHub allows
+60 requests an hour without a key, shared with GitHub research). `"minutes"`
+in the body sets it; the rule's words now say whole hours and days as such
+("every day", "every 6 hours") instead of "every 1440 minutes". At most 5
+search watches, 5 GitHub watches, and 5 page or price watches together (each
+fetches someone else's server), within the 10 in all.
+
+**When it cannot be set up** (409, a sentence, and no card): a search with
+"Ask before every web search" on (a daily watch cannot ask every day), with
+web search set to `never`, or with the chosen provider not ready (no key,
+`ddgs` not installed, a SearXNG address that is not allowed); search words
+that look like a password or key (400, the same check a chat search makes,
+before any card); GitHub with `github_read` not `"auto"` - the sentence ends
+"To allow it, add the line github_read = "auto" under [autonomy.tiers] in
+jarvis-framework.toml on the PC." A search watch's provider is always the
+one in Settings at setup - one an app sends is ignored.
+
+**The GitHub key (rule 3).** The key Jarvis already has for GitHub research
+(`JARVIS_GITHUB_TOKEN`), when one is set, is read fresh for each look, handed
+to the log scrubber by value (`jarvis_scrub.register_secret`), and sent in
+that one request's `Authorization` header to `api.github.com` only - any
+other address is refused before anything is sent, and a redirect is refused,
+never followed (it would carry the key). It is never in the card, an error,
+the audit log, an event, or what is kept; errors are said in fixed words
+("GitHub says there is no such repository or pull request - or it is
+private and no GitHub key that can see it is saved on this PC."). Without a
+key only public repositories can be seen, and the card says so.
+
+### 70.2 The cards
+
+Each is the scheduler's `schedule_repeat` card, in this kind's words, like
+§30.2 - for example a search:
+
+```
+Set up "Tell me when".
+
+Watching for: new results when Jarvis searches the web for "Kokoro voices".
+How: every day, Jarvis searches for exactly those words with SearXNG (on this PC) - the web search you chose in Settings - the same way as when you ask it. What leaves this PC: those words, and nothing else, to your SearXNG at http://127.0.0.1:8888, which asks several search engines for you - they see the words and your internet address.
+It compares the addresses of the results (up to 5) with the ones it has seen before, and keeps only a short fingerprint of each address - never the titles, text or the addresses themselves. The results are outside text: never learned from, never acted on, and never sent to the AI model.
+The first look only notes what is there now. If you choose another web search later, the watch uses that one from then on (and starts afresh); it never switches by itself - if the search service is down, it says so under the watch and tells you.
+Until: ...
+```
+
+A price card says "Watching for: the price on <url> - when it drops below
+£25.", how the price is read (plain code, never the AI model), "It never
+buys anything and never presses anything on the page.", and the private
+address rule. A GitHub card names the one GET in full ("How: every 10
+minutes, Jarvis asks GitHub one read-only question: GET
+https://api.github.com/repos/o/r/actions/runs?per_page=20&branch=main.
+Nothing on GitHub is changed, and nothing goes to the AI model.") and the
+key's rule, or that there is no key. Every "tell me when" card now also
+says: "If a look cannot happen (a server down, a setting changed), Jarvis
+tells you once, not at every look, and at most every 12 hours after that
+while it stays that way."
+
+The notices, from the owner's words and fixed words only: "Your search for
+"Kokoro voices" shows a new result." / "... shows 3 new results."; "The
+price on <url> is below £25. It is now £22.50." (the number read by plain
+code); "CI finished on o/r (branch main): everything passed." / "...:
+something failed."; "CI failed on o/r."; "Pull request #12 on o/r was
+merged." / "... was closed without being merged." `"watches"` on the job is
+now also `"search"`, `"price"` or `"github"`.
+
+### 70.3 A watch that cannot look tells the owner once
+
+Before this, a look that could not happen wrote "Could not look: ..." under
+the watch and nothing else - an urgent watch could be dead for days unseen
+(research audit idea 5, checked in the code). Now (the Hermes agent's
+grouped-failure idea, `cron/incidents.py`, MIT - no code copied):
+
+- Failures are grouped by (watch, kind of problem) - the "Could not look"
+  sentence without its bracketed detail, so "(TimeoutError)" and
+  "(ConnectionRefusedError)" from the same server are one problem.
+- The owner is told when it has lasted: at the second failed look in a row
+  for a watch that looks more often than hourly (one dropped connection is
+  not "broken"), at the first for one that looks hourly or less often.
+- Told once; the same problem is told again only after 12 hours
+  (`BROKEN_AGAIN_HOURS`) if it still stands. A different problem is told
+  as its own.
+- The next look that works clears it silently (audit line
+  `tellme.broken.cleared`, ids only).
+
+The event is `schedule` `{"id", "kind": "tellme", "state": "broken"}` - no
+words. The job then carries `"broken"` ("Your "tell me when" (CI fails on
+o/r) cannot look right now. GitHub did not answer (URLError).") and
+`"broken_at"` (when the owner was told), and its `note` adds "Jarvis told
+you at 14:02 that it cannot look; that clears by itself at the next look
+that works." Both apps read the job by id and show an **ordinary**
+notification titled "Tell me when" - it never rings, an urgent watch
+included (only a real match rings, as before) - or only "Jarvis: a "tell
+me when" cannot look right now." while App lock or "Hide memory lists and
+chat history" is on, and on a locked phone. Once per telling
+(`id#broken` + `broken_at`), even when a reconnect replays the event. Both
+apps blank `broken` with the private lists, like `alert`. What is kept
+(`tellme` table, columns added in place to an older one): the kind of
+problem, when it started, how many looks in a row, when the owner was told.
+
+### 70.4 Said or typed
+
+`jarvis_quick.py`, the owner's own words only, checked before email and
+devices ("the build on o/r finishes" is not a Home Assistant device):
+
+- "tell me when a search for Kokoro voices shows something new", "let me
+  know when a web search for "RTX 2060 12GB price" finds anything new,
+  every 12 hours", "tell me when there's something new about Tauri 3" -
+  and "..., once a day / weekly / twice a day / every N hours / every N
+  days" after it.
+- "tell me when the price on https://shop.example.com/kettle drops below
+  £25", "tell me when https://... goes under 1,299.99 dollars" - the
+  address typed in full, like a page watch.
+- "tell me when CI fails on owner/repo", "tell me when CI finishes on
+  owner/repo main", "urgently tell me when the build on owner/repo branch
+  dev finishes".
+- "tell me when PR #12 on owner/repo merges", "tell me when
+  https://github.com/owner/repo/pull/12 is merged". "tell me when PR 12
+  merges" (no repository) asks which repository.
+
+The model has no tool for any of this, as before.
+
+### 70.5 In the apps
+
+Both apps: the hint under "Tell me when" in Coming up now names the new
+kinds and ends "If a watch stops working, Jarvis tells you once."; the new
+watches are ordinary rows ("When CI fails on o/r", "Looks every 10
+minutes", the note, Pause / Delete) with no app change; the `broken` event
+gives a notification (desktop: `stream.rs` -> `brain/schedule.rs`
+`toast_broken`; phone: `JarvisRuntime.onTellMeBroken`,
+`Schedule.brokenFrom`/`brokenNotification`). Still no "Add a watch" form in
+either app - set up by saying or typing it, as §30.4 already chose. The
+Brain's "Watch" tab (the GitHub topic watchlist, §30.6) is a different
+thing: new repositories for a search topic, pull only. This is CI and pull
+requests on repositories the owner names.
+
+### 70.6 Known gaps, said plainly
+
+- **Not run against the real services.** Search results, shop pages and
+  GitHub answers were fakes shaped like the real ones (GitHub's documented
+  `workflow_runs` and pull request fields). A shop that marks no price for
+  machines and shows several prices may make the plain-code reader pick the
+  wrong one - the number under the watch is there to catch that.
+- **"What Jarvis can reach" does not list watches** (it never listed page
+  watches either): a GitHub watch reaches `api.github.com` without GitHub
+  research being switched on for the model.
+- **The GitHub key is only read from `JARVIS_GITHUB_TOKEN`**, the same as
+  GitHub research - not from Windows Credential Manager.
+- **The owner must add `github_read = "auto"`** to their own
+  `jarvis-framework.toml` (apply-patches.ps1 never overwrites it; its
+  settings diff shows the line).
+- The phone half (Kotlin) was not compiled here; CI is the only compiler.

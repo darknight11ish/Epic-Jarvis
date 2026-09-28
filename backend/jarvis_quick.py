@@ -90,7 +90,11 @@ approval card raised by the scheduler; nothing is watched before a yes. A
 device said in words is looked up first - one read of each of up to three
 likely Home Assistant names (switch.washing_machine, ...), through the
 gate like any read - and the answer then counts as having read outside
-text. The model has no tool for this.
+text. The model has no tool for this. Since 2026-09-28 (the "Watches"
+group): "tell me when a search for X shows something new" (", once a day"
+/ "every 12 hours"), "tell me when the price on <url> drops below 25",
+"tell me when CI fails / finishes on owner/repo [branch]" and "tell me when
+PR #12 on owner/repo merges" - each ONE card too (_tellme_watches).
 
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
@@ -1248,6 +1252,58 @@ _ENTITY_STATE = re.compile(r"(?P<dev>[a-z0-9_]+\.[a-z0-9_]+)\s+(?:is|becomes|rea
 #: only a literal address the owner typed - "tell me when it changes" (no
 #: address) goes to the model, since Jarvis has no page in mind for "it".
 _PAGE_CHANGE = re.compile(r"(?P<url>https?://\S+?)\s+changes?")
+#: Watches, 2026-09-28 (jarvis_tellme.py "price", "search" and "github").
+#: "tell me when the price on <url> drops below 25" - a literal address and
+#: a number, like the page watch above.
+_PRICE_NUM = r"(?P<cur>[£$€])?\s?(?P<num>\d[\d,.]*)(?:\s*(?:pounds?|dollars?|euros?|quid|bucks))?"
+_PRICE_DROP = re.compile(
+    r"(?:the\s+)?price\s+(?:on|of|at|for)\s+(?P<url>https?://\S+?)\s+(?:drops|falls|goes|gets"
+    r"|is|comes\s+down)\s+(?:below|under|beneath|less\s+than)\s+" + _PRICE_NUM
+    + r"|(?P<url2>https?://\S+?)\s+(?:drops|falls|goes|is)\s+(?:below|under|less\s+than)\s+"
+    + _PRICE_NUM.replace("?P<cur>", "?P<cur2>").replace("?P<num>", "?P<num2>"))
+#: "tell me when a search for <words> shows something new", "... when
+#: there's something new about <words>".
+_SEARCH_NEW = re.compile(
+    r"(?:a\s+|the\s+|my\s+)?(?:web\s+|google\s+|internet\s+)?search\s+(?:for\s+|on\s+)?"
+    r"(?P<q>.+?)\s+(?:shows|finds|has|turns\s+up|brings\s+up|gets)\s+(?:something|anything"
+    r"|a\s+new\s+result|new\s+results)(?:\s+new)?"
+    r"|there'?s\s+(?:something|anything)\s+new\s+(?:online\s+|on\s+the\s+web\s+)?"
+    r"(?:about|for|on)\s+(?P<q2>.+)"
+    r"|(?:there\s+are\s+)?new\s+(?:search\s+|web\s+)?results\s+(?:for|about)\s+(?P<q3>.+)")
+#: "... searching once a day / every 12 hours / every week" after it.
+_SEARCH_EVERY = re.compile(
+    r"[\s,]+(?:(?:checking|looking|searching)\s+)?(?:(?P<daily>once\s+a\s+day|daily|every\s+day)"
+    r"|(?P<weekly>once\s+a\s+week|weekly|every\s+week)|(?P<twice>twice\s+a\s+day)"
+    r"|every\s+(?P<n>\d{1,3}|six|twelve|two|three)\s+(?P<u>hours?|days?))$")
+_REPO_WORDS = r"(?P<repo>[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_.-]{1,100})"
+#: "tell me when CI fails on owner/repo", "... CI finishes on owner/repo main",
+#: "... the build on owner/repo (branch dev) fails".
+_CI_VERB = (r"(?P<verb>finishes|is\s+(?:done|finished)|completes|has\s+finished|fails"
+            r"|has\s+failed|breaks|goes\s+red|is\s+red)")
+_CI_WHAT = r"(?:the\s+)?(?:ci|build|builds|checks|tests|github\s+actions|actions)"
+_BR = r"[a-z0-9._/-]{1,100}"
+
+
+def _ci_branch(a: str, b: str, c: str) -> str:
+    """An optional branch after the repository: "branch dev", "dev branch",
+    "on dev", or just "dev" - three group names, one per shape."""
+    return (rf"(?:\s+(?:on\s+|for\s+)?(?:the\s+)?(?:branch\s+(?P<{a}>{_BR})"
+            rf"|(?P<{b}>{_BR})\s+branch|(?P<{c}>{_BR})))?")
+
+
+_CI = re.compile(
+    _CI_WHAT + r"\s+" + _CI_VERB + r"\s+(?:on|for|in)\s+" + _REPO_WORDS
+    + _ci_branch("br", "br2", "br3")
+    + r"|" + _CI_WHAT + r"\s+(?:on|for|in)\s+" + _REPO_WORDS.replace("?P<repo>", "?P<repo2>")
+    + _ci_branch("br4", "br5", "br6") + r"\s+" + _CI_VERB.replace("?P<verb>", "?P<verb2>"))
+#: "tell me when PR #12 on owner/repo merges", "... https://github.com/o/r/pull/12 is merged".
+_PR_MERGED = r"(?:is\s+merged|merges|gets\s+merged|has\s+been\s+merged|is\s+in)"
+_PR = re.compile(
+    r"(?:pr|pull\s+request)\s*#?(?P<n>\d{1,7})\s+(?:on|in|for)\s+" + _REPO_WORDS + r"\s+"
+    + _PR_MERGED
+    + r"|https?://(?:www\.)?github\.com/" + _REPO_WORDS.replace("?P<repo>", "?P<repo2>")
+    + r"/pull/(?P<n2>\d{1,7})/?\s+" + _PR_MERGED
+    + r"|(?:pr|pull\s+request)\s*#?(?P<n3>\d{1,7})\s+" + _PR_MERGED)
 #: Not a device - and not a sender: "tell me when it's done" is the model's.
 _NOT_A_THING = frozenset(("it", "this", "that", "they", "you", "he", "she", "we", "something",
                           "timer", "alarm", "reminder", "everything", "anything", "one",
@@ -1349,6 +1405,9 @@ def _tellme(s: str, original, now: float) -> Optional[Intent]:
             continue
         break
     f = {"urgent": urgent, "once": once, "ends": ends}
+    got = _tellme_watches(what, original, f)
+    if got is not None:
+        return got
     for rx in _MAIL_WHAT:
         mm = rx.fullmatch(what)
         if mm:
@@ -1380,6 +1439,58 @@ def _tellme(s: str, original, now: float) -> Optional[Intent]:
     return None
 
 
+def _tellme_watches(what: str, original, f: dict) -> Optional[Intent]:
+    """The 2026-09-28 watches: a price, a web search, GitHub CI or a pull
+    request. Checked before email and devices: "the build on owner/repo
+    finishes" is not a Home Assistant device."""
+    mm = _PRICE_DROP.fullmatch(what)
+    if mm:
+        url = mm.group("url") or mm.group("url2")
+        num = mm.group("num") or mm.group("num2")
+        cur = mm.group("cur") or mm.group("cur2") or ""
+        return Intent("tellme_price", dict(f, url=_restore(original, url),
+                                           below=num.rstrip(".,"), currency=cur))
+    minutes = None
+    probe = what
+    e = _SEARCH_EVERY.search(probe)
+    if e:
+        if e.group("daily"):
+            minutes = 1440
+        elif e.group("weekly"):
+            minutes = 7 * 1440
+        elif e.group("twice"):
+            minutes = 720
+        else:
+            n = e.group("n")
+            n = int(n) if n.isdigit() else {"six": 6, "twelve": 12, "two": 2, "three": 3}[n]
+            minutes = n * (1440 if e.group("u").startswith("day") else 60)
+        probe = probe[:e.start()].strip()
+    mm = _SEARCH_NEW.fullmatch(probe)
+    if mm:
+        q = (mm.group("q") or mm.group("q2") or mm.group("q3") or "").strip()
+        q = q.strip(" \"'“”")
+        if not q or q in _NOT_A_THING:
+            return Intent("tellme_help", {"why": "search"})
+        return Intent("tellme_search", dict(f, words=_restore(original, q), minutes=minutes))
+    mm = _CI.fullmatch(what)
+    if mm:
+        repo = mm.group("repo") or mm.group("repo2")
+        branch = next((mm.group(g) for g in ("br", "br2", "br3", "br4", "br5", "br6")
+                       if mm.group(g)), "")
+        verb = mm.group("verb") or mm.group("verb2")
+        event = "ci_failed" if re.search(r"fail|break|red", verb) else "ci_done"
+        return Intent("tellme_github", dict(f, repo=_restore(original, repo), event=event,
+                                            branch=_restore(original, branch) if branch else ""))
+    mm = _PR.fullmatch(what)
+    if mm:
+        if mm.group("n3"):
+            return Intent("tellme_help", {"why": "repo"})
+        repo = mm.group("repo") or mm.group("repo2")
+        return Intent("tellme_github", dict(f, repo=_restore(original, repo), event="pr_merged",
+                                            pr=int(mm.group("n") or mm.group("n2"))))
+    return None
+
+
 TELLME_MISSING = ("Your PC's Jarvis cannot do \"tell me when\" yet - run apply-patches.ps1 "
                   "on the PC.")
 
@@ -1395,6 +1506,12 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
         if f.get("why") == "when":
             return Result("Say by when, like \"tell me if Alex hasn't replied by Friday\" or "
                           "\"... within 2 days\".", n)
+        if f.get("why") == "search":
+            return Result("Say what to search for, like \"tell me when a search for Kokoro "
+                          "voices shows something new\".", n)
+        if f.get("why") == "repo":
+            return Result("Say which repository the pull request is on, like \"tell me when "
+                          "PR #12 on darknight11ish/Epic-Jarvis merges\".", n)
         return Result("Say who the email is from, like \"tell me when an email from Alex "
                       "arrives\".", n)
     try:
@@ -1419,6 +1536,19 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
                  "once": f["once"]}
     elif n == "tellme_page":
         watch = {"source": "page", "url": f["url"], "urgent": f["urgent"], "once": f["once"]}
+    elif n == "tellme_price":
+        watch = {"source": "price", "url": f["url"], "below": f["below"],
+                 "currency": f.get("currency") or "", "urgent": f["urgent"], "once": f["once"]}
+    elif n == "tellme_search":
+        watch = {"source": "search", "words": f["words"], "urgent": f["urgent"],
+                 "once": f["once"]}
+    elif n == "tellme_github":
+        watch = {"source": "github", "repo": f["repo"], "event": f["event"],
+                 "urgent": f["urgent"], "once": f["once"]}
+        if f["event"] == "pr_merged":
+            watch["pr"] = f["pr"]
+        elif f.get("branch"):
+            watch["branch"] = f["branch"]
     else:
         entity, name = f.get("entity") or "", f.get("name") or ""
         if not entity:
@@ -1449,7 +1579,8 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
         else:
             watch["states"] = f.get("states") or []
     try:
-        j = TM.add(watch, ends=f.get("ends"), source="quick", sched=sched)
+        j = TM.add(watch, ends=f.get("ends"), minutes=f.get("minutes"), source="quick",
+                   sched=sched)
     except (ValueError, OverflowError) as exc:
         return Result(S._sentence(exc), n, read=read)
     # Like a reminder's words, the sender or device is not said back: the

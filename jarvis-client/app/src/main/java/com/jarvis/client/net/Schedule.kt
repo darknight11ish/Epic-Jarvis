@@ -179,10 +179,20 @@ object Schedule {
     const val TELLME = "tellme"
     const val TELLME_TITLE = "Tell me when"
     const val TELLME_HINT =
-        "Say or type \"tell me when an email from Alex arrives\" or \"tell me when the washing " +
-            "machine finishes\" - add \"urgently\" to make it ring until you look. Setting one up asks " +
-            "once with an approval card; when it happens, Jarvis only tells you."
+        "Say or type \"tell me when an email from Alex arrives\", \"tell me when the washing " +
+            "machine finishes\", \"tell me when a search for Kokoro voices shows something new\", " +
+            "\"tell me when the price on https://example.com/kettle drops below 25\" or \"tell me when " +
+            "CI fails on owner/repo\" - add \"urgently\" to make it ring until you look. Setting one up " +
+            "asks once with an approval card; when it happens, Jarvis only tells you. If a watch stops " +
+            "working, Jarvis tells you once."
     const val TELLME_LOCK_SCREEN = "Jarvis: something you asked to be told about happened."
+
+    /**
+     * A "tell me when" that cannot look (2026-09-28): all a notification says
+     * while App lock or "Hide memory lists and chat history" is on, and all a
+     * locked phone shows. The desktop's `TELLME_BROKEN_LOCK_SCREEN`.
+     */
+    const val TELLME_BROKEN_LOCK_SCREEN = "Jarvis: a \"tell me when\" cannot look right now."
 
     /** A notification's title, by kind. The desktop's toast says the same. */
     fun title(kind: String): String = when (kind) {
@@ -266,6 +276,14 @@ object Schedule {
         /** When that happened (epoch seconds) - one notification per match. */
         val alertAt: Double? = null,
         /**
+         * A "tell me when" that cannot look (2026-09-28): the PC's notice, made
+         * from the owner's own words and fixed words about the problem - ""
+         * when it is working.
+         */
+        val broken: String = "",
+        /** When the PC told the owner so (epoch seconds) - one notification per telling. */
+        val brokenAt: Double? = null,
+        /**
          * A repeating job's rule, as the PC keeps it (jarvis_schedule's
          * `rule`): "day", "weekday", "week" or "hours"; its "HH:MM"; and for
          * "week" the days, 0 = Monday. For "Also on my phone" ([AlsoOnPhone]).
@@ -314,6 +332,8 @@ object Schedule {
             urgent = o.flag("urgent") == true,
             alert = o.text("alert") ?: "",
             alertAt = o.num("alert_at"),
+            broken = o.text("broken") ?: "",
+            brokenAt = o.num("broken_at"),
             ruleEvery = rule?.text("every") ?: "",
             ruleAt = rule?.text("at") ?: "",
             ruleDays = (rule?.get("days") as? JsonArray)?.mapNotNull { d ->
@@ -366,10 +386,10 @@ object Schedule {
             return "hidden-${i + 1}"
         }
         return View(
-            jobs = v.jobs.map { it.copy(text = "", alert = "", hidden = true) },
-            todo = v.todo.map { it.copy(text = "", alert = "", hidden = true, list = standIn(it.list)) },
+            jobs = v.jobs.map { it.copy(text = "", alert = "", broken = "", hidden = true) },
+            todo = v.todo.map { it.copy(text = "", alert = "", broken = "", hidden = true, list = standIn(it.list)) },
             hidden = true,
-            wentOff = v.wentOff.map { it.copy(text = "", alert = "", hidden = true) },
+            wentOff = v.wentOff.map { it.copy(text = "", alert = "", broken = "", hidden = true) },
             lists = v.lists.map { it.copy(name = standIn(it.name), title = "") },
         )
     }
@@ -649,6 +669,25 @@ object Schedule {
         if (data == null || data.text("state") != "matched" || data.text("kind") != TELLME) return null
         val id = data.text("id")?.takeIf { validId(it) } ?: return null
         return id to (data.flag("urgent") == true)
+    }
+
+    /**
+     * From a `schedule` event: the id when a "tell me when" cannot look
+     * (2026-09-28), else null. It carries no words; the notice is read by id.
+     */
+    fun brokenFrom(data: JsonObject?): String? {
+        if (data == null || data.text("state") != "broken" || data.text("kind") != TELLME) return null
+        return data.text("id")?.takeIf { validId(it) }
+    }
+
+    /**
+     * (title, text) of the notification for a "tell me when" that cannot
+     * look: the job's `broken` notice, or only [TELLME_BROKEN_LOCK_SCREEN]
+     * while [private] or when there is none. The desktop's `broken_words`.
+     */
+    fun brokenNotification(job: Job?, private: Boolean): Pair<String, String> {
+        val words = job?.broken?.trim().orEmpty()
+        return TELLME_TITLE to (if (private || words.isEmpty()) TELLME_BROKEN_LOCK_SCREEN else words)
     }
 
     /**

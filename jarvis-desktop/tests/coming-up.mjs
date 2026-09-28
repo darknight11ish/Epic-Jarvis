@@ -44,6 +44,7 @@ import {
   aloudFor,
   TELLME_HINT,
   TELLME_LOCK_SCREEN,
+  TELLME_BROKEN_LOCK_SCREEN,
   TELLME_TITLE,
   TIMER_ALOUD,
   COMING_UP_DETAIL,
@@ -267,6 +268,13 @@ await check("\"tell me when\": its words in both apps, its row, and ringing", as
   }
   assert.ok(read("src/brain.html").includes(`>${TELLME_HINT}</p>`));
   assert.ok(read("src-tauri/src/brain/schedule.rs").includes(`"${TELLME_LOCK_SCREEN}"`));
+  // A watch that cannot look (2026-09-28): the same generic words on the
+  // phone, in the Rust toast and on the PC (jarvis_tellme.BROKEN_LOCK_SCREEN).
+  const esc = `"${TELLME_BROKEN_LOCK_SCREEN.replace(/"/g, '\\"')}"`;
+  assert.ok(kt.includes(esc), "the phone's broken-watch words");
+  assert.ok(read("src-tauri/src/brain/schedule.rs").includes(esc), "the toast's broken-watch words");
+  assert.ok(readRepo("backend/jarvis_tellme.py").includes(`BROKEN_LOCK_SCREEN = ${esc}`),
+    "the PC's broken-watch words");
   const job = { id: "s00000000bb", kind: "tellme", text: "an email from Alex arrives",
     state: "active", due: NOW + 300, when: "12:05 today", repeats: true,
     repeat: "every 5 minutes", urgent: true,

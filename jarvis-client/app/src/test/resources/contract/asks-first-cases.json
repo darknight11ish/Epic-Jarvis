@@ -367,6 +367,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "github_read",
+       "fixed": false,
+       "id": "github_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Check GitHub for a \"tell me when\""
       }
      ],
      "title": "The internet"
@@ -1140,6 +1149,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "github_read",
+       "fixed": false,
+       "id": "github_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Check GitHub for a \"tell me when\""
       }
      ],
      "title": "The internet"
@@ -1913,6 +1931,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "github_read",
+       "fixed": false,
+       "id": "github_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Check GitHub for a \"tell me when\""
       }
      ],
      "title": "The internet"
@@ -2695,6 +2722,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "github_read",
+       "fixed": false,
+       "id": "github_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Check GitHub for a \"tell me when\""
       }
      ],
      "title": "The internet"

@@ -3440,6 +3440,12 @@ object JarvisRuntime {
             onTellMeMatched(id, urgent, eventId)
             return
         }
+        // A "tell me when" cannot look (2026-09-28): told once per problem by
+        // the PC; an ordinary notification, never ringing.
+        com.jarvis.client.net.Schedule.brokenFrom(obj)?.let { id ->
+            onTellMeBroken(id, eventId)
+            return
+        }
         val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(obj) ?: return
         val context = appContext ?: return
         // Written at once, not within two seconds: if the process is killed
@@ -3512,6 +3518,40 @@ object JarvisRuntime {
             com.jarvis.client.service.ScheduleNotifier.post(
                 context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_LOCK_SCREEN,
                 ring = com.jarvis.client.net.Schedule.rings(kind, urgent),
+                key = key,
+            )
+        }
+    }
+
+    /**
+     * A "tell me when" cannot look (backend jarvis_tellme.py, 2026-09-28):
+     * read its `broken` notice by id and show it - an ordinary notification,
+     * never ringing, an urgent watch included (only a real match rings).
+     * While App lock or "Hide memory lists and chat history" is on, only the
+     * generic words. Once per telling, even when a reconnect replays the event.
+     */
+    private fun onTellMeBroken(id: String, eventId: String? = null) {
+        val context = appContext ?: return
+        val kind = com.jarvis.client.net.Schedule.TELLME
+        flushResumePoint()
+        val arrived = System.currentTimeMillis()
+        scope.launch {
+            val job = when (val r = api.scheduleJob(id)) {
+                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+                is ApiResult.Failed -> null
+            }
+            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.brokenAt, eventId, arrived, "#broken@")
+            val fresh = synchronized(scheduleShown) {
+                if (scheduleShown.size > 500) scheduleShown.clear()
+                scheduleShown.add(key)
+            }
+            if (!fresh) return@launch
+            val security = settings.security.value
+            val locked = security.appLock || security.privateLists
+            val (title, text) = com.jarvis.client.net.Schedule.brokenNotification(job, locked)
+            com.jarvis.client.service.ScheduleNotifier.post(
+                context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_BROKEN_LOCK_SCREEN,
+                ring = false,
                 key = key,
             )
         }

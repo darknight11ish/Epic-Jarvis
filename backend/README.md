@@ -13892,3 +13892,94 @@ the relay did not call `keep_rules_first()` before this patch.
 That needs a first question on a turn with no tools enabled, where Jarvis
 recalls a fact, and a look at whether the answer follows the rules (for
 example "say what is a guess and what is verified").
+
+# Watches: a search, a price, GitHub, and a watch that breaks: `jarvis_tellme.py` (2026-09-28)
+
+The owner chose the "Watches" group of `docs/RESEARCH-AUDIT-2026-09-28.md`
+(section 3, ideas 1, 2 and 5). No new patch and no new route:
+`jarvis_tellme.py` is shipped whole already; these are three more `source`s
+inside it and one change to how a failed look is handled.
+`docs/JARVIS-API.md` section 70 has the details.
+
+## In plain words
+
+- **"Tell me when a search for X shows something new."** Once a day, Jarvis
+  searches your own words with the web search you chose in Settings
+  (SearXNG unless you changed it), and tells you when a result's address
+  appears that it has not seen before. If that search service is down, it
+  says so - it never quietly uses a different one. It keeps only short
+  fingerprints of the addresses, never the results' words.
+- **"Tell me when the price on <address> drops below 25."** Every hour,
+  one plain fetch of that page, and the price is read by ordinary code (not
+  the AI model). It never buys anything.
+- **"Tell me when CI fails on owner/repo", "... CI finishes on owner/repo
+  main", "... PR #12 on owner/repo merges".** Every 10 minutes, one
+  read-only question to GitHub, with the GitHub key Jarvis already has for
+  GitHub research if one is set - sent to GitHub only, never written down.
+- **A watch that stops working tells you once.** Before, "Could not look:
+  ..." was only written under the watch, so a broken watch could go unseen
+  for days. Now you get one ordinary notification (it never rings), no more
+  than once every 12 hours for the same problem, and it clears by itself
+  when a look works again.
+- Each new watch is ONE approval card, like every "tell me when".
+
+## What you need to do on the PC
+
+Add one line to your `jarvis-framework.toml`, under `[autonomy.tiers]`
+(apply-patches.ps1 shows it in its settings diff but never changes your
+file for you):
+
+```
+github_read               = "auto"
+```
+
+Without it, a GitHub watch is refused with a sentence saying exactly this.
+Search and price watches need nothing new.
+
+## What changed
+
+- `jarvis_tellme.py` - the `"search"`, `"price"` and `"github"` branches of
+  `check_watch`/`check_rule`/`what_words`/`alert_words`/`card`/`add`;
+  `_look_search` (through `jarvis_search.plan/run`), `address_print`;
+  `_look_price`, `price_of`, `parse_number`, `_page_get`;
+  `_look_github`, `github_url`, `_default_github_get`, `_GitHubNoRedirect`;
+  `_incident`, `broken_kind`, `broken_words`, the `broken`/`broken_at`
+  fields and the `"broken"` event; four new columns in its `tellme` table,
+  added in place to an older table (`ALTER TABLE`); the page fingerprint
+  fix (`PAGE_PRINT`, `_visible_text`) ported unchanged from the research
+  branch's commit 3064a6d.
+- `jarvis_schedule.py` - `rule_words` says whole hours and days ("every
+  day", "every 6 hours") for a minutes rule.
+- `jarvis_quick.py` - `_tellme_watches` (the new sentences), checked before
+  email and devices.
+- `jarvis_card_words.py` - a plain title for `github_read`.
+- `jarvis_asks_first.py` - `github_read` in "The internet".
+- `rebuilt/jarvis-framework.toml` - `github_read = "auto"`.
+- Both apps: the new hint under "Tell me when", and a notification for the
+  `broken` event (desktop `stream.rs`/`brain/schedule.rs` `toast_broken`;
+  phone `JarvisRuntime.onTellMeBroken`, `net/Schedule.kt`).
+
+## Test it
+
+```
+python3 backend/test_tellme_watches.py
+python3 backend/test_tellme.py
+```
+
+`test_tellme_watches.py` covers each source's rule, card and look cycle,
+the no-fallback rule (SearXNG down: only SearXNG was asked, and the look
+says so), search words holding a key refused before any card, the GitHub
+key sent only to `api.github.com` and never in a card, audit line, event,
+note, field or `schedule.db`, the broken-watch grouping, hold-back and
+clearing, the older-table upgrade, and the fast-path sentences. No socket
+is opened: every way out is a fake.
+
+## Not checked, said plainly
+
+- Not run against a real SearXNG, shop page or GitHub - only fakes shaped
+  like their documented answers.
+- A shop page that marks no price for machines and shows several prices
+  may make the plain-code reader pick the wrong one; the price it read is
+  shown under the watch so this can be seen.
+- "What Jarvis can reach" does not list watches (it never listed page
+  watches either).

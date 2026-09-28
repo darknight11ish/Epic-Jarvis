@@ -112,10 +112,21 @@ export const STANDBY_DEFAULT_END = "07:00";
  */
 export const TELLME_TITLE = "Tell me when";
 export const TELLME_HINT =
-  "Say or type \"tell me when an email from Alex arrives\" or \"tell me when the washing " +
-  "machine finishes\" - add \"urgently\" to make it ring until you look. Setting one up asks " +
-  "once with an approval card; when it happens, Jarvis only tells you.";
+  "Say or type \"tell me when an email from Alex arrives\", \"tell me when the washing " +
+  "machine finishes\", \"tell me when a search for Kokoro voices shows something new\", " +
+  "\"tell me when the price on https://example.com/kettle drops below 25\" or \"tell me when " +
+  "CI fails on owner/repo\" - add \"urgently\" to make it ring until you look. Setting one up " +
+  "asks once with an approval card; when it happens, Jarvis only tells you. If a watch stops " +
+  "working, Jarvis tells you once.";
 export const TELLME_LOCK_SCREEN = "Jarvis: something you asked to be told about happened.";
+/**
+ * A "tell me when" that cannot look (2026-09-28): the PC says `"state":
+ * "broken"` once (repeats held back for hours, cleared by itself at the next
+ * good look), and the Windows toast (brain/schedule.rs toast_broken) shows
+ * the job's `broken` sentence - or only these words while App lock or "Hide
+ * memory lists and chat history" is on. Never rings. Both apps' words.
+ */
+export const TELLME_BROKEN_LOCK_SCREEN = "Jarvis: a \"tell me when\" cannot look right now.";
 
 /** A notification's title, by kind (brain/schedule.rs toast_title). */
 export const TOAST_TITLES = Object.freeze({
