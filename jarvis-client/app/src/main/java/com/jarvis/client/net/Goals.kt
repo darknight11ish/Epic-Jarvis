@@ -74,9 +74,9 @@ object Goals {
 
     const val TITLE = "Goals"
     const val UNDER =
-        "A plan you write and edit, kept on your PC. Accepting one sets up a weekly check-in - the " +
-            "same kind of approval card a repeating reminder already raises, and it approves nothing " +
-            "that acts. Ticking a step done and Stop tracking need no card. When a step needs Jarvis " +
+        "A plan you write and edit, kept on your PC. Accepting one sets up a weekly check-in straight " +
+            "away, with no card - like a repeating reminder, it only ever reminds you and never " +
+            "acts. Ticking a step done and Stop tracking need no card. When a step needs Jarvis " +
             "to actually do something, just ask in chat, as usual - that still asks first, every time."
     const val EMPTY = "No goals yet. Say what you want to get done below."
 
@@ -91,10 +91,11 @@ object Goals {
     const val TOO_MANY_STEPS = "That is as many steps as a goal can have - drop one to add another."
 
     const val ACCEPT = "Accept"
-    const val ACCEPTING = "Asking…"
+    const val ACCEPTING = "Setting it up…"
     const val ACCEPT_DETAIL =
-        "Sets up a weekly check-in on your PC - one approval card, like a repeating reminder. It " +
-            "approves nothing that acts."
+        "Sets up a weekly check-in on your PC, with no card, like a repeating reminder. It only " +
+            "ever reminds you - it never acts."
+    /** Only an older PC, from before check-ins stopped asking (2026-09-28), still says "waiting". */
     const val WAITING = "Waiting for your yes on the approval card."
     const val ALSO_IN_COMING_UP = "It also shows under Coming up, in case you leave this screen first."
 
