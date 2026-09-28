@@ -983,6 +983,13 @@ class VoiceSession(
         // "One moment." may be said once for this question, if a tool starts
         // before the answer makes a sound (VoiceFlow.kt).
         moment.turnStarted()
+        // Jarvis Live: and when the first answer is slow (the model loading).
+        if (turn.live) {
+            scope.launch {
+                delay(LIVE_SLOW_MS)
+                if (current === turn && !turn.sounded && !turn.silenced) toolStarted()
+            }
+        }
         // What the phone knows about tools as the question goes: every
         // sentence is checked against it before it is read aloud.
         try {
@@ -1196,6 +1203,9 @@ class VoiceSession(
 
     private companion object {
         const val TAG = "JarvisVoice"
+
+        /** A Live answer with no sound after this says "One moment." (under its own switch). */
+        const val LIVE_SLOW_MS = 2500L
     }
 }
 

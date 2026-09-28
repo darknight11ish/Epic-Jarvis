@@ -84,6 +84,11 @@ static ANSWERING_TAP_ONLY: AtomicBool = AtomicBool::new(false);
 static LOCK_UNKNOWN: AtomicBool = AtomicBool::new(false);
 /// Whether another program is using the microphone could not be read.
 static CALL_UNKNOWN: AtomicBool = AtomicBool::new(false);
+/// The owner pressed Unmute while Live was muted for another program on the
+/// microphone: that wins until Windows' record says the other program let
+/// go (a program that closed badly can leave its record "in use" for good,
+/// and the owner must not be muted forever by it).
+static MIC_OVERRIDDEN: AtomicBool = AtomicBool::new(false);
 
 pub(crate) const LIVE_MISSING: &str = "This PC's Jarvis does not have Jarvis Live yet. Run \
      scripts\\apply-patches.ps1 on the PC to add it.";
@@ -152,9 +157,13 @@ pub(crate) fn mic_held(
 /// What to tell the PC about another program on the microphone, if
 /// anything: `Some(true)` mute, `Some(false)` unmute. Only ever undoes a
 /// mute THIS rule made - never the owner's own Mute.
-pub(crate) fn mic_mute_change(status: &serde_json::Value, others: Option<bool>) -> Option<bool> {
+pub(crate) fn mic_mute_change(
+    status: &serde_json::Value,
+    others: Option<bool>,
+    overridden: bool,
+) -> Option<bool> {
     match others {
-        Some(true) if !muted(status) => Some(true),
+        Some(true) if !muted(status) && !overridden => Some(true),
         Some(false) if muted(status) && text(status, "muted_why") == "mic_in_use" => Some(false),
         _ => None,
     }
@@ -399,6 +408,11 @@ pub async fn live_act(
 pub async fn live_mute(app: AppHandle, muted: bool) -> Result<serde_json::Value, String> {
     if muted {
         voice::suspend_for_live(&app);
+        MIC_OVERRIDDEN.store(false, Ordering::SeqCst);
+    } else {
+        // Unmute is the owner's word over "another program is using the
+        // microphone" (see MIC_OVERRIDDEN).
+        MIC_OVERRIDDEN.store(true, Ordering::SeqCst);
     }
     let out = post(
         &app,
@@ -544,7 +558,11 @@ fn spawn_watcher(app: AppHandle) {
                     CARD_PAUSED.store(card_pause(&status), Ordering::SeqCst);
                     let others = mic_in_use_by_others();
                     CALL_UNKNOWN.store(others.is_none(), Ordering::SeqCst);
-                    let status = match mic_mute_change(&status, others) {
+                    if others == Some(false) {
+                        MIC_OVERRIDDEN.store(false, Ordering::SeqCst);
+                    }
+                    let overridden = MIC_OVERRIDDEN.load(Ordering::SeqCst);
+                    let status = match mic_mute_change(&status, others, overridden) {
                         Some(mute) => post(
                             &app,
                             serde_json::json!({
@@ -582,13 +600,13 @@ fn spawn_watcher(app: AppHandle) {
 // ---------------------------------------------------------------------------
 
 /// The input desktop's name: "Default" while someone is signed in and
-/// working; "Winlogon" (or no access at all) on the lock screen.
+/// working. On the lock screen this app is refused the input desktop
+/// outright (access denied): locked. "Winlogon" is also the secure desktop a
+/// User Account Control prompt shows, and "Screen-saver" is not a lock by
+/// itself - both are "cannot tell", which pauses Live rather than ending it.
 pub(crate) fn locked_from_desktop(name: Option<&str>, access_denied: bool) -> Option<bool> {
     match name {
         Some(n) if n.eq_ignore_ascii_case("default") => Some(false),
-        Some(n) if n.eq_ignore_ascii_case("winlogon") || n.eq_ignore_ascii_case("screen-saver") => {
-            Some(true)
-        }
         Some(_) => None,
         None if access_denied => Some(true),
         None => None,
@@ -891,18 +909,20 @@ mod tests {
         let open = json!({"muted": false});
         let owner = json!({"muted": true, "muted_why": "owner"});
         let call = json!({"muted": true, "muted_why": "mic_in_use"});
-        assert_eq!(mic_mute_change(&open, Some(true)), Some(true));
-        assert_eq!(mic_mute_change(&open, Some(false)), None);
-        assert_eq!(mic_mute_change(&open, None), None);
-        assert_eq!(mic_mute_change(&call, Some(false)), Some(false));
-        assert_eq!(mic_mute_change(&call, Some(true)), None);
-        assert_eq!(mic_mute_change(&owner, Some(false)), None);
-        assert_eq!(mic_mute_change(&owner, Some(true)), None);
+        assert_eq!(mic_mute_change(&open, Some(true), false), Some(true));
+        assert_eq!(mic_mute_change(&open, Some(false), false), None);
+        assert_eq!(mic_mute_change(&open, None, false), None);
+        assert_eq!(mic_mute_change(&call, Some(false), false), Some(false));
+        assert_eq!(mic_mute_change(&call, Some(true), false), None);
+        assert_eq!(mic_mute_change(&owner, Some(false), false), None);
+        assert_eq!(mic_mute_change(&owner, Some(true), false), None);
         assert_eq!(
-            mic_mute_change(&call, None),
+            mic_mute_change(&call, None, false),
             None,
             "cannot tell: left as it is"
         );
+        // The owner's Unmute wins over a record stuck on "in use".
+        assert_eq!(mic_mute_change(&open, Some(true), true), None);
     }
 
     #[test]
@@ -935,7 +955,11 @@ mod tests {
     #[test]
     fn the_lock_screen_and_cannot_tell() {
         assert_eq!(locked_from_desktop(Some("Default"), false), Some(false));
-        assert_eq!(locked_from_desktop(Some("Winlogon"), false), Some(true));
+        assert_eq!(
+            locked_from_desktop(Some("Winlogon"), false),
+            None,
+            "a UAC prompt pauses"
+        );
         assert_eq!(locked_from_desktop(None, true), Some(true));
         assert_eq!(locked_from_desktop(None, false), None);
         assert_eq!(locked_from_desktop(Some("Something"), false), None);

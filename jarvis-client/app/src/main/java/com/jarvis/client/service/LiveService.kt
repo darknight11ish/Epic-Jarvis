@@ -43,6 +43,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Jarvis Live's microphone on this phone (the owner's decision and answers
@@ -86,6 +88,9 @@ class LiveService : Service() {
 
     @Volatile private var running = false
     private var shownSign: LiveRules.Sign? = null
+
+    /** Clips go to the PC one at a time, in order, while the microphone keeps being read. */
+    private val sending = Mutex()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -216,7 +221,10 @@ class LiveService : Service() {
                     recSource = source
                 }
                 val clip = window(requireNotNull(rec), ring, turnModel, overReply = speaking) ?: continue
-                send(clip)
+                // Not waited for: the recorder's buffer holds well under a
+                // second, and the owner may already be saying the next thing
+                // (a second thought joins the question - LiveRules.fold).
+                scope.launch { sending.withLock { send(clip) } }
             }
         } finally {
             close()
