@@ -1,0 +1,12 @@
+# Competitor scout (closed source), condensed. Proxy blocked vendor pages: all competitor facts are search summaries.
+Confirms Jarvis design: ChatGPT Voice email/calendar (23 Sep) "spoken approval not supported" (Jarvis refuses voice approvals, JARVIS-API.md:513); Gemini Gmail voice = confirm + 60 s undo (= card + undo shelf); Siri AI beta 14 Sep complaints: broken alarms/reminders, slowness (supports jarvis_quick no-model path).
+Top 5 (all 8B/8GB-realistic, rule-safe):
+1. Talk-to-type anywhere on PC (Pixel 11 Gboard Rambler, SwiftKey offline): hotkey, speak, clean text typed into current app. Windows dictation refused today (settings.html:309); Parakeet STT on PC (jarvis_speech.py:80). Typing into another program = new action kind (EXTRACTION-RESEARCH:123) -> owner's call on approval. Phone out (no client STT). M.
+2. Inbox tidy by voice (Gemini Live 26 Aug): star/archive/read/trash, one card listing every email, Undo. Email read-only today (jarvis_email.py:33 VERIFIED). M.
+3. Promises -> one-tap reminder offers ("I'll call the dentist Friday" -> "Remind you Friday at 9?"), owner's own words only, back-off rules. S-M.
+4. Today page with sections on/off/reorder (Copilot Today 25 Sep, Samsung Now Brief, Gemini Daily Brief). Briefing sections fixed (jarvis_briefing.py:1013-1018 VERIFIED order hard-coded). Today page designed (round2-experience #4) not built. M.
+5. "Remind me about this" from screen: Alt+Shift+S capture (commands.rs:1341) + OCR (API §36) exist; missing words->proposed reminder (outside text: propose only). S.
+Also: "Who used my Jarvis" connection history (ChatGPT sign-in history), ties to approval gap.
+Don't copy: always-listening pendants; ChatGPT "Allow read/low-risk actions" standing auto-approve (rule 4); cloud always-on agents; autonomous shopping; realtime video avatars; messaging-app reach (rule 2); cloud-synced history; reading every message (Magic Cue); local full-duplex voice model now (won't fit 8 GB).
+Owner questions: talk-to-type approval (one card to enable vs card each time); inbox tidy (card + Undo, delete = Trash only) vs keep read-only.
+Corrections to 09-25 docs: ChatGPT permission levels renamed; ChatGPT desktop + Muse Mac now do computer use (cloud-brained) -> Jarvis edge = local model + one card per action; Copilot Groups/Deep Research/Podcasts/Mico retired 18 Aug; Gemini Daily Brief tier unclear; Siri AI shipped 14 Sep beta; OpenAI device delayed >= Feb 2027; ChatGPT Atlas shut 9 Aug; Muse early access + PayPal.

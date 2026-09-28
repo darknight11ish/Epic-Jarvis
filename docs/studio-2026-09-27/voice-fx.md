@@ -1,0 +1,12 @@
+# Character voice techniques, condensed (4-core container timings, nothing listened to)
+1. Speed trick: Kokoro speed/k then np.interp resample by k -> pitch+formants up, pace normal; 1 ms; no dep, no VRAM; in jarvis_speech._synthesise (engine.generate :1860). Panda k 1.3-1.4, owl 1.5, otter 1.15 (NOTE: casting agent suggested milder 0.94-1.08 - owner to listen). USE.
+2. Kokoro blends: voices.bin float32 (n_speakers,511,256); sid picks slice (offline-tts-kokoro-model.cc:80); size must equal style_dim*n_speakers (:185-199) n_speakers from model metadata (:151) -> rewrite n_speakers in copy of model.onnx (onnx pkg Apache) or overwrite a slot. KOKORO_VOICES 0-10 order confirmed via generate_voices_bin.py. USE.
+3. Procedural animal sounds (numpy swept sines + envelope), cached WAVs, both apps; ZzFX (MIT) for tuning. Freesound CC0 per-sound check; xeno-canto NC/ND (no pitch shift); Sonniss not redistributable. USE procedural.
+4. stftpitchshift (MIT, numpy): pitch + formant separately, ~100-117 ms per 3 s sentence. python-stretch (MIT, Signalsmith) 26 ms but no formant in 0.3.1; Rust signalsmith-stretch has formants. USE as better option.
+5. Lip-sync: Kokoro via sherpa has audio only (no phoneme timings). Compute per-10 ms loudness + 5-6 bands on PC -> ~6 mouth shapes, send beside WAV. Port wawa-lipsync (MIT, lipsync.ts:76-83) or uLipSync (MIT MFCC). Scale bands by formant factor. Phone mouth runs ahead: level measured at AudioTrack write (Speaker.kt:274) -> use getPlaybackHeadPosition(); desktop attachAnalyser (voice.js:305) in time. ADAPT, M.
+6. OmniVoice (k2-fsa, Apache code; weights unverified): voice from text description + [laughter] tags; design once, feed custom-voice path (/api/voice/voices/create) with its card + owner-voice refusal. Later.
+7. pyworld: 0.6-1.3 s per 3 s sentence - stings only.
+VC: RVC MIT code, VCTK bases (CC BY 4.0), needs training + torch - skip; OpenVoice dormant - skip; Seed-VC GPL-3 - ideas/beside. Consent: character voices never from uploaded clips; current guard only refuses owner's voice (jarvis_voices.py:65) -> "Jarvis-made source only" rule needed for any conversion.
+Chatterbox exaggeration needs ref clip; Perth watermark. VoxCPM2 8 GB - no.
+Rejected GPL: Rubber Band, Pedalboard, psola (maxrmorrison), Praat/parselmouth, SoX. librosa pitch_shift same as trick but heavy. Parler-TTS idle; Qwen3-TTS needs FlashAttention; Rhubarb offline STT-based; HeadTTS duplicate.
+NOTICES if built: stftpitchshift, Signalsmith, Kokoro blends line, OmniVoice weights.

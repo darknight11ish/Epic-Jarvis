@@ -1,0 +1,6 @@
+CI reader, 2026-09-27. main 9cdb056: rust, powershell-5, credential-manager, backend, audit, python-advisories passed; frontend still running. da432b3 all 7 green.
+Jarvis client da432b3: build, smoke, face-shots pass. Smoke = 45 androidTests on Android 14 x86_64 emulator (ApiContractTest 32, EventStreamContractTest 3, TokenStoreTest 6, LaunchTest 3, FaceRenderTest 1) + signed release APK installs, starts, stays up 15 s. No real backend/model. Face-shots: 20 PNGs, software GPU (SwiftShader); job is continue-on-error so green alone proves nothing.
+Windows: cargo fmt/clippy/test 391 passed (unit only); credential-manager tests against real Windows Credential Manager; PS 5.1 parse + apply-patches on stand-in; desktop-release builds unsigned MSI/EXE 0.2.41 (TAURI_SIGNING_PRIVATE_KEY not set, nothing published); installer never run, app never launched.
+client-latest: 0.2.148 (main @ da432b3), jarvis-client-da432b3.apk, signed, pre-release, 0 downloads.
+Work branch claude/jarvis-continuation-03kls1 (061e39c) failed CloudOfferTest "every ordinary gate carries no offer": expected null, was <local>.
+Gaps: no test launches the real desktop app on Windows; no test pairs phone with a real backend; no end-to-end with a model.
