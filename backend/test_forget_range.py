@@ -527,6 +527,17 @@ def t_undo_edge_cases():
     w = _world_with_things()
     w.ask(_body(w))
     w.approve()
+    import copy
+    w.log.put_back(copy.deepcopy(FR._STATE["undo"]["chats"]))   # e.g. a backup restored meanwhile
+    w.chat("conv-trip-00001", "and a table for two", NOW + 40)
+    FR.undo(now=NOW + 60, mem=w.mem, chats=w.log)
+    words = [t["text"] for t in w.log.get("conv-trip-00001")["turns"]]
+    check("a chat already put back by other means is not doubled by Undo; newer words still join",
+          words == ["Plan the trip to Rome", "Sure - when?", "and a table for two"], words)
+
+    w = _world_with_things()
+    w.ask(_body(w))
+    w.approve()
     st = FR.status(NOW + 601)
     check("after ten minutes: no Undo, and the status says why", st["undo"] is None
           and st["last"]["outcome"] == "kept", st)

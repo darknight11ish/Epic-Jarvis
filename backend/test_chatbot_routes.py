@@ -459,13 +459,16 @@ def t_the_patch():
         return check("SKIP - git is not installed", True)
     order = _stack.order()
     # Last until live.patch (2026-09-28), which anchors on THIS patch's
-    # install block and so follows it.
+    # install block and so follows it. Later patches (rules-first-relay,
+    # forget-range) may follow too, as long as none of them rewrites this
+    # patch's own lines - checked by the words of its block, below.
     after = [n for n in order[order.index("chatbot-routes.patch") + 1:]] \
         if "chatbot-routes.patch" in order else []
-    check("chatbot-routes.patch is in apply-patches.ps1's list, followed only by patches "
-          "that anchor on it (live.patch)",
-          bool(order) and "chatbot-routes.patch" in order and after in ([], ["live.patch"]),
-          order[-3:])
+    touch = _stack.later_rewriting("chatbot-routes.patch", "jarvis_chatbot_routes", order)
+    check("chatbot-routes.patch is in apply-patches.ps1's list, live.patch (which anchors on "
+          "it) right after, and no later patch rewrites its lines",
+          bool(order) and "chatbot-routes.patch" in order and after[:1] in ([], ["live.patch"])
+          and not touch, (order[-4:], touch))
     if "chatbot-routes.patch" not in order:
         return
     text, log = _stack.stand_in("jarvis_hud.py", order[:order.index("chatbot-routes.patch")])

@@ -15202,7 +15202,7 @@ anyway, and the shipped one says `"ask"`.
 
 ## Test it
 
-`py -3 backend\test_forget_range.py` (153 checks, no network, no model).
+`py -3 backend\test_forget_range.py` (154 checks, no network, no model).
 The words and real answers both apps are tested against:
 `python3 tools/gen_forget_range_cases.py --check`.
 

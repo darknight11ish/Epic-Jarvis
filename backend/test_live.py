@@ -1134,7 +1134,10 @@ def t_the_route():
 def t_the_patch_and_shipping():
     import _stack
     order = _stack.order()
-    check("live.patch is in apply-patches.ps1's list, last", order and order[-1] == "live.patch",
+    # Last when it was added; patches added after it (rules-first-relay,
+    # forget-range) go after it, and must leave its lines alone.
+    check("live.patch is in apply-patches.ps1's list, and no later patch rewrites its lines",
+          "live.patch" in order and not _stack.later_rewriting("live.patch", "jarvis_live"),
           order[-3:])
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     for name in ("jarvis_live.py", "jarvis_live_photo_test.py"):

@@ -1144,6 +1144,12 @@ class ChatLog:
         for t in turns:
             c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", t)
         nxt = (max((t[1] for t in turns), default=-1)) + 1
+        # Only messages said AFTER the ones held: anything at or before the
+        # last held one is already among them - a copy put back by other
+        # means in the meantime (restoring a backup, say) - and would
+        # otherwise appear twice.
+        last_held = max((float(t[2] or 0) for t in turns), default=0.0)
+        newer = [t for t in newer if float(t[2] or 0) > last_held]
         for t in newer:
             plain = self._open(aead, t[10], self._aad(cid, t[1]))
             row = list(t)

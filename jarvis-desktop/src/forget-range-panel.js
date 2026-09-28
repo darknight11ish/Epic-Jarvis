@@ -172,9 +172,14 @@ async function readPreviewNow() {
     say("Choose what Jarvis learned, chats, or both.", "bad");
     return;
   }
+  // What the owner unticked stays unticked when the list is read again
+  // (after a card, an Undo, or "the list changed"); anything new is ticked.
+  const unticked = state.preview && state.preview.available
+    ? [...allTicked(state.preview)].filter((k) => !state.ticked.has(k)) : [];
   try {
     state.preview = readPreview(await invoke("forget_range_read", previewArgs()));
     state.ticked = state.preview.available ? allTicked(state.preview) : new Set();
+    for (const k of unticked) state.ticked.delete(k);
     say("");
   } catch (error) {
     state.preview = null;
@@ -265,12 +270,24 @@ function scheduleUndoTick() {
   clearTimeout(state.undoTimer);
   state.undoTimer = null;
   if (!(state.status && state.status.undo)) return;
-  // The minutes left, and the moment the ten minutes are over.
+  // The minutes left, and the moment the ten minutes are over. Only the
+  // Undo line is redrawn while it lasts, so a date being typed or a box
+  // being ticked is not disturbed; the whole card only when it ends.
   state.undoTimer = setTimeout(async () => {
     state.undoTimer = null;
     const box = root();
-    if (box && !box.closest("[hidden]")) await showForgetRange();
-    else scheduleUndoTick();
+    if (!box || box.closest("[hidden]")) {
+      scheduleUndoTick();
+      return;
+    }
+    await readStatusNow();
+    const line = box.querySelector(".fr-undo-text");
+    if (state.status && state.status.undo && line) {
+      line.textContent = undoLine(state.status.undo);
+      scheduleUndoTick();
+    } else {
+      paint();
+    }
   }, 20_000);
 }
 

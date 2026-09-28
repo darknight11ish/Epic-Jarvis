@@ -93,9 +93,13 @@ internal fun ForgetRangeSection(
             is ApiResult.Ok -> {
                 val reply = r.value
                 if (reply.code in 200..299) {
+                    // What the owner unticked stays unticked when the list is
+                    // read again (after a card, an Undo, "the list changed");
+                    // anything new is ticked.
+                    val unticked = preview?.let { ForgetRange.allTicked(it) - ticked }.orEmpty()
                     val p = ForgetRange.parsePreview(reply.body)
                     preview = p
-                    ticked = ForgetRange.allTicked(p)
+                    ticked = ForgetRange.allTicked(p) - unticked
                     said = null
                 } else {
                     preview = null
@@ -141,12 +145,15 @@ internal fun ForgetRangeSection(
         }
     }
 
-    // While Undo is open: the minutes left, and the moment it is over.
+    // While Undo is open: the minutes left, and the moment it is over. Only
+    // the status is read again - never the list, so ticks are not disturbed.
     val undoOpen = status?.undo != null
-    LaunchedEffect(undoOpen, reads) {
-        if (undoOpen) {
+    LaunchedEffect(undoOpen) {
+        while (undoOpen) {
             delay(20_000)
-            reads += 1
+            val r = JarvisRuntime.forgetRangeRead(ForgetRange.PATH)
+            val reply = (r as? ApiResult.Ok)?.value
+            if (reply != null && reply.code in 200..299) status = ForgetRange.parseStatus(reply.body)
         }
     }
 

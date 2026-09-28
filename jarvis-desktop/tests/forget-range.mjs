@@ -226,6 +226,11 @@ await check("the days, the ticked list, unticking, and ONE forget with only the 
     (els) => els.map((e) => [e.dataset.key, e.checked]));
   const label0 = await page.locator("#forget-range-go").innerText();
   await page.locator("#forget-range .fr-item", { hasText: "Leeds" }).locator("input").uncheck();
+  // Reading the list again keeps what was unticked.
+  await showList(page);
+  const stillOff = await page.locator("#forget-range .fr-item", { hasText: "Leeds" })
+    .locator("input").isChecked();
+  assert.equal(stillOff, false, "reading the list again ticked an unticked fact");
   const label1 = await page.locator("#forget-range-go").innerText();
   await page.locator("#forget-range-go").click();
   await page.waitForTimeout(500);
