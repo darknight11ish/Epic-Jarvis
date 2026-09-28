@@ -26,6 +26,7 @@
 
 import { announce, APPROVE_WHERE, onEvent, onLink, onQueue } from "./jarvis-link.js";
 import * as VT from "./voice-training.js";
+import { INTERRUPT, INTERRUPT_TITLE, loadInterrupt, saveInterrupt } from "./live-rules.js";
 import * as CV from "./custom-voices.js";
 
 const TAURI = globalThis.__TAURI__;
@@ -578,25 +579,67 @@ function paintSettings() {
       say($("vt-screen-note"), screenNote);
     }
   }
+  // The seventh: Jarvis Live under "Only trust the talk button" (the
+  // owner's answers, 2026-09-28). Three choices; a stricter one applies at
+  // once, a looser one is the card, held on a stale link.
+  const liveBox = $("vt-live-box");
+  if (liveBox) {
+    liveBox.hidden = !view.handsFreeLive;
+    if (view.handsFreeLive) {
+      group($("vt-live"), VT.HANDS_FREE_LIVE, view.handsFreeLive, "hands_free_live");
+      let liveNote = VT.HANDS_FREE_LIVE.find((c) => c.id === view.handsFreeLive).detail;
+      if (VT.liveCovered(view)) liveNote += ` ${VT.LIVE_ONLY_WHEN_STRICT_NOTE}`;
+      say($("vt-live-note"), liveNote);
+    }
+  }
+  paintInterrupt();
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;
   w.textContent = waiting || "";
 }
 
+/** "Interrupting Jarvis in Live": this PC's own choice (live-rules.js),
+ *  kept on this PC - it changes only how this PC listens while Jarvis
+ *  talks, never what is trusted, so it needs no card either way. */
+function paintInterrupt() {
+  const box = $("vt-live-interrupt");
+  if (!box) return;
+  const title = $("vt-live-interrupt-title");
+  if (title) title.textContent = INTERRUPT_TITLE;
+  const chosen = loadInterrupt();
+  box.replaceChildren(...INTERRUPT.map((c) => {
+    const b = node("button", "choice", VT.choiceText(c));
+    b.type = "button";
+    b.dataset.value = c.id;
+    b.setAttribute("aria-pressed", String(c.id === chosen));
+    b.addEventListener("click", () => {
+      saveInterrupt(c.id);
+      paintInterrupt();
+      announce(`${INTERRUPT_TITLE}: ${c.label}.`);
+    });
+    return b;
+  }));
+  say($("vt-live-interrupt-note"), INTERRUPT.find((c) => c.id === chosen).detail);
+}
+
 async function changeSetting(setting, value, current) {
   if (settingBusy || value === current) return;
   const out = $("vt-setting-status");
-  if (VT.loosens(setting, value) && linkStale) {
+  const loosening = VT.loosens(setting, value, current);
+  if (loosening && linkStale) {
     say(out, HELD, "bad");
     announce(HELD, "assertive");
     return;
   }
   settingBusy = true;
   paintSettings();
-  say(out, VT.loosens(setting, value) ? "Asking…" : "Changing it…");
+  say(out, loosening ? "Asking…" : "Changing it…");
   try {
-    const answer = await invoke("set_voice_setting", { setting, value });
+    // Jarvis Live's three choices: the Rust side needs the choice now to
+    // tell a stricter move from a looser one.
+    const args = setting === "hands_free_live" ? { setting, value, current } : { setting, value };
+    const answer = await invoke("set_voice_setting", args);
     const reply = VT.settingReply(answer, APPROVE_WHERE);
     say(out, reply.text, reply.tone);
     announce(reply.text, reply.tone === "bad" ? "assertive" : "polite");

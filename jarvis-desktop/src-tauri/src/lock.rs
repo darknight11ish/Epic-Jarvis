@@ -596,6 +596,20 @@ pub fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
     }
 }
 
+/// True when App lock is on and would ask Windows Hello before showing a
+/// Jarvis window now - the owner has been away longer than "Lock again
+/// after" and no Jarvis window has focus. Jarvis Live on this PC ends then,
+/// and cannot start (live.rs): someone else at the PC must not be able to
+/// talk to Jarvis through a session the owner left running. Asks nothing.
+pub fn app_locked(app: &AppHandle) -> bool {
+    let security = current(app);
+    if !security.app_lock {
+        return false;
+    }
+    let state = app.state::<LockState>();
+    state.inside_prompts.load(Ordering::SeqCst) == 0 && !state.fresh(app, &security, Instant::now())
+}
+
 /// How often [`spawn_watch`] looks. "Lock again after" is honoured to within
 /// this much.
 const WATCH_EVERY: Duration = Duration::from_secs(5);

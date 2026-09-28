@@ -426,6 +426,17 @@ fn main() {
             "start_automatic_listening",
             "stop_automatic_listening",
             "speak_reply",
+            // Jarvis Live (live.rs): read the session, start it (no card;
+            // held on a stale link and under App lock), stop it (never
+            // held), more time / carry on, mute, and hold the microphone
+            // closed while the bar shows a card. The Jarvis bar's and the
+            // Live badge's; neither records or reads any words.
+            "live_status",
+            "live_start",
+            "live_stop",
+            "live_act",
+            "live_mute",
+            "live_hold",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.

@@ -97,6 +97,10 @@ windows-sys = { version = "0.59", features = [
   # GlobalAlloc / GlobalLock / GlobalUnlock / GlobalFree: the moveable global
   # memory SetClipboardData itself requires. Same module, clipboard_privacy.rs.
   "Win32_System_Memory",
+  # OpenInputDesktop / GetUserObjectInformationW / CloseDesktop: is the
+  # Windows lock screen in front? Jarvis Live ends when it is, and pauses
+  # when it cannot tell (live.rs).
+  "Win32_System_StationsAndDesktops",
 ] }
 # The higher-level `windows` crate, not another windows-sys binding - not a
 # new dependency either: Tauri's own graph already resolves 0.61.3 for other

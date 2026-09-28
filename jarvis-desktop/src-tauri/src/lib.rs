@@ -33,6 +33,7 @@ pub mod folders;
 pub mod hardware;
 pub mod hotkeys;
 pub mod hud_proxy;
+pub mod live;
 pub mod lock;
 pub mod logfile;
 pub mod plain_errors;
@@ -938,6 +939,13 @@ pub fn run() {
             voice::start_automatic_listening,
             voice::stop_automatic_listening,
             voice::speak_reply,
+            // Jarvis Live: a back-and-forth voice conversation (live.rs).
+            live::live_status,
+            live::live_start,
+            live::live_stop,
+            live::live_act,
+            live::live_mute,
+            live::live_hold,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
             voice_flow::get_voice_flow,
