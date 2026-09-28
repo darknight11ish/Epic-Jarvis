@@ -42,10 +42,22 @@ def check(name, ok, detail=""):
 
 
 def t_the_list_is_real_and_only_reads():
-    check("the list is web_search and home_read, nothing else",
-          sorted(G.READ_ALOUD_TOOLS) == ["home_read", "web_search"], G.READ_ALOUD_TOOLS)
+    check("the list is web_search, home_read and read_screen, nothing else",
+          sorted(G.READ_ALOUD_TOOLS) == ["home_read", "read_screen", "web_search"],
+          G.READ_ALOUD_TOOLS)
     for name in G.READ_ALOUD_TOOLS:
+        if name in G.RECORDED_READS:
+            continue
         check(f"{name} is a real tool", name in jarvis_agent.TOOLS)
+    # read_screen is not a model tool: it is the read a screen turn records
+    # (the owner's answer of 2026-09-28, docs/SCREEN-DESIGN.md).
+    import jarvis_screen
+    check("read_screen is jarvis_screen's own name for a screen read",
+          jarvis_screen.SCREEN_TOOL == "read_screen" and "read_screen" in G.RECORDED_READS)
+    check("... and it is not a tool the model can call (nothing on the screen starts a look)",
+          "read_screen" not in jarvis_agent.TOOLS)
+    check("RECORDED_READS names nothing that is not on the list",
+          set(G.RECORDED_READS) <= set(G.READ_ALOUD_TOOLS), G.RECORDED_READS)
     for private in ("email_check", "calendar_read", "notes_search", "memory_search",
                     "my_files", "file_read", "send_email", "draft_email", "home_control",
                     "append_obsidian_daily", "append_logseq_journal", "create_joplin_note",
@@ -60,6 +72,8 @@ def t_the_step_event_carries_the_real_name():
     got = jarvis_agent._step_event("tool_started", "web_search_but_made_up")
     check("a name the model made up is 'unknown'", got.get("tool") == "unknown", got)
     check("... and 'unknown' is not on the list", "unknown" not in G.READ_ALOUD_TOOLS)
+    check("STEP_READS is exactly the recorded reads on the list",
+          set(jarvis_agent.STEP_READS) == set(G.RECORDED_READS), jarvis_agent.STEP_READS)
 
 
 def t_the_file_both_apps_read_is_current():
@@ -84,6 +98,22 @@ def t_the_table_says_what_the_owner_said():
     for c in table["cases"]:
         if c["stream"] != "live" and not c["heard"]["private_aloud"]:
             check(f"not knowing stays on screen: {c['name']}", c["read"] is False)
+    # The screen (owner, 2026-09-28): read aloud, with every earlier rule first.
+    screen = {c["name"]: c["read"] for c in table["cases"] if "screen" in c["name"].lower()}
+    want = {
+        "the screen was read (read_screen)": True,
+        "the screen was read, then email_check": False,
+        "web_search then the screen was read": True,
+        "the screen was read, with a sensitive saved fact": False,
+        "the screen was read, the router kept it here (gate screen), no facts": True,
+        "the screen was read, but the PC marked the question private": False,
+        "the screen was read, with remembered facts, memory kept on screen": False,
+        "the screen was read, stream dropped": False,
+        "a name that is not exact (Read_Screen) counts as unknown": False,
+    }
+    for name, read in want.items():
+        check(f"screen: {name} -> {'read aloud' if read else 'on screen'}",
+              screen.get(name) is read, screen.get(name))
     check("the fixed line", table["on_screen"] == "It's on your screen.")
 
 

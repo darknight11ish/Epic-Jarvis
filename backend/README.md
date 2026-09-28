@@ -14021,3 +14021,83 @@ the message box and the send button.
   instead.
 - A captcha that appears after a message went means that message counts
   as sent; after Resume the driver carries on from the next message.
+
+# Looking at the screen, steps 1 and 2: `jarvis_front.py` and `jarvis_screen.py` (2026-09-28)
+
+The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the
+owner's screen"), designed in `docs/SCREEN-DESIGN.md`. This is build steps 1
+and 2 only: the rules, tested here. `docs/JARVIS-API.md` section 62 has the
+details. **Not in either app yet, and not reachable from anything** - no
+route, no key, no badge, no phone gesture.
+
+## In plain words
+
+- **"Look at this"** is one look when the owner asks. What was read is kept
+  in memory for 2 minutes of follow-up questions, then thrown away.
+- **"Watch with me"** is a session the owner starts and stops: 30 minutes
+  by default, 2 hours at most, a warning 2 minutes before the end, "watch
+  20 more minutes" to extend. It ends on Stop, at the time, when Windows
+  locks, when the PC sleeps, and on Stop everything. No card to start it -
+  the owner's own act, like a focus session.
+- **It pauses** on a password box, on anything on the owner's **Never look
+  at** list (it starts with password managers and Windows sign-in), on a
+  window that asks not to be captured, on Jarvis's own windows, the lock
+  screen and admin prompts, and on a web page whose site cannot be read.
+  "Can't tell" is a pause. The rules are checked just before the picture
+  and again just after; if either fails, the picture is thrown away unread.
+- **Adding** to Never look at is instant. **Removing** from it is one
+  approval card (`change_own_config`), because it lets Jarvis see more.
+- **What the model gets:** at most 4,500 characters read from the picture
+  and 3,000 from the window's own text (password boxes skipped), labelled
+  OUTSIDE TEXT exactly as the words in a picture are (section 36).
+- **What the apps will see:** on/off, time left, and a pause reason in
+  fixed words ("a password box") - never an app, a site or a word from the
+  screen.
+- **Rule 1:** the router keeps a turn carrying the screen's words on this
+  PC (`jarvis_router.choose(has_screen=True)`, gate `screen`).
+- **Read aloud:** `read_screen` joins the read-aloud list in both apps (the
+  owner's answer of 2026-09-28); every earlier rule still comes first.
+
+## What changed
+
+- `jarvis_front.py` - new, shipped whole: Focus's front-window reader
+  (`windows_probe`, `_address_box_value`, `_windows_front`, the host
+  parsing), moved word for word out of `jarvis_focus.py`, which imports it
+  back under the same names. Focus behaves exactly as before.
+- `jarvis_screen.py` - new, shipped whole: the session states, the pause
+  rules, the caps and label, the Never look at list
+  (`screen-never-look.json` in the settings folder), Stop everything
+  (`screen_watch`). Every Windows reader is injected; none is built.
+- `rebuilt/jarvis_router.py` - `choose()` takes `has_screen`.
+- `jarvis_agent.py` - `STEP_READS`: a `step` event may carry
+  `read_screen` by name (nothing sends it yet).
+- `selftest.py` - a preflight `screen` check that says "not built on this
+  PC yet" (a skip).
+- `tools/gen_private_aloud_cases.py` and both apps' `READ_ALOUD_TOOLS` -
+  `read_screen` added; the shared table regenerated.
+- `scripts/apply-patches.ps1`, `backend/_where.py` - both modules added to
+  `$SHIPPED` (`jarvis_front.py` before `jarvis_focus.py`).
+
+## Test it
+
+    python3 backend/test_screen.py
+    python3 backend/test_front.py
+    python3 backend/test_focus.py
+    python3 backend/test_router_private_terms.py
+    python3 backend/test_private_aloud.py
+    python3 backend/run_suites.py
+
+## Not built yet, said plainly
+
+- **The chat route does not read `screen_text` yet.** The line in the
+  owner's `jarvis_hud.py` that calls `jarvis_router.choose(...,
+  has_image=...)` is the owner's own text, not in any patch here, so a
+  patch adding `has_screen=` would have to guess its surroundings. It is
+  the next step, made against the real file; until then no app sends a
+  `screen_text` part.
+- The Windows readers (password box, capture protection, a window's own
+  text) - step 3, on the owner's PC. Until then `jarvis_screen.ENGINE` is
+  not built and nothing can start.
+- Both apps (steps 4, 5, 7 and 8) and the second card's picture route
+  (step 6).
+- Not run on the owner's PC: tested in the dev container only.

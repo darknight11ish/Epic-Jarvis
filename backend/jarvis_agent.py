@@ -3156,12 +3156,22 @@ def _record_chain(steps: list) -> None:
 _STEP_PHASES = ("model", "tool_started", "tool_finished", "tool_refused", "answer")
 
 
+#: Names a `step` event may carry that are not model tools: reads a turn
+#: records itself. "read_screen" is a "Look at this" / "Watch with me" turn
+#: (jarvis_screen.SCREEN_TOOL, docs/SCREEN-DESIGN.md) - on the apps' read-aloud
+#: list by the owner's answer of 2026-09-28, so it must reach them by name,
+#: not as "unknown". Nothing sends it yet: the chat route's screen wiring is
+#: the next build step.
+STEP_READS = frozenset({"read_screen"})
+
+
 def _step_event(phase: str, tool: Optional[str] = None, *,
                 ok: Optional[bool] = None, round_no: Optional[int] = None) -> dict:
     """One step, reduced to what the event bus may carry."""
     out: dict = {"phase": phase if phase in _STEP_PHASES else "unknown"}
     if tool is not None:
-        out["tool"] = tool if isinstance(tool, str) and tool in TOOLS else "unknown"
+        out["tool"] = (tool if isinstance(tool, str)
+                       and (tool in TOOLS or tool in STEP_READS) else "unknown")
     if ok is not None:
         out["ok"] = bool(ok)
     if round_no is not None:

@@ -748,6 +748,7 @@ $SHIPPED = @(
     'jarvis_stop_all.py'         # stop-all.patch: POST /api/stop_all, and the hook other features register with
     'jarvis_tellme.py'           # "tell me when ..." (an email from someone, a device changing): a kind of job on the one scheduler, no patch; NOT a model tool
     # --- focus sessions (focus.patch) ---
+    'jarvis_front.py'            # what is in front on this PC: the one front-window reader focus sessions and "Watch with me" share (split out of jarvis_focus.py, 2026-09-28); no patch
     'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
     # --- what asks first (asks-first.patch) ---
     'jarvis_asks_first.py'       # "What asks first": every action and whether it asks; stricter from either app, looser on the PC only; lights without a card
@@ -783,6 +784,8 @@ $SHIPPED = @(
     # --- Projects, build steps 1 and 2 (projects.patch, 2026-09-28) ---
     'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
     'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
+    # --- looking at the screen, build steps 1 and 2 (2026-09-28): the session rules only; no route, no Windows readers yet ---
+    'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list; not reachable from the apps yet
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -111,8 +111,10 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   (offer the voice once, switch off by default, the otter not on "Sky") was
   not yet applied there as of 2026-09-28 01:10 UTC.
 - On this branch (`claude/jarvis-ai-assistant-research-ff37vy`): the
-  chatbot driver core (`jarvis_chatbot.py`, API §60) and Projects steps 1-2
-  (`jarvis_projects.py`, API §61).
+  chatbot driver core (`jarvis_chatbot.py`, API §60), Projects steps 1-2
+  (`jarvis_projects.py`, API §61), and the rules for looking at the screen,
+  steps 1-2 (`jarvis_screen.py`, with Focus's reader moved to
+  `jarvis_front.py`, API §62 - no Windows readers, route or app screens yet).
 
 ## Decided but not built yet (don't propose these as new)
 

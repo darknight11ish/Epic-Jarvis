@@ -85,7 +85,7 @@ CLOUD = ("gpt-oss:120b-cloud", "glm-4.6:cloud", "qwen3-coder:480b-cloud")
 def t_the_router_never_calls_a_cloud_model_local():
     q = "summarise my inbox and the file C:/tax/2025.pdf"
     for model in CLOUD:
-        for kw in ({"conversation_tainted": True}, {}, {"has_image": True},
+        for kw in ({"conversation_tainted": True}, {}, {"has_image": True}, {"has_screen": True},
                    {"lanes": []}):
             args = {"lanes": ["jarvis-escalate"], **kw}
             d = R.choose(q, local_model=model, **args)
