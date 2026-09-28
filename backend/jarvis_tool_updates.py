@@ -267,6 +267,19 @@ def _audit(event: str, detail: dict) -> None:
         pass
 
 
+def _lockdown_on() -> bool:
+    """Lockdown (jarvis_asks_first.py): False without that module; if it
+    cannot be read, True - the card is shown rather than skipped."""
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
+
+
 def _person_said_yes(v) -> bool:
     if getattr(v, "allowed", False) is not True:
         return False
@@ -779,7 +792,10 @@ def request_check(body=None, *, gate: Optional[Callable] = None,
         return 503, {"ok": False, "error": (
             f"{ACTION} is tier {t!r} in jarvis-framework.toml; the check "
             f"needs a person to say yes, so it must be 'ask'")}
-    if approved():
+    if approved() and not _lockdown_on():
+        # (While Lockdown is on - jarvis_asks_first.py, 2026-09-28 - the one
+        # "yes" from long ago does not count: every way out of this PC asks
+        # first, so this raises its card again, below.)
         # `view()` (below) calls `checking()`, which takes _C_LOCK itself -
         # never called while THIS function still holds it, or a thread
         # deadlocks on its own non-reentrant lock.

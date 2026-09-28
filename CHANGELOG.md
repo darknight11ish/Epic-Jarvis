@@ -65,6 +65,20 @@ number as the last part - `0.2.57` is a build of 0.2.
   said it was hidden.** The HUD's copy is covered too. Galaxy's search now
   counts every match and says when nothing matches.
 
+**New: reminders, your phone, and Lockdown**
+
+- **"Remind me next time I talk about X."** When your own words later mention
+  it, Jarvis brings it up in the chat. At most 3 times, never out loud if the
+  topic is sensitive, gone after 90 days. No card.
+- **"Ring my phone."** Said to Jarvis on the PC, your phone rings on its alarm
+  sound - even on silent - with a Stop button, for at most 2 minutes. It never
+  rings for an old message.
+- **"Playing on your PC" on the phone's Home:** previous, play, pause, next.
+- **Lockdown.** One tap (or "lockdown") makes everything that would leave the
+  PC ask first, and anything that runs by itself stop. Turning it off is on
+  the PC only, with a card and Windows Hello. Not yet covered: the ntfy push
+  notice, which lives in your own `jarvis_gate.py`.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

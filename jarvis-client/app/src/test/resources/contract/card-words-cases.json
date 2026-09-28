@@ -156,7 +156,7 @@
     },
     {
       "action": "loosen_what_asks_first",
-      "title": "Jarvis wants to let one action go ahead without asking you first"
+      "title": "Jarvis wants to loosen what asks first"
     },
     {
       "action": "memory_manage",

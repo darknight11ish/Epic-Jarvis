@@ -54,8 +54,10 @@ internal fun AsksFirstSection(canAct: Boolean) {
     // desktop's Settings does (onQueue).
     val queue by JarvisRuntime.pending.collectAsState()
     val queueKey = queue.map { it.id }
+    // Lockdown turned on or off elsewhere (the `lockdown` event): read again.
+    val lockdownNow by JarvisRuntime.lockdown.collectAsState()
 
-    LaunchedEffect(reads, queueKey) {
+    LaunchedEffect(reads, queueKey, lockdownNow) {
         when (val r = JarvisRuntime.asksFirst()) {
             is ApiResult.Ok -> {
                 val v = AsksFirst.parse(r.value)
@@ -102,6 +104,24 @@ internal fun AsksFirstSection(canAct: Boolean) {
                     color = if (err != null) chrome.warnInk else chrome.textLo,
                 )
                 else -> {
+                    // Lockdown (2026-09-28): on from here at once, never held
+                    // on a stale link; off only on the PC (the lines say so).
+                    val lv = AsksFirst.lockdownView(v.lockdown)
+                    if (lv.show) {
+                        Gap(8)
+                        Text(AsksFirst.LOCKDOWN_LABEL, style = MaterialTheme.typography.labelMedium,
+                            color = if (lv.on) chrome.warnInk else chrome.textMid)
+                        Text(AsksFirst.LOCKDOWN_DETAIL, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo)
+                        lv.lines.forEachIndexed { i, line ->
+                            Text(line, style = MaterialTheme.typography.bodySmall,
+                                color = if (i == 0 && lv.on) chrome.warnInk else chrome.textMid)
+                        }
+                        if (lv.canTurnOn) {
+                            Quiet(AsksFirst.LOCKDOWN_ON_LABEL, color = chrome.warnInk, enabled = !busy,
+                                onClick = { change { JarvisRuntime.turnOnLockdown() } })
+                        }
+                    }
                     v.groups.forEach { g ->
                         Gap(12)
                         Text(g.title, style = MaterialTheme.typography.labelMedium,

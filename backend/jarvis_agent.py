@@ -1596,6 +1596,9 @@ NOTE_AFTER_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before writin
 #: or key are refused outright (jarvis_search.plan, rule 1).
 WEB_SEARCH_EVERY = ("You chose \"Ask before every web search\", so Jarvis asks before "
                     "each one.")
+#: Lockdown (jarvis_asks_first.py, 2026-09-28): every way out asks first.
+WEB_SEARCH_LOCKDOWN = ("Lockdown is on, so Jarvis asks before every web search until you "
+                       "turn it off.")
 WEB_SEARCH_READ = ("Jarvis read outside text in this conversation (an email, a file, a "
                    "note, a web page or another tool's answer), so it asks before "
                    "searching - something private could be in the search words.")
@@ -1689,7 +1692,22 @@ def web_search_card_lines(watch: "_TurnWatch", ask_every_time: bool,
         lines.append(WEB_SEARCH_APP)
     if ask_every_time:
         lines.append(WEB_SEARCH_EVERY)
+    if _lockdown_on():
+        lines.append(WEB_SEARCH_LOCKDOWN)
     return lines
+
+
+def _lockdown_on() -> bool:
+    """Lockdown (jarvis_asks_first.py, 2026-09-28): False without that
+    module; True if it cannot be read - a search then asks."""
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
 
 
 #: The chat route's quoted block of recalled facts (auto-learn.patch,
@@ -4318,6 +4336,60 @@ def with_focus_note(msgs: list) -> list:
 
 
 # --------------------------------------------------------------------------
+#   "Remind me next time I talk about X" (jarvis_next_time.py, 2026-09-28)
+# --------------------------------------------------------------------------
+#
+# The reminders the owner's own newest words bring up, as ONE system line
+# just before the newest question - never first, placed like the focus note,
+# and only ever for the model on this PC (a cloud lane is never sent any of
+# these notes). A system message, so the learner (user messages only) and
+# chat history never take it for the owner's words. jarvis_next_time.py has
+# every rule: whose words count, which turns are left alone, the limits.
+# Counted as brought up only once the model answered (run_local_turn's
+# `finally`), so a turn that failed brings it up again next time.
+
+
+def _next_time_due(watch: "_TurnWatch", messages, request) -> dict:
+    """{"note": the line or "", "ids": [...]} for this turn. Never raises;
+    a backend without jarvis_next_time.py adds nothing."""
+    none = {"note": "", "ids": []}
+    try:
+        import jarvis_next_time as NT
+    except Exception:
+        return none
+    try:
+        if not NT.should_look(watch.newest_own_words, request=request, messages=messages,
+                              crisis=watch.crisis):
+            return none
+        items = NT.due_for(watch.newest_own_words, spoken=watch.spoken)
+        return {"note": NT.note_text(items), "ids": [i["id"] for i in items]}
+    except Exception:
+        return none
+
+
+def _next_time_brought_up(ids) -> None:
+    try:
+        import jarvis_next_time as NT
+        NT.brought_up(ids)
+    except Exception:
+        pass
+
+
+def with_next_time_note(msgs: list, note: str) -> list:
+    """A new list: `msgs` with `note` as a system message just before the
+    newest user message - never first, placed exactly like with_focus_note.
+    `msgs` itself is not changed; nothing to add returns a plain copy."""
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not users or not note:
+        return list(msgs)
+    msg = {"role": "system", "content": note}
+    at = users[-1]
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
+# --------------------------------------------------------------------------
 #   The owner cut the last spoken answer off
 # --------------------------------------------------------------------------
 #
@@ -4554,9 +4626,10 @@ def warm_prefix_on() -> bool:
 
 
 def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
-                   spoken: bool = False, cut_off: str = "", crisis: bool = False) -> list:
+                   next_time: str = "", spoken: bool = False, cut_off: str = "",
+                   crisis: bool = False) -> list:
     """The notes a local turn adds to its (already trimmed) messages, in
-    their order - manner, focus, spoken, cut-off, crisis, each just before
+    their order - manner, focus, next-time, spoken, cut-off, crisis, each just before
     the newest user message - and then keep_rules_first, last, so the rules
     stay first. A new list; `msgs` is not changed. run_local_turn and the
     warm-up both call this."""
@@ -4567,6 +4640,12 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
         # I144: additive on top of manner, never instead of it - nearer
         # the question than manner, further than spoken/cut-off/crisis.
         out = with_focus_note(out)
+    if next_time:
+        # "Remind me next time" (jarvis_next_time.py): the owner's own earlier
+        # words, to mention only - nearer the question than manner and focus,
+        # further than spoken/cut-off/crisis, which say how to answer at all.
+        # Never on the warm-up, which carries no conversation.
+        out = with_next_time_note(out, next_time)
     if spoken:
         # After trimming, so trimming can never leave the note first.
         out = with_spoken_note(out)
@@ -5077,6 +5156,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     if (not watch.crisis and watch.newest_own_words
             and looks_like_correction(watch.newest_own_words)):
         note_correction(conv_id)
+    # "Remind me next time I talk about X" (jarvis_next_time.py): worked out
+    # once, from the owner's own newest words, before any round.
+    next_time = _next_time_due(watch, messages, req)
     offer: dict = _new_offer(names, opened_groups(conv_id))
 
     def reoffer() -> None:
@@ -5156,6 +5238,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             room -= estimate_tokens(manner_msg)
         if focus_brief:
             room -= estimate_tokens(_FOCUS_MSG)
+        if next_time["note"]:
+            room -= estimate_tokens({"role": "system", "content": next_time["note"]})
         if watch.cut_off:
             room -= estimate_tokens({"role": "system", "content": CUT_OFF_NOTE.format(
                 said=watch.cut_off)})
@@ -5168,7 +5252,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # (warm_prefix), so what it sends cannot drift from this.
         body = chat_body(cur["model"],
                          dress_messages(fit_messages(msgs, room), manner=manner,
-                                        focus=focus_brief, spoken=watch.spoken,
+                                        focus=focus_brief, next_time=next_time["note"],
+                                        spoken=watch.spoken,
                                         cut_off=watch.cut_off, crisis=watch.crisis),
                          opts, offer["schemas"] if offer_tools else None)
         stripper = _ThinkStripper()
@@ -5452,6 +5537,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # crisis answer would be its own bad moment, never mind what it
         # counts (the owner's decision, 2026-09-27, extending "never
         # counted" to this signal).
+        # A reminder for next time counts as brought up only when the model
+        # really answered this turn (jarvis_next_time.brought_up).
+        if next_time["ids"] and "".join(answer).strip() and not watch.crisis:
+            _next_time_brought_up(next_time["ids"])
         if not watch.crisis:
             broken_this_turn = sum(watch.bad.values())
             if broken_this_turn:

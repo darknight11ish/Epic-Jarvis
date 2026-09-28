@@ -107,7 +107,9 @@ TITLES = {
     "big_model_enable": "start the big model for background jobs",
     # --- its own settings and code
     "change_own_config": "change one of its settings",
-    "loosen_what_asks_first": "let one action go ahead without asking you first",
+    # One setting going ahead without asking, or (2026-09-28) Lockdown off:
+    # both are this one card (jarvis_asks_first.py), so the words cover both.
+    "loosen_what_asks_first": "loosen what asks first",
     "enable_reading_tool": "offer a reading tool to the AI model",
     "check_tool_updates": "check PyPI, crates.io and GitHub for tool updates",
     "modify_own_code": "change its own code",

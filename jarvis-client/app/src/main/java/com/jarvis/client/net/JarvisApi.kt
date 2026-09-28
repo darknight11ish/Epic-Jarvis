@@ -1037,6 +1037,48 @@ class JarvisApi(
         postWrite(AsksFirst.LIGHTS_PATH, AsksFirst.lightsBody(on))
 
     /**
+     * `POST /api/asks_first/tier {"action": "lockdown", "ask": true}` - turn
+     * Lockdown ON (2026-09-28). At once, no card. The phone never sends the
+     * other direction: turning it off is the PC's alone ([AsksFirst]).
+     */
+    suspend fun lockdownOn(): ApiResult<DesktopWrite.Outcome> =
+        postWrite(AsksFirst.TIER_PATH, AsksFirst.lockdownBody())
+
+    /** `GET /api/media` - what is playing on the PC, in its own sentence ([PcMedia]). */
+    suspend fun pcMedia(): ApiResult<JsonObject> = probeKeeping503(PcMedia.PATH)
+
+    /**
+     * `POST /api/media/control {"action"}` - ONE of play, pause, next,
+     * previous ([PcMedia]). No card. The PC answers its own sentence on a
+     * 200 and on a 503 ("Nothing seems to be playing right now."), so both
+     * come back as [ApiResult.Ok] with that body; anything else fails.
+     */
+    suspend fun pcMediaControl(action: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val json = PcMedia.body(action)
+                ?: return@withContext ApiResult.Failed(ApiError.Unreachable("That is not a media button."))
+            val target = url(PcMedia.CONTROL_PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when {
+                        (resp.isSuccessful || resp.code == 503) && PcMedia.said(obj) != null ->
+                            ApiResult.Ok(obj!!)
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 -> ApiResult.Failed(ApiError.NotFound)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/email/sending` - whether sending email is set up, from which
      * address and through which server, in the PC's own words
      * ([EmailSending.parse]). A read; never the password. A 404 or 503 is a

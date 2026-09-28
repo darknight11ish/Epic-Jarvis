@@ -56,6 +56,13 @@ pub(crate) const SWITCHABLE: [&str; 7] = [
     "create_joplin_note",
 ];
 
+/// Lockdown (2026-09-28, `jarvis_asks_first.LOCKDOWN`): not an action but
+/// every way out of the PC at once, sent through the same route and command
+/// as one action - `ask: true` turns it on at once (never held: it only makes
+/// Jarvis ask more), `ask: false` asks for the ONE loosening card, with
+/// Windows Hello on the PC, that turns it off (held on a stale link).
+pub(crate) const LOCKDOWN: &str = "lockdown";
+
 /// The four reading tools that may be OFFERED to the AI model at all from
 /// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. A
 /// DIFFERENT list from [`SWITCHABLE`], and desktop only.
@@ -111,9 +118,10 @@ pub(crate) fn asks_first_answer(status: u16, body: &str) -> Result<serde_json::V
     Err(backend_refusal(status, body))
 }
 
-/// The body of one switch, or why not: only an action on [`SWITCHABLE`].
+/// The body of one switch, or why not: only an action on [`SWITCHABLE`], or
+/// [`LOCKDOWN`].
 pub(crate) fn tier_body(action: &str, ask: bool) -> Result<serde_json::Value, String> {
-    if !SWITCHABLE.contains(&action) {
+    if action != LOCKDOWN && !SWITCHABLE.contains(&action) {
         return Err(NOT_ON_LIST.to_string());
     }
     Ok(serde_json::json!({ "action": action, "ask": ask }))
@@ -239,7 +247,7 @@ pub async fn set_tool_enabled(
 mod tests {
     use super::{
         asks_first_answer, change_answer, held_on_stale, tier_body, tool_body, ASKS_FIRST_MISSING,
-        NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST, TOOLS_SWITCHABLE,
+        LOCKDOWN, NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST, TOOLS_SWITCHABLE,
     };
 
     /// The real answers, made by `tools/gen_asks_first_cases.py`.
@@ -276,6 +284,18 @@ mod tests {
             doc["words"]["tools_not_on_list"].as_str().unwrap(),
             TOOLS_NOT_ON_LIST
         );
+        assert_eq!(doc["words"]["lockdown_action"].as_str().unwrap(), LOCKDOWN);
+    }
+
+    #[test]
+    fn lockdown_goes_by_the_same_route_on_at_once_off_held() {
+        let on = tier_body(LOCKDOWN, true).unwrap();
+        assert_eq!(on["action"], "lockdown");
+        assert_eq!(on["ask"], true);
+        assert_eq!(tier_body(LOCKDOWN, false).unwrap()["ask"], false);
+        // Turning it on only makes Jarvis ask more: never held. Off is a card.
+        assert!(!held_on_stale(false));
+        assert!(held_on_stale(true));
     }
 
     #[test]

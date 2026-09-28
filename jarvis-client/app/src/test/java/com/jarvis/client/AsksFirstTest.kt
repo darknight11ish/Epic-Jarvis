@@ -115,6 +115,39 @@ class AsksFirstTest {
     }
 
     @Test
+    fun `Lockdown - the PC's words, on from the phone, never off`() {
+        assertEquals(word("lockdown_action"), AsksFirst.LOCKDOWN_ACTION)
+        assertEquals(word("lockdown_label"), AsksFirst.LOCKDOWN_LABEL)
+        assertEquals(word("lockdown_detail"), AsksFirst.LOCKDOWN_DETAIL)
+        assertEquals(word("lockdown_on_says"), AsksFirst.LOCKDOWN_ON_SAYS)
+        assertEquals(word("lockdown_off_says"), AsksFirst.LOCKDOWN_OFF_SAYS)
+        assertEquals(word("lockdown_on_label"), AsksFirst.LOCKDOWN_ON_LABEL)
+        assertEquals(word("lockdown_pc_only"), AsksFirst.LOCKDOWN_PC_ONLY)
+        assertEquals(word("lockdown_waiting"), AsksFirst.LOCKDOWN_WAITING)
+        val off = AsksFirst.lockdownView(view("phone_shipped").lockdown)
+        assertTrue(off.show)
+        assertFalse(off.on)
+        assertTrue("off: the phone may turn it on", off.canTurnOn)
+        assertEquals(listOf(AsksFirst.LOCKDOWN_OFF_SAYS), off.lines)
+        val on = AsksFirst.lockdownView(view("phone_lockdown_on").lockdown)
+        assertTrue(on.on)
+        assertFalse("on: the phone can never turn it off", on.canTurnOn)
+        assertEquals(AsksFirst.LOCKDOWN_ON_SAYS, on.lines.first())
+        assertTrue(on.lines.contains(AsksFirst.LOCKDOWN_PC_ONLY))
+        val waiting = AsksFirst.lockdownView(view("pc_lockdown_off_card_waiting").lockdown)
+        assertTrue(waiting.lines.contains(AsksFirst.LOCKDOWN_WAITING))
+        assertEquals("{\"action\":\"lockdown\",\"ask\":true}", AsksFirst.lockdownBody())
+        // While it is on, a read asks first and the phone's switch cannot loosen it.
+        val cal = row(view("phone_lockdown_on"), "calendar_read")
+        assertEquals("Asks you first, every time", cal.says)
+        assertEquals(AsksFirst.lockdownView(null), AsksFirst.LockdownView(false, false, emptyList(), false))
+        assertEquals(true, AsksFirst.lockdownFrom(buildJsonObject { put("on", true) }))
+        assertEquals(false, AsksFirst.lockdownFrom(buildJsonObject { put("on", false) }))
+        assertNull(AsksFirst.lockdownFrom(null))
+        assertNull(AsksFirst.lockdownFrom(buildJsonObject { put("on", "yes") }))
+    }
+
+    @Test
     fun `an older PC says so`() {
         assertNull(AsksFirst.parse(buildJsonObject { put("available", false) }))
         assertTrue(AsksFirst.missing(ApiError.NotFound))

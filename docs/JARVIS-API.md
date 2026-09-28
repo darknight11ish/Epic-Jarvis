@@ -6137,8 +6137,9 @@ If you did not just do this, say no.
 If you say no: nothing changes - it keeps asking first.
 ```
 
-Its title: "Jarvis wants to let one action go ahead without asking you
-first". Its risk entry (`asks-first.patch`, `jarvis_gate._RISK`): local,
+Its title: "Jarvis wants to loosen what asks first" (since 2026-09-28 -
+it was "... let one action go ahead without asking you first" - because
+turning Lockdown off is the same card, section 75). Its risk entry (`asks-first.patch`, `jarvis_gate._RISK`): local,
 undoable. **It is approved on the PC only, always with Windows Hello**:
 `jarvis_owner_check.PC_ONLY_ACTIONS` refuses its approval from any other
 device (403 `owner_check: "pc_only"`) and asks Windows Hello for it from the
@@ -9370,3 +9371,208 @@ is a hotkey like the others (Settings, Shortcuts): **Talk-to-type,
   with "say a little more".
 - **Not on the phone** (ARCHITECTURE section 8): it types into the PC's own
   programs, and a client must not do speech-to-text.
+
+## 73. "Remind me next time I talk about ..." (added 2026-09-28)
+
+The owner chose idea 3 of `docs/RESEARCH-AUDIT-2026-09-28.md` section 3
+("remind me next time I talk about X", from OpenClaw's standing intents,
+MIT - the numbers kept, no code copied). A reminder with no time of its
+own: it is brought up in the chat the next time the owner's OWN words
+mention the subject. **No new route, no card** (like a one-time reminder),
+**no second store**: it is a kind of job on the one scheduler (§21),
+`backend/jarvis_next_time.py`, shipped whole with no patch of its own.
+
+### 73.1 Setting, listing, deleting
+
+Said or typed, answered without the AI model (`jarvis_quick.py`, the owner's
+own typed or said words only, like every sentence there):
+
+| Said | Does |
+|---|---|
+| "remind me next time I talk about the dentist to ask about the bill", "next time I mention Sam, remind me to ask about the loan", "remind me to book the hotel next time we talk about Paris", "when I next talk about the car, remind me that the MOT is due" | Sets ONE, at once. The answer says back the subject and the words it understood, the limits, and "delete it under Coming up to stop it". "Cancel that" (§21) takes it back within two minutes. |
+| "what will you remind me of next time?", "list my reminders for next time" | Lists them (a private answer: kept on screen under the apps' private rule). |
+| "delete the reminder about the dentist" | Deletes ONE whose subject is exactly that. Several: says so and points to Coming up (never deletes them all). None at all: the sentence goes to the model as before. |
+
+The sentence that sets one is a command, so the learner never reads it for
+facts (`jarvis_intake.owner_turns` skips anything `jarvis_quick.is_command`
+matches).
+
+### 73.2 In Coming up
+
+`GET /api/schedule` lists each under `jobs` with `"kind": "nexttime"`:
+
+```
+{"id": "s0123456789", "kind": "nexttime", "text": "ask about the bill",
+ "about": "the dentist", "state": "active", "due": <epoch it ends>,
+ "when": "until Sunday 27 December", "fires": 0, "max_fires": 3,
+ "note": "Waits for you to talk about it." | "Brought up 1 of 3 times.",
+ "repeats": false, ...}
+```
+
+`due` is the day it ENDS (90 days on), not a time it goes off - `when`
+says "until ..." and there is no `left`. `about` is the owner's words, like
+`text`: the desktop blanks both while the private lists are hidden
+(`brain/schedule.rs redact_list`), and so does the phone (`Schedule.hide`).
+Both apps show it with Delete only (`POST /api/schedule/act {"do":
+"delete"}`); "pause" answers 409 - there is nothing to pause. Its tag is
+"next time"; the row's lines are the subject ("When you talk about "the
+dentist""), `when` and `note` - both apps' words, `coming-up.js` and
+`Schedule.kt`.
+
+### 73.3 When it is brought up
+
+In `jarvis_agent.run_local_turn` - only for the model on this PC; a note is
+never sent to a cloud lane:
+
+- **Whose words.** The newest message only, and only when it is the
+  owner's own - typed or said (`_TurnWatch.newest_own_words`), never
+  pasted, shared, from the clipboard, a picture's caption, untagged, or sent
+  with the app's own system text. Tool output, emails, web pages and notes
+  are never the newest message.
+- **Matching is plain code.** Every word of the subject must be in the
+  message as a whole word (a plural or a possessive 's counts; "the", "my"
+  and the like are never needed; "dentistry" is not "dentist").
+- **Never on**: the sentence that set a reminder or a timer, a crisis turn,
+  a temporary chat, or a game or role-play chat. A reminder whose words
+  touch a sensitive topic (`jarvis_sensitive.topic`) waits for a TYPED turn
+  - never in a spoken answer, the rule an answer using a sensitive saved
+  fact already follows.
+- **Limits** (OpenClaw's): at most 3 reminders and 1,200 characters in one
+  turn, at least 24 hours between two times one is brought up, at most 3
+  times in all (then it leaves the list, quietly), and gone after 90 days -
+  quietly too: no doorbell, no notification, and "what did I miss?" never
+  names it.
+- **How.** ONE system line just before the newest question - never first,
+  placed like the focus note - saying these are the owner's own earlier
+  words, to mention in one short sentence each and never to act on. A
+  system message, so the learner and chat history never take it for the
+  owner's words. It is counted as brought up only once the model has
+  answered; a failed turn brings it up again next time.
+
+Why a note and not a notification: the point is to be reminded in the
+conversation about the subject; a phone buzzing while the owner types to
+the PC would be noise, and a notification would need lock-screen words of
+its own.
+
+## 74. "Ring my phone", and "Playing on your PC" on the phone (added 2026-09-28)
+
+The owner chose ideas 7 and 8 of `docs/RESEARCH-AUDIT-2026-09-28.md`
+section 3. Both are KDE Connect ideas (GPL - the ideas only, no code).
+
+### 74.1 "Ring my phone"
+
+Said or typed to Jarvis ("ring my phone", "find my phone", "where's my
+phone?", "I can't find my phone"), answered on the PC without the AI model
+(`jarvis_quick.py` -> `backend/jarvis_find_phone.py`, shipped whole, no
+patch). **No card**: it only rings the owner's own phone, from the owner's
+own words. It publishes ONE event and nothing else:
+
+```
+event: ring_phone
+data: {"id": "r0123456789ab", "state": "ring", "at": <epoch on the PC>,
+       "until": <at + 60>, "seconds": 60}
+```
+
+No words at all - the phone writes its own ("Jarvis is ringing this
+phone"). Said twice within 5 seconds sends one ring. "Stop ringing my
+phone" sends `"state": "stop"` for that ring (only while it could still be
+ringing).
+
+**The phone** (`net/FindPhone.kt`, `JarvisRuntime.onRingPhone`) rings on its
+alarm channel - an alarm sound, so it rings on silent and through Do Not
+Disturb unless the owner turned alarms off there - with a Stop button, and
+stops by itself after `seconds` (at most 120). **Never for a stale or
+replayed event**: only when its own clock is within 120 seconds of `at`
+(far stricter than the 10-minute rule for alarms - a late ring is only a
+surprise), and only once per `id` (a reconnect replays recent events). A
+late one is dropped silently. The lock screen shows "Jarvis: you asked to
+find this phone."; the watch setting (§45) applies as to every notification.
+
+**Which phone.** The backend cannot tell phones apart - every paired
+device uses the one pairing key, and per-device keys ("more devices") are
+not built - so every phone whose Jarvis app is connected rings. Naming one
+("ring my work phone") says so plainly. Nothing reports back which phone
+rang. The desktop does nothing with the event: it is the PC being asked,
+not rung (ARCHITECTURE section 8).
+
+### 74.2 "Playing on your PC" on the phone's Home
+
+The routes of §47, which no app called until now: `GET /api/media` when Home
+shows the row (the PC's own sentence, "Playing: ... by ..." - the playing
+app's words, only shown, never saved or sent on) and `POST
+/api/media/control {"action"}` for ONE of Previous, Play, Pause, Next per
+tap (`net/PcMedia.kt`, `HomeScreen.PcMediaPlate`). **No card** (the owner's
+decision of 2026-09-27). Greyed while the link is stale, and refused then by
+`JarvisRuntime.pcMediaControl` too (rule 4). The PC's own answer - "Paused.",
+"Nothing seems to be playing right now." (a 503 carries it too) - is shown
+under the row. **Not on the desktop**, on purpose: it is the PC, with its
+own media keys and Windows' media controls, and "pause the music" said to
+the Jarvis bar already works (§47.1) - ARCHITECTURE section 8.
+
+## 75. Lockdown (added 2026-09-28)
+
+The owner chose idea 10 of `docs/RESEARCH-AUDIT-2026-09-28.md` section 3
+(after ChatGPT's Lockdown Mode): one tap makes every way out of this PC
+(ARCHITECTURE section 4) ask first, or stop. **Not a second mechanism**: it
+is "What asks first"'s own stricter switch for every way out at once, and
+its own PC-only loosening to undo it (`backend/jarvis_asks_first.py`, §32).
+**No new route.**
+
+### 75.1 On and off
+
+| Body of `POST /api/asks_first/tier` | From | Answers |
+|---|---|---|
+| `{"action": "lockdown", "ask": true}` | either app, and by voice ("lockdown", "turn on lockdown") | **200** at once, no card: `{"ok", "changed", "message", "lockdown"}`. It only makes Jarvis ask more, so neither app holds it on a stale link. A card waiting to turn it off is withdrawn. |
+| `{"action": "lockdown", "ask": false}` | the PC only ("turn off lockdown" said on the PC goes the same way) | **202** `{"waiting": true}` while ONE card of the loosening action itself, `loosen_what_asks_first`, waits - so `jarvis_owner_check.PC_ONLY_ACTIONS` makes it need Windows Hello and refuses its approval from any other device. Only a person's "approved" turns it off; denied, timed out, or Lockdown turned on again while it waits leaves it on. **403** `{"pc_only": true}` from any other device; **503** without the backend's own Windows Hello check (owner-check.patch). Both apps hold it on a stale link. |
+
+The phone can turn Lockdown on, never off. The card's title (the
+notification's words for `loosen_what_asks_first`) is now "Jarvis wants to
+loosen what asks first", which covers both uses of that card.
+
+### 75.2 What it does while it is on
+
+- **The tier table.** `rebuilt/jarvis_framework.action_tier()` asks
+  `jarvis_asks_first.lockdown_tier()` on every lookup: a way out
+  (`LOCKDOWN_ACTIONS` - web search and research, reading the calendar,
+  email and Home Assistant, home control, sending or saving email, news,
+  page and GitHub reads, the browser, a cloud model, browsing or downloading
+  models, checking for tool updates, spending, posting, and any plug-in
+  program's tool) whose line says `auto` or `notify` is `ask`. So a chat
+  tool asks with a card, and anything that runs by itself - it accepts only
+  `auto` - stops: "tell me when" watches, news feeds, the briefing's
+  calendar, email and weather. `never` stays `never`. **Nothing in
+  `jarvis-framework.toml` is written**; `file_action_tier()` still reads the
+  file's own line, and turning Lockdown off puts back exactly what it says.
+- **What the table cannot reach**, switched beside it: every web search asks
+  (`jarvis_agent.web_search_card_lines` adds "Lockdown is on, so Jarvis asks
+  before every web search"); no cloud AI model is offered at all (the
+  router's gate `"lockdown"`, before every other); "Lights, plugs and fans
+  without a card" does not apply; a plug-in program asks at every start
+  (`jarvis_mcp.card_every_start`); a "tell me when" does not look, and says
+  why under the watch (`jarvis_tellme.readiness`); checking for tool updates
+  raises its card again.
+- **Refused while on**: loosening any action (409), and turning the lights
+  setting on (409).
+
+**Not covered, said plainly.** The ntfy push (ARCHITECTURE section 4, "ntfy
+push"; text made from Jarvis's own tables, never payload) is sent from the
+owner's `jarvis_gate.py`, which this repository only patches - Lockdown does
+not stop it yet. A plug-in program that is already running and was approved
+before Lockdown keeps running until it is stopped (each of its tool calls
+still asks, as always).
+
+### 75.3 Where it shows
+
+- `GET /api/asks_first` carries `"lockdown": {"on", "waiting", "last",
+  "why", "says", "label", "detail", "can_turn_off"}` (`can_turn_off` only for
+  a request from this PC). Every row it changed has `"lockdown": true` and
+  its note ends "Lockdown is on, so this asks you first - or stops, if it
+  runs by itself."; a switch it changed offers no loosening.
+- `GET /api/version`'s `capabilities.lockdown` is `{"on": bool}` (false on
+  an older PC), and the `lockdown` event (`{"on": bool}`, nothing else)
+  says when it changes - so both apps can say it without opening the page:
+  the Jarvis bar's strip "Lockdown is on" (from the link, `stream.rs`
+  `LinkState.lockdown`) and a line at the top of the phone's Home.
+- Kept in `lockdown.json` in the Jarvis settings folder: `{"on": bool,
+  "changed": epoch}`. No file: off. A file that cannot be read, or says
+  anything else: **on** (fails closed), and the page says why.

@@ -419,6 +419,13 @@ data class HomeState(
      * notice is anything else.
      */
     val noticeProblem: com.jarvis.client.net.PlainErrors.Shown? = null,
+    /**
+     * Lockdown is on (backend jarvis_asks_first.py, 2026-09-28): every way
+     * out of the PC asks first, or has stopped. Home says so at the top -
+     * the desktop bar's strip, in the phone's place.
+     * [com.jarvis.client.JarvisRuntime.lockdown].
+     */
+    val lockdown: Boolean = false,
 )
 
 /**
@@ -555,6 +562,17 @@ data class HomeActions(
     val onShowPrivate: () -> Unit = {},
     /** "Try again" under a failed question: ask the same question again. */
     val onRetryQuestion: () -> Unit = {},
+    /**
+     * "Playing on your PC" (2026-09-28): what is playing, in the PC's own
+     * sentence, or null ([com.jarvis.client.JarvisRuntime.pcMedia]). A read.
+     */
+    val onPcMedia: suspend () -> String? = { null },
+    /**
+     * ONE media button on the PC - play, pause, next or previous
+     * ([com.jarvis.client.JarvisRuntime.pcMediaControl]). No card; refused on
+     * a stale link. @return the sentence to show.
+     */
+    val onPcMediaControl: suspend (String) -> String = { "" },
 )
 
 /**
@@ -984,6 +1002,11 @@ private fun ConversationList(
         if (busy) {
             item(key = "stop-everything") { StopEverythingPlate(actions) }
         }
+        // Lockdown (2026-09-28): said at the top while it is on. Turning it
+        // off is the PC's alone, so there is no button here.
+        if (state.lockdown) {
+            item(key = "lockdown") { LockdownPlate() }
+        }
         // AUTONOMY-PROPOSALS.md §3d. Shown only while the server itself
         // reports a task running or paused - never while merely thinking
         // about a chat reply, which WORKING is also used for elsewhere;
@@ -998,6 +1021,15 @@ private fun ConversationList(
         }
 
         item(key = "quick-note") { QuickNotePlate(open = state.quickNoteOpen, actions = actions) }
+
+        // "Playing on your PC" (2026-09-28): play, pause, next, previous -
+        // greyed while the link is stale (rule 4), no card.
+        item(key = "pc-media") {
+            PcMediaPlate(
+                canAct = state.link == LinkState.CONNECTED && !state.stale,
+                actions = actions,
+            )
+        }
 
         if (state.notice != null) {
             item(key = "notice") { HomeNotice(state, actions) }
@@ -1755,6 +1787,71 @@ private fun StopEverythingPlate(actions: HomeActions) {
                     }
                 },
             )
+        }
+    }
+}
+
+/**
+ * "Lockdown is on" (2026-09-28): the one line Home shows while every way out
+ * of the PC asks first. No button: turning it off is on the PC only, with an
+ * approval card and Windows Hello ([com.jarvis.client.net.AsksFirst]).
+ */
+@Composable
+private fun LockdownPlate() {
+    val chrome = LocalChrome.current
+    Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
+        Kicker(com.jarvis.client.net.AsksFirst.LOCKDOWN_BAR_LABEL, color = chrome.warnInk)
+        Gap(6)
+        Text(
+            com.jarvis.client.net.AsksFirst.LOCKDOWN_HOME_LINE,
+            style = MaterialTheme.typography.bodyMedium,
+            color = chrome.textMid,
+        )
+    }
+}
+
+/**
+ * "Playing on your PC" (2026-09-28; [com.jarvis.client.net.PcMedia]): what is
+ * playing, in the PC's own sentence - read when Home shows it, and again
+ * after each button - and four buttons, ONE action per tap. Greyed while the
+ * link is stale (rule 4); the runtime refuses then too. No card.
+ */
+@Composable
+private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var said by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(canAct) {
+        if (canAct) said = actions.onPcMedia()
+    }
+    Plate {
+        Kicker(com.jarvis.client.net.PcMedia.TITLE)
+        Gap(4)
+        Text(
+            said ?: com.jarvis.client.net.PcMedia.HINT,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            com.jarvis.client.net.PcMedia.ACTIONS.forEach { action ->
+                Quiet(
+                    com.jarvis.client.net.PcMedia.label(action),
+                    enabled = canAct && !busy,
+                    onClick = {
+                        if (!busy) {
+                            busy = true
+                            scope.launch {
+                                try {
+                                    said = actions.onPcMediaControl(action)
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
+                    },
+                )
+            }
         }
     }
 }

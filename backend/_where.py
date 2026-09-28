@@ -199,6 +199,11 @@ SHIPPED = (
     # The Brain upgrades (2026-09-28, brain-reads.patch): GET
     # /api/history/search and /api/memory/fact-history, for the apps only
     "jarvis_brain_reads.py",
+    # "remind me next time I talk about X": a kind on the one scheduler,
+    # brought up beside the question by jarvis_agent.py - no patch
+    "jarvis_next_time.py",
+    # "ring my phone": ONE ring_phone event the phone rings for - no patch
+    "jarvis_find_phone.py",
 )
 
 

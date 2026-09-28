@@ -766,6 +766,11 @@ def _capability_probe() -> dict:
         # is false - stopping is never hidden - and say plainly if the PC
         # cannot do it yet.
         "stop_all": _stop_all(),
+        # Lockdown (jarvis_asks_first.py, 2026-09-28): {"on": bool} - its
+        # STATE, like power's mode below, so both apps can say "Lockdown is
+        # on" from the handshake; the `lockdown` event says when it changes.
+        # False on a backend without it.
+        "lockdown": _lockdown(),
         "connectors": {},
     }
 
@@ -816,6 +821,16 @@ def _stop_all() -> bool:
     try:
         import jarvis_stop_all
         return bool(jarvis_stop_all.armed())
+    except Exception:
+        return False
+
+
+def _lockdown():
+    """{"on": bool} from jarvis_asks_first.lockdown_on() (which reads a
+    damaged file as on), or False without that module."""
+    try:
+        import jarvis_asks_first
+        return {"on": bool(jarvis_asks_first.lockdown_on())}
     except Exception:
         return False
 

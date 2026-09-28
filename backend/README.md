@@ -14215,6 +14215,64 @@ first answer after a pause of a minute or more.
 
 No route changed, so `docs/JARVIS-API.md` is unchanged.
 
+# Remind me next time, ring my phone, Lockdown: `jarvis_next_time.py`, `jarvis_find_phone.py`, `jarvis_asks_first.py` (2026-09-28)
+
+The owner chose ideas 3, 7, 8 and 10 of `docs/RESEARCH-AUDIT-2026-09-28.md`
+section 3. **No new patch and no new route.** Two new modules are shipped
+whole (apply-patches.ps1 copies them; `_where.SHIPPED` lists them); the rest
+are changes to modules already shipped whole. `docs/JARVIS-API.md` sections
+73, 74 and 75 have the details.
+
+## In plain words
+
+- **"Remind me next time I talk about the dentist to ask about the bill."**
+  No card. The next time your own typed or spoken words mention the
+  dentist, Jarvis brings it up in its answer. At most 3 times, at least a
+  day apart, gone after 90 days. It sits in Coming up in both apps, with
+  Delete. It never comes up from something pasted, shared, read from an
+  email or a web page, in a temporary chat, a game, or a crisis turn; one
+  about a sensitive topic only comes up in a typed chat, never out loud.
+- **"Ring my phone" / "find my phone".** No card. Your phone rings on its
+  alarm sound, even on silent, with a Stop button, for up to a minute. It
+  never rings for an old or repeated message (only within 2 minutes of
+  when you asked). Every phone with the Jarvis app connected rings - Jarvis
+  cannot tell phones apart yet, and says so if you name one.
+- **"Playing on your PC" on the phone's Home.** Previous, Play, Pause, Next
+  for whatever plays on the PC - no card, greyed while the connection is
+  catching up. Not on the desktop: it is the PC.
+- **Lockdown.** One tap (or "lockdown") makes everything that would leave
+  the PC ask you first - web search, research, reading your calendar, email
+  and Home Assistant, sending email, cloud AI models, plug-in programs -
+  and stops everything that runs by itself ("tell me when", news, the
+  briefing's reads). Turning it on is instant, from either app. Turning it
+  off is on the PC only: Settings, What asks first, one approval card and
+  Windows Hello. The Jarvis bar and the phone's Home say "Lockdown is on".
+  Your settings file is never changed by it.
+
+## What you need to do on the PC
+
+Nothing new: run apply-patches.ps1 as usual. It copies the two new modules.
+
+## What changed
+
+- `jarvis_next_time.py` (new) - the `"nexttime"` kind on the one scheduler,
+  matching, the limits, the note; `jarvis_schedule.py` - a kind's own small
+  state (the `extra` column, added in place to an older file), a kind whose
+  `due` is the day it ends (`Kind.ends`, "until <day>"), and
+  `jarvis_next_time` in `KIND_MODULES`; `jarvis_agent.py` -
+  `with_next_time_note`, counted after the answer.
+- `jarvis_find_phone.py` (new) - the `ring_phone` event.
+- `jarvis_quick.py` - the sentences for all three, plus "is lockdown on?".
+- `jarvis_asks_first.py` - Lockdown (`lockdown.json`, `lockdown_tier`,
+  `request_lockdown` behind `POST /api/asks_first/tier {"action":
+  "lockdown"}`); `rebuilt/jarvis_framework.py` - `action_tier` asks it
+  (`file_action_tier` is the file's own line); `rebuilt/jarvis_router.py` -
+  gate "lockdown"; `rebuilt/jarvis_events.py` - `capabilities.lockdown`;
+  `jarvis_mcp.py` - `card_every_start()`; `jarvis_tellme.py` - a watch does
+  not look; `jarvis_tool_updates.py` - asks again; `jarvis_card_words.py` -
+  the loosening card's title is now "loosen what asks first" (it also turns
+  Lockdown off).
+
 ## Test it
 
 ```
@@ -14264,3 +14322,24 @@ code and the new last patch.
   first question after a switch reads everything, as before. The same for
   the first question after the PC starts (nothing has been asked yet, so
   there is no tool list to copy).
+
+python3 backend/test_next_time.py
+python3 backend/test_find_phone.py
+python3 backend/test_lockdown.py
+```
+
+No socket, no model: the model's request is scripted and the event bus is
+a list.
+
+## Not checked, said plainly
+
+- Nothing here has run on the owner's PC or phone yet. The phone code is
+  compiled by CI only.
+- Whether the 8B model mentions a reminder for next time well, or at all, is
+  not measured: the note asks it to; a model that ignores it still counts
+  it as brought up.
+- Lockdown does not stop the ntfy push (the owner's `jarvis_gate.py` sends
+  it; a patch to that file would be needed) - text made from Jarvis's own
+  tables, never payload.
+- "Ring my phone" cannot pick one phone, and nothing reports which phone
+  rang: every paired phone shares one key until "more devices" is built.

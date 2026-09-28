@@ -455,6 +455,12 @@ def _env(name: str) -> str:
 def readiness(source: str, deps: Optional[Deps] = None) -> str:
     """"" when a watch on `source` could look, else the sentence why not."""
     deps = deps or DEPS
+    if _lockdown_on():
+        # Lockdown (jarvis_asks_first.py, 2026-09-28): every way out of this
+        # PC asks first, or stops - and a watch cannot stop to ask. Said
+        # first, and for every source, so the reason is the real one (the
+        # tier words below would blame a settings line nobody changed).
+        return LOCKDOWN_WORDS
     enabled = deps.tools_enabled()
     if source == "email":
         if not _env("JARVIS_IMAP_HOST") or EMAIL_TOOL not in enabled:
@@ -497,6 +503,24 @@ def readiness(source: str, deps: Optional[Deps] = None) -> str:
         return why
     return ("Jarvis can watch for an email from someone, a Home Assistant device, a web page, "
             "a price, a web search, or GitHub.")
+
+
+#: Why a watch does not look while Lockdown is on.
+LOCKDOWN_WORDS = ("Lockdown is on, so it does not look until you turn Lockdown off (on the PC, "
+                  "Settings, What asks first).")
+
+
+def _lockdown_on() -> bool:
+    """Lockdown (jarvis_asks_first.py): False without that module; True if
+    it cannot be read - a watch that cannot tell does not look."""
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
 
 
 def _search_readiness(deps: "Deps") -> str:

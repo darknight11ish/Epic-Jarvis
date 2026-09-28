@@ -241,6 +241,7 @@ const dom = {
   answerMarkNote: $("answer-mark-note"),
   temporary: $("temporary"),
   temporaryStrip: $("temporary-strip"),
+  lockdownStrip: $("lockdown-strip"),
   temporaryLine: $("temporary-line"),
   temporaryRefused: $("temporary-refused"),
   answerUsed: $("answer-used"),
@@ -4318,6 +4319,11 @@ startVoice(dom.root);
 onLink((link) => {
   toolWatch.link(link);
   recheckSpeech();
+  // Lockdown (2026-09-28): said in the bar while it is on, from the link.
+  if (dom.lockdownStrip && dom.lockdownStrip.hidden === Boolean(link.lockdown)) {
+    dom.lockdownStrip.hidden = !link.lockdown;
+    syncWindowHeight();
+  }
   // Forget and Erase under "Used in this answer" are held on a stale link.
   answerMemory.linkChanged();
 });

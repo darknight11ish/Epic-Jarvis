@@ -1430,6 +1430,22 @@ html[data-state="error"] .pulse {
 }
 .temporary-strip[data-state="refused"] .temporary-label { display: none; }
 .temporary-label { color: var(--accent-text); font-weight: 650; }
+
+/* Lockdown (2026-09-28): every way out of the PC asks first, or stops. */
+.lockdown-strip {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 7px 14px 7px 16px;
+  border-top: 1px solid var(--hairline);
+  border-left: 2px solid var(--warn);
+  background: var(--warn-faint);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.lockdown-strip[hidden] { display: none; }
+.lockdown-label { color: var(--warn); font-weight: 650; }
 .shell[data-temporary="true"] .bar { outline: 1px dashed var(--accent-dim); outline-offset: -1px; }
 
 /* "Used 2 memories" under an answer, and what the PC said about a
