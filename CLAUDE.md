@@ -687,6 +687,22 @@ testers, scouts and integration scouts; `.claude/agents/`):
   audio, pictures or side remarks); History shows it with a "Live" label
   and its length ("Live · 12 min · 28 Sep, 14:05") in both apps, and can
   be filtered to Live sessions only. Built with item 2.
+- **Chats, after the chat audit** (owner, 2026-09-28;
+  `docs/studio-2026-09-28/chat-audit-*.md`): **"Continue this chat"** from
+  History in both apps (reuses the conversation, its "read outside text"
+  mark carried over), an **"Earlier chats"** link on the phone's Home and in
+  the Jarvis bar, and **the whole current conversation as a scrollable
+  thread**, not just the last answer. **Chats with other AIs and comparisons
+  are kept in History**, encrypted, marked as outside text, never learned
+  from, never read aloud. **A new conversation starts after 30 quiet
+  minutes** (the old one stays in History, and Continue brings it back).
+  **Crisis chats are kept but titled "A difficult moment"**, never with the
+  owner's words. **Support chats: export stays** (the owner's own record -
+  a named exception to "no plain-text path", saying plainly the file is not
+  encrypted), and **auto-delete and "Forget a time frame" ask before
+  removing a support chat**. **The desktop HUD's own chat box opens the
+  Jarvis bar instead**, so the PC has one chat box. History rows carry a
+  kind (chat, Live, support, chatbot, comparison).
 - **Jarvis may look at the owner's screen, on the PC and the phone**
   (owner, 2026-09-28), two ways: **"Look at this"** - one look when the
   owner asks (a key on the PC; the assistant gesture on the phone), nothing
