@@ -260,6 +260,9 @@ class SpeakerMouthTest {
     fun `the error shake is sized from the face, not from the last tap`() {
         val h = FaceHost()
         h.onSize(1_000f)
+        // One idle frame first, so ERROR is a change (the shake needs one): a
+        // host's first state is worn as it is, not changed to (FaceHost.adopt).
+        h.advance(1f / 60f, FaceState.IDLE, null, null, Bindings.DEFAULTS, Arc)
         var biggest = 0f
         repeat(50) {
             h.advance(1f / 60f, FaceState.ERROR, null, null, Bindings.DEFAULTS, Arc)

@@ -57,9 +57,16 @@ object AnimalNow {
     /** A focus stretch that has waited longer than this for Jarvis to be idle is dropped. */
     const val FOCUS_END_WAIT_S = 60f
 
-    /** The shared switches, by their ids in `jarvis_animal.SWITCHES` - anything missing keeps its value. */
-    fun apply(values: Map<String, Boolean>) {
-        reads++
+    /**
+     * The shared switches, by their ids in `jarvis_animal.SWITCHES` - anything
+     * missing keeps its value. [stored] is false for the PC's defaults handed
+     * over before either this phone's copy or the PC has been heard (a first
+     * pairing): those are the values the switches already hold, and they do
+     * not count as a read ([reads]) - so a face opened then still takes the
+     * real ones at once when they come, and "Still" is not settled too early.
+     */
+    fun apply(values: Map<String, Boolean>, stored: Boolean = true) {
+        if (stored) reads++
         values["nods"]?.let { nods = it }
         values["focus_buddy"]?.let { focusBuddy = it }
         values["acks"]?.let { acks = it }
@@ -72,17 +79,78 @@ object AnimalNow {
         if (factAt == 0L || (now - factAt) / 1e9f >= ACK_NOD_GAP_S) factAt = now
     }
 
+    /**
+     * New facts were saved (`memory_saved`, fresh ids): the animal's nod -
+     * never while App lock or "Hide memory lists and chat history" is on (the
+     * owner's rule, 2026-09-28), and never for an event the PC is replaying
+     * after a reconnect or a restart ([isReplay]): that fact was saved while
+     * nobody was watching. Returns whether it nodded.
+     */
+    fun factSavedIf(appLock: Boolean, privateLists: Boolean, replayed: Boolean = false, now: Long = System.nanoTime()): Boolean {
+        if (appLock || privateLists || replayed) return false
+        factSaved(now)
+        return true
+    }
+
     /** A long answer is ready. */
     fun longAnswer(now: Long = System.nanoTime()) {
         if (glowAt == 0L || (now - glowAt) / 1e9f >= ACK_GLOW_GAP_S) glowAt = now
     }
 
-    /** A focus session is on, or has ended. */
-    fun focus(on: Boolean, now: Long = System.nanoTime()) {
-        if (focusOn && !on) focusEndDue = now
+    /** The `deep` event: a long answer ready glows once - never for a replayed one. */
+    fun deepEvent(data: JsonElement?, replayed: Boolean, now: Long = System.nanoTime()) {
+        if (!replayed && deepDone(data)) longAnswer(now)
+    }
+
+    /**
+     * A focus session is on, or has ended. [stretch] false (a replayed
+     * `ended`): the session is over, but the stretch that marks its end is
+     * not played - it ended while nobody was watching.
+     */
+    fun focus(on: Boolean, now: Long = System.nanoTime(), stretch: Boolean = true) {
+        if (focusOn && !on && stretch) focusEndDue = now
         if (on) focusEndDue = 0L
         focusOn = on
     }
+
+    /** The `focus` event: on, off, or nothing for a callout; a replayed end never stretches. */
+    fun focusEvent(data: JsonElement?, replayed: Boolean, now: Long = System.nanoTime()) {
+        focusOf(data)?.let { focus(it, now, stretch = !replayed) }
+    }
+
+    /**
+     * The events since the last one this phone saw could not be replayed (a
+     * stale resume: `hello.stale`), so an "ended" may have been missed. The
+     * focus buddy stops rather than stay on for good; a session still
+     * running shows again at its next `focus` event (docs/CRITTERS.md, "A
+     * focus session that was already running when the app started").
+     */
+    fun focusUnknown() {
+        focusOn = false
+        focusEndDue = 0L
+    }
+
+    /**
+     * Whether an event is the PC replaying what this phone missed: its id is
+     * at or below [replayUpTo], the newest id the PC had when this
+     * connection opened (`hello.latest`; the server replays from the resume
+     * point up to it, then sends live events above it). Negative: not known
+     * (no hello yet, or an older PC) - nothing counts as replayed.
+     */
+    fun isReplay(eventId: String?, replayUpTo: Long): Boolean {
+        if (replayUpTo < 0L) return false
+        val id = eventId?.trim()?.toLongOrNull() ?: return false
+        return id <= replayUpTo
+    }
+
+    /**
+     * Whether a press on Home's face that lasted [heldMs] still opens the
+     * Brain. A long press ([AnimalFeed.PET_HOLD_S], the same threshold that
+     * pets) is petting, so it does not - but only on a character face with
+     * the Petting switch on. Any other long press opens it, as before.
+     */
+    fun pressOpensBrain(heldMs: Long, character: Boolean, petting: Boolean = this.petting): Boolean =
+        !(character && petting && heldMs >= (AnimalFeed.PET_HOLD_S * 1000f).toLong())
 
     /** Seconds since [at] ([System.nanoTime]), or [CritterPose.NEVER] for none. */
     fun since(at: Long, now: Long): Float =
@@ -116,7 +184,11 @@ object AnimalNow {
  * steps it is given.
  */
 class AnimalFeed {
-    private var clock = 0f
+    // A Double, like FaceHost's clock (FaceClock), so it never stops
+    // advancing: as a Float it froze after about three days on screen at
+    // 120 Hz, and petting and the focus stretch froze with it. Only
+    // differences of it are ever handed on, so it needs no wrap.
+    private var clock = 0.0
 
     private var nodsW = if (AnimalNow.nods) 1f else 0f
     private var focusBuddyW = if (AnimalNow.focusBuddy) 1f else 0f
@@ -129,19 +201,24 @@ class AnimalFeed {
 
     private var heard: CritterPose.PauseRec? = null
     private var phrase: CritterPose.PauseRec? = null
-    /** Gestures follow the phrase ends in this answer (decided as it starts). */
+    /**
+     * Gestures follow the phrase ends in this speaking stretch: decided the
+     * first time a real voice is heard in it, off when it ends.
+     */
     var phraseOn: Boolean = false
         private set
+    // That first voice has been heard in this speaking stretch.
+    private var phraseDecided = false
     /** When the focus stretch was handed on (this clock); negative: none. */
-    private var focusEndAt = -1f
+    private var focusEndAt = -1.0
 
     // Petting: the press, held or moving, and the eased weight.
     private var petDown = false
-    private var petDownAt = 0f
+    private var petDownAt = 0.0
     private var petX0 = 0f
     private var petLastX = 0f
-    private var petLastAt = 0f
-    private var petMovedAt = -1f
+    private var petLastAt = 0.0
+    private var petMovedAt = -1.0
     private var petVx = 0f
     private var petTouchX = 0f
     private var petW = 0f
@@ -172,7 +249,7 @@ class AnimalFeed {
         petW = if (on) min(1f, petW + d / PET_IN_S) else max(0f, petW - d / PET_OUT_S)
         if (on) {
             petXs += (petTouchX - petXs) * (1f - exp(-d / 0.15f))
-            val moving = petMovedAt >= 0f && clock - petMovedAt < 0.15f
+            val moving = petMovedAt >= 0.0 && clock - petMovedAt < 0.15
             val want = if (moving) (petVx / 1.5f).coerceIn(-1f, 1f) else 0f
             petDirS += (want - petDirS) * (1f - exp(-d / 0.3f))
         } else {
@@ -184,15 +261,27 @@ class AnimalFeed {
     private var lastState: FaceState? = null
 
     /**
-     * The state shown, every advance (only a change counts). Into speaking,
-     * the gestures follow the phrase ends only while the "nods" switch is on
-     * and a real voice is heard ([voiced]) - decided as an answer starts,
-     * never in the middle.
+     * The state shown and whether a real voice is heard ([voiced]), every
+     * advance. The face turns to speaking as the answer's words start to
+     * arrive, before any voice (the voice is made sentence by sentence), so
+     * the choice is made when the voice is first heard in a speaking
+     * stretch, once: the gestures follow the phrase ends from then while the
+     * "nods" switch is on and no talking gesture of the face's own timing is
+     * playing at that moment ([gesture], asked only then) - switching then
+     * would cut it off. Off again when the speaking stretch ends. A typed or
+     * quiet answer keeps the gestures' own timing.
      */
-    fun onState(next: FaceState, voiced: Boolean) {
-        if (next == lastState) return
-        lastState = next
-        if (next == FaceState.SPEAKING) phraseOn = AnimalNow.nods && voiced
+    fun onState(next: FaceState, voiced: Boolean, gesture: () -> Boolean = { false }) {
+        if (next != lastState) {
+            lastState = next
+            phraseOn = false
+            phraseDecided = false
+        }
+        if (next != FaceState.SPEAKING || !voiced || phraseDecided) return
+        phraseDecided = true
+        phraseOn = AnimalNow.nods && !gesture()
+        // A new answer's phrase ends: nothing from an earlier one carries over.
+        if (phraseOn) phrase = phrase?.let { CritterPose.PauseRec(n = it.n) }
     }
 
     /**
@@ -246,7 +335,7 @@ class AnimalFeed {
             return false
         }
         val half = max(1f, width / 2f)
-        val dts = max(0.001f, clock - petLastAt)
+        val dts = max(0.001f, (clock - petLastAt).toFloat())
         petVx += ((x - petLastX) / half / dts - petVx) * 0.5f
         petTouchX = (x / half - 1f).coerceIn(-1f, 1f)
         petLastX = x
@@ -259,8 +348,39 @@ class AnimalFeed {
         petDown = false
     }
 
-    /** Whether the press is petting now: held long enough. */
-    fun petting(): Boolean = petDown && clock - petDownAt >= PET_HOLD_S
+    /**
+     * Whether the press is petting now: the Petting switch is on and it has
+     * been held long enough. With the switch off a held press is an ordinary
+     * press - a drag after it turns the face, as before - and the frame rate
+     * is not raised for it.
+     */
+    fun petting(): Boolean = AnimalNow.petting && petDown && clock - petDownAt >= PET_HOLD_S
+
+    /**
+     * Whether a moment is playing that should be drawn at the full frame
+     * rate (FaceHost.restFps): a fact's nod, a long answer's glow, the focus
+     * stretch, or being stroked (while held, and easing out after). Each
+     * only while its switch's weight is above 0; Still and serious moments
+     * are the host's to rule out.
+     */
+    fun momentPlaying(now: Long = System.nanoTime()): Boolean {
+        if (acksW > 0f) {
+            if (AnimalNow.since(AnimalNow.factAt, now) < CritterPose.ACK_S) return true
+            if (AnimalNow.since(AnimalNow.glowAt, now) < CritterPose.GLOW_S) return true
+        }
+        if (focusBuddyW > 0f && focusEndAt >= 0.0 && clock - focusEndAt < CritterPose.FOCUS_END_S) return true
+        return petW > 0f
+    }
+
+    /**
+     * A focus session has the idle happenings to itself: it is on and the
+     * focus buddy works through it (the pose's focusOf, at full weight). The
+     * happenings do not play then, so they do not keep the frame rate up.
+     */
+    fun focusQuiet(): Boolean {
+        fun e(r: Float) = r * r * (3f - 2f * r)
+        return e(focusW) * e(focusBuddyW) >= 0.99f
+    }
 
     /**
      * What the pose is handed besides calm, serious and still (those three
@@ -286,7 +406,7 @@ class AnimalFeed {
             phraseN = if (phraseOn) ph?.n ?: 0 else -1,
             ackNod = AnimalNow.since(AnimalNow.factAt, now),
             ackGlow = AnimalNow.since(AnimalNow.glowAt, now),
-            focusEnd = if (focusEndAt >= 0f) clock - focusEndAt else CritterPose.NEVER,
+            focusEnd = if (focusEndAt >= 0.0) (clock - focusEndAt).toFloat() else CritterPose.NEVER,
         )
     }
 
