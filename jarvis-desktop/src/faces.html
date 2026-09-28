@@ -192,6 +192,11 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 </div>
 
 <script src="faces-spec.js"></script>
+<script src="critter-pose.js"></script>
+<script src="critter-owl.js"></script>
+<script src="critter-otter.js"></script>
+<script src="critters-gen.js"></script>
+<script src="lipsync.js"></script>
 <script>
 "use strict";
 // The spec is loaded from `faces-spec.js`, generated from
@@ -1115,6 +1120,154 @@ void main(){
 
 
 /* ============================== the faces ============================= */
+/* THE ANIMAL FACES ("critters") - the red panda, the pygmy owl and the
+   sea otter.
+
+   Every other face here is an instrument: rings, orbits, a drum skin. These
+   are characters, so they are built differently in two ways.
+
+   A CHARACTER, not a table of speeds. The shell hands most faces one of four
+   motion tables and borrows for the rest; an animal declares all eight
+   states in `st`, so drawSurface() hands it the real one (see its `motion`
+   line) and it can sleep through standby, wave for an approval and be
+   puzzled at an error rather than borrow idle's pose. The shell's
+   transforms (dim, the approval clock, the error hitch) still apply on top,
+   exactly as they do for every other face.
+
+   And the pose is worked out outside the shader, once a frame, by the
+   animal's pose code (critter-pose.js, critter-owl.js, critter-otter.js) -
+   the same maths the phone runs, checked against it by a fixture. The
+   shader (critters/, one source for both apps) only draws the animal in
+   whatever pose it is given.
+
+   critterFace() is everything the three share; each passes its own name,
+   words and flat fallback. */
+function critterFace(o){
+  return Object.assign({
+    family:"critter", dim:"3d", wave:4,
+    geo:"sphere-traced soft-body character", type:"Syne / IBM Plex Mono",
+    fonts:{d:'"Syne"', m:'"IBM Plex Mono"'},
+    heavy:false,
+    // All eight states, so the shell passes each one through instead of
+    // borrowing. `sp` is the shell's spin rate; an animal barely uses it
+    // (only the orb's swirl turns with PHASE) because a creature's breathing
+    // and blinking should not stop when a state's spin does. The four states
+    // other faces borrow for carry the rate of the movement they would
+    // borrow (idle .5, thinking 1.6), because that is what the phone's
+    // speedFor receives - so the orb swirls at the same pace on both. The
+    // colours are the unbound defaults; a binding replaces them like any
+    // other face's. A fresh object per animal: withOverride() writes into it.
+    st:{ idle:     {sp:.5, glow:"#1d6f8a", hot:"#7fe3ff"},
+         listening:{sp:1,  glow:"#8a3a12", hot:"#ff8a3d"},
+         thinking: {sp:1.6,glow:"#3a3490", hot:"#8f7bff"},
+         speaking: {sp:.8, glow:"#2a7890", hot:"#9ff0ff"},
+         approval: {sp:.5, glow:"#8a5a10", hot:"#ffc14d"},
+         standby:  {sp:.5, glow:"#3a4048", hot:"#9aa3ad"},
+         error:    {sp:1.6, glow:"#8a1f35", hot:"#ff5a7a"},
+         banked:   {sp:.5, glow:"#444a52", hot:"#b0b6bf"} },
+    // This animal's pose code, looked up when first drawn (the scripts load
+    // before this page's own, but a missing one should cost the face its 3D
+    // picture, not the page).
+    get species(){
+      return (typeof CritterPose !== "undefined" && CritterPose.species && CritterPose.species[this.id]) || null;
+    },
+    // Which state each SURFACE last showed, and when it changed, so a change of
+    // state melts over CritterPose.BLEND_S instead of cutting. Keyed by the
+    // surface's own view object (VIEW is swapped per surface before each
+    // draw): the grid card and the solo view can show this same face in two
+    // different states at once, and must not fight over one memory.
+    //
+    // Timed in real seconds, not the face clock `t`, so the melt takes the
+    // same half second at any speed-slider setting - and matches the phone,
+    // whose FaceHost measures it the same way.
+    mem: new WeakMap(),
+    track(st, amp){
+      const now = performance.now() / 1000;
+      let m = this.mem.get(VIEW);
+      if(!m){
+        m = { st, prev: st, prev2: st, at: -1e9, gap: 1e9, prevAmp: amp, prevAmp2: amp, lastAmp: amp,
+              lookW: 0, lookAt: now };
+        this.mem.set(VIEW, m);
+      }
+      if(m.st !== st){
+        // What CritterPose.pose needs to carry on from what was on screen:
+        // the loudness at the change (and at the change before, which the
+        // state before that was drawn with), and whether the state being
+        // left was itself still melting in. Order matters: critter-pose.js
+        // makePose's own note.
+        m.prev2 = m.prev; m.gap = now - m.at; m.prevAmp2 = m.prevAmp; m.prevAmp = m.lastAmp;
+        m.prev = m.st; m.st = st; m.at = now;
+      }
+      m.lastAmp = amp;
+      return m;
+    },
+    look(m){
+      // The pointer, for a few seconds after it last moved over the face. The
+      // weight is EASED, both ways: taken straight from the pointer it jumped
+      // from 0 to 1 on the first move after a pause, and to 0 on a click, and
+      // the head snapped round. Only the Faces window has a pointer; the
+      // Widget, HUD and floating face have none, so there it stays 0.
+      const now = performance.now() / 1000;
+      const age = now - (TOUCH.at || -1e12) / 1000;
+      const want = Math.max(0, Math.min(1, 1 - (age - 2) / 1.5));
+      const dt = Math.max(0, now - m.lookAt); m.lookAt = now;
+      m.lookW += (want - m.lookW) * (1 - Math.exp(-dt / 0.3));
+      return { x: TOUCH.x, y: -TOUCH.y, w: m.lookW };
+    },
+    pose(t, st, amp){
+      if(!this.species) return null;
+      const m = this.track(st, amp);
+      return this.species.pose(st, m.prev, performance.now() / 1000 - m.at, t, amp, this.look(m),
+                              { prev2: m.prev2, gap: m.gap, prevAmp: m.prevAmp, prevAmp2: m.prevAmp2 });
+    },
+    gpu(g, w, h, t, st, amp, P){
+      if(typeof GPU === "undefined" || GPU.dead || !GPUOK || !P) return false;
+      if(typeof JARVIS_CRITTERS === "undefined") return false;
+      const rw = Math.max(96, Math.min(w, GPUPX));
+      // FACE_MOUTH: the mouth track of the voice being heard, or null (shut)
+      // - see LIP-SYNC. The pose scales it by how much it is speaking.
+      const U = this.species.uniforms(P, FACE_MOUTH);
+      if(U.uMouth) window.__faceVoice.lastMouth = Array.from(U.uMouth);
+      const p = this.st[st];
+      const bg = parseCol(this.swatch[0]), hot = parseCol(p.hot), cool = parseCol(p.glow);
+      if(!JARVIS_CRITTERS[this.id]) return false;
+      const out = GPU.pass(this.id, JARVIS_CRITTERS[this.id], rw, rw, (G, L) => {
+        for(const k in U){
+          const v = U[k], l = L[k];
+          if(!l) continue;
+          if(v.length === 1) G.uniform1f(l, v[0]);
+          else if(v.length === 2) G.uniform2f(l, v[0], v[1]);
+          else if(v.length === 3) G.uniform3f(l, v[0], v[1], v[2]);
+          else G.uniform4f(l, v[0], v[1], v[2], v[3]);
+        }
+        G.uniform3f(L.uHot, hot[0]/255, hot[1]/255, hot[2]/255);
+        G.uniform3f(L.uCool, cool[0]/255, cool[1]/255, cool[2]/255);
+        G.uniform3f(L.uBg, bg[0]/255, bg[1]/255, bg[2]/255);
+        G.uniform1f(L.uYaw, VIEW.yaw);
+        G.uniform1f(L.uPit, VIEW.pitch);
+        G.uniform1f(L.uZoom, VIEW.zoom || 1);
+        G.uniform1f(L.uTime, PHASE);
+        // One pixel in the shader's own units (it spans -1..1 across rw), for
+        // its soft outline.
+        G.uniform1f(L.uPx, 2 / rw);
+      });
+      if(!out) return false;
+      g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+      g.drawImage(out, 0, 0, w, h);
+      return true;
+    },
+    draw(g, w, h, t, st, amp){
+      const P = this.pose(t, st, amp);
+      if(this.gpu(g, w, h, t, st, amp, P)) return;
+      // The flat drawing opens the same mouth the shader would: the pose
+      // code's own mouthOf, [open, wide, round], shut with no real voice.
+      const M = P && this.species && this.species.mouth ? this.species.mouth(P, FACE_MOUTH) : [0, 0, 0];
+      window.__faceVoice.lastMouth = Array.from(M);
+      this.flat(g, w, h, st, P, M);
+    },
+  }, o);
+}
+
 const THEMES = [
 {
   id:"arc", name:"Arc", family:"core", tagline:"The classic, tightened", wave:1, dim:"2d",
@@ -2875,7 +3028,178 @@ const THEMES = [
       g.stroke();
     }
   }
-}
+},
+
+critterFace({
+  id:"redpanda", name:"Red Panda", tagline:"A friend who keeps the light on",
+  swatch:["#04060b","#ff8a3d","#1d6f8a","#f2e2c8"],
+  spec:"A red panda made of maths rather than a model file. Its head, cheeks, ears, paws and ringed tail are simple rounded shapes melted together with a smooth minimum, so it bends like felt instead of hinging like a toy, and every pixel is ray-traced with soft shadows and occlusion. The glowing orb it holds is the state colour, and it is a real light: it tints the panda's paws and chin, and the rim light round its fur is the state's second colour.",
+  // Without a GPU: the same panda as a flat sticker, in the same pose. Not
+  // ray-traced, but it still tilts its head, blinks, perks its ears, holds
+  // its orb and closes its eyes to sleep - the parts that say what Jarvis is
+  // doing survive; the lighting does not.
+  flat(g, w, h, st, P, M){
+    if(!P) return;
+    M = M || [0, 0, 0];
+    const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1);
+    const X = x => w / 2 + x * S / 1.08, Y = y => h / 2 - (y + 0.08) * S / 1.08;
+    const R = r => r * S / 1.08;
+    const RUST = "#e0622a", CREAM = "#f5e6cf", DARK = "#2a140d";
+    const ell = (x, y, rx, ry, col, rot) => {
+      g.fillStyle = col; g.beginPath(); g.ellipse(X(x), Y(y), R(rx), R(ry), rot || 0, 0, TAU); g.fill();
+    };
+    const seat = -0.90 + P.bob;
+    // Tail, behind everything: a fat curve with a few dark rings.
+    for(let i = 5; i >= 0; i--){
+      const k = i / 5, a = -0.6 + k * 2.2 + P.tailSwing * .4 * k;
+      ell(0.42 + Math.cos(a) * .22, seat + .2 + Math.sin(a) * .18 + k * .1, .15 - k * .05, .13 - k * .04,
+          i % 2 ? "#8a2e0f" : RUST);
+    }
+    // Body, with a soft halo in the state's second colour standing in for
+    // the shader's rim light.
+    g.save(); g.shadowColor = rgba(p.glow, .9); g.shadowBlur = S * .09;
+    ell(0, seat + .31, .38 * P.breath, .39, RUST);
+    g.restore();
+    ell(0, seat + .24, .25, .26, DARK);                         // belly
+    ell(-.2, seat + .03, .11, .08, DARK); ell(.2, seat + .03, .11, .08, DARK);   // feet
+    // Head, tilted by its roll and nodded by its pitch.
+    const nx = 0, ny = seat + .60, hs = 1.14;
+    g.save();
+    g.translate(X(nx), Y(ny)); g.rotate(P.headRoll); g.translate(-X(nx), -Y(ny));
+    g.translate(R(P.headYaw * .25), -R(P.headPitch * .12));
+    const hy = ny + .36 * hs;
+    for(const side of [-1, 1]){
+      const perk = side < 0 ? P.earL : P.earR;
+      const ex = side * .27 * hs, ey = ny + .68 * hs;
+      const rot = side * (.38 - .22 * perk + (perk < 0 ? -.35 * perk : 0));
+      ell(ex, ey, .13 * hs, .17 * hs, CREAM, rot);
+      ell(ex, ey - .01, .08 * hs, .11 * hs, DARK, rot);
+    }
+    ell(0, hy, .47 * hs, .39 * hs, RUST);
+    ell(-.25 * hs, ny + .21 * hs, .2 * hs, .15 * hs, CREAM); ell(.25 * hs, ny + .21 * hs, .2 * hs, .15 * hs, CREAM);
+    ell(0, ny + .2 * hs, .15 * hs, .11 * hs, CREAM);
+    ell(-.14 * hs, ny + .53 * hs, .06 * hs, .035 * hs, CREAM); ell(.14 * hs, ny + .53 * hs, .06 * hs, .035 * hs, CREAM);
+    ell(0, ny + .285 * hs, .055 * hs, .037 * hs, "#0b0b0e");
+    for(const side of [-1, 1]){
+      const open = Math.max(.08, Math.min(1.2, side < 0 ? P.eyeL : P.eyeR));
+      const ex = side * (.158 + .012 * P.lookX) * hs, ey = ny + (.395 + .012 * P.lookY) * hs;
+      ell(ex, ey, .07 * hs, .08 * hs * open, "#0b0b0e");
+      if(open > .3) ell(ex - .02 * hs, ey + .025 * hs, .018 * hs, .018 * hs, "#ffffff");
+    }
+    // The mouth track: open is its height, wide stretches it, round narrows it.
+    if(M[0] > .05) ell(0, ny + .15 * hs, .05 * hs * (1 + .5 * M[1] - .35 * M[2]), .05 * hs * M[0], "#4a0d10");
+    g.restore();
+    // The orb and the paws holding it sit in front of everything, the chin
+    // included - thinking lifts them right up to it.
+    // Orb, and its glow.
+    const ox = P.orbX, oy = seat + P.orbY, or = P.orbR;
+    const og = g.createRadialGradient(X(ox), Y(oy), 0, X(ox), Y(oy), R(or * 3.2));
+    og.addColorStop(0, rgba(p.hot, .55 * Math.min(1, P.orbGlow + .2))); og.addColorStop(1, rgba(p.hot, 0));
+    g.fillStyle = og; g.beginPath(); g.arc(X(ox), Y(oy), R(or * 3.2), 0, TAU); g.fill();
+    ell(ox, oy, or, or, lift(p.hot, .25));
+    // Paws.
+    ell(P.pawLx, seat + P.pawLy, .085, .085, DARK); ell(P.pawRx, seat + P.pawRy, .085, .085, DARK);
+  }
+}),
+critterFace({
+  id:"pygmyowl", name:"Pygmy Owl", tagline:"Small, round, and paying attention",
+  swatch:["#04060b","#ffc14d","#1d6f8a","#e6d2b2"],
+  spec:"A pygmy owl on a branch, made of maths rather than a model file: one egg of a body, a big round head with huge yellow eyes in pale facial discs, folded spotted wings and a streaked front, all ray-traced with soft shadows. Owls have no hands, so its orb floats beside it - the state colour, and a real light on its feathers. It turns its head to follow what is going on, tips it right over while it thinks, waves a wing when something is waiting on you and puffs up round to sleep.",
+  // Without a GPU: a flat owl in the same pose - head tilt, eyes, beak,
+  // wings and orb - without the lighting.
+  flat(g, w, h, st, P, M){
+    if(!P) return;
+    M = M || [0, 0, 0];
+    const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1);
+    const X = x => w / 2 + x * S / 1.08, Y = y => h / 2 - (y + 0.12) * S / 1.08;
+    const R = r => r * S / 1.08;
+    const BROWN = "#9a6a40", CREAM = "#f0e2c8", DARK = "#1a0e08", IRIS = "#ffc93a", HORN = "#e3b56a";
+    const ell = (x, y, rx, ry, col, rot) => {
+      g.fillStyle = col; g.beginPath(); g.ellipse(X(x), Y(y), R(rx), R(ry), rot || 0, 0, TAU); g.fill();
+    };
+    const seat = -0.93 + P.bob, fl = P.fluff * P.breath;
+    g.strokeStyle = "#5a3a24"; g.lineWidth = R(0.13); g.lineCap = "round";
+    g.beginPath(); g.moveTo(X(-0.9), Y(-0.99)); g.lineTo(X(0.9), Y(-0.95)); g.stroke();
+    g.save(); g.shadowColor = rgba(p.glow, .9); g.shadowBlur = S * .09;
+    ell(0, seat + .40, .40 * fl, .47, BROWN);
+    g.restore();
+    ell(0, seat + .34, .22 * fl, .36, CREAM);
+    for(const side of [-1, 1]){
+      const lift = side < 0 ? P.wingL : P.wingR;
+      ell(side * (.34 + .15 * Math.min(1.6, lift)), seat + .40 + .12 * Math.min(1.6, lift), .12, .32, BROWN, side * Math.min(1.6, lift));
+    }
+    const ny = seat + .70 - P.neckDrop;
+    g.save();
+    g.translate(X(0), Y(ny)); g.rotate(P.headRoll); g.translate(-X(0), -Y(ny));
+    g.translate(R(P.headYaw * .2), -R(P.headPitch * .1));
+    ell(0, ny + .30, .48, .41, BROWN);
+    for(const side of [-1, 1]){
+      const open = Math.max(.08, Math.min(1.2, side < 0 ? P.eyeL : P.eyeR));
+      const ex = side * .165, ey = ny + .33;
+      ell(ex, ey, .17, .17, CREAM);
+      ell(ex, ey, .115, .115 * open, DARK);
+      if(open > .3){
+        ell(ex + .02 * P.lookX, ey + .018 * P.lookY, .085, .085 * open, IRIS);
+        ell(ex + .02 * P.lookX, ey + .018 * P.lookY, .045, .045 * open, DARK);
+        ell(ex - .03, ey + .036, .018, .018, "#ffffff");
+      }
+    }
+    // The beak drops open with the mouth track, a dark gap under it.
+    if(M[0] > .05) ell(0, ny + .15 - .02 * M[0], .035 * (1 + .3 * M[1] - .2 * M[2]), .025 * M[0], "#4a0d10");
+    ell(0, ny + .21 - .02 * M[0], .05, .07, HORN);
+    g.restore();
+    const ox = P.orbX, oy = seat + P.orbY, or = P.orbR;
+    const og = g.createRadialGradient(X(ox), Y(oy), 0, X(ox), Y(oy), R(or * 3.2));
+    og.addColorStop(0, rgba(p.hot, .55 * Math.min(1, P.orbGlow + .2))); og.addColorStop(1, rgba(p.hot, 0));
+    g.fillStyle = og; g.beginPath(); g.arc(X(ox), Y(oy), R(or * 3.2), 0, TAU); g.fill();
+    ell(ox, oy, or, or, lift(p.hot, .25));
+  }
+}),
+critterFace({
+  id:"seaotter", name:"Sea Otter", tagline:"Afloat, and keeping your stone safe",
+  swatch:["#04060b","#7fe3ff","#1d6f8a","#d8c8b0"],
+  spec:"A sea otter floating on its back in a small round pool, made of maths rather than a model file and ray-traced with soft shadows; rings spread across the water from it as it bobs. It holds a glowing pebble on its chest - the orb, in the state colour, and a real light on its paws and face. It taps the pebble while it thinks, puts its paws to its cheeks to listen, waves while something is waiting on you and covers its eyes with its paws to sleep.",
+  // Without a GPU: a flat otter on a flat pool, in the same pose, without
+  // the lighting.
+  flat(g, w, h, st, P, M){
+    if(!P) return;
+    M = M || [0, 0, 0];
+    const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1);
+    const X = x => w / 2 + x * S / 1.1, Y = y => h / 2 - (y + 0.05) * S / 1.1;
+    const R = r => r * S / 1.1;
+    const FUR = "#6e4a34", FACE = "#e2d4bc", DARK = "#150c08", WATER = "#15586e";
+    const ell = (x, y, rx, ry, col, rot) => {
+      g.fillStyle = col; g.beginPath(); g.ellipse(X(x), Y(y), R(rx), R(ry), rot || 0, 0, TAU); g.fill();
+    };
+    ell(0, -.18, 1.0, .42, WATER);
+    g.strokeStyle = rgba(p.glow, .5); g.lineWidth = Math.max(1, S * .01);
+    g.beginPath(); g.ellipse(X(0), Y(-.18), R(.62 + .05 * Math.sin(P.wave)), R(.26), 0, 0, TAU); g.stroke();
+    const by = P.bob;
+    ell(.08, by, .62, .22, FUR);
+    ell(.66, by + .06 + .04 * P.paddle, .12, .06, DARK);
+    const hx = -.55, hy = by + .18;
+    g.save();
+    g.translate(X(hx), Y(hy)); g.rotate(P.headRoll); g.translate(-X(hx), -Y(hy));
+    ell(hx, hy, .25, .23, FACE);
+    for(const side of [-1, 1]){
+      const open = Math.max(.08, Math.min(1.2, side < 0 ? P.eyeL : P.eyeR));
+      ell(hx + side * .095, hy + .05, .035, .035 * open, DARK);
+    }
+    ell(hx, hy - .03, .045, .03, DARK);
+    // The mouth track: open is its height, wide stretches it, round narrows it.
+    if(M[0] > .05) ell(hx, hy - .10, .035 * (1 + .5 * M[1] - .35 * M[2]), .03 * M[0], "#4a0d10");
+    g.restore();
+    // The paws, then the pebble on its chest.
+    for(const k of ["L", "R"]){
+      ell(.02 + P["paw" + k + "x"], by + P["paw" + k + "y"] - .12, .07, .07, FUR);
+    }
+    const ox = .02 + P.orbX, oy = by + P.orbY - .12, or = P.orbR;
+    const og = g.createRadialGradient(X(ox), Y(oy), 0, X(ox), Y(oy), R(or * 3.2));
+    og.addColorStop(0, rgba(p.hot, .55 * Math.min(1, P.orbGlow + .2))); og.addColorStop(1, rgba(p.hot, 0));
+    g.fillStyle = og; g.beginPath(); g.arc(X(ox), Y(oy), R(or * 3.2), 0, TAU); g.fill();
+    ell(ox, oy, or, or, lift(p.hot, .25));
+  }
+}),
 ];
 
 /* ====================================================================== *
@@ -3319,6 +3643,165 @@ function stepAmp(dt){
   if(HUD.voice < 1e-4) HUD.voice = 0;
 }
 window.setSpeechLevel = setSpeechLevel;
+
+/* ---------------------------------------------------------------------- *
+ * LIP-SYNC - Jarvis's real voice, from the window that plays it.
+ *
+ * The Jarvis bar plays every spoken clip. It analyses each one up front into
+ * a mouth track (lipsync.js: loudness, open, wide, round, 100 times a
+ * second) and sends it once, then only its PLAYBACK CLOCK - where the audio
+ * element is, when that was read, playing or not - through Rust to every
+ * window, whose page posts it into this frame (face-voice.js). See
+ * docs/LIPSYNC.md.
+ *
+ * Every frame, lipStep() works out where the audio is NOW: the last clock,
+ * plus the time since it was read (on the sender's own clock, so the trip
+ * between windows costs nothing), frozen while paused. It samples the track
+ * there (lipsync.js adds a small lead - lips move just before the sound)
+ * and:
+ *   - feeds the loudness to setSpeechLevel(), so ALL faces talk with the
+ *     real voice instead of the made-up 4.2 Hz beat (synthVoice);
+ *   - hands the mouth {open, wide, round} to the animals (FACE_MOUTH).
+ *
+ * With no real voice playing - a typed answer, Quiet mode, an answer kept
+ * on screen, all of which still stream as `speaking` - FACE_MOUTH is null
+ * and the animals keep their mouths SHUT; the other faces keep the made-up
+ * beat, as before. Only the Faces window's own preview (not display mode)
+ * shows a made-up mouth, because nothing there is Jarvis really talking.
+ *
+ * The microphone's level arrives the same way ({mic}), about 30 times a
+ * second while it is open, so `listening` follows the owner's real voice.
+ * ---------------------------------------------------------------------- */
+const LIP = {
+  id: 0,            // the clip being followed; messages about older ones are stale
+  n: -1,            // the newest message about it, by its count
+  track: null,      // its unpacked mouth track
+  dur: 0,           // its length, seconds
+  ended: true,
+  playing: false,
+  t: 0,             // the last clock: seconds into the clip...
+  base: 0,          // ...at this moment on OUR performance.now() clock
+  rate: 1,
+  est: 0,           // where the audio is now, as last worked out
+  heardAt: -1e9,    // performance.now() when real voice last played
+  micAt: 0,         // performance.now() of the last microphone level; 0 = none
+  out: { level: 0, open: 0, wide: 0, round: 0 },
+  mouth: null,      // the mouth now, or null when no real voice is playing
+};
+// A clock older than this (no word from the Jarvis bar for this long while
+// "playing") is lost, not extrapolated: the mouth shuts rather than run on.
+// Generous, because a hidden window's timers may be slowed to once a second;
+// its media events (pause, ended) still come at once.
+const LIP_LOST_S = 5;
+// Past the end of the track by this much, a clip whose `end` never arrived
+// is over.
+const LIP_END_SLACK_S = 0.25;
+// For this long after real voice was last heard, speaking stays on the real
+// (silent) level instead of the made-up beat - the gap between two
+// sentences is silence, not syllables.
+const LIP_QUIET_HOLD_S = 2;
+// ...and for this long, a face whose state says idle/thinking still shows
+// speaking (lipState): the last sentences often play after the answer's text
+// has finished streaming, when the backend already says `idle`.
+const LIP_STATE_HOLD_S = 0.6;
+// A microphone level older than this is the microphone closing: back to 0.
+const MIC_STALE_S = 0.3;
+// Where the next frame will draw the animals' mouth from; see drawSurface.
+let FACE_MOUTH = null;
+
+/** One message from face-voice.js: a clip's track and/or clock, or {mic}. */
+function lipCue(c){
+  if(!c || typeof c !== "object") return;
+  if(typeof c.mic === "number"){
+    setLevel(c.mic);
+    LIP.micAt = performance.now();
+    return;
+  }
+  const id = +c.id, n = +c.n || 0;
+  if(!(id > 0) || id < LIP.id) return;            // about an older clip: stale
+  if(id > LIP.id){
+    Object.assign(LIP, { id, n: -1, track: null, dur: 0, ended: false, playing: false, t: 0 });
+  }
+  if(typeof c.track === "string" && !LIP.track && typeof JarvisLipSync !== "undefined"){
+    try {
+      const tr = JarvisLipSync.unpack(c.track);
+      if(tr && tr.n > 0 && tr.fps > 0){ LIP.track = tr; LIP.dur = tr.n / tr.fps; }
+    } catch(e){ LIP.track = null; }
+  }
+  if(n <= LIP.n || LIP.ended) return;             // an older clock, or already over
+  LIP.n = n;
+  if(c.end){ LIP.ended = true; LIP.playing = false; return; }
+  const now = performance.now();
+  // The sender read its clock at `at` (ms since 1970, the same PC clock this
+  // page sees): count from THEN, so the trip here is not a delay. A stamp
+  // that makes no sense (in the future, or seconds old) counts from now.
+  const age = Date.now() - (+c.at || 0);
+  LIP.t = Math.max(0, +c.t || 0);
+  LIP.base = now - (age >= -50 && age < 2000 ? Math.max(0, age) : 0);
+  LIP.rate = +c.rate > 0 ? Math.min(4, +c.rate) : 1;
+  LIP.playing = !!c.playing;
+}
+
+/** Once a frame, before anything draws: where the audio is, and what it
+ *  says the voice level and the mouth are right now. */
+function lipStep(){
+  const now = performance.now();
+  if(LIP.micAt && (now - LIP.micAt) / 1000 > MIC_STALE_S){ setLevel(0); LIP.micAt = 0; }
+  LIP.mouth = null;
+  if(LIP.track && !LIP.ended){
+    let t = LIP.t;
+    if(LIP.playing){
+      const since = (now - LIP.base) / 1000;
+      if(since > LIP_LOST_S){ LIP.playing = false; LIP.ended = true; }
+      else {
+        t += Math.max(0, since) * LIP.rate;
+        if(t > LIP.dur + LIP_END_SLACK_S){ LIP.playing = false; LIP.ended = true; }
+      }
+    }
+    LIP.est = Math.min(t, LIP.dur);
+    // Paused: the time is frozen where it stopped (so a resume carries on
+    // from there) and the mouth is shut - nothing is sounding.
+    if(LIP.playing){
+      LIP.heardAt = now;
+      LIP.mouth = JarvisLipSync.sample(LIP.track, LIP.est, LIP.out);
+      setSpeechLevel(LIP.mouth.level);
+      return;
+    }
+  }
+  if((now - LIP.heardAt) / 1000 < LIP_QUIET_HOLD_S) setSpeechLevel(0);
+}
+
+/** The state a live face shows: while Jarvis's real voice is playing, a
+ *  resting or busy face is speaking. An approval, an error, listening and
+ *  speaking itself are left alone. */
+const LIP_TALKS_OVER = new Set(["idle", "thinking", "standby", "banked"]);
+function lipState(state){
+  const talking = LIP.mouth || (performance.now() - LIP.heardAt) / 1000 < LIP_STATE_HOLD_S;
+  return talking && LIP_TALKS_OVER.has(state) ? "speaking" : state;
+}
+
+/** The mouth the animals draw on surface `s` in `state`: the real one while
+ *  Jarvis's voice plays; in the Faces window's preview of `speaking`, a
+ *  made-up one in step with the made-up beat; otherwise none (shut). */
+function faceMouth(state, s){
+  if(LIP.mouth) return LIP.mouth;
+  if(DISPLAY_MODE || state !== "speaking") return null;
+  const age = (s && s.fxAge) || 0;
+  const syl = Math.floor(age * 4.2), h = hash01(syl * 13 + 5);
+  return { open: Math.min(1, synthVoice(age) * 1.15),
+           wide: h > .55 ? (h - .55) * 2 : 0,
+           round: h < .3 ? (.3 - h) * 2.5 : 0 };
+}
+
+// For tests/voice-mouth.mjs and anyone debugging: what the voice is doing.
+window.__faceVoice = {
+  cue: lipCue,
+  now: () => ({ id: LIP.id, playing: LIP.playing, ended: LIP.ended, est: LIP.est,
+                mouth: LIP.mouth ? { open: LIP.mouth.open, wide: LIP.mouth.wide, round: LIP.mouth.round } : null,
+                voiceRaw: HUD.voiceRaw, mic: HUD.raw }),
+  lastMouth: null,  // the animal's uMouth as last drawn: [open, wide, round]
+  lastState: null,  // the state the display face last drew
+};
 // Two faces (swarm, fullerene) carry no per-state palette at all - their
 // colours are literals inside the draw. Those literals were rewritten at
 // build time to read this array, so the palette reaches them too. Order is
@@ -3734,6 +4217,8 @@ function drawSurface(s, dt, state){
     fx0 = s.ack.dx * flinch; fy0 = s.ack.dy * flinch;
   }
   const scaled = (fit !== 1 || push !== 1 || fx0 || fy0) && !th.persistent;
+  // The animals' mouth for this surface (LIP-SYNC): read by critterFace.
+  FACE_MOUTH = faceMouth(state, s);
   withOverride(th, motion, col, () => {
     for(let i=0;i<reps;i++){
       s.clock += dt * sub;
@@ -4054,6 +4539,7 @@ function frame(now){
   // draws. Faces read the result and must not filter it again: three of them
   // used to apply their own per-frame lerp on top, which is a second filter
   // with a different time constant that also changed with the refresh rate.
+  lipStep();
   stepAmp(dt);
   lastDrawn = now;
   const t0 = performance.now();
@@ -4420,6 +4906,9 @@ function buildGrid(){
       const p = pt(e), r = cv.getBoundingClientRect();
       s.touch.x = ((p.x - r.left) / r.width) * 2 - 1;
       s.touch.y = ((p.y - r.top) / r.height) * 2 - 1;
+      // When, so a face that follows the pointer (the red panda) can stop
+      // following once it has gone still or left.
+      s.touch.at = performance.now();
       if(!dragging) return;
       const now = performance.now(), ddt = Math.max(1, now - lt) / 1000;
       const dyaw = (p.x - lx) * .008;
@@ -4550,6 +5039,7 @@ function openSolo(theme){
     const rr = cv.getBoundingClientRect();
     SOLO.touch.x = ((e.clientX - rr.left) / rr.width) * 2 - 1;
     SOLO.touch.y = ((e.clientY - rr.top) / rr.height) * 2 - 1;
+    SOLO.touch.at = performance.now();
     if(!drag) return;
     const now = performance.now(), ddt = Math.max(1, now - lt) / 1000;
     const dyaw = (e.clientX - lx) * .008;
@@ -5176,8 +5666,13 @@ async function bootDisplay() {
       owed = 0;
       lastDraw = now;
       const t0 = performance.now();
+      // Jarvis's real voice first (LIP-SYNC): the level every face moves
+      // with, the animals' mouth, and speaking while it plays.
+      lipStep();
       stepAmp(dt);
-      drawSurface(surface, dt, LIVE_STATE);
+      const shown = lipState(LIVE_STATE);
+      window.__faceVoice.lastState = shown;
+      drawSurface(surface, dt, shown);
       govern(performance.now() - t0, now);
     }
     requestAnimationFrame(tick);
@@ -5192,6 +5687,8 @@ async function bootDisplay() {
       // Only the page that embeds this frame, on this origin.
       if (event.source !== window.parent || event.origin !== location.origin) return;
       const data = event.data;
+      // Lip-sync: Jarvis's voice and the owner's microphone (face-voice.js).
+      if (data && data.type === "jarvis-face-voice") { lipCue(data); return; }
       if (!data || data.type !== "jarvis-hud-face") return;
       // A state id this build of the spec does not know is ignored, not
       // guessed at: the face keeps showing the last state it was told.

@@ -400,7 +400,11 @@ def t_real_models():
         # the owner (or nobody) chose, not the `sid` this exercises.
         with mock.patch.object(S, "_cfg", lambda k, d=None, sid=sid:
                                sid if k == "tts_speaker_id" else fake(k, d)), \
-             mock.patch.object(VC, "speaker", lambda sid=sid: sid):
+             mock.patch.object(VC, "speaker", lambda sid=sid: sid), \
+             mock.patch.object(VC, "face_voice", lambda: None, create=True):
+            # ...and "Voice follows the face" (2026-09-27) is held off: with
+            # an animal face showing on the owner's PC, its voice would
+            # otherwise win over `sid`.
             yield
 
     with mock.patch.object(S, "_cfg", fake), \

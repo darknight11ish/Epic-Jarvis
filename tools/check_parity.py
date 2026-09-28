@@ -223,6 +223,9 @@ CLASSIFICATION = {
     # Which of Kokoro's own voices speaks (2026-09-27, ease-of-use audit row
     # 13): the exact same shape as speed above, right next to it.
     "/api/voice/voices/speaker": ("ported", "Jarvis's built-in voice: which of Kokoro's own voices, the PC's own choices and words (GET /api/voice/voices `speaker`). No card either way; held on a stale link like every change. Desktop: set_voice_speaker (Settings, Jarvis's voice). Phone: the Voices screen's voice chips (JarvisRuntime.setVoiceSpeaker)."),
+    # The voice follows the face (2026-09-27): an animal face speaks in its
+    # own built-in voice - an on/off switch, the same no-card shape.
+    "/api/voice/voices/face": ("ported", "Voice follows the face: with an animal face showing, the built-in voice becomes that animal's (GET /api/voice/voices `face_voice`, the PC's own words and line). An on/off switch, on by default; no card either way; held on a stale link like every change. Desktop: set_voice_face (Settings, Jarvis's voice). Phone: the Voices screen's switch (JarvisRuntime.setVoiceFace)."),
     "/api/voice/voices/better": ("ported","The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate. Desktop: set_better_voice, offered only with a capable second card. Phone: offered only when a capable second card is there; ON held on a stale link, OFF always goes."),
     # The voice flow (backend/voice-flow.patch, 2026-09-24): built on the
     # backend first, in both apps since 2026-09-25. Its other parts are on

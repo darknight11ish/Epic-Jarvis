@@ -529,6 +529,16 @@ def voices_cases():
         keep(w, "speaker_9", post("/api/voice/voices/speaker", {"speaker": "9"}), posts)
         keep(w, "speaker_chosen", VO.status(), statuses)
         keep(w, "speaker_bad", post("/api/voice/voices/speaker", {"speaker": "99"}), posts)
+        # The voice follows the face: an on/off switch, at once, no card
+        # either way. With the red panda showing (appearance.json, the one
+        # place both apps keep the face), its own voice stands in.
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
+                                               encoding="utf-8")
+        keep(w, "face_showing", VO.status(), statuses)
+        keep(w, "face_off", post("/api/voice/voices/face", {"enabled": False}), posts)
+        keep(w, "face_voice_off", VO.status(), statuses)
+        keep(w, "face_on", post("/api/voice/voices/face", {"enabled": True}), posts)
+        keep(w, "face_bad", post("/api/voice/voices/face", {"enabled": "yes"}), posts)
 
     # A custom voice chosen, but ZipVoice's files are not on this PC: the
     # built-in voice speaks, and says why.

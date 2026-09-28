@@ -6,6 +6,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTimestamp
 import android.media.AudioTrack
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
@@ -54,16 +55,134 @@ import kotlin.coroutines.resume
  * arrives for half a second the face substitutes its own speech-shaped
  * envelope, so a device whose engine reports no audio still looks right — just
  * not with *his* cadence.
+ *
+ * Lip-sync (docs/LIPSYNC.md): the PC's clip is analysed whole into a mouth
+ * track ([LipSync.forClip]: the clip's own analysis, with the PC's mouth
+ * shapes from the voice engine's timing when the WAV carries them) before it
+ * plays, and [mouthNow] reads that track
+ * at the moment the owner is actually HEARING - the AudioTrack's own
+ * presentation clock ([PresentedFrames]), not what has been written to it,
+ * which runs ahead by the whole output path. [level] comes from the same
+ * track at the same moment, so every face moves with the voice, not before it.
  */
 class Speaker(private val context: Context) {
 
     private val _level = MutableStateFlow<Float?>(null)
 
-    /** 0..1 while speaking, null when silent. Raw — the face owns the envelope. */
+    /**
+     * 0..1 while speaking, null when silent. The face owns the envelope.
+     *
+     * For the PC's voice, the analysed clip's loudness at the moment being
+     * heard (see [mouthNow], which the face reads first, every frame). For
+     * the phone's own voice, the RMS of each chunk as the engine makes it -
+     * ahead of the sound; [mouthNow] times that voice too.
+     */
     val level: StateFlow<Float?> = _level.asStateFlow()
 
     private var tts: TextToSpeech? = null
     @Volatile private var track: AudioTrack? = null
+
+    /**
+     * Where the clip [play] is playing has got to, for [mouthNow]: the last
+     * reading of the track's clock and the clip's mouth track. Replaced
+     * whole (never changed in place) by [play]'s thread every few tens of
+     * milliseconds, so a reader gets one consistent reading from one
+     * volatile read. Null when [play] is not playing.
+     */
+    @Volatile private var heard: Heard? = null
+
+    /** The phone's own voice as it arrives ([speakOnDevice]); null otherwise. */
+    @Volatile private var onDevice: SpeechEnvelope? = null
+    @Volatile private var onDeviceFloat = false
+
+    private class Heard(
+        val lips: LipSync.Track,
+        val rate: Int,
+        /** Frames presented at [atNanos]. */
+        val frames: Long,
+        val atNanos: Long,
+        /** False while the reply is held (paused): no voice is sounding. */
+        val running: Boolean,
+        /** Frames written so far - nothing past this can be heard yet. */
+        val limit: Long,
+    )
+
+    /**
+     * Jarvis's voice at the moment being heard, for the face - called every
+     * frame, on the UI thread, so it only reads volatiles and the clock:
+     * no lock, no allocation, no call into the audio system.
+     *
+     * Writes level, open, wide, round (each 0..1, the [LipSync.sample]
+     * layout) into [out], which must hold at least 4, and returns true while
+     * a real voice is playing - including its silent gaps, where the mouth
+     * is closed (zeros) but a voice is still on. False, with zeros, when
+     * nothing is playing, while the reply is held, and after [stop]: then the
+     * face has no real voice to follow, and the animals keep their mouths
+     * shut (a typed answer, Quiet mode, an answer kept on screen).
+     *
+     * The PC's voice gets the full mouth (open, wide, round) from the
+     * analysed clip. The phone's own fallback voice gets an estimate of the
+     * opening from loudness only - see [SpeechEnvelope] for why.
+     */
+    fun mouthNow(out: FloatArray): Boolean {
+        if (!cancelled) {
+            val h = heard
+            if (h != null) {
+                if (h.running && !paused) {
+                    val t = HeardClock.seconds(h.frames, h.atNanos, System.nanoTime(), h.rate, true, h.limit)
+                    // Outside the clip (its first lead-in, its very end) this
+                    // writes zeros: a voice is on, the mouth is closed.
+                    LipSync.sample(h.lips, t, out)
+                    return true
+                }
+            } else {
+                val e = onDevice
+                if (e != null && e.sample(System.nanoTime(), out)) return true
+            }
+        }
+        out[0] = 0f; out[1] = 0f; out[2] = 0f; out[3] = 0f
+        return false
+    }
+
+    /**
+     * One clip playing through [play]: its mouth track and the track's clock.
+     * Used only on [play]'s own thread.
+     */
+    private inner class Playback(
+        private val out: AudioTrack,
+        private val rate: Int,
+        private val lips: LipSync.Track?,
+    ) {
+        private val presented = PresentedFrames(rate)
+        private val stamp = AudioTimestamp()
+        private val scratch = FloatArray(4)
+
+        /** Frames handed to the track so far. */
+        var written = 0L
+
+        /** The track was told to play - at the start and after each pause. */
+        fun started() = presented.started(System.nanoTime())
+
+        /**
+         * Reads the track's clock, publishes it for [mouthNow], and sets
+         * [level] from the mouth track at the moment being heard. False when
+         * there is no mouth track (the analysis failed), so the caller keeps
+         * the old per-chunk level instead.
+         */
+        fun refresh(running: Boolean): Boolean {
+            val l = lips ?: return false
+            val now = System.nanoTime()
+            val ok = runCatching { out.getTimestamp(stamp) }.getOrDefault(false)
+            val head = runCatching { out.playbackHeadPosition.toLong() and 0xFFFF_FFFFL }.getOrDefault(0L)
+            val frames = presented.at(now, ok, stamp.framePosition, stamp.nanoTime, head)
+            heard = Heard(l, rate, frames, now, running, written)
+            if (running) {
+                LipSync.sample(l, frames.toFloat() / rate, scratch)
+                _level.value = scratch[0]
+            }
+            return true
+        }
+    }
     @Volatile private var cancelled = false
 
     /**
@@ -212,12 +331,22 @@ class Speaker(private val context: Context) {
         }.onFailure { Log.w(TAG, "could not play the heard-you sound", it) }
     }
 
-    /** Plays a WAV the desktop synthesised. Real levels, straight off the samples. */
+    /**
+     * Plays a WAV the desktop synthesised. The level and the mouth come from
+     * the whole clip, analysed before it plays, read at the moment heard.
+     */
     suspend fun play(wav: ByteArray) = withContext(Dispatchers.IO) {
         // Re-checked here, not cleared. See [arm].
         if (cancelled) return@withContext
         val pcm = runCatching { Wav.decode(wav) }.getOrNull() ?: return@withContext
         val rate = runCatching { Wav.rateOf(wav) }.getOrDefault(Wav.SAMPLE_RATE)
+        // The whole clip, analysed up front: a few milliseconds for a
+        // sentence, done before the first sample sounds. Guarded like the
+        // decode - a failure here costs the mouth, never the voice. When the
+        // PC put the voice engine's own mouth shapes in the WAV (the "jmth"
+        // chunk after the sound), they shape the mouth; the level is still
+        // this clip's own. Without them it is the analysis alone.
+        val lips = runCatching { LipSync.forClip(wav, pcm, rate) }.getOrNull()
         val minBuf = AudioTrack.getMinBufferSize(
             rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(4096)
@@ -258,22 +387,28 @@ class Speaker(private val context: Context) {
         // A refused request still plays; focus is a courtesy to other apps,
         // not a permission to speak.
         val focus = requestFocus()
+        val playback = Playback(out, rate, lips)
 
         try {
             out.play()
+            playback.started()
             var i = 0
             val chunk = 1024
             while (i < pcm.size && !cancelled) {
                 // Held while the PC checks an interruption: the track too, so
                 // what is already queued in it stops sounding at once.
-                if (paused) holdWhilePaused(out)
+                if (paused) holdWhilePaused(out, playback)
                 if (cancelled) break
                 val n = minOf(chunk, pcm.size - i)
                 // write() returns a NEGATIVE error code rather than throwing, so
                 // a non-positive result is the end of the road, not a short write.
                 val written = out.write(pcm, i, n)
                 if (written <= 0) break
-                _level.value = Wav.rms(pcm.copyOfRange(i, i + n))
+                playback.written = (i + written).toLong()
+                // The level at what is being HEARD, from the analysed clip.
+                // It used to be this chunk's RMS - the chunk just queued,
+                // which the owner hears a whole buffer and output path later.
+                if (!playback.refresh(running = true)) _level.value = Wav.rms(pcm.copyOfRange(i, i + n))
                 i += written
             }
             // Let the last buffer drain. write() returns when the samples
@@ -283,10 +418,13 @@ class Speaker(private val context: Context) {
             // so a track that never advances (a HAL that stalled) cannot hold
             // the voice loop; and skipped on cancel, where cutting the tail
             // is the whole point.
-            if (!cancelled && i > 0) drain(out, i)
+            if (!cancelled && i > 0) drain(out, i, playback)
         } catch (e: IllegalStateException) {
             Log.w(TAG, "playback failed", e)
         } finally {
+            // Before the track goes: the face must not read a clock that
+            // has stopped.
+            heard = null
             runCatching { out.stop() }
             out.release()
             track = null
@@ -296,25 +434,33 @@ class Speaker(private val context: Context) {
     }
 
     /** Pauses [out] until [resume] or [stop]; then plays on (unless stopped). */
-    private suspend fun holdWhilePaused(out: AudioTrack) {
+    private suspend fun holdWhilePaused(out: AudioTrack, playback: Playback) {
         runCatching { out.pause() }
+        // Held where it is: the mouth closes and stays at this point of the clip.
+        playback.refresh(running = false)
         _level.value = null
         while (paused && !cancelled) delay(PAUSE_POLL_MS)
-        if (!cancelled) runCatching { out.play() }
+        if (!cancelled) {
+            runCatching { out.play() }
+            playback.started()
+            playback.refresh(running = true)
+        }
     }
 
     /** Waits until the track has played [frames] frames, or a short bound passes. */
-    private suspend fun drain(out: AudioTrack, frames: Int) {
+    private suspend fun drain(out: AudioTrack, frames: Int, playback: Playback) {
         var deadline = System.currentTimeMillis() + DRAIN_MAX_MS
         while (!cancelled && System.currentTimeMillis() < deadline) {
             if (paused) {
                 // A pause during the tail: held, and the wait starts again after.
-                holdWhilePaused(out)
+                holdWhilePaused(out, playback)
                 deadline = System.currentTimeMillis() + DRAIN_MAX_MS
                 continue
             }
             val head = runCatching { out.playbackHeadPosition }.getOrDefault(Int.MAX_VALUE)
             if (head >= frames) return
+            // The tail is still being heard: keep the face's clock fresh.
+            playback.refresh(running = true)
             delay(DRAIN_POLL_MS)
         }
     }
@@ -393,20 +539,58 @@ class Speaker(private val context: Context) {
         // set the flag, and nothing read it again before speaking — so Jarvis
         // could start talking after the owner had cancelled.
         if (cancelled) return
+        // A fresh mouth for this sentence; the last one's must not carry over.
+        onDevice = null
+        onDeviceFloat = false
         suspendCancellableCoroutine { cont ->
             val id = "jarvis-${System.nanoTime()}"
             engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) { _level.value = 0f }
 
+                /** Whether the engine described its audio (below) for this utterance. */
+                @Volatile private var began = false
+
+                // How the engine's audio is laid out, before the first of it.
+                // Only this utterance's: a flushed earlier one can still be
+                // reporting on the same engine.
+                override fun onBeginSynthesis(
+                    utteranceId: String?,
+                    sampleRateInHz: Int,
+                    audioFormat: Int,
+                    channelCount: Int,
+                ) {
+                    if (utteranceId != id) return
+                    began = true
+                    onDeviceFloat = audioFormat == AudioFormat.ENCODING_PCM_FLOAT
+                    // 8-bit is not decoded; its mouth stays shut rather than wrong.
+                    onDevice = if (audioFormat == AudioFormat.ENCODING_PCM_8BIT) {
+                        null
+                    } else {
+                        SpeechEnvelope(sampleRateInHz.takeIf { it in 4_000..192_000 } ?: Wav.SAMPLE_RATE, channelCount)
+                    }
+                }
+
                 override fun onAudioAvailable(utteranceId: String?, audio: ByteArray?) {
                     if (audio == null || audio.size < 2) return
-                    val shorts = ShortArray(audio.size / 2) { i ->
-                        ((audio[i * 2].toInt() and 0xFF) or (audio[i * 2 + 1].toInt() shl 8)).toShort()
+                    // The level as before (the chunk as it arrives). The face
+                    // reads [mouthNow] first, which times this voice to when
+                    // it is heard rather than when it was made.
+                    if (!onDeviceFloat) {
+                        val shorts = ShortArray(audio.size / 2) { i ->
+                            ((audio[i * 2].toInt() and 0xFF) or (audio[i * 2 + 1].toInt() shl 8)).toShort()
+                        }
+                        _level.value = Wav.rms(shorts)
                     }
-                    _level.value = Wav.rms(shorts)
+                    if (utteranceId != id) return
+                    val now = System.nanoTime()
+                    // An engine that never described its audio: the usual
+                    // 16-bit mono, at the rate most engines use.
+                    val e = onDevice ?: if (began) null else SpeechEnvelope(Wav.SAMPLE_RATE).also { onDevice = it }
+                    if (onDeviceFloat) e?.addFloat(audio, now) else e?.add16(audio, now)
                 }
 
                 override fun onDone(utteranceId: String?) {
+                    if (utteranceId == id) onDevice = null
                     _level.value = null
                     // The engine outlives the utterance, and this listener
                     // holds a continuation; left registered it kept the
@@ -417,11 +601,13 @@ class Speaker(private val context: Context) {
 
                 @Deprecated("Required by the abstract class", ReplaceWith(""))
                 override fun onError(utteranceId: String?) {
+                    onDevice = null
                     _level.value = null
                     if (cont.isActive) cont.resume(Unit)
                 }
 
                 override fun onError(utteranceId: String?, errorCode: Int) {
+                    onDevice = null
                     _level.value = null
                     if (cont.isActive) cont.resume(Unit)
                 }
@@ -446,12 +632,13 @@ class Speaker(private val context: Context) {
             // to queue never resumed the voice loop for any later turn.
             if (queued != TextToSpeech.SUCCESS) {
                 Log.w(TAG, "speak() refused the utterance (code $queued)")
+                onDevice = null
                 _level.value = null
                 runCatching { engine.setOnUtteranceProgressListener(null) }
                 if (cont.isActive) cont.resume(Unit)
                 return@suspendCancellableCoroutine
             }
-            cont.invokeOnCancellation { runCatching { engine.stop() }; _level.value = null }
+            cont.invokeOnCancellation { runCatching { engine.stop() }; onDevice = null; _level.value = null }
         }
     }
 
@@ -459,6 +646,9 @@ class Speaker(private val context: Context) {
     fun stop() {
         cancelled = true
         paused = false
+        // The mouth closes now, not when [play]'s loop next looks.
+        heard = null
+        onDevice = null
         runCatching { track?.pause() }
         runCatching { tts?.stop() }
         _level.value = null

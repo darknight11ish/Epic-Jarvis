@@ -11,6 +11,7 @@
  */
 
 import { currentLink, onLink, start as startLink, surfaceState } from "./jarvis-link.js";
+import { relayFaceVoice } from "./face-voice.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -63,6 +64,9 @@ async function readFaceAppearance(fromServer) {
 }
 
 if (frame) frame.addEventListener("load", postFace);
+// Lip-sync: Jarvis's voice and the owner's microphone, passed into the face
+// the same way (face-voice.js) - an event reaches this page, never its frame.
+relayFaceVoice(frame, listen);
 onLink(() => postFace());
 listen("appearance-changed", () => readFaceAppearance(false));
 readFaceAppearance(true);
