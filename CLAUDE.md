@@ -665,6 +665,18 @@ testers, scouts and integration scouts; `.claude/agents/`):
   about the screen only. **A voice setting lets the owner allow reading them
   aloud** even then; like the other voice settings, turning it on raises an
   approval card and turning it off is immediate.
+- **"Jarvis Live": design voice and camera together now** (owner,
+  2026-09-28), like Gemini Live: a back-and-forth voice conversation the
+  owner starts and stops, with no wake word between turns and interrupting
+  at any time, plus showing Jarvis the phone's camera. The voice check still
+  runs on every clip, cards are still decided by tapping (never by voice),
+  and everything stays on the owner's own devices. Not full-duplex (that
+  skips the voice check), so a turn takes a second or two. The camera
+  understands pictures only with the 12 GB card (Qwen 3.5 9B or Qwen3-VL
+  8B, unmeasured); with one card it reads text only. The camera part stays
+  off until the card is in and a photo test passes. Designed in
+  `docs/LIVE-DESIGN.md` and brought back to the owner before anything is
+  built.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
