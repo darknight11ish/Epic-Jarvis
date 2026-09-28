@@ -1622,6 +1622,36 @@ the owner's everyday Ollama on the main card; show it with a copy button and
 `pin_note` above it, on the desktop. The phone shows `pin_note` only (the
 command is run on the PC).
 
+**A third graphics card - the data-model reshape only (added 2026-09-28,
+`docs/GPU-SUPPORT-RESEARCH-2026-09-27.md`).** That research found `_detect()`
+picked exactly one "second" candidate from however many capable extra cards
+were actually plugged in, and threw the rest away - a real, capable third
+card was already detected and already discarded, silently. Its
+recommendation #1 was to fix that shape first, on its own, with no change to
+this route's JSON at all: **`GET /api/second-card`'s answer above is
+BYTE-FOR-BYTE UNCHANGED by this work**, on a PC with any number of cards.
+What changed is internal only: `jarvis_second_card.detect()` now also keeps
+every capable non-primary card (not just the best one) as an internal list,
+and a new internal function, `extra_lanes(det)`, turns every card beyond
+the one already running as "second" into `second`'s own plain-dict shape -
+so a third capable card is visible to Python callers as data, in the same
+shape the route already uses, rather than only as a "why" sentence on an
+"unused" row in `cards[]` (which already correctly explained why it was not
+picked, and still does, word for word). Neither this route, nor either
+app, nor `jarvis_agent.choose_lane()`'s routing of the model's own tool
+calls, changed in any way - **a third card cannot run anything yet.**
+Building that (its own lane process, a real per-card approval decision, and
+a UI row in both apps - none of which exist today) is a separate, larger
+piece of work, deliberately left for a dedicated follow-up rather than
+built in the same pass as this shape change; see the "A THIRD CARD" section
+of `jarvis_second_card.py`'s own module docstring for the full reasoning.
+`jarvis_hardware.py`'s preset system (`lane_plan()`) is unchanged too - it
+stays a two-slot design (`chat_card`/`lane_card`) on purpose; only the
+non-preset detection path (`_detect()`) got the reshape. `"combined"`
+(below) is unaffected either way: it already only ever reads the
+`"primary"` and `"second"` rows of `cards[]`, so a third capable card was
+already left out of it, without any code change.
+
 **"One bigger model on both cards" (added 2026-09-27).** A third mode,
 alongside the five features above and alongside a chosen hardware preset's
 single-card lanes (docs/HARDWARE-PROFILES.md §4.3) - not one of `features`,

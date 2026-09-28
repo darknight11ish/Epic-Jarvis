@@ -210,7 +210,124 @@ def t_capable_and_not():
           and round(12 - 0.60 - 0.33 - 0.75, 2) == 10.32)
 
 
-# ------------------------------------------------------------ switches --
+# ------------------------------------------------------- a third card --
+#
+# docs/GPU-SUPPORT-RESEARCH-2026-09-27.md's recommendation #1: reshape
+# detection to keep every capable extra card, not just the biggest, with
+# NO behaviour change on a 1- or 2-card PC. What is checked here:
+#
+#   - 0 cards (t_capable_and_not's "garbage" case already covers this: no
+#     card at all), 1, 2 and 3 detected, each with the right det["_lanes"].
+#   - a third card that is too old (below Turing) is correctly EXCLUDED
+#     from _lanes and still explained in cards[]'s own "why", by the exact
+#     same words a not-capable second card already gets.
+#   - det["second"] / det["_second"] / det["cards"] (the public contract)
+#     are BYTE-FOR-BYTE the same with 3 cards present as they would be if
+#     the third card were not read at all - proving the reshape changed
+#     nothing a PC with fewer cards, or today's 2-card owner, can see.
+#   - extra_lanes() surfaces the third (and beyond) card, in the same
+#     plain-dict shape det["second"] already uses.
+
+#: A third capable card (a second 2080 Ti, distinct id) for the tests below.
+U_2080TI_2 = "GPU-51c0e8aa-6d2f-4b19-8e37-2a4c9f0b6d59"
+
+
+def t_third_card_reshape():
+    # Two capable extra cards: the 2060 (12,288 MB) and a 2080 Ti (11,264 MB).
+    # "second" must still be the 2060 (more memory) - completely unchanged
+    # from today's single-candidate rule.
+    three = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
+             f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
+             f"2, {U_2080TI_2}, NVIDIA GeForce RTX 2080 Ti, 11264, 11010, 7.5, Disabled\n")
+    with G.World(three):
+        det3 = SC.detect(fresh=True)
+    with G.World(G.SMI["2080s_2060"]):
+        det2 = SC.detect(fresh=True)
+    check("3 capable-extra cards: still capable, 'second' is unchanged (the 2060)",
+          det3["capable"] is True and det3["second"]["name"] == "NVIDIA GeForce RTX 2060")
+    check("the public contract (second/cards/why) is untouched by a 3rd capable card: "
+          "same second, same why, same primary as the 2-card case",
+          det3["second"] == det2["second"] and det3["why"] == det2["why"]
+          and det3["primary"] == det2["primary"])
+    check("cards[] still says the SAME thing about the 2080 Ti it always would have: "
+          "'unused', 'capable, but the RTX 2060 has more memory'",
+          next(c for c in det3["cards"] if "2080 Ti" in c["name"])
+          == {"index": 2, "uuid": U_2080TI_2, "name": "NVIDIA GeForce RTX 2080 Ti",
+              "total_mb": 11264, "free_mb": 11010, "compute_cap": 7.5,
+              "display_active": False, "role": "unused",
+              "why": "capable, but the NVIDIA GeForce RTX 2060 has more memory"})
+    check("det['_lanes'] (internal) now keeps BOTH capable extra cards, best memory first",
+          [c.name for c in det3["_lanes"]]
+          == ["NVIDIA GeForce RTX 2060", "NVIDIA GeForce RTX 2080 Ti"])
+    check("det['_lanes'][0] IS the same object as det['_second'] - 'second' really is lanes[0]",
+          det3["_lanes"][0] is det3["_second"])
+    extra = SC.extra_lanes(det3)
+    check("extra_lanes() surfaces exactly the third card, in second's own plain-dict shape",
+          extra == [{"uuid": U_2080TI_2, "index": 2, "name": "NVIDIA GeForce RTX 2080 Ti",
+                    "total_mb": 11264, "compute_cap": 7.5}])
+    check("a 2-card PC has no extra lanes at all", SC.extra_lanes(det2) == [])
+
+    # A third card that is genuinely NOT capable (below Turing): excluded
+    # from _lanes, and cards[] gives its REAL reason, never the generic
+    # "more memory" line a merely-smaller capable card would get.
+    old_third = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
+                 f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
+                 f"2, {G.U_P100}, Tesla P100-PCIE-16GB, 16384, 16270, 6.0, Disabled\n")
+    with G.World(old_third):
+        det_old = SC.detect(fresh=True)
+    check("an incapable 3rd card does not change 'second' or capability",
+          det_old["capable"] is True and det_old["second"]["name"] == "NVIDIA GeForce RTX 2060")
+    check("the incapable 3rd card is excluded from _lanes",
+          [c.name for c in det_old["_lanes"]] == ["NVIDIA GeForce RTX 2060"])
+    check("extra_lanes() leaves the incapable 3rd card out entirely",
+          SC.extra_lanes(det_old) == [])
+    p100_row = next(c for c in det_old["cards"] if "P100" in c["name"])
+    check("cards[] gives the P100's REAL reason (older than Turing), not 'more memory'",
+          p100_row["role"] == "unused" and "older than Turing" in p100_row["why"]
+          and "more memory" not in p100_row["why"], p100_row["why"])
+
+    # 0 and 1 card: _lanes is always [], never missing or None.
+    with G.World("garbage only\n"):
+        det0 = SC.detect(fresh=True)
+    check("no card at all: _lanes is [], not missing", det0.get("_lanes") == [])
+    with G.World(G.SMI["one_card"]):
+        det1 = SC.detect(fresh=True)
+    check("one card: _lanes is [] (nothing else to be a lane)", det1["_lanes"] == [])
+    check("one card: extra_lanes() is []", SC.extra_lanes(det1) == [])
+
+    # extra_lanes() never raises on a bad/missing det.
+    check("extra_lanes({}) is [] (no '_lanes' key at all)", SC.extra_lanes({}) == [])
+    check("extra_lanes(None-ish) never raises", SC.extra_lanes({"_lanes": None}) == [])
+
+
+def t_third_card_under_a_preset():
+    """_detect_preset's own mirror of _lanes - a preset has exactly one lane
+    slot (jarvis_hardware.py's own two-slot design, left unchanged - see the
+    module docstring), so this only proves _lanes is always present and
+    always matches the one lane card a preset can have (or [] when the
+    lanes run inside the everyday Ollama, or there is no lane at all)."""
+    import types
+    chat_dev = CP.Device(index=0, name="NVIDIA GeForce RTX 2080 SUPER", total_mb=8192,
+                         free_mb=6000, uuid=G.U_2080S, compute_cap=7.5, display_active=True)
+    lane_dev = CP.Device(index=1, name="NVIDIA GeForce RTX 2060", total_mb=12288,
+                         free_mb=12000, uuid=G.U_2060, compute_cap=7.5, display_active=False)
+    chat_card = types.SimpleNamespace(uuid=G.U_2080S, name=chat_dev.name, total_gib=8.0)
+    lane_card = types.SimpleNamespace(uuid=G.U_2060, name=lane_dev.name, total_gib=12.0)
+    base = {"preset": "features", "long": ("qwen3:8b", 32768, 7.69), "pictures": None,
+            "pictures_mode": None, "fit_target": None, "why_none": {}}
+    with mock.patch.object(SC, "_cards", return_value=[chat_dev, lane_dev]):
+        plan_with_lane = dict(base, chat_card=chat_card, lane_card=lane_card)
+        det = SC._detect_preset(plan_with_lane, fresh=True)
+        check("a preset with a real lane card: _lanes is exactly that one card",
+              [c.name for c in det["_lanes"]] == ["NVIDIA GeForce RTX 2060"]
+              and det["_lanes"][0] is lane_dev)
+        check("extra_lanes() is [] under a preset (only one lane slot exists)",
+              SC.extra_lanes(det) == [])
+        plan_main = dict(base, chat_card=chat_card, lane_card=None)
+        det_main = SC._detect_preset(plan_main, fresh=True)
+        check("a preset with no separate lane card (main=True): _lanes is []",
+              det_main["_lanes"] == [] and det_main["_main"] is True)
+
 
 def t_switches():
     with G.World(G.SMI["2080s_2060"]) as w:

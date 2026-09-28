@@ -599,6 +599,56 @@ run, so **built fully, switched off**, the owner's own recommended choice:
 - No UI in either app yet - once wired in as a tool, its card needs no new
   shape, only the ordinary approval flow both apps already have.
 
+Built 2026-09-28, after `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md` (the
+owner asked for a third NVIDIA graphics card, end to end) - **the data-model
+reshape only (that research's own recommendation #1), not the third card's
+own feature.** What the research found: `jarvis_second_card.py`'s detection
+already picked exactly one "second" card out of however many capable extra
+cards were actually plugged in, and threw the rest away with "capable, but
+the [other] card has more memory" - a real third card sat right there,
+detected, and was silently discarded. Building a third card's own lane
+(which of the five features runs on it, its own approval card, a UI row in
+both apps - none of which exist today) in the SAME pass as reshaping how
+cards are detected risked exactly what this module's own tests exist to
+catch: a change to the shape `jarvis_agent.choose_lane()` trusts to route
+the model's own tool calls, made and checked in one large, hard-to-verify
+step. So this pass built the safety-critical half alone, fully tested, and
+stopped there on purpose - the conservative choice the research itself
+recommended (its "L, do the S-sized reshape first" advice).
+
+- **What changed:** `jarvis_second_card.detect()` now keeps every capable
+  non-primary card internally, not just the biggest, as `det["_lanes"]`
+  (best memory first - "second" is unchanged, it is still `_lanes[0]`), and
+  a new function, `extra_lanes(det)`, turns every card beyond that into
+  `det["second"]`'s own plain-dict shape - so a third capable card is now
+  visible to Python code as data, not only as a "why" sentence. Both are
+  internal (never returned by `status()`, never in the `GET
+  /api/second-card` JSON) - **on a PC with any number of cards, the route,
+  both apps and every existing test behave exactly as they did before this
+  change.** `test_second_card.py` gained tests for 0/1/2/3-card detection
+  (including a genuinely incapable third card, correctly excluded and
+  explained) and proves the 2-card case's public output is untouched.
+- **What is deliberately NOT built:** a third card cannot run anything yet.
+  There is no third lane process, no approval action for "which feature
+  goes on which card" (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md §1.3 is
+  explicit this must be a real, named choice - never a "biggest card wins"
+  default, the same "no approve-all" rule every switch here already
+  follows), and no UI in either app (each renders exactly one "second card"
+  row today). None of `_wanted`, `_reconcile`, `lane_for`, `_LANE` or
+  `describe_on` (the approval card's own words) were touched - so nothing
+  about how the model's tool calls get routed could have moved. "Combined"
+  (one bigger model split across cards) stays two-card-only, for the same
+  reason its own real speed is still unmeasured on two cards: the second
+  card is not installed yet, so adding a third untested unknown on top of a
+  first untested one is not a decision to make silently.
+  `jarvis_hardware.py`'s preset system also stays two-slot, unchanged -
+  presets were designed and tested for exactly one extra lane card.
+- **This is a known, written-down gap, not an oversight:** a real "build
+  the third card's own lane, its approval card and both apps' UI" pass is
+  still queued, on top of the shape this one now provides. Until then, a
+  third capable NVIDIA card in the PC is detected and correctly explained
+  ("capable, but the [other] card has more memory") but does nothing.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

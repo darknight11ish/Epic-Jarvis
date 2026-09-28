@@ -162,6 +162,76 @@ see the main card, or it may put the everyday model on the second one. This
 module cannot and does not change another program's settings; it detects
 (best effort) and hands the owner one PowerShell line (`pin_command`).
 
+A THIRD CARD (2026-09-28, docs/GPU-SUPPORT-RESEARCH-2026-09-27.md). That
+research read this file's own _detect() and found it picks exactly ONE
+"second" candidate from however many capable extra cards are actually
+plugged in, and throws the rest away with "capable, but the {second.name}
+has more memory" - a real, capable third card sat right there and was
+discarded, not merely untested. Its recommendation #1 was to fix the DATA
+MODEL first, on its own, with NO behaviour change on a 1- or 2-card PC,
+before building anything a third card could actually run - because every
+call site below (_wanted, _feature_active, _reconcile, lane_for,
+_combined_rows, status() itself) reads the SINGULAR det["second"] /
+det["_second"], and jarvis_agent.choose_lane() trusts lane_for()'s answer to
+route the model's own tool calls, so a change here that got the shape wrong
+could silently send a turn to the wrong card, or to a card that isn't
+running anything. That is exactly the risk this module's own approval-card
+discipline exists to avoid on the SWITCH side; the detection side deserves
+the same care.
+
+**What is built here (2026-09-28):** _detect() now ALSO keeps every
+capable non-primary card, not just the biggest, as det["_lanes"] - a
+plain list of jarvis_compute Device objects (its own dataclass name for a
+graphics card), best-memory-first (the same
+sort _detect() already used to pick "second"; "second" is unchanged,
+it is still _lanes[0] when the list is non-empty). extra_lanes(det)
+turns _lanes[1:] into the same plain-dict shape status() already uses for
+"second" (uuid/index/name/total_mb/compute_cap), so a THIRD capable card
+is now visible to Python callers as data, not just as a "why" sentence on
+an "unused" row in det["cards"] (which already said, correctly, why it was
+not picked - that part of the design was already right and needed no
+change). `_lanes` and `extra_lanes()` are internal (leading underscore on
+the dict key; the function is not called from status() or any route) - the
+GET /api/second-card JSON is BYTE-FOR-BYTE UNCHANGED, so both apps and
+every existing test keep working exactly as before, on a PC with any
+number of cards, capable or not.
+
+**What is deliberately NOT built here, and why doing it now would be
+reckless rather than merely incomplete:** a third card cannot yet run a
+lane of its own. _wanted(), _feature_active(), _reconcile(), lane_for(),
+_LANE (the one lane-process singleton) and describe_on() (the approval
+card's own words) all still read the singular det["_second"] exactly as
+they did before this change - none of them was touched, on purpose, so
+none of the routing jarvis_agent.choose_lane() depends on could possibly
+have moved. Making a third card actually RUN something needs, at minimum:
+a second _LaneProcess-shaped singleton (or the two rewritten as a
+dict-by-card), a real approval-card decision for "which feature goes on
+which card" (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 is
+explicit that this must be a genuine per-card choice on the card, never a
+"biggest card wins" default - the same "no approve-all" rule every other
+switch here already follows), and a matching UI in both apps (there is
+none today; each app renders exactly one "second card" row). None of that
+exists yet. Building it without a real third card to measure against, in
+the same pass as this data-model change, risked exactly the kind of
+sweeping, hard-to-verify rewrite this module's own tests are built to
+catch early - so it is left for a dedicated follow-up pass instead, on top
+of the shape _lanes now provides. "Combined" (COMBINED_MODEL, above) stays
+two-card-only for the same reason MODEL-TOPOLOGY.md already gives for the
+pair itself: real speed for splitting a model across even two cards is
+still unmeasured, because the second card is not installed; adding a third
+untested unknown on top of a first untested unknown is not a design
+decision this module should make silently. _combined_rows() keeps reading
+only the "primary" and "second" roles from det["cards"], so a third
+capable card is automatically left out of "combined" too, without any new
+code - it simply is not one of those two rows.
+
+jarvis_hardware.py's preset system (lane_plan(), "chat_card"/"lane_card")
+is a separate two-slot design and is UNCHANGED here for the same reason:
+docs/HARDWARE-PROFILES.md's own presets ("Fastest answers"/"Smartest
+answers"/"Most features") were designed and tested around exactly one
+extra lane card, and generalising presets to three cards is its own,
+separate decision this file does not make.
+
 Standard library only. Never logs or returns a token or key.
 """
 from __future__ import annotations
@@ -801,7 +871,37 @@ def detect(fresh: bool = False) -> dict:
     except Exception as exc:
         return {"capable": False, "why": f"the graphics cards could not be read "
                                          f"({type(exc).__name__})",
-                "primary": None, "second": None, "cards": [], "_second": None}
+                "primary": None, "second": None, "cards": [], "_second": None,
+                "_lanes": []}
+
+
+def _card_summary(card) -> dict:
+    """The plain-dict shape det["second"] already uses, for one Device - shared
+    by _detect() (so "second" is built from the same code as extra_lanes())
+    and by extra_lanes() below. Never None: callers only pass a real card."""
+    return {"uuid": card.uuid, "index": card.index, "name": card.name,
+            "total_mb": card.total_mb, "compute_cap": card.compute_cap}
+
+
+def extra_lanes(det: dict) -> list:
+    """Every capable non-primary card BEYOND the one already running as
+    "second" today - a third card, and a fourth, if they are ever plugged
+    in - as det["second"]'s own plain-dict shape. [] on a 1- or 2-card PC,
+    or under a chosen hardware preset (which is a separate, two-slot design -
+    see the module docstring's "A THIRD CARD" section).
+
+    This is READ-ONLY, forward-looking data: nothing here can be turned on
+    yet, on this PC or any other - there is no switch, no approval action
+    and no lane process for a third card today. Nothing in this module or
+    any other calls this function yet; it exists so a later, dedicated pass
+    that DOES build a third card's own lane has a real list of candidates to
+    start from, instead of redoing _detect()'s own card-reading work. Never
+    raises; a bad `det` (missing or malformed "_lanes") reads as []."""
+    try:
+        lanes = det.get("_lanes") or []
+        return [_card_summary(c) for c in lanes[1:]]
+    except Exception:
+        return []
 
 
 def _detect(fresh: bool) -> dict:
@@ -810,7 +910,8 @@ def _detect(fresh: bool) -> dict:
         return {"capable": False,
                 "why": ("no NVIDIA graphics card could be read (nvidia-smi is missing "
                         "or did not answer)"),
-                "primary": None, "second": None, "cards": [], "_second": None}
+                "primary": None, "second": None, "cards": [], "_second": None,
+                "_lanes": []}
     prim, rule = _primary(cards)
     rows, candidates, reasons = [], [], []
     for c in sorted(cards, key=lambda d: d.index):
@@ -821,9 +922,17 @@ def _detect(fresh: bool) -> dict:
             candidates.append(c)
         else:
             reasons.append((c, r))
-    second = None
-    if candidates:
-        second = sorted(candidates, key=lambda d: (-d.total_mb, d.index))[0]
+    # Every capable non-primary card, best memory first - the same sort this
+    # line always used to pick "second" alone. "second" is unchanged: it is
+    # still lanes[0]. Keeping the WHOLE list (not just [0]) is the one real
+    # change docs/GPU-SUPPORT-RESEARCH-2026-09-27.md's recommendation #1
+    # asked for - see the module docstring's "A THIRD CARD" section. A
+    # second (or third, ...) capable card that is not "second" still gets
+    # its row in `rows` below, with the SAME "unused" role and "why" text as
+    # before this change - nothing about what is SHOWN today has moved,
+    # only what is kept internally for a card beyond the first two.
+    lanes = sorted(candidates, key=lambda d: (-d.total_mb, d.index))
+    second = lanes[0] if lanes else None
     for c in sorted(cards, key=lambda d: d.index):
         if c is prim:
             role, why = "primary", f"everyday chat runs here: {rule}"
@@ -842,18 +951,17 @@ def _detect(fresh: bool) -> dict:
                      "role": role, "why": why})
     p = {"uuid": prim.uuid or None, "index": prim.index, "name": prim.name}
     if second is not None:
-        s = {"uuid": second.uuid, "index": second.index, "name": second.name,
-             "total_mb": second.total_mb, "compute_cap": second.compute_cap}
+        s = _card_summary(second)
         why = (f"the {second.name} ({_gb(second.total_mb)}) can take the second-card "
                f"features; everyday chat stays on the {prim.name}")
         return {"capable": True, "why": why, "primary": p, "second": s, "cards": rows,
-                "_second": second}
+                "_second": second, "_lanes": lanes}
     if len(cards) == 1:
         why = f"only one graphics card found (the {prim.name})"
     else:
         why = "; ".join(r for (_, r) in reasons)
     return {"capable": False, "why": why, "primary": p, "second": None, "cards": rows,
-            "_second": None}
+            "_second": None, "_lanes": lanes}
 
 
 def _detect_preset(plan: dict, fresh: bool) -> dict:
@@ -915,9 +1023,19 @@ def _detect_preset(plan: dict, fresh: bool) -> dict:
                      "total_mb": c.total_mb, "free_mb": c.free_mb,
                      "compute_cap": c.compute_cap, "display_active": c.display_active,
                      "role": role, "why": why_c})
+    # A preset has exactly one lane slot (lane_card) - see the module
+    # docstring's "A THIRD CARD" section for why that stays a separate,
+    # two-slot design rather than growing a third slot here. `_lanes`
+    # mirrors `_second` for shape-consistency with the non-preset path
+    # above: [] when there is no lane card (or the lanes run inside the
+    # everyday Ollama, main=True), else the one lane card, so
+    # extra_lanes(det) is always safe to call and always answers [] under
+    # a chosen preset today.
+    lane_active = (not main) and capable and lane_dev is not None
     return {"capable": capable, "why": why, "primary": p, "second": s if capable else None,
             "cards": rows, "_second": None if main else lane_dev, "_main": main and capable,
-            "_plan": plan, "unsupported": unsupported}
+            "_plan": plan, "unsupported": unsupported,
+            "_lanes": [lane_dev] if lane_active else []}
 
 
 def _long_context_plan(total_mb: int) -> tuple:

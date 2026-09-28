@@ -5678,7 +5678,15 @@ code does.
   with `jarvis_compute.plan()`: `[compute] primary_gpu`, else the card with a
   monitor, else index 0. A second card is capable at compute capability 7.5
   or more and 10,240 MiB or more, and with a card id. Every other card gets a
-  reason in words.
+  reason in words. **2026-09-28, a third card (data-model reshape only,
+  `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md`):** `_detect()` now also keeps
+  every capable non-primary card internally (`det["_lanes"]`, best memory
+  first — "second" is still `_lanes[0]`), and `extra_lanes(det)` turns
+  every card beyond that into `det["second"]`'s own plain-dict shape. Both
+  are internal only; `GET /api/second-card`'s JSON, and the five features'
+  behaviour, are unchanged. A third card cannot run anything yet — see the
+  module docstring's "A THIRD CARD" section and `docs/JARVIS-API.md` §12
+  for exactly what remains.
 - **Switches.** A main switch and five features — `long_context`, `vision`,
   `learning`, `browser_control` (needs `long_context`), `wiki` — in
   `second-card.json` in the config folder, never in the toml. All default off.
