@@ -573,6 +573,21 @@ class JarvisApi(
     suspend fun setWatchNotify(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(WatchNotify.PATH, WatchNotify.enabledBody(on))
 
+    // ------------------------------------------------- reading phone notifications ----
+    // docs/JARVIS-API.md §61; see [PhoneNotifications] for the shapes and
+    // words. This switch is decided on the PC, the same as every other one
+    // here, even though only this phone ever acts on it (ARCHITECTURE §8).
+
+    /** `GET /api/notifications/phone`: `{"enabled", "waiting", "last", "why"}`. */
+    suspend fun phoneNotificationsSettings(): ApiResult<JsonObject> = probe(PhoneNotifications.PATH)
+
+    /**
+     * The switch. ON answers 202 waiting while its approval card is up; OFF
+     * is immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setPhoneNotifications(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(PhoneNotifications.PATH, PhoneNotifications.enabledBody(on))
+
     /**
      * [probe], except that a 503 keeps its body: `ApiError.Server(503, body)`
      * instead of [ApiError.NotAvailable], so the PC's own `error` ("automatic

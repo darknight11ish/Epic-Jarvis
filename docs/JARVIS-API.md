@@ -8841,7 +8841,7 @@ at - "turn off my calendar" and "turn on the special mode" are not real
 settings and go to the model, same as "ask, don't guess"
 (`docs/CUTTING-EDGE-2026-09-26-round2-tools.md`'s principle, reused here).
 
-Ten settings are covered - the ones that already sit behind a single
+Eleven settings are covered - the ones that already sit behind a single
 proven `handle_*`/`request_*` entry point this file can call exactly as
 the REST route does, never a copy of its logic:
 
@@ -8854,6 +8854,7 @@ the REST route does, never a copy of its logic:
 | Lights, plugs and fans without a card | "turn on/off lights without asking" | `jarvis_asks_first.handle_lights()` (§33) |
 | "Ask before every web search" | "turn on/off asking before every web search" | `jarvis_search.request_ask_every_time()` (§23) |
 | Smartwatch notifications | "turn on/off smartwatch notifications" | `jarvis_watch_notify.request()` (§39) |
+| Reading phone notifications | "turn on/off phone notifications" | `jarvis_phone_notifications.request()` (§61) |
 | Morning briefing senders shown | "turn on/off senders in my briefing" | `jarvis_briefing.handle_senders()` (§22) |
 | "What asks first" - loosen/stricter | "stop asking before my calendar" / "ask me before my calendar" | `jarvis_asks_first.handle_tier()` (§32) |
 | Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§43) |
@@ -9178,3 +9179,178 @@ order:
 shown exactly like any other approval card already is - `describe()`'s
 text is plain enough that no new card SHAPE is needed, only the ordinary
 approval flow already both apps have.
+
+## 61. Reading phone notifications (phone, added 2026-09-28)
+
+The owner's decision, `CLAUDE.md`, 2026-09-26 (queued after the four
+cutting-edge groups and the security audit; built 2026-09-28): "reading
+phone notifications is added as an option. The safe version only: off by
+default, turning it on raises an approval card, turning it off is
+immediate; only apps the owner chooses (never banking); one-time codes
+hidden before anything reaches the model; treated as outside text - never
+makes Jarvis act and is never saved as a fact; shown or summarised only
+when the owner asks; nothing leaves the owner's own devices. Never text
+messages (SMS), and Jarvis never replies or sends."
+
+**Phone-only, like the smartwatch setting it copies the shape of** (§8's
+"one-sided on purpose" table has the reason): a Windows desktop has no
+comparable OS surface - "which app posted a notification, and what did it
+say" is an Android concept with no PC equivalent this project has any
+reason to invent one for.
+
+### 61.1 The PC-decided master switch - the ONLY part on the backend
+
+`backend/jarvis_phone_notifications.py` (shipped whole,
+`phone-notifications.patch` teaches `jarvis_gate.py` the one new action
+name), copied deliberately from `jarvis_watch_notify.py`'s own shape: off
+by default, ON is one approval card, OFF is instant, decided on the PC
+like every switch of this shape even though only the phone ever acts on
+it (`docs/ARCHITECTURE.md` §3, "A second door to the same gates").
+
+| Route | Method | Body | Notes |
+|---|---|---|---|
+| `/api/notifications/phone` | GET | - | `{"enabled", "waiting", "last", "why"}` - the same shape `GET /api/notifications/watch` already answers. |
+| `/api/notifications/phone` | POST | `{"enabled": bool}` | ON: 202 `{"waiting": true, ...}` while the approval card (action `phone_notifications_read`, tier `ask`) is up - nothing changes until a person approves it. OFF: 200 at once, and withdraws a waiting ON card. |
+
+**This module never sees a notification's own text, ever.** It is a plain
+on/off switch and nothing else - the same division `jarvis_watch_notify.py`
+draws for the smartwatch setting. Turning it OFF does not revoke Android's
+own "Notification access" grant (only Android's own Settings screen can);
+it tells the phone to stop reading notifications and stop offering them to
+Jarvis, at once. `jarvis_settings_registry.py` gives it the usual second
+door too - "open phone notifications" / "turn on/off phone notifications"
+by voice or chat, calling this exact function, never a new one
+(`set_phone_notifications`, `BoolSetting("phone_notifications", ...)`).
+
+### 61.2 Android's own "Notification access" - explained before it is ever opened
+
+`NotificationListenerService` is unusually broad: once the owner grants it
+(`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS` - a special, OS-level
+access screen, NOT a runtime permission dialog), the app COULD be offered
+every notification on the phone, from every app. `PhoneNotificationsPlate.kt`
+says this in plain words, with the current granted/not-granted state
+(`NotificationManagerCompat.getEnabledListenerPackages`, re-read on
+resume) and the button that opens that screen, BEFORE the owner is ever
+sent there - the same pattern `FloatingAvatarPlate.kt` already follows for
+"draw over other apps".
+
+Granting it changes nothing by itself: Jarvis's own switch (61.1, off by
+default) and the per-app allow list (61.3, empty by default) both still
+have to say yes before a single notification is stored.
+
+### 61.3 The per-app allow list - empty by default, banking and SMS blocked outright
+
+`data/NotificationAllowList.kt` (pure logic, unit-tested in
+`NotificationAllowListTest.kt`) and its Android-backed half,
+`data/NotificationAllowListStore.kt` (per-device `SharedPreferences`,
+never synced - the same rule every other per-device setting in this app
+already follows). Empty until the owner adds an app, from the list
+Android itself reports as installed (`PackageManager.getInstalledApplic
+ations`) - never a name typed by hand, never a network lookup.
+
+**Banking apps are blocked outright, not just discouraged in words** -
+the stricter of the two choices the task allowed, because a real (if
+imperfect) signal exists for both halves of the check:
+- Android's own Play Store category for the app (`ApplicationInfo
+  .category == CATEGORY_FINANCE`, set by the app's own developer); or
+- a short, curated list of well-known banking, brokerage and payment
+  package-name substrings (`chase`, `paypal`, `coinbase`, `robinhood`,
+  `wellsfargo`, ...; `NotificationAllowList.BANKING_SUBSTRINGS` has the
+  rest), for a sideloaded APK or an older build with no category set.
+
+**Said plainly, because it would be dishonest not to:** this is a
+heuristic, not a guarantee. A bank whose category is unset AND whose
+package name matches nothing on the list is not caught here; the card and
+the allow-list screen both say plainly that Jarvis cannot always tell,
+and ask the owner not to add one regardless.
+
+**SMS/Messages is blocked by what the phone itself says its default SMS
+app is, not by a name guess:** `RoleManager.ROLE_SMS` (API 29+) names
+whichever package currently sends and receives text messages on this
+phone - whatever it is called, OEM rebrand or third-party app included.
+`NotificationAllowList.KNOWN_SMS_PACKAGES` is kept only as a second,
+static line of defence for a phone where that role cannot be read. Even a
+package that somehow reached the list some other way is dropped a second
+time, in `PhoneNotificationListenerService` itself, by the same check -
+CLAUDE.md's "even if the owner tries to add the Messages app" is met at
+both the add step and the read step, not only one of them.
+
+### 61.4 The listener, the redaction, and the local store
+
+`service/PhoneNotificationListenerService.kt`
+(`android.service.notification.NotificationListenerService`, bound only by
+the system - `BIND_NOTIFICATION_LISTENER_SERVICE`, `exported="false"`).
+For every notification posted, in order (cheapest checks first, so an app
+that fails an early one never has its text even read out):
+
+1. `JarvisRuntime.phoneNotificationsAllowed()` - the cached answer from
+   61.1's switch. OFF: nothing else in this list runs.
+2. SMS check (61.3's second layer).
+3. The per-app allow list (61.3) - only a chosen app's notification survives.
+4. `data/NotificationRedactor.kt` - **applied to the title and the text
+   before anything is stored, always** (CLAUDE.md's "one-time codes hidden
+   before anything reaches the model" - applied here to storage itself,
+   stricter than literally asked, since a code that never reaches disk
+   cannot leak from a lost phone or a backup either).
+
+**The redaction heuristic, and its real limits** (unit-tested in
+`NotificationRedactorTest.kt`; the class's own doc has the full list):
+catches a plain 4-8 digit run near an English trigger word ("code",
+"otp", "verification", "passcode", "2fa", ...), the common "NNN NNN" /
+"NNN-NNN" six-digit grouping with or without one, and a bare 4-8 digit
+notification (Google's "G-123456" shape included) even with no trigger
+word at all. Does NOT catch: a non-digit code, a trigger word in another
+language, a bare digit run with no trigger word buried in a longer
+sentence, or a code split some other way. Deliberately over-redacts
+(a year or reference number near the word "code") rather than
+under-redacts - the real failure this exists to prevent.
+
+Redacted notifications are kept in `data/CapturedNotifications.kt` - a
+private, per-device `SharedPreferences` file, capped at 200 rows and 7
+days, NEVER sent anywhere on its own. `android:allowBackup="false"` on
+this whole app already keeps it out of any phone backup.
+
+### 61.5 Reading one into a chat - no new backend plumbing, on purpose
+
+**"Shown or summarised only when the owner asks"** is met by reusing the
+EXACT mechanism the Share sheet and the desktop's clipboard hotkey already
+use (§18, `ChatSession.send`'s `shared` parameter): a "Notifications"
+button beside "Photo" in the composer (shown only once something has
+actually been captured) puts `CapturedNotifications.sharedText()` into the
+same held chip `sharedLine` already shows, with the same Dismiss. The
+owner still presses Send themselves - attaching never sends on its own.
+
+Because that text goes in as its own message with no `provenance` tag at
+all (the same shape a Share-sheet message already has), the backend's
+EXISTING outside-text rule - only `typed` and `voice` are the owner's own
+words (§18, "What the PC does with the tags in the answering loop") -
+already marks the conversation as having read outside text, on its own,
+with no new backend code: never learned as a fact, never makes Jarvis act,
+exactly as CLAUDE.md requires. No new route, no new tag, no new taint
+mechanism - the same one every other outside-text source already uses.
+Jarvis never reads a captured notification any other way: there is no
+tool call, no background job, and no route that returns one without the
+owner's own tap.
+
+### 61.6 Never
+
+- Never sends, replies to, or dismisses a notification - the service has
+  no code path that calls back into `NotificationManager` at all.
+- Never learns a fact from one - outside text is never learned (§5).
+- Never acts on one - reading it into a chat only lets the model SEE it;
+  every action Jarvis might then suggest still goes through the exact same
+  approval card any other action would.
+- Never leaves the owner's own devices unprompted - captured notifications
+  sit on the phone until the owner's own tap sends them, over the same
+  paired link every other chat message already uses.
+
+### 61.7 Tests
+
+`backend/test_phone_notifications.py` (the switch: default off, the card,
+OFF is instant, the routes, the patch applies and reverses - the same
+shape `test_watch_notify.py` already proves). `jarvis-client`'s
+`NotificationRedactorTest.kt` and `NotificationAllowListTest.kt` (pure
+logic, no Android framework, no device needed) prove the redaction
+heuristic's documented behaviour and the banking/SMS refusal - Kotlin
+compilation itself is confirmed only once CI runs (no local Android build,
+`CLAUDE.md`, "How the Android apps get built").

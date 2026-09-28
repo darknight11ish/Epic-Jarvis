@@ -183,6 +183,10 @@
       "title": "Jarvis wants to fetch a web page you're watching"
     },
     {
+      "action": "phone_notifications_read",
+      "title": "Jarvis wants to start reading notifications from apps you choose on your phone"
+    },
+    {
       "action": "post_to_external_service",
       "title": "Jarvis wants to post to an outside service"
     },

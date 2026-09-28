@@ -365,6 +365,15 @@ data class HomeState(
      */
     val pictureOffered: Boolean = false,
     /**
+     * Offer the "Notifications" button: reading phone notifications is on
+     * ([com.jarvis.client.JarvisRuntime.phoneNotificationsAllowed]) AND at
+     * least one has actually been captured
+     * ([com.jarvis.client.data.CapturedNotifications.sharedText] is not
+     * null). Hidden otherwise - a button that would attach nothing is not
+     * an offer, and this never appears at all while the setting is off.
+     */
+    val notificationsAttachable: Boolean = false,
+    /**
      * The line for a picture waiting to go with the next question, or null
      * when none is attached. See [com.jarvis.client.net.ChatPicture]. The
      * picture itself is never in this state - only its size, in words.
@@ -537,6 +546,14 @@ data class HomeActions(
     val onAttachPicture: () -> Unit = {},
     /** Drop the attached picture without sending it. */
     val onRemovePicture: () -> Unit = {},
+    /**
+     * Puts the recent captured notifications' redacted text into the same
+     * "shared text" chip the Share sheet and the clipboard hotkey use
+     * ([com.jarvis.client.data.CapturedNotifications.sharedText]) - the
+     * owner still presses Send themselves, exactly like any other shared
+     * text; nothing here reaches a chat on its own.
+     */
+    val onAttachNotifications: () -> Unit = {},
     /** Drop the shared text without sending it. */
     val onDropShared: () -> Unit = {},
     /** Open the release page in the browser. Downloads nothing itself. */
@@ -2426,6 +2443,19 @@ private fun Composer(
                 color = chrome.textMid,
                 enabled = state.link == LinkState.CONNECTED && !state.streaming && !state.pictureBusy,
                 onClick = actions.onAttachPicture,
+            )
+            Spacer(Modifier.width(4.dp))
+        }
+        // Only while phone notifications are on AND something has actually
+        // been captured - see HomeState.notificationsAttachable. Attaching
+        // never sends on its own: it fills the same shared-text chip the
+        // Share sheet does, and the owner still presses Send.
+        if (state.notificationsAttachable) {
+            Quiet(
+                "Notifications",
+                color = chrome.textMid,
+                enabled = !state.streaming,
+                onClick = actions.onAttachNotifications,
             )
             Spacer(Modifier.width(4.dp))
         }

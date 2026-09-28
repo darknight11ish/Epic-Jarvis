@@ -274,6 +274,7 @@ STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 # "desktop-todo"  - the desktop should have it too, and nobody has built it
 PHONE_ONLY = {
     "/api/notifications/watch": ("phone-only", "The smartwatch notification setting (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). A smartwatch pairs with a phone, never a Windows PC; the setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or writes it (docs/ARCHITECTURE.md §8)."),
+    "/api/notifications/phone": ("phone-only", "Reading phone notifications (the owner's decision, CLAUDE.md 2026-09-26; built 2026-09-28; docs/JARVIS-API.md §61). A Windows desktop has no equivalent to \"which app posted a notification\" - NotificationListenerService is Android-only. The setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or acts on it (docs/ARCHITECTURE.md §8)."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 

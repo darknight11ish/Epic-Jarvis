@@ -650,6 +650,15 @@
        "title": "Let your notifications show on a smartwatch too"
       },
       {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -1441,6 +1450,15 @@
        "title": "Let your notifications show on a smartwatch too"
       },
       {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -2230,6 +2248,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -3030,6 +3057,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",

@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.data.CheckMethod
@@ -1864,6 +1865,11 @@ class MainActivity : FragmentActivity() {
                         },
                         onRequestOverlay = ::requestOverlayPermission,
                         onOpenBubbleSettings = ::openBubbleSettings,
+                        notificationAccessGranted = remember(tick) {
+                            NotificationManagerCompat.getEnabledListenerPackages(this@MainActivity)
+                                .contains(packageName)
+                        },
+                        onOpenNotificationAccess = ::openNotificationAccessSettings,
                     )
 
                     Screen.APPEARANCE -> AppearanceScreen(
@@ -1992,6 +1998,15 @@ class MainActivity : FragmentActivity() {
                             // reading the words in a picture (2026-09-26), as
                             // the PC last reported it. The send asks again first.
                             pictureOffered = SecondCard.picturesTaken(secondCard),
+                            // Reading phone notifications (2026-09-28): only
+                            // offered once the setting is on AND something
+                            // has actually been captured - a button that
+                            // would attach nothing is not an offer.
+                            notificationsAttachable = remember(tick) {
+                                JarvisRuntime.phoneNotificationsAllowed() &&
+                                    com.jarvis.client.data.CapturedNotifications(this@MainActivity)
+                                        .sharedText() != null
+                            },
                             pictureLine = picture.value?.let {
                                 ChatPicture.attachedLine(it, wordsOnly = !SecondCard.visionAvailable(secondCard))
                             },
@@ -2088,6 +2103,15 @@ class MainActivity : FragmentActivity() {
                                     )
                                 },
                                 onRemovePicture = { picture.value = null },
+                                // Fills the SAME shared-text chip the Share
+                                // sheet already uses - the owner still
+                                // presses Send. Never sent, learned, or read
+                                // by anything until they do.
+                                onAttachNotifications = {
+                                    com.jarvis.client.data.CapturedNotifications(this@MainActivity)
+                                        .sharedText()
+                                        ?.let { sharedHeld = Provenance.joinShared(sharedHeld, it) }
+                                },
                                 onInterrupt = { chat.cancel() },
                                 onNewConversation = { chat.newConversation() },
                                 // A temporary chat: no card and no hold - it only
@@ -2527,6 +2551,23 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * Android's own "Notification access" screen
+     * (`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS`), for "reading
+     * phone notifications". `PhoneNotificationsPlate.kt`'s own explanation
+     * of what this OS-level access actually grants is shown BEFORE this is
+     * ever called, always - it is unusually broad (every notification, on
+     * every app, once granted), unlike an ordinary runtime permission
+     * dialog, and there is no direct way to grant it: only this screen,
+     * only the owner's own tap. `notificationAccessGranted` keeps reading
+     * the real answer either way, the same pattern `overlayGranted` above
+     * already follows.
+     */
+    private fun openNotificationAccessSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
     }
 
     /**

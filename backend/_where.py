@@ -200,6 +200,11 @@ SHIPPED = (
     # "One card, several steps" (the owner's own words, 2026-09-28;
     # plan-gate.patch): SWITCHED OFF until tools/tool_eval clears the bar.
     "jarvis_plan.py",
+    # Reading phone notifications (2026-09-26 decision, built 2026-09-28;
+    # phone-notifications.patch): off by default, ON is one approval card,
+    # OFF is instant; never sees a notification's own text - that lives on
+    # the phone.
+    "jarvis_phone_notifications.py",
 )
 
 

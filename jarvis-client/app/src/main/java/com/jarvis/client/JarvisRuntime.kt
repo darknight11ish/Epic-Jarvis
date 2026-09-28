@@ -3173,6 +3173,58 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * Read by [com.jarvis.client.service.PhoneNotificationListenerService]
+     * to decide whether to store anything at all - the cached last-known
+     * answer from the PC ([ClientSettings.phoneNotifications]), or false
+     * (read nothing - the safe direction) if [settings] has not been set
+     * up yet.
+     */
+    fun phoneNotificationsAllowed(): Boolean =
+        if (::settings.isInitialized) settings.phoneNotifications.value else false
+
+    // -------------------------------------------- reading phone notifications ----
+    // docs/JARVIS-API.md §61; see [com.jarvis.client.net.PhoneNotifications]
+    // and ui/screens/PhoneNotificationsPlate.kt. OFF by default, ON is one
+    // approval card. Every successful read or write updates
+    // [ClientSettings]'s cache, which the listener service reads - the only
+    // reason this route is read at all off the settings screen.
+
+    /**
+     * `GET /api/notifications/phone`. Updates the cache on success; leaves
+     * it alone on failure (a stale cache is never worse than no cache, and
+     * an app briefly offline should not stop reading notifications it was
+     * already allowed to read).
+     */
+    suspend fun phoneNotificationsSettings(): ApiResult<JsonObject> {
+        val r = api.phoneNotificationsSettings()
+        if (r is ApiResult.Ok) {
+            com.jarvis.client.net.PhoneNotifications.enabled(r.value)?.let { settings.setPhoneNotifications(it) }
+        }
+        return r
+    }
+
+    /**
+     * The switch. ON is held on a stale link (rule 4) and raises an
+     * approval card on the PC; OFF is never held. @return the sentence to
+     * show under the switch.
+     */
+    suspend fun setPhoneNotifications(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setPhoneNotifications(on) }) {
+            is ApiResult.Ok -> {
+                // Only a real Done (not Waiting) means the PC actually
+                // changed it - an ON that is still waiting for its card
+                // must not flip the cache early.
+                if (r.value is com.jarvis.client.net.DesktopWrite.Outcome.Done) {
+                    settings.setPhoneNotifications(on)
+                }
+                com.jarvis.client.net.PhoneNotifications.said(on, r.value)
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
     // ----------------------------------------------- automatic learning ----
     // docs/JARVIS-API.md section 19 (2026-09-24) - see
     // [com.jarvis.client.net.AutoLearn] and ui/screens/AutoLearnPlate.kt.

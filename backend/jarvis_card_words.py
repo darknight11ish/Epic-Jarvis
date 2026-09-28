@@ -125,6 +125,7 @@ TITLES = {
     "better_voice_enable": "turn on the better custom voice",
     # --- notifications
     "watch_notifications_enable": "let your notifications show on a smartwatch too",
+    "phone_notifications_read": "start reading notifications from apps you choose on your phone",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
     # --- helpers and anything else a tool asks for

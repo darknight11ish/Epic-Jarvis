@@ -841,6 +841,63 @@ repository or on the owner's PC yet.
   2026-09-28 entry above; once the safety test clears the bar, the card
   needs no new shape, only the ordinary approval flow both apps have.
 
+Built 2026-09-28, the owner's decision of 2026-09-26 above ("reading phone
+notifications is added as an option") - **the actual build of that
+decision**, phone-only end to end, its one PC-decided switch copied
+straight from `jarvis_watch_notify.py`'s already-approved shape
+(`docs/JARVIS-API.md` §61):
+
+- **Backend**: `backend/jarvis_phone_notifications.py` (shipped whole) +
+  `phone-notifications.patch` (one line into `jarvis_gate.py`'s
+  "acts only on tier ask" set, one `_RISK` entry) - off by default, ON is
+  one approval card (`phone_notifications_read`), OFF is instant. Never
+  sees a notification's own text: it is a plain on/off switch, nothing
+  more. Given the usual second door too (`jarvis_settings_registry.py`:
+  "open/turn on phone notifications" by voice or chat, calling the exact
+  same function). `backend/test_phone_notifications.py`, 70 checks - the
+  same shape `test_watch_notify.py` already proves.
+- **Phone**: `service/PhoneNotificationListenerService.kt` (the real
+  `NotificationListenerService`, bound only by the system), gated by the
+  PC's switch, the per-app allow list and, defensively, an SMS check a
+  second time; `data/NotificationRedactor.kt` (the one-time-code
+  heuristic, applied before anything is stored); `data/
+  NotificationAllowList.kt` + `.../NotificationAllowListStore.kt` (empty
+  by default; a package the OS itself reports as the default SMS handler,
+  `RoleManager.ROLE_SMS`, is refused outright, and so is one whose Play
+  Store category or package name looks like a bank, brokerage or payment
+  app); `data/CapturedNotifications.kt` (a capped, per-device store, never
+  synced). `PhoneNotificationsPlate.kt` (Settings → Phone notifications:
+  the switch, Android's "Notification access" explained before it is
+  opened, and the allow list). Reading one into a chat reuses the Share
+  sheet's own "shared text" chip - no new backend plumbing, and the
+  existing outside-text rule marks it on its own.
+- **Two judgment calls worth a second look, made rather than deferred:**
+  - **Banking apps are blocked outright**, not just discouraged in words
+    - the task allowed either. Two real signals existed (the app's own
+    declared Play Store category, and a curated name-substring list), so
+    blocking was the more responsible choice; the card and the allow-list
+    screen both say plainly that this is a heuristic, not a guarantee, for
+    a bank neither signal catches.
+  - **The redaction heuristic deliberately over-redacts.** It catches a
+    plain 4-8 digit run near an English trigger word, the common "NNN NNN"
+    grouping, and a bare digit-only notification with no trigger word at
+    all - and it will occasionally blank a year or a reference number by
+    mistake. It does NOT catch a non-digit code, a trigger word in another
+    language, or a bare digit run with no trigger word buried in a longer
+    sentence - written down in the class's own doc and in `docs/
+    JARVIS-API.md` §61.4, not discovered later.
+- Verified: `backend/test_phone_notifications.py` (70/70),
+  `test_asks_first.py` (174/174), `test_card_words.py` (98/98),
+  `test_gate_risk_words.py` (15/15) - all re-run after this feature's own
+  entries were added to their tables; `tools/gen_asks_first_cases.py` and
+  `tools/gen_card_words_cases.py` re-run so both apps' fixtures match.
+  `tools/check_parity.py`: clean, the new route classified `phone-only`
+  beside the smartwatch one. **Kotlin is unverified here** (no local
+  Android build; "How the Android apps get built" above) - every new file
+  was read back by eye instead, and the redaction/allow-list logic was
+  additionally checked by hand-simulating the regex in Python first, since
+  neither can be compiled in this container.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

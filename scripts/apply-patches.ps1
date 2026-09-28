@@ -660,6 +660,22 @@ $PATCHES = @(
     # patch alone changes nothing the model can reach yet; it only teaches
     # the gate the two new action names for when it is turned on.
     'plan-gate.patch'
+    # Reading phone notifications (the owner's decision, 2026-09-26; built
+    # 2026-09-28, CLAUDE.md): GET and POST /api/notifications/phone - OFF by
+    # default (Jarvis never reads a phone notification), ON is one approval
+    # card (phone_notifications_read), OFF is instant. Three hunks: its
+    # jarvis_gate.py "acts only on tier ask" line (context is backup.patch's
+    # own restore_backup line, so it goes after it) and its jarvis_gate.py
+    # _RISK entry (context is plan-gate.patch's own run_plan entry, so it
+    # goes after it); and its jarvis_hud.py install() block (context is
+    # goals.patch's own block, so it goes after it - last, like every new
+    # patch touching that block). Needs jarvis_phone_notifications.py copied
+    # in; without it, or on any error, the banner says so and the route is
+    # not there. Everything else (which apps, the one-time-code redaction,
+    # never SMS, the allow list) lives entirely on the phone
+    # (jarvis-client/), proved by that app's own tests - this patch and its
+    # module never see a notification's text.
+    'phone-notifications.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -796,6 +812,8 @@ $SHIPPED = @(
     'jarvis_goals.py'            # goals.patch: a goal's own plan and weekly check-in; accepting raises one card, like a repeating reminder; every acting step still asks through ordinary chat
     # --- "One card, several steps" (plan-gate.patch) ---
     'jarvis_plan.py'             # plan-gate.patch: the plan card's own module - SWITCHED OFF until tools/tool_eval's real results clear the bar; see its own docstring
+    # --- reading phone notifications (2026-09-28, phone-notifications.patch) ---
+    'jarvis_phone_notifications.py'  # off by default; ON is one approval card, phone_notifications_read; OFF is instant; never sees a notification's own text
 )
 
 # The settings file. Installed only where none exists; never overwritten.
