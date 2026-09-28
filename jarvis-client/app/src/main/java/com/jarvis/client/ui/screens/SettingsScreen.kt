@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
@@ -84,7 +86,8 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "backup" to 10,
     "watch-notify" to 11,
     "phone-notify" to 12,
-    "quick-tiles" to 13,
+    "devices" to 13,
+    "quick-tiles" to 14,
 )
 
 /**
@@ -302,6 +305,25 @@ fun SettingsScreen(
                     notificationAccessGranted = notificationAccessGranted,
                     onOpenNotificationAccess = onOpenNotificationAccess,
                 )
+            }
+
+            // Every device with its own key (docs/PAIRING-DESIGN.md section 7.2),
+            // shown only when the PC reports pairing (section 5.5).
+            item(key = "devices") {
+                val version by com.jarvis.client.JarvisRuntime.version.collectAsState()
+                if (version?.can("pairing") == true) {
+                    DevicesSection()
+                } else {
+                    Section("Devices") {
+                        Plate {
+                            Text(
+                                com.jarvis.client.net.Devices.MISSING,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textLo,
+                            )
+                        }
+                    }
+                }
             }
 
             item(key = "quick-tiles") {
