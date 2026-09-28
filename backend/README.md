@@ -14867,3 +14867,84 @@ cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 
   a driver that reports it; if yours does not, "Other programs using its
   memory" is simply left out.
 - Only NVIDIA cards are read (as on the Hardware screen).
+
+# Smarter answers: `jarvis_claims.py`, `jarvis_agent.py` (2026-09-28)
+
+Three changes to how Jarvis answers, all inside the answer itself - nothing
+new to switch on, no new card, no new route. You chose this group on
+2026-09-28 (the research audit's OSS items 1 and 4).
+
+**1. A big tool result is shortened, not dropped.** A tool result is capped
+at 8,000 characters. Until now, anything bigger - a long file, a long email,
+a big web page - was replaced whole by "the real result was N characters",
+so Jarvis saw none of it and could not answer. Now each long text keeps its
+first and last 1,500 characters, with a plain "[... 12,345 characters left
+out ...]" between them (less from each end when there are many long texts,
+and only then are long lists cut to their first and last items). It is
+still whole, valid JSON; the "this came from a tool, not from the owner"
+label is kept; a "shortened" note tells the model the middle is missing.
+The numbers are OpenClaw's (MIT); the code is written here, none copied.
+
+**2. Older tool results are cleared in a long answer.** When one answer
+uses many tools, their results used to pile up until the oldest parts of
+the conversation had to be dropped to make room. Now, once the conversation
+is past half of the room, OLDER tool results in it become a short "[an
+earlier tool result was cleared to make room]" note. The results after the
+last three of Jarvis's own messages (the ones it is working from) stay
+whole, and your own words, Jarvis's messages and the system notes are never
+touched. The full text stays in memory for that answer only; it is never
+written to disk.
+
+**3. "I've done it" when nothing was done gets one plain line.** Jarvis's
+rules already say never to claim an action that was not taken, and the
+tool test checks it - but nothing checked it in a real answer. Now, if an
+answer says it did something ("I've set a reminder", "Done - I've turned
+off the light") and no action tool succeeded in that answer, the answer
+ends with: "(Nothing was actually done - no action ran in this answer.)"
+On a voice turn it is said aloud, without the brackets: "To be clear,
+nothing was actually done - no action ran in this answer." It is part of
+the answer, so both apps show it with no change. It is NOT added when any
+action tool (a reminder, a note, a home change, an email, a plug-in tool)
+returned ok in the answer; a read (calendar, email, notes, search, files)
+does not count. It skips questions ("Should I set a reminder?"), "if ..."
+sentences, things done earlier ("I already set it this morning") and
+sentences about remembering (facts are saved by automatic learning after
+the answer, where this check cannot see them).
+
+## What changed
+
+- `jarvis_claims.py` (new, shipped whole, no patch): the "I've done it"
+  pattern (moved here from the tool test, which now imports it, so the two
+  can never disagree), the sentence-by-sentence check, and the two lines.
+- `jarvis_agent.py`: `_tool_content()` shortens instead of dropping;
+  `clear_old_tool_results()` runs before the usual trimming each round;
+  `run_local_turn()` adds the line at the end of the answer (before the
+  crisis help, which stays last) and returns `claimed_undone`.
+- `tools/tool_eval/`: a new behaviour case, `long_result` (the answer is
+  in the last line of a file far over the limit), and every run now counts
+  how often the "nothing was done" line would be added.
+- `test_smarter_answers.py` (new), `test_tool_eval.py`, `test_agent.py`.
+
+## Owner steps
+
+1. Run `apply-patches.ps1` as usual - it copies `jarvis_claims.py` in.
+   Restart Jarvis.
+2. Measure it with the tool test on the PC (20-40 minutes, when Jarvis is
+   idle; the results file lands in `tools\tool_eval\` in the repository
+   folder) - see `tools/tool_eval/README.md`.
+
+## Not checked, said plainly
+
+- **No real model has seen this.** The offline tests prove the shapes; only
+  the PC run says whether the model answers better from a shortened result,
+  and how often the line fires. Read the "nothing was done" row: a count on
+  answers that passed their checks is a false alarm.
+- **Clearing costs some speed.** Each time an older result is cleared, the
+  start of the prompt changes from that point, so Ollama re-reads the rest
+  of it instead of reusing what it already read. It only happens past half
+  of the room, and a cleared result stays cleared the same way, so each
+  round re-reads at most from the newly cleared result onward.
+- **The check is loose on purpose.** Any action that succeeded backs any
+  claim ("I've sent the email" after only a reminder was set is not
+  caught), because a wrong "nothing was done" after something really was
+  done would be worse than a missed one.

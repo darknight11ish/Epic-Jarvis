@@ -813,6 +813,8 @@ $SHIPPED = @(
     'jarvis_photo_remind.py'     # "Photo to reminder": the dates in a picture, read on this PC and PROPOSED, never set by itself (photo-reminder.patch)
     # --- "PC help" (2026-09-28, no patch of its own) ---
     'jarvis_pc_help.py'          # "why is my PC slow?", "how full is my disk?" and three more, read-only, no model; GET /api/pc/help through jarvis_brain_reads.py
+    # --- "Smarter answers" (2026-09-28, no patch of its own) ---
+    'jarvis_claims.py'           # "I've done it" when nothing was done: one plain line at the end of the answer; jarvis_agent.py calls it
 )
 
 # The settings file. Installed only where none exists; never overwritten.

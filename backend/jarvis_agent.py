@@ -2448,6 +2448,58 @@ def error_code(message: str) -> Optional[str]:
 
 _MAX_TOOL_CONTENT_CHARS = 8000
 
+#: A long text in a tool result keeps this many characters from its start
+#: and as many from its end ("Smarter answers", 2026-09-28). The number is
+#: OpenClaw's (docs/concepts/session-pruning.md, MIT); the code is written
+#: here, none copied. Tried in order: when the long texts are many, each
+#: keeps less.
+_KEEP_EACH_END = (1500, 600, 200, 80)
+
+#: What stands where the middle of a long text, or of a long list, was left out.
+_LEFT_OUT = "[... {n:,} characters left out ...]"
+_ITEMS_LEFT_OUT = "[... {n:,} more items left out ...]"
+
+
+def _shorten_strings(node, keep: int, over: int):
+    """`node` with every string longer than `over` cut to its first and last
+    `keep` characters, a plain marker between. Keys, numbers, true/false and
+    the outside-text label are never cut. A new structure."""
+    if isinstance(node, str):
+        if len(node) > over:
+            gone = len(node) - 2 * keep
+            return node[:keep] + " " + _LEFT_OUT.format(n=gone) + " " + node[-keep:]
+        return node
+    if isinstance(node, list):
+        return [_shorten_strings(v, keep, over) for v in node]
+    if isinstance(node, dict):
+        return {k: (v if k == OUTSIDE_FIELD else _shorten_strings(v, keep, over))
+                for k, v in node.items()}
+    return node
+
+
+def _shorten_lists(node, keep: int):
+    """`node` with every list longer than 2*keep+1 items cut to its first
+    `keep` and last `keep` items, a plain marker item between."""
+    if isinstance(node, list):
+        items = [_shorten_lists(v, keep) for v in node]
+        if len(items) > 2 * keep + 1:
+            items = (items[:keep] + [_ITEMS_LEFT_OUT.format(n=len(items) - 2 * keep)]
+                     + items[-keep:])
+        return items
+    if isinstance(node, dict):
+        return {k: _shorten_lists(v, keep) for k, v in node.items()}
+    return node
+
+
+def _with_note(short: dict, full_len: int) -> dict:
+    """`short` with a plain note that it was shortened, placed just after
+    OUTSIDE_FIELD and "ok" so the model reads it before the text."""
+    note = (f"the real result was {full_len:,} characters, so the middle of its "
+            f"longest parts was left out here; if the answer could be in the "
+            f"missing middle, say so rather than guess")
+    head = {k: short[k] for k in (OUTSIDE_FIELD, "ok") if k in short}
+    return {**head, "shortened": note, **{k: v for k, v in short.items() if k not in head}}
+
 
 def _tool_content(result: dict) -> str:
     """A tool's result, as the JSON string fed back to the model - always
@@ -2456,19 +2508,99 @@ def _tool_content(result: dict) -> str:
     a large result is not a hypothetical here: file_read alone can return
     up to 200,000 characters of content, far past any per-message budget.
     A model reading a hand-mangled JSON fragment as "the tool's answer" is a
-    worse failure than an honest, valid, short note that it was too big."""
+    worse failure than an honest, valid, short note that it was too big.
+
+    A result over the limit is SHORTENED, not dropped ("Smarter answers",
+    2026-09-28): the same JSON shape, each long text cut to its first and
+    last part with a plain "[... N characters left out ...]" between
+    (_KEEP_EACH_END), and - only if that is not enough - each long list cut
+    to its first and last items. Keys, numbers, true/false and the outside-
+    text label (OUTSIDE_FIELD) stay as they are; a "shortened" note says
+    what happened. Every cut is made on the decoded values and the whole is
+    encoded again, so the JSON is always whole. Only when even that does not
+    fit (a result made of thousands of tiny keys) is the old short note sent
+    instead. The full text stays in this answer's memory only; it is never
+    written anywhere."""
     full = json.dumps(result, ensure_ascii=False)
     if len(full) <= _MAX_TOOL_CONTENT_CHARS:
         return full
+    base = json.loads(full)
+    if isinstance(base, dict):
+        # Texts first, each keeping less in turn; lists only when cutting
+        # every text to its two ends is still not enough. (Only a text
+        # longer than both ends and the marker is worth cutting.)
+        tries = [(keep, None) for keep in _KEEP_EACH_END] + \
+                [(_KEEP_EACH_END[-1], items) for items in (20, 5, 2)]
+        for keep, items in tries:
+            trial = _shorten_strings(base, keep, 2 * keep + 40)
+            if items is not None:
+                trial = _shorten_lists(trial, items)
+            text = json.dumps(_with_note(trial, len(full)), ensure_ascii=False)
+            if len(text) <= _MAX_TOOL_CONTENT_CHARS:
+                return text
     short = {
-        "ok": result.get("ok"),
+        "ok": result.get("ok") if isinstance(result, dict) else None,
         "truncated": True,
         "note": f"the real result was {len(full)} characters - too large to "
-                 "show in full here",
+                "show in full here",
     }
-    if OUTSIDE_FIELD in result:
+    if isinstance(result, dict) and OUTSIDE_FIELD in result:
         short = {OUTSIDE_FIELD: result[OUTSIDE_FIELD], **short}
     return json.dumps(short, ensure_ascii=False)
+
+
+#: Once the conversation is past this share of the room, older tool results
+#: in it are cleared (clear_old_tool_results). OpenClaw's number.
+_CLEAR_OLD_RESULTS_AT = 0.5
+#: The newest assistant messages whose tool results are never cleared.
+_KEEP_LAST_ASSISTANTS = 3
+#: What an older tool result becomes.
+CLEARED_RESULT = "[an earlier tool result was cleared to make room]"
+
+
+def clear_old_tool_results(messages: list, room: int) -> list:
+    """`messages`, with the OLDER tool results replaced by a short stub once
+    the whole is past half of `room` tokens ("Smarter answers", 2026-09-28).
+
+    Runs before fit_messages, which drops whole earlier turns but never
+    touches a tool result inside the current one - so up to six rounds of
+    8,000 characters each could crowd out everything else. Here:
+
+      - only `tool` messages change - never the owner's words, never an
+        assistant message, never a system note;
+      - the results after the last _KEEP_LAST_ASSISTANTS assistant messages
+        (the newest ones, which the model is working from) are kept whole;
+      - a cleared result is still valid JSON, keeps the outside-text label
+        and its "ok", and says plainly that it was cleared.
+
+    A new list; `messages` is not changed - the full results stay in this
+    answer's own memory and are never written anywhere. Worked out from the
+    whole, untrimmed conversation every round, so a result once cleared
+    stays cleared for the rest of the answer and the start of the prompt
+    changes as little as it can (each newly cleared result makes Ollama
+    re-read the prompt from that point on)."""
+    msgs = list(messages)
+    if estimate_tokens(msgs) <= int(room * _CLEAR_OLD_RESULTS_AT):
+        return msgs
+    helpers = [i for i, m in enumerate(msgs)
+               if isinstance(m, dict) and m.get("role") == "assistant"]
+    if len(helpers) < _KEEP_LAST_ASSISTANTS:
+        return msgs
+    cutoff = helpers[-_KEEP_LAST_ASSISTANTS]
+    for i in range(cutoff):
+        m = msgs[i]
+        if not (isinstance(m, dict) and m.get("role") == "tool"):
+            continue
+        ok = None
+        try:
+            was = json.loads(m.get("content") or "")
+            if isinstance(was, dict):
+                ok = was.get("ok")
+        except Exception:
+            pass
+        stub = {OUTSIDE_FIELD: OUTSIDE_LABEL, "ok": ok, "cleared": CLEARED_RESULT}
+        msgs[i] = dict(m, content=json.dumps(stub, ensure_ascii=False))
+    return msgs
 
 
 # --------------------------------------------------------------------------
@@ -5058,7 +5190,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     `turn_id` and is already sent before this function even starts
     (streaming) - so the caller records these two under that same id
     afterwards (`jarvis_sources.record`), for a later `GET
-    /api/chat/sources` to read back.
+    /api/chat/sources` to read back. `claimed_undone` is True when the
+    answer claimed an action that no tool took, and so ended with the plain
+    "Nothing was actually done" line (jarvis_claims.py).
 
     When the turn is over, `record_chain(steps)` gets the list of tools this
     turn asked for, as `{"tool", "ran", "ok", "outcome"}` dicts in order.
@@ -5189,6 +5323,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     beat.start()
 
     answer: list = []
+    # The model's own words this answer, without the lines Jarvis itself
+    # adds (tell_owner) - what the "I've done it" check reads.
+    model_words: list = []
+    claimed_undone = False
     said = {"any": False, "gap": False}
     # The delay of a spoken turn (jarvis_voice_flow.py): when this answer's
     # first word and first complete sentence arrive, as numbers. None - and
@@ -5249,9 +5387,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 room -= estimate_tokens(crisis_msg)
         # The notes and the rules, after trimming (dress_messages), and the
         # body's shape (chat_body): the SAME two functions the warm-up uses
-        # (warm_prefix), so what it sends cannot drift from this.
+        # (warm_prefix), so what it sends cannot drift from this. Older tool
+        # results in a long answer are cleared first (clear_old_tool_results),
+        # so trimming never has to drop the owner's earlier words for them.
         body = chat_body(cur["model"],
-                         dress_messages(fit_messages(msgs, room), manner=manner,
+                         dress_messages(fit_messages(clear_old_tool_results(msgs, room), room),
+                                        manner=manner,
                                         focus=focus_brief, next_time=next_time["note"],
                                         spoken=watch.spoken,
                                         cut_off=watch.cut_off, crisis=watch.crisis),
@@ -5265,6 +5406,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 # Kept per round too: a round that then asks for a tool goes
                 # back to the model with the words it wrote before asking.
                 rnd.text.append(clean)
+                model_words.append(clean)
                 if first["text"]:
                     first["text"] = False
                     out.set_status(None)
@@ -5324,6 +5466,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         tail = stripper.flush()
         if tail:
             rnd.text.append(tail)
+            model_words.append(tail)
             if first["text"]:
                 first["text"] = False
                 say_step("answer")
@@ -5466,6 +5609,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                                      f"which has room for long web pages")
                         except Exception:
                             pass
+        # "I've done it" when nothing was done ("Smarter answers",
+        # 2026-09-28): the answer claims an action and no action tool
+        # returned ok in it (jarvis_claims.py). One plain line at the end, in
+        # the stream like any other - so both apps show it and a voice turn
+        # says it - and before the crisis help, which stays last.
+        line = _nothing_done_line("".join(model_words), steps, spoken=watch.spoken)
+        if line:
+            claimed_undone = True
+            tell_owner(line)
         if watch.crisis:
             # W1 (or the short repeat line), after the model's own answer -
             # never counted as a tool call, never asked for, always said.
@@ -5567,9 +5719,23 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             "tools_ran": ran,
             "outside_flags": sorted(watch.flags),
             "crisis": watch.crisis,
+            "claimed_undone": claimed_undone,
             "tool_sources": watch.sources,
             "unverified_quotes": unverified,
             "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}
+
+
+def _nothing_done_line(text: str, steps: list, *, spoken: bool = False) -> str:
+    """The plain line for an answer that claims an action no tool took
+    (jarvis_claims.unbacked_claim), or "". A missing or broken
+    jarvis_claims.py adds nothing - it never fails an answer."""
+    try:
+        import jarvis_claims
+        if jarvis_claims.unbacked_claim(text, steps):
+            return jarvis_claims.nothing_done_line(spoken)
+    except Exception:
+        pass
+    return ""
 
 
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,

@@ -788,6 +788,29 @@ the PC, no app change needed:
   in a new message to carry on.)"). A tool that asks nobody (tier `auto` or
   `notify`) is not limited. A new message starts at zero. Both apps show the
   line as part of the answer; neither needed a change.
+- **"I've done it" with nothing done gets one plain line** (2026-09-28,
+  "Smarter answers", `backend/jarvis_claims.py`). When the model's answer
+  claims an action ("I've set a reminder...", "Done - I've turned off...")
+  and no action tool returned ok in that answer (a read-only tool - a
+  search, calendar, email, notes, files, home status - does not count), the
+  answer ends with "(Nothing was actually done - no action ran in this
+  answer.)", or on a voice turn "To be clear, nothing was actually done - no
+  action ran in this answer." It is an ordinary `content` delta after the
+  model's words (a blank line before it) and before the finish chunk and
+  `data: [DONE]` - or at the end of `message.content` when not streamed -
+  and before the crisis help line, which stays last. No new field in the
+  stream; no app change needed. Questions, "if ..." sentences, things done
+  earlier and remembering do not count as claims.
+- **Big tool results are shortened, not dropped** (2026-09-28). A result
+  over 8,000 characters keeps its JSON shape and its outside-text label,
+  with each long text cut to its first and last 1,500 characters around a
+  plain "[... N characters left out ...]" and a `shortened` note; only if
+  that cannot fit does the old "too large to show" note stand. Once an
+  answer's conversation passes half of the room, older tool results in it
+  become `{"outside_text": ..., "ok": ..., "cleared": "[an earlier tool
+  result was cleared to make room]"}`; the results after the last three
+  assistant messages, and every user, assistant and system message, are
+  never changed. Nothing about this reaches the apps.
 - **Several smart-home devices on ONE card** (2026-09-25, the owner's
   decision after the creativity audit; `jarvis_home.plan_services`).
   `home_control` takes `entity_ids` (a list, at most 10) beside `entity_id`:
