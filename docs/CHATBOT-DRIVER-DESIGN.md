@@ -1,19 +1,22 @@
 # Chatbot driver: Jarvis talks to ChatGPT or Gemini for you (design)
 
-Status: **partly built, not reachable from either app** (2026-09-28): the
-core (`backend/jarvis_chatbot.py`) and Gemini's website adapter
-(`backend/jarvis_chatbot_gemini.py`, driven openly as the owner chose);
-no route or app screen yet (`docs/JARVIS-API.md` section 60). Since
-"the chatbot driver becomes versatile" (owner, 2026-09-28), eight more
-websites are built the same open way over one shared base
+Status (corrected 2026-09-28): **built, reachable from both apps, not yet
+tried against the real sites.** The core (`backend/jarvis_chatbot.py`), its
+routes (`backend/jarvis_chatbot_routes.py`) and both apps' screens
+(`docs/JARVIS-API.md` section 60); Gemini's website adapter
+(`backend/jarvis_chatbot_gemini.py`, driven openly as the owner chose).
+Since "the chatbot driver becomes versatile" (owner, 2026-09-28), eight
+more websites are built the same open way over one shared base
 (`backend/jarvis_chatbot_web.py`): ChatGPT, Claude, Copilot, Perplexity,
 DeepSeek, Grok, Le Chat and Meta AI, each with its own spare account and
-self-check, none yet tried against its real site (section 60.5). Written 2026-09-27 by the
-since 2026-09-28 also the API adapters (`backend/jarvis_chatbot_api.py`:
-OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq, one key each) and "a
-second AI on this PC" (`backend/jarvis_chatbot_local.py`); the money cap
-in section 2 is NOT built (token counts are recorded and shown);
-no route or app screen yet (`docs/JARVIS-API.md` section 60). Written 2026-09-27 by the
+self-check, none yet tried against its real site (section 60.5); the API
+adapters (`backend/jarvis_chatbot_api.py`: OpenAI, DeepSeek, Mistral, xAI,
+OpenRouter, Groq, one key each); "a second AI on this PC"
+(`backend/jarvis_chatbot_local.py`); and "Ask several and compare"
+(`backend/jarvis_chatbot_compare.py`, the section of that name below). The
+money cap in section 2 is NOT built (token counts are recorded and shown).
+(An earlier version of this line said "no route or app screen yet" twice;
+that was out of date.) Written 2026-09-27 by the
 studio's designer for the owner's decision in `CLAUDE.md` ("Decided
 2026-09-27, the owner's answers after the studio review"): Jarvis may hold a
 conversation with an AI chatbot for the owner, following up **on its own,
@@ -265,6 +268,90 @@ key is entered on the PC only, like the web-search keys.
 [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data);
 [ChatGPT web bridge ban report](https://github.com/Wladefant/super-board/issues/276);
 [Playwright blocked on ChatGPT](https://community.latenode.com/t/playwright-automation-getting-blocked-by-cloudflare-when-accessing-chatgpt/21831).
+
+---
+
+## Ask several and compare (2026-09-28)
+
+Status: **built on the backend and both apps; not yet tried against the
+real sites** (like everything above). The owner's decision (CLAUDE.md,
+"The chatbot driver becomes versatile", point 4): "compare: ask several AIs
+the same question, one card listing every AI it will ask, one summary of
+agreements, disagreements and sources." Routes and fields:
+`docs/JARVIS-API.md` section 60.7.
+
+### In plain words
+
+Tick "Ask several and compare", pick two or more chatbots, type the goal
+once. ONE approval card lists every chatbot Jarvis would ask, the goal word
+for word and the limits. On a yes, Jarvis holds an ordinary conversation
+with each chatbot in turn - the same rules as one conversation, nothing
+loosened - and at the end its own model on the PC writes ONE summary: where
+they agree, where they disagree (and which chatbot said what), the sources
+each gave (not checked by Jarvis), what is still open, and which chatbot
+dropped out and why.
+
+### How it fits what is already built
+
+- **Each chatbot gets an ordinary conversation.** `jarvis_chatbot_compare.py`
+  plans one `jarvis_chatbot.Session` per chatbot with `jarvis_chatbot.plan()`
+  and runs each with `jarvis_chatbot.run()`. So every message to every
+  chatbot goes through the same `last_check()` just before it is sent, with
+  the same never-send words, and each driver sees only the goal and THAT
+  chatbot's replies - the chatbots never see each other's answers, and
+  nothing private is ever in the context (rule 1).
+- **One card, the same kind.** Gate action `chatbot_session`, tier `ask`
+  only, risky (Windows Hello on the PC, a screen lock on the phone), no
+  "always allow". The card lists every chatbot by name and address.
+- **One after another**, on one card and on two: one browser window at a
+  time, and on one card the model writing the follow-ups is the owner's own
+  chat model, which already waits while the owner chats.
+- **A chatbot that cannot go on is left out**, not paused for: an error, no
+  reply, two blocked messages, a question about the owner, or a captcha /
+  sign-in / "unusual activity" page (never solved or skipped). A single
+  conversation pauses and asks at those pages; in a comparison that would
+  hold up every other chatbot, so the card says it will be left out, and the
+  summary says who and why (plain words from the backend, not the model).
+- **Pause / Resume / Stop act on the whole comparison.** It is one
+  `jarvis_task_control` task (tool `chatbot_compare`), so the existing Pause
+  and Resume (one card) work unchanged; Stop, the task Stop and Stop
+  everything end every conversation in it, and the chatbots not asked yet
+  are never opened.
+- **The summary** is written once, by the local model, from the chatbots'
+  replies only (each conversation under its name), with no tools. Its
+  `who` names are checked against the chatbots asked (anything else is
+  dropped); its sources are the web addresses found in each chatbot's own
+  replies by plain code, plus those the model lists - none opened, none
+  checked. It is outside text: never learned from, never read aloud. On one
+  card it waits for the owner's chat like a single conversation's summary.
+- **Kept in memory only**, like single conversations: a backend restart
+  loses it.
+
+### The limits (proposed - the owner can change them)
+
+| | one graphics card | two graphics cards |
+|---|---|---|
+| chatbots per comparison | **2 to 3** | **2 to 4** |
+| order | one after another | one after another |
+| messages and minutes | the version's own, **for each chatbot** (one card: default 5, most 8 messages; default 10, most 15 minutes) | the version's own, for each chatbot (default 8, most 20 messages; default 10, most 30 minutes) |
+| longest possible comparison | 3 x 15 = 45 minutes of conversation | 4 x 30 = 120 minutes |
+
+Why these numbers: on one card the model writing the follow-ups is the
+owner's own chat model, so three chatbots at up to 15 minutes each is
+already a long wait; on two cards the driver is on the 12 GB card and never
+slows the owner's chat, so one more is reasonable. Asking them side by side
+(at the same time) on two cards is possible later, once the two-card
+version is measured; it is not built. The numbers live in one place,
+`jarvis_chatbot_compare.MAX_AIS`, and both apps read them from the PC
+(`tier.compare_min` / `compare_max`).
+
+### Not built, said plainly
+
+- Changing the limits in the middle of a comparison (stop it and start a
+  new one); starting a comparison by saying it; side-by-side asking on two
+  cards; keeping comparisons in the encrypted chat history.
+- The summary's quality depends on the local model (Qwen 3 8B on one card);
+  it has not been measured on real chatbot answers.
 
 ---
 

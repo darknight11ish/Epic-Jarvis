@@ -6,6 +6,18 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Ask several chatbots and compare** (both apps, Brain -> "Talk to a
+  chatbot for me"). Tick "Ask several and compare", pick two or more
+  chatbots, type the goal once. One approval card lists every chatbot
+  Jarvis would ask. Jarvis then talks to each one in turn, under the same
+  limits and checks as a single conversation, and at the end writes one
+  summary on your PC: where they agree, where they disagree (and who said
+  what), the sources each gave (not checked by Jarvis), and which one
+  dropped out and why. If one shows a captcha or a sign-in page, Jarvis
+  leaves it out and carries on with the others. Pause, Resume and Stop act
+  on the whole comparison. Up to 3 chatbots with one graphics card, 4 with
+  two - a first proposal you can change. Not yet tried against the real
+  chatbot websites.
 - **The chatbot driver can now work eight more chatbot websites - still not
   usable from either app.** ChatGPT, Claude, Microsoft Copilot and
   Perplexity, plus DeepSeek, Grok, Le Chat (Mistral) and Meta AI (these
