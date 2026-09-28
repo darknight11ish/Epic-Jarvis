@@ -6,6 +6,25 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **A fifth face: the robot, on both apps.** From the owner's own picture:
+  a small floating robot with a big white helmet, a glossy dark-blue visor
+  with a glowing rim, ear pods with teal fins, an egg of a body with a teal
+  shield, two mitten arms and no legs - it floats, with a soft shadow on
+  the ground. No mouth and no orb: its glowing eyes carry the state's colour
+  and its expression, and pulse with Jarvis's real voice. Now and then at
+  rest it zips round inside its own picture (never out of it, never under
+  "Keep the animal still", calm motion, a serious moment, a focus session or
+  a petting hand), waves, or polishes its visor. It counts as an animal for
+  every animal option and does everything the animals do - all eight
+  states, powering down and booting up, the Zs, hello and goodbye, and the
+  new behaviours. Its own voice under "Voice follows the face": Emma, two
+  steps higher and a little faster (changeable in "Each animal's voice").
+  The sky's switches now read "Show the sun and moon behind the face" and
+  "Weather behind the face", so they fit the robot too. Pick it in the
+  Faces window (PC) or Appearance (phone). Needs `apply-patches.ps1` on the
+  PC for its voice and the new sky wording (`jarvis_voices.py`, `jarvis_sky.py`,
+  `jarvis_reach.py`, `jarvis_quick.py`). See `docs/CRITTERS.md`, "Robot".
+
 - **Animal options: every animal option in one place, on both apps, and
   Jarvis changes them when asked.** The desktop's Settings has a new
   "Animal options" card; the phone's Appearance has the same section. It
