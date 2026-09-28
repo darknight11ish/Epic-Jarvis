@@ -714,6 +714,13 @@ testers, scouts and integration scouts; `.claude/agents/`):
   answers. **Side remarks to someone else are ignored**: when a Live clip is
   clearly not meant for Jarvis, Jarvis stays silent and nothing from it is
   learned.
+  After the build (owner, 2026-09-28): **with App lock on, the PC ends Live
+  when App lock would ask again** (1 minute after the owner last touched a
+  Jarvis window, talking does not count) by default, **with a setting to
+  end it only when Windows itself locks**; the looser choice raises an
+  approval card, the stricter one is immediate. **The desktop Brain's
+  existing "Live" tab is renamed "Now"** so it is not confused with
+  Jarvis Live.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
