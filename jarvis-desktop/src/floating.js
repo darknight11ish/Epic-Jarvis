@@ -10,7 +10,7 @@
  * than inventing a second way to talk to that page.
  */
 
-import { currentLink, onLink, start as startLink, surfaceState } from "./jarvis-link.js";
+import { currentLink, faceSignal, onLink, onSerious, start as startLink } from "./jarvis-link.js";
 import { relayFaceVoice } from "./face-voice.js";
 
 const TAURI = globalThis.__TAURI__;
@@ -32,11 +32,25 @@ const frame = document.getElementById("face-frame");
 /** The owner's appearance document, as this window last read it. */
 let faceAppearance = null;
 
+/** The one thing this window says to a screen reader: the face itself is
+ *  hidden from it (decorative), so "not connected" is said here instead. */
+const status = document.getElementById("face-status");
+function sayConnection(offline) {
+  if (!status) return;
+  const words = offline ? "Jarvis isn't connected" : "";
+  if (status.textContent !== words) status.textContent = words;
+}
+
 /** Hands the face frame the state to show and the face to wear - the same
  *  message shape widget.js's `postFace` sends. */
 function postFace() {
+  const signal = faceSignal(currentLink());
+  sayConnection(signal.offline);
   if (!frame || !frame.contentWindow) return;
-  const message = { type: "jarvis-hud-face", state: surfaceState(currentLink()) };
+  // state, plus `offline` (the "not connected" ring), `waiting` (banked's
+  // notches) and `serious` (a crisis answer's calm, plain pose, section
+  // 38.1) - jarvis-link.js faceSignal.
+  const message = { type: "jarvis-hud-face", ...signal };
   if (faceAppearance) message.appearance = faceAppearance;
   try {
     frame.contentWindow.postMessage(message, location.origin);
@@ -68,6 +82,9 @@ if (frame) frame.addEventListener("load", postFace);
 // the same way (face-voice.js) - an event reaches this page, never its frame.
 relayFaceVoice(frame, listen);
 onLink(() => postFace());
+// A serious moment starting or ending (the `wellbeing` event) is not a link
+// change, so it has its own call to post again.
+onSerious(() => postFace());
 listen("appearance-changed", () => readFaceAppearance(false));
 readFaceAppearance(true);
 startLink();

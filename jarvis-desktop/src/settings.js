@@ -615,6 +615,9 @@ paintTextSize();
    phone. The face frames in the widget and the HUD read the same key. */
 let faceTuning = loadFaceTuning();
 const faceAuto = $("face-auto");
+// "Keep the animal still": every face page on this computer reads it from
+// the same key (faces.html FACE_STILL), eased in over about a second.
+const faceStill = $("face-still");
 const faceStatus = $("face-status");
 
 function choiceRow(box, options, label, onPick) {
@@ -632,6 +635,7 @@ function choiceRow(box, options, label, onPick) {
 
 function paintFaceTuning() {
   if (faceAuto) faceAuto.checked = faceTuning.autoAdjust;
+  if (faceStill) faceStill.checked = faceTuning.still === true;
   const mark = (id, value) => {
     const box = $(id);
     if (!box) return;
@@ -667,6 +671,12 @@ choiceRow($("face-speed"), SPEEDS, (s) => `${s}×`, (s) =>
 if (faceAuto) {
   faceAuto.addEventListener("change", () =>
     setFaceTuning({ ...faceTuning, autoAdjust: faceAuto.checked }));
+}
+if (faceStill) {
+  faceStill.addEventListener("change", () =>
+    setFaceTuning({ ...faceTuning, still: faceStill.checked },
+      faceStill.checked ? "Saved on this computer. The animal will keep still."
+        : "Saved on this computer. The animal moves as usual."));
 }
 paintFaceTuning();
 

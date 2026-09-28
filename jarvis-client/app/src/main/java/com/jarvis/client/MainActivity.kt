@@ -672,6 +672,8 @@ class MainActivity : FragmentActivity() {
         val stale by JarvisRuntime.stale.collectAsState()
         val activity by JarvisRuntime.activity.collectAsState()
         val faceState by JarvisRuntime.face.collectAsState()
+        val faceOffline by JarvisRuntime.faceOffline.collectAsState()
+        val faceSerious by JarvisRuntime.faceSerious.collectAsState()
         val power by JarvisRuntime.power.collectAsState()
         val status by JarvisRuntime.status.collectAsState()
         val version by JarvisRuntime.version.collectAsState()
@@ -1934,6 +1936,8 @@ class MainActivity : FragmentActivity() {
                             stale = stale,
                             activity = activity,
                             faceState = faceState,
+                            faceOffline = faceOffline,
+                            faceSerious = faceSerious,
                             power = power,
                             status = status,
                             pending = pending,
@@ -1959,6 +1963,7 @@ class MainActivity : FragmentActivity() {
                             tapFaceOpensMind = look.tapFaceOpensMind,
                             glow = look.glow,
                             calmMotion = calmMotion,
+                            stillAnimal = look.stillAnimal,
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                             conversationTurns = conversation.size,

@@ -454,14 +454,146 @@ export function faceState(state = link) {
  * the windows cannot drift — before this the tray showed `approval` and
  * `standby` and the Brain had no way to render either.
  */
-export function surfaceState(state = link) {
+export function surfaceState(state = link, now = Date.now()) {
+  const live = linkLive(state);
+  // Not reachable for longer than the grace below: standby, whatever the
+  // last activity said. The stream keeps the last activity it heard when it
+  // drops, so without this a face could talk, or wave "waiting on you", for
+  // ever after Jarvis had gone.
+  if (!live && linkOffline(state, now)) return "standby";
   const activity = String((state && state.activity) || "idle");
   if (activity === "error") return "error";
-  if (Number((state && state.approvals) || 0) > 0) return "approval";
+  // Never the approval face while Approve is blocked (rule 4): a face waving
+  // for a decision nobody can make yet is a promise the buttons break.
+  if (live && Number((state && state.approvals) || 0) > 0) return "approval";
   const face = faceState(state);
   if (face !== "idle") return face;
   const power = String((state && state.power) || "active");
   return power === "standby" || power === "quiet" ? "standby" : "idle";
+}
+
+/**
+ * How long the link may be down or stale before the faces say "Jarvis isn't
+ * connected". The same 12 seconds as the phone. It is there for the ordinary
+ * reconnect: the server closes the event stream every hour by design and
+ * stream.rs reconnects about 3 seconds later, and a face that dropped to
+ * standby with a ring for those 3 seconds every hour would be crying wolf.
+ * The approval face does NOT wait for it - it goes the moment Approve is
+ * blocked (surfaceState).
+ */
+export const OFFLINE_GRACE_MS = 12000;
+
+/** True when the queue is confirmed live: connected and not stale. */
+function linkLive(state) {
+  return Boolean(state && state.connected && state.stale === false);
+}
+
+/**
+ * When the link was last seen to stop being live, by this window, or null
+ * while it is live. A window that opens while Jarvis is already down counts
+ * from when it opened - it cannot know how long it had been down before.
+ */
+let downSince = Date.now();
+let graceTimer = null;
+
+/** Keeps `downSince` in step with `link`, and wakes every subscriber when the
+ *  grace runs out - nothing else would, because nothing new arrives from a
+ *  Jarvis that is down. */
+function noteLive() {
+  if (linkLive(link)) {
+    downSince = null;
+    if (graceTimer) { clearTimeout(graceTimer); graceTimer = null; }
+    return;
+  }
+  if (downSince === null) downSince = Date.now();
+  armGrace();
+}
+function armGrace() {
+  if (graceTimer || downSince === null) return;
+  const wait = Math.max(0, downSince + OFFLINE_GRACE_MS - Date.now());
+  graceTimer = setTimeout(() => {
+    graceTimer = null;
+    fanout(linkSubs, link);
+  }, wait + 50);
+}
+
+/**
+ * Whether the faces should say "Jarvis isn't connected": the link is down or
+ * stale and has been for OFFLINE_GRACE_MS. For a link object other than the
+ * current one (a test's, say) there is no history, so down means offline.
+ */
+export function linkOffline(state = link, now = Date.now()) {
+  if (linkLive(state)) return false;
+  if (state !== link || downSince === null) return true;
+  return now - downSince >= OFFLINE_GRACE_MS;
+}
+
+/**
+ * Everything a face frame is told, in one message-sized object - what
+ * widget.js and floating.js post to `faces.html?mode=display&feed=parent`:
+ *
+ * - `state`: surfaceState.
+ * - `offline`: true when the frame should draw the hollow "not connected"
+ *   ring (faces.html drawOfflineRing). Then `state` is always "standby".
+ * - `waiting`: how many things the budget is holding back - banked's
+ *   notches, the phone's `attention.pending`.
+ */
+export function faceSignal(state = link, now = Date.now()) {
+  const offline = !linkLive(state) && linkOffline(state, now);
+  const pending = Number((state && state.attention && state.attention.pending) || 0);
+  return {
+    state: surfaceState(state, now),
+    offline,
+    waiting: Number.isFinite(pending) && pending > 0 ? pending : 0,
+    serious: faceSerious(now),
+  };
+}
+
+/* ---------------------------------------------------------------------- *
+ * THE SERIOUS MOMENT (docs/JARVIS-API.md section 38.1): while a crisis answer
+ * is being given or spoken, the animal faces hold a calm, plain pose. The
+ * event `wellbeing` carries one boolean, `{"serious": true|false}` - never a
+ * word of the turn. Kept here, once, for every window that hands a face its
+ * frame (widget.js, floating.js): each posts `serious` with the rest of
+ * faceSignal, and re-posts when it changes (onSerious).
+ *
+ * The safety net the section asks for: 900 s after the last `true` with no
+ * `false`, it is over by itself, so a missed frame can never leave a face
+ * plain for good. A reconnect keeps what was there (section 38.1).
+ * ---------------------------------------------------------------------- */
+export const SERIOUS_NET_MS = 900000;
+/** When the last `{"serious": true}` arrived (ms since 1970), or null. */
+let seriousAt = null;
+let seriousTimer = null;
+const seriousSubs = new Set();
+
+/** True while a serious moment is on (and inside the 900 s net). */
+export function faceSerious(now = Date.now()) {
+  return seriousAt !== null && now - seriousAt < SERIOUS_NET_MS;
+}
+
+/** Subscribes to the serious moment starting or ending. Delivers nothing now. */
+export function onSerious(fn) {
+  seriousSubs.add(fn);
+  return () => seriousSubs.delete(fn);
+}
+
+/** One event frame: a `wellbeing` one turns the serious moment on or off. */
+export function noteWellbeing(frame, now = Date.now()) {
+  if (!frame || frame.kind !== "wellbeing" || !frame.data || typeof frame.data.serious !== "boolean") return;
+  const before = faceSerious(now);
+  if (seriousTimer) { clearTimeout(seriousTimer); seriousTimer = null; }
+  seriousAt = frame.data.serious ? now : null;
+  if (seriousAt !== null) {
+    // The net: tell every window when it runs out, since nothing else will.
+    seriousTimer = setTimeout(() => {
+      seriousTimer = null;
+      fanout(seriousSubs, faceSerious());
+    }, SERIOUS_NET_MS + 50);
+  }
+  // Every `true` is passed on, not only a change: a second crisis turn is
+  // the same moment carried on, and a window that just opened needs it.
+  if (frame.data.serious || before) fanout(seriousSubs, faceSerious(now));
 }
 
 /**
@@ -512,6 +644,9 @@ export function currentQueue() {
 /** Subscribes to link changes and immediately delivers the current one. */
 export function onLink(fn) {
   linkSubs.add(fn);
+  // The grace timer is armed by the first subscriber, not at import: a
+  // module nobody listens to has nobody to wake.
+  armGrace();
   fn(link);
   return () => linkSubs.delete(fn);
 }
@@ -1150,6 +1285,7 @@ export function start() {
 
   TAURI.event.listen(EV_LINK, (event) => {
     link = normaliseLink(event.payload);
+    noteLive();
     fanout(linkSubs, link);
   });
 
@@ -1163,7 +1299,10 @@ export function start() {
     fanout(queueSubs, queue);
   });
 
-  TAURI.event.listen(EV_EVENT, (event) => fanout(eventSubs, event.payload));
+  TAURI.event.listen(EV_EVENT, (event) => {
+    noteWellbeing(event.payload);
+    fanout(eventSubs, event.payload);
+  });
 
   // `hello.stale` said we fell off the back of the server's 512-event ring.
   // Nothing local is trustworthy; the backend has already re-read the queue, so
@@ -1178,6 +1317,7 @@ export function start() {
     .invoke("get_link_state")
     .then((payload) => {
       link = normaliseLink(payload);
+      noteLive();
       fanout(linkSubs, link);
     })
     .catch((error) => console.error("[jarvis] get_link_state failed:", error));

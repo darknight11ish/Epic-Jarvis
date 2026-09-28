@@ -1349,6 +1349,35 @@ reads, its chat, the right/wrong mark), and approvals are not answered in
 the HUD at all - only in the Jarvis bar and the widget, through
 `decide_approval`. No window may `emit` events to the others either (M1).
 
+**A face never pretends Jarvis is there** (owner, 2026-09-28). When the
+link is down or stale for longer than 12 seconds - the same grace on both
+apps, long enough to cover the hourly reconnect - every face (widget,
+floating face, HUD) shows **standby with a hollow ring** round it, the
+tray icon's "nothing is coming through" shape, and says "Jarvis isn't
+connected" to a screen reader. The approval face does not wait for the
+grace: it goes the moment Approve is blocked (rule 4). Desktop:
+`jarvis-link.js` `faceSignal` (`OFFLINE_GRACE_MS`), `faces.html`
+`drawOfflineRing`; phone: `FaceView.kt` `drawOfflineRing`. The ring, the
+same on both: a full circle at 0.4532 of the face's short side (just
+outside the approval clock), a stroke of max(1.5 px, 0.008 of it), fully
+opaque, in the colour bound to the state shown (standby's neutral grey
+unless the owner chose another) dimmed toward the ground by that state's
+own dim - a fixed colour, so it never breathes. (Until 2026-09-28 the
+desktop drew the pattern's second colour of the moment at 60% opacity,
+which breathed with standby's pattern and measured about 1.1:1 against the
+ground; the phone already drew this one, about 1.6:1.) An animal shows no
+sleeping Zs while the ring is up - "not connected" is not "asleep"
+(docs/CRITTERS.md). The tray follows the same rule since 2026-09-28: a
+dropped link paints the hollow icon in standby's colour, and a stale link
+never paints the approval colour (`tray.rs` `spec_state`).
+
+**The animal faces' display options** - the sleeping Zs, "Keep the animal
+still", the serious moment and calm motion - are on both apps, drawn from
+the same numbers (docs/CRITTERS.md, "How they move"). "Keep the animal
+still" is a display choice saved on each device, like the Motion setting:
+on the PC in its own storage (Settings, "Face on this computer"), on the
+phone in its Look. No card - it only ever takes movement away.
+
 **Android** (`jarvis-client/`): Kotlin, native, over Tailscale or NordVPN
 Meshnet. It is a
 remote, not a second brain. It renders, it decides one thing at a time, it
@@ -1536,6 +1565,7 @@ backend routes, in both directions; the rest are listed here only.
 | Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
 | On the Hardware screen: the memory bars, the "Details" arithmetic, Copy for the one PowerShell line, and the "exactly what is made" Modelfile (desktop Settings, Hardware and models) | The phone shows the cards (names and memory), what runs now, the three setups in the PC's words, their steps, Measure, and the line itself to read (the phone's Brain, Hardware - the design's section 4.6 asks for that much and no more). The line runs on the PC, so Copy belongs there; the bars and the arithmetic are the design's "Details", which a phone screen does not need to choose a setup. Every route is on both apps (JARVIS-API §20). |
 | The Faces window's "Portable output" (`faces.html`) | Code for building a client (the look spec as JSON, Kotlin, TypeScript). It is a developer's tool, and the phone already ships its own copy of the spec. |
+| The animal on the floating face: its sleeping Zs, "Keep the animal still" and the serious pose (2026-09-28) | Written with the features. The desktop's floating face draws the real animal (`faces.html` in display mode), so it gets all three, like every other desktop face. The phone's "Floating Jarvis" is the app's own icon with a status dot (`AvatarOverlayService.kt`), not the animal - there is no animal there to sleep, keep still or go serious. On the phone the Zs and Still reach every place the animal is drawn (Home and the Appearance preview), and the serious pose reaches Home (the preview shows the state being edited, not what Jarvis is doing). |
 | A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). |
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily or Brave key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |

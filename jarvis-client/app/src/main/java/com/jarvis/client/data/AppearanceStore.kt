@@ -455,6 +455,7 @@ class AppearanceStore(context: Context) {
         put("nav_always_shown", l.navAlwaysShown)
         put("glow", l.glow.toDouble())
         put("motion", l.motion.id)
+        put("still_animal", l.stillAnimal)
         put("compact", l.compact)
         put("sharp", l.sharp)
         put("text_scale", l.textScale.toDouble())
@@ -485,6 +486,7 @@ class AppearanceStore(context: Context) {
             navAlwaysShown = b("nav_always_shown", d.navAlwaysShown),
             glow = f("glow", d.glow),
             motion = MotionPref.byId(o.optString("motion")),
+            stillAnimal = b("still_animal", d.stillAnimal),
             compact = b("compact", d.compact),
             sharp = b("sharp", d.sharp),
             textScale = f("text_scale", d.textScale),
@@ -649,6 +651,13 @@ data class Look(
      */
     val glow: Float = 1f,
     val motion: MotionPref = MotionPref.FOLLOW,
+    /**
+     * "Keep the animal still" (owner, 2026-09-28): an animal face only
+     * breathes and blinks - no looking around, gestures or little idle
+     * happenings (FaceView's `stillMotion`). Off by default. The other faces
+     * ignore it. This phone's own choice; the PC has its own switch.
+     */
+    val stillAnimal: Boolean = false,
     /** Tighter padding and list spacing. */
     val compact: Boolean = false,
     /** Square-ish corners instead of rounded ones. */

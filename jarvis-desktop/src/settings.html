@@ -465,11 +465,11 @@
         <details class="more" id="face-tuning">
           <summary>
             <span class="more-title">Face on this computer</span>
-            <span class="more-detail">Quality, frame rate and speed.</span>
+            <span class="more-detail">Quality, frame rate, speed and keeping the animal still.</span>
           </summary>
           <p class="note">
-            For the face in the widget and the HUD on this computer only. The
-            phone has its own.
+            For the faces on this computer only: the widget, the floating face
+            and the HUD. The phone has its own.
           </p>
 
           <label class="toggle">
@@ -500,6 +500,20 @@
             <div class="choices" id="face-speed" role="group" aria-labelledby="face-speed-label"></div>
             <p class="note">How fast the face moves. It never goes above 1×.</p>
           </div>
+
+          <!-- The owner's "Still" option (2026-09-28). Cosmetic, so no card:
+               it only takes movement away. Shown whatever face is worn - the
+               line says it is for the animals, as the phone's does. -->
+          <label class="toggle">
+            <input id="face-still" type="checkbox" />
+            <span>
+              Keep the animal still
+              <span class="toggle-detail">
+                It only breathes and blinks - no looking around. For the animal
+                faces; the others are not changed.
+              </span>
+            </span>
+          </label>
           <span class="status" id="face-status" role="status"></span>
         </details>
 

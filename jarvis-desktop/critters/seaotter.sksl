@@ -51,6 +51,7 @@ const float3 CAM_TARGET = float3(0.0, -0.30, 0.0);
 const float CAM_DIST = 3.30;
 const float CAM_PITCH = 0.50;
 const float BOUND_R = 1.25;
+const int MARCH_STEPS = 48;
 // The pool: a thin round disc of water, this wide.
 const float POOL_R = 1.02;
 
@@ -176,7 +177,7 @@ float partAt(float3 p) {
     return id;
 }
 
-// A rough otter for shadows and occlusion, inside the real one. The water
+// A rough otter for shadows (and the foam), inside the real one. The water
 // is left out: it does not cast shadows on the otter worth the cost.
 float mapLite(float3 p) {
     float d = sdCapsule(toBody(p), float3(-0.30, 0.0, 0.0), float3(0.34, -0.02, 0.0), 0.21);
@@ -244,9 +245,11 @@ float3 sparkle(float id, float3 pos) {
 // (common_tail.sksl). Rays that skim the otter's outline use up their steps
 // creeping along its fur before they reach the pool behind it: meet the
 // water directly, so the edge shows water rather than see-through specks.
-float stuckRay(float3 ro, float3 rd) {
-    if (rd.y > -0.001) return -1.0;
+// Hands back where it meets it (-1 for nowhere) and map() there, which the
+// shading needs (common_tail.sksl's normalAt).
+float2 stuckRay(float3 ro, float3 rd) {
+    if (rd.y > -0.001) return float2(-1.0, 0.0);
     float t = (uWater.x - ro.y) / rd.y;
     float3 q = ro + rd * t;
-    return length(q.xz) < POOL_R - 0.02 ? t : -1.0;
+    return float2(length(q.xz) < POOL_R - 0.02 ? t : -1.0, map(q));
 }

@@ -527,7 +527,7 @@ window.JARVIS_SPEC = Object.freeze({
         "colour": "The fur keeps its own colours. The bound hot colour is the orb the panda holds, which lights its paws and chin; the dim colour is the rim light round its fur. Recolouring the whole animal per state would read as a different animal, not the same one changing its mind.",
         "fallback_desktop": "Without WebGL2, a flat sticker of the same panda in the same pose.",
         "more_coming": "Built after it: the pygmy owl and the sea otter (the owner's go-ahead, 2026-09-27).",
-        "note": "The first animal face. Unlike the twenty instruments before it, a character needs its own pose for every state, so it receives all eight rather than borrowing four motion tables: asleep for standby, a wave for approval, a head-scratch for error, a doze for banked. The shell's transforms (dim, the approval clock, the error hitch) still apply on top.",
+        "note": "The first animal face. Unlike the twenty instruments before it, a character needs its own pose for every state, so it receives all eight rather than borrowing four motion tables: asleep for standby, sitting up still and attentive for approval (no wave - it may be a serious moment), a still, concerned look for error, a doze for banked. The shell's transforms (dim, the approval clock, the error hitch) still apply on top.",
         "pose": "jarvis-desktop/src/critter-pose.js and jarvis-client CritterPose.kt, held equal by tools/gen_critters.py's fixture and CritterPoseTest",
         "shader": "jarvis-desktop/critters/common_head.sksl + redpanda.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
       },
@@ -554,7 +554,7 @@ window.JARVIS_SPEC = Object.freeze({
     {
       "archived": false,
       "character": {
-        "note": "The second animal. Perches on a branch; its orb floats beside it (owls have no hands). All eight states: turns its head to follow the room, tilts it to listen, tips it right over while the orb circles to think, moves its beak with Jarvis's voice, waves a wing for approval, fluffs up with its eyes shut for standby, squints with a tilted head at an error, dozes when banked.",
+        "note": "The second animal. Perches on a branch; its orb floats beside it (owls have no hands). All eight states: turns its head to follow the room, tilts it to listen, tips it a little to follow the orb circling its head to think, moves its beak with Jarvis's voice, draws itself up still and attentive for approval (no wave), fluffs up with its eyes shut for standby, a still, concerned look with its brows flattened at an error, dozes when banked.",
         "pose": "see the red panda's entry: the same scheme, in critter-owl.js and OwlPose.kt",
         "shader": "jarvis-desktop/critters/common_head.sksl + pygmyowl.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
       },
@@ -581,7 +581,7 @@ window.JARVIS_SPEC = Object.freeze({
     {
       "archived": false,
       "character": {
-        "note": "The third animal. Floats on its back in a small round pool, looked down on, holding a glowing pebble (the orb) on its chest. All eight states: bobs and looks about when idle, paws to its cheeks to listen, taps the pebble to think, talks with Jarvis's voice, waves a paw for approval, covers its eyes with its paws for standby, drops the pebble and scratches its head at an error, dozes when banked.",
+        "note": "The third animal. Floats on its back in a small round pool, looked down on, holding a glowing pebble (the orb) on its chest. All eight states: bobs and looks about when idle, lifts its head and keeps its pebble in its paws to listen, taps the pebble to think, talks with Jarvis's voice, holds the pebble up a little toward you, still, for approval (no wave), covers its eyes with its paws (the pebble resting on its chest) for standby, a still, concerned look holding its pebble at an error, dozes when banked.",
         "pose": "see the red panda's entry: the same scheme, in critter-otter.js and OtterPose.kt",
         "shader": "jarvis-desktop/critters/common_head.sksl + seaotter.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
       },

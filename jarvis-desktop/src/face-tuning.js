@@ -54,6 +54,12 @@ export const FACE_TUNING_DEFAULT = Object.freeze({
   frameRate: "auto",
   speed: 1,
   autoAdjust: true,
+  // "Keep the animal still" (owner, 2026-09-28): an animal face only
+  // breathes and blinks - no looking around, gestures or little idle
+  // happenings. Off unless chosen. Every face page on this computer reads it
+  // (faces.html FACE_STILL); the other faces ignore it. The phone has its
+  // own switch (Appearance), since this whole object never leaves this PC.
+  still: false,
 });
 
 /**
@@ -70,7 +76,9 @@ export function normaliseFaceTuning(raw) {
   const n = Number(v.speed);
   const speed = Number.isFinite(n) ? Math.min(MAX_SPEED, Math.max(MIN_SPEED, n)) : d.speed;
   const autoAdjust = typeof v.autoAdjust === "boolean" ? v.autoAdjust : d.autoAdjust;
-  return { quality, frameRate, speed, autoAdjust };
+  // Only a real `true` turns it on: anything else is the default, off.
+  const still = v.still === true;
+  return { quality, frameRate, speed, autoAdjust, still };
 }
 
 /** The stored tuning, or the default. Never throws. */

@@ -126,7 +126,10 @@ await check("the accent walks the idle colour's own family until it is legible",
 /* ── The face on this computer ───────────────────────────────────────────── */
 
 await check("face settings: slow-down only, and anything unreadable is the default", async () => {
-  assert.deepEqual(tuning.normaliseFaceTuning(null), { quality: "high", frameRate: "auto", speed: 1, autoAdjust: true });
+  assert.deepEqual(tuning.normaliseFaceTuning(null), { quality: "high", frameRate: "auto", speed: 1, autoAdjust: true, still: false });
+  // "Keep the animal still": only a real true turns it on.
+  assert.equal(tuning.normaliseFaceTuning({ still: "yes" }).still, false);
+  assert.equal(tuning.normaliseFaceTuning({ still: true }).still, true);
   assert.equal(tuning.normaliseFaceTuning({ speed: 3 }).speed, 1, "faster than 1x got through");
   assert.equal(tuning.normaliseFaceTuning({ speed: 0.01 }).speed, 0.25);
   assert.equal(tuning.normaliseFaceTuning({ speed: "x" }).speed, 1);
@@ -172,7 +175,7 @@ await check("Settings: text size buttons, the face section closed, and Open Face
   await page.locator('#face-speed .choice[data-value="0.5"]').click();
   await page.locator('#face-quality .choice[data-value="low"]').click();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("jarvis.faceTuning")));
-  assert.deepEqual(saved, { quality: "low", frameRate: "auto", speed: 0.5, autoAdjust: false },
+  assert.deepEqual(saved, { quality: "low", frameRate: "auto", speed: 0.5, autoAdjust: false, still: false },
     "picking a quality turns Auto adjust off, as on the phone");
   assert.equal(await page.locator("#more-options").evaluate((d) => d.open), false);
   await page.locator("#open-faces").click();

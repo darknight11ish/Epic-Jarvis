@@ -234,7 +234,9 @@ await check("while real voice plays, a resting face shows speaking - an approval
   assert.equal((await drawn(frame)).lastState, "approval");
   await state(page, "idle");
   await clock(page, { id, n: 2, t: 0.6, playing: false, end: true });
-  await page.waitForTimeout(900);
+  // Speaking is held for LIP_STATE_HOLD_S (2 s, faces.html) after the voice
+  // stops, so a pause between sentences does not drop out of it; then idle.
+  await page.waitForTimeout(2400);
   const got = await drawn(frame);
   await page.close();
   assert.equal(got.lastState, "idle", "still speaking after the voice ended");

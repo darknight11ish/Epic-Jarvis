@@ -2,17 +2,28 @@ package com.jarvis.client.face
 
 import com.jarvis.client.FaceState
 import com.jarvis.client.face.CritterPose.Look
+import com.jarvis.client.face.CritterPose.Opts
 import com.jarvis.client.face.CritterPose.apply
+import com.jarvis.client.face.CritterPose.beat
+import com.jarvis.client.face.CritterPose.blinkAt
+import com.jarvis.client.face.CritterPose.bump
 import com.jarvis.client.face.CritterPose.clamp
+import com.jarvis.client.face.CritterPose.envAHR
+import com.jarvis.client.face.CritterPose.happening
 import com.jarvis.client.face.CritterPose.invRow
+import com.jarvis.client.face.CritterPose.looks
 import com.jarvis.client.face.CritterPose.mul
+import com.jarvis.client.face.CritterPose.restingGaze
 import com.jarvis.client.face.CritterPose.rx
 import com.jarvis.client.face.CritterPose.ry
 import com.jarvis.client.face.CritterPose.rz
+import com.jarvis.client.face.CritterPose.shift
+import com.jarvis.client.face.CritterPose.smooth
+import com.jarvis.client.face.CritterPose.wave
 import kotlin.math.PI
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.pow
-import kotlin.math.sin
 
 /**
  * The sea otter's body language - a line-for-line copy of the desktop's
@@ -51,13 +62,27 @@ object OtterPose {
     private const val ORB_GLOW = 23
     private const val RIPPLE = 24
     private const val WAVE = 25
-    private const val N = 26
+    private const val ASLEEP = 26
+    private const val N = 27
 
     private const val TAU = (2.0 * PI).toFloat()
     private val NECK = floatArrayOf(-0.60f, 0.14f, 0.0f)
     private const val HEAD_BASE_YAW = 0.30f
     private const val HEAD_BASE_PITCH = 0.62f
     private val PEBBLE = floatArrayOf(-0.12f, 0.34f, 0.0f, 0.075f)
+    // Where the pebble lies when the paws have let go of it: down on the chest.
+    private val PEBBLE_DOWN = PEBBLE[1] - 0.08f
+
+    // The otter's own dice.
+    private const val S_GAZE = 160
+    private const val S_EVENT = 176
+    private const val S_ROLL = 184
+    private const val S_LEAN = 192
+    private const val S_BEAT = 200
+    private const val S_BLINK = 208
+    // Its idle happenings, and how often each comes up (the desktop's EVENTS):
+    // wash, roll left, roll right, kick, rub.
+    private val EVENTS = floatArrayOf(14f, 20f, 20f, 20f, 26f)
 
     private fun headTurn(p: FloatArray): FloatArray =
         mul(ry(-(HEAD_BASE_YAW + p[HEAD_YAW])), mul(rx(HEAD_BASE_PITCH + p[HEAD_PITCH]), rz(-p[HEAD_ROLL])))
@@ -72,93 +97,176 @@ object OtterPose {
         p[base] = v[0]; p[base + 1] = v[1]; p[base + 2] = v[2]
     }
 
-    fun stateTargets(state: FaceState, t: Float, amp: Float, look: Look): FloatArray {
+    fun stateTargets(state: FaceState, t: Float, amp: Float, look: Look, since: Float = 1e9f, o: Opts = Opts()): FloatArray {
+        val hap = o.hap
+        val sw = o.sway
+        val play = o.play
         val p = FloatArray(N)
         p[TILT] = 0.10f; p[BREATH] = 1f; p[EYE_L] = 1f; p[EYE_R] = 1f
         p[PAW_LX] = -0.14f; p[PAW_LY] = 0.33f; p[PAW_LZ] = -0.09f
         p[PAW_RX] = -0.14f; p[PAW_RY] = 0.33f; p[PAW_RZ] = 0.09f
         p[ORB_X] = PEBBLE[0]; p[ORB_Y] = PEBBLE[1]; p[ORB_Z] = PEBBLE[2]; p[ORB_R] = PEBBLE[3]
         p[ORB_GLOW] = 0.55f; p[RIPPLE] = 0.010f
-        p[WAVE] = t * 2.4f
-        var breathPeriod = 4.2f
+        // Where the rings on the water have spread to (391 cycles a loop), kept small.
+        val u = CritterPose.loopT(t) / CritterPose.LOOP * 391f
+        p[WAVE] = TAU * (u - floor(u))
+        p[ASLEEP] = if (state == FaceState.STANDBY) 1f else 0f
+        // 244 cycles a loop: a breath every 4.2 seconds.
+        var breathK = 244f
         var breathDepth = 1f
+        var blinkSlow = 1f
         var blinks = true
-        var paws = ""
+        var turnBlink = 0f
+        var calm = 1f
+        var eyeK = 1f
+        var deepBreath = 0f
+        var pawsOnEyes = false
+        var wash = 0f
 
         when (state) {
             FaceState.LISTENING -> {
+                // Head up and tilted, eyes on you, its pebble held on its chest.
+                val g = looks(t, S_GAZE, 2f, 7f, 0.8f, 0.2f, 0.1f, 0f, 0.05f, 1.1f, o)
                 p[TILT] = 0.24f
                 p[HEAD_PITCH] = 0.12f
-                p[HEAD_ROLL] = 0.28f + 0.03f * sin(t * 1.3f)
-                p[EYE_L] = 1.12f; p[EYE_R] = 1.12f
-                p[ORB_Y] = 0.30f
+                p[HEAD_YAW] = 0.1f * g[2]
+                p[HEAD_ROLL] = play * 0.28f + sw * 0.025f * wave(t, 212f, 0f)
+                p[EYE_L] = 1f + 0.12f * play; p[EYE_R] = p[EYE_L]
+                p[LOOK_X] = g[0] - 0.4f * g[2]; p[LOOK_Y] = g[1] - 0.4f * g[3]
                 p[ORB_GLOW] = 0.55f + 0.5f * amp
-                paws = "cheeks"
+                turnBlink = g[4]
             }
             FaceState.THINKING -> {
-                val tap = max(0f, sin(t * 7.0f)).pow(3)
+                // A few taps, a pause to think, a few more.
+                val gate = smooth(clamp(0.5f + 1.5f * wave(t, 184f, 0f), 0f, 1f))
+                val tap = sw * (0.5f - 0.5f * wave(t, 1141f, (PI / 2).toFloat())).pow(2) * gate
+                val g = looks(t, S_GAZE, 1.8f, 6f, 0.6f, 0.5f, 0.2f, 0.8f, 0.05f, 1.1f, o)
                 p[ORB_Y] = PEBBLE[1] + 0.07f * tap
                 p[PAW_LY] = 0.33f + 0.07f * tap; p[PAW_RY] = 0.33f + 0.07f * tap
-                p[HEAD_PITCH] = -0.30f
-                p[HEAD_ROLL] = 0.10f * sin(t * 0.6f)
-                p[LOOK_Y] = -0.7f; p[LOOK_X] = 0.3f
-                p[ORB_GLOW] = 0.95f + 0.2f * sin(t * 2.6f)
+                p[HEAD_PITCH] = -0.30f + 0.2f * g[3]
+                p[HEAD_YAW] = 0.12f * g[2]
+                p[HEAD_ROLL] = sw * 0.10f * wave(t, 98f, 0f)
+                p[LOOK_X] = 0.3f + g[0] - 0.4f * g[2]; p[LOOK_Y] = -0.7f + g[1] - 0.4f * g[3]
+                p[ORB_GLOW] = 0.95f + 0.2f * wave(t, 424f, 0f)
+                turnBlink = g[4]
             }
             FaceState.SPEAKING -> {
-                // The mouth follows the words being heard (CritterPose.mouthOf).
+                // Holds the pebble and talks with its eyes and head, in phrases,
+                // never on top of a look (CritterPose.mouthOf for the mouth).
+                val g = looks(t, S_GAZE, 1.8f, 6f, 0.65f, 0.5f, 0.18f, 0f, 0.06f, 1.1f, o)
+                val b = beat(t, S_BEAT, S_GAZE, 1.8f, 6f, 0.65f)
+                val x = b[1]
                 p[SPEAK] = 1f
-                p[HEAD_PITCH] = 0.04f + 0.08f * amp
-                p[HEAD_YAW] = 0.08f * sin(t * 0.7f)
-                p[HEAD_ROLL] = 0.06f * sin(t * 0.9f)
-                p[PAW_RX] = -0.22f; p[PAW_RY] = 0.42f + 0.08f * amp; p[PAW_RZ] = 0.14f
+                p[TILT] = 0.16f
+                p[HEAD_PITCH] = 0.05f
+                p[HEAD_YAW] = sw * 0.05f * wave(t, 111f, 0f) + 0.08f * g[2]
+                p[HEAD_ROLL] = sw * 0.04f * wave(t, 93f, 0.5f)
+                p[LOOK_X] = g[0] - 0.16f * g[2]; p[LOOK_Y] = g[1] - 0.16f * g[3]
                 p[ORB_GLOW] = 0.6f + 0.45f * amp
+                if (b[0] == 0f) {
+                    p[HEAD_PITCH] -= hap * 0.06f * (bump(x / 0.7f) - 0.3f * bump((x - 0.55f) / 0.7f))
+                } else if (b[0] == 1f) {
+                    val e = hap * envAHR(x, 0.4f, 0.3f, 0.6f)
+                    p[PAW_LY] += 0.06f * e; p[PAW_RY] += 0.06f * e; p[PAW_LZ] -= 0.05f * e; p[PAW_RZ] += 0.05f * e
+                    p[HEAD_PITCH] -= hap * 0.025f * bump(x / 0.9f)
+                } else if (b[0] == 2f) {
+                    p[HEAD_ROLL] += hap * play * 0.07f * bump(x / 1.2f)
+                }
+                turnBlink = g[4]
             }
             FaceState.APPROVAL -> {
-                p[PAW_RX] = -0.32f + 0.07f * sin(t * 5.0f)
-                p[PAW_RY] = 0.52f + 0.03f * sin(t * 10.0f)
-                p[PAW_RZ] = 0.10f
-                p[EYE_L] = 1.1f; p[EYE_R] = 1.1f
-                p[HEAD_PITCH] = 0.10f
+                // Head up, pebble held up a little toward you in both paws,
+                // forearms along the chest (never a raised hand), still.
+                val g = restingGaze(t, S_GAZE)
+                p[TILT] = 0.20f
+                p[HEAD_PITCH] = 0.12f
+                p[PAW_LX] = -0.08f; p[PAW_RX] = -0.08f
+                p[PAW_LZ] = -0.07f; p[PAW_RZ] = 0.07f
+                p[PAW_LY] = 0.38f; p[PAW_RY] = 0.38f
+                p[ORB_X] = -0.08f
+                p[ORB_Y] = PEBBLE[1] + 0.07f
+                p[EYE_L] = 1f + 0.1f * play; p[EYE_R] = p[EYE_L]
+                p[LOOK_X] = g[0]; p[LOOK_Y] = g[1]
                 p[ORB_GLOW] = 0.9f
+                calm = 0.7f; blinkSlow = 1.4f
             }
             FaceState.STANDBY -> {
+                val e = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.35f, 1)
+                val sigh = if (e[0] == 0f) bump(e[1] / 4.5f) else 0f
                 p[TILT] = 0.04f
-                p[HEAD_PITCH] = 0.10f
+                p[HEAD_PITCH] = 0.10f - 0.03f * sigh
                 p[EYE_L] = 0f; p[EYE_R] = 0f
                 p[ORB_GLOW] = 0.15f
                 p[RIPPLE] = 0.005f
-                breathPeriod = 6.0f; breathDepth = 1.8f; blinks = false
-                paws = "eyes"
+                deepBreath = sigh; calm = 0.4f
+                breathK = 171f; breathDepth = 1.8f; blinks = false
+                pawsOnEyes = true
             }
             FaceState.ERROR -> {
-                p[HEAD_ROLL] = -0.30f
-                p[HEAD_PITCH] = 0.10f
-                p[EYE_L] = 0.55f; p[EYE_R] = 0.9f
-                p[LOOK_Y] = 0.3f
-                p[ORB_X] = 0.12f; p[ORB_Y] = 0.26f; p[ORB_Z] = 0.20f
+                // A still, concerned look, holding its pebble; nothing comic.
+                val g = restingGaze(t, S_GAZE)
+                p[HEAD_ROLL] = -0.15f * play
+                p[HEAD_PITCH] = 0.02f
+                p[EYE_L] = 0.8f; p[EYE_R] = 0.8f
+                p[LOOK_X] = g[0]; p[LOOK_Y] = -0.25f + g[1]
                 p[ORB_GLOW] = 0.35f
-                paws = "scratch"
+                calm = 0.8f; blinkSlow = 1.4f
             }
             FaceState.BANKED -> {
-                p[EYE_L] = 0.35f; p[EYE_R] = 0.35f
-                p[HEAD_PITCH] = -0.10f
+                val e = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.55f, 1)
+                val x = e[1]
+                val droop = if (e[0] == 0f) {
+                    if (x < 3.2f) smooth(clamp(x / 3.2f, 0f, 1f)) else 1f - smooth(clamp((x - 3.2f) / 0.8f, 0f, 1f))
+                } else 0f
+                p[EYE_L] = 0.35f * (1f - 0.7f * droop); p[EYE_R] = p[EYE_L]
+                p[HEAD_PITCH] = -0.10f - 0.12f * droop
                 p[ORB_GLOW] = 0.25f
-                breathPeriod = 5.0f
+                calm = 0.8f
+                breathK = 205f; blinkSlow = 2.5f
             }
             FaceState.IDLE -> {
-                p[LOOK_X] = 0.55f * sin(t * 0.31f) + 0.25f * sin(t * 0.83f + 1.3f)
-                p[LOOK_Y] = 0.15f * sin(t * 0.47f)
-                p[HEAD_YAW] = 0.25f * p[LOOK_X]
-                p[HEAD_PITCH] = 0.08f * p[LOOK_Y]
-                p[HEAD_ROLL] = 0.06f * sin(t * 0.4f)
-                p[PADDLE] = max(0f, sin(t * 0.7f)).pow(4) * (0.5f + 0.5f * sin(t * 6.0f))
+                // Floats, looks about, and now and then one small thing.
+                val g = looks(t, S_GAZE, 1.5f, 6f, 0.35f, 0.8f, 0.25f, 0f, 0.08f, 1.1f, o)
+                val ev = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)
+                val x = ev[1]
+                var hx = g[2]
+                p[TILT] = 0.10f + sw * 0.011f * shift(t, S_ROLL)
+                p[ROCK] = sw * 0.01f * shift(t, S_LEAN)
+                p[PAW_LY] += sw * 0.008f * wave(t, 150f, 0f); p[PAW_RY] += sw * 0.008f * wave(t, 150f, 2.0f)
+                if (ev[0] == 0f) {
+                    // Washes its face.
+                    wash = hap * envAHR(x, 0.6f, 2.2f, 0.8f)
+                    p[HEAD_PITCH] += 0.1f * wash
+                    eyeK = 1f - 0.6f * wash
+                } else if (ev[0] == 1f || ev[0] == 2f) {
+                    // Rolls lazily to one side and looks that way (a small roll).
+                    val s = if (ev[0] == 1f) -1f else 1f
+                    val e = hap * envAHR(x, 1.4f, 1.8f, 1.8f)
+                    p[ROCK] += s * 0.02f * e
+                    hx += (s * 0.6f - hx) * e
+                } else if (ev[0] == 3f) {
+                    // Kicks its feet a few times.
+                    p[PADDLE] = hap * envAHR(x, 0.4f, 1.8f, 0.8f) * (0.5f + 0.5f * wave(t, 1024f, 0f))
+                } else if (ev[0] == 4f) {
+                    // Rubs its pebble.
+                    val e = hap * envAHR(x, 0.5f, 1.5f, 0.8f)
+                    val r = 0.03f * wave(t, 1536f, 0f) * e
+                    p[ORB_Y] += 0.03f * e; p[PAW_LY] += 0.03f * e; p[PAW_RY] += 0.03f * e
+                    p[PAW_LX] += r; p[PAW_RX] -= r
+                }
+                p[HEAD_YAW] = 0.25f * hx
+                p[HEAD_PITCH] += 0.10f * g[3]
+                p[HEAD_ROLL] = sw * 0.05f * wave(t, 67f, 0f)
+                p[LOOK_X] = g[0] - 0.4f * hx; p[LOOK_Y] = g[1] - 0.4f * g[3]
+                turnBlink = g[4]
             }
         }
 
-        val swell = sin(t * 1.1f)
-        p[BOB] = 0.018f * swell
-        p[ROCK] += 0.05f * sin(t * 0.8f + 0.6f)
-        val b = sin((t * TAU) / breathPeriod)
+        // Floating: the whole otter bobs and rocks with the water, gently.
+        val water = calm * (1f - 0.5f * o.calm) * (1f - 0.6f * o.serious) * (1f - o.still)
+        p[BOB] = 0.009f * water * wave(t, 179f, 0f)
+        p[ROCK] += 0.025f * water * wave(t, 130f, 0.6f)
+        val b = wave(t, breathK, 0f) * (1f + 0.6f * deepBreath)
         p[BREATH] = 1f + 0.02f * breathDepth * b
 
         val w = if (state == FaceState.STANDBY) 0f else clamp(look.w, 0f, 1f)
@@ -167,32 +275,38 @@ object OtterPose {
             val ly = clamp(look.y, -1f, 1f)
             p[LOOK_X] += (lx - p[LOOK_X]) * w
             p[LOOK_Y] += (ly - p[LOOK_Y]) * w
-            p[HEAD_YAW] += 0.35f * lx * w
-            p[HEAD_PITCH] += 0.2f * ly * w
+            p[HEAD_YAW] += o.head * 0.2f * lx * w
+            p[HEAD_PITCH] += o.head * 0.2f * ly * w
         }
 
-        when (paws) {
-            "cheeks" -> {
-                setPaw(p, PAW_LX, onHead(p, -0.24f, -0.08f, -0.10f))
-                setPaw(p, PAW_RX, onHead(p, 0.24f, -0.08f, -0.10f))
-            }
-            "eyes" -> {
-                setPaw(p, PAW_LX, onHead(p, -0.10f, 0.05f, -0.25f))
-                setPaw(p, PAW_RX, onHead(p, 0.10f, 0.05f, -0.25f))
-            }
-            "scratch" -> {
-                val s = 0.02f * sin(t * 9.0f)
-                setPaw(p, PAW_LX, onHead(p, -0.25f + s, 0.14f, 0.02f))
-            }
+        // Paws that go to the head are placed after the head has turned; while
+        // they are away the pebble rests on its chest.
+        if (pawsOnEyes) {
+            setPaw(p, PAW_LX, onHead(p, -0.10f, 0.05f, -0.25f))
+            setPaw(p, PAW_RX, onHead(p, 0.10f, 0.05f, -0.25f))
+            p[ORB_Y] = PEBBLE_DOWN
+        }
+        if (wash > 0f) {
+            // Both paws to the near side of its face, held out where they show.
+            val r = 0.03f * wave(t, 1229f, 0f)
+            val l = onHead(p, 0.22f, -0.15f + r, -0.21f)
+            val rr = onHead(p, 0.27f, -0.04f + r, -0.15f)
+            p[PAW_LX] += (l[0] - p[PAW_LX]) * wash; p[PAW_LY] += (l[1] - p[PAW_LY]) * wash; p[PAW_LZ] += (l[2] - p[PAW_LZ]) * wash
+            p[PAW_RX] += (rr[0] - p[PAW_RX]) * wash; p[PAW_RY] += (rr[1] - p[PAW_RY]) * wash; p[PAW_RZ] += (rr[2] - p[PAW_RZ]) * wash
+            p[ORB_Y] += (PEBBLE_DOWN - p[ORB_Y]) * wash
         }
 
-        if (blinks) {
-            val k = 1f - CritterPose.blink(t)
-            p[EYE_L] *= k
-            p[EYE_R] *= k
-        }
+        val k = eyeK * (1f - max(if (blinks) blinkAt(t, S_BLINK, blinkSlow, 2f, 10f) else 0f, turnBlink))
+        p[EYE_L] *= k
+        p[EYE_R] *= k
         return p
     }
+
+    private val HALF = CritterPose.halfLives(
+        N,
+        intArrayOf(EYE_L, EYE_R, LOOK_X, LOOK_Y), intArrayOf(SPEAK), intArrayOf(HEAD_YAW, HEAD_PITCH, HEAD_ROLL),
+        intArrayOf(PAW_LX, PAW_LY, PAW_LZ, PAW_RX, PAW_RY, PAW_RZ, ORB_X, ORB_Y, ORB_Z), intArrayOf(PADDLE),
+    )
 
     /** How much this pose is speaking, 0..1 - what [uniforms] scales the mouth by. */
     fun speakingWeight(p: FloatArray): Float = clamp(p[SPEAK], 0f, 1f)
@@ -205,7 +319,8 @@ object OtterPose {
         amp: Float,
         look: Look = Look(),
         hist: CritterPose.Hist = CritterPose.Hist(),
-    ): FloatArray = CritterPose.blend(::stateTargets, state, prevState, since, t, amp, look, hist)
+        opts: Opts = Opts(),
+    ): FloatArray = CritterPose.blend(::stateTargets, HALF, state, prevState, since, t, amp, look, hist, opts)
 
     private const val WATER_Y = -0.42f
 
@@ -236,5 +351,16 @@ object OtterPose {
             "uOrb" to floatArrayOf(orb[0], orb[1], orb[2], p[ORB_R]),
             "uOrbGlow" to floatArrayOf(clamp(p[ORB_GLOW], 0f, 1.5f)),
         )
+    }
+
+    // The otter's camera (seaotter.sksl): target x, y, z, distance, pitch.
+    private val CAM = floatArrayOf(0f, -0.30f, 0f, 3.30f, 0.50f)
+
+    /** Where its sleeping Zs rise from: [asleep, x, y] - see [CritterPose.overlay]. */
+    fun overlay(p: FloatArray, yaw: Float = 0f, pitch: Float = 0f, zoom: Float = 1f): FloatArray {
+        val bm = mul(rz(-p[TILT]), rx(p[ROCK]))
+        val h = onHead(p, -0.05f, 0.36f, 0.05f)
+        val v = apply(bm, h[0], h[1], h[2])
+        return CritterPose.overlayAt(p[ASLEEP], floatArrayOf(0.02f + v[0], WATER_Y + 0.02f + p[BOB] + v[1], v[2]), CAM, yaw, pitch, zoom)
     }
 }

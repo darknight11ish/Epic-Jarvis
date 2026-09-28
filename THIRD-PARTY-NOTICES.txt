@@ -370,6 +370,47 @@ HeadTTS (met4citizen), MIT - https://github.com/met4citizen/HeadTTS
   coarticulation in synthetic visual speech", in Models and Techniques in
   Computer Animation, Springer, 1993) - the idea only.
 
+THE ANIMALS' BODY LANGUAGE (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+How the three animal faces move (jarvis-desktop/src/critter-pose.js,
+critter-owl.js, critter-otter.js, and their phone copies CritterPose.kt,
+OwlPose.kt, OtterPose.kt; 2026-09-28) follows four MIT-licensed projects.
+Each was read, and the parts named below re-written in Jarvis's own pose
+code (a pure function of the clock, with a hash of the time in place of
+random numbers); no file of theirs is shipped. Each copyright line below
+goes with the MIT License text given for browser-use above, in place of
+that one.
+Spring-It-On (Daniel Holden), MIT - https://github.com/orangeduck/Spring-It-On
+  How a change of state settles ("inertialization"): common.h's
+  decay_spring_damper_exact and halflife_to_damping, and inertialization.c's
+  inertialize_transition / inertialize_update, worked out in closed form
+  from the time since the change, with Math.exp / kotlin.math.exp in place
+  of its fast_negexp. Read at commit
+  4d97b497a78e40c7b47d49e8a9da27e4aa5616d6. Copyright (c) 2021 Daniel
+  Holden.
+TalkingHead (met4citizen), MIT - https://github.com/met4citizen/TalkingHead
+  From modules/talkinghead.mjs: gaussianRandom (the average of five draws,
+  bent by a skew), the idea of
+  the idle body holding a pose and then easing to a new one
+  (animMoods.neutral), eyes that lead and a head that follows them part of
+  the way (animTemplateEyes and the "headmove" animation), and the blink
+  timing (animTemplateBlink: a skewed pause, a quick close, a short hold,
+  about one blink in seven a double). Read at commit
+  b3e277b3b46f88e557bf28a2c5612a5b04e075c3. Copyright (c) 2023-2024 Mika
+  Suominen.
+airi (moeru-ai), MIT - https://github.com/moeru-ai/airi
+  The table of pauses between the eyes' small jumps, 0.8 to 4.8 seconds
+  (packages/stage-ui-three/src/composables/vrm/utils/eye-motions.ts,
+  randomSaccadeInterval). Read at commit
+  49c15a6df2a1595dfd0ef2771abfc1229504d075. Copyright (c) 2024-PRESENT Neko
+  Ayaka.
+ChatVRM (pixiv), MIT - https://github.com/pixiv/ChatVRM
+  The idea, from src/lib/VRMLookAtSmootherLoaderPlugin/VRMLookAtSmoother.ts,
+  that the head takes part of a look (it gives the head 40%) and that the
+  eyes' small jumps are held at least half a second apart. The idea only.
+  Read at commit b542aa00e19dccf9fc48ba340cf7eee011d2329a. Copyright (c)
+  2023 pixiv Inc.
+
 OFFERS NOBODY ASKED FOR (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Leon (leon-ai/leon), MIT - https://github.com/leon-ai/leon

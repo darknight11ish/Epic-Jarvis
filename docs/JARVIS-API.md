@@ -183,8 +183,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed" \| "ready", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on) - except for a briefing, whose toast comes on `ready` (`brain/briefing.rs` `toast_ready`, always only "Jarvis: your morning briefing is ready.", section 22); the Brain reads Coming up again, and the briefing too for kind `briefing` (`brain.js`) | the Brain's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`). For kind `briefing`: the Brain's Morning briefing reads itself again, and on `ready` (not `fired`) a notification with only the fixed words, which opens the Brain (`JarvisRuntime.onBriefingReady`) |
 | `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | the Brain's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
-
-| `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. The animal faces hold a neutral pose while it is true. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. The face pages' own use of it is **not built yet** | **Not built yet** - falls through to "unhandled" until `JarvisRuntime.onEvent` has a branch for it (section 38.1 says what it must do) |
+| `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
 bell (`stream.rs:506-511`). `wellbeing` (above) carries one boolean for the
@@ -1121,7 +1120,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/digest` | GET | `attention.rs:81`, `routes.rs:35` | `JarvisApi.kt:280` | List key: `digest`. |
 | `/api/config` | GET | `routes.rs:36` | **no** | **Read-only: writing answers 501.** This is why there is no shared place to store a preference — `API-DISAGREEMENTS.md` §11. |
 | `/api/visual-spec` | GET | `spec_drift.rs:50` | **no** | Desktop checks its bundled spec against the server's at startup. The phone never fetches it. |
-| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. |
+| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. Not in this document, on purpose: display choices kept on ONE device - the face's quality, frame rate and speed, and "Keep the animal still" (2026-09-28; the animals only breathe and blink). The desktop keeps them in its own storage (`jarvis.faceTuning`, `face-tuning.js`), the phone in its Look (`still_animal`, `AppearanceStore.kt`); neither is sent to the PC's backend or the other device, and none raises a card. |
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
@@ -6810,7 +6809,10 @@ speaks as always. The mouth chunk (`jmth`) is made the same way. While the
 window is open, the PC's "is that the owner talking over Jarvis?" check
 (section 17, `source=barge_in`) also compares against the plain voice.
 
-**The event - what each app must read (the app side is NOT built yet).**
+**The event - what each app reads (built 2026-09-28 on both apps: the
+desktop's `jarvis-link.js` for the widget and the floating face, the HUD
+page's own stream, and `faces.html` for each face frame; the phone's
+`JarvisRuntime.onEvent` -> `faceSerious` -> the Home face).**
 Event kind `wellbeing`, data `{"serious": true}` when the window opens and
 `{"serious": false}` when it closes (by itself, or on the next ordinary
 question). One boolean; no text, no conversation id. A second crisis turn
@@ -6832,11 +6834,15 @@ while one is open sends `{"serious": true}` again - treat it as idempotent.
   playful poses; the face stays calm, and the mouth still follows the sound
   (the lip-sync is unchanged). The exact pose is the apps' call
   (`docs/CRITTERS.md`). Every
-  window that draws a face reads it: on the desktop the frame is already
-  fanned out to every window (`stream.rs`), so the face, floating, HUD and
-  widget pages each need only to read it; on the phone, `JarvisRuntime.
-  onEvent` needs a `"wellbeing"` branch that sets one state both the Home
-  face and "Floating Jarvis" read.
+  window that draws a face reads it: on the desktop the frame is fanned
+  out to every window (`stream.rs`); `jarvis-link.js` keeps it for the
+  widget and the floating face, which post `serious` to their face frames
+  with the rest of `faceSignal`, and the HUD page reads it from its own
+  stream and posts it to its frame the same way. On the phone,
+  `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious`, which
+  the Home face reads. ("Floating Jarvis" on the phone is the app's icon,
+  not the animal, so it has nothing to change.) Only a JSON `true` or
+  `false` counts, on both apps - a string such as `"true"` is ignored.
 - **Nothing else changes**: no card, no setting, no off switch (the crisis
   help line has none), and the chat panel's own crisis styling (section 38)
   is untouched.

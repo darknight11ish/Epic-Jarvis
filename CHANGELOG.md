@@ -39,6 +39,39 @@ number as the last part - `0.2.57` is a build of 0.2.
   Faster. **Try it** plays a short line in that voice; **Reset to its own
   voice** puts it back. The mouths still move in step with whatever you
   pick. It never asks first. Needs the patch script run again on the PC.
+- **The animals move their bodies, calmly.** Each looks at something (often
+  you) and holds the look, its head following its eyes part of the way;
+  blinks, small weight shifts, the panda's tail swish, and a small idle
+  happening about every 20 seconds. While speaking they lean in and gesture
+  now and then - never busy. Built on published MIT work (Spring-It-On,
+  TalkingHead, airi, ChatVRM), credited in THIRD-PARTY-NOTICES.txt. See
+  `docs/CRITTERS.md`, "How they move".
+- **Rising "Zs" while an animal sleeps.** On standby - by the schedule or by
+  hand - small z's float up from beside its head, two or three at a time,
+  on both apps. Not when Jarvis simply cannot be reached: then it is the
+  hollow ring alone. With reduced (calm) motion, one still z instead.
+- **"Keep the animal still"**, off to start: the animal only breathes and
+  blinks - no looking around, gestures or idle happenings. On the PC in
+  Settings -> Appearance -> "Face on this computer"; on the phone in
+  Appearance -> More options, under Motion. Each device keeps its own
+  choice. No card.
+- **Serious moments stay calm and plain.** While a crisis answer is being
+  given or spoken, every animal face (the PC's widget, floating face and
+  HUD, and the phone's Home) drops the gestures and tilts and simply
+  listens; waiting on an approval is an attentive, still look (no wave),
+  and an error a still, concerned one.
+- **"Jarvis isn't connected" looks the same everywhere.** Every face shows
+  standby with the same thin hollow ring on both apps (the PC's ring was
+  nearly invisible and breathed; it is now the phone's fixed colour). The
+  tray icon now goes to standby's colour when the link drops, and never
+  shows the approval colour while approvals are blocked.
+- **The PC notices a graphics card that cannot keep up** with a face and
+  draws a flat version instead, trying the card again after a minute; the
+  Faces window's gallery works from the keyboard (Tab, the arrow keys,
+  Enter).
+- **Sharper animals**: fewer see-through or stray specks along their
+  outlines, measured against a slow exact render (`docs/CRITTERS.md`,
+  "Drawing quality").
 
 ## 0.2.0 - 26 September 2026
 
