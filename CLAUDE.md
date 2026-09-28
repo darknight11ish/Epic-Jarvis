@@ -613,6 +613,16 @@ testers, scouts and integration scouts; `.claude/agents/`):
   the 12 GB card; nothing leaves the PC); and (4) **compare**: ask several
   AIs the same question, one card listing every AI it will ask, one summary
   of agreements, disagreements and sources.
+  **The chatbots the studio picked are confirmed** (owner, 2026-09-28,
+  after the feature audit noted they had gone in without a per-company OK):
+  DeepSeek, Grok, Le Chat and Meta AI websites and the Groq API stay, next
+  to the ChatGPT, Claude, Copilot and Perplexity the owner named. Any
+  further chatbot still gets the owner's OK first.
+  **A money limit comes before API chatbots are used for real** (owner,
+  2026-09-28): a monthly amount per service, set on the PC; Jarvis stops
+  that service when it is reached, and the approval card shows how much is
+  left. Prices change, so the amount is an estimate from a price list the
+  owner can see and correct, and the card says "about".
 - **Customer-support chats** (Groupon's and similar, owner 2026-09-28) are a
   separate mode of the driver, because the other side is a company acting
   on the owner's real account, often a real person: **one card before each
