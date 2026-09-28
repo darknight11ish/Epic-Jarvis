@@ -398,6 +398,20 @@ fn main() {
             "chatbot_resume",
             "chatbot_compare_start",
             "chatbot_compare_stop",
+            // "Chat with customer support for me" (jarvis_support.py through
+            // jarvis_chatbot_routes.py): read the chat (a read; the owner's
+            // words taken out in Rust while the private lists are hidden),
+            // start one (ONE details card on the PC; held on a stale link),
+            // stop and take over (never held), answer a waiting offer with
+            // Decline or "Say something else" (held) or Take over (not), and
+            // export the transcript to a file the owner picks. Resume is
+            // chatbot_resume. Brain only.
+            "support_status",
+            "support_start",
+            "support_stop",
+            "support_takeover",
+            "support_answer",
+            "support_export",
             // The morning briefing (backend/briefing.patch): read the latest
             // one and "Brief me now" (a read, not held on a stale link) -
             // Brain only; and its setup - read it, set one up that repeats

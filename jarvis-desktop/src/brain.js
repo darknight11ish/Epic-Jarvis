@@ -88,6 +88,24 @@ import {
   WORDS as CHATBOT,
 } from "./chatbot.js";
 import {
+  actionsOf as supportActionsOf,
+  detailRows as supportDetailRows,
+  formProblem as supportFormProblem,
+  holdingLine as supportHoldingLine,
+  limitOf as supportLimitOf,
+  MAX_DETAILS as SUPPORT_MAX_DETAILS,
+  offerActions as supportOfferActions,
+  POLL_MS as SUPPORT_POLL_MS,
+  progressLine as supportProgress,
+  readSupport,
+  savedLine as supportSavedLine,
+  statusLine as supportStatusLine,
+  talkingLine as supportTalkingLine,
+  versionLine as supportVersionLine,
+  whoOf as supportWhoOf,
+  WORDS as SUPPORT,
+} from "./support.js";
+import {
   actionsOf,
   addPlaceholder,
   anyTicking,
@@ -393,6 +411,21 @@ const dom = {
   chatbotSeveral: $("chatbot-several"),
   chatbotSeveralLegend: $("chatbot-several-legend"),
   chatbotSeveralList: $("chatbot-several-list"),
+  support: $("support"),
+  supportLog: $("support-log"),
+  supportVersion: $("support-version"),
+  supportForm: $("support-form"),
+  supportCompany: $("support-company"),
+  supportTerms: $("support-terms"),
+  supportAddressLabel: $("support-address-label"),
+  supportAddress: $("support-address"),
+  supportGoal: $("support-goal"),
+  supportRows: $("support-rows"),
+  supportAdd: $("support-add"),
+  supportMessages: $("support-messages"),
+  supportMinutes: $("support-minutes"),
+  supportQueue: $("support-queue"),
+  supportStart: $("support-start"),
   comingUp: $("coming-up"),
   todoList: $("todo-list"),
   todoForm: $("todo-form"),
@@ -773,6 +806,7 @@ function render(name) {
     case "work":
       renderFocus();
       renderChatbot();
+      renderSupport();
       renderComingUp();
       renderBriefing();
       renderJobs();
@@ -1665,8 +1699,10 @@ async function revealPrivate() {
 // read the lists again - Rust decides whether they come back hidden.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   const reread = async () => {
-    // The chatbot card's goal and conversation are hidden with the lists too.
+    // The chatbot card's goal and conversation are hidden with the lists too,
+    // and the support chat's goal, details and transcript.
     cb.at = 0;
+    sp.at = 0;
     await load(VIEW_SECTIONS.memory, { quiet: true });
     render(state.view);
   };
@@ -4309,9 +4345,9 @@ function paintCompareLog(c) {
   box.replaceChildren(...out);
 }
 
-function hiddenBlock(title) {
+function hiddenBlock(title, words = CHATBOT.hidden) {
   const hid = el("div", "private-hidden");
-  hid.append(el("p", "empty", CHATBOT.hidden));
+  hid.append(el("p", "empty", words));
   hid.append(button("Show", revealPrivate, { title }));
   return hid;
 }
@@ -4580,6 +4616,427 @@ if (dom.chatbotWhich) {
 if (dom.chatbotStart) {
   liveButtons.add(dom.chatbotStart);
   syncLiveButton(dom.chatbotStart);
+}
+
+/* ==========================================================================
+   Chat with customer support for me (the owner's decisions of 2026-09-28;
+   JARVIS-API.md section 65; support.js, brain/support.rs).
+
+   The form (the company - Groupon, or another company's help page typed by
+   the owner - its terms risk, the goal, the details Jarvis may give as
+   name-and-value rows, and the limits) asks the PC for ONE approval card;
+   nothing is sent before a yes. Then the chat: its state in the PC's words
+   (waiting for the owner to open the chat in the window, the queue, the
+   agent's name), Take over / Resume / Stop, a waiting offer with its words
+   and the exact reply its card would send (accepting is ONLY that card;
+   here: Decline, Say something else, Take over), a question handed to the
+   owner, the transcript with the company's words marked outside text, and
+   at the end the summary, the reference number, whether it was kept in the
+   encrypted history, and "Export transcript" (a file the owner picks). Kept
+   on screen, never read aloud (nothing in this window speaks). Read again
+   every few seconds while a chat is going, and on every activity event.
+   ========================================================================== */
+
+const sp = { view: null, error: "", loading: false, again: false, at: 0, id: "", gone: false,
+  timer: null, filled: false, starting: false, logKey: "", rows: [{ name: "", value: "" }],
+  rowsKey: "", sayOpen: false, companiesKey: "" };
+const SUPPORT_READ_MS = 15000;
+
+async function loadSupport() {
+  if (!IS_TAURI) return;
+  if (sp.loading) {
+    sp.again = true;
+    return;
+  }
+  sp.loading = true;
+  try {
+    let view = readSupport(await invoke("support_status", { id: null }));
+    sp.gone = false;
+    // The latest chat still going first (it may have been started on the
+    // phone); else the one this window last showed, for its summary.
+    if (view.available && !view.chat && sp.id) {
+      const named = readSupport(await invoke("support_status", { id: sp.id }));
+      if (named.available && named.chat) view = { ...view, chat: named.chat };
+      else if (named.available) {
+        sp.gone = true;
+        sp.id = "";
+      }
+    }
+    if (view.available && view.chat) sp.id = view.chat.id;
+    sp.view = view;
+    sp.error = "";
+  } catch (error) {
+    sp.error = errorText(error);
+  } finally {
+    sp.loading = false;
+    sp.at = Date.now();
+  }
+  if (sp.again) {
+    sp.again = false;
+    await loadSupport();
+    return;
+  }
+  if (state.view === "work") paintSupport();
+}
+
+async function supportAct(cmd, args = {}) {
+  try {
+    const out = await invoke(cmd, args);
+    const said = out && (out.message || out.said);
+    if (out && out.cancelled) toast("Not saved.", "ok");
+    else if (out && out.saved) toast(`Saved to ${out.saved}. ${SUPPORT.export_note}`, "ok");
+    else toast(asSentence(said || "Done."), "ok");
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  }
+  await loadSupport();
+}
+
+async function supportStart() {
+  const v = sp.view;
+  const form = {
+    company: dom.supportCompany ? dom.supportCompany.value : "",
+    address: dom.supportAddress ? dom.supportAddress.value : "",
+    goal: dom.supportGoal ? dom.supportGoal.value : "",
+    rows: sp.rows,
+    messages: dom.supportMessages ? dom.supportMessages.value : "",
+    minutes: dom.supportMinutes ? dom.supportMinutes.value : "",
+    queue: dom.supportQueue ? dom.supportQueue.value : "",
+  };
+  if (sp.starting) return;
+  const problem = supportFormProblem(v, form);
+  if (problem) {
+    toast(problem, "bad");
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  sp.starting = true;
+  if (dom.supportStart) {
+    dom.supportStart.dataset.busy = "true";
+    syncLiveButton(dom.supportStart);
+  }
+  try {
+    const typed = v.companies.find((c) => c.id === form.company);
+    const out = await invoke("support_start", {
+      company: form.company,
+      address: typed && typed.typed ? form.address.trim() : null,
+      goal: form.goal,
+      details: supportDetailRows(form.rows),
+      maxMessages: supportLimitOf(form.messages, v.tier.messagesMax),
+      maxMinutes: supportLimitOf(form.minutes, v.tier.minutesMax),
+      maxQueueMinutes: supportLimitOf(form.queue, v.tier.queueMax),
+    });
+    if (out && out.support) sp.id = out.support;
+    toast(asSentence((out && out.message) || SUPPORT.start_note), "ok");
+    if (dom.supportGoal) dom.supportGoal.value = "";
+    sp.rows = [{ name: "", value: "" }];
+    sp.rowsKey = "";
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  } finally {
+    sp.starting = false;
+    if (dom.supportStart) {
+      dom.supportStart.dataset.busy = "false";
+      syncLiveButton(dom.supportStart);
+    }
+  }
+  await loadSupport();
+}
+
+/** The details rows: rebuilt only when rows are added or removed, so typing is kept. */
+function paintSupportRows() {
+  const box = dom.supportRows;
+  if (!box) return;
+  const key = String(sp.rows.length);
+  if (key === sp.rowsKey) return;
+  sp.rowsKey = key;
+  const out = sp.rows.map((r, i) => {
+    const line = el("div", "row support-row");
+    const name = el("input", "field");
+    name.type = "text";
+    name.maxLength = 40;
+    name.value = r.name;
+    name.placeholder = SUPPORT.detail_name;
+    name.setAttribute("aria-label", `${SUPPORT.detail_name}, row ${i + 1}`);
+    name.addEventListener("input", () => { sp.rows[i].name = name.value; });
+    const value = el("input", "field");
+    value.type = "text";
+    value.maxLength = 200;
+    value.spellcheck = false;
+    value.value = r.value;
+    value.placeholder = SUPPORT.detail_value;
+    value.setAttribute("aria-label", `${SUPPORT.detail_value}, row ${i + 1}`);
+    value.addEventListener("input", () => { sp.rows[i].value = value.value; });
+    const remove = button(SUPPORT.remove_detail, () => {
+      sp.rows.splice(i, 1);
+      if (!sp.rows.length) sp.rows.push({ name: "", value: "" });
+      sp.rowsKey = "";
+      paintSupportRows();
+    });
+    remove.setAttribute("aria-label", `${SUPPORT.remove_detail} row ${i + 1}`);
+    line.append(name, value, remove);
+    return line;
+  });
+  box.replaceChildren(...out);
+}
+
+function paintSupportForm(v) {
+  const form = dom.supportForm;
+  if (!form) return;
+  form.hidden = Boolean(v.chat && v.chat.live);
+  if (form.hidden) return;
+  const which = dom.supportCompany;
+  if (which) {
+    const key = JSON.stringify(v.companies.map((c) => [c.id, c.name]));
+    if (key !== sp.companiesKey) {
+      const was = which.value;
+      which.replaceChildren(...v.companies.map((c) => {
+        const o = el("option", "", c.name);
+        o.value = c.id;
+        return o;
+      }));
+      which.value = v.companies.some((c) => c.id === was) ? was : (v.companies[0] || {}).id || "";
+      sp.companiesKey = key;
+    }
+  }
+  const co = v.companies.find((c) => c.id === (which ? which.value : ""));
+  if (dom.supportTerms) {
+    dom.supportTerms.textContent = co && co.terms ? `${SUPPORT.terms_title}: ${co.terms}` : "";
+  }
+  if (dom.supportAddressLabel) dom.supportAddressLabel.hidden = !(co && co.typed);
+  if (dom.supportMessages) dom.supportMessages.max = String(v.tier.messagesMax);
+  if (dom.supportMinutes) dom.supportMinutes.max = String(v.tier.minutesMax);
+  if (dom.supportQueue) dom.supportQueue.max = String(v.tier.queueMax);
+  if (!sp.filled) {
+    if (dom.supportMessages) dom.supportMessages.value = String(v.tier.messagesDefault);
+    if (dom.supportMinutes) dom.supportMinutes.value = String(v.tier.minutesDefault);
+    if (dom.supportQueue) dom.supportQueue.value = String(v.tier.queueDefault);
+    sp.filled = true;
+  }
+  paintSupportRows();
+}
+
+function supportTurn(t, c) {
+  const item = el("div", `chatbot-turn${t.outside ? " chatbot-outside" : ""}`);
+  item.dataset.who = t.who;
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("span", "chatbot-who", supportWhoOf(t, c)));
+  if (t.outside) head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  item.append(head);
+  item.append(el("p", t.who === "note" ? "note" : "chatbot-text", t.text));
+  return item;
+}
+
+function supportSummaryBox(c) {
+  const sm = c.summary;
+  const box = el("div", "chatbot-summary chatbot-outside");
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("h3", "subhead", SUPPORT.summary_title));
+  head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  box.append(head);
+  box.append(el("p", "note", SUPPORT.summary_note));
+  if (sm.answer) box.append(el("p", "chatbot-text", sm.answer));
+  summaryList(box, SUPPORT.agreed_title, sm.agreed, "support-agreed");
+  summaryList(box, SUPPORT.open_title, sm.open, "chatbot-open");
+  return box;
+}
+
+/** The summary and the transcript: rebuilt only when they change. */
+function paintSupportLog(c) {
+  const box = dom.supportLog;
+  if (!box) return;
+  const shown = c && !c.hidden ? c : null;
+  const key = shown ? JSON.stringify([shown.id, shown.summary, shown.transcript, shown.reference,
+    shown.saved, shown.live]) : "";
+  if (key === sp.logKey) return;
+  sp.logKey = key;
+  const out = [];
+  if (shown && shown.summary) out.push(supportSummaryBox(shown));
+  if (shown && !shown.live) {
+    if (shown.reference) {
+      out.push(el("p", "note support-reference",
+        SUPPORT.reference_line.replace("{reference}", shown.reference)));
+    }
+    const saved = supportSavedLine(shown);
+    if (saved) out.push(el("p", "note support-saved", saved));
+  }
+  if (shown && shown.transcript.length) {
+    const tr = el("div", "chatbot-transcript");
+    tr.append(el("h3", "subhead", SUPPORT.transcript_title));
+    tr.append(el("p", "note", SUPPORT.outside_note));
+    for (const t of shown.transcript) tr.append(supportTurn(t, shown));
+    const ex = button(SUPPORT.export, () => supportAct("support_export", { id: shown.id }));
+    ex.id = "support-export";
+    tr.append(ex, el("p", "note", SUPPORT.export_note));
+    out.push(tr);
+  }
+  box.replaceChildren(...out);
+}
+
+/** The waiting offer: its words, the exact reply its card would send, the owner's other choices. */
+function supportOfferBox(c) {
+  const o = c.offer;
+  const box = el("div", "chatbot-question chatbot-outside support-offer");
+  box.append(el("p", "subhead", SUPPORT.offer_title));
+  box.append(el("p", "chatbot-text", o.words));
+  box.append(el("p", "note", `If you approve the card, Jarvis sends: "${o.reply}"`));
+  box.append(el("p", "note", SUPPORT.offer_note));
+  if (o.card === "no") box.append(el("p", "note support-card-no", SUPPORT.offer_card_no));
+  const hold = supportHoldingLine(c);
+  if (hold) box.append(el("p", "note", hold));
+  if (o.said) box.append(el("p", "note failed", o.said));
+  const actions = el("div", "row-actions");
+  for (const a of supportOfferActions(c)) {
+    if (a === "decline") {
+      actions.append(button(SUPPORT.decline, () => supportAct("support_answer", {
+        id: c.id, offer: o.id, choice: "decline", text: null }), { live: true }));
+    }
+    if (a === "say_else") {
+      actions.append(button(SUPPORT.say_else, () => {
+        sp.sayOpen = !sp.sayOpen;
+        paintSupport();
+      }));
+    }
+    if (a === "take_over") {
+      actions.append(button(SUPPORT.take_over, () => supportAct("support_answer", {
+        id: c.id, offer: o.id, choice: "takeover", text: null })));
+    }
+  }
+  box.append(actions);
+  if (sp.sayOpen) {
+    const lab = el("label", "lbl", SUPPORT.say_else);
+    const input = el("input", "field");
+    input.type = "text";
+    input.maxLength = 1200;
+    input.id = "support-say";
+    lab.append(input);
+    const send = button(SUPPORT.say_send, async () => {
+      await supportAct("support_answer", { id: c.id, offer: o.id, choice: "say",
+        text: input.value });
+      sp.sayOpen = false;
+    }, { live: true });
+    send.id = "support-say-send";
+    box.append(lab, send, el("p", "note", SUPPORT.say_note));
+  }
+  return box;
+}
+
+function paintSupport() {
+  const box = dom.support;
+  if (!box) return;
+  const v = sp.view;
+  if (dom.supportVersion) dom.supportVersion.textContent = v ? supportVersionLine(v) : "";
+  if (!v) {
+    const line = el("p", "empty", sp.error ? `Could not read it: ${sp.error}` : "Reading…");
+    if (sp.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadSupport));
+    }
+    box.replaceChildren(line);
+    if (dom.supportForm) dom.supportForm.hidden = true;
+    paintSupportLog(null);
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || SUPPORT.missing));
+    if (dom.supportForm) dom.supportForm.hidden = true;
+    paintSupportLog(null);
+    return;
+  }
+  const c = v.chat;
+  const out = [];
+  if (sp.error) out.push(el("p", "empty failed", `Could not read it again: ${sp.error}`));
+  if (sp.gone) out.push(el("p", "note", SUPPORT.gone));
+  if (c) {
+    const now = el("div", "chatbot-now support-now");
+    now.dataset.state = c.state;
+    now.append(el("p", "chatbot-head", c.live ? supportTalkingLine(c)
+      : `${c.companyName}: ${supportStatusLine(c)}`));
+    if (c.live) now.append(el("p", "chatbot-line", supportStatusLine(c)));
+    if (c.state !== "refused") now.append(el("p", "note", supportProgress(c)));
+    if (c.tierName) now.append(el("p", "note", `${SUPPORT.version}: ${c.tierName}`));
+    if (c.hidden) {
+      now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the chat.",
+        SUPPORT.hidden));
+    } else {
+      if (c.goal) now.append(el("p", "note", `Your goal: ${c.goal}`));
+      if (c.details.length) {
+        now.append(el("p", "note support-details-line", "Jarvis may give: "
+          + c.details.map((d) => `${d.name}: ${d.value}`).join("; ")));
+      }
+      if (c.question) {
+        const q = el("div", "chatbot-question chatbot-outside");
+        q.append(el("p", "subhead", SUPPORT.question_title));
+        q.append(el("p", "chatbot-text", c.question));
+        q.append(el("p", "note", SUPPORT.question_note));
+        now.append(q);
+      }
+      if (c.offer) now.append(supportOfferBox(c));
+    }
+    const actions = el("div", "row-actions");
+    for (const a of supportActionsOf(c)) {
+      if (a === "take_over") {
+        const b = button(SUPPORT.take_over, () => supportAct("support_takeover", { id: c.id }));
+        b.title = SUPPORT.take_over_note;
+        actions.append(b);
+      }
+      if (a === "resume") actions.append(button(SUPPORT.resume, () => supportAct("chatbot_resume"), { live: true }));
+      if (a === "stop") actions.append(button(SUPPORT.stop, () => supportAct("support_stop", { id: c.id }), { danger: true }));
+    }
+    if (actions.childElementCount) now.append(actions);
+    out.push(now);
+  } else {
+    out.push(el("p", "empty", "No support chat yet."));
+  }
+  box.replaceChildren(...out);
+  paintSupportLog(c);
+  paintSupportForm(v);
+  const live = Boolean(c && c.live);
+  if (!live) sp.sayOpen = false;
+  if (live && !sp.timer) {
+    sp.timer = setInterval(() => {
+      if (state.view === "work" && !sp.loading) loadSupport();
+    }, SUPPORT_POLL_MS);
+  }
+  if (!live && sp.timer) {
+    clearInterval(sp.timer);
+    sp.timer = null;
+  }
+}
+
+function renderSupport() {
+  paintSupport();
+  if (IS_TAURI && !sp.loading && Date.now() - sp.at > SUPPORT_READ_MS) loadSupport();
+}
+
+if (dom.supportForm) {
+  dom.supportForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    supportStart();
+  });
+}
+if (dom.supportCompany) {
+  dom.supportCompany.addEventListener("change", () => {
+    if (sp.view && sp.view.available) paintSupportForm(sp.view);
+  });
+}
+if (dom.supportAdd) {
+  dom.supportAdd.addEventListener("click", () => {
+    if (sp.rows.length >= SUPPORT_MAX_DETAILS) {
+      toast(`At most ${SUPPORT_MAX_DETAILS} details.`, "bad");
+      return;
+    }
+    sp.rows.push({ name: "", value: "" });
+    sp.rowsKey = "";
+    paintSupportRows();
+  });
+}
+if (dom.supportStart) {
+  liveButtons.add(dom.supportStart);
+  syncLiveButton(dom.supportStart);
 }
 
 /* ==========================================================================
@@ -6700,7 +7157,13 @@ onEvent((frame) => {
   // again on every activity change while the Work tab is showing.
   if (kind === "activity") {
     cb.at = 0;
-    if (state.view === "work") loadChatbot();
+    sp.at = 0;
+    if (state.view === "work") {
+      loadChatbot();
+      // A support chat's progress rides on the same activity line ("Chat
+      // with Groupon: message 2 of 15.").
+      loadSupport();
+    }
   }
   if (kind === "schedule") {
     upL.at = 0;

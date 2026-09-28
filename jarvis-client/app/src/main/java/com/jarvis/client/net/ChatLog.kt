@@ -371,6 +371,21 @@ object ChatLog {
      * from": never silence, because silence would read as "you typed it".
      * The same words as the desktop's History.
      */
+    /**
+     * Who wrote each line of a customer-support chat's record (role
+     * "support"; "Chat with customer support for me"). The desktop's words
+     * too (history-view.js SUPPORT_WHO).
+     */
+    val SUPPORT_WHO = mapOf(
+        "support_company" to "The company (outside text)",
+        "support_jarvis" to "Sent by Jarvis in your name",
+        "support_owner" to "You",
+        "support_note" to "Note",
+    )
+
+    fun supportWho(provenance: String?): String =
+        SUPPORT_WHO[provenance] ?: SUPPORT_WHO.getValue("support_note")
+
     fun provenanceMark(provenance: String?): String? = when (provenance) {
         Provenance.TYPED, Provenance.VOICE -> null
         Provenance.SHARED -> "shared from another app"

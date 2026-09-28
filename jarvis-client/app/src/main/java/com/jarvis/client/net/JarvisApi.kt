@@ -1247,6 +1247,47 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    /**
+     * `GET /api/chatbot/status?support=`, for the support chat [id] names or,
+     * with none, the latest one still going ([Support.parse]). A read.
+     */
+    suspend fun supportStatus(id: String?): ApiResult<JsonObject> =
+        probe(if (id != null && Support.validId(id)) "${Support.STATUS_PATH}?support=$id" else Support.STATUS_PATH)
+
+    /**
+     * `POST /api/chatbot/support/start`, `/stop`, `/takeover` or `/answer`,
+     * with a body made by [Support.startBody], [Support.idBody] or
+     * [Support.answerBody]. Any other path is refused here, before anything
+     * is sent. The status and body come back whole ([Chatbot.Reply]): a 400
+     * or 409 carries the PC's own sentence.
+     */
+    suspend fun supportWrite(path: String, json: String): ApiResult<Chatbot.Reply> {
+        if (path !in Support.WRITE_PATHS) {
+            return ApiResult.Failed(ApiError.Malformed("not a support chat route"))
+        }
+        return rawPost(path, json)
+    }
+
+    /** One POST whose status and body come back whole - for [supportWrite]. */
+    private suspend fun rawPost(path: String, json: String): ApiResult<Chatbot.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Chatbot.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     /** A test search waits for the provider (up to 15 seconds on the PC). */
     private val webSearchTestCall: OkHttpClient by lazy {
         client.newBuilder()

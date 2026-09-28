@@ -444,6 +444,16 @@ fun BrainScreen(
                 ChatbotSection(canAct = canAct, privateHidden = privateHidden)
             }
 
+            // "Chat with customer support for me" (the owner's decisions of
+            // 2026-09-28): start one (ONE card listing every detail), the chat
+            // with the company's words marked outside text, a waiting offer
+            // (Decline / Say something else / Take over - accepting is only
+            // the offer's own card), Take over / Resume / Stop, the summary
+            // (SupportPlate.kt) - the desktop's Brain -> Work, the same card.
+            item(key = "support") {
+                SupportSection(canAct = canAct, privateHidden = privateHidden)
+            }
+
             // "Morning briefing" (the owner's decisions of 2026-09-25): the
             // latest one, "Brief me now", and when it arrives
             // (BriefingPlate.kt) - the desktop's Brain -> Work and Settings.

@@ -451,7 +451,7 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus,
-  folders, chatbot }) {
+  folders, chatbot, support }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
@@ -1534,6 +1534,47 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return { ok: true, message: cmd === "chatbot_pause" ? "Pausing at the next step." : "Resume asks you first." };
           }
+          // brain/support.rs ("Chat with customer support for me").
+          // `window.__support` is null - a PC without support chats, answered
+          // as `null` - unless the scenario names `support: {status, named?,
+          // startRefuses?}`: real GET /api/chatbot/status answers from
+          // fixtures/support-cases.json. Every change is recorded in
+          // window.__supportCalls; start, decline and say are refused on a
+          // stale link, as Rust does.
+          case "support_status": {
+            const s = window.__support;
+            if (!s) return null;
+            s.reads += 1;
+            s.ids.push(args.id);
+            const out = args.id && s.named ? s.named : s.status;
+            return JSON.parse(JSON.stringify(out));
+          }
+          case "support_start":
+          case "support_stop":
+          case "support_takeover":
+          case "support_answer":
+          case "support_export": {
+            window.__supportCalls.push({ cmd, ...args });
+            const held = cmd === "support_start"
+              || (cmd === "support_answer" && args.choice !== "takeover");
+            if (state.stale && held) {
+              throw new Error("the event stream is stale, so this cannot be confirmed live - nothing can be sent until it reconnects");
+            }
+            const s = window.__support;
+            if (cmd === "support_start") {
+              if (s.startRefuses) throw new Error(s.startRefuses);
+              return { ok: true, asking: true, support: "sup_000000000001",
+                message: "Nothing has been sent yet. An approval card shows the company, your goal and every detail Jarvis may give; the chat starts only if you approve it." };
+            }
+            if (cmd === "support_export") return { saved: "C:\\Users\\me\\jarvis-support-groupon.txt" };
+            if (cmd === "support_stop") {
+              return { ok: true, support: args.id, message: "Stopping. Nothing more is sent; messages already sent stay sent. The window closes." };
+            }
+            if (cmd === "support_takeover") {
+              return { ok: true, support: args.id, message: "Jarvis stops sending within a few seconds. Type in the chat window on the PC; press Resume when you want Jarvis to carry on." };
+            }
+            return { ok: true, support: args.id, message: "Declining: Jarvis sends the polite no within a few seconds." };
+          }
           case "brain_schedule_add_todo": {
             window.__scheduleCalls.push({ cmd, ...args });
             const sc = window.__schedule;
@@ -1876,6 +1917,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__focusCalls = [];
   window.__chatbot = chatbot ? JSON.parse(JSON.stringify({ reads: 0, ids: [], compares: [], ...chatbot })) : null;
   window.__chatbotCalls = [];
+  window.__support = support ? JSON.parse(JSON.stringify({ reads: 0, ids: [], ...support })) : null;
+  window.__supportCalls = [];
   window.__briefing = briefing ? JSON.parse(JSON.stringify({
     briefing: null, setups: [], sources: {}, reads: 0, fails: null, ...briefing })) : null;
   window.__briefingCalls = [];

@@ -280,7 +280,10 @@ await check("CONTROL: Rust holds what sends, hides the owner's words, Brain only
   }
   // Nothing in the chatbot's part of the Brain speaks.
   const js = read("src/brain.js");
-  const part = js.slice(js.indexOf("Talk to a chatbot for me (the owner's"), js.indexOf("Coming up - timers, alarms"));
+  // Up to the next card's own part (customer-support chats, tests/support.mjs).
+  const part = js.slice(js.indexOf("Talk to a chatbot for me (the owner's"),
+    js.indexOf("Chat with customer support for me (the owner's"));
+  assert.ok(part.length > 1000, "the chatbot part of the Brain was not found");
   assert.ok(!/speak\(|speakText|speechSynthesis|say_text|"say"|voice_say/i.test(part),
     "the chatbot's part of the Brain speaks");
 });

@@ -78,6 +78,18 @@ export const PROVENANCE_WORDS = Object.freeze({
   unknown: "not known where from",
 });
 
+/**
+ * Who wrote each line of a customer-support chat's record (role "support",
+ * jarvis_chat_log.record_support; "Chat with customer support for me").
+ * The phone's words too (ChatLog.SUPPORT_WHO).
+ */
+export const SUPPORT_WHO = Object.freeze({
+  support_company: "The company (outside text)",
+  support_jarvis: "Sent by Jarvis in your name",
+  support_owner: "You",
+  support_note: "Note",
+});
+
 /** The tainted line: under an opened conversation that read outside text,
  *  and the title of each "read outside text" mark. The phone's words too. */
 export const TAINT_TITLE =
@@ -197,7 +209,7 @@ export function readConversation(answer) {
     title: text(a.title).trim(),
     tainted: a.tainted === true,
     turns: turns
-      .filter((t) => t && (t.role === "user" || t.role === "assistant"))
+      .filter((t) => t && (t.role === "user" || t.role === "assistant" || t.role === "support"))
       .map((t) => ({
         role: t.role,
         // Jarvis Live's side-talk marker, in a chat kept before side remarks
@@ -206,7 +218,8 @@ export function readConversation(answer) {
         text: t.role === "assistant" && isSideTalk(text(t.text)) ? SEEN.not_for_me : text(t.text),
         at: num(t.at),
         // Only user turns carry one. Missing on a user turn is "unknown".
-        provenance: t.role === "user" ? text(t.provenance) || "unknown" : "",
+        provenance: t.role === "user" ? text(t.provenance) || "unknown"
+          : t.role === "support" ? text(t.provenance) || "support_note" : "",
         readOutside: t.read_outside === true,
         // Only the PC's "false" says so; an older PC sends nothing.
         answerKept: t.answer_kept !== false,
@@ -306,12 +319,17 @@ export function renderTranscript(box, conv, { el }) {
     const item = el("li", "history-turn");
     item.dataset.role = t.role;
     const head = el("div", "history-turn-head");
-    head.append(el("span", "history-who", t.role === "user" ? "You" : "Jarvis"));
+    const support = t.role === "support";
+    head.append(el("span", "history-who", support
+      ? SUPPORT_WHO[t.provenance] || SUPPORT_WHO.support_note
+      : t.role === "user" ? "You" : "Jarvis"));
     const when = whenWords(t.at);
     if (when) head.append(el("span", "history-when", when));
     const from = t.role === "user" ? provenanceWords(t.provenance) : "";
     if (from) head.append(el("span", "history-from", from));
-    if (t.readOutside) {
+    // A support chat's record is outside text as a whole (its taint note
+    // says so above); only the company's own lines carry the mark.
+    if (t.readOutside && (!support || t.provenance === "support_company")) {
       const mark = el("span", "history-mark history-mark-taint", "read outside text");
       mark.title = TAINT_TITLE;
       head.append(mark);

@@ -826,6 +826,27 @@ permissions = [
   "allow-chatbot-compare-stop",
 ]
 
+# "Chat with customer support for me" (jarvis_support.py; the owner's
+# decisions of 2026-09-28): Jarvis chats with a company's customer support in
+# the owner's name. Reading the chat is a read (the owner's words taken out in
+# Rust while the private lists are hidden). Starting one raises ONE card on
+# the PC and is held on a stale link; Stop and Take over only make Jarvis do
+# less and are not held; Decline and "Say something else" send words and are
+# held; accepting an offer is only ever the offer's own card. Export writes
+# a file the owner picks, and is held while the private lists are hidden. The
+# Brain's alone.
+[[set]]
+identifier = "support"
+description = "Chat with customer support for me: read the chat, start one (ONE approval card listing every detail), stop it, take over, decline an offer or say something else, and export the transcript to a file you pick. Start, Decline and Say something else are held on a stale link."
+permissions = [
+  "allow-support-status",
+  "allow-support-start",
+  "allow-support-stop",
+  "allow-support-takeover",
+  "allow-support-answer",
+  "allow-support-export",
+]
+
 # The morning briefing (backend/briefing.patch; the owner's decisions of
 # 2026-09-25): read the latest one, and "Brief me now". Both only READ - the
 # PC puts it together without the model and reads the calendar and the
