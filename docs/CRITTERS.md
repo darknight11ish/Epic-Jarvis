@@ -342,6 +342,37 @@ which used to light it a cold blue. The shapes blend smoothly at every
 opening (checked in steps of 0.02 to 0.2, then up to 1, with wide and round)
 by eye at 96 pixels and at 400.
 
+**Mouth drawing (fixed 2026-09-28, after a close visual check).**
+- *The line stays one line at small sizes.* Its width used to be fixed, so
+  below about 200 pixels it could fall between pixel centres: at 96 px a
+  shut mouth broke into pieces in about 690 of 2,541 panda shapes and 460
+  otter ones. It is now never thinner than about a pixel and a half of
+  whatever it is drawn at (0 broken at 96 and 64 px); big pictures are
+  unchanged. On the phone's lower-resolution picture this is what keeps the
+  line: at the Low tier the worst mouth line keeps 60 percent of its
+  contrast (it was down to 17 percent, and the otter's could vanish), so
+  the phone's trace sizes did not need changing.
+- *Teeth are ivory, whatever the orb's colour.* Inside a mouth the light
+  arrives without its colour (`common_tail.sksl`, `lit`): the key light is
+  mostly shadowed in there, so the blue sky and the orb had turned the
+  panda's teeth grey-blue (79 percent of teeth pixels bluer than red) and a
+  red or green orb would tint them. Now 0 percent, sRGB about 164, 155, 142
+  with the default orb, and ivory under red, green, purple, white and amber
+  orbs.
+- *No stripes on the roof of the mouth.* Seen from below, the roof of an
+  open mouth showed dotted dark stripes: the hit point sat a hair off the
+  surface by a different amount per pixel, and the teeth and line are
+  painted by position. Each hit is now moved onto the surface before it is
+  coloured (it changes nothing else visibly), and the roof takes no line.
+- *The otter's lower lip is no longer cut off.* Wide open, it reaches
+  round under the otter's chin, where it used to be clipped (up to 71
+  pixels at 400 px). It is now painted on the whole front of the head. The
+  price: seen from low down and to the side, a wide-open otter mouth wraps
+  a little way under the chin and looks longer.
+- These cost nothing in size: the smooth minimum was rewritten with one
+  division instead of two, which made every animal smaller (panda 59,637
+  to 58,730) with pictures the same to within one level of 255.
+
 **No sound, no mouth movement.** A typed answer, Quiet mode, and an answer
 kept on screen rather than read aloud all show as "speaking" with no sound.
 Then the mouth stays shut: the animals never make up mouth movements that
@@ -568,8 +599,10 @@ Sketchfab). Four reasons:
   to. The owl and the otter were measured before they were ever pushed.
   Since the drawing-quality pass (below) each animal spends what it can
   afford on march steps: **panda 59,637 (36 steps), owl 48,520 (48
-  steps), otter 55,497 (48 steps)**. The panda has about 360 to spare, so
-  any change to it must save as much as it adds. CI runs that check on
+  steps), otter 55,497 (48 steps)**. The mouth-drawing fixes (see "Mouth
+  drawing" under "How the mouths talk") paid for themselves with a one-division smooth minimum:
+  now **panda 58,730, owl 48,113, otter 54,594**. The panda has about
+  1,270 to spare, so any change to it must still save as much as it adds. CI runs that check on
   every push, so none of them can quietly grow over.
 - **Cost.** Measured through Skia (the engine Android draws with), per
   pixel: the **panda about 4 to 5 times Nucleus's work**, the **owl about

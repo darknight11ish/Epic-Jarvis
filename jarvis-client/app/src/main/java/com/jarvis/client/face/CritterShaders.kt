@@ -90,10 +90,13 @@ float sdCapsule(float3 p, float3 a, float3 b, float r) {
 // Polynomial smooth minimum: joins two shapes with a fillet of size k.
 // (Inigo Quilez's quadratic form - the same curve as the usual
 // clamp-and-mix one, to the last bit that matters, in fewer operations,
-// which counts: the march calls it a dozen times a step. See "program size".)
+// which counts: the march calls it a dozen times a step. See "program size".
+// Written with one division, not two - h / k squared times k is h squared
+// over k - which is two operations less a call, and about 950 less on the
+// red panda: its pictures came out the same to within a level of 255.)
 float smin(float a, float b, float k) {
-    float h = max(k - abs(a - b), 0.0) / k;
-    return min(a, b) - h * h * k * 0.25;
+    float h = max(k - abs(a - b), 0.0);
+    return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 
@@ -118,7 +121,11 @@ float seg2(float2 p, float2 a, float2 b) {
 // meets the lip in the middle, g.y how much higher the corners sit (the
 // smile's depth), g.z the half-width to the corners, g.w how far the lower
 // lip has dropped in the middle. `carved` is how much the point is on the jaw's carved hollow (the
-// hollow's own walls get the inside colours too). Returns the colour and
+// hollow's own walls get the inside colours too), and `roof` how much it is
+// on the hollow's roof - its walls that face down. The drawing is laid on
+// straight from the front, so the whole roof lies under the upper lip's
+// line, and seen from below it showed as a dark smudge across the roof: the
+// roof takes no line. Returns the colour and
 // the lighting code for common_tail.sksl: 0 fur, down to -2 for the inside
 // of a mouth, which takes no rim light (it used to catch it and read blue).
 // Distance to an ellipse in 2D (half-axes ab), exact to a hair however
@@ -139,7 +146,7 @@ float sdEllipse2(float2 p, float2 ab) {
 const float3 MOUTH_IN = float3(0.105, 0.012, 0.012);
 const float3 TONGUE = float3(0.320, 0.080, 0.085);
 const float3 TEETH = float3(0.780, 0.680, 0.560);
-float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved) {
+float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved, float roof) {
     // Two half-ellipses hanging from the corners' height, cy: the upper
     // lip is the small one (the shut smile, g.y deep), the lower lip the same
     // one stretched g.w further down. The opening is the crescent between
@@ -153,7 +160,16 @@ float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float 
     // upper lip.
     float f = q.y > cy ? -min(length(float2(ax - g.z, e.y)), e.y + g.y * s + 8.0 * max(ax - g.z, 0.0))
                        : min(sdEllipse2(e, g.zy), -sdEllipse2(e, float2(g.z, g.y + g.w)));
-    float line = 1.0 - smoothstep(0.004, 0.009, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))));
+    // The dark line: 0.013 wide (in the head's own units) where a pixel is
+    // smaller than that, and never under about a pixel where it is not
+    // (a small picture, or the phone's lower-resolution one). A fixed width
+    // fell between pixel centres at small sizes, and a shut mouth broke up
+    // into pieces or vanished. px is a pixel in the head's units, near
+    // enough for both animals (their heads sit about as far from the camera).
+    float px = 0.85 * uPx / max(uZoom, 0.1);
+    float lw = max(0.0065, 0.75 * px);
+    float lr = max(0.0025, 0.35 * px);
+    float line = (1.0 - smoothstep(lw - lr, lw + lr, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))))) * (1.0 - roof);
     float inside = max(smoothstep(0.0, 0.004, f), carved);
     // Inside: dark red, darker deeper in; the tongue low down in the
     // middle; a row of teeth under the upper lip when the mouth goes wide.
@@ -482,7 +498,7 @@ float4 material(float id, float3 pos, float3 n) {
         // the hollow behind it - darker the deeper in they are.
         if (h.z < -0.30) {
             float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
-            float4 c = mouthPaint(headColour(h), DARK * 2.0, h.xy, mouthSize(), 0.06, uMouth.y, carved);
+            float4 c = mouthPaint(headColour(h), DARK * 2.0, h.xy, mouthSize(), 0.06, uMouth.y, carved, carved * smoothstep(0.4, 0.8, -dot(uHeadR1, n)));
             return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.39, -0.34, h.z) * carved), c.w);
         }
         return float4(headColour(h), 0.0);
@@ -665,6 +681,14 @@ float4 critter(float2 p) {
     float3 pos = ro + rd * hitT;
     id = partAt(pos);
     float3 n = normalAt(pos, d0);
+    // A hit is anywhere within a hair of the surface (closer the nearer the
+    // camera), and where a ray skims along a surface, where along it the
+    // march stopped varies from pixel to pixel in rows. Colours painted by
+    // position (the mouth's teeth and line on the roof of an open mouth,
+    // seen from below) then came out in dotted stripes - even with ten times
+    // the march steps. One step back along the surface's direction, by the
+    // distance map() gave there, puts the point on the surface itself.
+    pos -= n * d0;
     float3 v = -rd;
 
     if (id == ID_ORB) {
@@ -710,18 +734,23 @@ float4 critter(float2 p) {
     // size it freed went to the march, which shows far more.)
     float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
 
-    float3 col = alb * keyCol * wrap * wrap * mix(0.35, 1.0, sh);
-    col += alb * skyCol * (0.6 + 0.4 * n.y);
-    col += alb * groundCol * (0.5 - 0.5 * n.y);
-    // A warm glow along the shadow's edge: light scattering through fur.
-    col += alb * float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh;
-
     // The orb is a real light: whatever colour Jarvis is showing lands on
     // the animal's paws, chest and chin.
     float3 ol = uOrb.xyz - pos;
     float od = length(ol);
     float orbLight = uOrbGlow * 0.55 / (1.0 + od * od * 14.0);
-    col += alb * hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // All the light arriving at the point, before the surface's own colour:
+    // the key light, the sky above and the warm ground below, a warm glow
+    // along the shadow's edge (light scattering through fur), and the orb.
+    float3 lit = keyCol * wrap * wrap * mix(0.35, 1.0, sh) + skyCol * (0.6 + 0.4 * n.y) +
+                 groundCol * (0.5 - 0.5 * n.y) + float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh +
+                 hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // Inside a mouth it arrives without its colour, only its brightness: in
+    // there the key light is mostly shadowed, so the blue sky and the orb
+    // were most of what reached the teeth, and turned them grey-blue (and a
+    // red orb would have turned them pink). Everywhere else rimK is 1 and
+    // this is the light as it is.
+    float3 col = alb * mix(float3(dot(lit, float3(0.2126, 0.7152, 0.0722))), lit, rimK);
 
     // Rim light in the state's colour, the soft halo round the silhouette.
     // It adds light whatever the fur's own colour, so an owner's own colour
@@ -854,10 +883,13 @@ float sdCapsule(float3 p, float3 a, float3 b, float r) {
 // Polynomial smooth minimum: joins two shapes with a fillet of size k.
 // (Inigo Quilez's quadratic form - the same curve as the usual
 // clamp-and-mix one, to the last bit that matters, in fewer operations,
-// which counts: the march calls it a dozen times a step. See "program size".)
+// which counts: the march calls it a dozen times a step. See "program size".
+// Written with one division, not two - h / k squared times k is h squared
+// over k - which is two operations less a call, and about 950 less on the
+// red panda: its pictures came out the same to within a level of 255.)
 float smin(float a, float b, float k) {
-    float h = max(k - abs(a - b), 0.0) / k;
-    return min(a, b) - h * h * k * 0.25;
+    float h = max(k - abs(a - b), 0.0);
+    return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 
@@ -882,7 +914,11 @@ float seg2(float2 p, float2 a, float2 b) {
 // meets the lip in the middle, g.y how much higher the corners sit (the
 // smile's depth), g.z the half-width to the corners, g.w how far the lower
 // lip has dropped in the middle. `carved` is how much the point is on the jaw's carved hollow (the
-// hollow's own walls get the inside colours too). Returns the colour and
+// hollow's own walls get the inside colours too), and `roof` how much it is
+// on the hollow's roof - its walls that face down. The drawing is laid on
+// straight from the front, so the whole roof lies under the upper lip's
+// line, and seen from below it showed as a dark smudge across the roof: the
+// roof takes no line. Returns the colour and
 // the lighting code for common_tail.sksl: 0 fur, down to -2 for the inside
 // of a mouth, which takes no rim light (it used to catch it and read blue).
 // Distance to an ellipse in 2D (half-axes ab), exact to a hair however
@@ -903,7 +939,7 @@ float sdEllipse2(float2 p, float2 ab) {
 const float3 MOUTH_IN = float3(0.105, 0.012, 0.012);
 const float3 TONGUE = float3(0.320, 0.080, 0.085);
 const float3 TEETH = float3(0.780, 0.680, 0.560);
-float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved) {
+float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved, float roof) {
     // Two half-ellipses hanging from the corners' height, cy: the upper
     // lip is the small one (the shut smile, g.y deep), the lower lip the same
     // one stretched g.w further down. The opening is the crescent between
@@ -917,7 +953,16 @@ float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float 
     // upper lip.
     float f = q.y > cy ? -min(length(float2(ax - g.z, e.y)), e.y + g.y * s + 8.0 * max(ax - g.z, 0.0))
                        : min(sdEllipse2(e, g.zy), -sdEllipse2(e, float2(g.z, g.y + g.w)));
-    float line = 1.0 - smoothstep(0.004, 0.009, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))));
+    // The dark line: 0.013 wide (in the head's own units) where a pixel is
+    // smaller than that, and never under about a pixel where it is not
+    // (a small picture, or the phone's lower-resolution one). A fixed width
+    // fell between pixel centres at small sizes, and a shut mouth broke up
+    // into pieces or vanished. px is a pixel in the head's units, near
+    // enough for both animals (their heads sit about as far from the camera).
+    float px = 0.85 * uPx / max(uZoom, 0.1);
+    float lw = max(0.0065, 0.75 * px);
+    float lr = max(0.0025, 0.35 * px);
+    float line = (1.0 - smoothstep(lw - lr, lw + lr, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))))) * (1.0 - roof);
     float inside = max(smoothstep(0.0, 0.004, f), carved);
     // Inside: dark red, darker deeper in; the tongue low down in the
     // middle; a row of teeth under the upper lip when the mouth goes wide.
@@ -1382,6 +1427,14 @@ float4 critter(float2 p) {
     float3 pos = ro + rd * hitT;
     id = partAt(pos);
     float3 n = normalAt(pos, d0);
+    // A hit is anywhere within a hair of the surface (closer the nearer the
+    // camera), and where a ray skims along a surface, where along it the
+    // march stopped varies from pixel to pixel in rows. Colours painted by
+    // position (the mouth's teeth and line on the roof of an open mouth,
+    // seen from below) then came out in dotted stripes - even with ten times
+    // the march steps. One step back along the surface's direction, by the
+    // distance map() gave there, puts the point on the surface itself.
+    pos -= n * d0;
     float3 v = -rd;
 
     if (id == ID_ORB) {
@@ -1427,18 +1480,23 @@ float4 critter(float2 p) {
     // size it freed went to the march, which shows far more.)
     float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
 
-    float3 col = alb * keyCol * wrap * wrap * mix(0.35, 1.0, sh);
-    col += alb * skyCol * (0.6 + 0.4 * n.y);
-    col += alb * groundCol * (0.5 - 0.5 * n.y);
-    // A warm glow along the shadow's edge: light scattering through fur.
-    col += alb * float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh;
-
     // The orb is a real light: whatever colour Jarvis is showing lands on
     // the animal's paws, chest and chin.
     float3 ol = uOrb.xyz - pos;
     float od = length(ol);
     float orbLight = uOrbGlow * 0.55 / (1.0 + od * od * 14.0);
-    col += alb * hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // All the light arriving at the point, before the surface's own colour:
+    // the key light, the sky above and the warm ground below, a warm glow
+    // along the shadow's edge (light scattering through fur), and the orb.
+    float3 lit = keyCol * wrap * wrap * mix(0.35, 1.0, sh) + skyCol * (0.6 + 0.4 * n.y) +
+                 groundCol * (0.5 - 0.5 * n.y) + float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh +
+                 hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // Inside a mouth it arrives without its colour, only its brightness: in
+    // there the key light is mostly shadowed, so the blue sky and the orb
+    // were most of what reached the teeth, and turned them grey-blue (and a
+    // red orb would have turned them pink). Everywhere else rimK is 1 and
+    // this is the light as it is.
+    float3 col = alb * mix(float3(dot(lit, float3(0.2126, 0.7152, 0.0722))), lit, rimK);
 
     // Rim light in the state's colour, the soft halo round the silhouette.
     // It adds light whatever the fur's own colour, so an owner's own colour
@@ -1571,10 +1629,13 @@ float sdCapsule(float3 p, float3 a, float3 b, float r) {
 // Polynomial smooth minimum: joins two shapes with a fillet of size k.
 // (Inigo Quilez's quadratic form - the same curve as the usual
 // clamp-and-mix one, to the last bit that matters, in fewer operations,
-// which counts: the march calls it a dozen times a step. See "program size".)
+// which counts: the march calls it a dozen times a step. See "program size".
+// Written with one division, not two - h / k squared times k is h squared
+// over k - which is two operations less a call, and about 950 less on the
+// red panda: its pictures came out the same to within a level of 255.)
 float smin(float a, float b, float k) {
-    float h = max(k - abs(a - b), 0.0) / k;
-    return min(a, b) - h * h * k * 0.25;
+    float h = max(k - abs(a - b), 0.0);
+    return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 
@@ -1599,7 +1660,11 @@ float seg2(float2 p, float2 a, float2 b) {
 // meets the lip in the middle, g.y how much higher the corners sit (the
 // smile's depth), g.z the half-width to the corners, g.w how far the lower
 // lip has dropped in the middle. `carved` is how much the point is on the jaw's carved hollow (the
-// hollow's own walls get the inside colours too). Returns the colour and
+// hollow's own walls get the inside colours too), and `roof` how much it is
+// on the hollow's roof - its walls that face down. The drawing is laid on
+// straight from the front, so the whole roof lies under the upper lip's
+// line, and seen from below it showed as a dark smudge across the roof: the
+// roof takes no line. Returns the colour and
 // the lighting code for common_tail.sksl: 0 fur, down to -2 for the inside
 // of a mouth, which takes no rim light (it used to catch it and read blue).
 // Distance to an ellipse in 2D (half-axes ab), exact to a hair however
@@ -1620,7 +1685,7 @@ float sdEllipse2(float2 p, float2 ab) {
 const float3 MOUTH_IN = float3(0.105, 0.012, 0.012);
 const float3 TONGUE = float3(0.320, 0.080, 0.085);
 const float3 TEETH = float3(0.780, 0.680, 0.560);
-float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved) {
+float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved, float roof) {
     // Two half-ellipses hanging from the corners' height, cy: the upper
     // lip is the small one (the shut smile, g.y deep), the lower lip the same
     // one stretched g.w further down. The opening is the crescent between
@@ -1634,7 +1699,16 @@ float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float 
     // upper lip.
     float f = q.y > cy ? -min(length(float2(ax - g.z, e.y)), e.y + g.y * s + 8.0 * max(ax - g.z, 0.0))
                        : min(sdEllipse2(e, g.zy), -sdEllipse2(e, float2(g.z, g.y + g.w)));
-    float line = 1.0 - smoothstep(0.004, 0.009, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))));
+    // The dark line: 0.013 wide (in the head's own units) where a pixel is
+    // smaller than that, and never under about a pixel where it is not
+    // (a small picture, or the phone's lower-resolution one). A fixed width
+    // fell between pixel centres at small sizes, and a shut mouth broke up
+    // into pieces or vanished. px is a pixel in the head's units, near
+    // enough for both animals (their heads sit about as far from the camera).
+    float px = 0.85 * uPx / max(uZoom, 0.1);
+    float lw = max(0.0065, 0.75 * px);
+    float lr = max(0.0025, 0.35 * px);
+    float line = (1.0 - smoothstep(lw - lr, lw + lr, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))))) * (1.0 - roof);
     float inside = max(smoothstep(0.0, 0.004, f), carved);
     // Inside: dark red, darker deeper in; the tongue low down in the
     // middle; a row of teeth under the upper lip when the mouth goes wide.
@@ -1862,10 +1936,14 @@ float4 material(float id, float3 pos, float3 n) {
     if (id == ID_NOSE) return float4(INK * 2.0, 0.7);
     if (id == ID_HEAD) {
         // The drawn mouth on the front of the muzzle, and the walls of the
-        // hollow behind it - darker the deeper in they are.
-        if (h.z < -0.20) {
+        // hollow behind it - darker the deeper in they are. (Painted on the
+        // whole front of the head, not just the muzzle's face: wide open,
+        // the lower lip reaches round under the chin, and held to the
+        // muzzle's face it was cut off there. Further back is kept out, where
+        // the back of the head lines up with the drawing.)
+        if (h.z < -0.05) {
             float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
-            float4 c = mouthPaint(headColour(h), INK * 3.0, h.xy, mouthSize(), 0.04, uMouth.y, carved);
+            float4 c = mouthPaint(headColour(h), INK * 3.0, h.xy, mouthSize(), 0.04, uMouth.y, carved, carved * smoothstep(0.4, 0.8, -dot(uHeadR1, n)));
             return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.27, -0.23, h.z) * carved), c.w);
         }
         return float4(headColour(h), 0.0);
@@ -2061,6 +2139,14 @@ float4 critter(float2 p) {
     float3 pos = ro + rd * hitT;
     id = partAt(pos);
     float3 n = normalAt(pos, d0);
+    // A hit is anywhere within a hair of the surface (closer the nearer the
+    // camera), and where a ray skims along a surface, where along it the
+    // march stopped varies from pixel to pixel in rows. Colours painted by
+    // position (the mouth's teeth and line on the roof of an open mouth,
+    // seen from below) then came out in dotted stripes - even with ten times
+    // the march steps. One step back along the surface's direction, by the
+    // distance map() gave there, puts the point on the surface itself.
+    pos -= n * d0;
     float3 v = -rd;
 
     if (id == ID_ORB) {
@@ -2106,18 +2192,23 @@ float4 critter(float2 p) {
     // size it freed went to the march, which shows far more.)
     float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
 
-    float3 col = alb * keyCol * wrap * wrap * mix(0.35, 1.0, sh);
-    col += alb * skyCol * (0.6 + 0.4 * n.y);
-    col += alb * groundCol * (0.5 - 0.5 * n.y);
-    // A warm glow along the shadow's edge: light scattering through fur.
-    col += alb * float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh;
-
     // The orb is a real light: whatever colour Jarvis is showing lands on
     // the animal's paws, chest and chin.
     float3 ol = uOrb.xyz - pos;
     float od = length(ol);
     float orbLight = uOrbGlow * 0.55 / (1.0 + od * od * 14.0);
-    col += alb * hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // All the light arriving at the point, before the surface's own colour:
+    // the key light, the sky above and the warm ground below, a warm glow
+    // along the shadow's edge (light scattering through fur), and the orb.
+    float3 lit = keyCol * wrap * wrap * mix(0.35, 1.0, sh) + skyCol * (0.6 + 0.4 * n.y) +
+                 groundCol * (0.5 - 0.5 * n.y) + float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh +
+                 hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // Inside a mouth it arrives without its colour, only its brightness: in
+    // there the key light is mostly shadowed, so the blue sky and the orb
+    // were most of what reached the teeth, and turned them grey-blue (and a
+    // red orb would have turned them pink). Everywhere else rimK is 1 and
+    // this is the light as it is.
+    float3 col = alb * mix(float3(dot(lit, float3(0.2126, 0.7152, 0.0722))), lit, rimK);
 
     // Rim light in the state's colour, the soft halo round the silhouette.
     // It adds light whatever the fur's own colour, so an owner's own colour

@@ -201,10 +201,14 @@ float4 material(float id, float3 pos, float3 n) {
     if (id == ID_NOSE) return float4(INK * 2.0, 0.7);
     if (id == ID_HEAD) {
         // The drawn mouth on the front of the muzzle, and the walls of the
-        // hollow behind it - darker the deeper in they are.
-        if (h.z < -0.20) {
+        // hollow behind it - darker the deeper in they are. (Painted on the
+        // whole front of the head, not just the muzzle's face: wide open,
+        // the lower lip reaches round under the chin, and held to the
+        // muzzle's face it was cut off there. Further back is kept out, where
+        // the back of the head lines up with the drawing.)
+        if (h.z < -0.05) {
             float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
-            float4 c = mouthPaint(headColour(h), INK * 3.0, h.xy, mouthSize(), 0.04, uMouth.y, carved);
+            float4 c = mouthPaint(headColour(h), INK * 3.0, h.xy, mouthSize(), 0.04, uMouth.y, carved, carved * smoothstep(0.4, 0.8, -dot(uHeadR1, n)));
             return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.27, -0.23, h.z) * carved), c.w);
         }
         return float4(headColour(h), 0.0);

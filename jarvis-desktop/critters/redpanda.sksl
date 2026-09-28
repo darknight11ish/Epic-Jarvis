@@ -302,7 +302,7 @@ float4 material(float id, float3 pos, float3 n) {
         // the hollow behind it - darker the deeper in they are.
         if (h.z < -0.30) {
             float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
-            float4 c = mouthPaint(headColour(h), DARK * 2.0, h.xy, mouthSize(), 0.06, uMouth.y, carved);
+            float4 c = mouthPaint(headColour(h), DARK * 2.0, h.xy, mouthSize(), 0.06, uMouth.y, carved, carved * smoothstep(0.4, 0.8, -dot(uHeadR1, n)));
             return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.39, -0.34, h.z) * carved), c.w);
         }
         return float4(headColour(h), 0.0);

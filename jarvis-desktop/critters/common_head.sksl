@@ -84,10 +84,13 @@ float sdCapsule(float3 p, float3 a, float3 b, float r) {
 // Polynomial smooth minimum: joins two shapes with a fillet of size k.
 // (Inigo Quilez's quadratic form - the same curve as the usual
 // clamp-and-mix one, to the last bit that matters, in fewer operations,
-// which counts: the march calls it a dozen times a step. See "program size".)
+// which counts: the march calls it a dozen times a step. See "program size".
+// Written with one division, not two - h / k squared times k is h squared
+// over k - which is two operations less a call, and about 950 less on the
+// red panda: its pictures came out the same to within a level of 255.)
 float smin(float a, float b, float k) {
-    float h = max(k - abs(a - b), 0.0) / k;
-    return min(a, b) - h * h * k * 0.25;
+    float h = max(k - abs(a - b), 0.0);
+    return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 
@@ -112,7 +115,11 @@ float seg2(float2 p, float2 a, float2 b) {
 // meets the lip in the middle, g.y how much higher the corners sit (the
 // smile's depth), g.z the half-width to the corners, g.w how far the lower
 // lip has dropped in the middle. `carved` is how much the point is on the jaw's carved hollow (the
-// hollow's own walls get the inside colours too). Returns the colour and
+// hollow's own walls get the inside colours too), and `roof` how much it is
+// on the hollow's roof - its walls that face down. The drawing is laid on
+// straight from the front, so the whole roof lies under the upper lip's
+// line, and seen from below it showed as a dark smudge across the roof: the
+// roof takes no line. Returns the colour and
 // the lighting code for common_tail.sksl: 0 fur, down to -2 for the inside
 // of a mouth, which takes no rim light (it used to catch it and read blue).
 // Distance to an ellipse in 2D (half-axes ab), exact to a hair however
@@ -133,7 +140,7 @@ float sdEllipse2(float2 p, float2 ab) {
 const float3 MOUTH_IN = float3(0.105, 0.012, 0.012);
 const float3 TONGUE = float3(0.320, 0.080, 0.085);
 const float3 TEETH = float3(0.780, 0.680, 0.560);
-float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved) {
+float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved, float roof) {
     // Two half-ellipses hanging from the corners' height, cy: the upper
     // lip is the small one (the shut smile, g.y deep), the lower lip the same
     // one stretched g.w further down. The opening is the crescent between
@@ -147,7 +154,16 @@ float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float 
     // upper lip.
     float f = q.y > cy ? -min(length(float2(ax - g.z, e.y)), e.y + g.y * s + 8.0 * max(ax - g.z, 0.0))
                        : min(sdEllipse2(e, g.zy), -sdEllipse2(e, float2(g.z, g.y + g.w)));
-    float line = 1.0 - smoothstep(0.004, 0.009, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))));
+    // The dark line: 0.013 wide (in the head's own units) where a pixel is
+    // smaller than that, and never under about a pixel where it is not
+    // (a small picture, or the phone's lower-resolution one). A fixed width
+    // fell between pixel centres at small sizes, and a shut mouth broke up
+    // into pieces or vanished. px is a pixel in the head's units, near
+    // enough for both animals (their heads sit about as far from the camera).
+    float px = 0.85 * uPx / max(uZoom, 0.1);
+    float lw = max(0.0065, 0.75 * px);
+    float lr = max(0.0025, 0.35 * px);
+    float line = (1.0 - smoothstep(lw - lr, lw + lr, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))))) * (1.0 - roof);
     float inside = max(smoothstep(0.0, 0.004, f), carved);
     // Inside: dark red, darker deeper in; the tongue low down in the
     // middle; a row of teeth under the upper lip when the mouth goes wide.

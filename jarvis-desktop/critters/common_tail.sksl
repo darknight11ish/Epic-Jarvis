@@ -144,6 +144,14 @@ float4 critter(float2 p) {
     float3 pos = ro + rd * hitT;
     id = partAt(pos);
     float3 n = normalAt(pos, d0);
+    // A hit is anywhere within a hair of the surface (closer the nearer the
+    // camera), and where a ray skims along a surface, where along it the
+    // march stopped varies from pixel to pixel in rows. Colours painted by
+    // position (the mouth's teeth and line on the roof of an open mouth,
+    // seen from below) then came out in dotted stripes - even with ten times
+    // the march steps. One step back along the surface's direction, by the
+    // distance map() gave there, puts the point on the surface itself.
+    pos -= n * d0;
     float3 v = -rd;
 
     if (id == ID_ORB) {
@@ -189,18 +197,23 @@ float4 critter(float2 p) {
     // size it freed went to the march, which shows far more.)
     float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
 
-    float3 col = alb * keyCol * wrap * wrap * mix(0.35, 1.0, sh);
-    col += alb * skyCol * (0.6 + 0.4 * n.y);
-    col += alb * groundCol * (0.5 - 0.5 * n.y);
-    // A warm glow along the shadow's edge: light scattering through fur.
-    col += alb * float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh;
-
     // The orb is a real light: whatever colour Jarvis is showing lands on
     // the animal's paws, chest and chin.
     float3 ol = uOrb.xyz - pos;
     float od = length(ol);
     float orbLight = uOrbGlow * 0.55 / (1.0 + od * od * 14.0);
-    col += alb * hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // All the light arriving at the point, before the surface's own colour:
+    // the key light, the sky above and the warm ground below, a warm glow
+    // along the shadow's edge (light scattering through fur), and the orb.
+    float3 lit = keyCol * wrap * wrap * mix(0.35, 1.0, sh) + skyCol * (0.6 + 0.4 * n.y) +
+                 groundCol * (0.5 - 0.5 * n.y) + float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh +
+                 hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // Inside a mouth it arrives without its colour, only its brightness: in
+    // there the key light is mostly shadowed, so the blue sky and the orb
+    // were most of what reached the teeth, and turned them grey-blue (and a
+    // red orb would have turned them pink). Everywhere else rimK is 1 and
+    // this is the light as it is.
+    float3 col = alb * mix(float3(dot(lit, float3(0.2126, 0.7152, 0.0722))), lit, rimK);
 
     // Rim light in the state's colour, the soft halo round the silhouette.
     // It adds light whatever the fur's own colour, so an owner's own colour
