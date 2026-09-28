@@ -44,7 +44,7 @@ class CloudOfferTest {
     fun `every ordinary gate carries no offer`() {
         for (gate in listOf("local", "taint", "image", "private", "secret", "complexity",
             "budget", "escalate", "unavailable", "cloud_model")) {
-            assertNull(CloudOffer.laneFromHeader("""{"gate":"$gate"}"""), gate)
+            assertNull(gate, CloudOffer.laneFromHeader("""{"gate":"$gate"}"""))
         }
     }
 

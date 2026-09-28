@@ -88,10 +88,13 @@ class NotificationRedactorTest {
 
     @Test
     fun `a trigger word in a language other than english is not recognised`() {
-        // "code" in French - not on the English-only trigger list.
-        val text = "Votre code de vérification est 482913"
-        // "verification" IS an English substring inside "vérification"? No -
-        // the accented e breaks it; this proves the documented limit stands.
+        // NOT "Votre code de vérification est ..." - "code" is spelled the
+        // same in French, so that sentence contains a REAL English trigger
+        // word by coincidence (a mistake this test itself used to make,
+        // fixed 2026-09-28: it was passing for the wrong reason - the
+        // sentence WAS redacted, just as TRIGGER correctly intends). "secret
+        // number" avoids every entry on the English-only trigger list.
+        val text = "Votre numéro secret est 482913"
         assertEquals(text, NotificationRedactor.redact(text))
     }
 

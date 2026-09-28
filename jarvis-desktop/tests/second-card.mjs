@@ -162,6 +162,7 @@ await check("a capable card, all off: only the main switch can be turned on, and
 await check("each feature says its model, whether it is installed, the exact name to install, and its memory", async () => {
   const page = await open({ status: SC.capable_off });
   const s = await section(page);
+  const switchesHtml = await page.$eval("#sc-switches", (el) => el.innerHTML);
   await page.close();
   const vision = row(s, "vision").text;
   assert.match(vision, /Model: qwen2\.5vl:7b, not installed yet\./);
@@ -175,9 +176,12 @@ await check("each feature says its model, whether it is installed, the exact nam
   const browserText = row(s, "browser_control").text;
   assert.match(browserText, /Needs Longer conversations on first\./);
   assert.equal((browserText.match(/Needs/g) || []).length, 1, "the same need is said twice");
-  // No catalogue: nothing on the page offers models to choose from.
-  const html = await (await open({ status: SC.capable_off })).content();
-  assert.doesNotMatch(html, /<select[^>]*sc-/, "a model picker appeared");
+  // No catalogue: nothing in the switches themselves offers a MODEL to
+  // choose from - scoped to #sc-switches, not the whole page, since the
+  // third card's own <select> (2026-09-28) picks a FEATURE, never a
+  // model, and legitimately lives in the same "sc-" naming convention
+  // every element on this page already uses (#sc-third-section, below).
+  assert.doesNotMatch(switchesHtml, /<select/, "a model picker appeared");
 });
 
 await check("the pin command: exactly the backend's line, read-only, with Copy and what it does", async () => {
