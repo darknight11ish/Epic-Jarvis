@@ -43,13 +43,18 @@ import {
   TEMPORARY_ON_TITLE,
   TEMPORARY_STARTED,
   TEMPORARY_UNAVAILABLE,
+  GAME_TEMPORARY,
   temporaryOutcome,
   USED_LINE_TITLE,
   USED_TITLE,
   usedIds,
   usedLine,
 } from "./memory-used.js";
+import { whenLine } from "./history-view.js";
 import {
+  eraseAlsoChatNamedConfirm,
+  ERASED_NO_CHAT,
+  readFactChat,
   ERASE_ALSO_CHAT_CONFIRM,
   ERASE_LABEL,
   ERASE_TITLE,
@@ -161,7 +166,7 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
  * as the memory ones above - omit it and this behaves exactly as before.
  */
 export function createAnswerMemory({ box, lineButton, list, note, invoke, isStale, confirm,
-  announce, onChange, sources }) {
+  announce, onChange, sources, onChatDeleted = null }) {
   const a = {
     ids: [],
     count: 0,
@@ -220,6 +225,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     const lines = [];
     const outcome = temporaryOutcome(a.sentTemporary, a.route);
     if (a.done && outcome === "unconfirmed") lines.push(TEMPORARY_NOT_CONFIRMED);
+    if (outcome === "game") lines.push(GAME_TEMPORARY);
     if (a.route && a.route.remember_off === true) lines.push(REMEMBER_OFF);
     // Answered WITHOUT the model (a timer, a reminder, the to-do list -
     // JARVIS-API.md section 21): the small "done" line both apps show.
@@ -285,10 +291,26 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
    *  Cancelling the second one still erases the fact. */
   async function writeErase(button, f) {
     if (isStale() || !confirm(eraseQuestion(f))) return;
-    const alsoChat = window.confirm(ERASE_ALSO_CHAT_CONFIRM);
+    // The chat named first, and no question when none is on record (the
+    // chat audit, 2026-09-28) - brain.js eraseFact asks the same way.
+    let chat;
+    try {
+      chat = readFactChat(await invoke("brain_fact_chat", { id: Number(f.id) }));
+    } catch {
+      chat = undefined;
+    }
+    const alsoChat = chat === undefined ? window.confirm(ERASE_ALSO_CHAT_CONFIRM)
+      : chat ? window.confirm(eraseAlsoChatNamedConfirm(chat, whenLine(chat.updated))) : false;
     await sendWrite(button, "brain_memory_erase",
       { id: Number(f.id), also_delete_conversation: alsoChat },
-      (out) => (out && out.chat_deleted ? ERASED_AND_CHAT_DELETED : ERASED));
+      (out) => {
+        // The chat this bar is in, deleted: its turns must stop being sent.
+        if (out && out.chat_deleted && chat && typeof onChatDeleted === "function") {
+          onChatDeleted(chat.id);
+        }
+        return out && out.chat_deleted ? ERASED_AND_CHAT_DELETED
+          : alsoChat || chat === null ? ERASED_NO_CHAT : ERASED;
+      });
   }
 
   function row(f) {

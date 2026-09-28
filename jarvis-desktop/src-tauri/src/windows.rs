@@ -499,34 +499,70 @@ pub fn show_brain(app: &AppHandle) -> Result<(), String> {
     show_brain_unlocked(app)
 }
 
+/// The Brain places a tray item or the Jarvis bar may open it at. The page
+/// is told the name alone (`#history` on a new window, the
+/// [`BRAIN_PLACE_EVENT`] event on an open one), never anything else.
+pub(crate) const BRAIN_PLACES: [&str; 1] = ["history"];
+
+/// The event an open Brain hears a place by.
+pub(crate) const BRAIN_PLACE_EVENT: &str = "brain-place";
+
+/// The place asked for, kept until the Brain is really shown - App lock may
+/// ask Windows Hello first (lock.rs), and the window is built only then.
+static PENDING_PLACE: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
+
+/// Opens the Brain at one of [`BRAIN_PLACES`] - "Chat history…" in the tray
+/// and "Earlier chats" in the Jarvis bar (the chat audit, 2026-09-28).
+/// Navigation only; App lock still applies, as for [`show_brain`].
+pub fn show_brain_at(app: &AppHandle, place: &str) -> Result<(), String> {
+    let place = BRAIN_PLACES
+        .iter()
+        .copied()
+        .find(|p| *p == place)
+        .ok_or_else(|| "That is not a place in the Brain.".to_string())?;
+    if let Ok(mut pending) = PENDING_PLACE.lock() {
+        *pending = Some(place);
+    }
+    show_brain(app)
+}
+
+fn take_pending_place() -> Option<&'static str> {
+    PENDING_PLACE.lock().ok().and_then(|mut p| p.take())
+}
+
 /// [`show_brain`] without the app lock. Only lock.rs calls this.
 pub(crate) fn show_brain_unlocked(app: &AppHandle) -> Result<(), String> {
+    let place = take_pending_place();
     if let Some(window) = app.get_webview_window(BRAIN_LABEL) {
         window
             .show()
             .map_err(|e| format!("unable to show the Brain: {e}"))?;
         let _ = window.unminimize();
+        if let Some(place) = place {
+            let _ = tauri::Emitter::emit_to(app, BRAIN_LABEL, BRAIN_PLACE_EVENT, place);
+        }
         return window
             .set_focus()
             .map_err(|e| format!("unable to focus the Brain: {e}"));
     }
 
-    let window = tauri::WebviewWindowBuilder::new(
-        app,
-        BRAIN_LABEL,
-        tauri::WebviewUrl::App("brain.html".into()),
-    )
-    .title("Jarvis — Brain")
-    .inner_size(1180.0, 820.0)
-    .min_inner_size(880.0, 600.0)
-    .center()
-    .resizable(true)
-    // Hidden until it is back where the owner left it (window_memory.rs),
-    // so it does not flash up centred first and then jump.
-    .visible(false)
-    .theme(Some(tauri::Theme::Dark))
-    .build()
-    .map_err(|e| format!("unable to open the Brain: {e}"))?;
+    let page = match place {
+        Some(p) => format!("brain.html#{p}"),
+        None => "brain.html".to_string(),
+    };
+    let window =
+        tauri::WebviewWindowBuilder::new(app, BRAIN_LABEL, tauri::WebviewUrl::App(page.into()))
+            .title("Jarvis — Brain")
+            .inner_size(1180.0, 820.0)
+            .min_inner_size(880.0, 600.0)
+            .center()
+            .resizable(true)
+            // Hidden until it is back where the owner left it (window_memory.rs),
+            // so it does not flash up centred first and then jump.
+            .visible(false)
+            .theme(Some(tauri::Theme::Dark))
+            .build()
+            .map_err(|e| format!("unable to open the Brain: {e}"))?;
     crate::window_memory::restore(&window, true);
     window
         .show()

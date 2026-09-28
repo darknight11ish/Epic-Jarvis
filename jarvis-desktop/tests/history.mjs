@@ -60,7 +60,32 @@ import {
   SWITCH_DETAIL,
   SWITCH_LABEL,
   whenWords,
+  whenLine,
+  liveLine,
+  messagesWords,
+  readKind,
+  KIND_TAG,
+  KIND_TITLE,
+  FILTERS,
+  FILTER_LABEL,
+  FILTER_NONE,
+  CHATBOT_WHO,
+  CONTINUE,
+  CONTINUE_TITLE,
+  CONTINUE_WHY,
+  COPY,
+  COPY_TITLE,
+  COPIED,
+  FORGET_RANGE_LINK,
+  FORGET_RANGE_LINK_TITLE,
+  DELETE_SUPPORT,
+  KEEP_SUPPORT_NOTE,
+  NO_TITLE,
+  SEARCH_LABEL,
 } from "../src/history-view.js";
+import * as CH from "../src/chat-history.js";
+import { GAME_TEMPORARY, temporaryOutcome } from "../src/memory-used.js";
+import { ERASED_NO_CHAT, eraseChatNamed } from "../src/auto-learn.js";
 import * as K from "./uikit.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -108,7 +133,8 @@ await check("the contract's list and conversation are read as the PC sends them"
   assert.equal(v.recording, true);
   assert.equal(v.keepDays, 0);
   assert.deepEqual(v.conversations[0], { id: "c0nv-phone-0001", title: "Dentist on Tuesday",
-    started: NOW - 3600, updated: NOW - 3300, turns: 6, device: "phone", hasVoice: true, tainted: false });
+    started: NOW - 3600, updated: NOW - 3300, turns: 6, device: "phone", hasVoice: true, tainted: false,
+    kind: "chat", project: null });
   const c = readConversation(CONV);
   assert.equal(c.turns.length, 2);
   assert.equal(c.turns[0].provenance, "typed");
@@ -190,7 +216,135 @@ await check("the wording is the contract's, word for word (section 5)", async ()
   assert.equal(SWITCH_LABEL, "Keep chat history on this PC");
   assert.equal(SWITCH_DETAIL, "Your chats, including what you say to Jarvis by voice, are kept on this PC, encrypted. Nothing is sent anywhere.");
   assert.equal(OFF_REPLY, "Chat history is off. Nothing new is kept. What is already kept stays until you delete it.");
-  assert.match(rowMeta({ updated: NOW - 120, turns: 1 }, NOW * 1000), /^2 min ago · 1 turn$/);
+  // "messages", never "turns", and the phone's dates (the chat audit, 2026-09-28).
+  assert.match(rowMeta({ updated: NOW - 120, turns: 1 }, NOW * 1000),
+    /^(Today|Yesterday) \d\d:\d\d · 1 message$/);
+});
+
+/* ── The chat audit (2026-09-28): the words and worked examples both apps
+      share (tools/gen_history_cases.py -> tests/fixtures/history-cases.json) ── */
+
+const CASES = JSON.parse(read("tests/fixtures/history-cases.json"));
+
+await check("History's new words are the contract's, word for word", async () => {
+  const w = CASES.words;
+  assert.deepEqual({ ...KIND_TAG }, w.kind_tag);
+  assert.deepEqual({ ...KIND_TITLE }, w.kind_title);
+  assert.deepEqual(FILTERS.map((f) => [...f]), w.filters);
+  assert.equal(FILTER_LABEL, w.filter_label);
+  assert.equal(FILTER_NONE, w.filter_none);
+  assert.deepEqual({ ...CHATBOT_WHO }, w.chatbot_who);
+  assert.equal(CONTINUE, w.continue);
+  assert.equal(CONTINUE_TITLE, w.continue_title_desktop);
+  assert.deepEqual({ ...CONTINUE_WHY }, w.continue_why);
+  assert.equal(COPY, w.copy);
+  assert.equal(COPY_TITLE, w.copy_title);
+  assert.equal(COPIED, w.copied);
+  assert.equal(FORGET_RANGE_LINK, w.forget_range_link);
+  assert.equal(FORGET_RANGE_LINK_TITLE, w.forget_range_link_title);
+  assert.equal(DELETE_KEEPS_FACTS, w.delete_keeps_facts);
+  assert.equal(DELETE_SUPPORT, w.delete_support);
+  assert.equal(KEEP_SUPPORT_NOTE, w.keep_support_note);
+  assert.equal(NO_TITLE, w.no_title);
+  assert.equal(SEARCH_LABEL, w.search_label);
+  // The Jarvis bar's words for the chat it is in.
+  assert.equal(CH.EARLIER_CHATS, w.earlier_chats);
+  assert.equal(CH.EARLIER_CHATS_TITLE, w.earlier_chats_title);
+  assert.equal(CH.IDLE_NEW_LINE, w.idle_new);
+  assert.equal(CH.CONTINUED_TRIMMED, w.continued_trimmed);
+  assert.equal(CH.CONTINUED_TAINTED, w.continued_tainted);
+  assert.equal(CH.CONTINUED_NOTHING, w.continued_nothing);
+  assert.equal(CH.CONTINUED_TEMPORARY_OFF, w.continued_temporary_off);
+  assert.equal(CH.CONTINUE_BUSY, w.continue_busy);
+  assert.equal(CH.CHAT_GONE, w.chat_gone);
+  assert.equal(CH.MOVED_HERE, w.moved_here);
+  assert.equal(CH.ESC_LABEL, w.esc_label);
+  assert.equal(CH.ENDED_SAVED, w.ended_saved);
+  assert.equal(CH.NEW_CONVERSATION, w.new_conversation);
+  assert.equal(CH.continuedLine("Dentist"), w.continued.replace("{title}", "Dentist"));
+  assert.equal(CH.threadSummary(1), w.thread_one);
+  assert.equal(CH.threadSummary(3), w.thread_many.replace("{n}", "3"));
+  assert.equal(CH.IDLE_NEW_MS, CASES.idle_ms);
+  assert.equal(CH.MAX_EXCHANGES, CASES.max_exchanges);
+  assert.equal(CH.MAX_CHARS, CASES.max_chars);
+  // Other screens.
+  assert.equal(GAME_TEMPORARY, w.game_temporary);
+  assert.equal(ERASED_NO_CHAT, w.erased_no_chat);
+  assert.equal(eraseChatNamed({ title: "Dentist" }, "Today 14:05"),
+    w.erase_chat_named.replace("{title}", "Dentist").replace("{when}", "Today 14:05"));
+  const projects = read("src/projects.js");
+  assert.ok(projects.includes(w.project_chats_later), "Projects still promises project chats");
+  assert.ok(!projects.includes("Jarvis reads this in this project's chats"));
+  const html = read("src/index.html");
+  assert.match(html, /<kbd>Esc<\/kbd> end chat/, "the bar still says Esc dismisses");
+});
+
+await check("dates, a Live session's line and 'messages' follow the worked examples", async () => {
+  const now = CASES.today * 1000;
+  for (const c of CASES.when_cases) assert.equal(whenLine(c.at, now, { utc: true }), c.expect, c.at);
+  for (const c of CASES.live_cases) {
+    assert.equal(liveLine(c.started, c.updated, now, { utc: true }), c.expect);
+    assert.equal(rowMeta({ kind: "live", started: c.started, updated: c.updated, turns: 2 }, now,
+      { utc: true }), `${c.expect} · 2 messages`);
+  }
+  for (const c of CASES.messages_cases) assert.equal(messagesWords(c.n), c.expect);
+  assert.deepEqual(CASES.kinds, ["chat", "live", "support", "chatbot", "compare"]);
+  assert.equal(readKind("imported"), "chat", "an unknown kind is read as a chat");
+});
+
+await check("Continue this chat loads the kept messages the worked examples load", async () => {
+  for (const c of CASES.continue_cases) {
+    const got = CH.continueWindow(c.turns);
+    const want = c.window.map((p) => (p.provenance ? p : { question: p.question, answer: p.answer }));
+    assert.deepEqual(got.window, want, c.name);
+    assert.equal(got.trimmed, c.trimmed, c.name);
+  }
+  // ...and the same from turns as history-view.js reads them (answerKept).
+  const read2 = readConversation({ id: "c1", kind: "chat", turns: [
+    { role: "user", text: "skip me", provenance: "typed", answer_kept: false },
+    { role: "user", text: "keep me", provenance: "voice" },
+    { role: "assistant", text: "Kept." },
+  ] });
+  assert.deepEqual(CH.continueWindow(read2.turns).window,
+    [{ question: "keep me", answer: "Kept.", provenance: "voice" }]);
+  assert.equal(read2.continuable, true);
+});
+
+await check("an opened record says whether it can be continued, and why not", async () => {
+  const sup = readConversation({ id: "s1", kind: "support", continuable: false,
+    continue_why: "the PC's own words", turns: [{ role: "support", text: "x", provenance: "support_company" }] });
+  assert.equal(sup.continuable, false);
+  assert.equal(sup.continueWhy, "the PC's own words");
+  const old = readConversation({ id: "o1", turns: [{ role: "chatbot", text: "Gemini: X", provenance: "chatbot_reply" }] });
+  assert.equal(old.continuable, false, "an older PC's chatbot record is never continued");
+  assert.equal(old.turns[0].provenance, "chatbot_reply");
+  const bot = readConversation({ id: "b1", kind: "chatbot", turns: [] });
+  assert.equal(bot.continueWhy, CONTINUE_WHY.chatbot);
+});
+
+await check("the bar keeps a new conversation after 30 quiet minutes, and never mid-chat", async () => {
+  const t0 = 1_000_000;
+  assert.equal(CH.idleExpired(t0, t0 + CH.IDLE_NEW_MS - 1, true), false);
+  assert.equal(CH.idleExpired(t0, t0 + CH.IDLE_NEW_MS, true), true);
+  assert.equal(CH.idleExpired(t0, t0 + CH.IDLE_NEW_MS * 3, false), false, "nothing to start afresh");
+  assert.equal(CH.idleExpired(0, t0, true), false, "no finished answer yet");
+});
+
+await check("a game the PC made temporary is said so, and only then", async () => {
+  assert.equal(temporaryOutcome(false, { temporary: true }), "game");
+  assert.equal(temporaryOutcome(false, {}), "");
+  assert.equal(temporaryOutcome(true, { temporary: true }), "confirmed");
+  assert.equal(temporaryOutcome(true, {}), "unconfirmed");
+});
+
+await check("a deleted chat is handed to the Jarvis bar by id only, once", async () => {
+  const store = new Map();
+  const s = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k) };
+  CH.tellChatsGone(["conv-gone-0001", "not an id!"], s);
+  assert.deepEqual(JSON.parse(store.get(CH.CHAT_GONE_KEY)).ids, ["conv-gone-0001"]);
+  assert.deepEqual(CH.takeChatsGone(s), ["conv-gone-0001"]);
+  assert.deepEqual(CH.takeChatsGone(s), [], "read once");
 });
 
 /* ── The Brain window ──────────────────────────────────────────────────── */
@@ -238,7 +392,7 @@ await check("each row: title, when, which app, and the voice and read-outside ma
   const taintTitle = await rows.nth(1).locator(".history-mark-taint").getAttribute("title");
   await page.close();
   assert.match(first, /Dentist on Tuesday/);
-  assert.match(first, /55 min ago · 6 turns/);
+  assert.match(first, /(Today|Yesterday) \d\d:\d\d · 6 messages/);
   assert.match(first, /voice/);
   assert.doesNotMatch(first, /read outside text/);
   assert.match(second, /Summarise that page/);
@@ -434,7 +588,7 @@ await check("opening one shows it read-only, with where pasted, shared or clipbo
   const turns = await page.locator("#history-transcript .history-turn").allInnerTexts();
   const note = await page.locator("#history-transcript .history-taint-note").innerText();
   const bold = await page.locator("#history-transcript b").count();
-  const buttons = await page.locator("#history-transcript-turns button").count();
+  const buttons = await page.locator("#history-transcript-turns button").allInnerTexts();
   // "Find in this chat" (section 71) only moves between matches.
   const findButtons = await page.locator("#history-transcript button").allInnerTexts();
   const opened = await page.evaluate(() => window.__history.opened);
@@ -452,8 +606,12 @@ await check("opening one shows it read-only, with where pasted, shared or clipbo
   assert.match(turns[5], /read outside text/);
   assert.match(turns[5], /<b>check the web<\/b>/, "the text was not shown as it was written");
   assert.equal(bold, 0, "a transcript's text became markup");
-  assert.equal(buttons, 0, "a read-only transcript has controls in it");
-  assert.deepEqual(findButtons, ["Previous", "Next"], "only the find bar's two steps");
+  // Read-only: the only control on a message is Copy, on Jarvis's answer
+  // (the chat audit, 2026-09-28); above the words, "Continue this chat" and
+  // the find bar's two steps.
+  assert.deepEqual(buttons, ["Copy"], "a read-only transcript has controls in it");
+  assert.deepEqual(findButtons, ["Continue this chat", "Previous", "Next", "Copy"],
+    "only Continue, the find bar's two steps and Copy");
   assert.match(note, /did not come from you/);
   assert.equal(closed, 0);
 });
@@ -600,7 +758,8 @@ await check("a shorter keep period asks first, in both apps' words; a no sends n
   const afterLonger = await page.evaluate(() => window.__history.settings);
   await page.close();
   assert.equal(asked,
-    "Delete every conversation older than 30 days from your PC now, and from then on? This cannot be undone.");
+    "Delete every conversation older than 30 days from your PC now, and from then on? This cannot be undone." +
+    `\n\n${KEEP_SUPPORT_NOTE}`);
   assert.deepEqual(afterNo, [], "a no still changed the period");
   assert.equal(shown, "90", "the choice moved although nothing was sent");
   assert.equal(askedAgain, false, "a longer period asked");
@@ -655,6 +814,8 @@ await check("dates say the weekday; an answer not kept and a delete say so, in t
   // Noon UTC on Tuesday 22 September 2026, read a week later.
   const tue = Date.UTC(2026, 8, 22, 12) / 1000;
   assert.match(whenWords(tue, (tue + 7 * 86400) * 1000), /^Tue 22 Sept? 2026$/);
+  // History itself: the phone's whenLine (the chat audit, 2026-09-28).
+  assert.equal(whenLine(tue, (tue + 7 * 86400) * 1000, { utc: true }), "Tue 22 Sep 12:00");
   const conv = readConversation({ id: "c", turns: [
     { role: "user", text: "a", at: 1, provenance: "typed", answer_kept: false },
     { role: "user", text: "b", at: 2, provenance: "typed", answer_kept: true },

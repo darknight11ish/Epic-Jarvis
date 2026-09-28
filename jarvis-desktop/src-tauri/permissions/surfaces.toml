@@ -133,11 +133,16 @@ permissions = [
 # quickbar with its mic button focused (voice.rs, `summon_push_to_talk`). The
 # microphone opens only when the owner holds that button - the `voice` set
 # above, which stays with the quickbar alone.
+#
+# And the HUD's chat box, which opens the Jarvis bar ready to type (the chat
+# audit, 2026-09-28: the PC has one chat box) - `hud_open_bar`, which sends
+# nothing either.
 [[set]]
 identifier = "hud-voice"
-description = "Show the quickbar with push-to-talk ready. Opens no microphone and records nothing."
+description = "Show the quickbar with push-to-talk ready, or with its box ready to type in. Opens no microphone, sends and records nothing."
 permissions = [
   "allow-summon-push-to-talk",
+  "allow-hud-open-bar",
 ]
 
 # The HUD page's requests to Jarvis, made in Rust with the token, so the page
@@ -233,7 +238,12 @@ permissions = [
   "allow-temporary-chat-available",
   # An error's fix button (plain_errors.rs): opens Settings or the Brain, and
   # nothing else - the app lock still applies. It changes no setting.
+  # "Earlier chats" uses it too, for the Brain's History tab.
   "allow-open-fix-place",
+  # "Continue this chat" and Jarvis Live's "Move it here" (the chat audit,
+  # 2026-09-28): the one conversation to carry on, read from History - a
+  # chat or a Live session only, refused while the private lists are hidden.
+  "allow-chat-continue-open",
 ]
 
 # "Used in this answer" under the quickbar's answer, and "Jarvis remembered N
@@ -250,6 +260,9 @@ permissions = [
   "allow-memory-used",
   "allow-brain-memory-forget",
   "allow-brain-memory-erase",
+  # "Erase the words" names the chat it would also delete (the chat audit,
+  # 2026-09-28): which chat a fact came from, a read.
+  "allow-brain-fact-chat",
 ]
 
 # "Where this came from" (feasibility I42/I132, answer-sources.patch): the
@@ -618,6 +631,10 @@ permissions = [
   # wiped for good, its dates kept. Stricter than forget, never looser:
   # held on a stale link, one id per call, asked about first.
   "allow-brain-memory-erase",
+  # "Also delete the chat it came from" names that chat first (the chat
+  # audit, 2026-09-28): which chat a fact came from, a read. Its title is
+  # taken out while the private lists are hidden.
+  "allow-brain-fact-chat",
   "allow-brain-memory-edit",
   "allow-brain-memory-learning",
   "allow-brain-memory-export",
@@ -678,15 +695,22 @@ permissions = [
 # "Search what was said" (JARVIS-API.md section 71, 2026-09-28) is a read
 # too, held back the same way: the PC opens each kept turn in memory for
 # that one search, keeps no index, and nothing reaches the AI model.
+#
+# "Continue this chat" (the chat audit, 2026-09-28) brings up the Jarvis bar
+# and names the chat to carry on - the id only; the bar reads it itself
+# (chat_continue_open, in quickbar-surface). Copy on an opened old answer
+# uses the same private copy as the bar's own Copy (clipboard_privacy.rs).
 [[set]]
 identifier = "brain-history"
-description = "List, read and search the chat history kept on the PC, delete one conversation, and change its two settings (turning it on only raises an approval card). No bulk delete."
+description = "List, read and search the chat history kept on the PC, delete one conversation, change its two settings (turning it on only raises an approval card), hand a chat to the Jarvis bar to continue, and copy an old answer. No bulk delete."
 permissions = [
   "allow-brain-history-list",
   "allow-brain-history-open",
   "allow-brain-history-search",
   "allow-brain-history-delete",
   "allow-brain-history-settings",
+  "allow-brain-continue-chat",
+  "allow-write-clipboard-private",
 ]
 
 # Show, on the Brain's memory lists while "Windows Hello for private

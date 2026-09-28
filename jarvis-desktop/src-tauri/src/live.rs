@@ -203,13 +203,23 @@ pub(crate) fn mic_mute_change(
 }
 
 /// The body for one action. Only the fixed words go in.
-pub(crate) fn act_body(action: &str, minutes: Option<u32>) -> Result<serde_json::Value, String> {
+pub(crate) fn act_body(
+    action: &str,
+    minutes: Option<u32>,
+    conversation_id: Option<&str>,
+) -> Result<serde_json::Value, String> {
     if !ACTIONS.contains(&action) {
         return Err(format!("Jarvis Live cannot {action:?}"));
     }
     let mut body = serde_json::json!({ "do": action });
     if action == "active" {
         body["device"] = serde_json::json!("desktop");
+        // A session started by voice or from the tray has no chat of its
+        // own yet: the bar names its chat here, once (the chat audit,
+        // 2026-09-28), so "Move it here" on the phone carries it on.
+        if let Some(cid) = conversation_id.filter(|c| commands::valid_conversation_id(c)) {
+            body["conversation_id"] = serde_json::json!(cid);
+        }
     }
     if action == "extend" {
         let m = minutes.unwrap_or(20);
@@ -221,10 +231,17 @@ pub(crate) fn act_body(action: &str, minutes: Option<u32>) -> Result<serde_json:
     Ok(body)
 }
 
-/// The start body: how it was started is one of the fixed words.
-pub(crate) fn start_body(by: Option<&str>) -> serde_json::Value {
+/// The start body: how it was started is one of the fixed words, and the
+/// chat the session's words go in (the bar's conversation id - a fresh one,
+/// or the other device's for "Move it here"; the chat audit, 2026-09-28).
+/// An id that is not one is left out, never sent.
+pub(crate) fn start_body(by: Option<&str>, conversation_id: Option<&str>) -> serde_json::Value {
     let by = by.filter(|b| STARTS.contains(b)).unwrap_or("button");
-    serde_json::json!({ "do": "start", "device": "desktop", "by": by })
+    let mut body = serde_json::json!({ "do": "start", "device": "desktop", "by": by });
+    if let Some(cid) = conversation_id.filter(|c| commands::valid_conversation_id(c)) {
+        body["conversation_id"] = serde_json::json!(cid);
+    }
+    body
 }
 
 /// The PC's answer, as a value or the reason in words.
@@ -313,11 +330,19 @@ pub async fn live_status(app: AppHandle) -> Result<serde_json::Value, String> {
 /// Starts Jarvis Live on this PC. No card; refused on a stale link and
 /// while App lock would ask. `by`: "button" (the bar), "tray", "hotkey".
 #[tauri::command]
-pub async fn live_start(app: AppHandle, by: Option<String>) -> Result<serde_json::Value, String> {
-    start(&app, by.as_deref()).await
+pub async fn live_start(
+    app: AppHandle,
+    by: Option<String>,
+    conversation_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    start(&app, by.as_deref(), conversation_id.as_deref()).await
 }
 
-pub(crate) async fn start(app: &AppHandle, by: Option<&str>) -> Result<serde_json::Value, String> {
+pub(crate) async fn start(
+    app: &AppHandle,
+    by: Option<&str>,
+    conversation_id: Option<&str>,
+) -> Result<serde_json::Value, String> {
     if stale(app) {
         return Err(STALE_HELD.to_string());
     }
@@ -327,7 +352,7 @@ pub(crate) async fn start(app: &AppHandle, by: Option<&str>) -> Result<serde_jso
     if let Some(why) = voice::live_audio_refusal(&commands::jarvis_base(app)) {
         return Err(why);
     }
-    let out = post(app, start_body(by)).await?;
+    let out = post(app, start_body(by, conversation_id)).await?;
     if let Err(why) = voice::open_for_live(app).await {
         // No microphone: the session the PC just started is ended again, so
         // no sign says "Live" over a microphone that is not open.
@@ -426,6 +451,7 @@ pub async fn live_act(
     app: AppHandle,
     action: String,
     minutes: Option<u32>,
+    conversation_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     if WINDOW_ACTIONS.contains(&action.as_str()) {
         match action.as_str() {
@@ -438,7 +464,7 @@ pub async fn live_act(
         }
         return Ok(serde_json::Value::Null);
     }
-    let body = act_body(&action, minutes)?;
+    let body = act_body(&action, minutes, conversation_id.as_deref())?;
     // "More time" and "Carry on" are held on a stale link; "active" only
     // keeps open a session the owner started, and goes.
     if action != "active" && stale(&app) {
@@ -527,7 +553,7 @@ pub fn toggle(app: &AppHandle, by: &'static str) {
         let result = if on_here() {
             stop(&app, "owner").await
         } else {
-            start(&app, Some(by)).await
+            start(&app, Some(by), None).await
         };
         if let Err(why) = result {
             commands::notify(&app, "Jarvis Live", &why);
@@ -1057,26 +1083,49 @@ mod tests {
     #[test]
     fn only_fixed_actions_go_out() {
         assert_eq!(
-            act_body("active", None).unwrap(),
+            act_body("active", None, None).unwrap(),
             json!({"do": "active", "device": "desktop"})
         );
         assert!(ACTIONS.contains(&"show_card") && WINDOW_ACTIONS.contains(&"open"));
         assert_eq!(
-            act_body("extend", None).unwrap(),
+            act_body("extend", None, None).unwrap(),
             json!({"do": "extend", "minutes": 20})
         );
-        assert_eq!(act_body("resume", None).unwrap(), json!({"do": "resume"}));
-        assert!(act_body("start", None).is_err(), "start is live_start's");
-        assert!(act_body("approve", None).is_err());
-        assert!(act_body("extend", Some(0)).is_err());
-        assert!(act_body("extend", Some(500)).is_err());
-        assert_eq!(start_body(Some("tray"))["by"], "tray");
         assert_eq!(
-            start_body(Some("voice"))["by"],
+            act_body("resume", None, None).unwrap(),
+            json!({"do": "resume"})
+        );
+        assert!(
+            act_body("start", None, None).is_err(),
+            "start is live_start's"
+        );
+        assert!(act_body("approve", None, None).is_err());
+        assert!(act_body("extend", Some(0), None).is_err());
+        assert!(act_body("extend", Some(500), None).is_err());
+        assert_eq!(start_body(Some("tray"), None)["by"], "tray");
+        // The chat the session goes in (the chat audit, 2026-09-28): a
+        // conversation id is passed on; anything else never reaches the PC.
+        assert_eq!(
+            start_body(None, Some("conv-live-0001"))["conversation_id"],
+            "conv-live-0001"
+        );
+        assert!(start_body(None, Some("bad id!"))
+            .get("conversation_id")
+            .is_none());
+        assert_eq!(
+            act_body("active", None, Some("conv-voice-0002")).unwrap()["conversation_id"],
+            "conv-voice-0002"
+        );
+        assert!(act_body("resume", None, Some("conv-voice-0002"))
+            .unwrap()
+            .get("conversation_id")
+            .is_none());
+        assert_eq!(
+            start_body(Some("voice"), None)["by"],
             "button",
             "voice is the PC's to say"
         );
-        assert_eq!(start_body(None)["by"], "button");
+        assert_eq!(start_body(None, None)["by"], "button");
     }
 
     #[test]

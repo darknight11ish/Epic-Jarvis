@@ -112,6 +112,14 @@ fn main() {
             // "Search what was said" (JARVIS-API.md section 71): a read,
             // refused while the private lists are hidden. Brain only.
             "brain_history_search",
+            // "Continue this chat" (the chat audit, 2026-09-28): the Brain
+            // tells the Jarvis bar which chat to carry on (the id only), and
+            // the bar reads that one chat - never a support, chatbot or
+            // comparison record.
+            "brain_continue_chat",
+            // "Erase the words" names the chat it would also delete: a read.
+            "brain_fact_chat",
+            "chat_continue_open",
             // "History of this fact" (section 71): every version of one
             // fact, hidden like every memory list. Brain only.
             "brain_fact_history",
@@ -513,6 +521,9 @@ fn main() {
             // The HUD's mic button. Shows the quickbar with push-to-talk
             // ready; records nothing. The one command the HUD holds.
             "summon_push_to_talk",
+            // The HUD's chat box opens the Jarvis bar instead (the chat
+            // audit, 2026-09-28). Sends nothing. The HUD only.
+            "hud_open_bar",
             // Lip-sync: hands the Jarvis bar's mouth track and playback
             // clock to every window's face (voice.rs `face_voice`). Checked
             // shape only; no words, no audio. Quickbar only.

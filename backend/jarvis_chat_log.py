@@ -1451,6 +1451,23 @@ class ChatLog:
         out["conversations"] = found
         return out
 
+    def brief(self, cid) -> Optional[dict]:
+        """One conversation's title, kind and when it was last added to -
+        no message is opened. For "Erase the words"'s "Also delete the chat
+        it came from" (the chat audit, 2026-09-28), which names the chat
+        before asking. None when there is no such conversation; raises
+        KeyUnavailable when its title cannot be opened."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
+            return None
+        with self._lock, closing(self._connect()) as c:
+            row = c.execute("SELECT title, updated, COALESCE(kind, 'chat') FROM conversations"
+                            " WHERE id=?", (cid,)).fetchone()
+        if row is None:
+            return None
+        aead = self._cipher()
+        return {"id": cid, "title": self._title(aead, cid, row[0]),
+                "updated": int(row[1] or 0), "kind": row[2] if row[2] in KINDS else "chat"}
+
     def tainted_from(self, cid):
         """The number of the first turn that read outside text, or None. Every
         turn from that one on is tainted (for the later learning build)."""
@@ -1724,6 +1741,11 @@ def record_chatbot(cid, title, rows, *, kind: str = "chatbot") -> dict:
 
 def status() -> dict:
     return _log().status()
+
+
+def brief(conversation_id) -> Optional[dict]:
+    """One conversation's title, kind and last change - see ChatLog.brief."""
+    return _log().brief(conversation_id)
 
 
 def overlapping(start: float, end: float, limit: int = 201, only=None) -> dict:

@@ -1001,6 +1001,44 @@ html[data-state="error"] .pulse {
   opacity: 0.8;
 }
 
+/* The whole conversation so far (the chat audit, 2026-09-28): scrolls
+   inside itself, so a long chat never pushes the answer off the bar. */
+.previous-answer .thread {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.thread-turn + .thread-turn {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+.thread-q {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+}
+
+.thread-who {
+  font-weight: 600;
+}
+
+.chat-note {
+  margin: 0 0 10px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.primer-chats {
+  margin: 4px 0 8px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.chat-ended-note {
+  margin-left: 8px;
+}
+
 /* --------------------------------------------------------------------------
    Markdown
    -------------------------------------------------------------------------- */

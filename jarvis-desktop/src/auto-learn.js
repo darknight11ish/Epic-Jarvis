@@ -238,6 +238,42 @@ export const ERASED = "Erased.";
 /** Said after an erase that also deleted the chat it came from. */
 export const ERASED_AND_CHAT_DELETED = "Erased, and the chat it came from is deleted too.";
 
+/** Said after an erase when no chat is on record for the fact (a card
+ *  accepted by hand, an older fact, or a chat already deleted) - honest,
+ *  rather than a bare "Erased." (the chat audit, 2026-09-28). The phone's
+ *  MemoryErase says the same. */
+export const ERASED_NO_CHAT = "Erased. No chat was on record for this fact, so no chat was deleted.";
+
+/** The chat named, with when (the chat audit, 2026-09-28): the phone's
+ *  checkbox says the same sentence. */
+export function eraseChatNamed(chat, when = "") {
+  const title = chat && typeof chat.title === "string" && chat.title.trim()
+    ? chat.title.trim() : "its title is hidden";
+  return `Also delete the chat it came from: "${title}" (${when || "date unknown"})?`;
+}
+
+/**
+ * The second question when the PC named the chat (GET
+ * /api/memory/fact-chat): the same shape as ERASE_ALSO_CHAT_CONFIRM, with
+ * the chat's title and when in it, so the owner knows which chat goes.
+ */
+export function eraseAlsoChatNamedConfirm(chat, when = "") {
+  return "The fact's words will be erased either way.\n\n" +
+    `${eraseChatNamed(chat, when)} That whole conversation will be deleted from History too, ` +
+    "on this PC. This cannot be undone either.\n\n" +
+    "OK: delete that chat too.\nCancel: keep the chat.";
+}
+
+/** brain_fact_chat's answer: the chat ({id, title, updated}), null when
+ *  none is on record, or undefined from a PC that cannot say. */
+export function readFactChat(v) {
+  if (!v || typeof v !== "object" || v.available === false) return undefined;
+  const c = v.conversation;
+  if (!c || typeof c !== "object" || typeof c.id !== "string") return null;
+  return { id: c.id, title: typeof c.title === "string" ? c.title : "",
+    updated: Number.isFinite(c.updated) ? c.updated : null };
+}
+
 /**
  * An erased fact's `erased_at` (unix seconds, a column of every fact row),
  * or null for a fact that still has its words. Only a real number counts.

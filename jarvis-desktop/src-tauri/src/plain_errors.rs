@@ -249,6 +249,9 @@ pub async fn open_fix_place(app: AppHandle, place: String) -> Result<(), String>
     match place.as_str() {
         "settings" => crate::windows::show_settings(&app),
         "brain" => crate::windows::show_brain(&app),
+        // "Earlier chats" in the Jarvis bar (the chat audit, 2026-09-28):
+        // the Brain, on its History tab. Navigation only.
+        "history" => crate::windows::show_brain_at(&app, "history"),
         _ => Err("That is not a place this button opens.".to_string()),
     }
 }

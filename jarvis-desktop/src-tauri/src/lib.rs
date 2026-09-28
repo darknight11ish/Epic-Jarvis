@@ -883,6 +883,9 @@ pub fn run() {
             brain::history::brain_history_list,
             brain::history::brain_history_open,
             brain::history::brain_history_search,
+            brain::history::brain_continue_chat,
+            brain::history::brain_fact_chat,
+            brain::history::chat_continue_open,
             brain::fact_history::brain_fact_history,
             brain::conversation_facts::brain_conversation_facts,
             brain::history::brain_history_delete,
@@ -1010,6 +1013,7 @@ pub fn run() {
             voice_flow::get_voice_flow,
             voice_flow::get_voice_moment,
             voice::summon_push_to_talk,
+            voice::hud_open_bar,
             // Lip-sync: the Jarvis bar's clip, for the faces in every window.
             voice::face_voice,
             voice::get_voice_status,

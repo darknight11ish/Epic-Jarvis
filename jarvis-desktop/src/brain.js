@@ -47,10 +47,11 @@ import { validToFromText } from "./valid-to.js";
 // phone through tests/fixtures/model-chat-cases.json).
 import { CANNOT_CHAT, canChat } from "./model-chat.js";
 // Brain -> Projects: its own module (projects-panel.js, projects.js).
-import { showProjects } from "./projects-panel.js";
+import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
+import { tellChatsGone } from "./chat-history.js";
 // Brain -> History -> "Forget a time frame": its own module too.
-import { openForgetRange, showForgetRange, takePlace } from "./forget-range-panel.js";
-import { BRAIN_PLACE_KEY } from "./forget-range.js";
+import { openForgetRange, showForgetRange, takeAnyPlace } from "./forget-range-panel.js";
+import { BRAIN_PLACE_KEY, HISTORY_CHANGED, HISTORY_PLACE, PLACE as FORGET_RANGE_PLACE } from "./forget-range.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -195,6 +196,19 @@ import {
 } from "./galaxy-view.js";
 import {
   addPage,
+  COPIED as HISTORY_COPIED,
+  CONTINUE as HISTORY_CONTINUE,
+  CONTINUE_TITLE as HISTORY_CONTINUE_TITLE,
+  DELETE_SUPPORT,
+  FILTER_LABEL as HISTORY_FILTER_LABEL,
+  FILTER_NONE as HISTORY_FILTER_NONE,
+  FILTERS as HISTORY_FILTERS,
+  FORGET_RANGE_LINK,
+  FORGET_RANGE_LINK_TITLE,
+  KEEP_SUPPORT_NOTE,
+  KIND_TAG,
+  KIND_TITLE,
+  NO_TITLE,
   chatFactsHiddenLine,
   chatFactsIntro,
   deleteAndForgetQuestion,
@@ -234,6 +248,7 @@ import {
   SWITCH_DETAIL,
   SWITCH_LABEL,
   TAINT_TITLE,
+  whenLine,
   whenWords,
 } from "./history-view.js";
 import {
@@ -248,6 +263,9 @@ import {
   ERASE_TITLE,
   ERASED,
   ERASED_AND_CHAT_DELETED,
+  ERASED_NO_CHAT,
+  eraseAlsoChatNamedConfirm,
+  readFactChat,
   erasedAt,
   erasedLine,
   eraseQuestion,
@@ -1021,7 +1039,12 @@ function agoMs(ms) {
 function paintFreshness() {
   if (!dom.freshness) return;
   const sections = (VIEW_SECTIONS[state.view] || []).filter((s) => state.readAt[s]);
-  const oldest = sections.length ? Math.min(...sections.map((s) => state.readAt[s])) : 0;
+  let oldest = sections.length ? Math.min(...sections.map((s) => state.readAt[s])) : 0;
+  // History and Projects are read through their own commands, not
+  // brain_read, so VIEW_SECTIONS lists nothing for them - and the line used
+  // to say "reading…" for ever (the chat audit, 2026-09-28, desktop B3).
+  const own = OWN_READS[state.view];
+  if (!sections.length && own) oldest = own() || 0;
   const what = (VIEWS[state.view] && VIEWS[state.view].title.toLowerCase()) || "this";
   const words = linkWords(currentLink());
   dom.freshness.dataset.tone = words.canAct ? "" : "warn";
@@ -1038,6 +1061,12 @@ function paintFreshness() {
   }
 }
 setInterval(paintFreshness, 15000);
+
+/** When a view read through its own command last read successfully. */
+const OWN_READS = {
+  history: () => chats.readOkAt,
+  projects: () => projectsReadAt(),
+};
 
 function renderCounts() {
   const set = (node, n) => {
@@ -2791,6 +2820,11 @@ const chats = {
   at: 0,
   loading: false,
   older: false,
+  /** A successful read's time, for the status line (paintFreshness). */
+  readOkAt: 0,
+  /** "Show": one kind of conversation, or "" for every kind (the chat
+   *  audit, 2026-09-28 - "History can be filtered to Live sessions only"). */
+  kind: "",
   /** The conversation open below its row, and its transcript. */
   openId: null,
   open: null,
@@ -2829,8 +2863,12 @@ async function loadHistory() {
   if (chats.loading) return;
   chats.loading = true;
   try {
-    const v = readHistory(await invoke("brain_history_list", { before: null, limit: HISTORY_PAGE }));
+    const kind = chats.kind;
+    const v = readHistory(await invoke("brain_history_list",
+      { before: null, limit: HISTORY_PAGE, kind: kind || null }));
+    if (kind !== chats.kind) return;       // the filter changed while this read ran
     chats.view = v;
+    chats.readOkAt = Date.now();
     // The re-read every 15 seconds replaces the newest page only: pages
     // "Load older" brought in stay, and so does a conversation opened
     // from one of them. A hidden list (Windows Hello) keeps nothing.
@@ -2862,7 +2900,8 @@ async function loadOlderHistory() {
   if (before === null || chats.older) return;
   chats.older = true;
   try {
-    const v = readHistory(await invoke("brain_history_list", { before, limit: HISTORY_PAGE }));
+    const v = readHistory(await invoke("brain_history_list",
+      { before, limit: HISTORY_PAGE, kind: chats.kind || null }));
     chats.rows = addPage(chats.rows, v.conversations);
     chats.more = v.conversations.length >= HISTORY_PAGE;
   } catch (error) {
@@ -2913,6 +2952,9 @@ async function deleteConversation(c) {
     paintHistory();
     return;
   }
+  // A customer-support chat's record is the owner's record of what a company
+  // agreed to: it asks once more, saying so (the chat audit, 2026-09-28).
+  if (c.kind === "support" && !window.confirm(DELETE_SUPPORT)) return;
   let got = null;
   try {
     got = readChatFacts(await invoke("brain_conversation_facts", { conversationId: c.id }));
@@ -3001,6 +3043,8 @@ async function finishDelete(c, factIds) {
       }
     }
     toast(deleteDoneWords({ gone: Boolean(out && out.gone), forgot, failed }), failed ? "bad" : "ok");
+    // The Jarvis bar may be in this chat: it starts a new one, and says so.
+    tellChatsGone([c.id]);
     if (factIds.length) refreshMemory();
     chats.deleting = null;
     chats.rows = chats.rows.filter((r) => r.id !== c.id);
@@ -3128,7 +3172,8 @@ function paintFound() {
   const matches = f.needle.trim() ? findMatches(chats.open, f.needle) : [];
   f.total = matches.length;
   if (f.current >= matches.length) f.current = 0;
-  renderTranscript(box, chats.open, { el }, { matches, current: f.current });
+  renderTranscript(box, chats.open, { el, onCopy: copyOldAnswer },
+    { matches, current: f.current, needle: f.needle.trim() });
   const count = $("history-find-count");
   if (count) count.textContent = f.needle.trim() ? findCountWords(f.current, matches.length) : "";
   for (const id of ["history-find-prev", "history-find-next"]) {
@@ -3194,6 +3239,7 @@ function transcriptNode() {
   if (chats.openError) t.append(el("p", "empty failed", chats.openError));
   else if (!chats.open) t.append(el("p", "empty", "Reading…"));
   else {
+    t.append(continueNode(chats.open));
     t.append(findBar());
     const turns = el("div", "history-transcript-turns");
     turns.id = "history-transcript-turns";
@@ -3202,13 +3248,55 @@ function transcriptNode() {
   return t;
 }
 
+/**
+ * "Continue this chat" (the owner's decision, 2026-09-28): the Jarvis bar
+ * carries this conversation on - the same conversation id, the newest kept
+ * messages that fit, its "read outside text" mark carried over by the PC.
+ * A support, chatbot or comparison record cannot be, and says why.
+ */
+function continueNode(conv) {
+  const box = el("div", "row-actions history-continue");
+  if (!conv.continuable) {
+    box.append(el("p", "hint history-continue-why", conv.continueWhy));
+    return box;
+  }
+  const go = button(HISTORY_CONTINUE, async () => {
+    try {
+      await invoke("brain_continue_chat", { id: conv.id });
+    } catch (error) {
+      toast(errorText(error), "bad");
+    }
+  }, { title: HISTORY_CONTINUE_TITLE });
+  go.classList.add("history-continue-go");
+  box.append(go);
+  return box;
+}
+
+/** Copy on an opened old answer: the bar's own private copy (kept out of
+ *  Windows' clipboard history), or a plain one from an older build. */
+async function copyOldAnswer(text, btn) {
+  try {
+    await invoke("write_clipboard_private", { text });
+  } catch {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      toast(errorText(error), "bad");
+      return;
+    }
+  }
+  const was = btn.textContent;
+  btn.textContent = HISTORY_COPIED;
+  setTimeout(() => { btn.textContent = was; }, 1200);
+}
+
 /** One conversation's row, in the list or in the search results. */
 function conversationRow(c, { needle = "", snippet = null } = {}) {
   const open = chats.openId === c.id;
   const device = deviceTag(c.device);
   const item = row({
     tag: device.tag,
-    title: c.title || "(no title)",
+    title: c.title || NO_TITLE,
     meta: [rowMeta(c), snippet ? hitsWords(c.hits) : ""],
     actions: [
       button(open ? "Close" : "Open", () => toggleConversation(c.id, needle),
@@ -3225,8 +3313,17 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
     renderSnippet(p, snippet, { el });
     main.append(p);
   }
-  if (c.hasVoice || c.tainted) {
+  const kindTag = KIND_TAG[c.kind] || "";
+  if (c.hasVoice || c.tainted || (kindTag && c.kind !== "live")) {
     const marks = el("span", "history-marks");
+    // What kind of conversation it is (the chat audit, 2026-09-28). A Live
+    // session says so in its line ("Live · 12 min · Today 14:05").
+    if (kindTag && c.kind !== "live") {
+      const kind = el("span", "history-mark history-mark-kind", kindTag);
+      kind.dataset.kind = c.kind;
+      kind.title = KIND_TITLE[c.kind] || "";
+      marks.append(kind);
+    }
     if (c.hasVoice) {
       const mic = el("span", "history-mark history-mark-voice", "voice");
       mic.title = "Some of it was said aloud to Jarvis.";
@@ -3387,7 +3484,8 @@ function paintHistorySettings() {
     select.value = String(v.keepDays);
     // A shorter period (or any, from "Never") deletes conversations now,
     // with no undo: asked first, the phone's question word for word.
-    if (keepNeedsConfirm(v.keepDays, days) && !window.confirm(keepConfirm(days))) return;
+    if (keepNeedsConfirm(v.keepDays, days)
+        && !window.confirm(`${keepConfirm(days)}\n\n${KEEP_SUPPORT_NOTE}`)) return;
     select.disabled = true;
     select.dataset.busy = "true";
     await setKeepDays(days);
@@ -3446,7 +3544,7 @@ function paintHistoryListNow(box) {
     return;
   }
   if (!chats.rows.length) {
-    box.append(el("p", "empty", v.enabled
+    box.append(el("p", "empty", chats.kind ? HISTORY_FILTER_NONE : v.enabled
       ? "No conversations kept yet."
       : "No conversations kept. Chat history is off."));
     return;
@@ -3479,7 +3577,62 @@ function paintHistoryListNow(box) {
   }
 }
 
+/**
+ * Above the list: "Show" (every kind, or Live only, and the rest) and a
+ * way to "Forget a time frame" from the top of History - it used to be at
+ * the very bottom (the chat audit, 2026-09-28).
+ */
+function paintHistoryTools() {
+  const box = $("history-tools");
+  if (!box) return;
+  const v = chats.view;
+  box.hidden = !v || !v.available || v.hidden;
+  if (box.hidden) return;
+  if (box.dataset.built === "true") {
+    const select = $("history-kind");
+    if (select && select.value !== chats.kind) select.value = chats.kind;
+    return;
+  }
+  box.dataset.built = "true";
+  box.replaceChildren();
+  const label = el("label", "history-kind-label");
+  label.append(el("span", "", HISTORY_FILTER_LABEL));
+  const select = document.createElement("select");
+  select.id = "history-kind";
+  select.className = "field";
+  for (const [value, words] of HISTORY_FILTERS) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = words;
+    select.append(option);
+  }
+  select.value = chats.kind;
+  select.addEventListener("change", () => {
+    chats.kind = select.value;
+    chats.rows = [];
+    chats.more = false;
+    chats.openId = null;
+    chats.open = null;
+    chats.view = chats.view ? { ...chats.view, conversations: [] } : null;
+    paintHistoryList();
+    loadHistory();
+  });
+  label.append(select);
+  const link = button(FORGET_RANGE_LINK, () => openForgetRange(), { title: FORGET_RANGE_LINK_TITLE });
+  link.classList.add("history-forget-range-link");
+  box.append(label, link);
+}
+
+/** Chats were removed or put back somewhere else (an Undo, "Forget a time
+ *  frame", "Erase the words" with its chat): read the list again now. */
+function historyChanged() {
+  chats.at = 0;
+  if (state.view === "history") loadHistory();
+}
+window.addEventListener(HISTORY_CHANGED, historyChanged);
+
 function paintHistory() {
+  paintHistoryTools();
   paintHistorySettings();
   paintHistoryList();
 }
@@ -3647,15 +3800,31 @@ async function setAutoSwitch(which, on) {
  *  still erases the fact; it only skips deleting the chat too. */
 async function eraseFact(f) {
   if (!window.confirm(eraseQuestion(f))) return;
-  const alsoChat = window.confirm(ERASE_ALSO_CHAT_CONFIRM);
+  // Since the chat audit (2026-09-28) the second question names the chat
+  // (its title and when), and is not asked at all when no chat is on record
+  // for this fact. A PC that cannot say asks as before.
+  let chat;
+  try {
+    chat = readFactChat(await invoke("brain_fact_chat", { id: Number(f.id) }));
+  } catch {
+    chat = undefined;
+  }
+  const alsoChat = chat === undefined ? window.confirm(ERASE_ALSO_CHAT_CONFIRM)
+    : chat ? window.confirm(eraseAlsoChatNamedConfirm(chat, whenLine(chat.updated)))
+      : false;
   const out = await memoryWrite(
     "brain_memory_erase",
     { id: Number(f.id), also_delete_conversation: alsoChat },
-    (reply) => (reply && reply.chat_deleted ? ERASED_AND_CHAT_DELETED : ERASED),
+    (reply) => (reply && reply.chat_deleted ? ERASED_AND_CHAT_DELETED
+      : alsoChat || chat === null ? ERASED_NO_CHAT : ERASED),
   );
   if (out && out.ok !== false) {
     autoL.rows = autoL.rows.filter((r) => r.id !== Number(f.id));
     paintAuto();
+    if (out.chat_deleted) {
+      window.dispatchEvent(new CustomEvent(HISTORY_CHANGED));
+      if (chat) tellChatsGone([chat.id]);
+    }
   }
 }
 
@@ -4564,6 +4733,33 @@ const cb = { view: null, error: "", loading: false, again: false, at: 0, id: "",
   cmpId: "", cmpGone: false, lastKind: "", several: new Set(), severalKey: "" };
 const CHATBOT_READ_MS = 15000;
 
+/* The last conversation's and comparison's ids outlive this window (the
+   chat audit, 2026-09-28, desktop B2: a finished summary vanished when the
+   Brain was closed, because the ids lived in the page alone). The ids only -
+   never a goal, a message or a summary - in this app's own storage; the PC
+   still answers "gone" once it restarts, and the finished conversation is
+   then in History. */
+const CHATBOT_LAST_KEY = "jarvis.chatbot.last";
+try {
+  const left = JSON.parse(localStorage.getItem(CHATBOT_LAST_KEY) || "null");
+  if (left && typeof left.id === "string") cb.id = left.id;
+  if (left && typeof left.cmp === "string") cb.cmpId = left.cmp;
+} catch {
+  /* no storage: the summary shows while this window is open, as before */
+}
+
+function keepChatbotIds() {
+  try {
+    if (cb.id || cb.cmpId) {
+      localStorage.setItem(CHATBOT_LAST_KEY, JSON.stringify({ id: cb.id, cmp: cb.cmpId }));
+    } else {
+      localStorage.removeItem(CHATBOT_LAST_KEY);
+    }
+  } catch {
+    /* no storage */
+  }
+}
+
 async function loadChatbot() {
   if (!IS_TAURI) return;
   if (cb.loading) {
@@ -4597,6 +4793,7 @@ async function loadChatbot() {
     }
     if (view.available && view.session) cb.id = view.session.id;
     if (view.available && view.compare) cb.cmpId = view.compare.id;
+    keepChatbotIds();
     if (view.available && view.session && view.session.live) cb.lastKind = "session";
     if (view.available && view.compare && view.compare.live) cb.lastKind = "compare";
     cb.view = view;
@@ -8162,25 +8359,40 @@ onEvent((frame) => {
   repaintTrace();
   // "Forget what you learned last week", said or typed in the Jarvis bar:
   // main.js left the place, so the Brain opens at History -> "Forget a time
-  // frame" with the list filled in (forget-range-panel.js). Navigation only.
-  if (takePlace()) {
+  // frame" with the list filled in (forget-range-panel.js). "Earlier chats"
+  // in the bar, and "Chat history…" in the tray (`#history`), open History
+  // itself (the chat audit, 2026-09-28). Navigation only.
+  const place = takeAnyPlace() || (location.hash === `#${HISTORY_PLACE}` ? HISTORY_PLACE : "");
+  if (place === FORGET_RANGE_PLACE) {
     await showView("history");
     await openForgetRange();
+  } else if (place === HISTORY_PLACE) {
+    await showView("history");
   } else {
     await showView("memory");
   }
 })();
 
-/** The Brain was already open when the Jarvis bar asked for the place. */
-async function goToForgetRange() {
-  if (!takePlace()) return;
-  await showView("history");
-  await openForgetRange();
+/** The Brain was already open when the Jarvis bar asked for a place. */
+async function goToPlace(place = takeAnyPlace()) {
+  if (place === FORGET_RANGE_PLACE) {
+    await showView("history");
+    await openForgetRange();
+  } else if (place === HISTORY_PLACE) {
+    await showView("history");
+  }
 }
-window.addEventListener("focus", goToForgetRange);
+window.addEventListener("focus", () => goToPlace());
 window.addEventListener("storage", (e) => {
-  if (e.key === BRAIN_PLACE_KEY && e.newValue) goToForgetRange();
+  if (e.key === BRAIN_PLACE_KEY && e.newValue) goToPlace();
 });
+// "Chat history…" in the tray, with the Brain already open (windows.rs
+// show_brain_at): the place's name only.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  TAURI.event.listen("brain-place", (event) => {
+    if (event && event.payload === HISTORY_PLACE) goToPlace(HISTORY_PLACE);
+  });
+}
 
 console.info(
   `[brain] ready — backend ${IS_TAURI ? "connected" : "absent (browser preview)"}`
