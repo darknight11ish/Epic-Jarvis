@@ -40,7 +40,7 @@
           "pending": false,
           "settings": {
             "hands_free": "button_only",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "voice_is_enough",
@@ -59,10 +59,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -94,10 +96,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": false,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -129,10 +133,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -164,10 +170,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": false,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -199,10 +207,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -234,10 +244,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -269,10 +281,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -304,10 +318,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -339,10 +355,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -374,10 +392,12 @@
           "engine": "",
           "is_owner": false,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": false,
           "min_seconds": 2.0,
           "mode": "owner",
@@ -409,10 +429,12 @@
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
           "live": "",
+          "live_elsewhere": "",
           "live_ended": "",
           "live_hint": "",
           "live_pause": "",
           "live_say": "",
+          "live_short": "",
           "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
@@ -437,6 +459,25 @@
           "wake_heard": false,
           "wake_score": 0.0
         }
+      },
+      "live_button_start_only": {
+        "body": {
+          "changed": true,
+          "message": "Done - that applies now.",
+          "ok": true,
+          "pending": false,
+          "settings": {
+            "hands_free": "button_only",
+            "hands_free_live": "live_button_start_only",
+            "hands_free_screen": "screen_on_screen",
+            "memory": "memory_aloud",
+            "privacy": "voice_is_enough",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict",
+            "voice_is_enough_allowed": true
+          }
+        },
+        "status": 200
       },
       "live_caution": {
         "body": {
@@ -463,7 +504,7 @@
           "ok": true,
           "pending": true,
           "setting": "hands_free_live",
-          "value": "live_same_as_button"
+          "value": "live_trust_fully"
         },
         "status": 202
       },
@@ -473,7 +514,7 @@
           "ok": true,
           "pending": true,
           "setting": "hands_free_live",
-          "value": "live_same_as_button"
+          "value": "live_trust_fully"
         },
         "status": 202
       },
@@ -483,7 +524,7 @@
           "ok": true,
           "pending": true,
           "setting": "hands_free_live",
-          "value": "live_same_as_button"
+          "value": "live_trust_fully"
         },
         "status": 202
       },
@@ -665,7 +706,7 @@
           "pending": false,
           "settings": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -750,7 +791,7 @@
           "pending": false,
           "settings": {
             "hands_free": "button_only",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "voice_is_enough",
@@ -799,7 +840,7 @@
           "pending": false,
           "settings": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "voice_is_enough",
@@ -845,7 +886,7 @@
           "pending": false,
           "settings": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -864,7 +905,7 @@
           "pending": false,
           "settings": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -1189,7 +1230,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -1289,7 +1330,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -1315,7 +1357,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -1323,7 +1365,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 1.5,
@@ -1367,7 +1409,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -1481,7 +1523,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -1507,7 +1550,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -1515,7 +1558,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 1.5,
@@ -1745,7 +1788,7 @@
           "enabled": true,
           "enrolled": false,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -1832,7 +1875,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -1858,7 +1902,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -1866,7 +1910,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -1908,7 +1952,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -2009,7 +2053,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -2035,7 +2080,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -2043,7 +2088,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -2474,7 +2519,7 @@
           "enabled": true,
           "enrolled": false,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -2561,7 +2606,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -2587,7 +2633,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -2595,7 +2641,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -2664,7 +2710,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -2765,7 +2811,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -2791,7 +2838,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -2799,7 +2846,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -3230,7 +3277,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -3322,7 +3369,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -3348,7 +3396,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -3356,7 +3404,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -3400,7 +3448,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -3506,7 +3554,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -3532,7 +3581,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -3540,7 +3589,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -3971,7 +4020,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -4063,7 +4112,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -4089,7 +4139,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -4097,7 +4147,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "button_only",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -4141,7 +4191,7 @@
           }
         },
         "hands_free": "button_only",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -4247,7 +4297,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -4273,7 +4324,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -4281,7 +4332,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -4692,7 +4743,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -4784,7 +4835,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -4810,7 +4862,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -4818,7 +4870,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "button_only",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -4862,7 +4914,7 @@
           }
         },
         "hands_free": "button_only",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -4968,7 +5020,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -4994,7 +5047,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -5002,7 +5055,750 @@
             "strictness": "very_strict"
           },
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "memory": "memory_aloud",
+          "min_command_seconds": 2.0,
+          "privacy": "voice_is_enough",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": true,
+        "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+        "strictness": "very_strict",
+        "stt": {
+          "available": false,
+          "client_fallback_ok": false,
+          "engine": "sherpa-onnx",
+          "status": "sherpa-onnx is selected but its model files are not on disk yet"
+        },
+        "stt_available": false,
+        "stt_engine": "sherpa-onnx",
+        "threshold": 0.35,
+        "tts": {
+          "available": false,
+          "client_fallback_ok": true,
+          "engine": "sherpa-onnx",
+          "status": "no Kokoro model files on disk yet",
+          "timings": [],
+          "voice": {
+            "active": "builtin",
+            "engine": "kokoro",
+            "fallback": "",
+            "name": "Built-in voice"
+          }
+        },
+        "tts_available": false,
+        "tts_engine": "sherpa-onnx",
+        "turn": {
+          "ask_after_ms": 200,
+          "available": false,
+          "enabled": true,
+          "engine": "Smart Turn v3.2 (ONNX Runtime)",
+          "max_pause_ms": 2000,
+          "threshold": 0.5,
+          "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+        },
+        "vad": {
+          "available": false,
+          "engine": "silero (sherpa-onnx)",
+          "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        },
+        "wake": {
+          "awake_seconds": 8.0,
+          "enabled": false,
+          "pending": false,
+          "phrase": "hey_jarvis",
+          "spotter": {
+            "available": false,
+            "engine": "openWakeWord (ONNX Runtime)",
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          },
+          "stop_word": {
+            "available": false,
+            "threshold": 0.5,
+            "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          },
+          "threshold": 0.5,
+          "verifier": {
+            "positives": 0,
+            "trained": false,
+            "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+          }
+        },
+        "wake_phrase": "hey_jarvis",
+        "wake_word_enabled": false
+      },
+      "live_button_start_only": {
+        "audio_in": {
+          "client_stt_allowed": false,
+          "format": "WAV, 16-bit mono PCM",
+          "max_seconds": 30.0,
+          "sample_rate": 16000,
+          "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+        },
+        "available": true,
+        "cohort": {
+          "small": {
+            "matches": false,
+            "source": "300 real speakers from Google's Speech Commands v0.02 (CC BY 4.0), two 8-word sentences each",
+            "speakers": 300,
+            "where": "shipped with Jarvis"
+          },
+          "strong": {
+            "matches": false,
+            "source": "300 real speakers from Google's Speech Commands v0.02 (CC BY 4.0), two 8-word sentences each",
+            "speakers": 300,
+            "where": "shipped with Jarvis"
+          }
+        },
+        "embedder": "sherpa-onnx:357a834f702b",
+        "enabled": true,
+        "enrolled": true,
+        "flow": {
+          "after_question": true,
+          "available": true,
+          "barge_in": {
+            "available": true,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": ""
+          },
+          "cut_off": true,
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": 1.0,
+              "step": "vad_ms",
+              "turns": 10,
+              "worst_ms": 1.0
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": 1.0,
+              "step": "owner_check_ms",
+              "turns": 10,
+              "worst_ms": 1.0
+            },
+            {
+              "label": "speech to text",
+              "median_ms": 1.0,
+              "step": "stt_ms",
+              "turns": 10,
+              "worst_ms": 1.0
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 1.0,
+              "mic": "phone",
+              "owner_check_ms": 1.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 1.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 1.0,
+              "wake_ms": null
+            }
+          ],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
+        "gate": {
+          "cohort": {
+            "small": {
+              "matches": false,
+              "source": "300 real speakers from Google's Speech Commands v0.02 (CC BY 4.0), two 8-word sentences each",
+              "speakers": 300,
+              "where": "shipped with Jarvis"
+            },
+            "strong": {
+              "matches": false,
+              "source": "300 real speakers from Google's Speech Commands v0.02 (CC BY 4.0), two 8-word sentences each",
+              "speakers": 300,
+              "where": "shipped with Jarvis"
+            }
+          },
+          "embedder": "sherpa-onnx:357a834f702b",
+          "enabled": true,
+          "enrolled": true,
+          "hands_free": "button_only",
+          "hands_free_live": "live_button_start_only",
+          "hands_free_screen": "screen_on_screen",
+          "memory": "memory_aloud",
+          "mode": "owner",
+          "models": {
+            "balanced_uses": "strong",
+            "small": {
+              "bars_measured": true,
+              "installed": true,
+              "label": "the small voice-ID model",
+              "name": "sherpa-onnx:357a834f702b",
+              "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+            },
+            "strong": {
+              "bars_measured": true,
+              "installed": true,
+              "label": "the stronger voice-ID model",
+              "name": "sherpa-onnx:d51abcf31717",
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+              "why": ""
+            },
+            "very_strict_model": "strong",
+            "very_strict_uses": 1
+          },
+          "needs_retraining": false,
+          "note": "",
+          "prints": {
+            "desktop": {
+              "created": 0.0,
+              "needs_retraining": false,
+              "samples": 0,
+              "strong_threshold": 0.0,
+              "strong_trained": false,
+              "subprints": [],
+              "threshold": 0.0,
+              "trained": false
+            },
+            "general": {
+              "created": 0.0,
+              "needs_retraining": false,
+              "samples": 0,
+              "strong_threshold": 0.0,
+              "strong_trained": false,
+              "subprints": [],
+              "threshold": 0.0,
+              "trained": false
+            },
+            "phone": {
+              "created": 1790000000.0,
+              "needs_retraining": false,
+              "samples": 12,
+              "strong_threshold": 0.0,
+              "strong_trained": true,
+              "subprints": [
+                {
+                  "condition": "close",
+                  "samples": 12
+                }
+              ],
+              "threshold": 0.35,
+              "trained": true
+            }
+          },
+          "privacy": "voice_is_enough",
+          "repeat": {
+            "balanced": {
+              "accepted": 0,
+              "refused": 0,
+              "refused_then_accepted": 0,
+              "repeat_rate": 0.0,
+              "too_short": 0
+            },
+            "since": 1790000000.0,
+            "very_strict": {
+              "accepted": 10,
+              "refused": 0,
+              "refused_then_accepted": 1,
+              "repeat_rate": 0.1,
+              "too_short": 1
+            },
+            "window_seconds": 10.0
+          },
+          "samples": 12,
+          "sensitive_memory": "sensitive_on_screen",
+          "settings": {
+            "changed": 1790000000.0,
+            "choices": {
+              "hands_free": [
+                "same_as_button",
+                "button_only"
+              ],
+              "hands_free_live": [
+                "live_trust_fully",
+                "live_button_start_only",
+                "live_like_hey_jarvis"
+              ],
+              "hands_free_screen": [
+                "screen_on_screen",
+                "screen_aloud"
+              ],
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
+              "privacy": [
+                "private_on_screen",
+                "voice_is_enough"
+              ],
+              "sensitive_memory": [
+                "sensitive_on_screen",
+                "sensitive_aloud"
+              ],
+              "strictness": [
+                "very_strict",
+                "balanced"
+              ]
+            },
+            "defaults": {
+              "hands_free": "same_as_button",
+              "hands_free_live": "live_trust_fully",
+              "hands_free_screen": "screen_on_screen",
+              "memory": "memory_aloud",
+              "privacy": "private_on_screen",
+              "sensitive_memory": "sensitive_on_screen",
+              "strictness": "very_strict"
+            },
+            "hands_free": "button_only",
+            "hands_free_live": "live_button_start_only",
+            "hands_free_screen": "screen_on_screen",
+            "memory": "memory_aloud",
+            "min_command_seconds": 2.0,
+            "privacy": "voice_is_enough",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict",
+            "voice_is_enough_allowed": true
+          },
+          "speaker_model": true,
+          "strictness": "very_strict",
+          "threshold": 0.35,
+          "training": {
+            "available": true,
+            "calibrate": true,
+            "last": {
+              "at": 1790000000.0,
+              "outcome": "setting_changed",
+              "setting": "hands_free_screen",
+              "value": "screen_aloud"
+            },
+            "limits": {
+              "max_clips": 12,
+              "max_seconds": 10.0,
+              "max_total_seconds": 80.0,
+              "measure_max_clips": 20,
+              "min_clips": 3,
+              "min_seconds": 1.0,
+              "rounds": 3,
+              "session_seconds": 900.0
+            },
+            "measure": true,
+            "pending": false,
+            "round_asks": {
+              "1": "normal, close to the microphone",
+              "2": "further away from the microphone, or quieter",
+              "3": "at another time of day, or in another room"
+            },
+            "rounds": true,
+            "session": null,
+            "settings": true
+          }
+        },
+        "hands_free": "button_only",
+        "hands_free_live": "live_button_start_only",
+        "hands_free_screen": "screen_on_screen",
+        "listening": {
+          "push_to_talk": false,
+          "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+          "wake_word": false,
+          "wake_word_pending": false,
+          "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+        },
+        "live": {
+          "available": true,
+          "device": null,
+          "on": false
+        },
+        "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
+        "mode": "owner",
+        "models": {
+          "balanced_uses": "strong",
+          "small": {
+            "bars_measured": true,
+            "installed": true,
+            "label": "the small voice-ID model",
+            "name": "sherpa-onnx:357a834f702b",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": true,
+            "installed": true,
+            "label": "the stronger voice-ID model",
+            "name": "sherpa-onnx:d51abcf31717",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_model": "strong",
+          "very_strict_uses": 1
+        },
+        "needs_retraining": false,
+        "note": "sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 12,
+            "strong_threshold": 0.0,
+            "strong_trained": true,
+            "subprints": [
+              {
+                "condition": "close",
+                "samples": 12
+              }
+            ],
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "privacy": "voice_is_enough",
+        "profile_embedder": "sherpa-onnx:357a834f702b",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 10,
+            "refused": 0,
+            "refused_then_accepted": 1,
+            "repeat_rate": 0.1,
+            "too_short": 1
+          },
+          "window_seconds": 10.0
+        },
+        "samples": 12,
+        "sensitive_memory": "sensitive_on_screen",
+        "settings": {
+          "changed": 1790000000.0,
+          "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
+            "hands_free_live": [
+              "live_trust_fully",
+              "live_button_start_only",
+              "live_like_hey_jarvis"
+            ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "hands_free": "same_as_button",
+            "hands_free_live": "live_trust_fully",
+            "hands_free_screen": "screen_on_screen",
+            "memory": "memory_aloud",
+            "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict"
+          },
+          "hands_free": "button_only",
+          "hands_free_live": "live_button_start_only",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -5525,7 +6321,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -5551,7 +6348,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -5709,7 +6506,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -5735,7 +6533,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -6174,7 +6972,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -6266,7 +7064,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -6292,7 +7091,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -6300,7 +7099,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "button_only",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -6344,7 +7143,7 @@
           }
         },
         "hands_free": "button_only",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -6450,7 +7249,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -6476,7 +7276,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -6484,7 +7284,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -6915,7 +7715,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -7007,7 +7807,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -7033,7 +7834,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -7041,7 +7842,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "button_only",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -7060,7 +7861,7 @@
               "at": 1790000000.0,
               "outcome": "setting_changed",
               "setting": "hands_free_live",
-              "value": "live_same_as_button"
+              "value": "live_trust_fully"
             },
             "limits": {
               "max_clips": 12,
@@ -7085,7 +7886,7 @@
           }
         },
         "hands_free": "button_only",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -7191,7 +7992,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -7217,7 +8019,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -7225,7 +8027,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -7748,7 +8550,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -7774,7 +8577,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -7801,7 +8604,7 @@
               "at": 1790000000.0,
               "outcome": "denied",
               "setting": "hands_free_live",
-              "value": "live_same_as_button"
+              "value": "live_trust_fully"
             },
             "limits": {
               "max_clips": 12,
@@ -7932,7 +8735,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -7958,7 +8762,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -8196,7 +9000,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -8296,7 +9100,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -8322,7 +9127,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -8330,7 +9135,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -8374,7 +9179,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -8488,7 +9293,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -8514,7 +9320,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -8522,7 +9328,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -8752,7 +9558,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -8852,7 +9658,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -8878,7 +9685,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -8886,7 +9693,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -8954,7 +9761,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -9068,7 +9875,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -9094,7 +9902,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -9102,7 +9910,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -9312,7 +10120,7 @@
           "enabled": true,
           "enrolled": false,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -9399,7 +10207,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -9425,7 +10234,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -9433,7 +10242,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -9471,7 +10280,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -9572,7 +10381,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -9598,7 +10408,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -9606,7 +10416,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -9836,7 +10646,7 @@
           "enabled": true,
           "enrolled": false,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -9923,7 +10733,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -9949,7 +10760,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -9957,7 +10768,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -10009,7 +10820,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -10110,7 +10921,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -10136,7 +10948,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -10144,7 +10956,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -10575,7 +11387,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_aloud",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -10667,7 +11479,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -10693,7 +11506,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -10701,7 +11514,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "button_only",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_aloud",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -10745,7 +11558,7 @@
           }
         },
         "hands_free": "button_only",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_aloud",
         "listening": {
           "push_to_talk": false,
@@ -10851,7 +11664,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -10877,7 +11691,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -10885,7 +11699,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_aloud",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -11316,7 +12130,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -11408,7 +12222,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -11434,7 +12249,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -11442,7 +12257,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "button_only",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -11486,7 +12301,7 @@
           }
         },
         "hands_free": "button_only",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -11592,7 +12407,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -11618,7 +12434,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -11626,7 +12442,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -12057,7 +12873,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -12149,7 +12965,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -12175,7 +12992,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -12183,7 +13000,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "button_only",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -12227,7 +13044,7 @@
           }
         },
         "hands_free": "button_only",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -12333,7 +13150,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -12359,7 +13177,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -12367,7 +13185,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "button_only",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -12738,7 +13556,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -12830,7 +13648,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -12856,7 +13675,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -12864,7 +13683,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -12908,7 +13727,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -13014,7 +13833,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -13040,7 +13860,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -13048,7 +13868,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -13278,7 +14098,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -13378,7 +14198,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -13404,7 +14225,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -13412,7 +14233,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -13487,7 +14308,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -13601,7 +14422,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -13627,7 +14449,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -13635,7 +14457,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -13855,7 +14677,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -13947,7 +14769,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -13973,7 +14796,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -13981,7 +14804,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -14030,7 +14853,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -14136,7 +14959,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -14162,7 +14986,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -14170,7 +14994,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -14400,7 +15224,7 @@
           "enabled": true,
           "enrolled": false,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -14487,7 +15311,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -14513,7 +15338,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -14521,7 +15346,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -14559,7 +15384,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -14660,7 +15485,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -14686,7 +15512,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -14694,7 +15520,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -14924,7 +15750,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -15024,7 +15850,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -15050,7 +15877,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -15058,7 +15885,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -15109,7 +15936,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -15223,7 +16050,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -15249,7 +16077,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -15257,7 +16085,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -15487,7 +16315,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -15587,7 +16415,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -15613,7 +16442,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -15621,7 +16450,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -15677,7 +16506,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -15791,7 +16620,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -15817,7 +16647,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -15825,7 +16655,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -16256,7 +17086,7 @@
           "enabled": true,
           "enrolled": false,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -16343,7 +17173,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -16369,7 +17200,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -16377,7 +17208,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -16418,7 +17249,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -16519,7 +17350,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -16545,7 +17377,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -16553,7 +17385,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
@@ -16783,7 +17615,7 @@
           "enabled": true,
           "enrolled": true,
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "mode": "owner",
@@ -16883,7 +17715,8 @@
                 "button_only"
               ],
               "hands_free_live": [
-                "live_same_as_button",
+                "live_trust_fully",
+                "live_button_start_only",
                 "live_like_hey_jarvis"
               ],
               "hands_free_screen": [
@@ -16909,7 +17742,7 @@
             },
             "defaults": {
               "hands_free": "same_as_button",
-              "hands_free_live": "live_same_as_button",
+              "hands_free_live": "live_trust_fully",
               "hands_free_screen": "screen_on_screen",
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
@@ -16917,7 +17750,7 @@
               "strictness": "very_strict"
             },
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "min_command_seconds": 2.0,
@@ -16961,7 +17794,7 @@
           }
         },
         "hands_free": "same_as_button",
-        "hands_free_live": "live_same_as_button",
+        "hands_free_live": "live_trust_fully",
         "hands_free_screen": "screen_on_screen",
         "listening": {
           "push_to_talk": false,
@@ -17075,7 +17908,8 @@
               "button_only"
             ],
             "hands_free_live": [
-              "live_same_as_button",
+              "live_trust_fully",
+              "live_button_start_only",
               "live_like_hey_jarvis"
             ],
             "hands_free_screen": [
@@ -17101,7 +17935,7 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
-            "hands_free_live": "live_same_as_button",
+            "hands_free_live": "live_trust_fully",
             "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
@@ -17109,7 +17943,7 @@
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
-          "hands_free_live": "live_same_as_button",
+          "hands_free_live": "live_trust_fully",
           "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,

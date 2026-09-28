@@ -140,7 +140,7 @@ const SETTING_NAMES = {
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
   hands_free: "how far \"Hey Jarvis\" is trusted",
-  hands_free_screen: "answers about your screen after \"Hey Jarvis\"",
+  hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
 };
 
 /**

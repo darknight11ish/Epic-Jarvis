@@ -385,7 +385,7 @@ const SETTING_NAMES = {
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
   hands_free: "how far \"Hey Jarvis\" is trusted",
-  hands_free_screen: "answers about your screen after \"Hey Jarvis\"",
+  hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
 };
 
 /** The choices, in the order they are shown, with plain words for each. */
@@ -489,7 +489,7 @@ export const HANDS_FREE_SCREEN = Object.freeze([
     id: "screen_on_screen",
     label: "Keep on screen",
     recommended: true,
-    detail: "With \"Only trust the talk button\" chosen, a question about your screen that starts with \"Hey Jarvis\" gets a written answer only.",
+    detail: "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Jarvis\" gets a written answer only.",
   },
   {
     id: "screen_aloud",
@@ -503,7 +503,7 @@ export const HANDS_FREE_SCREEN = Object.freeze([
  *  changes nothing. The choices stay usable - it takes over if the
  *  hands-free choice changes. */
 export const SCREEN_ONLY_WHEN_STRICT_NOTE =
-  "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", answers about your screen are read aloud already.";
+  "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", answers about your screen or the camera are read aloud already.";
 
 /** Whether the screen setting does nothing now (see SCREEN_ONLY_WHEN_STRICT_NOTE). */
 export function screenCovered(view) {

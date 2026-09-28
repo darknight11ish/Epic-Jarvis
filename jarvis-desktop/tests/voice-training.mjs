@@ -739,14 +739,14 @@ const withScreen = (st, value, where = "settings") => {
   return c;
 };
 
-await check("answers about your screen after \"Hey Jarvis\": on screen by default, the agreed words, and only when the PC has it", async () => {
+await check("answers about your screen or the camera after \"Hey Jarvis\": on screen by default, the agreed words, and only when the PC has it", async () => {
   assert.deepEqual(VT.HANDS_FREE_SCREEN.map(VT.choiceText), ["Keep on screen (recommended)", "Read aloud"]);
   assert.equal(VT.HANDS_FREE_SCREEN[0].detail,
-    "With \"Only trust the talk button\" chosen, a question about your screen that starts with \"Hey Jarvis\" gets a written answer only.");
+    "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Jarvis\" gets a written answer only.");
   assert.equal(VT.HANDS_FREE_SCREEN[1].detail,
     "Those answers are read aloud, even with \"Only trust the talk button\" chosen. Anyone near the speaker will hear them.");
   assert.equal(VT.SCREEN_ONLY_WHEN_STRICT_NOTE,
-    "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", answers about your screen are read aloud already.");
+    "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", answers about your screen or the camera are read aloud already.");
   assert.equal(VT.loosens("hands_free_screen", "screen_aloud"), true);
   assert.equal(VT.loosens("hands_free_screen", "screen_on_screen"), false);
   // The REAL status (the backend's own, regenerated) carries it.
@@ -769,7 +769,7 @@ await check("answers about your screen after \"Hey Jarvis\": on screen by defaul
   const note = await text(page, "vt-screen-note");
   await page.close();
   assert.equal(got.shown, true, "not offered by a PC that reports it");
-  assert.equal(got.title, "Answers about your screen after \"Hey Jarvis\"");
+  assert.equal(got.title, "Answers about your screen or the camera after \"Hey Jarvis\"");
   assert.deepEqual(got.labels, ["Keep on screen (recommended)", "Read aloud"]);
   assert.equal(got.pressed, "screen_on_screen");
   assert.deepEqual(got.disabled, [false, false]);
@@ -815,12 +815,12 @@ await check("answers about your screen: keeping them on screen is at once; Read 
   assert.deepEqual(sent, [{ setting: "hands_free_screen", value: "screen_aloud" }]);
   // The waiting line and the last-card lines name it, in the same shape.
   assert.match(VT.settingWaitingLine({ setting: "hands_free_screen", value: "screen_aloud" }, WHERE),
-    /^Waiting for your approval to change answers about your screen after "Hey Jarvis" to "Read aloud"\./);
+    /^Waiting for your approval to change answers about your screen or the camera after "Hey Jarvis" to "Read aloud"\./);
   const card = { ...S.balanced.gate.training.last, setting: "hands_free_screen", value: "screen_aloud" };
   assert.equal(W.lastTrainingLine({ ...card, outcome: "setting_changed" }, strict), "Approved: \"Read aloud\" is on now.");
   assert.equal(W.lastTrainingLine({ ...card, outcome: "denied" }, strict), "You said no, so \"Keep on screen\" stays.");
   assert.equal(W.lastTrainingLine({ ...card, outcome: "refused", reason: "no" }, strict),
-    "Your PC refused the change to answers about your screen after \"Hey Jarvis\": no.");
+    "Your PC refused the change to answers about your screen or the camera after \"Hey Jarvis\": no.");
   // CONTROL: the Rust knows the setting, and holds only its loosening.
   const rust = read("src-tauri/src/voice_training.rs");
   assert.match(rust, /\("hands_free_screen", "screen_aloud"\) => \{?\s*Ok\(\("hands_free_screen", "screen_aloud", true\)\)/);

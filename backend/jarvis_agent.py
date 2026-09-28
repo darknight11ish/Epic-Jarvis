@@ -1857,7 +1857,8 @@ def _open_stream(url: str, payload: dict, timeout: float = 300.0):
 
 def _get_json(url: str, payload: Optional[dict] = None, timeout: float = 4.0) -> dict:
     """A small JSON call to Ollama's own API - GET, or POST when there is a
-    body. Only used to look up the context length; see _context_length."""
+    body. Used to look up the context length (see _context_length) and to
+    warm the everyday model for Jarvis Live (warm_everyday)."""
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"},
@@ -2857,6 +2858,9 @@ class _TurnWatch:
         users = [m for m in raw if m.get("role") == "user"]
         self.provenance = None
         self.spoken = False          # the newest question was said out loud
+        # ...in Jarvis Live (the app's `live: true` on a spoken message):
+        # the Live note, and side talk (jarvis_live.MODEL_NOTE).
+        self.live = False
         # A system message the APP sent (security audit M1). Read only off the
         # request as it arrived: `messages` without it may already hold the
         # server's own system turns (the rules, recalled facts).
@@ -2867,10 +2871,13 @@ class _TurnWatch:
         # owner - what "the devices you named" is checked against
         # (LIGHTS_WITHOUT_CARD). "" otherwise.
         self.newest_own_words = ""
+        self.newest_raw = ""         # the newest question's words as sent (side talk)
         if users:
             i = max(j for j, m in enumerate(raw) if m.get("role") == "user")
             self.spoken = raw[i].get("provenance") == "voice"   # with_spoken_note
+            self.live = self.spoken and raw[i].get("live") is True      # with_live_note
             self.cut_off = cut_off_words(raw[i].get("interrupted"))
+            self.newest_raw = _text_of(raw[i].get("content"))
             newest = [raw[i]]
             j = i - 1
             while (j >= 0 and raw[j].get("role") == "user"
@@ -3473,6 +3480,14 @@ def note_crisis_turn(turn_id) -> bool:
     raises, and ignores anything that is not a plausible id."""
     if not isinstance(turn_id, str) or not _TURN_ID_OK.match(turn_id):
         return False
+    # Jarvis Live (jarvis_live.py): after a crisis turn, a Live conversation
+    # never ends on its own for being quiet - only End, its time limit or
+    # Stop everything end it (the rules review, 2026-09-28).
+    try:
+        import jarvis_live
+        jarvis_live.ENGINE.note_crisis()
+    except Exception:
+        pass
     try:
         with _SUGGEST_LOCK:
             _CRISIS_TURNS.pop(turn_id, None)
@@ -4252,6 +4267,61 @@ SPOKEN_NOTE = (
 _SPOKEN_MSG = {"role": "system", "content": SPOKEN_NOTE}
 
 
+def _live_note() -> Optional[str]:
+    try:
+        import jarvis_live
+        return jarvis_live.MODEL_NOTE
+    except Exception:
+        return None
+
+
+def with_live_note(msgs: list) -> list:
+    """A new list: `msgs` with Jarvis Live's note (jarvis_live.MODEL_NOTE) as
+    a system message just before the newest user message - placed exactly
+    like SPOKEN_NOTE, never first. Unchanged without jarvis_live.py."""
+    note = _live_note()
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if note is None or not users:
+        return list(msgs)
+    at = users[-1]
+    msg = {"role": "system", "content": note}
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
+def _is_side_talk(answer: str) -> bool:
+    try:
+        import jarvis_live
+        return jarvis_live.is_side_talk(answer)
+    except Exception:
+        return False
+
+
+def _note_side_talk(text: str) -> None:
+    try:
+        import jarvis_live
+        jarvis_live.note_side_talk(text)
+    except Exception:
+        pass
+
+
+def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None) -> bool:
+    """Loads the everyday model into the graphics card now (Ollama's own
+    "load with an empty prompt"), so Jarvis Live's first answer does not wait
+    for it. THIS PC's Ollama only; never a cloud model. Best effort: False
+    when it could not. jarvis_live.py calls it - never on Standby."""
+    url = (ollama_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
+    name = model or os.environ.get("JARVIS_MODEL") or "jarvis-primary"
+    try:
+        if not _is_this_machine(url) or local_model_refusal(url, name):
+            return False
+        _get_json(f"{url}/api/generate", {"model": name, "keep_alive": "30m"}, timeout=120.0)
+        return True
+    except Exception:
+        return False
+
+
 def with_spoken_note(msgs: list) -> list:
     """A new list: `msgs` with SPOKEN_NOTE as a system message just before
     the newest user message. `msgs` itself is not changed.
@@ -4800,6 +4870,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         if watch.spoken:
             # After trimming, so trimming can never leave the note first.
             body["messages"] = with_spoken_note(body["messages"])
+        if watch.live:
+            # Jarvis Live: no yes/no question to end on, and side talk
+            # answered with the marker alone. Never first; the relay never
+            # sees it (the same placing as the spoken note).
+            body["messages"] = with_live_note(body["messages"])
         if watch.cut_off:
             # The owner cut the last spoken answer off: said, never first.
             body["messages"] = with_cut_off_note(body["messages"], watch.cut_off)
@@ -5094,7 +5169,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # crisis answer would be its own bad moment, never mind what it
         # counts (the owner's decision, 2026-09-27, extending "never
         # counted" to this signal).
-        if not watch.crisis:
+        # Side talk in Jarvis Live (the owner's answer of 2026-09-28): the
+        # model said the words were not for it. Never counted, never learned
+        # from (jarvis_live.note_side_talk keeps a hash for the learner to
+        # skip), and both apps say nothing.
+        side_talk = watch.live and _is_side_talk("".join(answer))
+        if side_talk:
+            _note_side_talk(watch.newest_raw)
+        if not watch.crisis and not side_talk:
             broken_this_turn = sum(watch.bad.values())
             if broken_this_turn:
                 note_struggle(conv_id, broken_this_turn)
@@ -5120,6 +5202,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             "tools_ran": ran,
             "outside_flags": sorted(watch.flags),
             "crisis": watch.crisis,
+            "side_talk": bool(watch.live and _is_side_talk(final_answer)),
             "tool_sources": watch.sources,
             "unverified_quotes": unverified,
             "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}

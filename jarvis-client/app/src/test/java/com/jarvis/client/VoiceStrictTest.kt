@@ -835,7 +835,7 @@ class VoiceStrictTest {
         assertTrue(block, block.contains("choices = StrictVoice.HANDS_FREE"))
     }
 
-    // ------------------- answers about your screen after "Hey Jarvis" --
+    // ------------------- answers about your screen or the camera after "Hey Jarvis" --
     //
     // The owner's decision, 2026-09-28: under "Only trust the talk button",
     // an answer about the screen to a "Hey Jarvis" question stays on screen,
@@ -922,14 +922,14 @@ class VoiceStrictTest {
 
     @Test
     fun `screen answers after hey Jarvis - the agreed words, the same as the desktop's, and the note`() {
-        assertEquals("Answers about your screen after \"Hey Jarvis\"", StrictVoice.HANDS_FREE_SCREEN_TITLE)
+        assertEquals("Answers about your screen or the camera after \"Hey Jarvis\"", StrictVoice.HANDS_FREE_SCREEN_TITLE)
         assertEquals(listOf("Keep on screen (recommended)", "Read aloud"), StrictVoice.HANDS_FREE_SCREEN.map { it.label })
         assertEquals(
             listOf(VoiceStrict.SCREEN_ON_SCREEN, VoiceStrict.SCREEN_ALOUD),
             StrictVoice.HANDS_FREE_SCREEN.map { it.value },
         )
         assertEquals(
-            "With \"Only trust the talk button\" chosen, a question about your screen that starts with " +
+            "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with " +
                 "\"Hey Jarvis\" gets a written answer only.",
             StrictVoice.HANDS_FREE_SCREEN[0].detail,
         )
@@ -969,7 +969,7 @@ class VoiceStrictTest {
             assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (recommended)")}\""))
         }
         assertTrue(js.contains(StrictVoice.SCREEN_ONLY_WHEN_STRICT))
-        assertTrue(requireNotNull(html).readText().contains(">Answers about your screen after \"Hey Jarvis\"<"))
+        assertTrue(requireNotNull(html).readText().contains(">Answers about your screen or the camera after \"Hey Jarvis\"<"))
     }
 
     @Test

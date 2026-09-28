@@ -1480,7 +1480,9 @@ class Heard:
     #: nothing to do with Live. For a `live` clip: the session after it -
     #: "on", "paused" (the clip was not looked at), "off" (no session on this
     #: device: `available` is false too - stop sending), "ended" (the owner's
-    #: words ended it). For any clip whose words started Live: "started".
+    #: words ended it). For any clip whose words started Live: "started" -
+    #: or "refused", with `reason` in words, when Live could not start (no
+    #: real voice check yet, or standby).
     live: str = ""
     #: Why Live is paused, when it is: "card" or "other_voices"
     #: (jarvis_live.PAUSE_WORDS). The app shows the words, not this code.
@@ -1494,6 +1496,15 @@ class Heard:
     live_say: str = ""
     #: Why Live ended with this clip ("bye"), from jarvis_live.END_WORDS.
     live_ended: str = ""
+    #: A too-short Live clip, put to the voice check only (NEVER to
+    #: speech-to-text): "owner" - probably the owner, so both apps show
+    #: "Didn't catch that - say a bit more"; "other" - counted as another
+    #: voice, and nothing is shown or said.
+    live_short: str = ""
+    #: The owner's "hey Jarvis" at THIS device while Live is on the OTHER one
+    #: ("phone" / "desktop"): the app offers "Live is on your phone - move it
+    #: here?" instead of answering. `other_device` is true with it.
+    live_elsewhere: str = ""
 
     def as_dict(self) -> dict:
         """What /api/voice/utterance sends back - assuming, as the desktop's
@@ -1685,25 +1696,42 @@ def _live_fields(mic: str) -> dict:
             "live_hint": str(st.get("hint") or "") if on else ""}
 
 
-def _live_refusal(mic: str, source: str) -> Optional[Heard]:
-    """A `live` clip is looked at only while THIS microphone's Live session
-    is on and not paused. Anything else is refused here - before the file is
-    read, before any speech is looked for, never checked, never turned into
-    words."""
+def _live_refusal(mic: str, source: str) -> tuple:
+    """(refusal or None, check-only). A `live` clip is looked at only while
+    THIS microphone's Live session is on and not paused; anything else is
+    refused here - before the file is read, before any speech is looked for,
+    never checked, never turned into words. The one exception is a VOICE
+    pause (other voices, or trouble with the owner's voice): then the clip
+    may be put to the voice check - check-only is True - so the owner's own
+    voice carries Live on without a tap. Still never transcribed unless it
+    passes."""
     if jarvis_live is None:
         return Heard(False, source=source, available=False, live="off",
-                     reason="jarvis_live.py is not in the backend folder")
+                     reason="jarvis_live.py is not in the backend folder"), False
     try:
-        ok, state, code, words = jarvis_live.ENGINE.accepts(mic)
+        acc = jarvis_live.ENGINE.accepts(mic)
     except Exception as exc:
         return Heard(False, source=source, available=False, live="off",
-                     reason=f"Jarvis Live could not be read ({type(exc).__name__})")
-    if ok:
-        return None
-    if state == "paused":
-        return Heard(False, source=source, live="paused", live_pause=code,
-                     live_hint=_live_fields(mic).get("live_hint", ""), reason=words)
-    return Heard(False, source=source, available=False, live="off", reason=words)
+                     reason=f"Jarvis Live could not be read ({type(exc).__name__})"), False
+    if acc.get("ok"):
+        return None, False
+    if acc.get("check"):
+        return None, True
+    if acc.get("state") == "paused":
+        return Heard(False, source=source, live="paused", live_pause=str(acc.get("code") or ""),
+                     live_hint=_live_fields(mic).get("live_hint", ""),
+                     reason=str(acc.get("words") or "")), False
+    return Heard(False, source=source, available=False, live="off",
+                 reason=str(acc.get("words") or "")), False
+
+
+def _near_miss(verdict) -> bool:
+    """A refusal close to the bar: probably the owner, recognised badly."""
+    try:
+        th, sc = float(verdict.threshold or 0.0), float(verdict.score or 0.0)
+    except (TypeError, ValueError):
+        return False
+    return th > 0 and sc < th and sc >= th * jarvis_live.NEAR_MISS
 
 
 def _live_elsewhere(mic: str) -> str:
@@ -1716,6 +1744,18 @@ def _live_elsewhere(mic: str) -> str:
         return ""
 
 
+def _offer_move(mic: str, engine: str, common: dict) -> Optional[Heard]:
+    """The owner said "hey Jarvis" to THIS device while Live runs on the
+    OTHER one: not answered here - the app offers "Live is on your phone -
+    move it here?" (a tap moves it). Never silently dropped (the voice play
+    test, 2026-09-28). Nothing from the words is kept."""
+    elsewhere = _live_elsewhere(mic)
+    if not elsewhere:
+        return None
+    return Heard(True, text="", engine=engine, wake_heard=False, other_device=True,
+                 live_elsewhere=elsewhere, reason=f"Live is on your {elsewhere}", **common)
+
+
 def _live_phrase(text: str):
     if jarvis_live is None:
         return None
@@ -1726,15 +1766,33 @@ def _live_phrase(text: str):
 
 
 def _live_start(mic: str) -> Optional[dict]:
-    """Starts Live on `mic` (the owner's own words, checked). None when it
-    could not - no device named (an older app), or no jarvis_live.py."""
+    """Starts Live on `mic` (the owner's own words, checked; `started_by`
+    voice). None when there is nothing to start it on - no device named (an
+    older app), or no jarvis_live.py; else jarvis_live's answer, which says
+    why it did not start (no real voice check, standby) when it did not."""
     if jarvis_live is None or not _norm_mic(mic):
         return None
     try:
-        out = jarvis_live.ENGINE.start(mic)
+        return jarvis_live.ENGINE.start(mic, by="voice")
     except Exception:
         return None
-    return out if out.get("ok") else None
+
+
+def _live_trust_source(mic: str) -> str:
+    try:
+        return jarvis_live.ENGINE.trust_source(mic)
+    except Exception:
+        return "live_voice"          # cannot tell how it started: the stricter
+
+
+def _live_started(out: dict, engine: str, wake: bool, common: dict) -> Heard:
+    """The reply to "let's talk": started, or refused in words."""
+    if out.get("ok"):
+        return Heard(True, text="", engine=engine, wake_heard=wake, live="started",
+                     live_say=str(out.get("say") or jarvis_live.SAY_STARTED),
+                     reason="Jarvis Live started", **common)
+    return Heard(True, text="", engine=engine, wake_heard=wake, live="refused",
+                 reason=str(out.get("error") or "Jarvis Live could not start"), **common)
 
 
 def _too_short_reason(spoken: float, need: float) -> str:
@@ -1768,11 +1826,13 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                      stop=bool(b.get("stop")), reason=str(b.get("reason") or ""),
                      seconds=float(b.get("seconds") or 0.0))
     live = source == SOURCE_LIVE
+    check_only = False
     if live:
         # Jarvis Live: only while THIS microphone's session is on and not
         # paused. Otherwise nothing below runs - no speech found, no voice
-        # check, no words.
-        refused = _live_refusal(mic, source)
+        # check, no words. During a voice pause the clip is CHECKED (not
+        # transcribed) so the owner's own voice carries Live on.
+        refused, check_only = _live_refusal(mic, source)
         if refused is not None:
             return refused
     t_in = time.monotonic()
@@ -1833,14 +1893,6 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                                          f"it again in {left} seconds, or press stop"))
                 return Heard(False, source=source, seconds=seconds, stop=True,
                              reason="stop")
-        elsewhere = _live_elsewhere(mic)
-        if elsewhere:
-            # Jarvis Live is on the owner's OTHER device: this one's "hey
-            # Jarvis" clips are dropped before the spotter - not checked,
-            # not transcribed - the same shape as "answered on your other
-            # device", which both apps already drop without a word.
-            return Heard(False, source=source, seconds=seconds, other_device=True,
-                         reason=f"Live is on your {elsewhere}")
         if _take_awake(mic):
             via_window = True
         elif _question_open(mic):
@@ -1866,6 +1918,39 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                              reason="no \"hey Jarvis\" in that recording")
         steps["wake"] = (time.monotonic() - t) * 1000.0
 
+    # Jarvis Live: "stop" in a short clip silences Jarvis, exactly as it
+    # does for a "hey Jarvis" clip - no voice check needed to stop speech,
+    # never transcribed, nothing else done.
+    if live and spoken <= STOP_MAX_SECONDS and jarvis_wakeword is not None \
+            and hasattr(jarvis_wakeword, "spot_stop"):
+        stop = jarvis_wakeword.spot_stop(samples, sample_rate)
+        if stop.ran and stop.heard and _jarvis_said_stop(mic) is None:
+            return Heard(False, source=source, seconds=seconds, stop=True, reason="stop",
+                         **_live_fields(mic))
+
+    if jarvis_voice is None:
+        return Heard(False, source=source, available=False, seconds=seconds,
+                      reason="jarvis_voice is not importable; refusing "
+                             "rather than skipping the owner check")
+
+    def check_owner():
+        # 4. The owner check.
+        try:
+            emb = jarvis_voice.EcapaEmbedder()
+        except Exception:
+            emb = jarvis_voice.Embedder()
+        # The real sample rate goes with the clip. Both clients send 16 kHz
+        # now, but an older desktop (before 2026-09-24) sent its
+        # microphone's own rate, and the speaker model resamples when told.
+        # Only to a jarvis_voice.py that takes it - an older copy on the PC
+        # would raise TypeError here, and this call is not wrapped.
+        kw = {}
+        if _takes_rate(jarvis_voice.verify):
+            kw["sample_rate"] = sample_rate
+        if mic and _takes(jarvis_voice.verify, "mic"):
+            kw["mic"] = mic
+        return jarvis_voice.verify(samples, emb, **kw), emb
+
     # 3b. Long enough to be sure it is the owner? (2026-09-24.) A speaker
     #     model has little to go on in a second of speech, so a command
     #     that short is refused HERE - before the owner check, never
@@ -1877,42 +1962,44 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         _note_short(mic)
         extra = {}
         if live:
-            # In a conversation this happens more ("yes", "no"): a short
-            # line, not the long reason, and not more than once a minute -
-            # the reason stays as the caption.
+            # Jarvis Live (the voice play test, 2026-09-28): the clip is put
+            # to the voice check ONLY - never to speech-to-text - to decide
+            # whether it was probably the owner. The owner hears "say a bit
+            # more" at most once a minute and sees "Didn't catch that" every
+            # time; anyone else (the TV) makes Jarvis say nothing and counts
+            # as another voice. The reason stays as the caption.
             extra = _live_fields(mic)
             try:
-                if jarvis_live.ENGINE.short_line_due():
-                    extra["live_say"] = jarvis_live.SAY_SHORT
+                v_short, _ = check_owner()
             except Exception:
-                pass
+                v_short = None
+            if v_short is not None and v_short.is_owner and _really_checked(v_short):
+                extra["live_short"] = "owner"
+                try:
+                    jarvis_live.ENGINE.carry_on_by_voice(mic)
+                    if jarvis_live.ENGINE.short_line_due():
+                        extra["live_say"] = jarvis_live.SAY_SHORT
+                except Exception:
+                    pass
+            else:
+                extra["live_short"] = "other"
+                try:
+                    jarvis_live.ENGINE.note_refused(
+                        mic, near_miss=v_short is not None and _near_miss(v_short))
+                except Exception:
+                    pass
+            extra.update({k: v for k, v in _live_fields(mic).items() if k != "live"})
         return Heard(False, source=source, seconds=seconds, too_short=True,
                      min_seconds=need, reason=_too_short_reason(spoken, need), **extra)
 
-    if jarvis_voice is None:
-        return Heard(False, source=source, available=False, seconds=seconds,
-                      reason="jarvis_voice is not importable; refusing "
-                             "rather than skipping the owner check")
-
-    # 4. The owner check.
     t = time.monotonic()
-    try:
-        embedder = jarvis_voice.EcapaEmbedder()
-    except Exception:
-        embedder = jarvis_voice.Embedder()
-    # The real sample rate goes with the clip. Both clients send 16 kHz now,
-    # but an older desktop (before 2026-09-24) sent its microphone's own
-    # rate, and the speaker model resamples when told it.
-    # Only to a jarvis_voice.py that takes it - an older copy on the PC
-    # would raise TypeError here, and this call is not wrapped.
-    kw = {}
-    if _takes_rate(jarvis_voice.verify):
-        kw["sample_rate"] = sample_rate
-    if mic and _takes(jarvis_voice.verify, "mic"):
-        kw["mic"] = mic
-    verdict = jarvis_voice.verify(samples, embedder, **kw)
+    verdict, embedder = check_owner()
     steps["owner_check"] = (time.monotonic() - t) * 1000.0
-    trusted = _source_trusted(source)
+    # What this clip is trusted as. A Live clip asks as "live" when the owner
+    # pressed Start, or like "hey Jarvis" when Live was started by voice
+    # (jarvis_live.trust_source - one switch there decides).
+    trust_src = _live_trust_source(mic) if live else source
+    trusted = _source_trusted(trust_src)
     common = dict(score=verdict.score, threshold=verdict.threshold,
                   source=source, mode=verdict.mode, seconds=seconds,
                   wake_score=spot.score if spot else 0.0,
@@ -1941,7 +2028,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                   # under "only trust the talk button" a clip from anywhere
                   # else keeps it on screen unless the owner allowed it (the
                   # owner's decision, 2026-09-28).
-                  screen_aloud=_screen_aloud(source, trusted))
+                  screen_aloud=_screen_aloud(trust_src, trusted))
 
     if not verdict.is_owner:
         if live:
@@ -1949,11 +2036,18 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
             # and Live pauses after many), never turned into words, and the
             # quiet clock does not move - the TV cannot keep Live open.
             try:
-                jarvis_live.ENGINE.note_refused(mic)
+                jarvis_live.ENGINE.note_refused(mic, near_miss=_near_miss(verdict))
             except Exception:
                 pass
             return Heard(False, reason=verdict.reason, **common, **_live_fields(mic))
         return Heard(False, reason=verdict.reason, **common)
+    if check_only:
+        # A voice pause, and this was the owner: Live carries on without a
+        # tap, and this sentence is taken like any other.
+        try:
+            jarvis_live.ENGINE.carry_on_by_voice(mic)
+        except Exception:
+            pass
 
     if _stt_engine() is None:
         return Heard(True, available=False, wake_heard=wake,
@@ -1978,7 +2072,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         if words:
             _flow("note_heard", t_in, steps, source=source, mic=mic,
                   waited_ms=waited_ms, cold=cold)
-            _note_for_history(words, verdict, embedder, source)
+            _note_for_history(words, verdict, embedder, trust_src)
 
     def other_device() -> Heard:
         # The same words, heard by the owner's other device and already
@@ -2039,13 +2133,16 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         if wake and text.strip() and not _claim_wake(mic, t_in):
             return other_device()
         said = _live_phrase(text)
-        if said is not None and said[0] == "start" and _live_start(mic) is not None:
+        started = _live_start(mic) if said is not None and said[0] == "start" else None
+        if started is not None:
             # "Let's talk" - with the talk button, or in the window after a
             # bare "Hey Jarvis." - starts Live on this device. No card: the
             # owner's own act, and the owner check just passed.
-            return Heard(True, text="", engine=engine, wake_heard=wake, live="started",
-                         live_say=jarvis_live.SAY_STARTED, reason="Jarvis Live started",
-                         **common)
+            return _live_started(started, engine, wake, common)
+        if wake and text.strip():
+            offer = _offer_move(mic, engine, common)
+            if offer is not None:
+                return offer
         timed(text)
         return Heard(True, text=text, engine=engine, wake_heard=wake,
                      question_private=_question_private(text), **common)
@@ -2064,6 +2161,9 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         # that device alone.
         if not _claim_wake(mic, t_in):
             return other_device()
+        offer = _offer_move(mic, engine, common)
+        if offer is not None:
+            return offer
         secs = _open_awake(mic)
         return Heard(True, text="", engine=engine, wake_heard=True, awake=True,
                      awake_seconds=secs, reason="listening", **common)
@@ -2076,11 +2176,14 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     if not _claim_wake(mic, t_in):
         return other_device()
     said = _live_phrase(rest)
-    if said is not None and said[0] == "start" and _live_start(mic) is not None:
+    started = _live_start(mic) if said is not None and said[0] == "start" else None
+    if started is not None:
         # "Hey Jarvis, let's talk": Jarvis Live starts on the device that
         # heard it (docs/LIVE-DESIGN.md section 2). No card.
-        return Heard(True, text="", engine=engine, wake_heard=True, live="started",
-                     live_say=jarvis_live.SAY_STARTED, reason="Jarvis Live started", **common)
+        return _live_started(started, engine, True, common)
+    offer = _offer_move(mic, engine, common)
+    if offer is not None:
+        return offer
     timed(rest)
     return Heard(True, text=rest, engine=engine, wake_heard=True,
                  question_private=_question_private(rest), **common)
@@ -2116,10 +2219,11 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     _note_timing(engine, voice, text, t0, len(samples) / float(rate), fallback, note)
     # Jarvis asked something aloud: the next wake-word clip needs no phrase.
     _note_said(text, len(samples) / float(rate or 16000), mic)
-    # Jarvis Live's quiet clock starts again from Jarvis speaking.
+    # Jarvis Live's quiet clock starts again from Jarvis speaking - but not
+    # from "Say a bit more": asking for more words is no conversation.
     if jarvis_live is not None:
         try:
-            jarvis_live.ENGINE.note_spoke(mic)
+            jarvis_live.ENGINE.note_spoke(mic, text)
         except Exception:
             pass
     wav = _write_wav(samples, rate)

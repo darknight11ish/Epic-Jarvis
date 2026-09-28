@@ -87,7 +87,8 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
     {"mode": "sensitive_memory", "value": "sensitive_on_screen"|"sensitive_aloud"}
     {"mode": "hands_free", "value": "same_as_button"|"button_only"}
     {"mode": "hands_free_screen", "value": "screen_on_screen"|"screen_aloud"}
-    {"mode": "hands_free_live", "value": "live_same_as_button"|"live_like_hey_jarvis"}
+    {"mode": "hands_free_live", "value": "live_trust_fully"|"live_button_start_only"|
+                                         "live_like_hey_jarvis"}
         Tightening applies at once. Loosening raises ONE card
         (change_own_config), and changes nothing until it is approved.
         `voice_is_enough` is refused unless the check is very strict;
@@ -946,30 +947,40 @@ _SETTING_WORDS = {
         "If you say no: nothing changes - \"Hey Jarvis\" questions stay on the "
         "stricter setting."),
     # The owner's decision, 2026-09-28: under "only trust the talk button",
-    # an answer about the screen to a "Hey Jarvis" question stays on screen;
-    # this card lets those be read aloud even then.
+    # an answer about the screen - or, since Jarvis Live, about what the
+    # camera sees (read_camera follows the same screen_aloud) - to a "Hey
+    # Jarvis" question stays on screen; this card lets those be read aloud
+    # even then.
     ("hands_free_screen", "screen_aloud"): (
-        "Let Jarvis read answers about your screen aloud after \"Hey Jarvis\", even "
-        "while \"Only trust the talk button\" is chosen?\n\n"
-        "Anyone near the speaker will hear what Jarvis says about your screen. A "
-        "recording or a copy of your voice played near the microphone while Jarvis "
-        "is watching your screen could hear it too.\n\n"
+        "Let Jarvis read answers about your screen or the camera aloud after \"Hey "
+        "Jarvis\", even while \"Only trust the talk button\" is chosen?\n\n"
+        "Anyone near the speaker will hear what Jarvis says about your screen or what "
+        "the camera sees. A recording or a copy of your voice played near the "
+        "microphone while Jarvis is looking could hear it too.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - those answers stay on your screen."),
-    # The owner's answer of 2026-09-28 (docs/LIVE-DESIGN.md): under "only
+    # The owner's answers of 2026-09-28 (docs/LIVE-DESIGN.md): under "only
     # trust the talk button", Jarvis Live is trusted like the talk button by
-    # default, with a setting to give it the "Hey Jarvis" caution instead.
-    # Choosing the caution is immediate; going back to trusted is this card.
-    ("hands_free_live", "live_same_as_button"): (
-        "Trust what you say in Jarvis Live like the talk button again, even while "
-        "\"Only trust the talk button\" is chosen?\n\n"
+    # default however it was started, with two stricter choices. A stricter
+    # one is immediate; each looser one is this card.
+    ("hands_free_live", "live_trust_fully"): (
+        "Trust what you say in Jarvis Live like the talk button, however Live was "
+        "started, even while \"Only trust the talk button\" is chosen?\n\n"
         "During Jarvis Live the microphone stays open. A recording or a copy of your "
         "voice played near it could pass the voice check, and would then be trusted "
         "like you pressing the talk button: Jarvis could remember things from it, or "
         "read memory and private answers aloud.\n\n"
         "If you did not just do this, say no.\n\n"
-        "If you say no: nothing changes - Jarvis Live keeps the extra caution of "
-        "\"Hey Jarvis\"."),
+        "If you say no: nothing changes."),
+    ("hands_free_live", "live_button_start_only"): (
+        "Trust what you say in Jarvis Live like the talk button when you start Live "
+        "with the button, even while \"Only trust the talk button\" is chosen?\n\n"
+        "During Jarvis Live the microphone stays open. A recording or a copy of your "
+        "voice played near it could pass the voice check, and would then be trusted "
+        "like you pressing the talk button. A Live started by \"Hey Jarvis, let's "
+        "talk\" keeps the extra caution.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes."),
 }
 
 

@@ -164,7 +164,7 @@ object StrictVoice {
         Choice(
             VoiceStrict.SCREEN_ON_SCREEN,
             "Keep on screen (recommended)",
-            "With \"Only trust the talk button\" chosen, a question about your screen that starts " +
+            "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts " +
                 "with \"Hey Jarvis\" gets a written answer only.",
         ),
         Choice(
@@ -175,7 +175,7 @@ object StrictVoice {
         ),
     )
 
-    const val HANDS_FREE_SCREEN_TITLE = "Answers about your screen after \"Hey Jarvis\""
+    const val HANDS_FREE_SCREEN_TITLE = "Answers about your screen or the camera after \"Hey Jarvis\""
 
     /**
      * Under the screen choices while "Same as the talk button" is chosen:
@@ -185,7 +185,7 @@ object StrictVoice {
      */
     const val SCREEN_ONLY_WHEN_STRICT =
         "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the " +
-            "talk button\", answers about your screen are read aloud already."
+            "talk button\", answers about your screen or the camera are read aloud already."
 
     const val PRIVACY_ONLY_VERY_STRICT =
         "\"Voice check is enough\" can only be chosen while the check is very strict."
