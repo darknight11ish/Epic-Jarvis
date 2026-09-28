@@ -854,7 +854,11 @@ object JarvisRuntime {
      */
     private fun describe(e: ApiError, handshake: Boolean = false): String {
         if (e == ApiError.AlreadyHandled) return "Already handled elsewhere."
-        val shown = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
+        val plain = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
+        // A refused key whose 401 said why (docs/PAIRING-DESIGN.md §5.3):
+        // that sentence instead of the general one. Otherwise unchanged.
+        val why = if (e == ApiError.BadToken) com.jarvis.client.net.KeyRefusal.words() else null
+        val shown = if (why != null) plain.copy(says = why, fix = "") else plain
         _problem.value = shown
         return shown.text
     }
@@ -3551,6 +3555,50 @@ object JarvisRuntime {
     // approval card. Every successful read or write updates
     // [ClientSettings]'s cache, which the listener service reads - the only
     // reason this route is read at all off the settings screen.
+
+    // -------------------------------------------------- pairing and devices ----
+    // docs/PAIRING-DESIGN.md: QR-code pairing (net/Pairing.kt,
+    // net/PairingFlow.kt) and Settings -> Devices (net/Devices.kt,
+    // ui/screens/DevicesPlate.kt).
+
+    /**
+     * The one pairing attempt, for the whole process - so turning the phone
+     * does not drop it. Its secrets live in memory only (never saved state).
+     */
+    val pairing: com.jarvis.client.net.PairingFlow by lazy {
+        com.jarvis.client.net.PairingFlow(
+            scope = scope,
+            transport = object : com.jarvis.client.net.PairTransport {
+                override suspend fun post(base: String, path: String, json: String) = api.pairPost(base, path, json)
+            },
+            wordList = { appContext?.let { com.jarvis.client.data.PairWords.load(it) } },
+        )
+    }
+
+    /** `GET /api/devices`. A read: not held on a stale link. */
+    suspend fun devices(): ApiResult<JsonObject> = api.devices()
+
+    /**
+     * Remove ONE device (design §6.4). Immediate and never held on a stale
+     * link: it only takes access away, like Forget. @return the sentence to
+     * show, and whether the device removed was this phone itself.
+     */
+    suspend fun removeDevice(device: com.jarvis.client.net.Devices.Device): Pair<String, Boolean> =
+        when (val r = api.devicesPost(com.jarvis.client.net.Devices.REMOVE_PATH, com.jarvis.client.net.Devices.removeBody(device.id))) {
+            is ApiResult.Ok -> {
+                val (code, body) = r.value
+                val self = code == 200 && (com.jarvis.client.net.Devices.removedThisPhone(body) || device.thisDevice)
+                com.jarvis.client.net.Devices.removeSaid(code, body, device.name) to self
+            }
+            is ApiResult.Failed -> ("Not removed. " + describe(r.error)) to false
+        }
+
+    /** "Retire for other devices" - stricter, so immediate (design §6.4). @return the sentence to show. */
+    suspend fun retireSharedKey(): String =
+        when (val r = api.devicesPost(com.jarvis.client.net.Devices.SHARED_PATH, com.jarvis.client.net.Devices.RETIRE_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Devices.retireSaid(r.value.first, r.value.second)
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
 
     /**
      * `GET /api/notifications/phone`. Updates the cache on success; leaves
