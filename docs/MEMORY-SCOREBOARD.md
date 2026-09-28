@@ -119,3 +119,15 @@ scores. "Found all" = every chat line the question relies on came back.
 number worse, in every one of the five chats. Nobody has looked into why yet.
 It may not hold with the real models; the PC run will tell. This is the
 baseline milestone 5 (multi-hop memory) has to beat.
+
+### "Said again" as a tie-breaker (milestone 12, added 2026-09-28, OFF)
+
+Switched on only with `JARVIS_MEMORY_SAID_AGAIN_TIEBREAK=1`. It reorders only
+facts that scored exactly the same, putting the one said more often first;
+it never adds, drops or hides a fact (`backend/README.md`, "Said again").
+
+| Date | Where measured | Result |
+|---|---|---|
+| 2026-09-28 | build machine, words only, re-ranker off, 71 to 10,071 facts | **No change**: 0 questions reordered at every size, every number identical (recall@5 80.9% at 71 facts, 79.8% at 10,071). The 6 exact ties involving a repeated fact already had it first. |
+| - | the PC, real models | **not run yet** - ties should be commoner with meaning search on, so only this run can say whether it helps. It stays off unless this run improves a number. |
+
