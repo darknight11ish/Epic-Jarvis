@@ -473,6 +473,16 @@ def t_every_outbound_tool_is_refused_unless_a_person_approved():
     auto/notify regardless, so an owner who lowers a tier is covered too."""
     tiers = _shipped_tiers()
     for tname in sorted(AG.NEEDS_A_PERSON):
+        if tname == "propose_plan":
+            # propose_plan carries a SECOND, independent gate ahead of the
+            # tier check this loop drives: jarvis_plan.enabled(), refused
+            # outright in _one_call before prepare() (or the gate) is ever
+            # reached - see _propose_plan_refusal. It ships off regardless
+            # of tier until a real safety-test result clears it, so this
+            # tier-only loop cannot exercise it meaningfully; see
+            # test_agent_plan_wiring.py's own version of this same check,
+            # with jarvis_plan.enabled() mocked to True.
+            continue
         action, shipped = tiers[tname]
         cases = [("auto", True, "auto", False), ("notify", True, "notify", False),
                  ("ask", True, "approved", True), ("ask", False, "denied", False),

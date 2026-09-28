@@ -66,6 +66,7 @@ const float3 CAM_TARGET = float3(0.0, -0.08, 0.0);
 const float CAM_DIST = 3.35;
 const float CAM_PITCH = 0.0;
 const float BOUND_R = 1.35;
+const int MARCH_STEPS = 36;
 
 float3 toBody(float3 p) {
     float3 v = p - uBodyPos;
@@ -76,7 +77,7 @@ float3 toHead(float3 p) {
     return float3(dot(uHeadR0, v), dot(uHeadR1, v), dot(uHeadR2, v)) / HEAD_S;
 }
 // Where each eye sits: it drifts a little toward where it is looking.
-float2 eyeAt() { return float2(0.158 + 0.012 * uLook.x, 0.395 + 0.012 * uLook.y); }
+float2 eyeAt() { return float2(0.158, 0.395) + 0.012 * uLook; }
 // Ears are placed in the HEAD's frame, so they turn with it.
 float3 toEarL(float3 h) {
     float3 v = h - float3(-0.265, 0.60, 0.04);
@@ -90,9 +91,9 @@ float3 toEarR(float3 h) {
 // --- the parts, each in the frame it is modelled in ---------------------
 
 float partTorso(float3 b) {
-    float br = uBreath;
+    // (Written out as one multiply-add: this is in every march step.)
     return sdEllipsoid(b - float3(0.0, 0.31, 0.02),
-                       float3(0.38 * br, 0.39 * (0.5 + 0.5 * br), 0.33 * br));
+                       float3(0.38, 0.195, 0.33) * uBreath + float3(0.0, 0.195, 0.0));
 }
 // One piece per leg: the thigh, reaching forward into the foot.
 float partLegs(float3 b) {
@@ -127,7 +128,7 @@ float4 mouthSize() {
 // The hollow's half-height. It sits just inside the drawing - its top under
 // the upper lip's line, its sides in from the corners - so its edge is
 // always covered by the drawn line and never shows as a second outline.
-float mouthH() { return 0.0015 + uMouth.x * (0.035 - 0.014 * uMouth.y + 0.012 * uMouth.z); }
+float mouthH() { return 0.0015 + uMouth.x * (0.035 + dot(uMouth.yz, float2(-0.014, 0.012))); }
 // It bends up toward the corners, as the drawn smile does (a parabola,
 // near enough, and cheap: this runs in every march step). Inside so flat
 // a shape sdEllipsoid's estimate runs far too deep - it cut a slit along
@@ -135,7 +136,7 @@ float mouthH() { return 0.0015 + uMouth.x * (0.035 - 0.014 * uMouth.y + 0.012 * 
 // half-height, which is as deep as the inside of it can really be.
 float mouthShape(float3 h) {
     float3 m = uMouth;
-    float a = 0.034 + 0.030 * m.y - 0.020 * m.z + 0.024 * m.x;
+    float a = 0.034 + dot(m, float3(0.024, 0.030, -0.020));
     float hh = mouthH();
     float bend = (0.0047 + 0.0029 * m.y) * h.x * h.x / (a * a);
     return max(sdEllipsoid(h - float3(0.0, 0.186 - hh + bend, -0.395 - 0.012 * m.z), float3(a, hh, 0.075)), -hh);
@@ -144,7 +145,7 @@ float mouthShape(float3 h) {
 // surface altogether (by more than the fillet), so no groove is left under
 // the drawn line; it sinks in over the first quarter of an opening, while
 // the drawing is already parting, so nothing pops.
-float mouthCarve(float3 h) { return mouthShape(h) + 0.02 * (1.0 - min(uMouth.x * 4.0, 1.0)); }
+float mouthCarve(float3 h) { return mouthShape(h) + max(0.02 - 0.08 * uMouth.x, 0.0); }
 // The head (head frame, unscaled): skull, cheek fluff, muzzle and eyebrow
 // puffs, with the mouth carved out of it.
 float partHead(float3 h) {
@@ -153,8 +154,8 @@ float partHead(float3 h) {
     d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
     // The muzzle; its lower edge - the chin - drops as the jaw opens, and
     // it pushes forward a little for an "oo".
-    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205 - 0.045 * uMouth.x, -0.29 - 0.012 * uMouth.z),
-                            float3(0.155 - 0.012 * uMouth.z, 0.115 + 0.045 * uMouth.x, 0.13)), 0.07);
+    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205, -0.29) + float3(0.0, 0.045, 0.012) * uMouth.xxz,
+                            float3(0.155, 0.115, 0.13) + float3(-0.012, 0.045, 0.0) * uMouth.zxx), 0.07);
     // (The eyebrow spots are painted on - see headColour - not modelled:
     // two more shapes here cost more than they showed.)
     return smax(d, -mouthCarve(h), 0.012);
@@ -162,7 +163,7 @@ float partHead(float3 h) {
 // An ear: a flattened ellipsoid, pinched toward the tip.
 float earShape(float3 e) {
     return sdEllipsoid(e - float3(0.0, 0.13, 0.0),
-                       float3(0.13 * (1.0 - 0.30 * clamp(e.y / 0.28, 0.0, 1.0)), 0.17, 0.055));
+                       float3(0.13 - clamp(e.y * 0.1392857, 0.0, 0.039), 0.17, 0.055));
 }
 float partEars(float3 h) { return min(earShape(toEarL(h)), earShape(toEarR(h))); }
 float partNose(float3 h) {
@@ -222,7 +223,7 @@ float partAt(float3 p) {
     return id;
 }
 
-// A rough panda for shadows and occlusion, which are soft anyway: body,
+// A rough panda for shadows, which are soft anyway: body,
 // skull, arms and a two-piece tail. A fraction of map()'s size. Every piece
 // sits INSIDE the real shape, never outside it: a point on the real surface
 // that found itself inside this one would shadow itself (it drew a dark band
@@ -301,7 +302,7 @@ float4 material(float id, float3 pos, float3 n) {
         // the hollow behind it - darker the deeper in they are.
         if (h.z < -0.30) {
             float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
-            float4 c = mouthPaint(headColour(h), DARK * 2.0, h.xy, mouthSize(), 0.06, uMouth.y, carved);
+            float4 c = mouthPaint(headColour(h), DARK * 2.0, h.xy, mouthSize(), 0.06, uMouth.y, carved, carved * smoothstep(0.4, 0.8, -dot(uHeadR1, n)));
             return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.39, -0.34, h.z) * carved), c.w);
         }
         return float4(headColour(h), 0.0);
@@ -332,7 +333,8 @@ float3 sparkle(float id, float3 pos) {
 }
 
 // What a ray that ran out of march steps without reaching anything sees
-// (common_tail.sksl): nothing behind this animal to fill it in.
-float stuckRay(float3 ro, float3 rd) {
-    return -1.0;
+// (common_tail.sksl): nothing behind this animal to fill it in. (Where it
+// meets something, and map() there; -1 for nothing.)
+float2 stuckRay(float3 ro, float3 rd) {
+    return float2(-1.0, 0.0);
 }

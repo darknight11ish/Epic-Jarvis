@@ -342,6 +342,11 @@ permissions = [
   "allow-get-backend-capabilities",
   "allow-get-second-card",
   "allow-set-second-card",
+  # Moving one of the second card's own features onto a third, capable
+  # graphics card (2026-09-28) - its own command, since the wire shape
+  # differs ("assign", not "enabled"); the GET side rides along in
+  # allow-get-second-card's own poll (status()'s new "third" key).
+  "allow-set-third-card",
   # "When to suggest the bigger model": the two settings that decide
   # whether Jarvis may OFFER "One bigger model on both cards" on its own
   # (2026-09-27). No card either way - it only changes whether Jarvis
@@ -409,6 +414,14 @@ permissions = [
   # asks first - written by the PC from its settings, never by the model.
   # A read: it changes nothing, and no key or private link is in it.
   "allow-get-reach",
+  # The sun, the moon and the weather behind the animal faces (backend/
+  # sky.patch, the owner's decisions of 2026-09-28): the settings (a read),
+  # and ONE change at a time - show them, the town (this PC only; the PC
+  # checks too), forget the town, the weather source. Open-Meteo ON
+  # approves nothing: the PC raises ONE approval card. Adding is held on a
+  # stale link in Rust; hiding, forgetting and "off" never are.
+  "allow-get-sky",
+  "allow-set-sky",
   # "What asks first" (backend/asks-first.patch, 2026-09-26): every action
   # and whether it asks first, in the PC's words (a read); "Ask me first" on
   # ONE action of the short safe list - stricter at once, looser only as one
@@ -501,6 +514,12 @@ permissions = [
   # "Voice follows the face" (an animal face speaks in its own built-in
   # voice): an on/off switch, the same shape - no card either way.
   "allow-set-voice-face",
+  # Each animal's own voice, pitch and pace, and "Reset to its own voice":
+  # the same shape, no card either way. "Try it" plays one fixed line in
+  # that voice and changes nothing.
+  "allow-set-voice-animal",
+  "allow-reset-voice-animal",
+  "allow-try-voice-animal",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",
@@ -751,6 +770,25 @@ permissions = [
   "allow-brain-schedule-clear-list",
 ]
 
+# Goals (backend/goals.patch, JARVIS-API.md section 59; the owner's "build it
+# now", 2026-09-27): reading the list is a read - the words taken out in Rust
+# while the private lists are hidden, same as Coming up. A new draft, marking
+# a step done or not, and Stop tracking raise no card - a draft is content,
+# not action, and the other two are immediate, like a to-do item. Accepting
+# a draft is the one place this can raise a card, and it is the backend's
+# own, through jarvis_schedule.py's existing mechanism - never a card this
+# app raises itself. Every write held while the event stream is stale.
+[[set]]
+identifier = "brain-goals"
+description = "Read Goals, add one draft goal, accept a draft (the backend raises its own one weekly-check-in approval card), mark one step done or not, and stop tracking a goal - no card except through accepting, and every change held on a stale link."
+permissions = [
+  "allow-brain-goals",
+  "allow-brain-goals-create",
+  "allow-brain-goals-accept",
+  "allow-brain-goals-step",
+  "allow-brain-goals-stop",
+]
+
 # "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
 # version; brain/widgets.rs, backend jarvis_widgets.py; JARVIS-API.md section
 # 87). The Brain lists the widgets, asks the PC for a PREVIEW from the
@@ -816,6 +854,44 @@ permissions = [
   "allow-history-import-cancel",
 ]
 
+# Projects (backend/projects.patch; JARVIS-API section 88; the owner's
+# decision of 2026-09-28, docs/PROJECTS-DESIGN.md build step 3). Reading is a
+# read - hidden in Rust while "Windows Hello for memory lists and chat
+# history" hides the private lists. A change is ONE action from a fixed list
+# (brain/projects.rs ACTIONS) - the page never names a URL - and the PC
+# decides which raise a card: Shareable ON and taking off a private mark
+# Jarvis made itself, one change_own_config card each. Every change is held
+# while the event stream is stale, except Shareable OFF. A coding project's
+# folder comes only from the Windows folder picker (a typed path is
+# refused in Rust), and the PC accepts only one on "Folders Jarvis may look
+# in". Nothing here runs a benchmark's command: that is a later step.
+[[set]]
+identifier = "brain-projects"
+description = "Read the projects, make ONE change at a time (a project, its Shareable switch, a benchmark, one number, a private mark - the PC raises any card), and choose a coding project's folder with the Windows picker. Runs nothing."
+permissions = [
+  "allow-projects-read",
+  "allow-projects-write",
+  "allow-projects-choose-folder",
+]
+
+# "Forget a time frame" (backend/forget-range.patch; JARVIS-API section 64;
+# the owner's decision of 2026-09-28). Reading the status or the list for
+# some days is a read - the list's words hidden in Rust while "Windows Hello
+# for memory lists and chat history" hides the private lists, or App lock
+# has locked Jarvis. A change is ONE of two actions from a fixed list
+# (brain/forget_range.rs) - the page never names a URL: "Forget these" sends
+# the ids still ticked, and the PC raises ONE card listing every item (never
+# approved here, never by voice); it is refused while the list is hidden
+# and held while the event stream is stale. Undo puts back what that card
+# removed, within 10 minutes, with no card; it is never held.
+[[set]]
+identifier = "brain-forget-range"
+description = "Read what Jarvis learned and the chats from some days, ask the PC to forget the ticked ones (the PC raises ONE approval card), and Undo within 10 minutes. Approves nothing."
+permissions = [
+  "allow-forget-range-read",
+  "allow-forget-range-write",
+]
+
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
 # timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
 # is a read. ONE thing per call to the running session - pause, resume, +10
@@ -824,6 +900,25 @@ permissions = [
 # stop are not (they only make Jarvis do less). Starting one is its own set,
 # the Brain's alone: the widget shows and steers a session, it does not start
 # one.
+# Jarvis Live (live.rs; docs/LIVE-DESIGN.md; the owner's answers of
+# 2026-09-28): a back-and-forth voice conversation on this PC. Start needs no
+# card (the owner's own act) but is held on a stale link and while App lock
+# would ask; Stop and Mute only make Jarvis hear less and are never held. The
+# microphone itself is voice.rs's and only a server on this PC hears it. The
+# Jarvis bar holds the whole set; the always-on-top badge holds it too, so
+# the owner can always end Live from the sign that says it is on.
+[[set]]
+identifier = "live"
+description = "Jarvis Live: read the session (fixed words and minutes, never what was said), start it (no card; held on a stale link and under App lock), stop it, more time, carry on, mute or unmute, and keep the microphone closed while a card is shown or an answer is spoken under \"Interrupt by tap only\"."
+permissions = [
+  "allow-live-status",
+  "allow-live-start",
+  "allow-live-stop",
+  "allow-live-act",
+  "allow-live-mute",
+  "allow-live-hold",
+]
+
 [[set]]
 identifier = "focus"
 description = "Read the focus session (a countdown, booleans and counts - never what was in front) and do ONE thing to it: pause, resume, +10 minutes, stop, or lock on where the owner lands. No card; resume, extend and lock are held on a stale link."
@@ -837,6 +932,28 @@ identifier = "focus-start"
 description = "Start a focus session (minutes, and optionally what it is on). No card. Held on a stale link."
 permissions = [
   "allow-focus-start",
+]
+
+# "Talk to a chatbot for me" (backend/chatbot-routes.patch; the owner's decisions of
+# 2026-09-27 and 2026-09-28): Jarvis asks an AI chatbot about something for
+# the owner, within limits approved on ONE card. Reading the conversation is
+# a read (the goal and the transcript taken out in Rust while the private
+# lists are hidden). Starting one and changing its limits each raise a card
+# on the PC and are held on a stale link; Stop and Pause only make Jarvis do
+# less and are not held; Resume raises the task's own card and is held. The
+# Brain's alone.
+[[set]]
+identifier = "chatbot"
+description = "Talk to a chatbot for me: read the conversation, start one (ONE approval card), change its limits (a NEW card), stop, pause and resume it; ask several and compare (ONE card listing every chatbot) and stop that. Start, compare, limits and resume are held on a stale link."
+permissions = [
+  "allow-chatbot-status",
+  "allow-chatbot-start",
+  "allow-chatbot-limits",
+  "allow-chatbot-stop",
+  "allow-chatbot-pause",
+  "allow-chatbot-resume",
+  "allow-chatbot-compare-start",
+  "allow-chatbot-compare-stop",
 ]
 
 # The morning briefing (backend/briefing.patch; the owner's decisions of
@@ -875,6 +992,15 @@ permissions = ["allow-get-appearance", "allow-set-appearance"]
 identifier = "appearance-read"
 description = "Read which face Jarvis wears and whether that choice is shared with the phone. Cosmetic and read-only."
 permissions = ["allow-get-appearance"]
+
+# The sun, the moon and the weather, read only: the Widget and the floating
+# face keep what their face frame draws (the position rounded to 0.1 degree,
+# the weather as five numbers) in this computer's localStorage. Neither may
+# change anything: that is Settings.
+[[set]]
+identifier = "sky-read"
+description = "Read whether the sun and moon show behind the animal, the rough position and the weather now. Cosmetic and read-only."
+permissions = ["allow-get-sky"]
 
 # Settings' "Open Faces" button. Opens a window; changes nothing by itself.
 [[set]]

@@ -1,0 +1,4242 @@
+{
+ "phases": [
+  "New moon",
+  "Waxing crescent",
+  "First quarter",
+  "Waxing gibbous",
+  "Full moon",
+  "Waning gibbous",
+  "Last quarter",
+  "Waning crescent"
+ ],
+ "tint": [
+  [
+   -18,
+   12,
+   18,
+   40,
+   0.1,
+   12,
+   18,
+   40,
+   0.04
+  ],
+  [
+   -8,
+   22,
+   32,
+   74,
+   0.16,
+   40,
+   40,
+   80,
+   0.1
+  ],
+  [
+   -2,
+   30,
+   44,
+   90,
+   0.18,
+   120,
+   70,
+   60,
+   0.16
+  ],
+  [
+   6,
+   36,
+   70,
+   118,
+   0.2,
+   140,
+   96,
+   70,
+   0.14
+  ],
+  [
+   20,
+   36,
+   78,
+   122,
+   0.2,
+   60,
+   100,
+   138,
+   0.12
+  ]
+ ],
+ "layout": {
+  "HORIZON": -0.32,
+  "RX": 0.84,
+  "RY": 1.21,
+  "SUN_R": 0.075,
+  "MOON_R": 0.066
+ },
+ "bodies": [
+  {
+   "ms": 1718941380000,
+   "lat": 39.7,
+   "lon": -105,
+   "gmst": 325.586616291,
+   "sun": {
+    "alt": -11.676641089,
+    "az": 314.385147255,
+    "H": 130.287933657,
+    "ra": 90.298682634,
+    "dec": 23.438331165,
+    "lambda": 90.274037753
+   },
+   "moon": {
+    "alt": 13.413951055,
+    "altGeo": 14.336864463,
+    "az": 146.36232907,
+    "H": -37.250428763,
+    "ra": 257.837045054,
+    "dec": -27.545083265,
+    "parallax": 0.952579977,
+    "elong": 168.92465398,
+    "fraction": 0.989133564,
+    "waxing": true,
+    "phase": 4,
+    "chi": 252.711930447,
+    "tilt": 281.442260416
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1718969547572,
+    "sunset": 1719023489821,
+    "moonUp": true,
+    "moonrise": 1719024840919,
+    "moonset": 1718966578297,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "Sun rises 11:32, sets 02:31. Moon: full moon, 99% lit, rises 02:54, sets 10:42."
+  },
+  {
+   "ms": 1734816720000,
+   "lat": 39.7,
+   "lon": -105,
+   "gmst": 53.941791557,
+   "sun": {
+    "alt": 17.419143263,
+    "az": 216.65096575,
+    "H": 38.373231668,
+    "ra": 270.568559889,
+    "dec": -23.43757247,
+    "lambda": 270.521648929
+   },
+   "moon": {
+    "alt": -31.698312,
+    "altGeo": -30.916143954,
+    "az": 309.508163673,
+    "H": 138.3392884,
+    "ra": 170.602503157,
+    "dec": 5.264244903,
+    "parallax": 0.911702591,
+    "elong": 258.775935152,
+    "fraction": 0.59730466,
+    "waxing": false,
+    "phase": 6,
+    "chi": 112.888541446,
+    "tilt": 76.29515008
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1734877090587,
+    "sunset": 1734824352660,
+    "moonUp": false,
+    "moonrise": 1734848564513,
+    "moonset": 1734893574254,
+    "phase": 6,
+    "phaseName": "Last quarter",
+    "percent": 60,
+    "waxing": false
+   },
+   "today": "Sun rises 14:18, sets 23:39. Moon: last quarter, 60% lit, rises 06:22, sets 18:52."
+  },
+  {
+   "ms": 1706205240000,
+   "lat": 39.7,
+   "lon": -105,
+   "gmst": 33.043295426,
+   "sun": {
+    "alt": 28.566520831,
+    "az": 158.866685028,
+    "H": -19.560692219,
+    "ra": 307.603987646,
+    "dec": -18.956028543,
+    "lambda": 305.247391799
+   },
+   "moon": {
+    "alt": -24.645532236,
+    "altGeo": -23.811264667,
+    "az": 339.252276596,
+    "H": 159.287138462,
+    "ra": 128.756156964,
+    "dec": 23.60149149,
+    "parallax": 0.911887117,
+    "elong": 179.896661767,
+    "fraction": 0.998269853,
+    "waxing": true,
+    "phase": 4,
+    "chi": 13.226358567,
+    "tilt": 355.922257214
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1706278388199,
+    "sunset": 1706227862443,
+    "moonUp": false,
+    "moonrise": 1706227699003,
+    "moonset": 1706281692118,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 100,
+    "waxing": true
+   },
+   "today": "Sun rises 14:13, sets 00:11. Moon: full moon, 100% lit, rises 00:08, sets 15:08."
+  },
+  {
+   "ms": 1705549920000,
+   "lat": 39.7,
+   "lon": -105,
+   "gmst": 175.067434047,
+   "sun": {
+    "alt": -43.833442309,
+    "az": 279.296559069,
+    "H": 130.466982824,
+    "ra": 299.600451223,
+    "dec": -20.654311207,
+    "lambda": 297.529190404
+   },
+   "moon": {
+    "alt": 40.493482449,
+    "altGeo": 41.228228754,
+    "az": 246.793963054,
+    "H": 44.787784972,
+    "ra": 25.279649075,
+    "dec": 11.126319841,
+    "parallax": 0.976938956,
+    "elong": 89.936617577,
+    "fraction": 0.499446914,
+    "waxing": true,
+    "phase": 2,
+    "chi": 248.918017575,
+    "tilt": 202.806002435
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1705587481322,
+    "sunset": 1705622578649,
+    "moonUp": true,
+    "moonrise": 1705602715001,
+    "moonset": 1705563628209,
+    "phase": 2,
+    "phaseName": "First quarter",
+    "percent": 50,
+    "waxing": true
+   },
+   "today": "Sun rises 14:18, sets 00:02. Moon: first quarter, 50% lit, rises 18:31, sets 07:40."
+  },
+  {
+   "ms": 1718941380000,
+   "lat": 51.48,
+   "lon": 0,
+   "gmst": 325.586616291,
+   "sun": {
+    "alt": -0.812511054,
+    "az": 48.961949166,
+    "H": -124.712066343,
+    "ra": 90.298682634,
+    "dec": 23.438331165,
+    "lambda": 90.274037753
+   },
+   "moon": {
+    "alt": -9.726158865,
+    "altGeo": -8.78475355,
+    "az": 236.136393973,
+    "H": 67.749571237,
+    "ra": 257.837045054,
+    "dec": -27.545083265,
+    "parallax": 0.952579977,
+    "elong": 168.92465398,
+    "fraction": 0.989133564,
+    "waxing": true,
+    "phase": 4,
+    "chi": 252.711930447,
+    "tilt": 217.032072498
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1719027784962,
+    "sunset": 1719001259974,
+    "moonUp": false,
+    "moonrise": 1719002598878,
+    "moonset": 1719026150892,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "Sun rises 03:43, sets 20:20. Moon: full moon, 99% lit, rises 20:43, sets 03:15."
+  },
+  {
+   "ms": 1718971200000,
+   "lat": 51.48,
+   "lon": 0,
+   "gmst": 90.1768015,
+   "sun": {
+    "alt": 61.954785792,
+    "az": 179.061652886,
+    "H": -0.48083726,
+    "ra": 90.65763876,
+    "dec": 23.437237957,
+    "lambda": 90.603379043
+   },
+   "moon": {
+    "alt": -66.300518109,
+    "altGeo": -65.910268606,
+    "az": 15.653017916,
+    "H": -172.834956351,
+    "ra": 263.011757851,
+    "dec": -28.000318593,
+    "parallax": 0.956102875,
+    "elong": 173.208782542,
+    "fraction": 0.994814008,
+    "waxing": true,
+    "phase": 4,
+    "chi": 238.18692406,
+    "tilt": 249.157912854
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1719027784955,
+    "sunset": 1719001259967,
+    "moonUp": false,
+    "moonrise": 1719002598871,
+    "moonset": 1719026150885,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "Sun rises 03:43, sets 20:20. Moon: full moon, 99% lit, rises 20:43, sets 03:15."
+  },
+  {
+   "ms": 1734816720000,
+   "lat": 51.48,
+   "lon": 0,
+   "gmst": 53.941791557,
+   "sun": {
+    "alt": -50.333203421,
+    "az": 300.960206081,
+    "H": 143.373231668,
+    "ra": 270.568559889,
+    "dec": -23.43757247,
+    "lambda": 270.521648929
+   },
+   "moon": {
+    "alt": -12.808580243,
+    "altGeo": -11.916525325,
+    "az": 65.437766487,
+    "H": -116.6607116,
+    "ra": 170.602503157,
+    "dec": 5.264244903,
+    "parallax": 0.911702591,
+    "elong": 258.775935152,
+    "fraction": 0.59730466,
+    "waxing": false,
+    "phase": 6,
+    "chi": 112.888541446,
+    "tilt": 147.557299796
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1734854628893,
+    "sunset": 1734882829076,
+    "moonUp": false,
+    "moonrise": 1734821798705,
+    "moonset": 1734868224034,
+    "phase": 6,
+    "phaseName": "Last quarter",
+    "percent": 60,
+    "waxing": false
+   },
+   "today": "Sun rises 08:03, sets 15:53. Moon: last quarter, 60% lit, rises 22:56, sets 11:50."
+  },
+  {
+   "ms": 1742475720000,
+   "lat": 51.48,
+   "lon": 0,
+   "gmst": 13.815324244,
+   "sun": {
+    "alt": 37.309572608,
+    "az": 197.267942413,
+    "H": 13.656411682,
+    "ra": 0.158912562,
+    "dec": 0.068894528,
+    "lambda": 0.173204059
+   },
+   "moon": {
+    "alt": -44.740168567,
+    "altGeo": -44.086821245,
+    "az": 282.349069457,
+    "H": 128.267241259,
+    "ra": 245.548082984,
+    "dec": -26.658720501,
+    "parallax": 0.90959173,
+    "elong": 248.026711298,
+    "fraction": 0.686360412,
+    "waxing": false,
+    "phase": 5,
+    "chi": 101.548840593,
+    "tilt": 58.646963625
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1742536803783,
+    "sunset": 1742494406188,
+    "moonUp": false,
+    "moonrise": 1742521268492,
+    "moonset": 1742545148339,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 69,
+    "waxing": false
+   },
+   "today": "Sun rises 06:00, sets 18:13. Moon: waning gibbous, 69% lit, rises 01:41, sets 08:19."
+  },
+  {
+   "ms": 1706205240000,
+   "lat": 51.48,
+   "lon": 0,
+   "gmst": 33.043295426,
+   "sun": {
+    "alt": -11.96524577,
+    "az": 254.517403048,
+    "H": 85.439307781,
+    "ra": 307.603987646,
+    "dec": -18.956028543,
+    "lambda": 305.247391799
+   },
+   "moon": {
+    "alt": 13.977505601,
+    "altGeo": 14.85889947,
+    "az": 70.621329644,
+    "H": -95.712861538,
+    "ra": 128.756156964,
+    "dec": 23.60149149,
+    "parallax": 0.911887117,
+    "elong": 179.896661767,
+    "fraction": 0.998269853,
+    "waxing": true,
+    "phase": 4,
+    "chi": 13.226358567,
+    "tilt": 53.102781104
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1706255250846,
+    "sunset": 1706287072599,
+    "moonUp": true,
+    "moonrise": 1706289224161,
+    "moonset": 1706258533158,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 100,
+    "waxing": true
+   },
+   "today": "Sun rises 07:47, sets 16:37. Moon: full moon, 100% lit, rises 17:13, sets 08:42."
+  },
+  {
+   "ms": 1712600460000,
+   "lat": 51.48,
+   "lon": 0,
+   "gmst": 112.749681901,
+   "sun": {
+    "alt": 2.94042563,
+    "az": 278.507397958,
+    "H": 94.840648335,
+    "ra": 17.909033566,
+    "dec": 7.593670043,
+    "lambda": 19.403733218
+   },
+   "moon": {
+    "alt": 2.288428333,
+    "altGeo": 3.301842715,
+    "az": 278.765259564,
+    "H": 94.817525236,
+    "ra": 17.932156664,
+    "dec": 8.036832304,
+    "parallax": 1.015099482,
+    "elong": 0.188929853,
+    "fraction": 0.000014996,
+    "waxing": true,
+    "phase": 0,
+    "chi": 182.960728218,
+    "tilt": 144.526231326
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1712639794698,
+    "sunset": 1712601943063,
+    "moonUp": true,
+    "moonrise": 1712640524630,
+    "moonset": 1712601765927,
+    "phase": 0,
+    "phaseName": "New moon",
+    "percent": 0,
+    "waxing": true
+   },
+   "today": "Sun rises 05:16, sets 18:45. Moon: new moon, 0% lit, rises 05:28, sets 18:42."
+  },
+  {
+   "ms": 1705549920000,
+   "lat": 51.48,
+   "lon": 0,
+   "gmst": 175.067434047,
+   "sun": {
+    "alt": -37.324356259,
+    "az": 75.780088999,
+    "H": -124.533017176,
+    "ra": 299.600451223,
+    "dec": -20.654311207,
+    "lambda": 297.529190404
+   },
+   "moon": {
+    "alt": -23.058800608,
+    "altGeo": -22.153985408,
+    "az": 327.784644862,
+    "H": 149.787784972,
+    "ra": 25.279649075,
+    "dec": 11.126319841,
+    "parallax": 0.976938956,
+    "elong": 89.936617577,
+    "fraction": 0.499446914,
+    "waxing": true,
+    "phase": 2,
+    "chi": 248.918017575,
+    "tilt": 229.140419776
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1705564595336,
+    "sunset": 1705595061156,
+    "moonUp": false,
+    "moonrise": 1705575646849,
+    "moonset": 1705629762792,
+    "phase": 2,
+    "phaseName": "First quarter",
+    "percent": 50,
+    "waxing": true
+   },
+   "today": "Sun rises 07:56, sets 16:24. Moon: first quarter, 50% lit, rises 11:00, sets 02:02."
+  },
+  {
+   "ms": 1790577000000,
+   "lat": 51.48,
+   "lon": 0,
+   "gmst": 104.552595197,
+   "sun": {
+    "alt": 4.482187476,
+    "az": 98.979145255,
+    "H": -80.182087323,
+    "ra": 184.73468252,
+    "dec": -2.049397767,
+    "lambda": 185.158263699
+   },
+   "moon": {
+    "alt": 14.1828413,
+    "altGeo": 15.125294097,
+    "az": 273.066588227,
+    "H": 82.781229528,
+    "ra": 21.771365669,
+    "dec": 13.669007391,
+    "parallax": 0.976273314,
+    "elong": 200.043553319,
+    "fraction": 0.968446951,
+    "waxing": false,
+    "phase": 5,
+    "chi": 56.875542899,
+    "tilt": 17.08198642
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1790661435773,
+    "sunset": 1790617482294,
+    "moonUp": true,
+    "moonrise": 1790618197467,
+    "moonset": 1790583295221,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 97,
+    "waxing": false
+   },
+   "today": "Sun rises 05:57, sets 17:44. Moon: waning gibbous, 97% lit, rises 17:56, sets 08:14."
+  },
+  {
+   "ms": 1718941380000,
+   "lat": 78.2,
+   "lon": 15.6,
+   "gmst": 325.586616291,
+   "sun": {
+    "alt": 19.142889261,
+    "az": 66.586341134,
+    "H": -109.112066343,
+    "ra": 90.298682634,
+    "dec": 23.438331165,
+    "lambda": 90.274037753
+   },
+   "moon": {
+    "alt": -26.433178794,
+    "altGeo": -25.573923952,
+    "az": 257.509919172,
+    "H": 83.349571237,
+    "ra": 257.837045054,
+    "dec": -27.545083265,
+    "parallax": 0.952579977,
+    "elong": 168.92465398,
+    "fraction": 0.989133564,
+    "waxing": true,
+    "phase": 4,
+    "chi": 252.711930447,
+    "tilt": 239.698393466
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": null,
+    "sunset": null,
+    "moonUp": false,
+    "moonrise": null,
+    "moonset": null,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "The sun stays up all day. Moon: full moon, 99% lit."
+  },
+  {
+   "ms": 1718971200000,
+   "lat": 78.2,
+   "lon": 15.6,
+   "gmst": 90.1768015,
+   "sun": {
+    "alt": 34.782919172,
+    "az": 196.940020707,
+    "H": 15.11916274,
+    "ra": 90.65763876,
+    "dec": 23.437237957,
+    "lambda": 90.603379043
+   },
+   "moon": {
+    "alt": -39.504727954,
+    "altGeo": -38.759173988,
+    "az": 25.985561015,
+    "H": -157.234956351,
+    "ra": 263.011757851,
+    "dec": -28.000318593,
+    "parallax": 0.956102875,
+    "elong": 173.208782542,
+    "fraction": 0.994814008,
+    "waxing": true,
+    "phase": 4,
+    "chi": 238.18692406,
+    "tilt": 244.011168696
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": null,
+    "sunset": null,
+    "moonUp": false,
+    "moonrise": null,
+    "moonset": null,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "The sun stays up all day. Moon: full moon, 99% lit."
+  },
+  {
+   "ms": 1734816720000,
+   "lat": 78.2,
+   "lon": 15.6,
+   "gmst": 53.941791557,
+   "sun": {
+    "alt": -34.365822452,
+    "az": 336.495986823,
+    "H": 158.973231668,
+    "ra": 270.568559889,
+    "dec": -23.43757247,
+    "lambda": 270.521648929
+   },
+   "moon": {
+    "alt": 1.998103679,
+    "altGeo": 2.908631746,
+    "az": 78.110172894,
+    "H": -101.0607116,
+    "ra": 170.602503157,
+    "dec": 5.264244903,
+    "parallax": 0.911702591,
+    "elong": 258.775935152,
+    "fraction": 0.59730466,
+    "waxing": false,
+    "phase": 6,
+    "chi": 112.888541446,
+    "tilt": 124.481428565
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": null,
+    "sunset": null,
+    "moonUp": true,
+    "moonrise": 1734909247533,
+    "moonset": 1734866121105,
+    "phase": 6,
+    "phaseName": "Last quarter",
+    "percent": 60,
+    "waxing": false
+   },
+   "today": "The sun stays down all day. Moon: last quarter, 60% lit, rises 23:14, sets 11:15."
+  },
+  {
+   "ms": 1742475720000,
+   "lat": 78.2,
+   "lon": 15.6,
+   "gmst": 13.815324244,
+   "sun": {
+    "alt": 10.345745563,
+    "az": 209.788213423,
+    "H": 29.256411682,
+    "ra": 0.158912562,
+    "dec": 0.068894528,
+    "lambda": 0.173204059
+   },
+   "moon": {
+    "alt": -36.666627697,
+    "altGeo": -35.930100826,
+    "az": 319.398055179,
+    "H": 143.867241259,
+    "ra": 245.548082984,
+    "dec": -26.658720501,
+    "parallax": 0.90959173,
+    "elong": 248.026711298,
+    "fraction": 0.686360412,
+    "waxing": false,
+    "phase": 5,
+    "chi": 101.548840593,
+    "tilt": 92.984691721
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1742532131517,
+    "sunset": 1742491435851,
+    "moonUp": false,
+    "moonrise": null,
+    "moonset": null,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 69,
+    "waxing": false
+   },
+   "today": "Sun rises 04:42, sets 17:23. Moon: waning gibbous, 69% lit."
+  },
+  {
+   "ms": 1706205240000,
+   "lat": 78.2,
+   "lon": 15.6,
+   "gmst": 33.043295426,
+   "sun": {
+    "alt": -20.794147418,
+    "az": 276.809290645,
+    "H": 101.039307781,
+    "ra": 307.603987646,
+    "dec": -18.956028543,
+    "lambda": 305.247391799
+   },
+   "moon": {
+    "alt": 24.267151214,
+    "altGeo": 25.092975156,
+    "az": 94.569241731,
+    "H": -80.112861538,
+    "ra": 128.756156964,
+    "dec": 23.60149149,
+    "parallax": 0.911887117,
+    "elong": 179.896661767,
+    "fraction": 0.998269853,
+    "waxing": true,
+    "phase": 4,
+    "chi": 13.226358567,
+    "tilt": 26.079560348
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": null,
+    "sunset": null,
+    "moonUp": true,
+    "moonrise": null,
+    "moonset": null,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 100,
+    "waxing": true
+   },
+   "today": "The sun stays down all day. Moon: full moon, 100% lit."
+  },
+  {
+   "ms": 1712600460000,
+   "lat": 78.2,
+   "lon": 15.6,
+   "gmst": 112.749681901,
+   "sun": {
+    "alt": 3.357335091,
+    "az": 291.500610761,
+    "H": 110.440648335,
+    "ra": 17.909033566,
+    "dec": 7.593670043,
+    "lambda": 19.403733218
+   },
+   "moon": {
+    "alt": 2.783778426,
+    "altGeo": 3.796650112,
+    "az": 291.563342159,
+    "H": 110.417525236,
+    "ra": 17.932156664,
+    "dec": 8.036832304,
+    "parallax": 1.015099482,
+    "elong": 0.188929853,
+    "fraction": 0.000014996,
+    "waxing": true,
+    "phase": 0,
+    "chi": 182.960728218,
+    "tilt": 171.887105811
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1712627698971,
+    "sunset": 1712606449874,
+    "moonUp": true,
+    "moonrise": 1712626084274,
+    "moonset": 1712606467050,
+    "phase": 0,
+    "phaseName": "New moon",
+    "percent": 0,
+    "waxing": true
+   },
+   "today": "Sun rises 01:54, sets 20:00. Moon: new moon, 0% lit, rises 01:28, sets 20:01."
+  },
+  {
+   "ms": 1705549920000,
+   "lat": 78.2,
+   "lon": 15.6,
+   "gmst": 175.067434047,
+   "sun": {
+    "alt": -24.039185112,
+    "az": 75.733393342,
+    "H": -108.933017176,
+    "ra": 299.600451223,
+    "dec": -20.654311207,
+    "lambda": 297.529190404
+   },
+   "moon": {
+    "alt": -1.27874075,
+    "altGeo": -0.301815348,
+    "az": 345.668166883,
+    "H": 165.387784972,
+    "ra": 25.279649075,
+    "dec": 11.126319841,
+    "parallax": 0.976938956,
+    "elong": 89.936617577,
+    "fraction": 0.499446914,
+    "waxing": true,
+    "phase": 2,
+    "chi": 248.918017575,
+    "tilt": 245.960810239
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": null,
+    "sunset": null,
+    "moonUp": false,
+    "moonrise": 1705556923876,
+    "moonset": null,
+    "phase": 2,
+    "phaseName": "First quarter",
+    "percent": 50,
+    "waxing": true
+   },
+   "today": "The sun stays down all day. Moon: first quarter, 50% lit, rises 05:48."
+  },
+  {
+   "ms": 1790577000000,
+   "lat": 78.2,
+   "lon": 15.6,
+   "gmst": 104.552595197,
+   "sun": {
+    "alt": 3.02156176,
+    "az": 115.327137723,
+    "H": -64.582087323,
+    "ra": 184.73468252,
+    "dec": -2.049397767,
+    "lambda": 185.158263699
+   },
+   "moon": {
+    "alt": 10.718676034,
+    "altGeo": 11.674752278,
+    "az": 281.006021145,
+    "H": 98.381229528,
+    "ra": 21.771365669,
+    "dec": 13.669007391,
+    "parallax": 0.976273314,
+    "elong": 200.043553319,
+    "fraction": 0.968446951,
+    "waxing": false,
+    "phase": 5,
+    "chi": 56.875542899,
+    "tilt": 44.953191252
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1790659087811,
+    "sunset": 1790612526984,
+    "moonUp": true,
+    "moonrise": null,
+    "moonset": null,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 97,
+    "waxing": false
+   },
+   "today": "Sun rises 05:18, sets 16:22. Moon: waning gibbous, 97% lit."
+  },
+  {
+   "ms": 1718971200000,
+   "lat": 40.7,
+   "lon": -74,
+   "gmst": 90.1768015,
+   "sun": {
+    "alt": 26.454034364,
+    "az": 80.908751796,
+    "H": -74.48083726,
+    "ra": 90.65763876,
+    "dec": 23.437237957,
+    "lambda": 90.603379043
+   },
+   "moon": {
+    "alt": -35.499242945,
+    "altGeo": -34.713315174,
+    "az": 260.940756176,
+    "H": 113.165043649,
+    "ra": 263.011757851,
+    "dec": -28.000318593,
+    "parallax": 0.956102875,
+    "elong": 173.208782542,
+    "fraction": 0.994814008,
+    "waxing": true,
+    "phase": 4,
+    "chi": 238.18692406,
+    "tilt": 180.199461062
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1719048323273,
+    "sunset": 1719016246893,
+    "moonUp": false,
+    "moonrise": 1719017349811,
+    "moonset": 1719048449432,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "Sun rises 09:25, sets 00:30. Moon: full moon, 99% lit, rises 00:49, sets 09:27."
+  },
+  {
+   "ms": 1742475720000,
+   "lat": 40.7,
+   "lon": -74,
+   "gmst": 13.815324244,
+   "sun": {
+    "alt": 22.080379923,
+    "az": 110.316776296,
+    "H": -60.343588318,
+    "ra": 0.158912562,
+    "dec": 0.068894528,
+    "lambda": 0.173204059
+   },
+   "moon": {
+    "alt": 5.013374176,
+    "altGeo": 5.918118021,
+    "az": 226.831411251,
+    "H": 54.267241259,
+    "ra": 245.548082984,
+    "dec": -26.658720501,
+    "parallax": 0.90959173,
+    "elong": 248.026711298,
+    "fraction": 0.686360412,
+    "waxing": false,
+    "phase": 5,
+    "chi": 101.548840593,
+    "tilt": 63.326633274
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1742554633715,
+    "sunset": 1742512107250,
+    "moonUp": true,
+    "moonrise": 1742536146691,
+    "moonset": 1742478182714,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 69,
+    "waxing": false
+   },
+   "today": "Sun rises 10:57, sets 23:08. Moon: waning gibbous, 69% lit, rises 05:49, sets 13:43."
+  },
+  {
+   "ms": 1712600460000,
+   "lat": 40.7,
+   "lon": -74,
+   "gmst": 112.749681901,
+   "sun": {
+    "alt": 52.044745168,
+    "az": 214.985694914,
+    "H": 20.840648335,
+    "ra": 17.909033566,
+    "dec": 7.593670043,
+    "lambda": 19.403733218
+   },
+   "moon": {
+    "alt": 51.834102647,
+    "altGeo": 52.452720396,
+    "az": 215.270830255,
+    "H": 20.817525236,
+    "ra": 17.932156664,
+    "dec": 8.036832304,
+    "parallax": 1.015099482,
+    "elong": 0.188929853,
+    "fraction": 0.000014996,
+    "waxing": true,
+    "phase": 0,
+    "chi": 182.960728218,
+    "tilt": 156.721441732
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1712658346029,
+    "sunset": 1712618920052,
+    "moonUp": true,
+    "moonrise": 1712659732174,
+    "moonset": 1712619676095,
+    "phase": 0,
+    "phaseName": "New moon",
+    "percent": 0,
+    "waxing": true
+   },
+   "today": "Sun rises 10:25, sets 23:28. Moon: new moon, 0% lit, rises 10:48, sets 23:41."
+  },
+  {
+   "ms": 1790577000000,
+   "lat": 40.7,
+   "lon": -74,
+   "gmst": 104.552595197,
+   "sun": {
+    "alt": -44.857230693,
+    "az": 37.878262193,
+    "H": -154.182087323,
+    "ra": 184.73468252,
+    "dec": -2.049397767,
+    "lambda": 185.158263699
+   },
+   "moon": {
+    "alt": 61.440056793,
+    "altGeo": 61.899894705,
+    "az": 198.356839377,
+    "H": 8.781229528,
+    "ra": 21.771365669,
+    "dec": 13.669007391,
+    "parallax": 0.976273314,
+    "elong": 200.043553319,
+    "fraction": 0.968446951,
+    "waxing": false,
+    "phase": 5,
+    "chi": 56.875542899,
+    "tilt": 42.651039301
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1790592573944,
+    "sunset": 1790635376459,
+    "moonUp": true,
+    "moonrise": 1790638031891,
+    "moonset": 1790600486627,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 97,
+    "waxing": false
+   },
+   "today": "Sun rises 10:49, sets 22:42. Moon: waning gibbous, 97% lit, rises 23:27, sets 13:01."
+  },
+  {
+   "ms": 1718941380000,
+   "lat": 64.1,
+   "lon": -21.9,
+   "gmst": 325.586616291,
+   "sun": {
+    "alt": 1.328752458,
+    "az": 30.333633054,
+    "H": -146.612066343,
+    "ra": 90.298682634,
+    "dec": 23.438331165,
+    "lambda": 90.274037753
+   },
+   "moon": {
+    "alt": -9.351034484,
+    "altGeo": -8.408694596,
+    "az": 220.02296032,
+    "H": 45.849571237,
+    "ra": 257.837045054,
+    "dec": -27.545083265,
+    "parallax": 0.952579977,
+    "elong": 168.92465398,
+    "fraction": 0.989133564,
+    "waxing": true,
+    "phase": 4,
+    "chi": 252.711930447,
+    "tilt": 234.241396007
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1719024996852,
+    "sunset": 1719014562184,
+    "moonUp": false,
+    "moonrise": null,
+    "moonset": null,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "Sun rises 02:56, sets 00:02. Moon: full moon, 99% lit."
+  },
+  {
+   "ms": 1734816720000,
+   "lat": 64.1,
+   "lon": -21.9,
+   "gmst": 53.941791557,
+   "sun": {
+    "alt": -34.543878931,
+    "az": 288.192968428,
+    "H": 121.473231668,
+    "ra": 270.568559889,
+    "dec": -23.43757247,
+    "lambda": 270.521648929
+   },
+   "moon": {
+    "alt": -14.979635901,
+    "altGeo": -14.095383177,
+    "az": 42.804037253,
+    "H": -138.5607116,
+    "ra": 170.602503157,
+    "dec": 5.264244903,
+    "parallax": 0.911702591,
+    "elong": 258.775935152,
+    "fraction": 0.59730466,
+    "waxing": false,
+    "phase": 6,
+    "chi": 112.888541446,
+    "tilt": 130.229717066
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1734866522216,
+    "sunset": 1734881452013,
+    "moonUp": false,
+    "moonrise": 1734826382018,
+    "moonset": 1734873795824,
+    "phase": 6,
+    "phaseName": "Last quarter",
+    "percent": 60,
+    "waxing": false
+   },
+   "today": "Sun rises 11:22, sets 15:30. Moon: last quarter, 60% lit, rises 00:13, sets 13:23."
+  },
+  {
+   "ms": 1706205240000,
+   "lat": 64.1,
+   "lon": -21.9,
+   "gmst": 33.043295426,
+   "sun": {
+    "alt": -6.207990288,
+    "az": 238.39531645,
+    "H": 63.539307781,
+    "ra": 307.603987646,
+    "dec": -18.956028543,
+    "lambda": 305.247391799
+   },
+   "moon": {
+    "alt": 9.15972159,
+    "altGeo": 10.057595464,
+    "az": 55.553230481,
+    "H": -117.612861538,
+    "ra": 128.756156964,
+    "dec": 23.60149149,
+    "parallax": 0.911887117,
+    "elong": 179.896661767,
+    "fraction": 0.998269853,
+    "waxing": true,
+    "phase": 4,
+    "chi": 13.226358567,
+    "tilt": 36.373302169
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1706264809281,
+    "sunset": 1706288043607,
+    "moonUp": true,
+    "moonrise": 1706289459708,
+    "moonset": 1706269422330,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 100,
+    "waxing": true
+   },
+   "today": "Sun rises 10:26, sets 16:54. Moon: full moon, 100% lit, rises 17:17, sets 11:43."
+  },
+  {
+   "ms": 1705549920000,
+   "lat": 64.1,
+   "lon": -21.9,
+   "gmst": 175.067434047,
+   "sun": {
+    "alt": -41.137422465,
+    "az": 43.390006719,
+    "H": -146.433017176,
+    "ra": 299.600451223,
+    "dec": -20.654311207,
+    "lambda": 297.529190404
+   },
+   "moon": {
+    "alt": -6.114485845,
+    "altGeo": -5.14147765,
+    "az": 308.966900704,
+    "H": 127.887784972,
+    "ra": 25.279649075,
+    "dec": 11.126319841,
+    "parallax": 0.976938956,
+    "elong": 89.936617577,
+    "fraction": 0.499446914,
+    "waxing": true,
+    "phase": 2,
+    "chi": 248.918017575,
+    "tilt": 228.667643716
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1705574891869,
+    "sunset": 1705595291466,
+    "moonUp": false,
+    "moonrise": 1705578169567,
+    "moonset": 1705639481664,
+    "phase": 2,
+    "phaseName": "First quarter",
+    "percent": 50,
+    "waxing": true
+   },
+   "today": "Sun rises 10:48, sets 16:28. Moon: first quarter, 50% lit, rises 11:42, sets 04:44."
+  },
+  {
+   "ms": 1718971200000,
+   "lat": 1.3,
+   "lon": 103.8,
+   "gmst": 90.1768015,
+   "sun": {
+    "alt": -11.670918202,
+    "az": 294.263462744,
+    "H": 103.31916274,
+    "ra": 90.65763876,
+    "dec": 23.437237957,
+    "lambda": 90.603379043
+   },
+   "moon": {
+    "alt": 16.858727486,
+    "altGeo": 17.76921803,
+    "az": 120.02613849,
+    "H": -69.034956351,
+    "ra": 263.011757851,
+    "dec": -28.000318593,
+    "parallax": 0.956102875,
+    "elong": 173.208782542,
+    "fraction": 0.994814008,
+    "waxing": true,
+    "phase": 4,
+    "chi": 238.18692406,
+    "tilt": 316.802972593
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1719010856158,
+    "sunset": 1719054769208,
+    "moonUp": true,
+    "moonrise": 1719056156195,
+    "moonset": 1719010728094,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "Sun rises 23:00, sets 11:12. Moon: full moon, 99% lit, rises 11:35, sets 22:58."
+  },
+  {
+   "ms": 1742475720000,
+   "lat": 1.3,
+   "lon": 103.8,
+   "gmst": 13.815324244,
+   "sun": {
+    "alt": -27.446966375,
+    "az": 270.752999134,
+    "H": 117.456411682,
+    "ra": 0.158912562,
+    "dec": 0.068894528,
+    "lambda": 0.173204059
+   },
+   "moon": {
+    "alt": -34.76994961,
+    "altGeo": -34.016006011,
+    "az": 121.744045254,
+    "H": -127.932758741,
+    "ra": 245.548082984,
+    "dec": -26.658720501,
+    "parallax": 0.90959173,
+    "elong": 248.026711298,
+    "fraction": 0.686360412,
+    "waxing": false,
+    "phase": 5,
+    "chi": 101.548840593,
+    "tilt": 209.500294261
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1742512121715,
+    "sunset": 1742555716307,
+    "moonUp": false,
+    "moonrise": 1742485333861,
+    "moonset": 1742529688121,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 69,
+    "waxing": false
+   },
+   "today": "Sun rises 23:08, sets 11:15. Moon: waning gibbous, 69% lit, rises 15:42, sets 04:01."
+  },
+  {
+   "ms": 1712600460000,
+   "lat": 1.3,
+   "lon": 103.8,
+   "gmst": 112.749681901,
+   "sun": {
+    "alt": -69.38904927,
+    "az": 64.161803438,
+    "H": -161.359351665,
+    "ra": 17.909033566,
+    "dec": 7.593670043,
+    "lambda": 19.403733218
+   },
+   "moon": {
+    "alt": -69.580161305,
+    "altGeo": -69.220024075,
+    "az": 63.000765171,
+    "H": -161.382474764,
+    "ra": 17.932156664,
+    "dec": 8.036832304,
+    "parallax": 1.015099482,
+    "elong": 0.188929853,
+    "fraction": 0.000014996,
+    "waxing": true,
+    "phase": 0,
+    "chi": 182.960728218,
+    "tilt": 247.068753054
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1712617339266,
+    "sunset": 1712661019772,
+    "moonUp": false,
+    "moonrise": 1712618199130,
+    "moonset": 1712663016866,
+    "phase": 0,
+    "phaseName": "New moon",
+    "percent": 0,
+    "waxing": true
+   },
+   "today": "Sun rises 23:02, sets 11:10. Moon: new moon, 0% lit, rises 23:16, sets 11:43."
+  },
+  {
+   "ms": 1790577000000,
+   "lat": 1.3,
+   "lon": 103.8,
+   "gmst": 104.552595197,
+   "sun": {
+    "alt": 66.149617621,
+    "az": 261.964083081,
+    "H": 23.617912677,
+    "ra": 184.73468252,
+    "dec": -2.049397767,
+    "lambda": 185.158263699
+   },
+   "moon": {
+    "alt": -73.945727707,
+    "altGeo": -73.67125014,
+    "az": 23.335203217,
+    "H": -173.418770472,
+    "ra": 21.771365669,
+    "dec": 13.669007391,
+    "parallax": 0.976273314,
+    "elong": 200.043553319,
+    "fraction": 0.968446951,
+    "waxing": false,
+    "phase": 5,
+    "chi": 56.875542899,
+    "tilt": 80.926615523
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1790635930463,
+    "sunset": 1790593116486,
+    "moonUp": false,
+    "moonrise": 1790597669366,
+    "moonset": 1790642534967,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 97,
+    "waxing": false
+   },
+   "today": "Sun rises 22:52, sets 10:58. Moon: waning gibbous, 97% lit, rises 12:14, sets 00:42."
+  },
+  {
+   "ms": 1718941380000,
+   "lat": -33.9,
+   "lon": 151.2,
+   "gmst": 325.586616291,
+   "sun": {
+    "alt": 27.370231924,
+    "az": 332.561760667,
+    "H": 26.487933657,
+    "ra": 90.298682634,
+    "dec": 23.438331165,
+    "lambda": 90.274037753
+   },
+   "moon": {
+    "alt": -19.229095028,
+    "altGeo": -18.324820986,
+    "az": 144.044734655,
+    "H": -141.050428763,
+    "ra": 257.837045054,
+    "dec": -27.545083265,
+    "parallax": 0.952579977,
+    "elong": 168.92465398,
+    "fraction": 0.989133564,
+    "waxing": true,
+    "phase": 4,
+    "chi": 252.711930447,
+    "tilt": 39.369010655
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1719003622950,
+    "sunset": 1718952833375,
+    "moonUp": false,
+    "moonrise": 1718949018190,
+    "moonset": 1719004341749,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "Sun rises 21:00, sets 06:53. Moon: full moon, 99% lit, rises 05:50, sets 21:12."
+  },
+  {
+   "ms": 1718971200000,
+   "lat": -33.9,
+   "lon": 151.2,
+   "gmst": 90.1768015,
+   "sun": {
+    "alt": -62.384009928,
+    "az": 255.480552256,
+    "H": 150.71916274,
+    "ra": 90.65763876,
+    "dec": 23.437237957,
+    "lambda": 90.603379043
+   },
+   "moon": {
+    "alt": 70.25656526,
+    "altGeo": 70.574546079,
+    "az": 78.185419192,
+    "H": -21.634956351,
+    "ra": 263.011757851,
+    "dec": -28.000318593,
+    "parallax": 0.956102875,
+    "elong": 173.208782542,
+    "fraction": 0.994814008,
+    "waxing": true,
+    "phase": 4,
+    "chi": 238.18692406,
+    "tilt": 351.241072211
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1719003622980,
+    "sunset": 1719039247650,
+    "moonUp": true,
+    "moonrise": 1719038835956,
+    "moonset": 1719004341742,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "Sun rises 21:00, sets 06:54. Moon: full moon, 99% lit, rises 06:47, sets 21:12."
+  },
+  {
+   "ms": 1734816720000,
+   "lat": -33.9,
+   "lon": 151.2,
+   "gmst": 53.941791557,
+   "sun": {
+    "alt": 32.583641473,
+    "az": 98.004389147,
+    "H": -65.426768332,
+    "ra": 270.568559889,
+    "dec": -23.43757247,
+    "lambda": 270.521648929
+   },
+   "moon": {
+    "alt": 38.316459537,
+    "altGeo": 39.024737737,
+    "az": 313.386826053,
+    "H": 34.5392884,
+    "ra": 170.602503157,
+    "dec": 5.264244903,
+    "parallax": 0.911702591,
+    "elong": 258.775935152,
+    "fraction": 0.59730466,
+    "waxing": false,
+    "phase": 6,
+    "chi": 112.888541446,
+    "tilt": 330.171515084
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1734892910057,
+    "sunset": 1734858376256,
+    "moonUp": true,
+    "moonrise": 1734875041637,
+    "moonset": 1734829634557,
+    "phase": 6,
+    "phaseName": "Last quarter",
+    "percent": 60,
+    "waxing": false
+   },
+   "today": "Sun rises 18:41, sets 09:06. Moon: last quarter, 60% lit, rises 13:44, sets 01:07."
+  },
+  {
+   "ms": 1742475720000,
+   "lat": -33.9,
+   "lon": 151.2,
+   "gmst": 13.815324244,
+   "sun": {
+    "alt": -53.308039577,
+    "az": 205.926028406,
+    "H": 164.856411682,
+    "ra": 0.158912562,
+    "dec": 0.068894528,
+    "lambda": 0.173204059
+   },
+   "moon": {
+    "alt": 21.010644911,
+    "altGeo": 21.854864097,
+    "az": 108.234515044,
+    "H": -80.532758741,
+    "ra": 245.548082984,
+    "dec": -26.658720501,
+    "parallax": 0.90959173,
+    "elong": 248.026711298,
+    "fraction": 0.686360412,
+    "waxing": false,
+    "phase": 5,
+    "chi": 101.548840593,
+    "tilt": 219.651575802
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1742500738011,
+    "sunset": 1742544319493,
+    "moonUp": true,
+    "moonrise": 1742557631993,
+    "moonset": 1742523213951,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 69,
+    "waxing": false
+   },
+   "today": "Sun rises 19:58, sets 08:05. Moon: waning gibbous, 69% lit, rises 11:47, sets 02:13."
+  },
+  {
+   "ms": 1706205240000,
+   "lat": -33.9,
+   "lon": 151.2,
+   "gmst": 33.043295426,
+   "sun": {
+    "alt": -14.506980368,
+    "az": 125.319175012,
+    "H": -123.360692219,
+    "ra": 307.603987646,
+    "dec": -18.956028543,
+    "lambda": 305.247391799
+   },
+   "moon": {
+    "alt": 11.09172121,
+    "altGeo": 11.98373519,
+    "az": 309.475576848,
+    "H": 55.487138462,
+    "ra": 128.756156964,
+    "dec": 23.60149149,
+    "parallax": 0.911887117,
+    "elong": 179.896661767,
+    "fraction": 0.998269853,
+    "waxing": true,
+    "phase": 4,
+    "chi": 13.226358567,
+    "tilt": 237.586532201
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1706209784769,
+    "sunset": 1706259890592,
+    "moonUp": true,
+    "moonrise": 1706262199955,
+    "moonset": 1706209569254,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 100,
+    "waxing": true
+   },
+   "today": "Sun rises 19:09, sets 09:04. Moon: full moon, 100% lit, rises 09:43, sets 19:06."
+  },
+  {
+   "ms": 1712600460000,
+   "lat": -33.9,
+   "lon": 151.2,
+   "gmst": 112.749681901,
+   "sun": {
+    "alt": -24.067129914,
+    "az": 97.224426471,
+    "H": -113.959351665,
+    "ra": 17.909033566,
+    "dec": 7.593670043,
+    "lambda": 19.403733218
+   },
+   "moon": {
+    "alt": -25.25729623,
+    "altGeo": -24.332367365,
+    "az": 96.834387901,
+    "H": -113.982474764,
+    "ra": 17.932156664,
+    "dec": 8.036832304,
+    "parallax": 1.015099482,
+    "elong": 0.188929853,
+    "fraction": 0.000014996,
+    "waxing": true,
+    "phase": 0,
+    "chi": 182.960728218,
+    "tilt": 306.626147206
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1712607203463,
+    "sunset": 1712648377694,
+    "moonUp": false,
+    "moonrise": 1712607930978,
+    "moonset": 1712649127218,
+    "phase": 0,
+    "phaseName": "New moon",
+    "percent": 0,
+    "waxing": true
+   },
+   "today": "Sun rises 20:13, sets 07:39. Moon: new moon, 0% lit, rises 20:25, sets 07:52."
+  },
+  {
+   "ms": 1705549920000,
+   "lat": -33.9,
+   "lon": 151.2,
+   "gmst": 175.067434047,
+   "sun": {
+    "alt": 62.971792011,
+    "az": 292.460514398,
+    "H": 26.666982824,
+    "ra": 299.600451223,
+    "dec": -20.654311207,
+    "lambda": 297.529190404
+   },
+   "moon": {
+    "alt": 17.231895522,
+    "altGeo": 18.160172109,
+    "az": 62.283475861,
+    "H": -59.012215028,
+    "ra": 25.279649075,
+    "dec": 11.126319841,
+    "parallax": 0.976938956,
+    "elong": 89.936617577,
+    "fraction": 0.499446914,
+    "waxing": true,
+    "phase": 2,
+    "chi": 248.918017575,
+    "tilt": 20.427019314
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1705604568468,
+    "sunset": 1705568904027,
+    "moonUp": true,
+    "moonrise": 1705634505114,
+    "moonset": 1705584535924,
+    "phase": 2,
+    "phaseName": "First quarter",
+    "percent": 50,
+    "waxing": true
+   },
+   "today": "Sun rises 19:02, sets 09:08. Moon: first quarter, 50% lit, rises 03:21, sets 13:28."
+  },
+  {
+   "ms": 1790577000000,
+   "lat": -33.9,
+   "lon": 151.2,
+   "gmst": 104.552595197,
+   "sun": {
+    "alt": 16.843174947,
+    "az": 279.11501458,
+    "H": 71.017912677,
+    "ra": 184.73468252,
+    "dec": -2.049397767,
+    "lambda": 185.158263699
+   },
+   "moon": {
+    "alt": -38.082204396,
+    "altGeo": -37.305663346,
+    "az": 98.862938673,
+    "H": -126.018770472,
+    "ra": 21.771365669,
+    "dec": 13.669007391,
+    "parallax": 0.976273314,
+    "elong": 200.043553319,
+    "fraction": 0.968446951,
+    "waxing": false,
+    "phase": 5,
+    "chi": 56.875542899,
+    "tilt": 179.309903506
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1790624138544,
+    "sunset": 1790582130084,
+    "moonUp": false,
+    "moonrise": 1790588464142,
+    "moonset": 1790627688922,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 97,
+    "waxing": false
+   },
+   "today": "Sun rises 19:35, sets 07:55. Moon: waning gibbous, 97% lit, rises 09:41, sets 20:34."
+  },
+  {
+   "ms": 1718971200000,
+   "lat": -54.8,
+   "lon": -68.3,
+   "gmst": 90.1768015,
+   "sun": {
+    "alt": -7.67742864,
+    "az": 59.658388867,
+    "H": -68.78083726,
+    "ra": 90.65763876,
+    "dec": 23.437237957,
+    "lambda": 90.603379043
+   },
+   "moon": {
+    "alt": 6.981219039,
+    "altGeo": 7.92818323,
+    "az": 231.325576368,
+    "H": 118.865043649,
+    "ra": 263.011757851,
+    "dec": -28.000318593,
+    "parallax": 0.956102875,
+    "elong": 173.208782542,
+    "fraction": 0.994814008,
+    "waxing": true,
+    "phase": 4,
+    "chi": 238.18692406,
+    "tilt": 88.829950074
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1718974735382,
+    "sunset": 1719000685236,
+    "moonUp": true,
+    "moonrise": 1718996674493,
+    "moonset": 1718976152142,
+    "phase": 4,
+    "phaseName": "Full moon",
+    "percent": 99,
+    "waxing": true
+   },
+   "today": "Sun rises 12:58, sets 20:11. Moon: full moon, 99% lit, rises 19:04, sets 13:22."
+  },
+  {
+   "ms": 1742475720000,
+   "lat": -54.8,
+   "lon": -68.3,
+   "gmst": 13.815324244,
+   "sun": {
+    "alt": 19.42520485,
+    "az": 59.859289254,
+    "H": -54.643588318,
+    "ra": 0.158912562,
+    "dec": 0.068894528,
+    "lambda": 0.173204059
+   },
+   "moon": {
+    "alt": 37.932493185,
+    "altGeo": 38.642932329,
+    "az": 277.864325926,
+    "H": 59.967241259,
+    "ra": 245.548082984,
+    "dec": -26.658720501,
+    "parallax": 0.90959173,
+    "elong": 248.026711298,
+    "fraction": 0.686360412,
+    "waxing": false,
+    "phase": 5,
+    "chi": 101.548840593,
+    "tilt": 321.261120504
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1742553415917,
+    "sunset": 1742510696239,
+    "moonUp": true,
+    "moonrise": 1742516090453,
+    "moonset": 1742494694689,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 69,
+    "waxing": false
+   },
+   "today": "Sun rises 10:36, sets 22:44. Moon: waning gibbous, 69% lit, rises 00:14, sets 18:18."
+  },
+  {
+   "ms": 1712600460000,
+   "lat": -54.8,
+   "lon": -68.3,
+   "gmst": 112.749681901,
+   "sun": {
+    "alt": 23.777179343,
+    "az": 331.053330697,
+    "H": 26.540648335,
+    "ra": 17.909033566,
+    "dec": 7.593670043,
+    "lambda": 19.403733218
+   },
+   "moon": {
+    "alt": 22.426388951,
+    "altGeo": 23.358294399,
+    "az": 331.213128643,
+    "H": 26.517525236,
+    "ra": 17.932156664,
+    "dec": 8.036832304,
+    "parallax": 1.015099482,
+    "elong": 0.188929853,
+    "fraction": 0.000014996,
+    "waxing": true,
+    "phase": 0,
+    "chi": 182.960728218,
+    "tilt": 19.240986439
+   },
+   "summary": {
+    "sunUp": true,
+    "sunrise": 1712661229354,
+    "sunset": 1712613409237,
+    "moonUp": true,
+    "moonrise": 1712665884921,
+    "moonset": 1712612931991,
+    "phase": 0,
+    "phaseName": "New moon",
+    "percent": 0,
+    "waxing": true
+   },
+   "today": "Sun rises 11:13, sets 21:56. Moon: new moon, 0% lit, rises 12:31, sets 21:48."
+  },
+  {
+   "ms": 1790577000000,
+   "lat": -54.8,
+   "lon": -68.3,
+   "gmst": 104.552595197,
+   "sun": {
+    "alt": -27.507120036,
+    "az": 143.912711965,
+    "H": -148.482087323,
+    "ra": 184.73468252,
+    "dec": -2.049397767,
+    "lambda": 185.158263699
+   },
+   "moon": {
+    "alt": 19.52417107,
+    "altGeo": 20.438982719,
+    "az": 344.971175287,
+    "H": 14.481229528,
+    "ra": 21.771365669,
+    "dec": 13.669007391,
+    "parallax": 0.976273314,
+    "elong": 200.043553319,
+    "fraction": 0.968446951,
+    "waxing": false,
+    "phase": 5,
+    "chi": 56.875542899,
+    "tilt": 245.724409925
+   },
+   "summary": {
+    "sunUp": false,
+    "sunrise": 1790589967145,
+    "sunset": 1790635357562,
+    "moonUp": true,
+    "moonrise": 1790647486505,
+    "moonset": 1790590320099,
+    "phase": 5,
+    "phaseName": "Waning gibbous",
+    "percent": 97,
+    "waxing": false
+   },
+   "today": "Sun rises 10:06, sets 22:42. Moon: waning gibbous, 97% lit, rises 02:04, sets 10:12."
+  }
+ ],
+ "scenes": [
+  {
+   "ms": 1718963400000,
+   "t": 1000.25,
+   "place": {
+    "lat": 40.7,
+    "lon": -74
+   },
+   "weather": null,
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     33.919851649,
+     60.986023814,
+     108.29264103,
+     0.193066172,
+     133.066172164,
+     86.986023814,
+     66.533086082,
+     0.146933828
+    ],
+    "glow": {
+     "x": -0.836878349,
+     "y": -0.32,
+     "r": 0.95,
+     "alpha": 0.199626461
+    },
+    "sun": {
+     "x": -0.836878349,
+     "y": -0.21578049,
+     "r": 0.075,
+     "alpha": 1,
+     "glow": 0.28,
+     "warm": 0.970797246
+    },
+    "moon": {
+     "x": 0.744237641,
+     "y": -0.88106563,
+     "r": 0.066,
+     "alpha": 0,
+     "glow": 0,
+     "fraction": 0.993588697,
+     "phase": 4,
+     "bx": 0.221058459,
+     "by": -0.975260559
+    },
+    "clouds": [],
+    "fog": 0,
+    "rain": [],
+    "snow": [],
+    "wisps": [],
+    "cloudDay": 0.524256055,
+    "sunAlt": 3.226468866
+   }
+  },
+  {
+   "ms": 1718988900000,
+   "t": 1000.25,
+   "place": {
+    "lat": 40.7,
+    "lon": -74
+   },
+   "weather": null,
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     36,
+     78,
+     122,
+     0.2,
+     60,
+     100,
+     138,
+     0.12
+    ],
+    "glow": null,
+    "sun": {
+     "x": -0.008649158,
+     "y": 0.889935856,
+     "r": 0.075,
+     "alpha": 1,
+     "glow": 0.28,
+     "warm": 0
+    },
+    "moon": {
+     "x": 0.807748364,
+     "y": -0.652068287,
+     "r": 0.066,
+     "alpha": 0,
+     "glow": 0,
+     "fraction": 0.996897483,
+     "phase": 4,
+     "bx": 0.83675778,
+     "by": -0.547573208
+    },
+    "clouds": [],
+    "fog": 0,
+    "rain": [],
+    "snow": [],
+    "wisps": [],
+    "cloudDay": 1,
+    "sunAlt": 72.724944419
+   }
+  },
+  {
+   "ms": 1719015900000,
+   "t": 1000.25,
+   "place": {
+    "lat": 40.7,
+    "lon": -74
+   },
+   "weather": null,
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     31.571994275,
+     50.81197519,
+     97.335973281,
+     0.185239981,
+     125.239980915,
+     76.81197519,
+     62.619990458,
+     0.154760019
+    ],
+    "glow": {
+     "x": 0.839831062,
+     "y": -0.32,
+     "r": 0.95,
+     "alpha": 0.2
+    },
+    "sun": {
+     "x": 0.839831062,
+     "y": -0.29573378,
+     "r": 0.075,
+     "alpha": 0.715511192,
+     "glow": 0.200343134,
+     "warm": 1
+    },
+    "moon": {
+     "x": -0.831006993,
+     "y": -0.496582506,
+     "r": 0.066,
+     "alpha": 0,
+     "glow": 0,
+     "fraction": 0.998179462,
+     "phase": 4,
+     "bx": 0.742702141,
+     "by": -0.66962193
+    },
+    "clouds": [],
+    "fog": 0,
+    "rain": [],
+    "snow": [],
+    "wisps": [],
+    "cloudDay": 0.206706363,
+    "sunAlt": 0.095992366
+   }
+  },
+  {
+   "ms": 1706245200000,
+   "t": 1000.25,
+   "place": {
+    "lat": 40.7,
+    "lon": -74
+   },
+   "weather": null,
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     12,
+     18,
+     40,
+     0.1,
+     12,
+     18,
+     40,
+     0.04
+    ],
+    "glow": null,
+    "sun": {
+     "x": -0.493319613,
+     "y": -1.299349835,
+     "r": 0.075,
+     "alpha": 0,
+     "glow": 0,
+     "warm": 1
+    },
+    "moon": {
+     "x": -0.102563651,
+     "y": 0.880946604,
+     "r": 0.066,
+     "alpha": 1,
+     "glow": 0.159431971,
+     "fraction": 0.996449821,
+     "phase": 4,
+     "bx": -0.993303673,
+     "by": 0.115532738
+    },
+    "clouds": [],
+    "fog": 0,
+    "rain": [],
+    "snow": [],
+    "wisps": [],
+    "cloudDay": 0,
+    "sunAlt": -68.068147966
+   }
+  },
+  {
+   "ms": 1705273200000,
+   "t": 1000.25,
+   "place": {
+    "lat": 40.7,
+    "lon": -74
+   },
+   "weather": null,
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     17.234881002,
+     25.328833403,
+     57.798595407,
+     0.131409286,
+     26.657666806,
+     29.516738205,
+     60.939524009,
+     0.071409286
+    ],
+    "glow": null,
+    "sun": {
+     "x": 0.78207406,
+     "y": -0.761548049,
+     "r": 0.075,
+     "alpha": 0,
+     "glow": 0,
+     "warm": 1
+    },
+    "moon": {
+     "x": 0.593982412,
+     "y": 0.535580889,
+     "r": 0.066,
+     "alpha": 1,
+     "glow": 0.026045685,
+     "fraction": 0.162785529,
+     "phase": 1,
+     "bx": 0.599524203,
+     "by": -0.800356627
+    },
+    "clouds": [],
+    "fog": 0,
+    "rain": [],
+    "snow": [],
+    "wisps": [],
+    "cloudDay": 0,
+    "sunAlt": -12.765118998
+   }
+  },
+  {
+   "ms": 1705224600000,
+   "t": 1000.25,
+   "place": {
+    "lat": -33.9,
+    "lon": 151.2
+   },
+   "weather": null,
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     26.542948119,
+     38.814422179,
+     83.085896238,
+     0.17135737,
+     85.429481192,
+     57.036055447,
+     68.642629702,
+     0.134072111
+    ],
+    "glow": {
+     "x": -0.837583681,
+     "y": -0.32,
+     "r": 0.95,
+     "alpha": 0.173647364
+    },
+    "sun": {
+     "x": -0.837583681,
+     "y": -0.411711813,
+     "r": 0.075,
+     "alpha": 0,
+     "glow": 0,
+     "warm": 1
+    },
+    "moon": {
+     "x": -0.753307923,
+     "y": 0.215359664,
+     "r": 0.066,
+     "alpha": 1,
+     "glow": 0.018670078,
+     "fraction": 0.116687988,
+     "phase": 1,
+     "bx": -0.747635511,
+     "by": -0.664109286
+    },
+    "clouds": [],
+    "fog": 0,
+    "rain": [],
+    "snow": [],
+    "wisps": [],
+    "cloudDay": 0,
+    "sunAlt": -4.592788911
+   }
+  },
+  {
+   "ms": 1719010800000,
+   "t": 1000.25,
+   "place": {
+    "lat": 78.2,
+    "lon": 15.6
+   },
+   "weather": null,
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     36,
+     73.219732999,
+     119.6098665,
+     0.2,
+     107.802670007,
+     97.6098665,
+     97.367730494,
+     0.131950668
+    ],
+    "glow": {
+     "x": -0.839999716,
+     "y": -0.32,
+     "r": 0.95,
+     "alpha": 0.000962596
+    },
+    "sun": {
+     "x": -0.839999716,
+     "y": -0.31900455,
+     "r": 0.075,
+     "alpha": 0.008728969,
+     "glow": 0.002444111,
+     "warm": 0.101252334
+    },
+    "moon": {
+     "x": 0.782306495,
+     "y": -0.760692847,
+     "r": 0.066,
+     "alpha": 0,
+     "glow": 0,
+     "fraction": 0.998114843,
+     "phase": 4,
+     "bx": 0.206471492,
+     "by": -0.978452617
+    },
+    "clouds": [],
+    "fog": 0,
+    "rain": [],
+    "snow": [],
+    "wisps": [],
+    "cloudDay": 1,
+    "sunAlt": 11.634532749
+   }
+  },
+  {
+   "ms": 1734782400000,
+   "t": 1000.25,
+   "place": {
+    "lat": 78.2,
+    "lon": 15.6
+   },
+   "weather": null,
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     17.934745628,
+     26.308643879,
+     60.178135136,
+     0.135608474,
+     28.617287759,
+     31.056440382,
+     63.738982513,
+     0.075608474
+    ],
+    "glow": null,
+    "sun": {
+     "x": 0.029842541,
+     "y": 0.889236155,
+     "r": 0.075,
+     "alpha": 0,
+     "glow": 0,
+     "warm": 1
+    },
+    "moon": {
+     "x": 0.835346941,
+     "y": -0.192817386,
+     "r": 0.066,
+     "alpha": 0.909186674,
+     "glow": 0.092287153,
+     "fraction": 0.634407349,
+     "phase": 5,
+     "bx": -0.977792396,
+     "by": -0.209575836
+    },
+    "clouds": [],
+    "fog": 0,
+    "rain": [],
+    "snow": [],
+    "wisps": [],
+    "cloudDay": 0,
+    "sunAlt": -12.065254372
+   }
+  },
+  {
+   "ms": 1735743600000,
+   "t": 1234.5,
+   "place": {
+    "lat": 40.7,
+    "lon": -74
+   },
+   "weather": {
+    "rain": 0.7,
+    "snow": 0,
+    "wind": 0.4,
+    "cloud": 0.8,
+    "fog": 0,
+    "dir": -1
+   },
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     36,
+     78,
+     122,
+     0.2,
+     60,
+     100,
+     138,
+     0.12
+    ],
+    "glow": null,
+    "sun": {
+     "x": -0.52328537,
+     "y": 0.626528148,
+     "r": 0.075,
+     "alpha": 0.48,
+     "glow": 0.1008,
+     "warm": 0
+    },
+    "moon": {
+     "x": -0.793942586,
+     "y": 0.075161162,
+     "r": 0.066,
+     "alpha": 0.216,
+     "glow": 0,
+     "fraction": 0.034170566,
+     "phase": 1,
+     "bx": 0.812982178,
+     "by": 0.582288569
+    },
+    "clouds": [
+     [
+      0.105396372,
+      0.414651475,
+      0.302968089,
+      0.104322696,
+      0.129187236
+     ],
+     [
+      -0.473383777,
+      0.699255121,
+      0.340932633,
+      0.116977544,
+      0.144373053
+     ],
+     [
+      -1.121539148,
+      0.555789279,
+      0.273758525,
+      0.094586175,
+      0.11750341
+     ],
+     [
+      -0.951077723,
+      0.429945873,
+      0.297577645,
+      0.102525882,
+      0.127031058
+     ]
+    ],
+    "fog": 0,
+    "rain": [
+     [
+      0.622682774,
+      -0.777152679,
+      -0.019959184,
+      0.090723565,
+      0.244
+     ],
+     [
+      -0.241692057,
+      0.772146577,
+      -0.021088674,
+      0.095857611,
+      0.244
+     ],
+     [
+      0.498184049,
+      0.628664888,
+      -0.016478555,
+      0.074902522,
+      0.244
+     ],
+     [
+      0.140049052,
+      -0.787962398,
+      -0.022450087,
+      0.102045852,
+      0.244
+     ],
+     [
+      -0.928797254,
+      0.173017305,
+      -0.023507965,
+      0.106854387,
+      0.244
+     ],
+     [
+      0.898986441,
+      -1.034901193,
+      -0.02081613,
+      0.094618773,
+      0.244
+     ],
+     [
+      -0.356741266,
+      -0.812865249,
+      -0.019816531,
+      0.090075139,
+      0.244
+     ],
+     [
+      0.081792998,
+      0.553572793,
+      -0.016297225,
+      0.074078298,
+      0.244
+     ],
+     [
+      -0.486762641,
+      0.574948391,
+      -0.015525356,
+      0.070569799,
+      0.244
+     ],
+     [
+      0.052266591,
+      -1.00913272,
+      -0.020159282,
+      0.091633102,
+      0.244
+     ],
+     [
+      -0.852419207,
+      0.94559027,
+      -0.022435331,
+      0.101978777,
+      0.244
+     ],
+     [
+      0.048056766,
+      0.525687297,
+      -0.020805184,
+      0.094569017,
+      0.244
+     ],
+     [
+      0.774777961,
+      0.956291509,
+      -0.022398552,
+      0.101811601,
+      0.244
+     ],
+     [
+      -0.724188179,
+      -1.141505565,
+      -0.018888121,
+      0.085855095,
+      0.244
+     ],
+     [
+      0.937106796,
+      -0.870502057,
+      -0.022126848,
+      0.10057658,
+      0.244
+     ],
+     [
+      0.555104135,
+      0.462209479,
+      -0.016020049,
+      0.072818406,
+      0.244
+     ],
+     [
+      0.466815917,
+      -0.896384395,
+      -0.02238932,
+      0.101769635,
+      0.244
+     ],
+     [
+      -0.652796217,
+      -0.595243571,
+      -0.020658068,
+      0.093900307,
+      0.244
+     ],
+     [
+      -0.930159029,
+      -1.029498601,
+      -0.015400658,
+      0.07000299,
+      0.244
+     ],
+     [
+      -0.681191977,
+      -0.055763519,
+      -0.018155694,
+      0.082525882,
+      0.244
+     ],
+     [
+      -0.751523496,
+      0.891544911,
+      -0.017711468,
+      0.080506672,
+      0.244
+     ],
+     [
+      0.172157182,
+      -0.85011496,
+      -0.020632536,
+      0.093784256,
+      0.244
+     ],
+     [
+      0.720330663,
+      0.238915981,
+      -0.020105026,
+      0.091386482,
+      0.244
+     ],
+     [
+      0.594946906,
+      0.820778028,
+      -0.019914458,
+      0.090520262,
+      0.244
+     ],
+     [
+      0.688651626,
+      -0.456658612,
+      -0.015729524,
+      0.071497835,
+      0.244
+     ],
+     [
+      0.498692268,
+      0.255050409,
+      -0.022548467,
+      0.10249303,
+      0.244
+     ],
+     [
+      -0.087224017,
+      -0.613675324,
+      -0.017554468,
+      0.079793038,
+      0.244
+     ],
+     [
+      0.147229848,
+      -0.672945167,
+      -0.018723117,
+      0.085105079,
+      0.244
+     ],
+     [
+      -0.418965231,
+      -0.567581722,
+      -0.015886097,
+      0.072209532,
+      0.244
+     ],
+     [
+      0.375577159,
+      0.801392905,
+      -0.021730986,
+      0.098777209,
+      0.244
+     ],
+     [
+      -0.533536796,
+      -0.408730878,
+      -0.018057455,
+      0.082079341,
+      0.244
+     ],
+     [
+      -0.370557235,
+      0.061052984,
+      -0.018639244,
+      0.084723834,
+      0.244
+     ],
+     [
+      0.821894723,
+      0.370717559,
+      -0.022928704,
+      0.104221381,
+      0.244
+     ]
+    ],
+    "snow": [],
+    "wisps": [
+     [
+      -0.755923162,
+      0.338527654,
+      0.21293701,
+      0.028
+     ],
+     [
+      -0.125240136,
+      -0.569802764,
+      0.186489633,
+      0.028
+     ]
+    ],
+    "cloudDay": 1,
+    "sunAlt": 20.535449568
+   }
+  },
+  {
+   "ms": 1735743600000,
+   "t": 1234.5,
+   "place": {
+    "lat": 40.7,
+    "lon": -74
+   },
+   "weather": {
+    "rain": 0.7,
+    "snow": 0,
+    "wind": 0.4,
+    "cloud": 0.8,
+    "fog": 0,
+    "dir": -1
+   },
+   "opts": {
+    "calm": true
+   },
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     36,
+     78,
+     122,
+     0.2,
+     60,
+     100,
+     138,
+     0.12
+    ],
+    "glow": null,
+    "sun": {
+     "x": -0.52328537,
+     "y": 0.626528148,
+     "r": 0.075,
+     "alpha": 0.48,
+     "glow": 0.1008,
+     "warm": 0
+    },
+    "moon": {
+     "x": -0.793942586,
+     "y": 0.075161162,
+     "r": 0.066,
+     "alpha": 0.216,
+     "glow": 0,
+     "fraction": 0.034170566,
+     "phase": 1,
+     "bx": 0.812982178,
+     "by": 0.582288569
+    },
+    "clouds": [
+     [
+      0.740360609,
+      0.414651475,
+      0.302968089,
+      0.104322696,
+      0.129187236
+     ],
+     [
+      -0.763730369,
+      0.699255121,
+      0.340932633,
+      0.116977544,
+      0.144373053
+     ],
+     [
+      0.871056839,
+      0.555789279,
+      0.273758525,
+      0.094586175,
+      0.11750341
+     ],
+     [
+      -0.582293603,
+      0.429945873,
+      0.297577645,
+      0.102525882,
+      0.127031058
+     ]
+    ],
+    "fog": 0,
+    "rain": [
+     [
+      0.675596791,
+      -0.536634422,
+      -0.019959184,
+      0.090723565,
+      0.244
+     ],
+     [
+      -0.46933624,
+      -0.262599707,
+      -0.021088674,
+      0.095857611,
+      0.244
+     ],
+     [
+      0.476632555,
+      0.530703556,
+      -0.016478555,
+      0.074902522,
+      0.244
+     ],
+     [
+      0.174709792,
+      -0.630413582,
+      -0.022450087,
+      0.102045852,
+      0.244
+     ],
+     [
+      -0.761760408,
+      0.932275696,
+      -0.023507965,
+      0.106854387,
+      0.244
+     ],
+     [
+      -0.980356019,
+      -0.486457831,
+      -0.02081613,
+      0.094618773,
+      0.244
+     ],
+     [
+      0.024847774,
+      0.921630387,
+      -0.019816531,
+      0.090075139,
+      0.244
+     ],
+     [
+      -0.207896702,
+      -0.763198572,
+      -0.016297225,
+      0.074078298,
+      0.244
+     ],
+     [
+      -0.543366853,
+      0.317656514,
+      -0.015525356,
+      0.070569799,
+      0.244
+     ],
+     [
+      0.156942446,
+      -0.533333378,
+      -0.020159282,
+      0.091633102,
+      0.244
+     ],
+     [
+      0.954532925,
+      0.068099962,
+      -0.022435331,
+      0.101978777,
+      0.244
+     ],
+     [
+      -0.000201733,
+      0.306330483,
+      -0.020805184,
+      0.094569017,
+      0.244
+     ],
+     [
+      0.520186393,
+      -0.200942889,
+      -0.022398552,
+      0.101811601,
+      0.244
+     ],
+     [
+      -0.501123473,
+      -0.127575085,
+      -0.018888121,
+      0.085855095,
+      0.244
+     ],
+     [
+      -0.956225737,
+      -0.385649933,
+      -0.022126848,
+      0.10057658,
+      0.244
+     ],
+     [
+      0.542240618,
+      0.403738946,
+      -0.016020049,
+      0.072818406,
+      0.244
+     ],
+     [
+      0.575754548,
+      -0.401208795,
+      -0.02238932,
+      0.101769635,
+      0.244
+     ],
+     [
+      -0.441240423,
+      0.366373676,
+      -0.020658068,
+      0.093900307,
+      0.244
+     ],
+     [
+      -0.887009612,
+      -0.833364885,
+      -0.015400658,
+      0.07000299,
+      0.244
+     ],
+     [
+      -0.628389226,
+      0.184248985,
+      -0.018155694,
+      0.082525882,
+      0.244
+     ],
+     [
+      -0.975686931,
+      -0.127379795,
+      -0.017711468,
+      0.080506672,
+      0.244
+     ],
+     [
+      0.495732132,
+      0.620680267,
+      -0.020632536,
+      0.093784256,
+      0.244
+     ],
+     [
+      0.493763011,
+      -0.790936985,
+      -0.020105026,
+      0.091386482,
+      0.244
+     ],
+     [
+      0.463669723,
+      0.224063559,
+      -0.019914458,
+      0.090520262,
+      0.244
+     ],
+     [
+      0.746615091,
+      -0.193188316,
+      -0.015729524,
+      0.071497835,
+      0.244
+     ],
+     [
+      0.533466289,
+      0.413114142,
+      -0.022548467,
+      0.10249303,
+      0.244
+     ],
+     [
+      -0.20408295,
+      -1.144852291,
+      -0.017554468,
+      0.079793038,
+      0.244
+     ],
+     [
+      0.354083726,
+      0.267299732,
+      -0.018723117,
+      0.085105079,
+      0.244
+     ],
+     [
+      -0.474879808,
+      -0.821738889,
+      -0.015886097,
+      0.072209532,
+      0.244
+     ],
+     [
+      0.445604148,
+      1.1196974,
+      -0.021730986,
+      0.098777209,
+      0.244
+     ],
+     [
+      -0.478685088,
+      -0.15940493,
+      -0.018057455,
+      0.082079341,
+      0.244
+     ],
+     [
+      -0.445980954,
+      -0.281782101,
+      -0.018639244,
+      0.084723834,
+      0.244
+     ],
+     [
+      0.65220455,
+      -0.400601408,
+      -0.022928704,
+      0.104221381,
+      0.244
+     ]
+    ],
+    "snow": [],
+    "wisps": [
+     [
+      -0.707331658,
+      0.338527654,
+      0.21293701,
+      0.028
+     ],
+     [
+      -1.196078267,
+      -0.569802764,
+      0.186489633,
+      0.028
+     ]
+    ],
+    "cloudDay": 1,
+    "sunAlt": 20.535449568
+   }
+  },
+  {
+   "ms": 1735700400000,
+   "t": 1759000000.125,
+   "place": {
+    "lat": 40.7,
+    "lon": -74
+   },
+   "weather": {
+    "rain": 0,
+    "snow": 0.8,
+    "wind": 0.3,
+    "cloud": 0.6,
+    "fog": 0.1,
+    "dir": 1
+   },
+   "opts": {},
+   "scene": {
+    "ax": 1,
+    "ay": 1,
+    "tint": [
+     12,
+     18,
+     40,
+     0.1,
+     12,
+     18,
+     40,
+     0.04
+    ],
+    "glow": null,
+    "sun": {
+     "x": -0.194069584,
+     "y": -1.497263919,
+     "r": 0.075,
+     "alpha": 0,
+     "glow": 0,
+     "warm": 1
+    },
+    "moon": {
+     "x": -0.049877524,
+     "y": -1.527865039,
+     "r": 0.066,
+     "alpha": 0,
+     "glow": 0,
+     "fraction": 0.017791544,
+     "phase": 1,
+     "bx": 0.636532909,
+     "by": -0.771249541
+    },
+    "clouds": [
+     [
+      0.342931399,
+      0.414651475,
+      0.302968089,
+      0.104322696,
+      0.113038831
+     ],
+     [
+      -0.024075969,
+      0.699255121,
+      0.340932633,
+      0.116977544,
+      0.126326421
+     ],
+     [
+      -0.309069275,
+      0.555789279,
+      0.273758525,
+      0.094586175,
+      0.102815484
+     ],
+     [
+      0.745297394,
+      0.429945873,
+      0.297577645,
+      0.102525882,
+      0.111152176
+     ]
+    ],
+    "fog": 0.01,
+    "rain": [],
+    "snow": [
+     [
+      -0.916589741,
+      -0.767965195,
+      0.011460964,
+      0.55
+     ],
+     [
+      -0.271979095,
+      -0.856544293,
+      0.012177412,
+      0.55
+     ],
+     [
+      0.676523988,
+      0.572395621,
+      0.012358818,
+      0.55
+     ],
+     [
+      0.219670947,
+      0.406524637,
+      0.019515597,
+      0.55
+     ],
+     [
+      -0.005744535,
+      0.063012582,
+      0.012738216,
+      0.55
+     ],
+     [
+      -0.270307813,
+      -0.838969427,
+      0.013820238,
+      0.55
+     ],
+     [
+      -0.032656938,
+      0.697454412,
+      0.015647316,
+      0.55
+     ],
+     [
+      -0.767279937,
+      0.271120441,
+      0.012033501,
+      0.55
+     ],
+     [
+      0.782762606,
+      -0.272494242,
+      0.019824168,
+      0.55
+     ],
+     [
+      -0.106763889,
+      0.462484217,
+      0.014621932,
+      0.55
+     ],
+     [
+      0.644356679,
+      0.525316241,
+      0.011162215,
+      0.55
+     ],
+     [
+      0.520668417,
+      0.510357799,
+      0.015403083,
+      0.55
+     ],
+     [
+      -0.009011118,
+      0.882540643,
+      0.017293435,
+      0.55
+     ],
+     [
+      -0.524806928,
+      0.488025856,
+      0.011004156,
+      0.55
+     ],
+     [
+      -0.23299846,
+      0.640385891,
+      0.016106701,
+      0.55
+     ],
+     [
+      -0.518310599,
+      -0.395547438,
+      0.018314146,
+      0.55
+     ],
+     [
+      -0.265429097,
+      -0.686090845,
+      0.019345351,
+      0.55
+     ],
+     [
+      -0.80905805,
+      0.181913146,
+      0.017537539,
+      0.55
+     ],
+     [
+      -0.782050873,
+      0.788078097,
+      0.015865832,
+      0.55
+     ],
+     [
+      0.852145804,
+      -0.449006188,
+      0.011978731,
+      0.55
+     ],
+     [
+      0.107442105,
+      0.725866038,
+      0.017956215,
+      0.55
+     ],
+     [
+      -0.09529481,
+      0.320527039,
+      0.016457811,
+      0.55
+     ],
+     [
+      -0.598484238,
+      1.041529043,
+      0.014465875,
+      0.55
+     ],
+     [
+      -0.789920474,
+      -0.647565848,
+      0.019043142,
+      0.55
+     ],
+     [
+      -0.248226573,
+      1.039767341,
+      0.013436966,
+      0.55
+     ],
+     [
+      -0.909447595,
+      0.467951569,
+      0.015762387,
+      0.55
+     ],
+     [
+      -0.640056479,
+      -0.047519571,
+      0.010380016,
+      0.55
+     ],
+     [
+      -0.998644617,
+      1.036409506,
+      0.018198265,
+      0.55
+     ],
+     [
+      0.595274129,
+      0.476167899,
+      0.013937268,
+      0.55
+     ],
+     [
+      -0.209034449,
+      0.040385458,
+      0.01668506,
+      0.55
+     ],
+     [
+      0.065116426,
+      0.118947378,
+      0.010368243,
+      0.55
+     ],
+     [
+      0.12594626,
+      -0.250976904,
+      0.013586489,
+      0.55
+     ],
+     [
+      -0.396661499,
+      -0.955456062,
+      0.011662253,
+      0.55
+     ],
+     [
+      0.648088724,
+      0.598243457,
+      0.014277526,
+      0.55
+     ]
+    ],
+    "wisps": [
+     [
+      0.328933895,
+      0.338527654,
+      0.21293701,
+      0.021
+     ],
+     [
+      0.083014742,
+      -0.569802764,
+      0.186489633,
+      0.021
+     ]
+    ],
+    "cloudDay": 0,
+    "sunAlt": -59.298224449
+   }
+  },
+  {
+   "ms": 1735700400000,
+   "t": 77.75,
+   "place": null,
+   "weather": {
+    "rain": 0,
+    "snow": 0,
+    "wind": 0.9,
+    "cloud": 0.2,
+    "fog": 0,
+    "dir": 1
+   },
+   "opts": {
+    "ax": 1.5,
+    "ay": 1
+   },
+   "scene": {
+    "ax": 1.5,
+    "ay": 1,
+    "tint": null,
+    "glow": null,
+    "sun": null,
+    "moon": null,
+    "clouds": [
+     [
+      -1.870549908,
+      0.414651475,
+      0.302968089,
+      0.104322696,
+      0.080742022
+     ],
+     [
+      0.080047078,
+      0.699255121,
+      0.340932633,
+      0.116977544,
+      0.090233158
+     ],
+     [
+      -1.840794285,
+      0.555789279,
+      0.273758525,
+      0.094586175,
+      0.073439631
+     ]
+    ],
+    "fog": 0,
+    "rain": [],
+    "snow": [],
+    "wisps": [
+     [
+      0.526130868,
+      0.338527654,
+      0.21293701,
+      0.063
+     ],
+     [
+      1.182787867,
+      -0.569802764,
+      0.186489633,
+      0.063
+     ],
+     [
+      -1.343282208,
+      0.18573596,
+      0.146661816,
+      0.063
+     ],
+     [
+      -1.359514779,
+      0.006844424,
+      0.151173276,
+      0.063
+     ],
+     [
+      0.209171984,
+      0.680432957,
+      0.191843394,
+      0.063
+     ]
+    ],
+    "cloudDay": 0,
+    "sunAlt": -90
+   }
+  },
+  {
+   "ms": 1735700400000,
+   "t": 77.75,
+   "place": {
+    "lat": -33.9,
+    "lon": 151.2
+   },
+   "weather": {
+    "rain": 0.1,
+    "snow": 0.1,
+    "wind": 0,
+    "cloud": 1,
+    "fog": 1,
+    "dir": 1
+   },
+   "opts": {
+    "ax": 1,
+    "ay": 1.4
+   },
+   "scene": {
+    "ax": 1,
+    "ay": 1.4,
+    "tint": [
+     36,
+     78,
+     122,
+     0.2,
+     60,
+     100,
+     138,
+     0.12
+    ],
+    "glow": null,
+    "sun": {
+     "x": -0.186157495,
+     "y": 0.859912141,
+     "r": 0.075,
+     "alpha": 0.35,
+     "glow": 0.056,
+     "warm": 0
+    },
+    "moon": {
+     "x": 0.015449723,
+     "y": 0.88979532,
+     "r": 0.066,
+     "alpha": 0.1575,
+     "glow": 0,
+     "fraction": 0.017791544,
+     "phase": 1,
+     "bx": -0.999802512,
+     "by": 0.019873006
+    },
+    "clouds": [
+     [
+      1.024875988,
+      0.414651475,
+      0.302968089,
+      0.104322696,
+      0.14533564
+     ],
+     [
+      -0.420180125,
+      0.699255121,
+      0.340932633,
+      0.116977544,
+      0.162419685
+     ],
+     [
+      1.110151346,
+      0.555789279,
+      0.273758525,
+      0.094586175,
+      0.132191336
+     ],
+     [
+      -0.306160365,
+      0.429945873,
+      0.297577645,
+      0.102525882,
+      0.14290994
+     ],
+     [
+      -0.154514206,
+      0.522045174,
+      0.267649613,
+      0.092549871,
+      0.129442326
+     ]
+    ],
+    "fog": 0.1,
+    "rain": [
+     [
+      -0.953343636,
+      -0.939004976,
+      0,
+      0.090723565,
+      0.172
+     ],
+     [
+      -0.158564304,
+      0.640695954,
+      0,
+      0.095857611,
+      0.172
+     ],
+     [
+      0.612877773,
+      0.375657777,
+      0,
+      0.074902522,
+      0.172
+     ],
+     [
+      0.56640078,
+      0.330750022,
+      0,
+      0.102045852,
+      0.172
+     ],
+     [
+      -0.713861061,
+      0.863688201,
+      0,
+      0.106854387,
+      0.172
+     ],
+     [
+      -0.620335296,
+      1.542969278,
+      0,
+      0.094618773,
+      0.172
+     ],
+     [
+      0.075089089,
+      -1.443328675,
+      0,
+      0.090075139,
+      0.172
+     ],
+     [
+      0.213006984,
+      -0.567254348,
+      0,
+      0.074078298,
+      0.172
+     ],
+     [
+      -0.360251287,
+      1.199372503,
+      0,
+      0.070569799,
+      0.172
+     ],
+     [
+      0.52727579,
+      1.281488725,
+      0,
+      0.091633102,
+      0.172
+     ],
+     [
+      -0.807449067,
+      1.33741256,
+      0,
+      0.101978777,
+      0.172
+     ],
+     [
+      0.18540556,
+      -0.440133155,
+      0,
+      0.094569017,
+      0.172
+     ]
+    ],
+    "snow": [
+     [
+      -0.998447348,
+      -0.616224598,
+      0.011460964,
+      0.375
+     ],
+     [
+      -0.372336541,
+      1.150641059,
+      0.012177412,
+      0.375
+     ],
+     [
+      0.674136875,
+      0.960340763,
+      0.012358818,
+      0.375
+     ],
+     [
+      0.171335081,
+      -0.824289661,
+      0.019515597,
+      0.375
+     ],
+     [
+      -0.143561537,
+      -0.439204706,
+      0.012738216,
+      0.375
+     ],
+     [
+      -0.344232996,
+      0.74848272,
+      0.013820238,
+      0.375
+     ],
+     [
+      -0.093385081,
+      1.383807405,
+      0.015647316,
+      0.375
+     ],
+     [
+      -0.78362021,
+      1.238414777,
+      0.012033501,
+      0.375
+     ],
+     [
+      0.759009932,
+      0.034014782,
+      0.019824168,
+      0.375
+     ],
+     [
+      -0.175764455,
+      0.919696187,
+      0.014621932,
+      0.375
+     ],
+     [
+      0.611660509,
+      -1.38036727,
+      0.011162215,
+      0.375
+     ],
+     [
+      0.400444512,
+      1.100118985,
+      0.015403083,
+      0.375
+     ],
+     [
+      0.003171894,
+      -1.021977124,
+      0.017293435,
+      0.375
+     ]
+    ],
+    "wisps": [],
+    "cloudDay": 1,
+    "sunAlt": 72.699239762
+   }
+  }
+ ],
+ "outlines": [
+  {
+   "fraction": 0,
+   "bx": 1,
+   "by": 0,
+   "n": 8,
+   "pts": [
+    [
+     0,
+     1
+    ],
+    [
+     0.382683432,
+     0.923879533
+    ],
+    [
+     0.707106781,
+     0.707106781
+    ],
+    [
+     0.923879533,
+     0.382683432
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     0.923879533,
+     -0.382683432
+    ],
+    [
+     0.707106781,
+     -0.707106781
+    ],
+    [
+     0.382683432,
+     -0.923879533
+    ],
+    [
+     0,
+     -1
+    ],
+    [
+     0.382683432,
+     -0.923879533
+    ],
+    [
+     0.707106781,
+     -0.707106781
+    ],
+    [
+     0.923879533,
+     -0.382683432
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     0.923879533,
+     0.382683432
+    ],
+    [
+     0.707106781,
+     0.707106781
+    ],
+    [
+     0.382683432,
+     0.923879533
+    ]
+   ]
+  },
+  {
+   "fraction": 0.25,
+   "bx": 0.6,
+   "by": -0.8,
+   "n": 12,
+   "pts": [
+    [
+     0.8,
+     0.6
+    ],
+    [
+     0.928032088,
+     0.37250026
+    ],
+    [
+     0.992820323,
+     0.119615242
+    ],
+    [
+     0.989949494,
+     -0.141421356
+    ],
+    [
+     0.919615242,
+     -0.392820323
+    ],
+    [
+     0.786610732,
+     -0.617449234
+    ],
+    [
+     0.6,
+     -0.8
+    ],
+    [
+     0.37250026,
+     -0.928032088
+    ],
+    [
+     0.119615242,
+     -0.992820323
+    ],
+    [
+     -0.141421356,
+     -0.989949494
+    ],
+    [
+     -0.392820323,
+     -0.919615242
+    ],
+    [
+     -0.617449234,
+     -0.786610732
+    ],
+    [
+     -0.8,
+     -0.6
+    ],
+    [
+     -0.695094948,
+     -0.683083114
+    ],
+    [
+     -0.542820323,
+     -0.719615242
+    ],
+    [
+     -0.353553391,
+     -0.707106781
+    ],
+    [
+     -0.140192379,
+     -0.646410162
+    ],
+    [
+     0.082722512,
+     -0.541661758
+    ],
+    [
+     0.3,
+     -0.4
+    ],
+    [
+     0.496832984,
+     -0.231078903
+    ],
+    [
+     0.659807621,
+     -0.046410162
+    ],
+    [
+     0.777817459,
+     0.141421356
+    ],
+    [
+     0.842820323,
+     0.319615242
+    ],
+    [
+     0.850386375,
+     0.476027878
+    ]
+   ]
+  },
+  {
+   "fraction": 0.5,
+   "bx": 0,
+   "by": 1,
+   "n": 8,
+   "pts": [
+    [
+     -1,
+     0
+    ],
+    [
+     -0.923879533,
+     0.382683432
+    ],
+    [
+     -0.707106781,
+     0.707106781
+    ],
+    [
+     -0.382683432,
+     0.923879533
+    ],
+    [
+     0,
+     1
+    ],
+    [
+     0.382683432,
+     0.923879533
+    ],
+    [
+     0.707106781,
+     0.707106781
+    ],
+    [
+     0.923879533,
+     0.382683432
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     0.923879533,
+     0
+    ],
+    [
+     0.707106781,
+     0
+    ],
+    [
+     0.382683432,
+     0
+    ],
+    [
+     0,
+     0
+    ],
+    [
+     -0.382683432,
+     0
+    ],
+    [
+     -0.707106781,
+     0
+    ],
+    [
+     -0.923879533,
+     0
+    ]
+   ]
+  },
+  {
+   "fraction": 0.93,
+   "bx": -0.28,
+   "by": 0.96,
+   "n": 10,
+   "pts": [
+    [
+     -0.96,
+     -0.28
+    ],
+    [
+     -0.999539014,
+     0.03036049
+    ],
+    [
+     -0.941236185,
+     0.337749084
+    ],
+    [
+     -0.790798601,
+     0.612076444
+    ],
+    [
+     -0.562952139,
+     0.826489497
+    ],
+    [
+     -0.28,
+     0.96
+    ],
+    [
+     0.03036049,
+     0.999539014
+    ],
+    [
+     0.337749084,
+     0.941236185
+    ],
+    [
+     0.612076444,
+     0.790798601
+    ],
+    [
+     0.826489497,
+     0.562952139
+    ],
+    [
+     0.96,
+     0.28
+    ],
+    [
+     0.987425548,
+     0.011171394
+    ],
+    [
+     0.918195003,
+     -0.258750746
+    ],
+    [
+     0.759085134,
+     -0.50334456
+    ],
+    [
+     0.525670724,
+     -0.698667501
+    ],
+    [
+     0.2408,
+     -0.8256
+    ],
+    [
+     -0.067641905,
+     -0.871717018
+    ],
+    [
+     -0.36946255,
+     -0.832504301
+    ],
+    [
+     -0.635117626,
+     -0.711800263
+    ],
+    [
+     -0.838602963,
+     -0.521420255
+    ]
+   ]
+  },
+  {
+   "fraction": 1,
+   "bx": 1,
+   "by": 0,
+   "n": 6,
+   "pts": [
+    [
+     0,
+     1
+    ],
+    [
+     0.5,
+     0.866025404
+    ],
+    [
+     0.866025404,
+     0.5
+    ],
+    [
+     1,
+     0
+    ],
+    [
+     0.866025404,
+     -0.5
+    ],
+    [
+     0.5,
+     -0.866025404
+    ],
+    [
+     0,
+     -1
+    ],
+    [
+     -0.5,
+     -0.866025404
+    ],
+    [
+     -0.866025404,
+     -0.5
+    ],
+    [
+     -1,
+     0
+    ],
+    [
+     -0.866025404,
+     0.5
+    ],
+    [
+     -0.5,
+     0.866025404
+    ]
+   ]
+  }
+ ],
+ "hashes": [
+  [
+   -3,
+   0.923417559
+  ],
+  [
+   4,
+   0.677268918
+  ],
+  [
+   11,
+   0.061754151
+  ],
+  [
+   18,
+   0.614344799
+  ],
+  [
+   25,
+   0.705946785
+  ],
+  [
+   32,
+   0.756794277
+  ],
+  [
+   39,
+   0.229459892
+  ]
+ ],
+ "tints": [
+  [
+   -30,
+   [
+    12,
+    18,
+    40,
+    0.1,
+    12,
+    18,
+    40,
+    0.04
+   ]
+  ],
+  [
+   -18,
+   [
+    12,
+    18,
+    40,
+    0.1,
+    12,
+    18,
+    40,
+    0.04
+   ]
+  ],
+  [
+   -12,
+   [
+    18,
+    26.4,
+    60.4,
+    0.136,
+    28.8,
+    31.2,
+    64,
+    0.076
+   ]
+  ],
+  [
+   -5,
+   [
+    26,
+    38,
+    82,
+    0.17,
+    80,
+    55,
+    70,
+    0.13
+   ]
+  ],
+  [
+   -2,
+   [
+    30,
+    44,
+    90,
+    0.18,
+    120,
+    70,
+    60,
+    0.16
+   ]
+  ],
+  [
+   0,
+   [
+    31.5,
+    50.5,
+    97,
+    0.185,
+    125,
+    76.5,
+    62.5,
+    0.155
+   ]
+  ],
+  [
+   3,
+   [
+    33.75,
+    60.25,
+    107.5,
+    0.1925,
+    132.5,
+    86.25,
+    66.25,
+    0.1475
+   ]
+  ],
+  [
+   6,
+   [
+    36,
+    70,
+    118,
+    0.2,
+    140,
+    96,
+    70,
+    0.14
+   ]
+  ],
+  [
+   12,
+   [
+    36,
+    73.428571429,
+    119.714285714,
+    0.2,
+    105.714285714,
+    97.714285714,
+    99.142857143,
+    0.131428571
+   ]
+  ],
+  [
+   20,
+   [
+    36,
+    78,
+    122,
+    0.2,
+    60,
+    100,
+    138,
+    0.12
+   ]
+  ],
+  [
+   45,
+   [
+    36,
+    78,
+    122,
+    0.2,
+    60,
+    100,
+    138,
+    0.12
+   ]
+  ]
+ ]
+}

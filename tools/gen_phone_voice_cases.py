@@ -15,8 +15,9 @@ Two halves, both the backend's own code run with the outside world replaced:
            real jarvis_voice.enroll().
   voices   Custom voices (section 15). GET /api/voice/voices is
            backend/jarvis_voices.status(); the POST answers are its create(),
-           switch(), delete(), set_better(), set_speed(), set_speaker() and
-           set_face_voice(). The "sounds like you"
+           switch(), delete(), set_better(), set_speed(), set_speaker(),
+           set_face_voice(), set_face_animal() and try_face_animal()'s
+           refusal. The "sounds like you"
            refusal is the real owner_check() against a print the real
            jarvis_voice.enroll() made from the same voice.
 
@@ -429,6 +430,45 @@ def strict_cases():
             {"mode": "hands_free", "value": "button_only"})), w)
         status["hands_free_button_only"] = scrub(S.status(), w)
         heard["button_only_talk_button"] = hear("What time is it?")
+        # The owner's decision (2026-09-28): under "Only trust the talk
+        # button", answers about the screen after "hey Jarvis" stay on
+        # screen; reading them aloud even then is the voice card, keeping
+        # them on screen again is immediate. (The talk button's own clips
+        # carry screen_aloud true either way - backend/test_voice_strict.py
+        # has the "hey Jarvis" clips.)
+        answers["screen_aloud_waiting"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_aloud"}, spawn=never)), w)
+        E._reset_for_tests()
+        answers["screen_aloud_denied"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_aloud"}, g=gate("denied"))), w)
+        status["screen_aloud_denied"] = scrub(S.status(), w)
+        answers["screen_aloud_approved"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_aloud"})), w)
+        status["screen_aloud"] = scrub(S.status(), w)
+        answers["screen_on_screen"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_on_screen"})), w)
+        status["screen_back_on_screen"] = scrub(S.status(), w)
+        # The owner's answers of 2026-09-28 (docs/LIVE-DESIGN.md): under "Only
+        # trust the talk button", Jarvis Live is trusted like the talk button
+        # by default however it started; "Only when I start it with the
+        # button" and "Be as careful as with Hey Jarvis" are stricter and
+        # immediate; each looser choice is the voice card.
+        status["live_default"] = scrub(S.status(), w)
+        answers["live_button_start_only"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_button_start_only"})), w)
+        status["live_button_start_only"] = scrub(S.status(), w)
+        answers["live_caution"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_like_hey_jarvis"})), w)
+        status["live_caution"] = scrub(S.status(), w)
+        answers["live_trusted_waiting"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_trust_fully"}, spawn=never)), w)
+        E._reset_for_tests()
+        answers["live_trusted_denied"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_trust_fully"}, g=gate("denied"))), w)
+        status["live_trusted_denied"] = scrub(S.status(), w)
+        answers["live_trusted_approved"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_trust_fully"})), w)
+        status["live_trusted"] = scrub(S.status(), w)
         answers["hands_free_back_waiting"] = scrub(answer(post(
             {"mode": "hands_free", "value": "same_as_button"}, spawn=never)), w)
         E._reset_for_tests()
@@ -554,7 +594,8 @@ def vpost(fn, body, g=None, spawn=run_now, check=not_owner):
     kw = {"gate": g or gate(), "tier_of": ask, "spawn": spawn}
     if fn in (VS.create, VS.switch):
         kw["check"] = check
-    if fn in (VS.delete, VS.set_speed, VS.set_speaker, VS.set_face_voice):
+    if fn in (VS.delete, VS.set_speed, VS.set_speaker, VS.set_face_voice,
+              VS.set_face_animal, VS.try_face_animal):
         return fn(body)
     return fn(body, **kw)
 
@@ -618,11 +659,31 @@ def voices_cases():
         # apps keep the face), its own voice stands in.
         (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
                                                encoding="utf-8")
+        # It ships OFF (the owner's 2026-09-28 decision): the owner turns it
+        # on first, as they would, before the face's voice can stand in.
+        status["face_default_off"] = scrub(VS.status(), w)
+        vpost(VS.set_face_voice, {"enabled": True})
         status["face_showing"] = scrub(VS.status(), w)
         answers["face_off"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": False})), w)
         status["face_off"] = scrub(VS.status(), w)
         answers["face_on"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": True})), w)
         answers["face_bad"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": "yes"})), w)
+        # Each animal's own voice, pitch and pace (2026-09-28): at once, no
+        # card either way; "Reset to its own voice"; a pitch out of range;
+        # "Try it" for a face that is not an animal (its WAV answer is
+        # bytes, not JSON, so only its refusal is kept here).
+        answers["animal_set"] = scrub(answer(vpost(VS.set_face_animal, {
+            "face": "redpanda", "speaker": "3", "semitones": -1.5, "pace": "faster"})), w)
+        status["animal_changed"] = scrub(VS.status(), w)
+        answers["animal_reset"] = scrub(answer(vpost(VS.set_face_animal, {
+            "face": "redpanda", "reset": True})), w)
+        answers["animal_bad"] = scrub(answer(vpost(VS.set_face_animal, {
+            "face": "redpanda", "speaker": "3", "semitones": 9, "pace": "normal"})), w)
+        answers["animal_try_bad"] = scrub(answer(vpost(VS.try_face_animal, {"face": "orbit"})), w)
+        # "Try it" while another is still being made: one at a time.
+        with VS._TRY_LOCK:
+            answers["animal_try_busy"] = scrub(answer(vpost(VS.try_face_animal,
+                                                            {"face": "redpanda"})), w)
 
     with VoicesWorld(zipvoice=False) as w:
         vpost(VS.create, create_body())

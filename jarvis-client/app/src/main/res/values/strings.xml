@@ -5,15 +5,17 @@
     <!-- App-icon shortcuts (feasibility I125, docs/FEASIBILITY-AUDIT-
          2026-09-26.md: "Talk, Note, Brief me, What did I miss; still meets
          App lock"), shown on a long press of the app's own icon on the
-         home screen or app drawer - res/xml/shortcuts.xml. Each reuses an
-         action MainActivity already handles (the widget's own Talk and
-         Note buttons; the briefing notification's own "open the briefing"
-         action), so there is no new behaviour here, only a second way to
-         reach it. All four still open behind App lock like any other
+         home screen or app drawer - res/xml/shortcuts.xml. Talk and Note
+         reuse the widget's own buttons' actions; "Brief me now" and "What
+         did I miss?" ask that sentence on Home as a typed question
+         (AppShortcuts.kt holds the exact sentences, both from the "Things
+         you can say" list). All four still open behind App lock like any other
          launch - MainActivity.kt's own "the app lock outranks everything"
          composes nothing else until it is unlocked. -->
     <string name="shortcut_talk_short">Talk</string>
     <string name="shortcut_talk_long">Talk to Jarvis</string>
+    <string name="shortcut_live_short">Live</string>
+    <string name="shortcut_live_long">Jarvis Live</string>
     <string name="shortcut_note_short">Note</string>
     <string name="shortcut_note_long">Quick note</string>
     <string name="shortcut_brief_short">Brief me</string>

@@ -15,7 +15,10 @@ No network, no microphone. What it proves:
   3. The ORDER in hear() for a wake-word clip - each later step is made to
      raise if it is reached: switched off -> nothing runs; no phrase -> no
      owner check, no speech-to-text; not the owner -> no speech-to-text.
-  4. "Hey Jarvis." on its own opens ONE follow-up window, owner-checked.
+  4. "Hey Jarvis." on its own opens ONE follow-up window, owner-checked,
+     for the microphone that heard it only; and one "hey Jarvis" heard by
+     the phone AND the PC is answered once (the voice play test, F2,
+     2026-09-27) - the other copy is `other_device`, no words kept.
   5. The switch: ON is one approval card and nothing else - denied, timed
      out, refused, a verdict at the wrong tier, the tier not "ask", a second
      request while one waits, and "off" while the card waits all leave it
@@ -308,6 +311,205 @@ def t_follow_up_window():
             S.hear(tone(220.0), source="wake_word")
         S.set_wake_enabled(False)
         check("turning the wake word off closes an open window", not S._take_awake())
+
+
+def _owner_wake(transcript, heard=True):
+    """The spotter hears (or not) "hey Jarvis", and speech-to-text says
+    `transcript` - for the owner's enrolled 220 Hz voice."""
+    return (mock.patch.object(W, "spot", return_value=W.Spot(True, heard=heard,
+                                                             score=0.9 if heard else 0.01)),
+            mock.patch.object(S, "_stt_engine", return_value=object()),
+            mock.patch.object(S, "_transcribe", return_value=transcript))
+
+
+def _hear(transcript, mic, heard=True, freq=220.0):
+    a, b, c = _owner_wake(transcript, heard)
+    with a, b, c:
+        return S.hear(tone(freq), source="wake_word", mic=mic).as_dict()
+
+
+def _phone_verdict(w):
+    """The phone's own WakeRules.verdict, restated (voice/WakeRules.kt)."""
+    if not w["available"]:
+        return "STOP"
+    if w["too_short"] and w["wake_heard"]:
+        return "TOO_SHORT"
+    if w["too_short"]:
+        return "IGNORE"
+    if w["awake"] and w["owner"]:
+        return "AWAKE"
+    if w["wake_heard"] and w["owner"]:
+        return "ANSWER"
+    return "IGNORE"
+
+
+def _desktop_drops(w):
+    """voice.rs, the wake-word listener: a reply that is available, not
+    `stop` and not `wake_heard` is dropped without a word."""
+    return w["available"] and not w["stop"] and not w["wake_heard"]
+
+
+def t_the_follow_up_window_is_per_device():
+    """The voice play test's F2 (2026-09-27): "Hey Jarvis." opens a window
+    for the microphone that heard it, not for the whole PC."""
+    with Env():
+        turn_on()
+        samples, _ = S._read_wav(tone(220.0))
+        V.enroll([samples] * 3, embedder=V.EcapaEmbedder(), path=V.PROFILE_PATH)
+        first = _hear("Hey Jarvis.", "desktop")
+        check("'Hey Jarvis.' to the desktop opens a window", first["awake"], first)
+        S._SAME_WAKE.clear()          # not the same words heard twice: a later clip
+        phone = _hear("What time is it?", "phone", heard=False)
+        check("the phone's clip without the phrase does not use the desktop's window",
+              not phone["ok"] and not phone["wake_heard"] and phone["text"] == "", phone)
+        with mock.patch.object(W, "spot", boom("the spotter")), \
+                mock.patch.object(S, "_stt_engine", return_value=object()), \
+                mock.patch.object(S, "_transcribe", return_value="What time is it?"):
+            desk = S.hear(tone(220.0), source="wake_word", mic="desktop").as_dict()
+        check("... so the owner's question to the desktop still gets through",
+              desk["ok"] and desk["wake_heard"] and desk["text"] == "What time is it?", desk)
+        check("used once, as before", not S._take_awake("desktop"))
+
+        S._reset_wake_for_tests()
+        turn_on()
+        S._open_awake("phone")
+        check("a phone window is the phone's only",
+              not S._take_awake("desktop") and S._take_awake("phone"))
+        S._open_awake("")
+        check("an unnamed app's window is not a named one's",
+              not S._take_awake("phone") and not S._take_awake("desktop") and S._take_awake(""))
+        S._open_awake("desktop")
+        S._open_awake("phone")
+        check("_take_awake() with no microphone (tests) takes any, and closes all",
+              S._take_awake() and not S._take_awake("phone") and not S._take_awake("desktop"))
+        S._open_awake("desktop")
+        S.set_wake_enabled(False)
+        check("turning the wake word off closes every window", not S._take_awake("desktop"))
+
+
+def t_one_hey_jarvis_heard_by_two_devices():
+    """The voice play test's F2 (2026-09-27), reproduced with this file's own
+    harness (the tester's repro_two_devices.py): both the phone and the PC
+    hear one "Hey Jarvis". Before the fix both were answered, or the second
+    copy used the window up and the real question was dropped."""
+    with Env():
+        turn_on()
+        samples, _ = S._read_wav(tone(220.0))
+        V.enroll([samples] * 3, embedder=V.EcapaEmbedder(), path=V.PROFILE_PATH)
+        # 1. "Hey Jarvis, what time is it?" - one answer.
+        pc = _hear("Hey Jarvis, what time is it?", "desktop")
+        order = []
+        real_verify = V.verify
+
+        def verify(*a, **k):
+            order.append("verify")
+            return real_verify(*a, **k)
+
+        def stt(*a, **k):
+            order.append("stt")
+            return "Hey Jarvis, what time is it?"
+        history = []
+        with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.9)), \
+                mock.patch.object(V, "verify", verify), \
+                mock.patch.object(S, "_stt_engine", return_value=object()), \
+                mock.patch.object(S, "_transcribe", stt), \
+                mock.patch.object(S, "_note_for_history", lambda *a, **k: history.append(a)):
+            phone = S.hear(tone(220.0), source="wake_word", mic="phone").as_dict()
+        check("the PC's copy is answered", pc["ok"] and pc["text"] == "what time is it?", pc)
+        check("the phone's copy: no words, `other_device`, the plain reason",
+              phone["text"] == "" and phone["other_device"] is True
+              and phone["reason"] == "answered on your other device" and not phone["awake"], phone)
+        check("... and the voice check still came before any speech-to-text",
+              order == ["verify", "stt"], order)
+        check("... and nothing from it went to chat history", history == [], history)
+        check("the phone drops it without a word (WakeRules IGNORE)",
+              _phone_verdict(phone) == "IGNORE", phone)
+        check("the desktop would drop it without a word too (voice.rs)", _desktop_drops(phone), phone)
+        check("the one that WAS answered says nothing about another device",
+              pc["other_device"] is False, pc)
+
+        # 2. "Hey Jarvis." on its own, heard by both, then the question.
+        S._reset_wake_for_tests()
+        turn_on()
+        a = _hear("Hey Jarvis.", "desktop")
+        b = _hear("Hey Jarvis.", "phone")
+        check("the first 'Hey Jarvis.' opens its device's window", a["awake"], a)
+        check("the second copy opens none, and says why",
+              not b["awake"] and b["other_device"] and _phone_verdict(b) == "IGNORE", b)
+        check("the phone has no window to use", not S._take_awake("phone"))
+        c = _hear("What time is it?", "desktop", heard=False)
+        check("the owner's real question to the PC is answered (it used to be dropped)",
+              c["ok"] and c["wake_heard"] and c["text"] == "What time is it?", c)
+
+        # 3. Whichever arrives first is answered - the phone, this time.
+        S._reset_wake_for_tests()
+        turn_on()
+        first = _hear("Hey Jarvis, next song.", "phone")
+        second = _hear("Hey Jarvis, next song.", "desktop")
+        check("the phone first: the phone answers, the PC does not",
+              first["text"] == "next song." and second["other_device"] and second["text"] == "",
+              (first, second))
+
+        # 4. What is NOT matched.
+        S._reset_wake_for_tests()
+        turn_on()
+        one = _hear("Hey Jarvis, what time is it?", "desktop")
+        two = _hear("Hey Jarvis, and the date?", "desktop")
+        check("the same microphone twice is the owner talking again: both answered",
+              one["text"] and two["text"] == "and the date?" and not two["other_device"], two)
+        S._SAME_WAKE["at"] -= S.SAME_WAKE_SECONDS + 0.5
+        late = _hear("Hey Jarvis, set a timer.", "phone")
+        check(f"another device more than {S.SAME_WAKE_SECONDS} s later is answered",
+              late["text"] == "set a timer." and not late["other_device"], late)
+        with mock.patch.object(S, "_stt_engine", return_value=object()), \
+                mock.patch.object(S, "_transcribe", return_value="what is the weather"):
+            push = S.hear(tone(220.0), source="push_to_talk", mic="desktop").as_dict()
+        check("the talk button is never matched (one deliberate press)",
+              push["ok"] and push["text"] == "what is the weather" and not push["other_device"], push)
+        S._reset_wake_for_tests()
+        turn_on()
+        a, b2, c2 = _owner_wake("Hey Jarvis, what time is it?")
+        with a, b2, mock.patch.object(S, "_transcribe", boom("speech-to-text")):
+            stranger = S.hear(tone(880.0), source="wake_word", mic="phone").as_dict()
+        owner = _hear("Hey Jarvis, what time is it?", "desktop")
+        check("a stranger's clip claims nothing: refused as before, not transcribed",
+              not stranger["ok"] and not stranger["other_device"], stranger)
+        check("... and the owner's own clip right after it is answered",
+              owner["text"] == "what time is it?" and not owner["other_device"], owner)
+        S._reset_wake_for_tests()
+        turn_on()
+        noted = _hear("The computer in that film was called Jarvis.", "desktop")
+        after = _hear("Hey Jarvis, what time is it?", "phone")
+        check("a clip that was not addressed to Jarvis claims nothing",
+              noted["text"] == "" and not noted["other_device"]
+              and after["text"] == "what time is it?" and not after["other_device"], (noted, after))
+
+
+def t_two_devices_at_once():
+    """Both copies arrive together (two request threads): exactly one is
+    answered."""
+    with Env():
+        turn_on()
+        samples, _ = S._read_wav(tone(220.0))
+        V.enroll([samples] * 3, embedder=V.EcapaEmbedder(), path=V.PROFILE_PATH)
+        out = {}
+        gate = threading.Barrier(2)
+
+        def one(mic):
+            gate.wait()
+            out[mic] = S.hear(tone(220.0), source="wake_word", mic=mic).as_dict()
+        a, b, c = _owner_wake("Hey Jarvis, set a timer for ten minutes.")
+        with a, b, c:
+            ts = [threading.Thread(target=one, args=(m,)) for m in ("phone", "desktop")]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join(30)
+        answered = [m for m, w in out.items() if w["text"]]
+        other = [m for m, w in out.items() if w["other_device"]]
+        check("exactly one device's copy is answered, the other is 'other device'",
+              len(answered) == 1 and len(other) == 1 and set(answered + other) == {"phone", "desktop"},
+              out)
 
 
 def _said(text, mic=""):
@@ -740,6 +942,8 @@ if __name__ == "__main__":
                t_order_wake_switched_off_runs_nothing, t_order_no_phrase_no_owner_check,
                t_order_not_the_owner_is_never_transcribed,
                t_order_the_owner_is_heard_and_the_phrase_removed, t_follow_up_window,
+               t_the_follow_up_window_is_per_device, t_one_hey_jarvis_heard_by_two_devices,
+               t_two_devices_at_once,
                t_after_a_question,
                t_no_spotter_is_said_not_crashed, t_push_to_talk_is_unchanged,
                t_the_switch_is_one_card, t_the_spotter_module_writes_and_logs_nothing,

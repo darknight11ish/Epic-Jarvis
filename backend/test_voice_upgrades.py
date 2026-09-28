@@ -120,7 +120,10 @@ class FakePocket:
         return types.SimpleNamespace(samples=x, sample_rate=24000)
 
 
-def reset():
+def reset(face_voice=True):
+    """A fresh config folder. `face_voice`: the "Voice follows the face"
+    switch starts ON here, as most of these tests are about it working; it
+    ships OFF (FACE_VOICE_DEFAULT, checked on its own with face_voice=None)."""
     V._reset_for_tests()
     d = Path(tempfile.mkdtemp(prefix="cfg-", dir=TMP))
     CFG.clear()
@@ -142,6 +145,10 @@ def reset():
     V._ZIP.update(engine=FakeZip(), why="ready", built=True)
     S._tts_cache = FakeKokoro()
     S._cfg = lambda k, default=None: CFG.get(k, default)
+    if face_voice is not None:
+        V._write_state(face_voice=face_voice)
+        AUDIT.clear()
+        EVENTS.clear()
     return d
 
 
@@ -273,6 +280,18 @@ def t_the_speaker_choices_come_from_the_pc():
     check("the title and the detail say what it is",
           view["title"] == "Jarvis's built-in voice" and "Kokoro" in view["detail"])
     check("GET /api/voice/voices carries it", V.status()["speaker"] == V.speaker_view())
+    # The detail points at the "Voices" list, which both apps draw BELOW this
+    # choice - it said "above" (play tester, 2026-09-27). Read from the two
+    # screens themselves, so a reordering there shows up here.
+    root = HERE.parent
+    html = (root / "jarvis-desktop" / "src" / "settings.html").read_text(encoding="utf-8")
+    kt = (root / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+          / "client" / "ui" / "screens" / "VoicesScreen.kt").read_text(encoding="utf-8")
+    check("the detail says the recorded voices are under \"Voices\" below, and on both "
+          "screens they are",
+          view["detail"].endswith('stays under "Voices" below.')
+          and html.index('id="cv-speaker"') < html.index('<h3 class="subhead">Voices</h3>')
+          and kt.index("SpeakerPlate(sk") < kt.index('Text("Voices"'), view["detail"])
 
 
 def t_setting_the_speaker_asks_nothing_and_says_so():
@@ -349,8 +368,12 @@ def _show_face(d: Path, face):
 
 
 def t_face_voice_needs_an_animal_face():
-    d = reset()
-    check("on by default", V.face_voice_on() is True and V.FACE_VOICE_DEFAULT is True)
+    d = reset(face_voice=None)
+    check("off by default (the owner's 2026-09-28 decision)",
+          V.face_voice_on() is False and V.FACE_VOICE_DEFAULT is False)
+    check("the sea otter does not start on Kokoro's \"Sky\" voice",
+          V.FACE_VOICES["seaotter"]["speaker"] != "4")
+    V._write_state(face_voice=True)  # the rest of this test is about it switched on
     check("no appearance.json: no face, so the owner's built-in voice as before",
           V.face_voice() is None and V.builtin_voice() == (0, 1.0, 0.0, ""))
     view = V.face_voice_view()
@@ -359,7 +382,9 @@ def t_face_voice_needs_an_animal_face():
     _show_face(d, "nucleus")
     check("a face that is not an animal: still the owner's own voice",
           V.face_voice() is None and V.builtin_voice()[2] == 0.0)
-    check("... and the line names the three animals",
+    check("... and the line names the four animals",
+          "Monkey" in V.face_voice_view()["line"])
+    check("... the panda among them",
           "Red Panda" in V.face_voice_view()["line"])
     _show_face(d, ["redpanda"])
     check("a damaged face in appearance.json is no face", V.appearance_face() == "")
@@ -369,7 +394,7 @@ def t_face_voice_needs_an_animal_face():
 def t_each_animal_speaks_in_its_own_voice():
     d = reset()
     for face, sid, pace, semis in (("redpanda", 1, 1.0, 2.0), ("pygmyowl", 2, 0.85, 1.0),
-                                   ("seaotter", 4, 1.15, 3.0)):
+                                   ("seaotter", 3, 1.15, 3.0), ("monkey", 6, 1.0, 1.0)):
         _show_face(d, face)
         check(f"{face}: its own voice, pace and pitch",
               V.builtin_voice() == (sid, pace, semis, face), V.builtin_voice())
@@ -431,7 +456,7 @@ def t_a_recorded_voice_still_wins():
     check("a chosen recorded voice that cannot be used falls back to the animal - "
           "and the line says so, rather than claiming the recorded voice speaks",
           view["speaking"] and "cannot be used right now" in view["line"]
-          and S.tts_voice() == (4, 1.15, 3.0), (view, S.tts_voice()))
+          and S.tts_voice() == (3, 1.15, 3.0), (view, S.tts_voice()))
 
 
 def t_the_voice_is_read_once_per_sentence():
@@ -477,8 +502,8 @@ def t_the_face_switch_asks_nothing_and_says_so():
         code, out = V.set_face_voice(bad)
         check(f"refused: {bad!r}", code == 400 and out["ok"] is False, (code, out))
     V._state_path().write_text(json.dumps({"active": "builtin", "face_voice": "no"}))
-    check("a damaged switch in state.json is no choice (the default, on)",
-          V._read_state()["face_voice"] is None and V.face_voice_on())
+    check("a damaged switch in state.json is no choice (the default, off)",
+          V._read_state()["face_voice"] is None and not V.face_voice_on())
 
 
 def t_the_one_moment_clip_and_the_echo_check_follow_the_face():
@@ -500,7 +525,221 @@ def t_the_one_moment_clip_and_the_echo_check_follow_the_face():
     finally:
         S._sherpa_tts_paths = _S_PATHS
     check("talking over the otter is checked against the otter's pitched voice",
-          keys and keys[0][1] == "4" and keys[0][-1] == "3.0", keys)
+          keys and keys[0][1] == "3" and keys[0][-1] == "3.0", keys)
+
+
+# ------------------------------------------------------ each animal's voice --
+# The owner's choice, 2026-09-28: for each animal, any built-in voice, a
+# pitch from 3 steps deeper to 4 higher (half steps) and a pace. No card
+# either way; "Reset to its own voice"; "Try it" plays a fixed line.
+
+def t_each_animal_voice_can_be_changed():
+    d = reset()
+    _show_face(d, "redpanda")
+    body = {"face": "redpanda", "speaker": "3", "semitones": -1.5, "pace": "faster"}
+    code, out = V.handle_post("/api/voice/voices/face_animal", body)
+    check("POST face_animal: 200, at once, no card", code == 200 and out["ok"] is True
+          and not CARDS, (code, out))
+    check("the answer says it plainly",
+          out["message"] == "The Red Panda's voice is now Sarah, 1.5 steps deeper, "
+                            "a little faster.", out["message"])
+    check("the panda now speaks in it (the owner's speed still on top)",
+          V.builtin_voice() == (3, 1.15, -1.5, "redpanda"), V.builtin_voice())
+    check("... and jarvis_speech reads the same, deeper pitch included",
+          S.tts_voice() == (3, 1.15, -1.5) and S.tts_pitch() == -1.5, S.tts_voice())
+    check("kept in state.json, only for the animal that changed",
+          V._read_state()["face_animals"] == {"redpanda": {"speaker": "3", "semitones": -1.5,
+                                                            "pace": "faster"}})
+    check("both apps are told to read again; the audit line has the choice only",
+          EVENTS == [{"what": "face_animal", "outcome": "set"}]
+          and AUDIT == [("voices.face_animal", {"face": "redpanda", "speaker": "3",
+                                                "semitones": -1.5, "pace": "faster"})],
+          (EVENTS, AUDIT))
+    rows = {r["face"]: r for r in out["face_voice"]["animals"]}
+    check("the view lists all four animals, the panda marked changed",
+          list(rows) == ["redpanda", "pygmyowl", "seaotter", "monkey"] and rows["redpanda"]["changed"]
+          and not rows["pygmyowl"]["changed"] and rows["redpanda"]["voice"] == "Sarah"
+          and rows["redpanda"]["own"] == {"speaker": "1", "semitones": 2.0, "pace": "normal"},
+          rows)
+    check("each row has a line in words",
+          rows["redpanda"]["line"] == "Sarah, 1.5 steps deeper, a little faster."
+          and rows["pygmyowl"]["line"] == "Nicole, 1 step higher, a little slower."
+          and rows["monkey"]["line"] == "Michael, 1 step higher, at normal pace.",
+          [r["line"] for r in rows.values()])
+    ch = out["face_voice"]["animal_choices"]
+    check("the choices come from the PC: the 11 voices, three paces, the pitch range",
+          len(ch["voices"]) == 11 and [p["id"] for p in ch["paces"]] == ["slower", "normal",
+                                                                         "faster"]
+          and ch["pitch"] == {"min": -3.0, "max": 4.0, "step": 0.5}, ch)
+    check("the switch's line says deeper, not higher",
+          V.face_voice_view()["line"] == "Speaking as the Red Panda: Sarah, a little deeper.")
+    S._tts_cache = FakeKokoro()
+    S.say("Of course. I have added the dentist to Tuesday at ten.")
+    f = 2 ** (-1.5 / 12)
+    check("Kokoro is asked for FASTER speech by the pitch factor, so once the sound is "
+          "played slower (deeper) the pace comes out as chosen",
+          S._tts_cache.sids == [3] and abs(S._tts_cache.speeds[0] - 1.15 / f) < 1e-9,
+          (S._tts_cache.sids, S._tts_cache.speeds))
+    V.set_speed({"speed": "slower"})
+    check("the owner's speaking speed multiplies the animal's pace",
+          abs(V.builtin_voice()[1] - 1.15 * 0.85) < 1e-9)
+    _show_face(d, "pygmyowl")
+    check("the other animals keep their own voices",
+          V.builtin_voice() == (2, 0.85 * 0.85, 1.0, "pygmyowl"), V.builtin_voice())
+    V.set_face_voice({"enabled": False})
+    _show_face(d, "redpanda")
+    check("switch off: the owner's single built-in voice for every face, choices kept",
+          V.builtin_voice() == (0, 0.85, 0.0, "") and "redpanda" in V._read_state()["face_animals"])
+    code, out = V.set_face_animal({"face": "seaotter", "speaker": "10", "semitones": 0,
+                                   "pace": "normal"})
+    check("changing an animal while the switch is off says it is heard once that is on",
+          code == 200 and out["message"] == "The Sea Otter's voice is now Lewis, normal pitch, "
+          "at normal pace. \"Voice follows the face\" is off, so you will hear it once that is on.",
+          out["message"])
+
+
+def t_reset_and_its_own_voice():
+    d = reset()
+    _show_face(d, "seaotter")
+    V.set_face_animal({"face": "seaotter", "speaker": "9", "semitones": 4, "pace": "slower"})
+    EVENTS.clear(); AUDIT.clear()
+    code, out = V.handle_post("/api/voice/voices/face_animal", {"face": "seaotter", "reset": True})
+    check("reset: 200, at once, no card, its own voice back",
+          code == 200 and not CARDS and V.builtin_voice() == (3, 1.15, 3.0, "seaotter")
+          and out["message"] == "The Sea Otter speaks in its own voice again.", (code, out))
+    check("... nothing kept for it, and it is announced and audited without words",
+          V._read_state()["face_animals"] == {}
+          and EVENTS == [{"what": "face_animal", "outcome": "reset"}]
+          and AUDIT == [("voices.face_animal", {"face": "seaotter", "reset": True})],
+          (EVENTS, AUDIT))
+    V.set_face_animal({"face": "seaotter", "speaker": "3", "semitones": 3.0, "pace": "faster"})
+    check("choosing exactly its own voice keeps no choice (so it is not marked changed)",
+          V._read_state()["face_animals"] == {}
+          and not V.face_voice_view()["animals"][2]["changed"])
+
+
+def t_bad_animal_bodies_are_refused():
+    reset()
+    good = {"face": "redpanda", "speaker": "3", "semitones": 1.5, "pace": "normal"}
+    bads = [None, True, [], {}, dict(good, face="nucleus"), dict(good, face=1),
+            {k: v for k, v in good.items() if k != "pace"}, dict(good, extra=1),
+            dict(good, speaker="99"), dict(good, speaker=3), dict(good, semitones=4.5),
+            dict(good, semitones=-3.5), dict(good, semitones=1.25), dict(good, semitones=True),
+            dict(good, semitones="1"), dict(good, semitones=float("nan")),
+            dict(good, semitones=float("inf")), dict(good, pace="fast"), dict(good, pace=1.0),
+            {"face": "redpanda", "reset": False}, {"face": "redpanda", "reset": 1},
+            {"face": "redpanda", "reset": True, "speaker": "3"}]
+    for bad in bads:
+        code, out = V.set_face_animal(bad)
+        check(f"refused: {bad!r}", code == 400 and out["ok"] is False
+              and isinstance(out["error"], str) and out["error"][:1].islower(), (code, out))
+    check("nothing was kept, nothing announced", V._read_state()["face_animals"] == {}
+          and not EVENTS and not AUDIT)
+    check("the pitch refusal is in words",
+          V.set_face_animal(dict(good, semitones=9))[1]["error"]
+          == "the pitch must be from 3 steps deeper to 4 steps higher, in half steps")
+    check("every half step in range is taken",
+          all(V.set_face_animal(dict(good, semitones=x / 2))[0] == 200 for x in range(-6, 9)))
+    V._state_path().write_text(json.dumps({"active": "builtin", "face_animals": {
+        "redpanda": {"speaker": "99", "semitones": 1.0, "pace": "normal"},
+        "pygmyowl": {"speaker": "5", "semitones": 9, "pace": "normal"},
+        "seaotter": {"speaker": "5", "semitones": -2, "pace": "faster"},
+        "orbit": {"speaker": "5", "semitones": 0, "pace": "normal"}}}))
+    check("a damaged entry in state.json is no choice; a good one is kept",
+          V._read_state()["face_animals"] == {"seaotter": {"speaker": "5", "semitones": -2.0,
+                                                           "pace": "faster"}},
+          V._read_state()["face_animals"])
+
+
+def t_the_pitch_goes_down_too():
+    x = np.sin(2 * np.pi * 200 * np.arange(24000) / 24000).astype(np.float32)
+    y = S.pitch_up(x, -12)
+    check("-12 semitones: twice as long", len(y) == 48000, len(y))
+
+    def crossings(a):
+        return int(np.sum((a[:-1] < 0) & (a[1:] >= 0)))
+    check("... and half the pitch (200 Hz becomes 100 Hz)",
+          abs(crossings(y) / (len(y) / 24000) - 100) < 3, crossings(y))
+    k = FakeKokoro()
+    got = S.kokoro_speak(k, "hi", 5, 1.0, -3.0)
+    f = 2 ** (-3 / 12)
+    check("kokoro_speak with a deeper pitch asks for FASTER speech, then lowers it back to pace",
+          abs(k.speeds[0] - 1 / f) < 1e-9 and len(got[0]) == int(24000 / f), (k.speeds, len(got[0])))
+    check("jarvis_speech holds a pitch to -3..+4 and treats nonsense as none",
+          (S._pitch_range(-9), S._pitch_range(9), S._pitch_range("x"),
+           S._pitch_range(float("nan"))) == (-3.0, 4.0, 0.0, 0.0))
+
+
+def t_the_one_moment_clip_and_the_echo_check_follow_the_animal_choice():
+    d = reset()
+    _show_face(d, "redpanda")
+    k_own = F.moment_key()[0]
+    V.set_face_animal({"face": "redpanda", "speaker": "1", "semitones": -2, "pace": "normal"})
+    k_deep = F.moment_key()[0]
+    check("a new pitch for the showing animal makes a new \"One moment.\" clip",
+          k_own != k_deep)
+    try:
+        S._sherpa_tts_paths = (lambda real: (lambda: dict(real(), model=__file__)))(_S_PATHS)
+        keys = [k for k, _label, _load in F._reference_sources() if k[0] == "builtin"]
+    finally:
+        S._sherpa_tts_paths = _S_PATHS
+    check("talking over the deeper panda is checked against the deeper voice",
+          keys and keys[0][1] == "1" and keys[0][-1] == "-2.0", keys)
+
+
+def t_try_it_plays_the_animal_as_it_is_now():
+    d = reset()
+    _show_face(d, "nucleus")
+    V.set_face_animal({"face": "pygmyowl", "speaker": "6", "semitones": -1, "pace": "faster"})
+    EVENTS.clear(); AUDIT.clear()
+    before = V._state_path().read_bytes()
+    S._tts_cache = FakeKokoro()
+    code, wav = V.handle_post("/api/voice/voices/face_animal/try", {"face": "pygmyowl"})
+    check("Try it: a WAV in the owl's voice as chosen, though another face is showing",
+          code == 200 and isinstance(wav, bytes) and wav[:4] == b"RIFF"
+          and S._tts_cache.sids == [6]
+          and abs(S._tts_cache.speeds[0] - 1.15 / 2 ** (-1 / 12)) < 1e-9,
+          (code, S._tts_cache.sids, S._tts_cache.speeds))
+    x, sr = S._read_wav(wav)
+    check("... played deeper: longer than Kokoro's own sound",
+          sr == 24000 and len(x) == int(24000 / 2 ** (-1 / 12)), len(x))
+    check("... changing nothing, announcing nothing, logging nothing",
+          V._state_path().read_bytes() == before and not EVENTS and not AUDIT and not CARDS)
+    V.set_face_voice({"enabled": False})
+    S._tts_cache = FakeKokoro()
+    check("it plays with the switch off too (it is a preview)",
+          V.try_face_animal({"face": "seaotter"})[0] == 200 and S._tts_cache.sids == [3])
+    for bad in ({}, {"face": "orbit"}, {"face": "redpanda", "text": "say this"}, None):
+        code, out = V.try_face_animal(bad)
+        check(f"refused: {bad!r} (an app never sends words to be spoken)",
+              code == 400 and out["ok"] is False, (code, out))
+    S._tts_cache = None
+    code, out = V.try_face_animal({"face": "redpanda"})
+    check("no built-in voice on this PC: 503 in words",
+          code == 503 and out["error"] == "this PC has no built-in voice to play it with",
+          (code, out))
+    S._tts_cache = FakeKokoro()
+    # One at a time: a second "Try it" while one is being made is refused
+    # at once, in words, and the next one after it plays again.
+    V._TRY_LOCK.acquire()
+    try:
+        code, out = V.try_face_animal({"face": "redpanda"})
+    finally:
+        V._TRY_LOCK.release()
+    check("a Try it while another is being made: 429 in words, nothing made",
+          code == 429 and out["ok"] is False and "Try it again in a moment" in out["error"],
+          (code, out))
+    check("a bad body is still a 400 while one is being made",
+          V._TRY_LOCK.acquire(blocking=False)
+          and (V.try_face_animal({"face": "orbit"})[0] == 400)
+          and (V._TRY_LOCK.release() is None))
+    check("the lock is let go after each Try it (and after a failure)",
+          V.try_face_animal({"face": "redpanda"})[0] == 200
+          and not V._TRY_LOCK.locked())
+    S._tts_cache = None
+    V.try_face_animal({"face": "redpanda"})
+    check("... after a 503 too", not V._TRY_LOCK.locked())
+    S._tts_cache = FakeKokoro()
 
 
 # ---------------------------------------------------------- Pocket TTS --
@@ -888,6 +1127,10 @@ def t_shipped_and_pinned():
           re.search(r"^sherpa-onnx>=1\.12\.26\b", req, re.M) is not None)
     routes = (HERE / "voices.patch").read_text(encoding="utf-8")
     check("voices.patch routes the speed POST", '"/api/voice/voices/speed"' in routes)
+    check("voices.patch routes each animal's voice and its Try it (a WAV)",
+          '"/api/voice/voices/face_animal"' in routes
+          and 'route == "/api/voice/voices/face_animal/try"' in routes
+          and 'ctype="audio/wav"' in routes)
 
 
 if __name__ == "__main__":

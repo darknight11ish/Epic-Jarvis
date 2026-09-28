@@ -156,6 +156,26 @@
             <span class="sr-only">Toggle listening for "hey Jarvis"</span>
           </button>
 
+          <!-- Jarvis Live (live.rs, live-rules.js; docs/LIVE-DESIGN.md): a
+               back-and-forth voice conversation, started and ended here.
+               No wake word between turns; the voice check still runs on
+               every sentence. Its id is jarvis-live-*. A visible "Live"
+               beside the icon (the review: an unlabelled icon that turned
+               red), one name and aria-pressed for on/off. -->
+          <button
+            id="jarvis-live-toggle"
+            class="icon-button live-toggle"
+            type="button"
+            aria-pressed="false"
+            aria-label="Jarvis Live"
+            title="Jarvis Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M3 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 3 6.5Zm2.5-2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM8 2.5a.75.75 0 0 1 .75.75v9.5a.75.75 0 0 1-1.5 0v-9.5A.75.75 0 0 1 8 2.5Zm2.5 2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM13 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 13 6.5Z" />
+            </svg>
+            <span class="live-toggle-label" aria-hidden="true">Live</span>
+          </button>
+
           <!-- Temporary chat (the owner's decision, 2026-09-25): while it is
                pressed, Jarvis uses and learns nothing from memory and the PC
                keeps nothing of the chat. Turning it on or off starts a new
@@ -197,6 +217,31 @@
            never grow past the window's 720px clamp and hide the Approve and
            Deny buttons below the cut. -->
       <div class="stack" id="stack">
+        <!-- Jarvis Live's sign in the bar: fixed words and minutes (the PC's
+             jarvis_live.py), its buttons, and the tap buttons after a spoken
+             question. The always-on-top badge (live-badge.html) shows the
+             same sign while the bar is hidden. The sign's words reach a
+             screen reader through the bar's own announcer (a live region
+             inside a hidden box would announce nothing). -->
+        <section class="jarvis-live" id="jarvis-live-strip" hidden aria-label="Jarvis Live">
+          <div class="jarvis-live-sign">
+            <span class="jarvis-live-dot" aria-hidden="true"></span>
+            <strong id="jarvis-live-title">Jarvis Live</strong>
+            <span id="jarvis-live-detail"></span>
+          </div>
+          <p class="jarvis-live-hint" id="jarvis-live-hint" hidden></p>
+          <div class="jarvis-live-actions">
+            <button id="jarvis-live-move" class="text-button" type="button" hidden>Move it here</button>
+            <button id="jarvis-live-fix" class="text-button" type="button" hidden>Open Settings, then Voice</button>
+            <button id="jarvis-live-show-card" class="text-button" type="button" hidden>Show the card</button>
+            <button id="jarvis-live-carry-on" class="text-button" type="button" hidden>Carry on</button>
+            <button id="jarvis-live-resume" class="text-button" type="button" hidden>Resume Live</button>
+            <button id="jarvis-live-more" class="text-button" type="button" hidden>20 more minutes</button>
+            <button id="jarvis-live-stop-talking" class="text-button" type="button" hidden>Stop talking</button>
+            <button id="jarvis-live-mute" class="text-button" type="button" hidden>Mic off</button>
+            <button id="jarvis-live-end" class="text-button" type="button" hidden>End Live</button>
+          </div>
+        </section>
         <!-- The marker for a whole temporary chat, and its one line while
              the chat is still empty (answer-memory.js). -->
         <div class="temporary-strip" id="temporary-strip" role="status" hidden>
@@ -611,6 +656,10 @@
             -->
             <article class="markdown" id="answer"></article>
             <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
+            <!-- Jarvis Live's tap buttons, under the answer they answer (the
+                 review: they sat in the sign's row, looking like its
+                 controls). Each is sent as the owner's TYPED words. -->
+            <div class="jarvis-live-chips" id="jarvis-live-chips" role="group" aria-label="Quick answers" hidden></div>
             <!-- A failed answer: ONE fix button, and the technical detail for a
                  bug report behind "Details" - scrubbed of tokens, keys,
                  passwords, email addresses and the Windows user name first
@@ -656,6 +705,19 @@
               <button class="text-button answer-used-line" type="button" id="answer-sources-line"
                       aria-expanded="false" aria-controls="answer-sources-list"></button>
               <div class="answer-used-list" id="answer-sources-list" hidden></div>
+            </div>
+            <!-- "A cloud model could give this one a second look."
+                 (jarvis_router.choose()'s gate "offer", docs/JARVIS-API.md,
+                 "`offer` in `X-Jarvis-Route`"): one tap, one question,
+                 never a standing choice. Hidden whenever the answer above
+                 carries no offer, or the owner already acted on it
+                 (main.js). Same fixed wording as the phone's
+                 net/CloudOffer.kt, word for word. -->
+            <div class="answer-cloud-offer" id="answer-cloud-offer" hidden>
+              <p class="answer-cloud-offer-label">A cloud model could give this one a second look.</p>
+              <button class="text-button" type="button" id="cloud-offer-try">Try the cloud model</button>
+              <button class="text-button" type="button" id="cloud-offer-dismiss">Not now</button>
+              <p class="answer-cloud-offer-micro">Sends only this question - nothing else from this conversation.</p>
             </div>
           </div>
 

@@ -496,7 +496,8 @@ def lockdown_on() -> bool:
 def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
            has_image: bool = False, conversation_tainted: bool = False,
            budget: Optional[Budget] = None, tainted: Optional[bool] = None,
-           owner_said_yes: bool = False, **_extra) -> Decision:
+           owner_said_yes: bool = False, has_screen: bool = False,
+           **_extra) -> Decision:
     """Which lane answers this turn.
 
     Nine gates, in this order, and the order is the policy. Each one can only
@@ -509,6 +510,7 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
      0b. Lockdown is on              -> local, unconditionally, no offer
       1. the conversation is tainted -> local, unconditionally
      1b. the turn carries a picture  -> local, unconditionally
+         or the screen's words
       2. private content matched     -> local
       3. a real secret was found     -> local, unconditionally
       4. not complex enough          -> local
@@ -618,6 +620,19 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
             "image",
             "the message carries a picture, which can show anything that was "
             "on screen, so it stays on this machine")
+    # THE SCREEN'S WORDS NEVER LEAVE EITHER (docs/SCREEN-DESIGN.md section 5,
+    # "Rule 1: a turn with screen content always stays on this PC"). "Look
+    # at this" and "Watch with me" hand the model the words read off the
+    # owner's screen (jarvis_screen.py) - an email, a document, a chat, a
+    # bank page not on the Never look at list - with or without a picture,
+    # and the private-topic check below reads only the owner's question.
+    # Its own gate name, "screen", so the route header says why; nothing in
+    # either app reads a gate name but "private", so none needs a change.
+    if has_screen:
+        return local_decision(
+            "screen",
+            "the message carries words read from your screen, which can show "
+            "anything, so it stays on this machine")
     if is_private(query):
         return local_decision("private", "the question matches the private-topic backstop")
     secret = looks_like_a_secret(query)

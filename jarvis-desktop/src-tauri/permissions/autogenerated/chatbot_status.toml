@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chatbot-status"
+description = "Enables the chatbot_status command without any pre-configured scope."
+commands.allow = ["chatbot_status"]
+
+[[permission]]
+identifier = "deny-chatbot-status"
+description = "Denies the chatbot_status command without any pre-configured scope."
+commands.deny = ["chatbot_status"]

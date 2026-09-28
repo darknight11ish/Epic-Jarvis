@@ -39,14 +39,18 @@ import com.jarvis.client.LinkState
 import com.jarvis.client.ModelRequest
 import com.jarvis.client.SectionRead
 import com.jarvis.client.net.Attention
+import com.jarvis.client.net.CachedModels
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.MemoryCardKind
 import com.jarvis.client.net.MemoryCardView
 import com.jarvis.client.net.MemoryCards
+import com.jarvis.client.net.ModelChat
 import com.jarvis.client.net.ModelsInfo
+import com.jarvis.client.net.ModelsView
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.net.modelsView
 import com.jarvis.client.ui.BackButton
 import com.jarvis.client.ui.parts.Affirm
 import com.jarvis.client.ui.parts.Field
@@ -60,6 +64,7 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Refuse
 import com.jarvis.client.ui.parts.Rule
+import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
@@ -136,11 +141,24 @@ fun BrainScreen(
     notice: String? = null,
     onDismissNotice: () -> Unit = {},
     /**
-     * The model list, or null on a backend without the `models` capability -
-     * in which case the section is not drawn at all, per §2's rule that a
-     * capability reporting false means hide the UI for it.
+     * The model list from the most recent LIVE read, or null when there
+     * wasn't one - a backend without the `models` capability (hides the
+     * section outright, per §2's rule that a capability reporting false
+     * means hide the UI for it), a read never yet tried, or one that just
+     * failed. In the last case the section still draws, from [modelsCache]
+     * instead - see that parameter and [ModelsView].
      */
     models: ModelsInfo? = null,
+    /**
+     * The phone's own last successful `GET /api/models` read, held on disk
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`) so this section can show
+     * something, clearly marked as old, on a run where [models] is null
+     * because the live read failed rather than because the backend lacks
+     * the capability. Null on a fresh install, or before any read has ever
+     * succeeded - [ModelsPlate] says so in words rather than showing an
+     * empty list.
+     */
+    modelsCache: CachedModels? = null,
     /** True while a switch, rollback or install is in flight, so none can double-send. */
     modelBusy: Boolean = false,
     onSwitchModel: (ref: String) -> Unit = {},
@@ -195,6 +213,12 @@ fun BrainScreen(
      * [com.jarvis.client.JarvisRuntime.setSecondCardSuggest].
      */
     onSetSecondCardSuggest: (signal: String, enabled: Boolean) -> Unit = { _, _ -> },
+    /**
+     * Moving a switch onto a third graphics card, or moving it back off
+     * (2026-09-28) - [com.jarvis.client.JarvisRuntime.setThirdCard]. A
+     * feature id raises an approval card; null unassigns at once.
+     */
+    onSetThirdCard: (assign: String?) -> Unit = {},
     onRecheckSecondCard: () -> Unit = {},
     /**
      * Re-read the board every this many milliseconds while the screen is
@@ -227,6 +251,14 @@ fun BrainScreen(
      * plate points at should not be assumed.
      */
     onOpenSettings: (() -> Unit)? = null,
+    /**
+     * "Open <a place>" by voice or chat ([com.jarvis.client.ui.OpenPlace]):
+     * the item key to bring into view once - "briefing", "hardware",
+     * "second-card", "big-model" or "capabilities" - or null for the top.
+     */
+    initialSection: String? = null,
+    /** Called once [initialSection] has been acted on, so it is not acted on again. */
+    onSectionConsumed: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     // The same test ModelsPlate always had, now shared by every control on this
@@ -270,6 +302,7 @@ fun BrainScreen(
         // that line is on, and that plate is on screen when it is tapped.
         val listState = rememberLazyListState()
         val listScope = rememberCoroutineScope()
+        ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             state = listState,
@@ -437,6 +470,20 @@ fun BrainScreen(
                 )
             }
 
+            // "Goals" (the owner's "build it now", 2026-09-27): a plan the
+            // owner writes and edits, one approval card for its weekly
+            // check-in, no card for ticking a step or Stop tracking
+            // (GoalsPlate.kt) - the desktop's Brain -> Work, beside Coming
+            // up, docs/JARVIS-API.md section 59.
+            item(key = "goals") {
+                GoalsSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
             // "Focus session" (the owner's decision of 2026-09-25): start and
             // stop one, the countdown, the counts and the report card
             // (FocusPlate.kt) - the desktop's Brain -> Work -> Focus session.
@@ -445,11 +492,33 @@ fun BrainScreen(
                 FocusSection(canAct = canAct, privateHidden = privateHidden)
             }
 
+            // "Talk to a chatbot for me" (the owner's decisions of 2026-09-27
+            // and 2026-09-28): start one (ONE approval card on the PC), the
+            // conversation with the chatbot's words marked outside text,
+            // Pause/Resume/Stop, new limits, the summary (ChatbotPlate.kt) -
+            // the desktop's Brain -> Work, the same card.
+            item(key = "chatbot") {
+                ChatbotSection(canAct = canAct, privateHidden = privateHidden)
+            }
+
             // "Morning briefing" (the owner's decisions of 2026-09-25): the
             // latest one, "Brief me now", and when it arrives
             // (BriefingPlate.kt) - the desktop's Brain -> Work and Settings.
             item(key = "briefing") {
                 BriefingSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
+            // "Projects" (the owner's decision of 2026-09-28): projects,
+            // their notes and benchmarks with a chart (ProjectsPlate.kt) -
+            // the desktop's Brain -> Projects. It reads and acts through
+            // JarvisRuntime directly.
+            item(key = "projects") {
+                ProjectsSection(
                     canAct = canAct,
                     privateHidden = privateHidden,
                     showPrivateBusy = showPrivateBusy,
@@ -554,6 +623,20 @@ fun BrainScreen(
                     )
                 }
             }
+            // "Forget a time frame" (the owner's decision of 2026-09-28;
+            // ForgetRangePlate.kt): the days, the ticked list of facts and
+            // chats, "Forget these" (ONE approval card), then 10 minutes of
+            // Undo - next to History, as the desktop puts it on its History
+            // tab. "forget what you learned last week" opens this item
+            // (OpenPlace, "forget-range").
+            item(key = "forget-range") {
+                ForgetRangeSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
             if (privateHidden) {
                 item(key = "memory-hidden") {
                     HiddenSection("Memory awaiting review", busy = showPrivateBusy, onShow = onShowPrivate)
@@ -603,11 +686,18 @@ fun BrainScreen(
 
             item(key = "group-model-pc") { GroupHeading("Model and PC") }
 
-            if (models != null) {
+            // Shown whenever there is anything to show: a live read, a cached
+            // one, or the capability itself confirmed and nothing read yet.
+            // A backend that has never reported the `models` capability at
+            // all draws neither this nor - since nothing was ever cached
+            // without it - the stale replay, per §2's "false hides the UI"
+            // rule: [modelsCache] can only be non-null here if a live read
+            // succeeded at some past point, which needed the capability.
+            if (models != null || modelsCache != null || version?.can("models") == true) {
                 item(key = "models") {
                     Section("Model") {
                         ModelsPlate(
-                            models = models,
+                            view = modelsView(models, modelsCache),
                             busy = modelBusy,
                             canAct = canAct,
                             onSwitch = onSwitchModel,
@@ -646,6 +736,7 @@ fun BrainScreen(
                         canAct = canAct,
                         onSet = onSetSecondCard,
                         onSetSuggest = onSetSecondCardSuggest,
+                        onSetThird = onSetThirdCard,
                         onRecheck = onRecheckSecondCard,
                         onOpenApprovals = onOpenApprovals,
                     )
@@ -889,7 +980,7 @@ private fun RetryButton(onRetry: (() -> Unit)?) {
  */
 @Composable
 private fun ModelsPlate(
-    models: ModelsInfo,
+    view: ModelsView,
     busy: Boolean,
     canAct: Boolean,
     onSwitch: (String) -> Unit,
@@ -900,98 +991,32 @@ private fun ModelsPlate(
 ) {
     val chrome = LocalChrome.current
     var installRef by rememberSaveable { mutableStateOf("") }
-    val current = models.currentRef
-    val entries = models.entries
     Plate {
         if (request != null) {
             ApprovalWaiting(request, onOpenApprovals)
             Gap(12)
         }
-        // Is the model actually ON the graphics card? Nothing else on the
-        // phone says, and the only symptom of a spill is that everything got
-        // slow - which reads as "Jarvis is slow", not "the model is on the CPU".
-        val off = models.offload
-        if (off != null && off.bad) {
-            Text(
-                off.note ?: "The model is not on the graphics card, so replies are slow.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = chrome.warnInk,
+        when (view) {
+            is ModelsView.Live -> LiveModelsBody(
+                models = view.info,
+                busy = busy,
+                canAct = canAct,
+                onSwitch = onSwitch,
+                onRollback = onRollback,
             )
-            Gap(10)
-        }
-        // speed-record.patch. The backend's own sentence, and only when it
-        // says the running model got slower - never built from the numbers
-        // here, so this screen and the desktop cannot say it differently.
-        models.speed?.slowdownNote?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = chrome.warnInk)
-            Gap(10)
-        }
-        if (entries.isEmpty()) {
-            Text(
-                "No models reported.",
+            is ModelsView.Stale -> StaleModelsBody(
+                cached = view.cached,
+                busy = busy,
+                canAct = canAct,
+                onSwitch = onSwitch,
+                onRollback = onRollback,
+            )
+            ModelsView.NeverConnected -> Text(
+                "There's nothing to show yet - open this once while Jarvis is " +
+                    "running on your PC.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = chrome.textMid,
             )
-        } else {
-            entries.forEachIndexed { i, entry ->
-                if (i > 0) Rule()
-                val isCurrent = entry.ref == current
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            entry.ref,
-                            style = com.jarvis.client.ui.theme.JarvisType.machine,
-                            color = chrome.textHi,
-                        )
-                        val meta = listOfNotNull(
-                            entry.family,
-                            entry.sizeBytes?.let { bytes(it) },
-                            if (entry.ref == models.previous && !isCurrent) "the previous model" else null,
-                        )
-                        if (meta.isNotEmpty()) {
-                            Gap(2)
-                            Text(
-                                meta.joinToString(" · "),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = chrome.textLo,
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    if (isCurrent) {
-                        Pill("Active", color = chrome.okInk)
-                    } else {
-                        Quiet(
-                            if (busy) "…" else "Use",
-                            enabled = !busy && canAct,
-                            onClick = { onSwitch(entry.ref) },
-                        )
-                    }
-                }
-            }
-            models.speed?.currentLine?.let {
-                Gap(4)
-                Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
-            }
-            // Old speed against new, word for word from the backend, beside
-            // the button that undoes the switch.
-            models.speed?.lastSwitchNote?.let {
-                Gap(6)
-                Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-            }
-            val previous = models.previous?.takeIf { it.isNotBlank() && it != current }
-            if (previous != null) {
-                Gap(6)
-                Quiet(
-                    if (busy) "…" else "Roll back to $previous",
-                    color = chrome.textMid,
-                    enabled = !busy && canAct,
-                    onClick = onRollback,
-                )
-            }
         }
         Gap(8)
         Text(
@@ -1024,6 +1049,10 @@ private fun ModelsPlate(
             Spacer(Modifier.width(8.dp))
             Quiet(
                 if (busy) "…" else "Install",
+                // canAct is already false whenever the live link is down or
+                // stale (rule 4) - the exact same greying this plate always
+                // used, reused rather than reinvented for the offline case,
+                // per docs/OFFLINE-MODELS-DESIGN-2026-09-27.md section 6.
                 enabled = !busy && canAct && installRef.isNotBlank(),
                 onClick = {
                     onInstall(installRef)
@@ -1032,6 +1061,215 @@ private fun ModelsPlate(
             )
         }
     }
+}
+
+/** The live case: unchanged from before this section could ever be stale. */
+@Composable
+private fun LiveModelsBody(
+    models: ModelsInfo,
+    busy: Boolean,
+    canAct: Boolean,
+    onSwitch: (String) -> Unit,
+    onRollback: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val current = models.currentRef
+    val entries = models.entries
+    // Is the model actually ON the graphics card? Nothing else on the
+    // phone says, and the only symptom of a spill is that everything got
+    // slow - which reads as "Jarvis is slow", not "the model is on the CPU".
+    val off = models.offload
+    if (off != null && off.bad) {
+        Text(
+            off.note ?: "The model is not on the graphics card, so replies are slow.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = chrome.warnInk,
+        )
+        Gap(10)
+    }
+    // speed-record.patch. The backend's own sentence, and only when it
+    // says the running model got slower - never built from the numbers
+    // here, so this screen and the desktop cannot say it differently.
+    models.speed?.slowdownNote?.let {
+        Text(it, style = MaterialTheme.typography.bodyMedium, color = chrome.warnInk)
+        Gap(10)
+    }
+    if (entries.isEmpty()) {
+        Text(
+            "No models reported.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = chrome.textMid,
+        )
+    } else {
+        entries.forEachIndexed { i, entry ->
+            if (i > 0) Rule()
+            val isCurrent = entry.ref == current
+            // An embedding model (nomic-embed-text) cannot answer anything,
+            // so it gets no "Use" - and the row says why rather than
+            // showing a greyed-out button (the desktop's rule and words,
+            // net/ModelChat.kt).
+            val chats = entry.canChat
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        entry.ref,
+                        style = com.jarvis.client.ui.theme.JarvisType.machine,
+                        color = chrome.textHi,
+                    )
+                    val meta = listOfNotNull(
+                        entry.family,
+                        entry.sizeBytes?.let { bytes(it) },
+                        if (entry.ref == models.previous && !isCurrent) "the previous model" else null,
+                        if (chats) null else ModelChat.CANNOT_CHAT,
+                    )
+                    if (meta.isNotEmpty()) {
+                        Gap(2)
+                        Text(
+                            meta.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                if (isCurrent) {
+                    Pill("Active", color = chrome.okInk)
+                } else if (chats) {
+                    Quiet(
+                        if (busy) "…" else "Use",
+                        enabled = !busy && canAct,
+                        onClick = { onSwitch(entry.ref) },
+                    )
+                }
+            }
+        }
+        models.speed?.currentLine?.let {
+            Gap(4)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        // Old speed against new, word for word from the backend, beside
+        // the button that undoes the switch.
+        models.speed?.lastSwitchNote?.let {
+            Gap(6)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        val previous = models.previous?.takeIf { it.isNotBlank() && it != current }
+        if (previous != null) {
+            Gap(6)
+            Quiet(
+                if (busy) "…" else "Roll back to $previous",
+                color = chrome.textMid,
+                enabled = !busy && canAct,
+                onClick = onRollback,
+            )
+        }
+    }
+}
+
+/**
+ * The offline replay: the phone's own last successful read, clearly marked
+ * as old, and with nothing that only means anything about a running Ollama
+ * (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md section 5) - there is no offload
+ * or speed field on [CachedModels] to show stale by mistake, and no "Active"
+ * pill drawn as though it were live: the current model gets a quieter note
+ * instead, saying plainly this is as of the last connection, not now.
+ */
+@Composable
+private fun StaleModelsBody(
+    cached: CachedModels,
+    busy: Boolean,
+    canAct: Boolean,
+    onSwitch: (String) -> Unit,
+    onRollback: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val now = rememberTickingNow(cached.asOfMs)
+    val age = ageText((now - cached.asOfMs).coerceAtLeast(0L))
+    Text(
+        "Can't reach Jarvis - showing what it last saw, $age.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = chrome.warnInk,
+    )
+    Gap(4)
+    Text(
+        "Sizes and names are probably still right. What's actually loaded right " +
+            "now isn't shown, since only a running Jarvis knows that.",
+        style = MaterialTheme.typography.bodySmall,
+        color = chrome.textLo,
+    )
+    Gap(10)
+    val current = cached.currentRef
+    val entries = cached.entries
+    if (entries.isEmpty()) {
+        Text(
+            "No models reported.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = chrome.textMid,
+        )
+    } else {
+        entries.forEachIndexed { i, entry ->
+            if (i > 0) Rule()
+            val isCurrent = entry.ref == current
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        entry.ref,
+                        style = com.jarvis.client.ui.theme.JarvisType.machine,
+                        color = chrome.textHi,
+                    )
+                    val meta = listOfNotNull(
+                        entry.family,
+                        entry.sizeBytes?.let { bytes(it) },
+                        if (isCurrent) "as of the last connection, this was the one in use" else null,
+                        if (entry.ref == cached.previous && !isCurrent) "the previous model" else null,
+                        if (entry.canChat) null else ModelChat.CANNOT_CHAT,
+                    )
+                    if (meta.isNotEmpty()) {
+                        Gap(2)
+                        Text(
+                            meta.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                // Never an "Active" pill here - that would say this is true
+                // right now, which nothing offline can promise. Use stays on
+                // screen but dimmed by canAct, the same as every other write
+                // on this screen while the link is down (rule 4).
+                if (!isCurrent && entry.canChat) {
+                    Quiet(
+                        if (busy) "…" else "Use",
+                        enabled = !busy && canAct,
+                        onClick = { onSwitch(entry.ref) },
+                    )
+                }
+            }
+        }
+        val previous = cached.previous?.takeIf { it.isNotBlank() && it != current }
+        if (previous != null) {
+            Gap(6)
+            Quiet(
+                if (busy) "…" else "Roll back to $previous",
+                color = chrome.textMid,
+                enabled = !busy && canAct,
+                onClick = onRollback,
+            )
+        }
+    }
+    Gap(8)
+    Text(
+        "Needs Jarvis running: Use and Roll back stay dimmed until the live link is back.",
+        style = MaterialTheme.typography.bodySmall,
+        color = chrome.textLo,
+    )
 }
 
 /**

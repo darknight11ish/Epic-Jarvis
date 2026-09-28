@@ -140,6 +140,14 @@ fun SecurityScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,
                         )
+                        Gap(12)
+                        SwitchRow(
+                            title = SecurityRules.SWIPE_TITLE,
+                            detail = SecurityRules.SWIPE_DETAIL,
+                            checked = security.swipeDecides,
+                            enabled = !busy,
+                            onChange = { onChange(security.copy(swipeDecides = it)) },
+                        )
                     }
                 }
             }

@@ -53,7 +53,7 @@ await check("the table holds the tricky cases the rule exists for", async () => 
   }
   for (const h of ["localhost", "127.0.0.1", "::1", "192.168.1.20", "10.0.0.1", "172.16.0.1",
     "100.64.0.0", "100.127.255.255", "homeassistant.local", "desktop.tail1234.ts.net",
-    "marioirelan11-alps.nord", "DESKTOP.TAIL1234.TS.NET", "desktop.tail1234.ts.net."]) {
+    "my-pc.nord", "DESKTOP.TAIL1234.TS.NET", "desktop.tail1234.ts.net."]) {
     assert.equal(verdict[h], true, `${h} should be allowed`);
   }
   assert.ok(REFUSED.some((u) => u.startsWith("https://")), "https:// is refused too");

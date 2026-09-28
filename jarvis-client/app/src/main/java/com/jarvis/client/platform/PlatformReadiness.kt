@@ -111,6 +111,19 @@ object PlatformReadiness {
     }
 
     /**
+     * The "Background restart" item's title, its words while it is not
+     * allowed, and its button - shared by Checks and by the one-time offer on
+     * Home after the first pairing (phone walk-through C9, 2026-09-27), so
+     * the two always say the same thing.
+     */
+    const val BACKGROUND_RESTART = "Background restart"
+    const val BACKGROUND_RESTART_NOT_ALLOWED =
+        "Not allowed yet. If Android closes Jarvis to save battery, " +
+            "approvals stop arriving until you open the app again. Tap " +
+            "Keep link alive to fix it."
+    const val KEEP_LINK_ALIVE = "Keep link alive"
+
+    /**
      * Whether the app is exempt from battery optimisation.
      *
      * This is the exemption that lets the service go foreground from the background,
@@ -264,14 +277,12 @@ object PlatformReadiness {
             fix = ReadinessItem.Fix.NOTIFICATIONS,
         ),
         ReadinessItem(
-            title = "Background restart",
+            title = BACKGROUND_RESTART,
             detail = if (batteryExempt(context)) {
                 "Allowed. If Android closes Jarvis to free up memory, the " +
                     "connection starts again by itself."
             } else {
-                "Not allowed yet. If Android closes Jarvis to save battery, " +
-                    "approvals stop arriving until you open the app again. Tap " +
-                    "Keep link alive to fix it."
+                BACKGROUND_RESTART_NOT_ALLOWED
             },
             technical = if (batteryExempt(context)) {
                 "Exempt from battery optimisation, so the service can be restarted " +

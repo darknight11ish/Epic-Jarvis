@@ -131,20 +131,34 @@ class World:
             return self.old_driver
         return None
 
-    def running(self):
-        return any(p.alive for p in self.started)
+    def running(self, port=None):
+        """Any of our own started processes alive, or - with `port` given -
+        specifically the one listening on that port (2026-09-28: the third
+        card's own lane can be alive on 11436 at the same time as the
+        feature lane on 11435, so "is a lane running" has to mean "is THIS
+        one running", not "is any lane process alive")."""
+        if port is None:
+            return any(p.alive for p in self.started)
+        want = f"127.0.0.1:{port}"
+        return any(p.alive and p.kwargs.get("env", {}).get("OLLAMA_HOST") == want
+                   for p in self.started)
 
     def http_json(self, url, payload=None, timeout=2.0):
         self.http.append((url, payload))
         if not SC._is_loopback_url(url):
             raise AssertionError("a non-loopback address was asked: " + url)
-        lane = url.startswith("http://127.0.0.1:11435")
+        # 11435: the feature/combined lane's shared port. 11436: the third
+        # card's own lane (2026-09-28) - it can run at the same time as the
+        # feature lane, so it is checked against its OWN process, never
+        # "any lane process is alive" (self.running(port), above).
+        port = next((p for p in (11435, 11436) if url.startswith(f"http://127.0.0.1:{p}")), None)
+        lane = port is not None
         if url.endswith("/api/version"):
-            if lane and (self.foreign_on_port or (self.lane_answers and self.running())):
+            if lane and (self.foreign_on_port or (self.lane_answers and self.running(port))):
                 return {"version": "0.12.3"}
             raise OSError("connection refused")
         if url.endswith("/api/tags"):
-            if not self.tags_answer or (lane and not self.running()):
+            if not self.tags_answer or (lane and not self.running(port)):
                 raise OSError("connection refused")
             return {"models": [{"name": n, "model": n} for n in self.installed]}
         if url.endswith("/api/generate"):
@@ -166,7 +180,9 @@ class World:
             (SC, "_primary"): lambda cards: CP.primary(cards, configured=""),
             (SC, "_cfg"): lambda key, default=None: default,
             (SC, "_state_path"): lambda: self.dir / "second-card.json",
-            (SC, "_log_path"): lambda: self.dir / "second-card-ollama.log",
+            (SC, "_log_path"): lambda role="second": self.dir / (
+                "second-card-ollama.log" if role in ("second", "combined")
+                else f"second-card-{role}-ollama.log"),
             (SC, "_http_json"): self.http_json,
             (SC, "_port_taken"): lambda port: False,
             (SC, "_popen"): self.popen,
@@ -202,9 +218,10 @@ class World:
                 setattr(mod, name, val)
             CP._cache.update(at=-1e9, cards=None, fields="")
 
-    def switches(self, master=False, combined=False, **features):
+    def switches(self, master=False, combined=False, third_feature=None, **features):
         data = {"master": master, "combined": combined,
-                "features": {f: bool(features.get(f)) for f in SC.FEATURE_IDS}}
+                "features": {f: bool(features.get(f)) for f in SC.FEATURE_IDS},
+                "third_feature": third_feature}
         (self.dir / "second-card.json").write_text(json.dumps(data), encoding="utf-8")
 
     def __enter__(self):

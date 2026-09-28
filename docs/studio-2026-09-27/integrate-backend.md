@@ -1,0 +1,8 @@
+# Integration scout: backend senses, condensed. All senses already built mostly with stdlib.
+1. BUG-ish (VERIFIED code): "tell me when this page changes" hashes raw bytes (jarvis_tellme.py:_default_page_fetch sha256(body[:PAGE_MAX_BYTES])). Dynamic tokens/ads -> likely false "changed" every check. Adapt changedetection.io approach (Apache-2.0): strip head/script/style/svg/iframe, hash visible text (html_tools.py:803-855). Use stdlib html.parser (lxml not thread-safe per changedetection docs). Same helper gives HTML-only emails a preview (jarvis_email.py:321 shows nothing). Small.
+2. Scanned PDFs: pypdfium2 (BSD-3/Apache) already in lock via pdfplumber/MarkItDown -> render pages -> jarvis_ocr.read_text (Windows OCR); cap pages. Medium. USE.
+3. Calendar repeats: recurring-ical-events (LGPL-3.0, pip dependency OK; icalendar BSD-2, x-wr-timezone LGPL). Handles BYSETPOS, RDATE, BYWEEKNO, THISANDFUTURE, X-WR-TIMEZONE that _expand skips. Compare on owner's real feed first. Medium. USE.
+4. Optional winrt-Windows.Media.Ocr (MIT) instead of PowerShell 5.1 OCR script, only if that fails.
+Later: feedparser (BSD-2) bytes only never URL (its own fetch skips private-address check); dateparser (BSD-3) fallback for "on 3 October at 9".
+Rejected: unstructured (telemetry on import, rule 1); docling (PyTorch; revisit 12 GB); pymupdf4llm AGPL, html2text + HomeAssistant-API GPL (ideas only); RapidOCR downloads from modelscope.cn; APScheduler/croniter duplicate scheduler; IMAPClient reserve; hass-client async misfit.
+Stale: jarvis_calendar.py:115-120 says tzdata not installed (it is). Outlook.com IMAP password sign-in may be gone (unverified). SearXNG uses :latest image (pin suggestion).

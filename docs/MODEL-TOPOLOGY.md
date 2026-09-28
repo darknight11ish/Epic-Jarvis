@@ -126,8 +126,7 @@ current figure). Without it, a `q8_0` cache does not load at all.
 One time, in the environment — a Modelfile cannot express these:
 
 ```powershell
-setx OLLAMA_KV_CACHE_TYPE q8_0
-setx OLLAMA_KEEP_ALIVE -1
+setx OLLAMA_KV_CACHE_TYPE q8_0; setx OLLAMA_KEEP_ALIVE -1; Write-Host "Saved for new windows: close this one and Ollama, then start them again"
 ```
 
 Then:

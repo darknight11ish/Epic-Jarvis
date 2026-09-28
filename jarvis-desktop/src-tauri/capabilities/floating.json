@@ -15,6 +15,7 @@
     "core:window:allow-start-dragging",
     "core:webview:allow-set-webview-zoom",
     "jarvis-link",
-    "appearance-read"
+    "appearance-read",
+    "sky-read"
   ]
 }

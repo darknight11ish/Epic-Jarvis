@@ -150,6 +150,54 @@ check("oo looks round and ee looks spread", () => {
   }
 });
 
+// Played slower or faster by the same rule as jarvis_speech.pitch_up (the
+// animals' pitch setting): every frequency x 2^(semitones/12).
+function pitched(x, semitones) {
+  const f = 2 ** (semitones / 12), n = Math.floor(x.length / f), y = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const s = i * f, a = Math.floor(s), b = Math.min(a + 1, x.length - 1);
+    y[i] = x[a] + (x[b] - x[a]) * (s - a);
+  }
+  return y;
+}
+
+check("a deeper or higher voice still looks spread on ee and round on oo (the lip bands follow the pitch)", () => {
+  // kokoro-default-wide-deep: "Please see these three sheep." 3 semitones
+  // deeper. Before the bands followed the pitch it read round 0.26, wide 0.11.
+  const d = lipShape(clips["default-wide-deep"].track);
+  assert.ok(d.wide > d.round + 0.05, `3 semitones deeper: wide ${d.wide.toFixed(2)} vs round ${d.round.toFixed(2)}`);
+  // The default voice from 3 deeper to 2 higher (at +4 the "oo" sentence
+  // was already a tie, 0.19 round vs 0.18 wide, before and after).
+  for (const semis of [-3, -1.5, 2]) {
+    for (const [name, want] of [["default-wide", "wide"], ["default-round", "round"]]) {
+      const c = clips[name], s = lipShape(L.analyse(pitched(c.samples, semis), c.sampleRate));
+      const other = want === "wide" ? "round" : "wide";
+      assert.ok(s[want] > s[other] + 0.05, `${name} ${semis > 0 ? "+" : ""}${semis} semitones: ${want} ${s[want].toFixed(2)} vs ${other} ${s[other].toFixed(2)}`);
+    }
+  }
+  // The otter's voice (Kokoro speaker 4) set to 3 semitones deeper, where
+  // its clip says +3: 6 down. It read round 0.43, wide 0.06; now spread,
+  // though only just (the bands move at most 3/8 of an octave).
+  const o = clips["otter-wide"], os = lipShape(L.analyse(pitched(o.samples, -6), o.sampleRate));
+  assert.ok(os.wide > os.round, `otter at -3 semitones: wide ${os.wide.toFixed(2)} vs round ${os.round.toFixed(2)}`);
+});
+
+check("a steady noise floor does not keep the mouth moving in the pauses", () => {
+  // kokoro-default-pauses-noisy: "Okay. Let me check. Done." with white
+  // noise 20 dB under the speech, as a voice cloned from a recording made in
+  // a noisy room carries. The pauses are judged from the clean clip; before
+  // the gate followed the noise floor the mouth opened to 0.3 in them and
+  // the loudness sat at 0.24.
+  const clean = clips["default-pauses"], noisy = clips["default-pauses-noisy"], sil = silentFrames(clean);
+  assert.ok(sil.length >= 20, `silent frames ${sil.length}`);
+  const open = Math.max(...sil.map((i) => noisy.track.open[i])), level = mean(sil.map((i) => noisy.track.level[i]));
+  assert.ok(open < 0.02, `open ${open.toFixed(3)} in a pause`);
+  assert.ok(level < 0.1, `loudness ${level.toFixed(3)} in the pauses`);
+  const r = corr(noisy.track.open, clean.track.open);
+  assert.ok(r > 0.95, `the opening correlates ${r.toFixed(3)} with the clean clip's`);
+  assert.ok(closures(noisy.track.open) >= 2, `closures ${closures(noisy.track.open)}`);
+});
+
 check("wide and round are never both high", () => {
   for (const [name, c] of Object.entries(clips)) {
     for (let i = 0; i < c.track.n; i++) {
@@ -158,10 +206,87 @@ check("wide and round are never both high", () => {
   }
 });
 
+/* ── Other rates, short clips, a clip cut off mid-word, the sound roughed up ─ */
+// kokoro-default-hi (24 kHz, 0.66 s), -panda-endcut-16k (cut off inside
+// "ready"), -default-call-22k (22.05 kHz: a mouth frame is 220.5 samples),
+// -owl-hear-44k (44.1 kHz: the 1024-sample window), -otter-wait-8k (8 kHz,
+// nothing above 4 kHz), -otter-sheep ("sh" x 4). Kokoro's real voice,
+// resampled with a windowed sinc; the phone checks every frame of them too.
+
+check("the other sample rates and a very short reply open for speech, in every voice", () => {
+  for (const name of ["default-hi", "panda-endcut-16k", "default-call-22k", "owl-hear-44k", "otter-wait-8k", "otter-sheep"]) {
+    const c = clips[name];
+    assert.ok(c, `${name} is missing`);
+    assert.ok(Math.max(...c.track.open) > 0.5, `${name}: opens to ${Math.max(...c.track.open).toFixed(2)}`);
+    assert.ok(Math.max(...c.track.level) > 0.9, `${name}: level`);
+  }
+  assert.equal(clips["owl-hear-44k"].sampleRate, 44100);
+  assert.equal(clips["otter-wait-8k"].sampleRate, 8000);
+  assert.ok(closures(clips["otter-wait-8k"].track.open) >= 2, "\"Wait... wait... okay, now.\" closes between the words at 8 kHz");
+});
+
+check("a clip that ends mid-word does not snap the mouth shut (the end fade)", () => {
+  const t = clips["panda-endcut-16k"].track;
+  assert.ok(t.open[t.n - 1] > 0.3, `the cut is inside a vowel: open ${t.open[t.n - 1]}`);
+  const last = (t.n - 1) / t.fps - L.LEAD_S;
+  let prev = null, step = 0;
+  for (let s = last - 0.3; s <= last + 0.1; s += 1 / 60) { // a 60 Hz screen
+    const o = L.sample(t, s), v = [o.open, o.wide, o.round];
+    if (prev) step = Math.max(step, ...v.map((x, i) => Math.abs(x - prev[i])));
+    prev = v;
+  }
+  assert.ok(step < 0.3, `biggest step between two screen frames at the end: ${step.toFixed(2)}`);
+  assert.deepEqual(prev, [0, 0, 0], "shut after the end");
+});
+
+// A deterministic noise source, so the test gives the same numbers every run.
+function lcg(seed) {
+  return () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+}
+function corr(a, b) {
+  const n = a.length, ma = mean(a), mb = mean(b);
+  let ab = 0, aa = 0, bb = 0;
+  for (let i = 0; i < n; i++) { const x = a[i] - ma, y = b[i] - mb; ab += x * y; aa += x * x; bb += y * y; }
+  return ab / Math.sqrt(aa * bb + 1e-30);
+}
+
+check("the mouth barely changes when the sound is quieter, louder, clipped, noisy, hummy or resampled", () => {
+  const c = clips["default-pauses"], x = c.samples, sr = c.sampleRate, want = c.track.open;
+  const q16 = (f) => Float32Array.from(x, (v, i) => Math.max(-32768, Math.min(32767, Math.round(f(v, i) * 32768))) / 32768);
+  const rnd = lcg(12345), gauss = () => Math.sqrt(-2 * Math.log(rnd() || 1e-9)) * Math.cos(2 * Math.PI * rnd());
+  let p = 0, k = 0;
+  for (const v of x) if (Math.abs(v) > 0.003) { p += v * v; k++; }
+  const noise30 = Math.sqrt(p / k / 1000); // 30 dB below the speech
+  const variants = {
+    "40 dB quieter": q16((v) => v * 0.01),
+    "12 dB louder, clipped": q16((v) => Math.max(-1, Math.min(1, v * 4))),
+    "hiss 30 dB below the speech": q16((v) => v + noise30 * gauss()),
+    "60 Hz hum at -30 dBFS": q16((v, i) => v + 0.0316 * Math.sin(2 * Math.PI * 60 * i / sr)),
+    "a chord at -30 dBFS": q16((v, i) => v + 0.0316 * (Math.sin(2 * Math.PI * 220 * i / sr) + Math.sin(2 * Math.PI * 277 * i / sr) +
+      Math.sin(2 * Math.PI * 330 * i / sr)) / 3),
+  };
+  for (const [name, y] of Object.entries(variants)) {
+    const t = L.analyse(y, sr), r = corr(t.open, want);
+    assert.equal(t.n, c.track.n, name);
+    assert.ok(r > 0.95, `${name}: the mouth's opening correlates ${r.toFixed(3)} with the clean clip's`);
+  }
+  // The same sound at other rates (linear interpolation): the same mouth.
+  for (const rate of [16000, 44100, 48000]) {
+    const n = Math.floor(x.length * rate / sr), y = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const s = i * sr / rate, a = Math.floor(s), b = Math.min(a + 1, x.length - 1);
+      y[i] = x[a] + (x[b] - x[a]) * (s - a);
+    }
+    const t = L.analyse(y, rate), m = Math.min(t.n, want.length);
+    const r = corr(t.open.subarray(0, m), want.subarray(0, m));
+    assert.ok(r > 0.95, `at ${rate} Hz the opening correlates ${r.toFixed(3)} with 24 kHz`);
+  }
+});
+
 /* ── sample(): the playback clock plus the lead ──────────────────────────── */
 
 check("sample() reads LEAD_S ahead, interpolates, and is all zeros outside", () => {
-  const n = 20, ramp = Float32Array.from({ length: n }, (_, i) => i / (n - 1));
+  const n = 40, ramp = Float32Array.from({ length: n }, (_, i) => i / (n - 1));
   const t = { fps: 100, n, level: ramp, open: ramp, wide: new Float32Array(n), round: new Float32Array(n) };
   assert.equal(L.sample(null, 0.1), null);
   const at0 = L.sample(t, 0);
@@ -174,6 +299,14 @@ check("sample() reads LEAD_S ahead, interpolates, and is all zeros outside", () 
   assert.ok(Math.abs(mid.open - 0.5 * 7.5 / (n - 1)) < 1e-6, "half faded in at 25 ms");
   const full = L.sample(t, 0.1);
   assert.ok(Math.abs(full.open - full.level) < 1e-6, "fully in from ONSET_S on");
+  // ...and fades out over the track's last ONSET_S (the level does not): a
+  // clip whose sound runs to its end must not snap shut in one frame.
+  const lastT = (n - 1) / 100 - L.LEAD_S;
+  const tail = L.sample(t, lastT - 0.025);
+  assert.ok(Math.abs(tail.level - (n - 3.5) / (n - 1)) < 1e-6, "the level is not faded at the end");
+  assert.ok(Math.abs(tail.open - 0.5 * tail.level) < 1e-6, `half faded out 25 ms before the end: ${tail.open}`);
+  assert.ok(L.sample(t, lastT - 1e-4).open < 0.01, "shut at the last frame");
+  assert.ok(Math.abs(L.sample(t, lastT - 0.06).open - L.sample(t, lastT - 0.06).level) < 1e-6, "not faded before the last ONSET_S");
   const zero = { level: 0, open: 0, wide: 0, round: 0 };
   assert.deepEqual({ ...L.sample(t, -L.LEAD_S - 0.001) }, zero, "before the start");
   assert.deepEqual({ ...L.sample(t, (n - 1) / 100 - L.LEAD_S + 0.001) }, zero, "after the end");
@@ -252,6 +385,42 @@ check("fromWav reads mono and stereo (averaged) 16-bit, whatever chunks surround
   const eight = L.fromWav(wav({ bits: 8, frames: [1, 2] }));
   assert.equal(eight.samples.length, 0, "not 16-bit: no samples rather than noise");
   assert.equal(L.fromWav(new Uint8Array(10)).samples.length, 0, "not a WAV");
+});
+
+check("fromWav never throws, and refuses what it cannot read (cut short, short fmt, nonsense rate)", () => {
+  const good = wav({ frames: Array.from({ length: 480 }, (_, i) => (i * 97) % 2000 - 1000) });
+  // Cut short at every length through the header and into the data: no
+  // exception (a file cut inside `fmt ` used to throw a RangeError).
+  for (let cut = 0; cut <= 60; cut++) {
+    const w = L.fromWav(good.subarray(0, cut));
+    assert.ok(w.samples instanceof Float32Array, `cut to ${cut} bytes`);
+  }
+  // A fmt chunk too short to hold its fields is not read past its end.
+  const shortFmt = good.slice();
+  new DataView(shortFmt.buffer).setUint32(16, 4, true);
+  assert.equal(L.fromWav(shortFmt).samples.length, 0, "fmt of 4 bytes");
+  // Rates the phone refuses too (Wav.rateOf: 4000..192000): 1 Hz would ask
+  // for 100 mouth frames per sample.
+  for (const rate of [0, 1, 3999, 192001, 4e9]) {
+    assert.equal(L.fromWav(wav({ rate, frames: [1, 2, 3] })).samples.length, 0, `rate ${rate}`);
+  }
+  for (const rate of [4000, 8000, 11025, 16000, 22050, 44100, 48000, 96000, 192000]) {
+    assert.equal(L.fromWav(wav({ rate, frames: [1, 2, 3] })).samples.length, 3, `rate ${rate}`);
+  }
+});
+
+check("a sample that is not a number counts as silence - never a NaN mouth", () => {
+  const rate = 24000, clean = new Float32Array(rate);
+  for (let i = 6000; i < 18000; i++) clean[i] = 0.4 * Math.sin(2 * Math.PI * 200 * i / rate);
+  const want = L.analyse(clean, rate);
+  for (const bad of [NaN, Infinity, -Infinity]) {
+    const dirty = clean.slice(); dirty[3000] = bad;
+    const got = L.analyse(dirty, rate);
+    for (const ch of ["level", "open", "wide", "round"]) assert.deepEqual(Array.from(got[ch]), Array.from(want[ch]), `${bad} ${ch}`);
+    dirty[12000] = bad;
+    const mid = L.analyse(Array.from(dirty), rate); // a plain array too
+    for (const ch of ["level", "open", "wide", "round"]) for (const v of mid[ch]) assert.ok(v >= 0 && v <= 1, `${bad} in the sound: ${ch} ${v}`);
+  }
 });
 
 /* ── Mouth shapes inside the WAV: the "jmth" chunk ──────────────────────── */

@@ -5,8 +5,8 @@
 > is the detail.
 
 
-Fifty-one patches against the Jarvis backend (counted 2026-09-24, after
-`chat-history.patch`, `auto-learn.patch`, `memory-erase.patch` and `past-recall.patch`), each with an executable test
+Eighty-three patches against the Jarvis backend (counted 2026-09-28 on `main`; the list grows, so trust
+the `$PATCHES` list in `scripts/apply-patches.ps1` over this number), each with an executable test
 (counted from the `$PATCHES` list in `scripts/apply-patches.ps1`, which
 refuses to run if a `.patch` file here is missing from it). The paragraphs
 below were written as the list grew, so the counts in them are the count at
@@ -138,13 +138,22 @@ on a throwaway copy instead.
 | `data-health.patch` | `jarvis_hud.py` | **"Data health in the preflight"** (feasibility I97, `docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Small, read-only." / "WARN, never fix."). Adds `GET /api/data-health` - fixed shape, not a setting, **no approval card either way**, the same shape as `sayable.patch` and `reach.patch`. Checks (never fixes) whether the chat history and memory databases open, whether there is disk space where Jarvis writes its data, and whether the settings files parse; every row is `ok` or `warn`, never a failure. Read by `backend/selftest.py --preflight`'s own "Is Jarvis's own data healthy?" check. Its context is `sayable.patch`'s own new route block, unaffected by the patches above it in this table (including `memory-shared.patch`), which touch a different, unrelated part of `jarvis_hud.py`; last in the list. Needs `jarvis_data_health.py`. |
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
-| `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Two more small hunks (the owner, 2026-09-28) hand a crisis turn's `turn_id` to `jarvis_agent.note_crisis_turn` - right after `feedback.patch` makes the id, on `wellbeing.patch`'s flag, and again after `run_local_turn` on its own crisis check - so a "wrong" mark on a crisis answer is never counted. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `projects.patch` | `jarvis_hud.py` | **Projects, build steps 1 and 2** (the owner's decision of 2026-09-28, `docs/PROJECTS-DESIGN.md`). One hunk, like every install()-shaped patch: `jarvis_projects.install(Handler, ...)` at start-up, answering `GET`/`POST /api/projects` and its benchmarks (`docs/JARVIS-API.md` §88). Its context is `answer-sources.patch`'s own install block, so it goes after it - last, like every new patch. **When the continuation branch merges:** `goals.patch` there anchors on the very same lines, so whichever lands second is re-anchored on the other's block. Needs `jarvis_projects.py`; without it, or on any error, the banner says so and the routes are not there. See "Projects", at the very end. |
+| `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py`, `jarvis_chatbot_gemini.py` and the other website adapters (`jarvis_chatbot_web.py` and a site file each), shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window" and "... more chatbot websites, the same open way", at the very end. |
+| `live.patch` | `jarvis_hud.py` | **Jarvis Live: talking back and forth** (the owner's decision and answers of 2026-09-28, `docs/LIVE-DESIGN.md`). One call at start-up, `jarvis_live.install(Handler, ...)`, answers `GET`/`POST /api/voice/live` (JARVIS-API section 63): start (no card; refused until your voice is trained), stop, more time, carry on, mute. Last in the list; its context is `chatbot-routes.patch`'s install block. Needs `jarvis_live.py` - without it, or on any error, the banner says so. See "Jarvis Live", at the very end. |
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
+| `cloud-say-yes.patch` | `jarvis_hud.py` | **"Try the cloud model" - the owner's yes for one question** (the owner's "yes, build it now", 2026-09-27; `docs/ARCHITECTURE.md` "Cloud / API keys"). One line added to the chat turn's already-existing `jarvis_router.choose()` call: `owner_said_yes=bool(body.get("cloud_yes"))`. Every gate in `choose()` still runs first and in the same order - private, tainted, a picture, no lane, no budget - so this can only ever turn THIS question's own gate 6 from `"offer"` into `"escalate"`, for a question that had already cleared every other gate on its own merits; a yes never carries a private, tainted or picture turn out. Both apps' "Try the cloud model" button (`docs/JARVIS-API.md` §18.1, §4 "`offer` in `X-Jarvis-Route`") sends `cloud_yes: true` only when the owner actually pressed it, resending the exact same question and nothing else. **Real, verified against the owner's own `jarvis_hud.py` by hand, not a `_stack.py` stand-in**: no earlier patch's hunk had ever touched this call site before, so `_stack.stand_in()` could not check it against the real file (it would have materialised the hunk's own claimed pre-image instead of failing) - see the patch's own comment, and `test_cloud_say_yes.py`, which round-trips it against the real, hand-verified lines instead of a derived fixture. Its context is the router call itself, `second-card-suggest.patch`'s own new code above it in this table notwithstanding (that patch touches a different, unrelated part of `jarvis_hud.py`). `goals.patch`, after it in this table, touches a third, separate part again (the startup install() block), so the two never interact. Needs no new module - `jarvis_router.py`'s `owner_said_yes` parameter has accepted this since 2026-09-24, unused until now. |
+| `goals.patch` | `jarvis_hud.py` | **"Goals with one card per step"** (the owner's "build it now", 2026-09-27, after the Jarvis evaluation; `docs/creativity-2026-09-25/future.md` idea 3, the feasibility audit's I63/I64). One call at start-up, `jarvis_goals.install(Handler, ...)`, answers `GET`/`POST /api/goals` and `POST /api/goals/<id>/accept`\|`step`\|`stop`. A goal starts as a draft (the owner's own words, plus a plan they typed or asked Jarvis to suggest in an ordinary chat message first - this module calls no model itself, see its own docstring for why); accepting it raises exactly ONE approval card, through `jarvis_schedule.py`'s existing `schedule_repeat` mechanism (the same one a repeating reminder or the morning briefing already uses), which approves nothing that acts - it only lets a weekly, deterministic, model-free check-in exist. Marking a step done and stopping a goal need no card, immediate, like ticking off a to-do. **Not the same thing as "the plan card"** (I61, still gated behind the multi-step safety tests) - Goals never batches an approval; every acting step still goes through the ordinary chat/tool gate, one card each, exactly as today. Last in the list; its context is `answer-sources.patch`'s own new route block. Needs `jarvis_goals.py` - without it, or on any error, the banner says so and the routes answer 503. See `test_goals.py`. |
 | `brain-reads.patch` | `jarvis_hud.py` | **The Brain upgrades** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §71). One install()-shaped hunk at start-up - `jarvis_brain_reads.install(Handler, ...)` - whose context is `answer-sources.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/history/search?q=` ("search what was said": `jarvis_chat_log.ChatLog.search` opens each kept turn in memory for that one search - no index, nothing written) and `GET /api/memory/fact-history?id=` ("history of this fact": `jarvis_memory.fact_history_view`, an erased version never with its words). Reads for the apps only; nothing reaches the AI model. Needs `jarvis_brain_reads.py`; without it the banner says so and the two routes are not there. See "The Brain upgrades", at the very end. |
 | `photo-reminder.patch` | `jarvis_hud.py` | **Photo to reminder** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §83). One install()-shaped hunk at start-up - `jarvis_photo_remind.install(Handler, ...)` - whose context is `brain-reads.patch`'s own install block, so it goes after it, last like every new patch. It answers `POST /api/photo/scan`: the words in a picture read by Windows (`jarvis_ocr.py`), a date, time and title found by `jarvis_quick.py`'s own parser, and a PROPOSED reminder sent back - nothing set up, nothing kept, outside text. Needs `jarvis_photo_remind.py`; without it the banner says so and the route is not there. See "Photo to reminder", at the very end. |
+| `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude or Gemini** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
+| `forget-range.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Forget a time frame"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 64). Adds `GET /api/memory/forget_range` and `/preview` (what Jarvis learned and the chats from some days, as a list the owner unticks), `POST /api/memory/forget_range` (ONE approval card, `memory_forget_range`, listing every item - nothing changes before a person approves) and `/undo` (10 minutes, no card), and the gate's risk line for the new action (local, not reversible: a risky approval). Last in the list: its context is `chatbot.patch`'s gate lines and `live.patch`'s install block. Needs `jarvis_forget_range.py` - see "Forget a time frame", at the very end. |
+| `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 
-## Thirty-four of the thirty-six actually apply, and that is correct
+## All but two of the patches apply, and that is correct
 
 Ten backend modules were lost and rebuilt from scratch (`backend/rebuilt/` —
 see the header of any file in there). The rebuild was written against the
@@ -169,7 +178,8 @@ So six of the patches are already half-applied by the rebuild:
 | `event-allowlist.patch` | `jarvis_events.py` | *(nothing — skipped entirely)* |
 
 Because the script installs the rebuilt modules itself, it always applies the
-split versions: 34 patches, four of them as halves, and two skipped. (It used
+split versions: every patch in the list except two, four of them as halves, and two
+(`embedding-guard.patch`, `event-allowlist.patch`) skipped. (It used
 to decide by looking for a marker in your `jarvis_memory.py` only - which
 got it wrong on a backend without the rebuilt modules, and ignored
 `jarvis_events.py`, which two of the six are about. `-Revert` still looks,
@@ -4100,6 +4110,40 @@ settings folder (`%USERPROFILE%\.openjarvis\` unless you moved it):
   it does not. It needs an Ollama new enough to report the reused count;
   an older one leaves `cached_tokens` out.
 
+**How much of the conversation was reused, on screen** (milestone 7,
+2026-09-28). Ollama keeps the start of the last prompt it read (the "prompt
+cache"). When the next question starts the same way, it skips reading that
+part again, and the answer starts sooner. Both apps' speed line (Brain →
+Model) now ends with it, for example: "Recent answers: about 14 words a
+second, first word after 0.8 s, 90% of the conversation reused, not read
+again (middle of the last 30 answers)."
+
+- **What the number is, exactly.** For each answer, `cached_tokens` out of
+  `prompt_tokens`, as a percentage (`jarvis_speed.reused_percent`). Jarvis
+  talks to Ollama's OpenAI-style endpoint, `/v1/chat/completions`. There,
+  `prompt_tokens` is Ollama's `prompt_eval_count` and `cached_tokens` is its
+  `prompt_eval_cached_count` (Ollama's `openai/openai.go`). The first counts
+  the **whole** prompt, cached part included: Ollama's own `--verbose`
+  printout works out the part it really read as the difference (Ollama's
+  `api/types.go`). Read in Ollama's source on 2026-09-28, not run against a
+  real Ollama. For a tool answer, both counts are added up over all its
+  requests to the model. The screen shows the middle value over recent
+  answers (`by_model[model].median_reused_percent`, and `reused_answers` -
+  how many answers had the numbers).
+- **When there is no number.** Rows written before 2026-09-26 have no
+  counts; they still load and are skipped, never counted as 0%. So is an
+  answer from an Ollama too old to report the reused count. **And so is an
+  answer with no tools switched on** (`[tools].enabled` empty): that answer
+  is passed straight through from Ollama in the form the app asked for, and
+  neither app asks for the counts. Adding the request there would change the
+  stream the apps receive (an extra last piece), and an app that hangs up
+  after the answer's final piece could then cut off the relay before it
+  records the answer at all (not checked whether either app does) - so it
+  was left alone. Answers with tools on
+  (the tool loop, `jarvis_agent.run_local_turn`) always ask.
+- **Numbers only.** The same `_clean()` filter keeps every row free of
+  words; the share is worked out from two counts when the screen asks.
+
 **What it never records: any words of the conversation.** Not the question,
 not the answer, not a summary. That is enforced in code: every row goes
 through a filter (`_clean()`). It keeps only a fixed list of field names, and
@@ -4152,7 +4196,7 @@ would be noise.
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_speed_record.py
 ```
 
-Sixty-three checks with no network (opening a socket fails the test) and a
+Eighty-seven checks with no network (opening a socket fails the test) and a
 fake clock. The main one: an answer full of a distinctive secret sentence is
 timed, then every word of it is searched for in the file, and none is found.
 Also checked:
@@ -4161,6 +4205,9 @@ Also checked:
 - all three stream shapes are handled;
 - a broken or unwritable file never raises;
 - the slowdown warning, with a control where nothing changed;
+- the reused share: worked out from a fake Ollama usage piece, older rows
+  without the counts still load and have no share (not 0%), and no word of
+  the conversation reaches the file or the screen's block;
 - the patch rehearsed against what `gpu-offload.patch` and
   `tool-calling-wiring.patch` wrote.
 
@@ -4592,6 +4639,17 @@ is its context. Listed last in `apply-patches.ps1`.
 
 <!-- ===== task controls, notes, power (2026-09-23) - begin ===== -->
 
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_cloud_one_turn.py
+```
+
+Runs the patch's own lines on a request carrying a private earlier question
+(only the newest question comes out), checks the local lane is untouched,
+rehearses the patch with `git apply` against what the earlier patches wrote,
+and - with `JARVIS_BACKEND` set - checks `_open` in your real file.
+
 # `task-control.patch` — Pause, Resume, Stop, and notes, for real
 
 **What was wrong.** Both apps have had Pause, Resume, Stop and "add a note"
@@ -4672,14 +4730,7 @@ nothing if the patch does not fit.
 ## Test it
 
 ```powershell
-$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_cloud_one_turn.py
-```
-
-Runs the patch's own lines on a request carrying a private earlier question
-(only the newest question comes out), checks the local lane is untouched,
-rehearses the patch with `git apply` against what the earlier patches wrote,
-and - with `JARVIS_BACKEND` set - checks `_open` in your real file.
-python backend\test_task_control.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_task_control.py
 ```
 
 103 checks, no network and no real gate: a fake plan module and a fake gate
@@ -5727,7 +5778,15 @@ code does.
   with `jarvis_compute.plan()`: `[compute] primary_gpu`, else the card with a
   monitor, else index 0. A second card is capable at compute capability 7.5
   or more and 10,240 MiB or more, and with a card id. Every other card gets a
-  reason in words.
+  reason in words. **2026-09-28, a third card (data-model reshape only,
+  `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md`):** `_detect()` now also keeps
+  every capable non-primary card internally (`det["_lanes"]`, best memory
+  first — "second" is still `_lanes[0]`), and `extra_lanes(det)` turns
+  every card beyond that into `det["second"]`'s own plain-dict shape. Both
+  are internal only; `GET /api/second-card`'s JSON, and the five features'
+  behaviour, are unchanged. A third card cannot run anything yet — see the
+  module docstring's "A THIRD CARD" section and `docs/JARVIS-API.md` §12
+  for exactly what remains.
 - **Switches.** A main switch and five features — `long_context`, `vision`,
   `learning`, `browser_control` (needs `long_context`), `wiki` — in
   `second-card.json` in the config folder, never in the toml. All default off.
@@ -5874,6 +5933,10 @@ file - two small additions to the whole modules `jarvis_agent.py` and
   never a scan for the bare word "no"), or a "wrong" mark that changed
   (`jarvis_feedback.mark`, reached through the one small hunk
   `second-card-suggest.patch` adds - see its own row in the table above).
+  Never for a crisis answer (the owner, 2026-09-28): the chat route tells
+  `jarvis_agent.note_crisis_turn` a crisis turn's id when it makes it, and
+  `note_correction` leaves the count alone for that id. In memory only,
+  ids never words, bounded, gone on restart.
 
 `jarvis_second_card.maybe_suggest_combined(conversation_id)`, called once at
 the end of every turn (`jarvis_agent.run_local_turn`'s own `finally` block -
@@ -5928,7 +5991,9 @@ off, raises the real card with a reason once both are met, a "yes" turns it
 on and clears the counts, a "no" is heard by `jarvis_backoff` and clears
 them too, and already-on or a card already waiting offers nothing. Plus
 `second-card-suggest.patch` applying to what `feedback.patch` wrote, and
-reversing.
+reversing, and a crisis turn's "wrong" mark not counted while an ordinary
+one still is. `python3 backend/test_wellbeing.py` runs that join end to
+end through the patch's own lines and a real `run_local_turn`.
 
 # `wiki.patch` and `jarvis_wiki.py` — the wiki builder, on the second card (or the big model)
 
@@ -6998,7 +7063,7 @@ with those two - see `jarvis_voices.KOKORO_VOICES`'s own comment for the
 full reasoning and the caveat.
 
 **Also new (2026-09-27, the owner's choice): "Voice follows the face"** -
-with the red panda, pygmy owl or sea otter face showing, the built-in voice
+with the red panda, pygmy owl, sea otter or monkey face showing, the built-in voice
 becomes that animal's: one of the Kokoro voices already installed, its own
 pace, and a small pitch rise (`jarvis_voices.FACE_VOICES`; the face is read
 from `appearance.json`). An on/off switch, **on by default**, right under
@@ -7008,6 +7073,28 @@ way, held on a stale link like every change sent to the PC. A voice you
 recorded still wins, and your speaking speed still applies on top. The
 animals' voices were picked from Kokoro's published descriptions, **not
 listened to** - change a row in `FACE_VOICES` if one sounds wrong.
+
+**Also new (2026-09-28, the owner's choice): each animal's own voice.**
+Under that switch, for each animal, any of the eleven built-in voices, a
+pitch from 3 steps deeper to 4 steps higher (half steps; a step is a
+semitone) and a pace (Slower / Normal / Faster, still times your speaking
+speed), with **Try it** and **Reset to its own voice** - desktop: Settings
+-> Jarvis's voice, "Each animal's voice"; phone: the Voices screen. `POST
+/api/voice/voices/face_animal` sets or resets one animal (no card either
+way, held on a stale link, kept in `voices/state.json` as `face_animals`);
+`POST /api/voice/voices/face_animal/try` answers a WAV of one fixed line in
+that voice (nothing kept, never any words from the app), one at a time - a
+second one while the first is still being made is refused at once with a
+429 in words (`jarvis_voices.try_face_animal`'s lock, so `voices.patch` did
+not change for it). Both are routed in
+`voices.patch`, so **run `apply-patches.ps1` again** on the PC; until then
+the apps show the rows but a change answers "your PC does not have this
+yet". A deeper pitch plays the sound slower (`jarvis_speech.pitch_up` with
+a negative number: Kokoro is asked for faster speech first, so the pace
+stays as chosen), and the mouth timing is divided by the same factor, so
+**the mouths match whatever is chosen** - checked with the real Kokoro model
+(`docs/LIPSYNC.md`). `test_voice_upgrades.py` covers the choices, the
+refusals, reset, the deeper pitch, the "One moment." key and Try it.
 
 ## The two candidates
 
@@ -7314,6 +7401,16 @@ the training fails and says to record again somewhere quieter.
   Jarvis does not know, counts as hands-free. Said plainly: the utterance
   route in your `jarvis_hud.py` still reads a request with no `?source=`
   as the talk button, as it always has; both apps always send it.
+- **Answers about your screen after "Hey Jarvis"** (2026-09-28): under
+  "Only trust the talk button", an answer about your screen ("Look at
+  this", "Watch with me") to a "Hey Jarvis" question stays on screen too.
+  The sixth setting, `hands_free_screen`, can allow reading those aloud
+  even then ("Read aloud" raises an approval card; "Keep on screen", the
+  default, applies at once). It changes nothing under "Same as the talk
+  button", and nothing else: private, memory and sensitive answers keep
+  their own settings. The utterance reply says it as `screen_aloud`.
+  Said plainly: nothing reads your screen yet (no route, no key in the
+  apps), so for now the setting is only stored and shown.
 
 Also new: training in **three rounds** (normal and close; further away or
 quieter; another time or room), all kept in memory until one card at the
@@ -10429,6 +10526,7 @@ chat even while tools are switched on.
 | the voice models | speech-to-text or the voice is not installed (a WARN only - typing works without them) |
 | calendar, email, web search | calendar and email: says whether each is set up, and reads nothing unless `--with-reads`. Web search: tested ONLY when it is switched on and a provider is chosen, and then through the Test search button's own route (one search for the word "wikipedia") |
 | the PC stays awake | Windows puts the PC to sleep on mains power (a WARN only: alarms, reminders and "tell me when" go off by the PC's clock, and nothing goes off while it sleeps). Read with `powercfg /query` (read-only); the WARN gives the one line that keeps it awake while plugged in, `powercfg /change standby-timeout-ac 0`. Skipped off Windows (ease-of-use audit 2026-09-27, #8d) |
+| your phone can reach Jarvis | four things, each with its fix (newcomer play test 2026-09-27): no phone address is set - in the desktop app's "Let my phone reach this", `JARVIS_HUD_BIND`, or `[security] bind_address` (a WARN: skip it if you do not use the phone); the address is not a Tailscale or Meshnet one, 100.64.x.x to 100.127.x.x (FAIL); this PC does not have that address - Tailscale or Meshnet is off, or the address changed (FAIL); Jarvis does not answer on that address and port (FAIL, and the fix says whether to switch on "Let Jarvis Desktop start and stop Jarvis" or restart it); no enabled Windows Firewall rule lets TCP 4719 in (a WARN, with the one `New-NetFirewallRule` line from `docs/INSTALL.md` 3.2; read with `Get-NetFirewallRule`, skipped off Windows). It opens one connection to Jarvis's own port and closes it; it changes nothing |
 | Windows Credential Manager | it does not answer |
 | a hidden llama.cpp settings file | `%PROGRAMDATA%\llama.cpp\config.ini` or `%APPDATA%\llama.cpp\config.ini` exists (a WARN only). Ollama's engine reads settings from those files on top of Jarvis's own (the research audit, 2026-09-28, section 6 - read in llama.cpp's source, not tried on the PC), and nothing else in Jarvis shows them. The WARN lists the settings' names (never their values) and gives the one line that renames the file. Skipped off Windows |
 
@@ -11013,11 +11111,35 @@ voice. No words. It counts only your own live words, with the same checks
 as automatic learning (not pasted, not after a tool read outside text, a
 voice turn checked at its strictest, every word said and no "not" left
 out), only after the fact was saved, and once per message however often the
-learner re-reads the conversation. Nothing uses the count to decide
-anything: it cannot make a fact harder to forget, correct or erase. "Erase
+learner re-reads the conversation. The count cannot make a fact harder
+to forget, correct or erase, and nothing uses it to decide anything except
+the tie-break below, which is off. "Erase
 the words" leaves these rows (they hold no words). Shown in the "Saved
 automatically" list in both apps; the full memory list comes from
 `jarvis_hud.py` on your PC and does not show it yet.
+
+**"Said again" as a tie-breaker (milestone 12, 2026-09-28) - built, OFF.**
+When two of the facts a chat turn recalls score exactly the same, the one
+you have said again more often goes first. That is all it does: the same
+facts come back, the same number of them, and a fact never jumps ahead of
+one that scored higher (or that the re-ranker put higher). It never hides
+or fades anything. Only chat recall uses it (`jarvis_past.recall`, which
+calls `search(said_again=True)`); finding a fact to correct, and anything
+that writes, never does. It stays off until the memory self-test on your PC
+shows it helps. `eval_memory.py` always measures it, on its own line ("Said
+again as a tie-breaker"), with a few made-up repeats (`SAID_AGAIN` in the
+file) that change none of the other numbers. Words only, here, it changed
+nothing: 0 questions reordered at every size (the ties it could break
+already had the repeated fact first). To switch it on, if your PC's numbers
+say so - this sets it for your Windows user, then restart Jarvis:
+
+```
+[Environment]::SetEnvironmentVariable('JARVIS_MEMORY_SAID_AGAIN_TIEBREAK', '1', 'User'); Write-Host 'Done. Quit Jarvis from the tray and start it again.'
+```
+
+Tested by `test_memory_tiebreak.py`: off is exactly the old order; on, a
+repeated fact wins a real tie, never passes a higher score or the
+re-ranker's order, and never adds or drops a fact.
 
 ## 4. Real "true from" dates, and older news
 
@@ -11058,6 +11180,7 @@ end.)*
 ```
 python3 backend/test_memory_rerank.py
 python3 backend/test_memory_said_again.py
+python3 backend/test_memory_tiebreak.py
 python3 backend/test_memory_true_from.py
 python3 backend/test_memory_auto_true_from.py   # true_from on /api/memory/auto rows (review I10)
 python3 backend/test_memory_words.py            # both apps' memory words fixture is fresh
@@ -11806,6 +11929,58 @@ mentioned in another language is not caught.
 - **No off switch, and no card, ever** - the owner's own instruction. It
   only adds words to an answer; it never approves or acts (rule 4).
 
+## The serious moment: a neutral face and the plain voice (2026-09-28)
+
+The owner's decision: "At serious moments the animals drop the cute
+gestures." For a crisis answer the animal faces show a neutral pose, and
+Jarvis speaks in its plain built-in voice - not the animal's voice
+("Voice follows the face", `jarvis_voices.py`), no pitch rise.
+
+**Why a window on the PC, not a flag on each spoken sentence.** Both apps
+speak an answer one sentence at a time through `POST /api/voice/say
+{"text"}`, and that route hands `jarvis_speech.say()` the text and nothing
+else - a per-request flag would need both apps and the route changed first.
+So `jarvis_wellbeing.py` keeps ONE in-memory window instead (two
+timestamps and a counter; never a word of the turn, never on disk, never
+logged):
+
+- `serious_begin()` - `jarvis_agent.run_local_turn` calls it (through
+  `serious_moment("begin")`) for a crisis turn, before the model is asked,
+  so before the first word. An ordinary turn calls `serious_calm()`
+  instead, which closes an ENDED crisis answer's window at once (both apps
+  drop the rest of the last answer's queued sentences when a new question
+  is sent); a crisis answer still being written is never closed that way.
+- `serious_end(words)` - in `run_local_turn`'s `finally`, for a crisis
+  turn: the window stays open `grace_seconds(words)` more - 30 s plus one
+  second per 1.2 words (the slowest speaking speed, with room), at most
+  300 s - then a timer closes it. The length is used once, not kept.
+- A crisis turn that never reports its end stops counting after 600 s.
+- Both apps are told by a `wellbeing` event, `{"serious": true | false}` -
+  one boolean. `view()` (`GET /api/wellbeing`, proposed) carries
+  `serious` too.
+
+**The voice.** `jarvis_speech.say()` asks `plain_voice_now(text)` (which
+asks `jarvis_wellbeing.speak_plainly`) for each sentence: True inside the
+window, and for the help message's own words at any time (`help_words`:
+`REPLY`, `REPLY_SPOKEN`, `REPEAT`, `REPEAT_SPOKEN`, or a piece naming 988,
+"nine eight eight", the Crisis Lifeline or "call 911" - however the app
+cut the sentence). Then `_synthesise(..., plain=True)` speaks through
+`tts_voice(plain=True)`: the owner's own built-in choice and speed
+(`jarvis_voices.speaker()`/`speed()`), no pitch rise. A recorded custom voice
+still speaks first, as always; the mouth chunk is made the same way. While
+the window is open, `jarvis_voice_flow`'s barge-in check also compares
+against the plain voice (`_reference_sources`), so Jarvis's own plain voice
+is not taken for the owner talking over it.
+
+**Not touched:** the request and answer of `/api/voice/say`, the "Voice
+follows the face" switch, the "One moment." clip (made ahead in the voice
+in use, not remade plainly for a crisis turn), and every non-voice part of
+the crisis help line above. **Erring on the safe side**: anything else said
+inside the window (an alarm a minute later) is plain too, and the faces may
+stay neutral up to 300 s after the answer. **The app side - the neutral
+pose - is not built here**: `docs/JARVIS-API.md` section 38.1 says exactly
+what each app must read, and when it starts and ends.
+
 ## `wellbeing.patch` - the one piece that is NOT confirmed
 
 Every other patch in the table above was checked against real, cited lines
@@ -11845,12 +12020,19 @@ be edited by hand from a guess.
 python3 backend/test_wellbeing.py
 ```
 
-122 checks, no model and no network: the crisis phrases and the false-alarm
+209 checks, no model and no network: the crisis phrases and the false-alarm
 list, the fixed texts (the US numbers only, no invented feeling), the note
 never first and the rules block staying first, no tools offered, the help
 message following the model's answer and sent alone on a failure, the
-repeat line on a second mention, the learner exclusion, and that the module
-itself never opens a file, a socket or a log.
+repeat line on a second mention, the learner exclusion, that the module
+itself never opens a file, a socket or a log - and (section 7, 2026-09-28)
+the serious moment: the window opening before the first word and lasting
+until the answer can have been spoken, the next ordinary question closing
+it, an old timer never closing a newer one, the `wellbeing` event (one
+boolean), the help words recognised however a sentence is cut, `say()`
+speaking the owner's plain built-in voice instead of the panda's inside it
+(the mouth track still made) and the panda's again outside it, and the
+barge-in check knowing the plain voice while it lasts.
 
 ## Not checked, said plainly
 
@@ -13812,6 +13994,1284 @@ has the phone-parity row.
   is in `jarvis_settings_registry.py`'s own module header and
   `docs/JARVIS-API.md` section 58.2/58.3.
 
+# Talking to an AI chatbot for you, the core: `jarvis_chatbot.py` (2026-09-28)
+
+Step 1 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`, the owner's
+answers of 2026-09-28; `docs/JARVIS-API.md` section 87). **Not usable
+yet**: no real chatbot - Gemini's adapter is listed and says "not built
+yet". (The routes and both apps' screens came next: `chatbot-routes.patch`,
+below.) Shipped whole (`apply-patches.ps1` copies it; no patch), so the
+next steps build on code that is already tested.
+
+## In plain words
+
+The owner gives Jarvis a goal. Jarvis sends it to an AI chatbot word for
+word, reads the answer, and asks its own follow-up questions - without
+asking the owner each time - until the goal looks met or a limit the owner
+approved is reached. One approval card per conversation shows the goal,
+the most messages, the longest time and the words that must never be sent.
+The model that writes the follow-ups is given only the goal and the
+conversation - never memory, email, notes, calendar, files or chat history,
+and no tools. Every message is checked just before it would leave the PC;
+one that could leak something private is rewritten once, and if it fails
+again the conversation pauses and asks. A captcha, a sign-in page or an
+"unusual activity" page also pauses and asks: Jarvis never gets past one by
+itself. The chatbot's words are outside text - never learned from, never
+read aloud.
+
+Two versions: with one graphics card, shorter conversations that wait
+while the owner is chatting; with both cards, longer ones on the second
+card's "Longer conversations" lane - off until the owner sets `[chatbot]
+full_version = true` in `jarvis-framework.toml` after measuring the second
+card, and even then only while that lane is running.
+
+## What changed
+
+- `backend/jarvis_chatbot.py` (new): the adapter interface and registry
+  (`FakeChatbot`; a "not built yet" entry for `gemini_web`), the session,
+  `plan`/`describe`/the card/`run`, `last_check`, the driver's clean
+  context and fixed-format move (Ollama `format`), the stops, the summary,
+  `start`/`stop`/`change_limits`/`view` for the routes to come.
+- `backend/jarvis_task_control.py`: a module may word the first line of its
+  Resume card (`RESUME_HEADER`); the chatbot's steps are messages, not
+  things on the screen. Every other module's card is unchanged.
+- `backend/jarvis_stop_all.py`: `answers_running()`, read-only, so the
+  one-card version can wait while a chat answer is being written.
+- `backend/jarvis_card_words.py`, `backend/jarvis_asks_first.py`,
+  `backend/rebuilt/jarvis-framework.toml`: the new gate action
+  `chatbot_session` - its card title, its "What asks first" row (always
+  asks, never loosened), its tier `ask`, and `[chatbot] full_version =
+  false`. The two apps' contract files were regenerated
+  (`tools/gen_card_words_cases.py`, `tools/gen_asks_first_cases.py`).
+- `backend/_where.py`, `scripts/apply-patches.ps1`: shipped.
+- `backend/test_chatbot.py` (new).
+
+## Test it
+
+```
+python3 backend/test_chatbot.py
+python3 backend/run_suites.py
+```
+
+## Not checked, said plainly
+
+- **No real chatbot and no real model.** Every run is against
+  `FakeChatbot` and a stand-in driver model. How well the owner's 8B model
+  actually drives a conversation, and whether its follow-ups trip the last
+  check often, is unmeasured.
+- **The last check is strict on purpose.** It reuses the router's
+  private-topic words, so a goal about money, health, email or files is
+  refused outright ("my bank", "tax", "diagnosis", "files"), and a
+  follow-up that happens to repeat a saved fact's word is blocked. On 50
+  harmless follow-ups against five planted facts it blocked 1 ("Could you
+  check that number again?" - "number" is in a saved phone-number fact).
+- **The transcript lives in memory only** and is lost on a backend
+  restart. Keeping it in the encrypted chat history, tagged as outside
+  text, was meant to come with the routes; it did NOT (see `chatbot-routes.patch`
+  below) - still to do.
+- The one-card limits (5 messages by default, at most 8; 10 minutes, at
+  most 15) are a first guess; the two-card ones (8/20 messages, 10/30
+  minutes) are the design's.
+- The gate's `_RISK` table has no line for `chatbot_session` yet (it lives
+  in a patch on the owner's PC); an unclassified action is already treated
+  as risky, so Windows Hello is asked. The "What Jarvis can reach" row
+  comes with the Gemini adapter.
+# Projects: `jarvis_projects.py`, `projects.patch` (2026-09-28, build steps 1 and 2)
+
+The owner's decision of 2026-09-28 (`CLAUDE.md`, "Projects, like Claude's
+Projects and more"), designed in `docs/PROJECTS-DESIGN.md`. This is the
+backend of build steps 1 and 2 only. `docs/JARVIS-API.md` section 88 has
+the routes. **Not in either app yet** (step 3).
+
+## In plain words
+
+- **A project** is one place for one thing the owner is working on: a
+  coding project (an app) or a life project ("run a half marathon"). It
+  keeps a name, "how Jarvis should work on this" (up to 1,500
+  characters), up to 10 short project notes, a folder (coding only), a
+  Shareable switch (off), a work list and the goals it is linked to.
+- **The folder** must already be on "Folders Jarvis may look in", or
+  inside one of them - there is no second folder list. It is chosen on
+  the PC only.
+- **The work list** is a named list on the one scheduler (the same lists
+  as "add milk to the shopping list"). It defaults to the project's name
+  when that makes a list name.
+- **Goals** live on the continuation branch (`jarvis_goals.py`), not
+  here, so a project keeps a list of goal ids on its own side for now.
+- **Benchmarks** are named measurements. A life benchmark is a number the
+  owner logs - by a tap, or by saying "I ran 5 km" / "log 5 km run" (60.4:
+  only when a benchmark fits). Each has dated results for a chart, and
+  "better or worse than last time" when the owner said which way is
+  better. A coding benchmark keeps its command, word for word, marked
+  "not runnable yet": nothing runs until the fence (build step 6).
+- **Sensitive numbers.** Health or money benchmarks (weight, heart rate,
+  savings, spending, a currency sign...) are marked from their name and
+  unit, or by the owner, and flagged "kept on screen": never read aloud,
+  never sent anywhere. The spoken "I weighed 72 kg" answer is private.
+- **Cards.** Only one: turning a project's Shareable switch on
+  (`change_own_config`, the same card "Folders Jarvis may look in" uses).
+  Everything else is the owner writing down their own things, like a to-do
+  item - no card.
+
+## What changed
+
+- `jarvis_projects.py` - new module, shipped whole. `projects.db` in the
+  settings folder (`JARVIS_PROJECTS_DB` overrides it). No socket, no
+  model, no command run; the audit log gets ids and counts only.
+- `jarvis_quick.py` - the "log a number" sentences (`project_log`),
+  asked only after a sentence already has that shape; `projects.db` is
+  never created by asking.
+- `projects.patch` - one hunk against `jarvis_hud.py` (see the table).
+- `scripts/apply-patches.ps1`, `backend/_where.py` - `projects.patch` added
+  to `$PATCHES` (last), `jarvis_projects.py` added to `$SHIPPED`.
+- `tools/check_parity.py` - the nine routes, as `planned`.
+- `docs/ARCHITECTURE.md` §8 - the folder and a command's words are PC-only.
+
+## Test it
+
+    python3 backend/test_projects.py
+    python3 backend/test_shipped_modules.py
+    python3 backend/run_suites.py
+    python3 tools/check_parity.py
+
+## Not built yet, said plainly
+
+- Running a benchmark (build step 6), Jarvis changing code (steps 5 and 7,
+  after the 12 GB card), the project chat context and project-labelled
+  facts (step 4), the chat-history `project` column (step 4), and both
+  apps' screens (step 3).
+- The goals.db `project` column and a goal step's measure: after the
+  continuation branch merges.
+- ~~Backups do not include `projects.db` yet~~ - done 2026-09-28 by the
+  feature audit: `jarvis_backup.SOURCE_DBS` and `jarvis_data_health` both
+  include it.
+
+## Step 3 additions (2026-09-28)
+
+- `POST /api/projects/<id>/benchmarks/<bid>/unmark`: the owner's own
+  private mark comes off at once; a mark Jarvis made from the name raises
+  ONE `change_own_config` card (`unmark_card`), in the Shareable card's
+  words and shape. A new `auto_cleared` column (an older `projects.db`
+  gains it when opened); renaming or a new unit clears it.
+- Both apps' screens call every route (JARVIS-API 88.6);
+  `tools/gen_projects_cases.py` writes the contract file they share, and
+  `test_projects.py` fails when it is stale.
+- Not run on the owner's PC: tested in the dev container only, with a
+  stand-in approval gate.
+- ~~The gate's `_RISK` table has no line for `chatbot_session` yet~~ -
+  done in step 2: `chatbot.patch` gives it one, and "What Jarvis can
+  reach" has its row (see the next section).
+
+# Talking to an AI chatbot for you, step 2: Gemini's window, `jarvis_chatbot_gemini.py` (2026-09-28)
+
+Step 2 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`;
+`docs/JARVIS-API.md` section 87.4). ~~Still not usable from either app:
+no route and no app screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
+(`chatbot-routes.patch`) take any chatbot id, so this is reachable
+from both apps once it is set up; it has not been tried against the
+real gemini.google.com yet. Shipped whole, like the core.
+
+## In plain words
+
+Jarvis can now work its own Gemini window: it opens gemini.google.com in a
+browser window you can see, starts a new chat, types the question at a
+steady pace, and reads back only Gemini's answer to it. It does this
+**openly**, as you decided: nothing hides that a program is typing, and
+nothing changes how the browser looks to Google. At a captcha (a "prove you
+are a person" check), a sign-in page, or an "unusual activity" / "verify
+it's you" page, it **stops and asks you** - it never tries to get past one.
+You deal with it in the window, then press Resume.
+
+The window uses its own browser profile (a folder of its own, under your
+`.openjarvis` folder, in `chatbot\gemini-profile`). You sign in to it
+**once, by hand**, with the spare Google account used only by Jarvis -
+never your main account. Jarvis never types or keeps the password.
+
+## What to do on the PC, in order
+
+1. **Install Playwright** (the program Jarvis uses to work a browser window)
+   and its browser, once. Paste into PowerShell:
+
+   ```
+   py -3 -m pip install playwright; py -3 -m playwright install chromium
+   ```
+
+2. **Sign in once.** This opens Jarvis's Gemini window and waits. Click
+   "Sign in" in that window, sign in to the spare account, and close the
+   window when Gemini's message box shows:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py sign-in
+   ```
+
+3. **Check it works on the real site.** How Jarvis finds Gemini's message
+   box, send button and answer could not be tested against the real
+   gemini.google.com (the place this was built cannot reach it). This line
+   sends two harmless fixed questions in one new chat, "What is 2 plus 2?"
+   and "And what is 3 plus 3?", and prints PASS or FAIL for each step, and
+   which way of finding each part worked:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py check; Write-Host "The results are also saved in $env:USERPROFILE\.openjarvis\chatbot\gemini-check.txt"
+   ```
+
+   If a step says FAIL, paste the printed lines back. The fix is one table
+   (`SELECTORS`, near the top of `jarvis_chatbot_gemini.py`).
+
+`JARVIS_GEMINI_BROWSER=msedge` makes it use Microsoft Edge (already on
+Windows 11) instead of Playwright's own Chromium.
+
+## What changed
+
+- `backend/jarvis_chatbot_gemini.py` (new): the Gemini adapter - one browser
+  thread, the selector table, `status()` for every "needs you" page, the
+  sign-in helper and the self-check (`sign-in` and `check` on its command
+  line). It registers itself as `gemini_web` in the core's list.
+- `backend/jarvis_chatbot.py`: loads the adapter at the end; `AdapterInfo`
+  gains `ready` (asked by `plan()` BEFORE any card, so a card is never
+  raised for something that cannot run - "Playwright is not installed",
+  "never signed in"); `choices()` says `ready` and why not in `note`; an
+  adapter that cannot open says why in plain words instead of an error's
+  name; a captcha or sign-in page that appears while waiting for a reply
+  pauses at once instead of after the 3-minute reply timeout; `ROUTED`.
+- `backend/chatbot.patch` (new): the gate's `_RISK` line (see the table).
+- `backend/jarvis_reach.py`: a "Chatbot conversations" row - "Not set up"
+  with the reason, "Off" while no app can start one, "On" once routed.
+  `tools/gen_reach_cases.py` and both apps' `reach-cases.json` regenerated.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: shipped, and the patch
+  listed. Playwright is NOT installed by the script (it is optional, like
+  for Browser control); `backend/requirements.txt`'s note says so.
+- `THIRD-PARTY-NOTICES.txt`: Playwright for Python (Apache-2.0), with its
+  NOTICE.
+- `backend/test_chatbot_gemini.py` (new); `backend/test_chatbot.py` and
+  `backend/test_reach.py` updated.
+
+# Talking to an AI chatbot for you, the routes and both apps: `chatbot-routes.patch` (2026-09-28)
+
+Step 3 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md` sections 2
+and 6; `docs/JARVIS-API.md` section 87). ~~Still not usable: Gemini's
+adapter is not built, so every start is refused with "Gemini through its
+website is not built yet." and no card.~~ **Corrected 2026-09-28:** the
+Gemini adapter (the section above) and every later adapter are built and
+reachable through these routes once set up; none has been tried against
+its real site or service yet.
+
+## In plain words
+
+Both apps get a "Talk to a chatbot for me" card - the PC in Brain -> Work,
+the phone in Brain. You pick the chatbot, type what Jarvis should find out
+(the card says plainly that these words are sent exactly as typed), set the
+most messages and minutes (within what the version that runs allows - it
+says which: "the limited version (one graphics card)" today) and any words
+it must never send. Start asks for ONE approval card; nothing is sent
+before you say yes. While it talks you see each message, the chatbot's
+words marked "outside text", the counts, and Pause, Resume and Stop; a
+change to the limits is a new card. When it ends, the summary stays on
+screen and is never read aloud. The phone also shows "Talking to Gemini, 3
+of 5" as a quiet notification with a Stop button.
+
+## What changed
+
+- `backend/jarvis_chatbot_routes.py` (new, shipped whole): `GET
+  /api/chatbot/status`, `POST /api/chatbot/start`, `/stop` and `/limits`,
+  and `WORDS` - the sentences both apps show. It only turns HTTP into
+  `jarvis_chatbot` calls; no rule lives here. One fix the feature audit
+  asked for: a read ends a paused conversation that can no longer be
+  resumed (its task was stopped, or its hour ran out), after 10 seconds'
+  grace - the core only did that when a NEW conversation was planned, so
+  both apps showed "Paused" with a Resume that could only fail, and the
+  phone's notification stayed up.
+- `backend/chatbot-routes.patch` (new, last in the list): one `install()` block in
+  `jarvis_hud.py`, after answer-sources.patch's.
+- `backend/jarvis_chatbot.py`: its notes now point at the routes; no
+  behaviour changed.
+- `tools/gen_chatbot_cases.py` (new): the routes' real answers, and
+  `WORDS`, into `jarvis-desktop/tests/fixtures/chatbot-cases.json` and
+  `jarvis-client/.../contract/chatbot-cases.json`.
+- The desktop: `src/chatbot.js`, `brain.html`/`brain.js`/`brain.css` (the
+  card on the Work tab), `src-tauri/src/brain/chatbot.rs` (six commands,
+  the Brain's alone - start, limits and resume held on a stale link; the
+  owner's words taken out while the private lists are hidden),
+  `tests/chatbot.mjs`.
+- The phone: `net/Chatbot.kt`, `ui/screens/ChatbotPlate.kt`,
+  `service/ChatbotNotifier.kt` (and `EventService`'s Stop),
+  `JarvisRuntime`'s chatbot calls and watcher, `ChatbotTest`.
+- `tools/check_parity.py`: the four routes, `ported`.
+  `docs/ARCHITECTURE.md` §8: signing in to the chatbot's account is PC-only,
+  the ongoing notification is phone-only.
+
+## Test it
+
+```
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 backend/test_chatbot_gemini.py
+python3 backend/test_chatbot.py
+```
+
+The first runs a real, visible Chromium (under Xvfb, a pretend screen, on a
+Linux machine with none) against a fake Gemini page on 127.0.0.1: a full
+turn, a reply that pauses before it finishes, each "needs you" page, no
+navigation away, close. It skips its browser half, and says so, where
+Playwright or a browser is missing. Its first half also reads the module's
+own code and fails on any stealth, fingerprint, webdriver-hiding, proxy or
+captcha-solving code, on any headless launch, and on a click anywhere but
+the message box and the send button.
+
+## Not checked, said plainly
+
+- **Not tried against the real gemini.google.com.** Every selector is a
+  best guess from how Gemini's page is known to be built (a
+  `role="textbox"` message box, "Send message" and "Stop response"
+  buttons, `<model-response>` answers). The self-check above is the proof.
+- **Google may block it anyway.** Driving the site openly is exactly what
+  Google's terms forbid; the spare account could be closed. Jarvis will
+  not work around a block.
+- A notice laid over the page (a welcome or "what's new" box) counts as
+  "needs you": Jarvis stops rather than guess which button closes it.
+- If the send button is not found, it stops - it does not press Enter
+  instead.
+- A captcha that appears after a message went means that message counts
+  as sent; after Resume the driver carries on from the next message.
+python3 backend/test_chatbot_routes.py
+python3 tools/gen_chatbot_cases.py --check
+node jarvis-desktop/tests/chatbot.mjs
+```
+
+## Not checked, said plainly
+
+- **No real chatbot**, as before: every answer in the contract file comes
+  from `FakeChatbot` registered under Gemini's own entry (its name, host
+  and card wording) - a test double, not a claim that Gemini works.
+- **The Kotlin UI and notification are compiled only by CI.** The phone's
+  pure logic (`net/Chatbot.kt`) and `ChatbotTest` were compiled and run here
+  with a stand-alone Kotlin compiler against the real contract file; the
+  Compose plate, the notification and the runtime changes were not.
+- **No event of its own.** Both apps read the conversation again every 4
+  seconds while one is going, and on every activity event.
+- **Stop while the card is still waiting** marks the conversation to stop,
+  but the card stays on screen until it is answered or times out; approving
+  it then starts nothing (the core checks the stop first). The conversation
+  shows "Waiting for your yes" until then.
+- **Not built:** starting a conversation by saying it, task notes to a
+  running conversation, and keeping the transcript in the encrypted chat
+  history (it is in memory only, lost on a backend restart).
+
+# Talking to an AI chatbot for you: more chatbot websites, the same open way (2026-09-28)
+
+The owner's decision "the chatbot driver becomes versatile" (`CLAUDE.md`,
+2026-09-28): ChatGPT, Claude, Microsoft Copilot, Perplexity and other
+commonly used chatbot websites, each driven **openly like Gemini**, each
+with **its own spare account** used only by Jarvis. `docs/JARVIS-API.md`
+section 87.5. ~~Still not usable from either app: no route and no app
+screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
+(`chatbot-routes.patch`) take any chatbot id, so this is reachable
+from both apps once it is set up; it has not been tried against the
+real sites yet.
+
+## In plain words
+
+Jarvis can now work eight more chatbot websites the same way it works
+Gemini: a browser window you can see, a new chat, the question typed at a
+steady pace, and only the answer read back. Nothing hides that a program is
+typing, nothing changes how the browser looks to the site, and at a
+captcha, a sign-in page or an "unusual activity" / "verify you are human"
+page it **stops and asks you**. Each website has its own browser profile
+(its own folder under `.openjarvis\chatbot\`) and you sign in to each one
+**once, by hand**, with a spare account made only for Jarvis.
+
+**Worth knowing before you sign in to any of them:** every one of these
+companies' terms restricts automated use (for ChatGPT, OpenAI's terms
+forbid automatically extracting its answers; the others' terms were not
+read word for word). The spare account may be blocked or closed. Jarvis
+will not work around a block. The last four - DeepSeek, Grok, Le Chat and
+Meta AI - were picked by the studio as "other commonly used" websites; say
+if you want any of them left out. Not checked: whether Meta allows a second
+account kept only for this.
+
+The four you named, then the four others:
+
+| Website | Its file | Its spare account |
+|---|---|---|
+| ChatGPT (`chatgpt.com`) | `jarvis_chatbot_chatgpt.py` | an OpenAI account |
+| Claude (`claude.ai`) | `jarvis_chatbot_claude.py` | a Claude account |
+| Microsoft Copilot (`copilot.microsoft.com`) | `jarvis_chatbot_copilot.py` | a Microsoft account |
+| Perplexity (`www.perplexity.ai`) | `jarvis_chatbot_perplexity.py` | a Perplexity account |
+| DeepSeek (`chat.deepseek.com`) | `jarvis_chatbot_deepseek.py` | a DeepSeek account |
+| Grok (`grok.com`) | `jarvis_chatbot_grok.py` | a Grok account |
+| Le Chat by Mistral AI (`chat.mistral.ai`) | `jarvis_chatbot_lechat.py` | a Mistral account |
+| Meta AI (`www.meta.ai`) | `jarvis_chatbot_metaai.py` | a Meta account |
+
+**Perplexity's sources:** Perplexity lists the web pages its answer came
+from. Jarvis copies those links as text under the answer ("Sources listed
+by Perplexity (links not opened)") and never opens them, so a later
+comparison can say which answers came with sources.
+
+## What to do on the PC, in order (for each website you want)
+
+1. **Install Playwright once**, if you have not already for Gemini:
+
+   ```
+   py -3 -m pip install playwright; py -3 -m playwright install chromium
+   ```
+
+2. **Sign in once, by hand.** Each line opens that website's own Jarvis
+   window and waits; sign in to the spare account there, then close the
+   window when the message box shows. One line at a time - each is a whole
+   command on its own:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py sign-in
+   ```
+
+3. **Check it works on the real site.** How Jarvis finds each site's
+   message box, send button and answer could not be tried against the real
+   sites (the place this was built cannot reach them). Each line sends two
+   harmless fixed questions in one new chat, "What is 2 plus 2?" and "And
+   what is 3 plus 3?" (the second proves the conversation carries on in the
+   same chat), and prints PASS or FAIL for each step and which way of
+   finding each part worked; the results
+   are also saved in `%USERPROFILE%\.openjarvis\chatbot\<site>-check.txt`:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py check
+   ```
+
+   If a step says FAIL, paste the printed lines back. The fix is that
+   site's one table (`SELECTORS`, near the top of its file).
+
+`JARVIS_CHATGPT_BROWSER=msedge` (and the same for each site), or
+`JARVIS_CHATBOT_BROWSER=msedge` for all of them, uses Microsoft Edge
+instead of Playwright's own Chromium.
+
+## What changed
+
+- `backend/jarvis_chatbot_web.py` (new): what every website adapter shares,
+  moved out of `jarvis_chatbot_gemini.py` - the browser thread, the visible
+  window, the typing, the host lock, "the reply is finished", every "needs
+  you" page (now also Cloudflare's "verify you are human" page, hCaptcha,
+  Turnstile and Arkose checks, a sign-in address on the site itself, and
+  "Log in" as well as "Sign in"), the sign-in helper and the self-check. At
+  its end it loads every site file (`SITE_MODULES`); one that is broken is
+  recorded in `LOAD_ERRORS` and does not take the others down.
+- `backend/jarvis_chatbot_gemini.py`: now a thin site file (its table,
+  hosts and words); it behaves as before.
+- `backend/jarvis_chatbot_chatgpt.py`, `_claude.py`, `_copilot.py`,
+  `_perplexity.py`, `_deepseek.py`, `_grok.py`, `_lechat.py`, `_metaai.py`
+  (new): one thin site file each, registered as `chatgpt_web`,
+  `claude_web`, `copilot_web`, `perplexity_web`, `deepseek_web`,
+  `grok_web`, `lechat_web`, `metaai_web`.
+- `backend/jarvis_chatbot.py`: its last lines import `jarvis_chatbot_web`
+  instead of `jarvis_chatbot_gemini` (the web module now loads Gemini, with
+  the others). Nothing else in it changed.
+- `backend/jarvis_reach.py`: the "Chatbot conversations" row says, when
+  several websites are listed and none is signed in, that each is signed
+  in on its own, instead of letting the first one's words speak for all.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: the nine new files
+  shipped.
+- `backend/test_chatbot_sites.py` (new); `backend/test_chatbot_gemini.py`
+  (its code checks now read the site file AND the shared base);
+  `backend/test_reach.py`.
+
+# Talking to an AI chatbot for you: API keys and a second AI on this PC, `jarvis_chatbot_api.py` and `jarvis_chatbot_local.py` (2026-09-28)
+
+Owner's decision (CLAUDE.md, "The chatbot driver becomes versatile"): one
+adapter speaking the common OpenAI-style API, so a key reaches ChatGPT,
+DeepSeek, Mistral, Grok, OpenRouter and similar; and a second AI on the
+owner's own PC (`docs/JARVIS-API.md` 87.4.1 and 87.4.2). ~~Still not
+usable from either app - no route or screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
+(`chatbot-routes.patch`) take any chatbot id, so this is reachable
+from both apps once it is set up; it has not been tried against the
+real services or a real Ollama yet.
+
+## In plain words
+
+- **With a key**, Jarvis can hold its one-card conversation with ChatGPT
+  (OpenAI), DeepSeek, Mistral, Grok (xAI), OpenRouter or Groq through each
+  company's official API instead of a website. Each is its own choice, so
+  the card names the exact service, its address and its model. The key is
+  kept in Windows Credential Manager (like the web-search keys), sent only
+  to that one company's address, never written to a log. Each message costs
+  a little on that account; Jarvis counts the "tokens" (word-pieces) the
+  company reports and shows them, ~~but **there is no money limit yet** - the
+  message limit on the card is what limits the cost~~ - **changed
+  2026-09-28:** each service now needs a monthly money limit first ("A money
+  limit for chatbots with a key", below).
+- **A second AI on this PC** is another model in Ollama on this PC. Nothing
+  leaves the PC. With one graphics card, the only model allowed is the one
+  Jarvis already uses (the 8 GB card has no room for a second), so it is a
+  fresh look from the same model, and the card says so; any other model
+  says "needs your second graphics card". With both cards, any model the PC
+  has (up to 9 GiB) runs on the second card.
+
+## What to do on the PC, in order
+
+1. Run `apply-patches.ps1` as usual (it copies both files).
+2. **To use a service with a key:** make a key on the company's site
+   (OpenAI: https://platform.openai.com/api-keys), then save it with one
+   line in PowerShell (the key is pasted at a prompt and does not show):
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py key openai
+   ```
+
+   (`deepseek`, `mistral`, `xai`, `openrouter` or `groq` for the others;
+   `py -3 jarvis_chatbot_api.py status` lists which are saved.)
+3. **To change a service's model** (optional), add a line under `[chatbot]`
+   in `jarvis-framework.toml`, e.g. `openai_api_model = "gpt-4.1-mini"`,
+   and restart Jarvis.
+4. **To use a second AI on this PC:** see the models the PC has, then add
+   `local_model = "<one of them>"` under `[chatbot]` and restart Jarvis:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_local.py models
+   ```
+
+## What changed
+
+- `backend/jarvis_chatbot_api.py` (new): six presets, each its own chatbot
+  id (`openai_api`, `deepseek_api`, `mistral_api`, `xai_api`,
+  `openrouter_api`, `groq_api`); keys through `jarvis_token_store` (the
+  web-search keys' store); the host pin, redirect refusal, plain-words
+  errors, one capped retry after a 429; token counts; its command line.
+- `backend/jarvis_chatbot_local.py` (new): `local_ai`; loopback only, cloud
+  models refused, the one-card/two-card rule from the core's own
+  `choose_tier()`, installed-models check, waits while the owner chats on
+  one card; its command line.
+- `backend/jarvis_chatbot.py` (the core) - small changes, listed exactly:
+  `AdapterInfo.kind` ("website", "api", "local", default "website") and
+  `choices()` returns it; `describe()` mentions captchas only for websites
+  and says "is sent" instead of "leaves this PC" for the local AI;
+  `Session.usage` (an adapter's own counts, read after each reply and at
+  the end) and `session_view()["usage"]`; an adapter error raised while
+  sending or reading shows its `owner_words` (as `open()` already did);
+  the two modules are loaded at the end.
+- `backend/jarvis_reach.py`: a new row, "Chatbot conversations with a key
+  (API)" (`chatbot_api`), listing the hosts with a key saved; the website
+  row now lists websites only. No row for the local AI. Both apps'
+  `reach-cases.json` regenerated (`tools/gen_reach_cases.py`).
+- `backend/rebuilt/jarvis-framework.toml`: commented example lines under
+  `[chatbot]` (nothing switched on).
+- `docs/ARCHITECTURE.md` section 4 (a new way out, one host per service),
+  section 8 and section 11; `docs/JARVIS-API.md` section 87;
+  `docs/CHATBOT-DRIVER-DESIGN.md`'s status line.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: both shipped. No new
+  dependency (standard library only).
+
+## Test it
+
+```
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 backend/test_chatbot_sites.py
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 backend/test_chatbot_gemini.py
+```
+
+`test_chatbot_sites.py` builds ONE generic fake chat page per website from
+that website's own `SELECTORS` table, serves it on 127.0.0.1, and runs the
+site's adapter in a real, visible Chromium (under Xvfb on a Linux machine
+with no screen): a full turn, a reply that pauses before it finishes, the
+new chat's own address, every "needs you" page, another host refused,
+close from another thread, the sign-in helper, the self-check, and
+Perplexity's sources through the whole driver. Without a browser it still
+reads the shared base and every site file for any stealth, fingerprint,
+webdriver-hiding, proxy or captcha-solving code, checks that only the base
+drives the browser (one visible launch, one host-checked address, clicks
+only on the message box and the send button), and that every send selector
+names "send" or "submit". Pass site names to run just those
+(`... test_chatbot_sites.py chatgpt perplexity`).
+
+## Not checked, said plainly
+
+- **Not tried against any real site.** Every selector is a best guess from
+  how each site is generally known to be built; the fake page proves the
+  adapter and its table fit together, not that the table matches the real
+  page. The self-checks above are the proof.
+- **Any of these sites may block it anyway**, and its spare account may be
+  closed. Jarvis will not work around a block.
+- A cookie box or "what's new" box over the page counts as "needs you":
+  Jarvis stops rather than guess which button closes it (some of these
+  sites show a cookie box in some countries).
+- If a site's send button is not found, it stops - it does not press Enter
+  instead.
+python3 backend/test_chatbot_api.py
+python3 backend/test_chatbot_local.py
+```
+
+The first runs a fake OpenAI-style server on 127.0.0.1 (every preset
+pointed at it) and a second one a redirect points to: the key goes only to
+the pinned host, never into a log line (logging captured), a redirect is
+refused, no key means not ready, 429/5xx/401/timeouts end in plain words
+with at most one retry, token counts are recorded, and a whole core session
+through the adapter never sends a planted secret or saved fact. The second
+runs a fake Ollama: cloud names refused, loopback only, one- and two-card
+readiness, a whole session.
+
+## Not checked, said plainly
+
+- **No real service was called.** The addresses of OpenAI, Mistral,
+  OpenRouter and Groq were read from each company's own code on GitHub;
+  **DeepSeek's address, and xAI's `/v1/chat/completions` path, are from
+  memory** (their documentation was blocked from the container). The first
+  real conversation with a saved key is the proof.
+- **The default models were not checked against any price list**, and
+  model names change; a 404 says so and how to change the model.
+- **No money cap.** Token counts are shown; the design's cap is not built.
+- **One card, local:** the rule "only the everyday model" comes from
+  MODEL-TOPOLOGY's numbers (the 8 GB card is full at 16K), not from a
+  measurement. The two-card swap time is not measured either.
+
+# Talking to an AI chatbot for you: audit fixes (2026-09-28)
+
+Five findings from the chatbot driver's audit, each checked against the
+source first, and fixed. No new feature; nothing the owner must switch on.
+
+## In plain words
+
+- **A website window could read the answer from a different chat.** The
+  window only checked which chat it was in AFTER the first answer had been
+  read. If you clicked an old chat in the window while that first answer
+  was still coming, Jarvis took the old chat's last answer and typed its
+  follow-ups there. Now the chat is fixed the moment the first message is
+  sent: Jarvis accepts exactly one change of address - the site giving
+  that new chat its own address - and reads an answer only while the
+  window shows that chat. Anything else pauses and asks you.
+- **The self-check asks two questions now** ("What is 2 plus 2?", then
+  "And what is 3 plus 3?" in the same chat). A wrong guess about the
+  address a site gives a new chat used to show only on the second message
+  of a real conversation; now the check FAILs and names the line to fix.
+- **"Signed in" means the sign-in finished.** Opening the sign-in window
+  made the profile folder, and the folder alone counted as signed in. Now
+  the sign-in helper writes a small note (`jarvis-signed-in.txt`, the date
+  and nothing else) only when it sees the site's message box. **If you
+  signed in to Gemini (or any site) before this change, run its sign-in
+  line once more**; if it is still signed in, it finishes as soon as the
+  message box shows:
+
+  ```
+  cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py sign-in
+  ```
+
+- **The second AI on your PC, on one graphics card,** waits while you chat
+  with Jarvis. That wait used to count against the driver's 3-minute limit
+  for an answer, so a long chat of yours plus a slow answer ended with a
+  wrong "did not answer within 180 seconds". The wait no longer counts
+  (the conversation's own minutes still do, as its card says), Jarvis says
+  it is waiting for your chat, and Stop now closes the connection to
+  Ollama, so Ollama stops that answer and the graphics card is free.
+- **Wording.** The resume card no longer says a message "leaves this PC"
+  for the second AI on this PC; its card no longer reads "A second AI on
+  this PC (this PC)"; and "What Jarvis can reach" gives the real reason a
+  key-based chatbot is not set up (a bad model line, or Windows Credential
+  Manager - the password store - cannot be read) instead of always "no key
+  is saved". The docs and every module's opening lines no longer say the
+  chatbots are unreachable from the apps.
+
+## What changed
+
+- `jarvis_chatbot_web.py`: the chat is locked at the first send;
+  `_read_here` reads only while `status()` is ok; the self-check's second
+  question and its plain-words hint for a wrong `chat_address`;
+  `SIGNED_IN_MARKER`, `mark_signed_in()`, and `ready()` checking it (the
+  new `Site.sign_in_unfinished` words).
+- `jarvis_chatbot_local.py`: `waiting_for_owner()`; `close()` closes the
+  request's connection (`_Line`, `_LineHandler`).
+- `jarvis_chatbot.py`: the reply wait skips time an adapter says it is
+  waiting for the owner (`_held_for_owner`); `RESUME_HEADER` and the card's
+  "Chatbot:" line word the local kind correctly.
+- `jarvis_reach.py`: the true reason in the "with a key (API)" row.
+- Every site file, `jarvis_chatbot_api.py`, `jarvis_chatbot_local.py`:
+  opening lines; `docs/ARCHITECTURE.md` sections 4 and 8,
+  `docs/CHATBOT-DRIVER-DESIGN.md`, `docs/JARVIS-API.md` 87.4 and 87.5.
+
+## Test it
+
+```
+cd backend; python3 test_chatbot_local.py; python3 test_reach.py; python3 test_chatbot_gemini.py; python3 test_chatbot_sites.py
+```
+
+## Not checked, said plainly
+
+- **Nothing here was tried against a real site or a real Ollama.** The
+  fake pages prove the logic; Ollama stopping an answer when its
+  connection closes is how its server is written to behave, not something
+  measured here.
+- **One gap stays:** if a site has not yet given the new chat its own
+  address when you click an old chat whose address has the same shape,
+  that one move is still accepted as "the new chat's address". It needs
+  both a slow site and a click in the window during the first answer.
+  Reading your own message back off the page would close it, but the
+  selectors for that are unproven, so it was not added.
+
+# Looking at the screen, steps 1 and 2: `jarvis_front.py` and `jarvis_screen.py` (2026-09-28)
+
+The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the
+owner's screen"), designed in `docs/SCREEN-DESIGN.md`. This is build steps 1
+and 2 only: the rules, tested here. `docs/JARVIS-API.md` section 62 has the
+details. **Not in either app yet, and not reachable from anything** - no
+route, no key, no badge, no phone gesture.
+
+## In plain words
+
+- **"Look at this"** is one look when the owner asks. What was read is kept
+  in memory for 2 minutes of follow-up questions, then thrown away.
+- **"Watch with me"** is a session the owner starts and stops: 30 minutes
+  by default, 2 hours at most, a warning 2 minutes before the end, "watch
+  20 more minutes" to extend. It ends on Stop, at the time, when Windows
+  locks, when the PC sleeps, and on Stop everything. No card to start it -
+  the owner's own act, like a focus session.
+- **It pauses** on a password box, on anything on the owner's **Never look
+  at** list (it starts with password managers and Windows sign-in), on a
+  window that asks not to be captured, on Jarvis's own windows, the lock
+  screen and admin prompts, and on a web page whose site cannot be read.
+  "Can't tell" is a pause. The rules are checked just before the picture
+  and again just after; if either fails, the picture is thrown away unread.
+- **Adding** to Never look at is instant. **Removing** from it is one
+  approval card (`change_own_config`), because it lets Jarvis see more.
+- **What the model gets:** at most 4,500 characters read from the picture
+  and 3,000 from the window's own text (password boxes skipped), labelled
+  OUTSIDE TEXT exactly as the words in a picture are (section 36).
+- **What the apps will see:** on/off, time left, and a pause reason in
+  fixed words ("a password box") - never an app, a site or a word from the
+  screen.
+- **Rule 1:** the router keeps a turn carrying the screen's words on this
+  PC (`jarvis_router.choose(has_screen=True)`, gate `screen`).
+- **Read aloud:** `read_screen` joins the read-aloud list in both apps (the
+  owner's answer of 2026-09-28); every earlier rule still comes first.
+
+## What changed
+
+- `jarvis_front.py` - new, shipped whole: Focus's front-window reader
+  (`windows_probe`, `_address_box_value`, `_windows_front`, the host
+  parsing), moved word for word out of `jarvis_focus.py`, which imports it
+  back under the same names. Focus behaves exactly as before.
+- `jarvis_screen.py` - new, shipped whole: the session states, the pause
+  rules, the caps and label, the Never look at list
+  (`screen-never-look.json` in the settings folder), Stop everything
+  (`screen_watch`). Every Windows reader is injected; none is built.
+- `rebuilt/jarvis_router.py` - `choose()` takes `has_screen`.
+- `jarvis_agent.py` - `STEP_READS`: a `step` event may carry
+  `read_screen` by name (nothing sends it yet).
+- `selftest.py` - a preflight `screen` check that says "not built on this
+  PC yet" (a skip).
+- `tools/gen_private_aloud_cases.py` and both apps' `READ_ALOUD_TOOLS` -
+  `read_screen` added; the shared table regenerated.
+- `scripts/apply-patches.ps1`, `backend/_where.py` - both modules added to
+  `$SHIPPED` (`jarvis_front.py` before `jarvis_focus.py`).
+
+## Test it
+
+    python3 backend/test_screen.py
+    python3 backend/test_front.py
+    python3 backend/test_focus.py
+    python3 backend/test_router_private_terms.py
+    python3 backend/test_private_aloud.py
+    python3 backend/run_suites.py
+
+## Not built yet, said plainly
+
+- **The chat route does not read `screen_text` yet.** The line in the
+  owner's `jarvis_hud.py` that calls `jarvis_router.choose(...,
+  has_image=...)` is the owner's own text, not in any patch here, so a
+  patch adding `has_screen=` would have to guess its surroundings. It is
+  the next step, made against the real file; until then no app sends a
+  `screen_text` part.
+- The Windows readers (password box, capture protection, a window's own
+  text) - step 3, on the owner's PC. Until then `jarvis_screen.ENGINE` is
+  not built and nothing can start.
+- Both apps (steps 4, 5, 7 and 8) and the second card's picture route
+  (step 6).
+- Not run on the owner's PC: tested in the dev container only.
+
+# Ask several and compare, `jarvis_chatbot_compare.py` (2026-09-28)
+
+Owner's decision (CLAUDE.md, "The chatbot driver becomes versatile", point
+4): "compare: ask several AIs the same question, one card listing every AI
+it will ask, one summary of agreements, disagreements and sources." Built on
+the backend and in both apps (`docs/JARVIS-API.md` 87.7; the design and the
+proposed numbers are in `docs/CHATBOT-DRIVER-DESIGN.md`, "Ask several and
+compare"). Like the rest of the chatbot driver, **not yet tried against the
+real sites**.
+
+## In plain words
+
+- Tick "Ask several and compare" in "Talk to a chatbot for me", pick two or
+  more chatbots and type the goal once. **One approval card** lists every
+  chatbot Jarvis would ask (name and address), the goal word for word, and
+  the limits for each chatbot and in all.
+- On a yes, Jarvis talks to each chatbot **one after another**, each in its
+  own ordinary conversation - the same rules as a single conversation:
+  every message checked just before it is sent, your never-send words,
+  nothing private ever in the conversation, and no chatbot ever sees
+  another's answers.
+- If one chatbot cannot go on (an error, a captcha, a sign-in page, a
+  question about you), Jarvis **leaves that one out** and carries on with
+  the others. It never solves or skips a captcha.
+- At the end, Jarvis's own model on the PC writes **one summary**: where they
+  agree, where they disagree and who said what, the sources each gave (not
+  checked by Jarvis), what is still open, and who dropped out and why. It is
+  outside text: never learned from, never read aloud.
+- Pause, Resume and Stop act on the whole comparison. Stop everything stops
+  it too.
+- **How many chatbots (proposed - you can change them):** 2 to 3 with one
+  graphics card, 2 to 4 with two.
+
+## What to do on the PC
+
+Run `apply-patches.ps1` as usual - it copies the new file. There is no new
+patch: `chatbot-routes.patch` already installs the routes, and
+`jarvis_chatbot.py` loads the new file. Every chatbot you want to compare
+must already be set up on its own (signed in, or its key saved - the
+sections above).
+
+## What changed
+
+- `backend/jarvis_chatbot_compare.py` (new): plan, the one card, the loop
+  (one ordinary `jarvis_chatbot.run()` per chatbot), leaving out a chatbot
+  that cannot go on, Pause/Resume as ONE task (`chatbot_compare`), Stop and
+  Stop everything, the one summary, the view both apps read.
+- `backend/jarvis_chatbot.py` (the core) - small changes, listed exactly:
+  `Session.compare` (the comparison a conversation belongs to); such a
+  conversation writes no summary of its own; `view()`'s "latest
+  conversation" is never one of a comparison's; `OTHER_BUSY` (a single
+  conversation cannot start while a comparison is going); the new file is
+  loaded at the end.
+- `backend/jarvis_chatbot_routes.py`: `POST /api/chatbot/compare/start` and
+  `/compare/stop`; `GET /api/chatbot/status` carries `compare` (and
+  `?compare=`) and `tier.compare_min` / `compare_max`; `/api/chatbot/stop`
+  with one of a comparison's conversations stops the whole comparison;
+  `WORDS` gains the compare sentences both apps show.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: the new file shipped.
+- `tools/gen_chatbot_cases.py`: `compare_*` cases in both apps' contract
+  file.
+
+## Test it
+
+```
+python3 backend/test_chatbot_compare.py
+python3 tools/gen_chatbot_cases.py --check
+```
+
+With stand-in chatbots, a stand-in model and a stand-in card: the numbers
+per version; the one card lists every chatbot and the goal word for word; a
+"no" opens nothing; each driver sees only its own chatbot's words; the last
+check and the never-send words on every chatbot; one failing (an error, a
+captcha, a question about you) leaves the others going; Stop, the task
+Stop, Stop everything and a conversation's own Stop all stop everything;
+Pause and Resume (one card) of the whole; the summary names who disagrees
+and drops names that were not asked; the routes.
+
+## Not checked, said plainly
+
+- **Not tried against any real chatbot**, and the summary's quality with the
+  real local model on real answers is not measured.
+- The numbers (3 on one card, 4 on two) are confirmed by the owner (2026-09-28); the times are not measured.
+- A comparison is kept in memory only: a backend restart loses it.
+
+
+# A money limit for chatbots with a key, `jarvis_chatbot_api.py` (2026-09-28)
+
+Owner's decision (CLAUDE.md, "A money limit comes before API chatbots are
+used for real"): "a monthly amount per service, set on the PC; Jarvis stops
+that service when it is reached, and the approval card shows how much is
+left. Prices change, so the amount is an estimate from a price list the
+owner can see and correct, and the card says 'about'." Built on the
+backend and shown in both apps (`docs/JARVIS-API.md` 87.4.1). Like the rest
+of the chatbot driver, **not yet tried against the real services**.
+
+## In plain words
+
+- **Each service with a key (OpenAI, DeepSeek, Mistral, xAI, OpenRouter,
+  Groq) now needs a monthly money limit before Jarvis uses it.** Until you
+  set one, that service shows "No monthly money limit is set ..." in both
+  apps and a conversation with it cannot start. If you already saved a key,
+  this is the one extra step.
+- **Jarvis estimates what each message costs** from the word-pieces
+  ("tokens") the company reports and a price list. It counts per calendar
+  month and starts again on the 1st.
+- **It stops before going over**: once this month's estimate reaches your
+  limit, that service is not offered; and before every message Jarvis
+  checks that the most that message could cost still fits in what is left.
+  If it does not, the conversation ends there and says so. In "Ask several
+  and compare", that one chatbot drops out and the others carry on.
+- **The approval card says how much is left**, "about", e.g. "About $4.55
+  of $5.00 left this month for OpenAI (prices are estimates you can correct
+  on the PC)." Both apps show the same line under that service, and a
+  conversation's "Used so far" line adds "about $0.03".
+- **The prices Jarvis starts with are NOT checked.** They were written from
+  memory on 2026-09-28, because no company's price page could be opened
+  while this was built. Please compare each one with the company's price
+  page and correct it (below). Until then, the money figures may be wrong.
+- **It is an estimate, so a month can end slightly over your limit** - for
+  example if a price is wrong, or one answer is much longer than usual
+  ("thinking" models are billed for their hidden reasoning too). For a hard
+  stop, also set a spending limit on the company's own website if it offers
+  one. (Updated the same day: Jarvis now also asks most services to cap
+  each answer's length - see "The money limit becomes a hard stop" below.)
+- **Limits and prices are set on the PC only**, in PowerShell, the same
+  place keys are added. The phone and the desktop app can only show them.
+  Raising a limit lets more money be spent, so it is kept where only a
+  person at the PC can do it.
+
+## What to do on the PC, in order
+
+1. Run `apply-patches.ps1` as usual (it copies the changed files).
+2. **Set a monthly limit for each service you use** - this example is $5 a
+   month for OpenAI (use `deepseek`, `mistral`, `xai`, `openrouter` or
+   `groq` for the others, and your own amount):
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py limit openai 5
+   ```
+
+3. **Look at the price list and this month's spending:**
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py spent
+   ```
+
+   Every price marked "UNVERIFIED" is one Jarvis started with. Open the
+   page it names and check it.
+4. **Correct a price** if it is wrong - dollars per million word-pieces
+   IN first, then OUT (the price pages usually say "per 1M tokens", input
+   and output). This example sets OpenAI's to $0.25 in and $2.00 out:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py price openai 0.25 2.00
+   ```
+
+   `py -3 jarvis_chatbot_api.py price openai default` goes back to the
+   price Jarvis started with. A model you chose yourself with a
+   `<service>_model` line has no price at all until you set one this way.
+5. To remove a limit (the service is then not used):
+   `cd "<your backend folder>"; py -3 jarvis_chatbot_api.py limit openai none`
+
+The numbers are kept in `chatbot\api-money.json` inside Jarvis's settings
+folder (`spent` prints the full path). It holds numbers only - never a key,
+never a word of a conversation. Deleting it forgets this month's spending
+AND every limit and price you set.
+
+## What changed
+
+- `backend/jarvis_chatbot_api.py`: the money limit - the price list
+  (`DEFAULT_PRICES`, every one UNVERIFIED, with each company's price page),
+  the monthly count (`record_spend`, the file), `money_problem` (no limit,
+  no price, limit reached, the next message's worst case), `money_view`
+  (what the card and both apps show), `before_send` on the adapter, the
+  session's `dollars` and `cost`, and the command line's `limit`, `price`
+  and `spent`. A service with a key but no limit is no longer ready; the
+  no-key line now mentions the limit as the next step. OpenRouter's own
+  reported cost is counted when it sends one.
+- `backend/jarvis_chatbot.py` (the core) - small changes, listed exactly:
+  `AdapterInfo.money` and `money_of()`; `choices()` carries `money` for an
+  API service with a limit; `describe()` adds the money line; `run()` asks
+  the adapter's optional `before_send()` right before every message and
+  ends with `money_limit` when it says no (one that fails is a no).
+- `backend/jarvis_chatbot_compare.py`: the one card shows each API
+  service's money line, and says its money limit can make it drop out.
+- `backend/jarvis_chatbot_routes.py`: `WORDS` gains `money_left` and
+  `money_pc_only`; `usage_line` gains ", about {cost}".
+- `backend/jarvis_reach.py`: "Chatbot conversations with a key (API)" says
+  "no monthly money limit is set" for such services, and its "on" line
+  says it stops at the limit.
+- Both apps: the money line under each API service in the chooser (and
+  "Limits and prices are set on the PC only"), and "about $0.03" on the
+  "Used so far" line. Desktop `src/chatbot.js`, `src/brain.js`,
+  `src/brain.html`; phone `net/Chatbot.kt`, `ui/screens/ChatbotPlate.kt`.
+  No Rust change (the status passes through as it is).
+- `tools/gen_chatbot_cases.py`: `money_reached`, `start_money_reached` and
+  `start_no_limit` cases, and `money` / `cost` in the long-list and usage
+  cases; `tools/gen_reach_cases.py` regenerated.
+
+## Test it
+
+```
+python3 backend/test_chatbot_api.py
+python3 backend/test_reach.py
+python3 tools/gen_chatbot_cases.py --check
+node jarvis-desktop/tests/chatbot.mjs
+```
+
+Against a fake OpenAI-style server on 127.0.0.1: no limit = not ready and
+no card; two answers counted into the month (tokens, requests, dollars) and
+shown as "about $0.90"; the month rolls over on the 1st and the "wait until"
+date moves; the limit reached refuses before any card, raising it on the
+command line lets it run again, lowering it stops it; the worst case of the
+next message stops a conversation after one message, and stops one with
+too little left before the goal is even sent (the card warns first);
+OpenRouter's own cost counted, another service's ignored; an answer with no
+counts estimated from its length; price correction and "default"; bad
+limits and prices refused; `spent` marks every default UNVERIFIED and never
+prints the key; a model with no price refused until one is set; an
+unreadable money file stops everything and is left untouched; the money file
+never holds the key, the goal or a reply; in a comparison the API chatbot
+near its limit drops out after one message and the other carries on.
+
+## Not checked, said plainly
+
+- **Every default price** (in `DEFAULT_PRICES` and `docs/JARVIS-API.md`
+  60.4.1). None could be checked; `grok-4.6` had no known price at all and
+  uses Grok 4's as a cautious guess. The price-page addresses are from
+  memory too.
+- **Whether each service reports `usage` the way the code reads it** (all
+  six are OpenAI-style, which does), and **whether OpenRouter sends
+  `usage.cost`** without being asked - its documentation describes a
+  request switch for it that Jarvis does not send (not checked, so not
+  added); without it, OpenRouter's answers are estimated like the others.
+- Not tried against any real service, like the rest of the API adapters.
+
+# The money limit becomes a hard stop: each answer's length is capped (2026-09-28)
+
+Owner's decision (CLAUDE.md, "Built 2026-09-28; the owner then chose to
+make it a hard stop too"): "Jarvis also asks each service to cap how long
+an answer can be, so one long answer cannot carry a month past the limit.
+Each service names that setting differently, so each one's own
+documentation is checked before it is used." Built on the backend and
+shown in both apps (`docs/JARVIS-API.md` 87.4.1). **Not yet tried against
+the real services.**
+
+## In plain words
+
+- **Every message now asks the service to keep its answer short enough to
+  fit in what is left of your monthly limit.** The most is 8,000
+  word-pieces (tokens) a message; as the month's spending grows, the cap
+  gets smaller, so the service itself stops writing - and charging -
+  before your limit would be passed.
+- **When so little is left that not even a short answer fits** (256
+  word-pieces), Jarvis does not send the message, with the same plain
+  words as before ("could cost up to about ..., which would pass the ...
+  you set").
+- **An answer that was cut short says so**, under it, in both apps:
+  "Jarvis asked for a short answer so it stays within your limit; the rest
+  was cut off."
+- **Each company calls this setting something different, so each name was
+  checked in that company's own code** (their documentation websites could
+  not be opened from where this was built):
+  - OpenAI: `max_completion_tokens` (openai/openai-python). OpenAI's own
+    words say it **includes the hidden "thinking"**, so for OpenAI the cap
+    really does bound the whole bill.
+  - Groq: `max_completion_tokens` (groq/groq-python).
+  - OpenRouter: `max_completion_tokens` (OpenRouterTeam/typescript-sdk).
+  - Mistral: `max_tokens` (mistralai/client-python).
+  - xAI (Grok): `max_tokens` - taken from **xAI's own client program**
+    (xai-org/grok-build), not from its published API reference, which
+    could not be opened. Very likely right, but not from the reference.
+  - For Groq, OpenRouter, Mistral and xAI, their code **does not say
+    whether hidden "thinking" counts inside the cap**. So Jarvis also keeps
+    room for 8,000 word-pieces of thinking when it works out the cap. That
+    room is a guess: very long hidden thinking could still carry a month a
+    little over.
+- **DeepSeek: no cap is sent.** Its setting's name could not be confirmed
+  (its documentation could not be opened, and it has no program on GitHub
+  for this API), and guessing a name was ruled out. So DeepSeek keeps only
+  the old check: before each message, the longest possible answer (8,000
+  word-pieces) plus 8,000 for thinking must fit in what is left. Its card
+  and `spent` say this plainly.
+
+## What to do on the PC
+
+1. Run `apply-patches.ps1` as usual (it copies the changed files).
+2. Nothing else. To see, per service, which setting caps its answers and
+   what happens to hidden thinking:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py spent
+   ```
+
+## What changed
+
+- `backend/jarvis_chatbot_api.py`: each preset names its cap field
+  (`cap_field`), where it was checked (`cap_source`) and whether hidden
+  reasoning is inside it (`reasoning`); `reply_cap` works out the cap (the
+  smaller of `MOST_REPLY_TOKENS`, 8,000, and what the rest of the month
+  pays for, less `REASONING_ROOM`, 8,000, where reasoning is not said to be
+  inside; refused below `LEAST_REPLY_TOKENS`, 256); `money_check` returns
+  the problem and the cap (`money_problem` still returns the words);
+  `send()` checks again and puts the cap in the request; an answer with
+  `finish_reason` "length" (with a cap sent) is marked cut off
+  (`cut_off()`), and one cut off before any words ends with plain words
+  (`CUT_OFF_EMPTY`); the card's note says whether Jarvis asks that service
+  for short answers; `spent` says per service how the limit is kept
+  (`cap_words`). `WORST_REPLY_TOKENS` stays as the old name for
+  `MOST_REPLY_TOKENS`.
+- `backend/jarvis_chatbot.py` (the core) - small, listed exactly: an
+  adapter's optional `cut_off()`, read after each reply (`_cut_off`); a
+  chatbot turn it says yes for gets `"cut_off": true` in the transcript.
+- `backend/jarvis_chatbot_routes.py`: `WORDS` gains `cut_off`.
+- `backend/jarvis_reach.py`: the "Chatbot conversations with a key" line
+  adds "and asks each service it can to keep every answer short enough to
+  stay within it".
+- Both apps: `cut_off` read from each chatbot turn, and `WORDS.cut_off`
+  shown under it. Desktop `src/chatbot.js`, `src/brain.js`; phone
+  `net/Chatbot.kt`, `ui/screens/ChatbotPlate.kt`. No Rust change.
+- `tools/gen_chatbot_cases.py`: a `cut_off` case; both fixtures and
+  `tools/gen_reach_cases.py`'s regenerated.
+
+## Test it
+
+```
+python3 backend/test_chatbot_api.py
+python3 backend/test_chatbot.py
+python3 backend/test_chatbot_routes.py
+python3 backend/test_chatbot_compare.py
+python3 backend/test_reach.py
+python3 tools/gen_chatbot_cases.py --check
+node jarvis-desktop/tests/chatbot.mjs
+```
+
+The fake OpenAI-style server now writes no more than the cap a request
+carries, like a real service. Proved: each service sends its own field and
+no other (DeepSeek none); the cap is 8,000 with plenty left and shrinks
+message by message as spending grows (8,000, then about 7,000, 4,000,
+1,000), the month ends at or under the limit, and the next message is
+refused in the old words; too little left refuses before the goal is sent,
+and the card warns; the arithmetic of `reply_cap` for OpenAI (reasoning
+inside) and Groq (room kept); a "length" answer is marked cut off, the next
+whole one is not, and a "length" from DeepSeek (no cap sent) gets no note;
+a cap used up before any words ends plainly; DeepSeek is still refused by
+the worst-case check when it may not fit, and sends no cap field when it
+does; the card and `spent` say how each service is guarded; the key is in
+no log line, output, session view or the money file.
+
+## Not checked, said plainly
+
+- **None of the field names was read in a company's published API
+  reference** - every documentation site was blocked from the build
+  container. Each comes from that company's own code on GitHub; xAI's from
+  its own client program rather than an SDK for this API.
+- **Whether hidden reasoning counts inside the cap** for Groq, OpenRouter,
+  Mistral and xAI: not stated in their code. The 8,000 of room is a guess.
+- **DeepSeek's field**: not confirmed, so not sent.
+- **One real-world side effect to watch:** on OpenAI, hidden reasoning
+  counts inside the cap, so a "thinking" model (the default `gpt-5-mini`
+  is one) could spend much of a small cap thinking and return a short or
+  empty answer near the end of the month. An empty one ends the
+  conversation with plain words.
+- Not tried against any real service.
+
+# Jarvis Live: talking back and forth, `jarvis_live.py` (2026-09-28)
+
+Owner's decision (CLAUDE.md, "Jarvis Live") and answers, designed in
+`docs/LIVE-DESIGN.md` (which lists what was built and what changed from the
+design). Built on the backend and in both apps (`docs/JARVIS-API.md` section
+63). **Nothing here has run on your PC or phone yet.**
+
+## In plain words
+
+- Press **Live** (the Jarvis bar's button, the tray row, or Home -> Live on
+  the phone), or say "Hey Jarvis, let's talk". From then on you just talk:
+  no "Hey Jarvis" before each sentence. Every sentence is still checked to
+  be your voice on the PC before any words are made of it.
+- It ends when you press End Live, say "Okay Jarvis, that's all for now",
+  after 90 quiet seconds, at the time limit (30 minutes; "give me twenty
+  more minutes" adds time), or on Stop everything. The sign ("Jarvis Live ·
+  24 min left") is on screen the whole time. After a crisis answer it gets
+  at least 30 more minutes and does not warn about time.
+- Cards still need a tap: while a card raised during Live waits, Jarvis
+  stops listening.
+- **It needs your voice trained first** (Settings, then Voice on the PC;
+  Settings, then Train my voice on the phone), and the better voice model
+  installed - otherwise it says so and does not start.
+- **The camera is built but switched off**, and stays hidden, until the
+  12 GB card is in and passes the photo test below.
+
+## What to do on the PC
+
+Run `apply-patches.ps1` as usual. It copies `jarvis_live.py` and
+`jarvis_live_photo_test.py` and applies `live.patch` (last in the list),
+which installs `/api/voice/live`. Nothing to switch on.
+
+Later, once the 12 GB card is in and running the Pictures lane, run the photo
+test - one line in PowerShell (it needs the 30 test photos in
+`%USERPROFILE%\.openjarvis\live\photo-test-photos`; the crowd photo must be a
+licensed stock photo):
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_live_photo_test.py; Write-Host "The results are in $env:USERPROFILE\.openjarvis\live\photo-test (the newest folder: results.txt)"
+```
+
+It passes at 24 of 30 photos right, a median answer of 3 seconds or less, the
+slowest 6 seconds or less, and never naming a person. It refuses a cloud
+model.
+
+## What changed
+
+- `backend/jarvis_live.py` (new, shipped whole): the session (one device at
+  a time), its limits, pauses, Mute, calls, the phrases' words, side talk,
+  the crisis rule, the camera gate, the route and the `live` event.
+- `backend/jarvis_live_photo_test.py` (new, shipped whole): the photo test.
+- `backend/live.patch` (new, last): installs the route in `jarvis_hud.py`.
+- `backend/jarvis_speech.py`: `source=live` clips (the owner check first, as
+  ever), too-short clips checked without words, the stop word, the phrases,
+  "let's talk", and "Live is on your other device".
+- `backend/rebuilt/jarvis_voice.py`, `jarvis_voice_enroll.py`: the
+  `hands_free_live` setting (three choices; a looser one is the voice card).
+- `backend/jarvis_agent.py`: the Live note to the model, side talk (never
+  counted), `read_camera` in `STEP_READS`, loading the everyday model when
+  Live starts (never on Standby), the crisis note.
+- `backend/jarvis_intake.py`, `jarvis_auto_learn.py`: side talk and Live's
+  trust rule for learning.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: the new files shipped,
+  the patch listed.
+- `tools/gen_live_cases.py` (new): `live-cases.json` for both apps.
+
+## The review fixes (2026-09-28, branch `studio-live-fixes`)
+
+Four studio reviews (`docs/studio-2026-09-28/live-review-*.md`) and the
+owner's answers to them. On the backend side (no `.patch` file changed -
+all of it is in the files shipped whole):
+
+- `jarvis_live.py`: plain ending phrases (a bare "that's it" / "I'm done"
+  no longer ends Live); the sleep check runs on every tick, so a status
+  read cannot hide the PC having slept; `{"do": "active"}` (typing keeps
+  Live open); pause and mute lines with next steps; whole-sentence end
+  reasons and the line said when Live ends by itself (`ended_say`);
+  `started_at`, `ended_ago_s` and `end_on` in the status; more time after
+  a crisis turn (`CRISIS_MORE_S`, no warning); "your PC", never "your
+  desktop"; the start refusal names each app's own Settings place.
+- `jarvis_speech.py`: a Live clip whose words could not be made out keeps
+  Live open (it used to look like Live had stopped).
+- `rebuilt/jarvis_voice.py`, `jarvis_voice_enroll.py`: the `live_end`
+  voice setting ("End Live when"; the looser "only when Windows locks" is
+  the voice card).
+- `jarvis_chat_log.py`: a side-talk turn is not kept in chat history at
+  all (`{"recorded": false}`), the owner's answer of 2026-09-28.
+- `jarvis_asks_first.py`: the fixed row "Start Jarvis Live - does it
+  without asking".
+- `tools/gen_live_cases.py`: the new words, buttons and rules for both
+  apps, including the tap-button examples that used to come out garbled
+  and the one "Interrupting Jarvis" setting's carry-over rule.
+
+Nothing new to run on the PC beyond `apply-patches.ps1` as usual.
+
+## Test it
+
+```
+python3 backend/test_live.py
+python3 backend/test_voice_strict.py
+python3 backend/test_chat_log.py
+python3 tools/gen_live_cases.py --check
+```
+
+## Not checked, said plainly
+
+- **Not run on your PC or phone**: turn times, the TV test (how many
+  refusals, none becoming words) and the phone's battery over 30 minutes are
+  not measured (`docs/LIVE-DESIGN.md` build step 5).
+- The phone app is compiled only by GitHub; its screens have not been seen.
+- The camera path is off (`CAMERA_WIRED = False`) and the phone does not
+  take pictures yet.
+
 # Mouths that match the words: `jarvis_mouth.py` (2026-09-28)
 
 ## In plain words
@@ -13938,6 +15398,32 @@ That needs a first question on a turn with no tools enabled, where Jarvis
 recalls a fact, and a look at whether the answer follows the rules (for
 example "say what is a guess and what is verified").
 
+# The app builder's workspace: `jarvis_app_workspace.py` (2026-09-28)
+
+**What it is.** Milestone A of the app builder (`docs/APP-BUILDER-DESIGN.md`).
+It keeps app projects under `<settings folder>/apps/`, one git repository each.
+Every piece of work gets its own separate copy (a git worktree) on its own
+branch. When the work is ready, a merge card lists every file and shows the
+whole change before anything reaches the app. **It runs nothing:** no npm, no
+Gradle, no build.
+
+**Not switched on.** There is no patch, no model tool, no API route and no
+screen yet (milestone B), so nothing calls it. `apply-patches.ps1` copies it in
+so the later milestones find it there.
+
+**Needs** git on the PC (<https://git-scm.com>). Without it, every call answers
+"git is not installed" and nothing else happens.
+
+**Safety.** git gets the no-secrets environment every program Jarvis starts
+gets (`jarvis_child_env`), none of the owner's own git settings
+(`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM`), and an empty hooks folder. It has
+no remote, so there is no fetch and no push. File names are checked before
+anything is written: no `..`, nothing in `.git`, no Windows device names, and
+nothing that points outside the task's copy. A merge is refused if the task or
+the app changed after its card was built.
+
+**Tested by** `test_app_workspace.py` (36 checks, real git in a temporary
+folder).
 # Watches: a search, a price, GitHub, and a watch that breaks: `jarvis_tellme.py` (2026-09-28)
 
 The owner chose the "Watches" group of `docs/RESEARCH-AUDIT-2026-09-28.md`
@@ -14139,6 +15625,50 @@ The owner chose this group on 2026-09-28, from
     python3 backend/test_brain_reads.py
     python3 backend/test_chat_log.py
     python3 backend/test_memory_erase.py
+# The sky behind the animals: `jarvis_sky.py`, `sky.patch` (2026-09-28)
+
+## In plain words
+
+Two options for the animal faces, both off until switched on: the real sun
+and moon for your town behind the animal, and rain, snow or wind. You type
+your town once on the PC (Settings, Appearance, "Sun, moon and weather");
+the PC finds it in a list of towns it carries and keeps only a rough
+position. Nothing goes online for the sun and moon - each app works them out
+itself. The weather comes from your own Home Assistant, or from Open-Meteo
+on the internet if you choose it and approve its card.
+
+## Owner steps (one line each, in PowerShell)
+
+Nothing new to install: `apply-patches.ps1` copies the two modules and
+applies `sky.patch`, like every other feature. Then, in the desktop's
+Settings, Appearance: switch on "Show the sun and moon behind the animal",
+type your town and press Set. For the weather from Home Assistant, it must
+already be set up for Jarvis (the same device the morning briefing reads).
+
+## What the code does
+
+- `jarvis_sky.py`: the settings (`<config dir>/sky.json`: on or off, the town
+  with its position rounded to 0.1 degree, the weather source and the
+  position an Open-Meteo card approved), the town search (offline, accents
+  and "St." ignored, a state or country after a comma, or a typed position),
+  the two weather reads, the cache (read again after 20 minutes, a failure
+  after 30, and only while an app asks), the Open-Meteo card, and the route.
+- `jarvis_sky_places.py`: about 16,000 towns from GeoNames (CC BY 4.0),
+  made by `tools/gen_sky_places.py` - one long string, no code.
+- Home Assistant: the morning briefing's own rules (`jarvis_briefing.
+  _weather_source`) and weather device (`jarvis_home.weather_entity`), one
+  GET of its state through the gate as `home_read`, at tier auto only.
+- Open-Meteo: one fixed address, the rounded position and four value names,
+  no proxy, no redirect, 10 s, 64 KB; ON is a `change_own_config` card that
+  names the exact numbers, good for that position only.
+- `jarvis_reach.py`: a row, "Weather for the animal's scene".
+- Never: the town or position in a log line, the audit log or anything the
+  AI model sees.
+
+## Test it
+
+    python3 backend/test_sky.py
+    python3 tools/gen_sky_cases.py --check
     python3 backend/run_suites.py
 
 ## Not checked, said plainly
@@ -15040,3 +16570,68 @@ the desktop's widget window. Contract: `docs/JARVIS-API.md` section 86.
   plain words and adds nothing.
 - The phone half is not compiled here (CI compiles it); the Rust tests run
   only on Windows.
+---
+
+# Forget a time frame: `forget-range.patch` (2026-09-28)
+
+## In plain words
+
+You can now ask Jarvis to forget a stretch of time - "forget what you
+learned last week", "delete my chats from 1 to 15 September" - by voice,
+by typing, or from the Brain in either app. Nothing goes at once. Jarvis
+shows you every fact it saved in those days and every chat from them, each
+ticked. You untick anything you want to keep and tap **Forget these**. One
+approval card then lists everything, word for word, and you approve it by
+tapping (saying "yes" does nothing). Approved, the facts are forgotten -
+exactly like pressing Forget on each - and the chats are deleted. For 10
+minutes, one tap on **Undo** puts it all back.
+
+## What to do on the PC
+
+Run `apply-patches.ps1` as usual. It copies `jarvis_forget_range.py` in
+and applies `forget-range.patch` last. Nothing to install. Your settings
+file needs no change: a file without the `memory_forget_range` line asks
+anyway, and the shipped one says `"ask"`.
+
+## What the code does
+
+- **Which facts:** the ones Jarvis SAVED in those days (by when it learned
+  them, not by a date in their words), and only ones still in use.
+- **Which chats:** any chat with a message in those days. The whole chat is
+  deleted, and the list says so when it also has messages from other days.
+- **Days** are this PC's own time, first and last day included. At most 200
+  facts and chats in one go; more, and it asks for fewer days.
+- **The card** (`memory_forget_range`) must be "ask" or nothing happens. It
+  counts as a risky approval (Windows Hello on the PC, the screen lock on
+  the phone), because after 10 minutes the chats cannot come back.
+- **Undo** keeps the deleted chats in memory only, still encrypted, never on
+  disk: it ends after 10 minutes or when Jarvis stops, whichever is first.
+  A fact whose words you erased in the meantime stays erased.
+- **By voice**, `jarvis_quick.py` only fills in the list and says where it
+  is. When a date could mean two things ("on Monday" said on a Monday,
+  "3/9", "the 3rd"), it asks instead of guessing.
+
+## Test it
+
+`py -3 backend\test_forget_range.py` (154 checks, no network, no model).
+The words and real answers both apps are tested against:
+`python3 tools/gen_forget_range_cases.py --check`.
+
+## Not checked, said plainly
+
+- Not tried on your PC's real memory and chat history. The tests use real
+  SQLite files and real encryption in a temporary folder.
+- The phone's screen (`ForgetRangePlate.kt`) is compiled only by CI; its
+  pure logic (`net/ForgetRange.kt`) and test were compiled and run here.
+- "A forgotten fact is not learned again automatically" is on the audit
+  branch, not this one yet. These forgets use Forget's own mark, so it will
+  cover them when it lands.
+- **Not run on the owner's PC, and Open-Meteo was never actually called**:
+  every read in the tests is injected (no network in the container's tests).
+  The address and the four value names follow Open-Meteo's published API
+  (`/v1/forecast`, `current=`, `wind_speed_unit=ms`); if Open-Meteo changes
+  it, the status line says it could not read the answer and no weather is
+  drawn.
+- A Home Assistant weather device whose attributes run past 500 characters
+  (`jarvis_home`'s cap) loses its wind; the condition still draws.
+

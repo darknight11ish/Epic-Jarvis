@@ -60,7 +60,7 @@ interface Face {
 
 /**
  * Twenty faces - all of the desktop kit's instruments - and, since 2026-09-27,
- * three animals ([RedPanda], [PygmyOwl], [SeaOtter], in CritterFaces.kt),
+ * animals ([RedPanda], [PygmyOwl], [SeaOtter] and, since 2026-09-28, [Monkey], in CritterFaces.kt),
  * which are drawn like Nucleus.
  *
  * The brief called porting all twenty the real cost of going fully native,
@@ -131,7 +131,7 @@ object Faces {
     val all: List<Face> = listOf(
         Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital, Geodesic, Kirkwood,
         Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion, Cascade, Nucleus, Tokamak,
-        Membrane, RedPanda, PygmyOwl, SeaOtter,
+        Membrane, RedPanda, PygmyOwl, SeaOtter, Monkey,
     )
     val default: Face = Arc
     fun byId(id: String): Face = all.firstOrNull { it.id == id } ?: default
@@ -4118,6 +4118,7 @@ float3 tonemap(float3 c) {
     return c / (1.0 + c);
 }
 
+// Smooth minimum by Inigo Quilez: https://iquilezles.org/articles/distfunctions/
 float smin(float a, float b, float k) {
     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
     return b + (a - b) * h - k * h * (1.0 - h);

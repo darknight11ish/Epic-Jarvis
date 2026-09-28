@@ -158,6 +158,13 @@ TITLE_CHARS = 80
 #: temporary chat: a jarvis_chat_log.py without it would keep one.
 TEMPORARY_CHAT = True
 TEMPORARY_WHY = "a temporary chat is never kept"
+#: Jarvis Live's side talk (the owner's answer of 2026-09-28): a remark the
+#: model called "not for me" (jarvis_agent's `side_talk`) is not kept in chat
+#: history at all - neither the owner's words nor the marker. It goes in the
+#: live-turn registry (a hash, in memory) as "temporary", like a temporary
+#: chat's turn, so if an app ever re-sent it, automatic learning would make
+#: it a card, never a saved fact. jarvis_live.was_side_talk skips it anyway.
+SIDE_TALK_WHY = "a side remark in Jarvis Live is never kept"
 LIST_DEFAULT, LIST_MAX = 30, 100
 _CID = re.compile(r"[A-Za-z0-9_-]{8,64}")   # used with fullmatch: no trailing newline
 _SWEEP_EVERY = 86400
@@ -656,7 +663,8 @@ class ChatLog:
         as "voice"; otherwise as "voice_unverified". Only a hash is kept.
 
         `source` is how the clip started: "push_to_talk" (the talk button)
-        or "wake_word" ("hey Jarvis"), kept with the voice check's facts so
+        or "wake_word" ("hey Jarvis") or, since 2026-09-28, "live" (Jarvis
+        Live, jarvis_live.py), kept with the voice check's facts so
         automatic learning can honour the owner's "hands-free" voice setting
         (jarvis_auto_learn.check_voice). "" when the speech route did not
         say - which that check treats as hands-free."""
@@ -864,7 +872,8 @@ class ChatLog:
         answer_kept = bool(turn and turn.get("finish_reason") and not turn.get("client_gone")
                            and isinstance(answer, str) and answer.strip())
         rows = self._live_rows(live)
-        temporary = body.get("temporary") is True
+        side_talk = bool(turn and turn.get("side_talk") is True)
+        temporary = body.get("temporary") is True or side_talk
         if temporary:
             # temporary-chat.patch (the owner's decision, 2026-09-25): a
             # temporary chat is never kept. Its turns still go in the
@@ -883,6 +892,8 @@ class ChatLog:
         with self._lock:
             self._seed(cid, body.get("messages"))
         self._note_live(cid, rows, device, read_outside, now)
+        if side_talk:
+            return {"recorded": False, "why": SIDE_TALK_WHY}
         if temporary:
             return {"recorded": False, "why": TEMPORARY_WHY}
         aead, why = self._recording()
@@ -1197,7 +1208,9 @@ class ChatLog:
         return None if row is None or row[0] is None else int(row[0])
 
     def delete(self, cid) -> bool:
-        """One conversation. True if there was one. There is no delete-all."""
+        """One conversation. True if there was one. There is no delete-all here: the one
+        exception, "Forget a time frame", is take_out() below, after a checked
+        list and ONE approval card."""
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return False
         with self._lock, closing(self._connect()) as c:
@@ -1213,6 +1226,168 @@ class ChatLog:
     def set_keep_days(self, days) -> int:
         self._save_settings(keep_days=days)
         return self.sweep()
+
+    # -- "Forget a time frame" (jarvis_forget_range.py, 2026-09-28) --------
+    #
+    # The one exception to "there is no delete-all" (docs/JARVIS-API.md
+    # section 18): the owner's decision of 2026-09-28. It never deletes by
+    # itself - jarvis_forget_range.py lists the conversations first, the
+    # owner unticks any to keep, ONE approval card lists every one, and only
+    # the ids on that card reach take_out(). What take_out() removes is held
+    # IN MEMORY for the 10-minute Undo (put_back()), still sealed exactly as
+    # it was on disk, and never written anywhere else.
+
+    _TURN_COLS = ("conversation_id, idx, at, role, provenance, device, lane, read_outside,"
+                  " answer_kept, voice_check, text")
+
+    def overlapping(self, start: float, end: float, limit: int = 201,
+                    only=None) -> dict:
+        """The conversations that OVERLAP [start, end) - a message at or
+        after `start` and before `end`, or one that started before and went
+        on after. Oldest first, at most `limit`, with how many in all.
+
+        {"items": [{"id", "title", "started", "updated", "turns", "in_frame",
+        "spills"}], "total": n, "why_not": ""}. `spills`: the conversation
+        also has messages outside the frame - deleting it deletes those too,
+        and the list says so. Titles need the key; without it `why_not` says
+        why and `items` is empty. `only`: these ids and no others (checking
+        that the ids on an approval card are still in the frame)."""
+        out = {"items": [], "total": 0, "why_not": ""}
+        if not self.db_path.exists():
+            return out
+        ids = None
+        if only is not None:
+            ids = [i for i in only if isinstance(i, str) and _CID.fullmatch(i)]
+            if not ids:
+                return out
+        with self._lock, closing(self._connect()) as c:
+            # A conversation's own first and last message, from its turns
+            # (`started`/`updated` are the same moments, kept on the row).
+            sql = ("SELECT c.id, c.title, c.started, c.updated,"
+                   " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id),"
+                   " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id"
+                   "   AND t.at >= ? AND t.at < ?),"
+                   " (SELECT MIN(at) FROM turns t WHERE t.conversation_id=c.id),"
+                   " (SELECT MAX(at) FROM turns t WHERE t.conversation_id=c.id)"
+                   " FROM conversations c"
+                   " WHERE COALESCE(c.started, c.updated) < ? AND c.updated >= ?")
+            where = ("SELECT COUNT(*) FROM conversations c"
+                     " WHERE COALESCE(c.started, c.updated) < ? AND c.updated >= ?")
+            args = [float(start), float(end), float(end), float(start)]
+            count_args = [float(end), float(start)]
+            if ids is not None:
+                marks = ",".join("?" * len(ids))
+                sql += f" AND c.id IN ({marks})"
+                where += f" AND c.id IN ({marks})"
+                args += ids
+                count_args += ids
+            out["total"] = int(c.execute(where, count_args).fetchone()[0])
+            rows = c.execute(sql + " ORDER BY COALESCE(c.started, c.updated), c.id LIMIT ?",
+                             args + [max(0, int(limit))]).fetchall()
+        if not rows:
+            return out
+        try:
+            aead = self._cipher()
+        except KeyUnavailable as exc:
+            out["why_not"] = str(exc)
+            return out
+        except Exception as exc:
+            out["why_not"] = f"the chat history could not be opened ({type(exc).__name__})"
+            return out
+        for cid, title, started, updated, n, inside, first, last in rows:
+            first = first if first is not None else started
+            last = last if last is not None else updated
+            out["items"].append({
+                "id": cid, "title": self._title(aead, cid, title),
+                "started": float(started or first or 0), "updated": float(updated or last or 0),
+                "turns": int(n), "in_frame": int(inside),
+                "spills": bool((first is not None and first < start)
+                               or (last is not None and last >= end))})
+        return out
+
+    def take_out(self, cids) -> dict:
+        """Deletes these conversations from the file - secure_delete and the
+        usual VACUUM, as delete() does - and returns them, sealed as they
+        were, for put_back(): {cid: {"conversation": row, "turns": [rows]}}.
+        An id that is not there is skipped. The caller keeps what comes back
+        in memory only, for the 10-minute Undo."""
+        held = {}
+        if not self.db_path.exists():
+            return held
+        with self._lock, closing(self._connect()) as c:
+            with c:
+                for cid in cids:
+                    if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+                        continue
+                    conv = c.execute("SELECT id, title, started, updated, device"
+                                     " FROM conversations WHERE id=?", (cid,)).fetchone()
+                    if conv is None:
+                        continue
+                    turns = c.execute(f"SELECT {self._TURN_COLS} FROM turns"
+                                      " WHERE conversation_id=? ORDER BY idx", (cid,)).fetchall()
+                    held[cid] = {"conversation": tuple(conv), "turns": [tuple(t) for t in turns]}
+                    self._drop(c, [cid])
+        if held:
+            self._deleted()
+        return held
+
+    def put_back(self, held: dict) -> dict:
+        """Undo for take_out(): {"restored": [cid], "failed": {cid: why}}.
+
+        A conversation the owner went on with after it was deleted (the app
+        still had it open, so a new message made it again) is joined back
+        together: the old messages first, the new ones after them. The new
+        ones are re-sealed at their new places, which needs the key; without
+        it that one conversation is not put back, and `failed` says why."""
+        out = {"restored": [], "failed": {}}
+        if not isinstance(held, dict) or not held:
+            return out
+        with self._lock, closing(self._connect()) as c:
+            for cid, h in held.items():
+                try:
+                    with c:
+                        self._put_one(c, cid, h)
+                    out["restored"].append(cid)
+                except KeyUnavailable as exc:
+                    out["failed"][cid] = str(exc)
+                except Exception as exc:
+                    out["failed"][cid] = f"it could not be written back ({type(exc).__name__})"
+        return out
+
+    def _put_one(self, c, cid: str, h: dict) -> None:
+        conv = h["conversation"]
+        turns = h["turns"]
+        marks = ",".join("?" * 11)
+        now_conv = c.execute("SELECT updated FROM conversations WHERE id=?", (cid,)).fetchone()
+        if now_conv is None:
+            c.execute("INSERT INTO conversations (id, title, started, updated, device)"
+                      " VALUES (?,?,?,?,?)", conv)
+            for t in turns:
+                c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", t)
+            return
+        aead = self._cipher()
+        newer = c.execute(f"SELECT {self._TURN_COLS} FROM turns WHERE conversation_id=?"
+                          " ORDER BY idx", (cid,)).fetchall()
+        c.execute("DELETE FROM turns WHERE conversation_id=?", (cid,))
+        for t in turns:
+            c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", t)
+        nxt = (max((t[1] for t in turns), default=-1)) + 1
+        # Only messages said AFTER the ones held: anything at or before the
+        # last held one is already among them - a copy put back by other
+        # means in the meantime (restoring a backup, say) - and would
+        # otherwise appear twice.
+        last_held = max((float(t[2] or 0) for t in turns), default=0.0)
+        newer = [t for t in newer if float(t[2] or 0) > last_held]
+        for t in newer:
+            plain = self._open(aead, t[10], self._aad(cid, t[1]))
+            row = list(t)
+            row[1] = nxt
+            row[10] = self._seal(aead, plain, self._aad(cid, nxt))
+            c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", row)
+            nxt += 1
+        # The old title and first moment; the newer last moment stays.
+        c.execute("UPDATE conversations SET title=?, started=? WHERE id=?",
+                  (conv[1], conv[2], cid))
 
 
 # ------------------------------------------------------ the module's own log
@@ -1286,6 +1461,24 @@ def search(query, limit=SEARCH_DEFAULT) -> dict:
     History screens only: nothing a model or a chat turn can call reaches
     this (docs/JARVIS-API.md section 71)."""
     return _log().search(query, limit=limit)
+
+
+def overlapping(start: float, end: float, limit: int = 201, only=None) -> dict:
+    """"Forget a time frame" (jarvis_forget_range.py): the conversations in
+    a time frame, with their titles. See ChatLog.overlapping."""
+    return _log().overlapping(start, end, limit, only)
+
+
+def take_out(cids) -> dict:
+    """"Forget a time frame", after its ONE approval card: these
+    conversations deleted from the file, and handed back sealed, for the
+    10-minute Undo. See ChatLog.take_out."""
+    return _log().take_out(cids)
+
+
+def put_back(held: dict) -> dict:
+    """The Undo of take_out(). See ChatLog.put_back."""
+    return _log().put_back(held)
 
 
 # ------------------------------------------------------ turning it back on

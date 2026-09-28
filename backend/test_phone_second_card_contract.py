@@ -259,6 +259,25 @@ def build_post_replies():
     case("a needed switch is off", capable(), "browser_control", True, master=True)
     case("no capable second card", G.World(G.SMI["one_card"]), "master", True)
     case("an unknown switch", capable(), "telepathy", True, master=True)
+
+    def third_case(name, world, assign, **switches):
+        with world as w:
+            w.switches(**switches)
+            code, body = SC.request_change("third", assign=assign, spawn=lambda fn: None)
+        out.append({"name": name, "feature": "third", "assign": assign,
+                    "status": code, "body": body})
+
+    # A third card (2026-09-28): the same GET fixture's cards do not include
+    # a third one (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md's own reshape
+    # left the plain second-card world at two cards), so what is checked
+    # here is the shape every PC without one still answers - the phone
+    # reads these the exact same way as any other switch's POST reply.
+    third_case("third: no capable card, so assigning is refused",
+               capable(), "long_context", master=True, long_context=True)
+    third_case("third: the switch is not on yet, so assigning is refused",
+               capable(), "vision", master=True)
+    third_case("third: unassigning is immediate, even with nothing assigned",
+               capable(), None, master=True)
     return out
 
 
@@ -348,6 +367,16 @@ def t_the_post_answers_are_the_documented_ones():
           by["no capable second card"]["status"] == 503
           and "only one graphics card" in by["no capable second card"]["body"]["error"])
     check("an unknown switch: 400", by["an unknown switch"]["status"] == 400)
+    check("third, no capable card: 503 with the reason",
+          by["third: no capable card, so assigning is refused"]["status"] == 503
+          and "no capable third graphics card" in
+          by["third: no capable card, so assigning is refused"]["body"]["error"])
+    check("third, the switch is not on yet: 400, naming it",
+          by["third: the switch is not on yet, so assigning is refused"]["status"] == 400
+          and "Pictures" in by["third: the switch is not on yet, so assigning is refused"]["body"]["error"])
+    r = by["third: unassigning is immediate, even with nothing assigned"]
+    check("third, unassigning: 200, not assigned, no card",
+          r["status"] == 200 and r["body"]["assigned"] is None and r["body"]["pending"] is False, r)
 
 
 def t_the_fixture_is_what_this_makes_today():

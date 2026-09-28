@@ -135,8 +135,10 @@ import {
 import {
   createToolWatch,
   mayReadAloud,
+  onlyReadAloudToolsBetween,
   privacyFromHeard,
   PRIVATE_LINE,
+  screenReadBetween,
   TOOL_WORDS,
   toolRanBetween,
   toolsKnownBetween,
@@ -144,6 +146,9 @@ import {
 // The renderer the answer card and the approval preview use - see markdown.js.
 import { escapeHtml, renderMarkdown } from "./markdown.js";
 import { approvalPlainText, isEmailCard } from "./email-sending.js";
+// "Forget a time frame": where the Brain opens after "forget what you learned
+// last week" (openBrainFromRoute).
+import { BRAIN_PLACE_KEY, PLACE as FORGET_RANGE_PLACE } from "./forget-range.js";
 import {
   fromChatFailure,
   fromStreamError,
@@ -176,6 +181,29 @@ import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
 // What a `step` event means, in words - shared with Brain's Live tab
 // (item 10, UI-AUDIT-2026-09-26.md).
 import { stepText } from "./step-words.js";
+// Jarvis Live: the same rules as the phone's (live-rules.js, 2026-09-28).
+import {
+  BUTTONS,
+  cardInSession,
+  couldBeSideTalk,
+  DUCK_VOLUME,
+  END_TONE,
+  isSideTalk,
+  liveBarge,
+  liveChips,
+  liveFold,
+  liveReply,
+  liveSign,
+  liveTransition,
+  loadInterrupt,
+  LOCK_UNKNOWN_WORDS,
+  deviceWords,
+  moveWords,
+  NEEDS_VOICE,
+  onHere,
+  SEEN,
+  TITLE,
+} from "./live-rules.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -252,11 +280,29 @@ const dom = {
   answerSources: $("answer-sources"),
   answerSourcesLine: $("answer-sources-line"),
   answerSourcesList: $("answer-sources-list"),
+  answerCloudOffer: $("answer-cloud-offer"),
+  cloudOfferTry: $("cloud-offer-try"),
+  cloudOfferDismiss: $("cloud-offer-dismiss"),
   approvalOptionsWhy: $("approval-options-why"),
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
   mic: $("mic"),
   voiceAuto: $("voice-auto"),
+  liveToggle: $("jarvis-live-toggle"),
+  liveStrip: $("jarvis-live-strip"),
+  liveTitle: $("jarvis-live-title"),
+  liveDetail: $("jarvis-live-detail"),
+  liveMove: $("jarvis-live-move"),
+  liveHint: $("jarvis-live-hint"),
+  liveMore: $("jarvis-live-more"),
+  liveShowCard: $("jarvis-live-show-card"),
+  liveFix: $("jarvis-live-fix"),
+  liveCarryOn: $("jarvis-live-carry-on"),
+  liveResume: $("jarvis-live-resume"),
+  liveStopTalking: $("jarvis-live-stop-talking"),
+  liveMute: $("jarvis-live-mute"),
+  liveEnd: $("jarvis-live-end"),
+  liveChips: $("jarvis-live-chips"),
   pin: $("pin"),
   submitHint: $("submit-hint"),
   noteChip: $("note-chip"),
@@ -407,7 +453,7 @@ const state = {
   routeFromHeader: false,
   /** The private-answer rule (private-speech.js), for a voice turn: what the
    *  utterance reply said (`privateAloud`, `questionPrivate`,
-   *  `memoryAloud`, `sensitiveAloud`), the route line (`gate`,
+   *  `memoryAloud`, `sensitiveAloud`, `screenAloud`), the route line (`gate`,
    *  `injected_facts`, `injected_sensitive`), whether `: jarvis-status` said a
    *  tool ran, the tool counters when the question was sent (`toolStart`,
    *  a `toolWatch` snapshot), and whether "It's on your screen." was said
@@ -502,6 +548,10 @@ const state = {
    *  turn finishes so a later turn can label it in the scrollback strip. */
   lastPrompt: "",
   lastAsked: "typed",
+  /** "A cloud model could give this one a second look." (jarvis_router
+   *  gate "offer"): the lane name it would use, or null when this answer
+   *  carries no offer. Cleared on every new turn and once acted on. */
+  cloudOffer: null,
   /** The previous turn's `{ prompt, buffer }`, once a new one starts — one
    *  level of scrollback, shown folded in the card until dismissed. */
   previousAnswer: null,
@@ -562,6 +612,52 @@ const answerMemory = createAnswerMemory({
  *  link (private-speech.js `createToolWatch`). */
 const toolWatch = createToolWatch();
 
+/** Jarvis Live's state in this bar (the Jarvis Live section below). */
+const LIVE_ME = "desktop";
+/** How long "Heard you - thinking" / "Didn't catch that" stay up. */
+const LIVE_FLASH_MS = 6000;
+/** A first answer slower than this plays "One moment." (the model loading). */
+const LIVE_SLOW_MS = 2500;
+
+const live = {
+  status: null,
+  stale: false,
+  lockUnknown: false,
+  callUnknown: false,
+  thinking: false,
+  short: false,
+  flashUntil: 0,
+  chips: [],
+  elsewhere: "",
+  elsewhereTimer: null,
+  // When it ended, as the PC counted it: {at: this PC's ms, ago: seconds}.
+  endedBase: null,
+  endedTimer: null,
+  // Why Live did not start, in the strip; `noticeNeedsVoice` adds a
+  // "Settings, then Voice" button.
+  notice: "",
+  noticeNeedsVoice: false,
+  noticeTimer: null,
+  // One click at a time on the Live button.
+  busy: false,
+  // "Resume Live" / "Move it here": the same chat carries on.
+  resuming: false,
+  // The answer that was on screen, while a Live answer could still be side
+  // talk (liveHeldAnswer).
+  keep: null,
+  sideTalkUntil: 0,
+  troubleUntil: 0,
+  explaining: false,
+  toldPlaying: false,
+  heldForCard: false,
+  heldForAnswer: false,
+  sounded: false,
+  slowTimer: null,
+  duckTimer: null,
+  lastQuestion: "",
+  pending: null,
+};
+
 /** How many prompts `state.promptHistory` keeps. Older ones fall off the front. */
 const PROMPT_HISTORY_LIMIT = 50;
 
@@ -608,17 +704,18 @@ function paint({ immediate = false } = {}) {
     paintQueued = false;
     lastPaintAt = performance.now();
 
-    dom.answer.innerHTML = renderMarkdown(state.buffer);
+    // Jarvis Live: while a spoken answer could still be side talk, the
+    // answer that was on screen stays (liveHeldAnswer).
+    const held = liveHeldAnswer();
+    dom.answer.innerHTML = renderMarkdown(held ? held.buffer : state.buffer);
     // The crisis help line (jarvis_wellbeing.py, 2026-09-27): a calm, plain
     // panel - larger numbers, nothing else about the layout - instead of an
     // ordinary answer, the moment the server's own flag says so
     // (`X-Jarvis-Route`'s `wellbeing: "crisis"` - see docs/JARVIS-API.md
     // section 38; not yet confirmed sent by every backend, so this is a
     // no-op, and the words still show as an ordinary answer, until it is).
-    dom.answer.classList.toggle(
-      "wellbeing-crisis",
-      Boolean(state.turnRoute && state.turnRoute.wellbeing === "crisis")
-    );
+    const route = held ? held.route : state.turnRoute;
+    dom.answer.classList.toggle("wellbeing-crisis", Boolean(route && route.wellbeing === "crisis"));
     // `.fresh` marks a block that has just appeared. It used to be added to
     // `lastElementChild` on every paint — but `innerHTML` destroys and
     // recreates that element each time, so the 260ms animation restarted every
@@ -958,6 +1055,8 @@ function applyHeaderRoute(route) {
   // The facts this answer used (ids only) and the temporary-chat marks.
   answerMemory.route(state.turnRoute);
   openSettingsFromRoute(state.turnRoute);
+  cloudOfferFromRoute(state.turnRoute);
+  openBrainFromRoute(state.turnRoute);
   const next = routeFromHeader(route);
   if (!next) return;
   state.routeFromHeader = true;
@@ -984,6 +1083,41 @@ function openSettingsFromRoute(route) {
     /* no storage: Settings opens at the top, and the answer's own words say where */
   }
   invoke("open_fix_place", { place: "settings" });
+}
+
+/**
+ * "A cloud model could give this one a second look." (jarvis_router
+ * gate "offer", docs/JARVIS-API.md "`offer` in `X-Jarvis-Route`"): every
+ * gate that would refuse escalation outright - private, tainted, a
+ * picture, no lane, no budget - already ran before this ever appears, so
+ * accepting it only ever turns an offer this question already earned on
+ * its own merits into an escalation. Never a standing choice: cleared on
+ * every new turn (see send()) and the moment the owner acts on it.
+ */
+function cloudOfferFromRoute(route) {
+  state.cloudOffer =
+    route && route.gate === "offer" && typeof route.offer === "string" && route.offer
+      ? route.offer
+      : null;
+}
+
+/**
+ * "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): after "forget
+ * what you learned last week", said or typed, `open_brain` on X-Jarvis-Route
+ * names the Brain place with the list already filled in. The same shape as
+ * openSettingsFromRoute: leave the place under BRAIN_PLACE_KEY, then ask Rust
+ * to open or focus the Brain; brain.js takes it from there. Navigation only -
+ * nothing is removed until the owner ticks, presses Forget these and
+ * approves the card.
+ */
+function openBrainFromRoute(route) {
+  if (!route || route.open_brain !== FORGET_RANGE_PLACE) return;
+  try {
+    localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify({ place: FORGET_RANGE_PLACE, at: Date.now() }));
+  } catch {
+    /* no storage: the Brain opens where it was, and the answer's own words say where */
+  }
+  invoke("open_fix_place", { place: "brain" });
 }
 
 /** Paints the three health dots in the card footer. */
@@ -1390,6 +1524,8 @@ function openApproval(approval) {
   if (state.decided && state.decided !== approval.id) state.decided = null;
   refreshApproval(approval);
   setPhase("approval");
+  // Jarvis Live: speech pauses and the microphone closes for the card.
+  liveCardShown(true);
 
   if (!dom.card.hidden) dom.cardStatusText.textContent = "Paused for approval";
 
@@ -1834,6 +1970,20 @@ function parkApproval() {
   state.parked.add(state.approval.id);
   closeApproval();
   announce(`Put aside: ${title}. It is still waiting; nothing was decided.`);
+  // Another card still waiting takes its place, as the queue subscription
+  // would show it on its next read (and skipping, like it does, the one just
+  // answered here). Parking the first of two cards used to hide BOTH until
+  // the next event, with the line saying "1 approval is still waiting"
+  // while two were (play tester, 2026-09-27). Display only: openApproval
+  // puts focus on the card, never on Approve, and decides nothing.
+  const next = currentQueue().items.find(
+    (item) => !state.parked.has(item.id) && item.id !== state.decided
+  );
+  if (next) {
+    openApproval(next);
+    syncParkedBar();
+    return;
+  }
   syncParkedBar();
   focusInput({ selectAll: false });
 }
@@ -1863,6 +2013,7 @@ function syncParkedBar() {
 /** Clears the gate. Called when it leaves the queue, however it left. */
 function closeApproval() {
   state.approval = null;
+  liveCardShown(false);
   // Feasibility I110: no card left to watch. `openApproval`/`refreshApproval`
   // restarts it for whichever card (the same or a different one) opens next.
   heavyGate.stop();
@@ -2336,6 +2487,7 @@ function appendDelta(text) {
   // streaming through the whole cold start of a local model, which is the one
   // stretch a person actually wants explained.
   if (!state.chunks) dom.cardStatusText.textContent = STATUSES.answering;
+  if (!state.chunks && state.liveTurn) liveAnswerArrived();
   state.buffer += text;
   state.chunks += 1;
   updateStat();
@@ -2587,7 +2739,7 @@ async function fileFromBar(target, text) {
  * (JARVIS-API.md section 18). Anything else is sent as no tag, which the PC
  * treats as not the owner's own words.
  */
-async function send(promptText, provenance = "typed") {
+async function send(promptText, provenance = "typed", { live: isLive = false, cloudYes = false } = {}) {
   const message = promptText.trim();
   if (!message) return;
   // A note prefix files the rest instead of asking anything - see fileFromBar.
@@ -2608,6 +2760,8 @@ async function send(promptText, provenance = "typed") {
   // `finishStream`, which is the single funnel every ending passes through.
   if (state.abort || state.inFlight) return;
   state.inFlight = message;
+  // Jarvis Live: a spoken turn is marked, and its tap buttons go.
+  liveBeforeSend(isLive, provenance);
 
   // A picture goes only to a model that can see it - see "A picture, and a
   // model that may not see it" above. A "no" leaves everything as it was.
@@ -2647,6 +2801,10 @@ async function send(promptText, provenance = "typed") {
   state.turnId = null;
   state.turnMark = "none";
   paintAnswerMark();
+  // A new question starts with no cloud offer until the route header (if
+  // any) says otherwise - the last answer's offer does not carry over.
+  state.cloudOffer = null;
+  paintCloudOffer();
   spokenUpTo = 0;
   // "Stop" silences one turn, not every turn after it: a new question is
   // allowed to be answered out loud again. Cleared only past the guard
@@ -2692,8 +2850,10 @@ async function send(promptText, provenance = "typed") {
   openCard("Thinking…");
   dom.cursor.hidden = false;
   dom.stop.hidden = false;
-  dom.answer.innerHTML = "";
-  dom.answer.classList.remove("wellbeing-crisis");
+  if (!live.keep) {
+    dom.answer.innerHTML = "";
+    dom.answer.classList.remove("wellbeing-crisis");
+  }
   dom.cardStat.textContent = "";
 
   // Stay open while the answer streams, even if focus wanders.
@@ -2749,7 +2909,7 @@ async function send(promptText, provenance = "typed") {
       ...(state.clipboard
         ? [userMessage(`Context:\n${state.clipboard}`, "clipboard")]
         : []),
-      withCutOff(userMessage(content, state.turnProvenance)),
+      liveTag(withCutOff(userMessage(content, state.turnProvenance))),
     ],
     hasImage: Boolean(state.capture),
     auto: true,
@@ -2761,6 +2921,10 @@ async function send(promptText, provenance = "typed") {
     // A temporary chat (section 18.1): no memory used, nothing learned,
     // nothing kept. stream_chat sends it only to a PC that has one.
     temporary: temporaryChat.on,
+    // The owner's yes to "Try the cloud model" for THIS one question
+    // (backend/cloud-say-yes.patch). stream_chat forwards it only when
+    // true, the same rule it already follows for `temporary`.
+    cloudYes,
   };
   // What this answer used, and what the PC said about a temporary one,
   // start from nothing (answer-memory.js).
@@ -2842,6 +3006,32 @@ async function sendMark(mark) {
 if (dom.markRight) dom.markRight.addEventListener("click", () => sendMark("right"));
 if (dom.markWrong) dom.markWrong.addEventListener("click", () => sendMark("wrong"));
 
+/** Shows or hides "A cloud model could give this one a second look." */
+function paintCloudOffer() {
+  if (!dom.answerCloudOffer) return;
+  const show = Boolean(state.cloudOffer) && state.phase === "done";
+  dom.answerCloudOffer.hidden = !show;
+}
+
+/** "Try the cloud model": the owner's yes for this one question only -
+ *  resends the same words that earned the offer, with `cloud_yes: true`. */
+function tryCloudModel() {
+  const again = state.lastPrompt;
+  const asked = state.lastAsked || "typed";
+  state.cloudOffer = null;
+  paintCloudOffer();
+  if (again) send(again, asked, { cloudYes: true });
+}
+
+/** "Not now": the offer was seen and declined, for this answer only. */
+function dismissCloudOffer() {
+  state.cloudOffer = null;
+  paintCloudOffer();
+}
+
+if (dom.cloudOfferTry) dom.cloudOfferTry.addEventListener("click", tryCloudModel);
+if (dom.cloudOfferDismiss) dom.cloudOfferDismiss.addEventListener("click", dismissCloudOffer);
+
 function finishStream(phase, statusText) {
   state.abort = null;
   state.inFlight = null;
@@ -2855,8 +3045,11 @@ function finishStream(phase, statusText) {
   // said.
   const question = state.turnQuestion;
   state.turnQuestion = null;
+  // Jarvis Live's side talk: "(not for Jarvis)", not kept, never spoken.
+  const sideTalk = phase !== "error" && liveSideTalk();
   if (
     question &&
+    !sideTalk &&
     phase !== "error" &&
     !statusText &&
     state.buffer.trim() &&
@@ -2894,6 +3087,9 @@ function finishStream(phase, statusText) {
   // "Used 2 memories" on an answer that came back, and whether a temporary
   // one was confirmed (answer-memory.js).
   answerMemory.finish(phase !== "error");
+  // "A cloud model could give this one a second look." - shown only once
+  // the answer is really done, and only when this one earned an offer.
+  paintCloudOffer();
 
   // Once, at the end. The answer element carries no live region any more —
   // announcing a growing buffer per repaint is what left a screen reader
@@ -2928,10 +3124,13 @@ function finishStream(phase, statusText) {
   state.voiceTurn = false;
   // No tool can start for this answer any more: no "One moment." after it.
   momentFlow.turnEnded();
-  if (wasVoiceTurn && phase !== "error" && !speechMuted) {
+  if (wasVoiceTurn && !sideTalk && phase !== "error" && !speechMuted) {
     const remainder = state.buffer.slice(spokenUpTo).trim();
     if (remainder) enqueueSpeech(remainder);
   }
+  // Jarvis Live: tap buttons after a spoken question, and a sentence that
+  // waited for this answer goes now.
+  liveTurnFinished(wasVoiceTurn && !sideTalk && phase !== "error" && !statusText);
 
   syncNewConversation();
 
@@ -3201,6 +3400,9 @@ function stripMarkdownForSpeech(text) {
  *  queue that is, worst case, a little choppier warrants. */
 function checkForSpeakableSentence() {
   if (!state.voiceTurn || speechMuted) return;
+  // Jarvis Live: nothing is said while the answer could still be the side-
+  // talk marker ("[not for me]"), which is never spoken.
+  if (state.liveTurn && couldBeSideTalk(state.buffer)) return;
   for (;;) {
     const cut = nextSpeechPiece(state.buffer.slice(spokenUpTo), spokenUpTo === 0);
     if (!cut) return;
@@ -3225,10 +3427,18 @@ function enqueueSpeech(text) {
  *  may what it says be read aloud? */
 function speakableNow() {
   const now = toolWatch.snapshot();
+  // `: jarvis-status working` / `approval` names no tool: it counts as a
+  // private one unless the `step` events since the question say every tool
+  // that ran was a read-aloud one (web search, home status - the owner's
+  // decision of 2026-09-27).
+  const statusSaysPrivate = state.toolRan && !onlyReadAloudToolsBetween(state.toolStart, now);
   return mayReadAloud({
     ...(state.voicePrivacy || {}),
     route: state.turnRoute,
-    toolRan: state.toolRan || toolRanBetween(state.toolStart, now),
+    toolRan: statusSaysPrivate || toolRanBetween(state.toolStart, now),
+    // An answer about the screen: kept on screen unless the utterance reply
+    // said `screenAloud` (the owner's decision of 2026-09-28).
+    screenRead: screenReadBetween(state.toolStart, now),
     toolsKnown: toolsKnownBetween(state.toolStart, now),
   });
 }
@@ -3336,6 +3546,7 @@ async function drainSpeechQueue() {
     return;
   }
   speaking = true;
+  syncLiveAnswer();
   const generation = speechGeneration;
   try {
     for (;;) {
@@ -3375,6 +3586,7 @@ async function drainSpeechQueue() {
       finishCurrentClip = null;
       clipPlaying = false;
       speaking = false;
+      syncLiveAnswer();
     }
   }
 }
@@ -3386,6 +3598,8 @@ async function playClip(dataUri, generation, text = "") {
   // this, and one already playing is let finish first (it is under a
   // second) - never over the reply.
   momentFlow.replyStarted();
+  // Jarvis Live: a sound was made - a second thought no longer joins it.
+  live.sounded = true;
   if (momentAudio && momentDone) await momentDone;
   // Paused while the PC checks whether the owner is talking: this clip
   // waits, and is dropped if the answer was "stop".
@@ -3471,6 +3685,7 @@ function stopSpeaking() {
     finish();
   }
   speaking = false;
+  syncLiveAnswer();
 }
 
 /* ── Focus session callouts ────────────────────────────────────────────────
@@ -3627,6 +3842,11 @@ listen("voice-level", (event) => {
 listen("voice-barge-onset", (event) => {
   const id = event && event.payload ? Number(event.payload.id) : NaN;
   if (!Number.isFinite(id)) return;
+  // Jarvis Live: lower the voice while the PC checks (live-rules.js).
+  if (liveOnHere()) {
+    liveBargeOnset(id);
+    return;
+  }
   const allowed = loadBargeIn() && voiceFlow.bargeIn && jarvisTalking() && !speechMuted &&
     toolWatch.snapshot().live;
   if (interrupt.onset(performance.now(), id, allowed) !== PAUSE) return;
@@ -3640,6 +3860,10 @@ listen("voice-barge-verdict", (event) => {
   // The PC cannot tell the owner's voice now: no more checks until its
   // status says otherwise.
   if (v.available === false) voiceFlow = { ...voiceFlow, bargeIn: false };
+  if (liveOnHere()) {
+    liveBargeVerdict(v);
+    return;
+  }
   actOnInterrupt(interrupt.verdict(Number(v.id), v.stop === true));
 });
 
@@ -3718,6 +3942,14 @@ function playHeardSound() {
  *  it off, this is ignored while Jarvis is talking - the reply plays to the
  *  end, or until Esc closes the bar. */
 listen("voice-speech-started", () => {
+  // Jarvis Live: the owner's voice stops Jarvis unless "Interrupt by tap
+  // only" is chosen (then the microphone is closed while Jarvis talks).
+  if (liveOnHere()) {
+    if (loadInterrupt() !== "voice") return;
+    noteCutOff();
+    stopSpeaking();
+    return;
+  }
   if (ignoreWhileTalking(loadBargeIn(), jarvisTalking())) return;
   noteCutOff();
   stopSpeaking();
@@ -3825,6 +4057,8 @@ listen("voice-listening", (event) => {
 listen("voice-heard", (event) => {
   const heard = event && event.payload;
   if (!heard) return;
+  // Jarvis Live's sentences, "let's talk", and the offer to move Live here.
+  if (liveHeard(heard)) return;
   if (!heard.available) {
     // The whole feature is broken, not just this one utterance - repeating
     // this every few seconds while automatic listening stays on would be
@@ -3881,6 +4115,14 @@ async function setPinned(pinned, { silent = false } = {}) {
 
 /** Clears the composer and hides the window. */
 async function dismiss() {
+  // Jarvis Live: Esc only hides the bar. The conversation, the answer on
+  // screen and Live itself carry on (the review's #1 - it used to forget
+  // the conversation mid-Live). End Live ends it.
+  if (liveOnHere()) {
+    await setPinned(false, { silent: true });
+    await invoke("hide_quickbar");
+    return;
+  }
   abortStream();
   closeApproval();
   dom.prompt.value = "";
@@ -4405,21 +4647,682 @@ onEvent((frame) => {
   if (aloud) sayAside(aloud);
 });
 
+/* ==========================================================================
+   Jarvis Live (live.rs, live-rules.js; docs/LIVE-DESIGN.md)
+   --------------------------------------------------------------------------
+   A back-and-forth voice conversation the owner starts and stops. The PC
+   holds the session; the microphone is Rust's (every sentence goes as
+   `source=live` and is checked for the owner's voice before any words
+   exist). This bar:
+   - starts and ends it (the Live button - "End Live" once on), and shows
+     the sign, with End Live, Mic off, Carry on, Resume Live, 20 more
+     minutes (in the last five), Show the card, and Move it here when Live
+     is on the phone;
+   - sends each heard sentence as a spoken question marked `live: true`
+     (the PC adds its Live note: short answers, choices in words, side talk
+     answered with the marker only);
+   - never speaks side talk: an answer that is only "[not for me]" leaves
+     the answer on screen as it was (a crisis help panel included), shows
+     "(not for Jarvis)" on the sign for a moment, and is left out of the
+     conversation - the PC does not keep it either;
+   - after a spoken answer that ends with a question, shows tap buttons
+     under the answer - each is sent as the owner's TYPED words (typed-turn
+     rules), and never while a card raised in this session is on screen;
+   - while such a card is shown: speech pauses and the microphone closes
+     (cards are decided by tapping only), and the sign says so;
+   - interrupting ("Interrupting Jarvis", one setting): by voice, another
+     voice LOWERS Jarvis's voice while the PC checks it, and it stops only
+     if it was the owner; by button only, the microphone closes while
+     Jarvis talks and "Stop talking" cuts it off; "Don't interrupt" shows no
+     Stop talking;
+   - a second thought said before Jarvis made a sound joins the question;
+   - Esc hides the bar and keeps the conversation (it used to forget it);
+   - typing or tapping keeps Live open (the PC's quiet clock);
+   - a short tone when Live ends here, and the PC's fixed line for why.
+   ========================================================================== */
+
+/** Where "Settings, then Voice" opens (settings.html section id). */
+const LIVE_TRAIN_PLACE = "voice";
+/** Shown once, the first time Live is on here, until the first answer. */
+const LIVE_EXPLAINED_KEY = "jarvis.live.explained";
+const LIVE_TYPE_HINT = "Type to Jarvis - typed answers stay on screen";
+const LIVE_EXPLAINER =
+  "Jarvis now listens after every answer - just talk, no \"Hey Jarvis\" needed. Every sentence is checked for your voice first.";
+
+function liveOnHere() {
+  return onHere(live.status, LIVE_ME);
+}
+
+/** Seconds since Live ended, counted on from the PC's `ended_ago_s`. */
+function liveEndedAgo() {
+  if (!live.endedBase) return null;
+  return live.endedBase.ago + Math.floor((Date.now() - live.endedBase.at) / 1000);
+}
+
+/** Does the card the bar shows hold Live? Only one raised in THIS session
+ *  (live-rules.js `cardInSession`, the PC's own rule). */
+function liveCardHolds() {
+  return Boolean(state.approval) && liveOnHere() && cardInSession(state.approval.created, live.status);
+}
+
+function liveExplained() {
+  try {
+    return localStorage.getItem(LIVE_EXPLAINED_KEY) === "yes";
+  } catch {
+    return true;
+  }
+}
+
+function paintLive() {
+  if (!dom.liveStrip) return;
+  const on = liveOnHere();
+  // One name, one state: the button is "Jarvis Live" and pressed while on.
+  dom.liveToggle.setAttribute("aria-pressed", String(on));
+  dom.liveToggle.title = on
+    ? "Jarvis Live is on - click to end it"
+    : "Jarvis Live: talk back and forth, no \"Hey Jarvis\" needed";
+  const now = Date.now();
+  const flash = now < live.flashUntil;
+  const sign = liveSign(live.status, LIVE_ME, {
+    stale: live.stale,
+    thinking: flash && live.thinking,
+    short: flash && live.short,
+    cardShown: liveCardHolds(),
+    endedAgo: liveEndedAgo(),
+  });
+  const offer = live.elsewhere && !sign.show;
+  const notice = !on && live.notice ? live.notice : "";
+  const show = sign.show || Boolean(offer) || Boolean(notice);
+  dom.liveStrip.hidden = !show;
+  if (show) {
+    dom.liveTitle.textContent = sign.show ? sign.title : TITLE;
+    let detail = sign.detail;
+    if (!detail && sign.stop && live.lockUnknown) detail = LOCK_UNKNOWN_WORDS;
+    if (!detail && sign.stop && live.callUnknown) detail = SEEN.call_unknown;
+    if (!detail && sign.stop && now < live.troubleUntil) detail = SEEN.trouble;
+    if (!detail && sign.stop && now < live.sideTalkUntil) detail = SEEN.not_for_me;
+    if (offer) detail = moveWords(live.elsewhere);
+    if (notice && !sign.show) detail = notice;
+    if (detail && detail !== dom.liveDetail.textContent) announce(detail);
+    dom.liveDetail.textContent = detail;
+    // The end hint (and, the first time, what Live is), under the sign.
+    let hint = "";
+    if (on && !detail) hint = live.explaining ? LIVE_EXPLAINER : SEEN.end_hint;
+    dom.liveHint.hidden = !hint;
+    dom.liveHint.textContent = hint;
+    const s = live.status || {};
+    dom.liveStrip.dataset.muted = String(Boolean(on && s.muted));
+    dom.liveStrip.dataset.ended = String(!on);
+    dom.liveEnd.hidden = !sign.stop;
+    dom.liveEnd.textContent = sign.stop || BUTTONS.endLive;
+    dom.liveMute.hidden = !sign.mute;
+    dom.liveMute.textContent = sign.mute || BUTTONS.micOff;
+    dom.liveCarryOn.hidden = !sign.carryOn;
+    dom.liveResume.hidden = !sign.resume;
+    dom.liveMore.hidden = !sign.moreTime;
+    dom.liveShowCard.hidden = !sign.showCard;
+    dom.liveFix.hidden = !(notice && live.noticeNeedsVoice);
+    dom.liveStopTalking.hidden = !(on && jarvisTalking() && loadInterrupt() !== "off");
+    dom.liveMove.hidden = !(sign.move || offer);
+  }
+  // Typing in Live: the same hint the phone's text box gives.
+  if (on && !dom.prompt.dataset.livePlaceholder) {
+    dom.prompt.dataset.livePlaceholder = dom.prompt.placeholder;
+    dom.prompt.placeholder = LIVE_TYPE_HINT;
+  } else if (!on && dom.prompt.dataset.livePlaceholder) {
+    dom.prompt.placeholder = dom.prompt.dataset.livePlaceholder;
+    delete dom.prompt.dataset.livePlaceholder;
+  }
+  // The tap buttons sit under the answer, not in the sign's row.
+  const chips = on && !liveCardHolds() ? live.chips : [];
+  dom.liveChips.hidden = chips.length === 0;
+  dom.liveChips.replaceChildren(
+    ...chips.map((chip) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "text-button";
+      b.textContent = chip;
+      b.addEventListener("click", () => liveTapChip(chip));
+      return b;
+    })
+  );
+  syncWindowHeight();
+}
+
+/** Repaints when the ended sign or Resume Live runs out (they never stay). */
+function liveScheduleEndedRepaint() {
+  clearTimeout(live.endedTimer);
+  const ago = liveEndedAgo();
+  if (ago === null) return;
+  const limits = (live.status && live.status.limits) || {};
+  const marks = [Number(limits.ended_show_s) || 15, Number(limits.resume_s) || 600]
+    .map((s) => s + 1 - ago)
+    .filter((s) => s > 0);
+  if (!marks.length) return;
+  live.endedTimer = setTimeout(() => {
+    paintLive();
+    liveScheduleEndedRepaint();
+  }, Math.min(...marks) * 1000);
+}
+
+/** Why Live did not start, in the strip; "Settings, then Voice" gets a button. */
+function liveRefused(why) {
+  const text = String(why || "").trim() || "Jarvis Live could not start.";
+  live.noticeNeedsVoice = text.startsWith(NEEDS_VOICE);
+  live.resuming = false;
+  live.notice = /^Jarvis Live/.test(text) ? text : `Jarvis Live didn't start. ${text}`;
+  clearTimeout(live.noticeTimer);
+  live.noticeTimer = setTimeout(() => {
+    live.notice = "";
+    paintLive();
+  }, 30000);
+  announce(live.notice, "assertive");
+  paintLive();
+}
+
+async function toggleLive() {
+  // One click at a time: a double click used to start Live twice, and the
+  // second start took the Live microphone for a "hey Jarvis" one (bug 6).
+  if (live.busy) return;
+  live.busy = true;
+  dom.liveToggle.setAttribute("aria-busy", "true");
+  try {
+    if (liveOnHere()) {
+      await invokeStrict("live_stop");
+    } else {
+      live.elsewhere = "";
+      live.notice = "";
+      await invokeStrict("live_start", { by: "button" });
+    }
+  } catch (error) {
+    liveRefused(String((error && error.message) || error));
+  } finally {
+    live.busy = false;
+    dom.liveToggle.removeAttribute("aria-busy");
+  }
+}
+
+async function liveDo(command, args = {}) {
+  try {
+    await invokeStrict(command, args);
+  } catch (error) {
+    const why = String((error && error.message) || error);
+    if (command === "live_start") liveRefused(why);
+    else announce(why, "assertive");
+  }
+}
+
+/** A tap button: the owner's own words, TYPED - a typed answer's rules. */
+function liveTapChip(chip) {
+  live.chips = [];
+  paintLive();
+  send(chip, "typed");
+}
+
+/** Called by `send`: is this a Live voice turn? Typing in Live keeps it open. */
+function liveBeforeSend(isLive, provenance) {
+  state.liveTurn = Boolean(isLive) && provenance === "voice" && liveOnHere();
+  live.sounded = false;
+  live.chips = [];
+  clearTimeout(live.slowTimer);
+  // What is on screen stays there until the new answer really starts - if it
+  // turns out to be side talk, it never goes (the review's #2).
+  live.keep = state.liveTurn && !dom.card.hidden && state.buffer.trim() && state.phase !== "error"
+    ? {
+      buffer: state.buffer,
+      route: state.turnRoute,
+      prompt: state.lastPrompt,
+      previousAnswer: state.previousAnswer,
+      turnId: state.turnId,
+      turnMark: state.turnMark,
+    }
+    : null;
+  if (state.liveTurn) {
+    live.slowTimer = setTimeout(liveSlowFirstAnswer, LIVE_SLOW_MS);
+    // The answer comes into this bar: shown (without taking the keyboard)
+    // if it was hidden (live.rs `live_act` "show"; the review's #10).
+    invoke("live_act", { action: "show" });
+  } else if (liveOnHere() && provenance === "typed") {
+    // The owner typed (or tapped a quick answer) in Live: the conversation
+    // goes on, so the PC's quiet clock starts again (the review's B4).
+    invoke("live_act", { action: "active" });
+  }
+  paintLive();
+}
+
+/** What `paint` shows while a Live answer could still be side talk: the
+ *  answer that was on screen before, or null for the new one. */
+function liveHeldAnswer() {
+  if (!state.liveTurn || !live.keep) return null;
+  if (!state.buffer.trim() || couldBeSideTalk(state.buffer)) return live.keep;
+  live.keep = null;
+  return null;
+}
+
+/** The newest user message, marked as said in Jarvis Live. */
+function liveTag(message) {
+  return state.liveTurn ? { ...message, live: true } : message;
+}
+
+/** Back to what the answer rule says about the microphone (held only while
+ *  an answer plays and talking over it may not interrupt). */
+function liveReleaseHold() {
+  live.heldForAnswer = liveOnHere() && loadInterrupt() !== "voice" && speaking;
+  if (!live.heldForAnswer) invoke("live_hold", { what: "answer", on: false });
+}
+
+/** The first answer is slow (the model loading): "One moment.", under its
+ *  own switch, once per question (momentFlow), with the microphone held so
+ *  Jarvis's own voice is not sent as a sentence (the review's #9). */
+function liveSlowFirstAnswer() {
+  if (!state.liveTurn || !state.inFlight || state.chunks || speechMuted) return;
+  if (!momentFlow.toolStarted(loadMoment() && voiceFlow.moment, Boolean(momentClip))) return;
+  const audio = new Audio(momentClip.uri);
+  invoke("live_hold", { what: "answer", on: true });
+  let done = false;
+  const end = () => {
+    if (done) return;
+    done = true;
+    liveReleaseHold();
+  };
+  audio.onended = end;
+  audio.onerror = end;
+  setTimeout(end, 3000);
+  audio.play().catch(end);
+}
+
+function liveAnswerArrived() {
+  clearTimeout(live.slowTimer);
+  live.thinking = false;
+  live.flashUntil = 0;
+  if (live.explaining) {
+    live.explaining = false;
+    try {
+      localStorage.setItem(LIVE_EXPLAINED_KEY, "yes");
+    } catch {
+      /* shown again next time: harmless */
+    }
+  }
+  paintLive();
+}
+
+/** Called by `finishStream` before the answer is kept: side talk is never
+ *  spoken, leaves what was on screen as it was, shows "(not for Jarvis)" on
+ *  the sign, and is not kept in the conversation. */
+function liveSideTalk() {
+  if (!state.liveTurn || !isSideTalk(state.buffer)) return false;
+  const kept = live.keep;
+  live.keep = null;
+  live.sideTalkUntil = Date.now() + LIVE_FLASH_MS;
+  if (kept) {
+    state.buffer = kept.buffer;
+    state.turnRoute = kept.route;
+    state.lastPrompt = kept.prompt;
+    state.previousAnswer = kept.previousAnswer;
+    state.turnId = kept.turnId;
+    state.turnMark = kept.turnMark;
+    renderPreviousAnswer();
+  } else {
+    state.buffer = SEEN.not_for_me;
+  }
+  return true;
+}
+
+function liveTurnFinished(spokenAnswer) {
+  clearTimeout(live.slowTimer);
+  const wasLive = state.liveTurn;
+  state.liveTurn = false;
+  live.keep = null;
+  live.thinking = false;
+  if (wasLive && spokenAnswer && liveOnHere()) {
+    live.chips = liveChips(state.buffer, { cardShown: liveCardHolds() });
+  }
+  paintLive();
+  const next = live.pending;
+  live.pending = null;
+  if (next && liveOnHere()) {
+    setTimeout(() => liveSend(next.text, next.privacy), 0);
+  }
+}
+
+function liveSend(text, privacy) {
+  state.voiceTurn = true;
+  state.voicePrivacy = privacy;
+  live.lastQuestion = text;
+  send(text, "voice", { live: true });
+}
+
+/** One sentence the PC heard from the owner in Live. */
+function liveAsk(text, heard) {
+  if (!text) return;
+  live.thinking = true;
+  live.short = false;
+  live.flashUntil = Date.now() + LIVE_FLASH_MS;
+  // "I heard you", under its own switch - as on the phone (the audit's
+  // both-apps 2).
+  playHeardSound();
+  const privacy = privacyFromHeard(heard);
+  if (state.inFlight) {
+    // Still answering the last one. Before any sound, a second thought
+    // joins it; after, it waits for this answer to wind up.
+    const folded = state.liveTurn && !live.sounded;
+    live.pending = {
+      text: folded ? liveFold(live.lastQuestion, text, false) : text,
+      privacy,
+    };
+    if (folded) abortStream();
+    return;
+  }
+  liveSend(text, privacy);
+}
+
+/** Every reply the PC sent for a Live sentence (and "let's talk" or the
+ *  move offer for a "hey Jarvis" one). True when it was Live's. */
+function liveHeard(heard) {
+  const isLive = heard.source === "live" || Boolean(heard.live) || Boolean(heard.liveElsewhere);
+  if (!isLive) return false;
+  const reply = liveReply(heard);
+  switch (reply.action) {
+    case "end":
+      live.chips = [];
+      if (reply.say) sayAside(reply.say);
+      break;
+    case "refused": {
+      // "Hey Jarvis, let's talk" the PC would not start: said aloud, in the
+      // PC's fixed words, and shown (the review's #7).
+      const why = String(heard.reason || "Jarvis Live could not start.");
+      liveRefused(why);
+      sayAside(why);
+      break;
+    }
+    case "start":
+      live.resuming = false;
+      if (reply.say) sayAside(reply.say);
+      break;
+    case "move":
+      live.elsewhere = String(heard.liveElsewhere || "");
+      clearTimeout(live.elsewhereTimer);
+      live.elsewhereTimer = setTimeout(() => {
+        live.elsewhere = "";
+        paintLive();
+      }, 30000);
+      // Said, in fixed words, as the phone does - the offer was easy to miss.
+      sayAside(`${SEEN.elsewhere.replace("{device}", deviceWords(live.elsewhere))}.`);
+      break;
+    case "stop":
+      if (loadInterrupt() !== "off") {
+        noteCutOff();
+        stopSpeaking();
+      }
+      break;
+    case "answer":
+      liveAsk(String(heard.text || "").trim(), heard);
+      break;
+    case "short":
+      live.thinking = false;
+      live.short = true;
+      live.flashUntil = Date.now() + LIVE_FLASH_MS;
+      if (reply.say) sayAside(reply.say);
+      break;
+    case "trouble":
+      // The owner's voice, but no words could be made of it: Live carries
+      // on (it used to be taken as the end - the review's bug 2).
+      live.thinking = false;
+      live.troubleUntil = Date.now() + LIVE_FLASH_MS;
+      break;
+    default:
+      if (reply.say) sayAside(reply.say);
+  }
+  paintLive();
+  return true;
+}
+
+/** A card is on screen (or gone): speech pauses and the microphone closes
+ *  until it is decided - by tapping only. Only a card raised in THIS Live
+ *  session holds it (cardInSession). */
+function liveCardShown(on) {
+  if (!liveOnHere()) {
+    live.heldForCard = false;
+    return;
+  }
+  if (on === live.heldForCard) return;
+  live.heldForCard = on;
+  invoke("live_hold", { what: "card", on });
+  if (on) {
+    live.chips = [];
+    speechPaused = true;
+    clearTimeout(pauseTimer);
+    if (currentAudio) currentAudio.pause();
+  } else {
+    resumeSpeaking();
+  }
+  paintLive();
+}
+
+/** "By button only" / "Don't interrupt": the microphone is closed while
+ *  Jarvis talks. */
+function syncLiveAnswer() {
+  const hold = liveOnHere() && loadInterrupt() !== "voice" && speaking;
+  if (hold !== live.heldForAnswer) {
+    live.heldForAnswer = hold;
+    invoke("live_hold", { what: "answer", on: hold });
+  }
+  // voice.rs drops a Live sentence that began over an answer unless the
+  // PC said it was the owner (the review's #9): it is told when one plays.
+  const playing = liveOnHere() && jarvisTalking();
+  if (playing !== live.toldPlaying) {
+    live.toldPlaying = playing;
+    invoke("live_hold", { what: "speaking", on: playing });
+  }
+  if (dom.liveStopTalking) {
+    dom.liveStopTalking.hidden = !(liveOnHere() && jarvisTalking() && loadInterrupt() !== "off");
+  }
+}
+
+/** Another voice while Jarvis talks, in Live: lower Jarvis's voice and ask
+ *  the PC whose it was. */
+function liveBargeOnset(id) {
+  if (loadInterrupt() !== "voice" || !jarvisTalking() || speechMuted) return;
+  if (!voiceFlow.bargeIn || !toolWatch.snapshot().live) return;
+  if (liveBarge("onset") === "duck" && currentAudio) currentAudio.volume = DUCK_VOLUME;
+  clearTimeout(live.duckTimer);
+  live.duckTimer = setTimeout(() => {
+    if (currentAudio) currentAudio.volume = 1;
+  }, WAIT_MAX_MS);
+  invoke("judge_barge_in", { id });
+}
+
+/** The PC's answer: the owner - stop; anyone else - back to full voice. */
+function liveBargeVerdict(verdict) {
+  clearTimeout(live.duckTimer);
+  if (liveBarge(verdict.stop === true ? "owner" : "other") === "stop") {
+    noteCutOff();
+    stopSpeaking();
+  } else if (currentAudio) {
+    currentAudio.volume = 1;
+  }
+}
+
+/** The short sound when Live ends here (the "I heard you" notes the other
+ *  way round, live-rules.js END_TONE). */
+let liveToneContext = null;
+function playLiveEndTone() {
+  try {
+    const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!Ctx) return;
+    liveToneContext = liveToneContext || new Ctx();
+    const samples = heardSoundSamples({
+      ...HEARD_SOUND,
+      tones: END_TONE.map(([hz, ms]) => ({ hz, ms })),
+    });
+    const buffer = liveToneContext.createBuffer(1, samples.length, HEARD_SOUND.rate);
+    const channel = buffer.getChannelData(0);
+    samples.forEach((v, i) => {
+      channel[i] = v / 32768;
+    });
+    const source = liveToneContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(liveToneContext.destination);
+    if (liveToneContext.state === "suspended") liveToneContext.resume().catch(() => {});
+    source.start();
+  } catch (error) {
+    console.info("[quickbar] no Live end tone:", error);
+  }
+}
+
+/** A new Live session here (not "Resume Live"): one Live session is one
+ *  chat (docs/LIVE-DESIGN.md section 3.7), so the next question starts a
+ *  new conversation. What is on screen stays until then. */
+function liveNewSession() {
+  state.conversation = [];
+  state.conversationId = newConversationId();
+  syncNewConversation();
+  live.explaining = !liveExplained();
+}
+
+function liveTake(p) {
+  const before = live.status;
+  live.status = p.status || null;
+  live.stale = p.stale === true;
+  live.lockUnknown = p.lockUnknown === true;
+  live.callUnknown = p.callUnknown === true;
+  const s = live.status || {};
+  if (s.state === "ended") {
+    if (!(before && before.state === "ended" && before.session === s.session)) {
+      live.endedBase = { at: Date.now(), ago: Number.isInteger(s.ended_ago_s) ? s.ended_ago_s : 0 };
+      liveScheduleEndedRepaint();
+    }
+  } else {
+    live.endedBase = null;
+  }
+  const wasHere = onHere(before, LIVE_ME);
+  if (liveOnHere()) {
+    live.elsewhere = "";
+    live.notice = "";
+    if (!wasHere || (before && before.session !== s.session)) {
+      if (!live.resuming) liveNewSession();
+      live.resuming = false;
+    }
+    // Live began (or carried on) with a card of this session on screen: held too.
+    if (liveCardHolds() && !live.heldForCard) liveCardShown(true);
+  } else {
+    live.chips = [];
+    live.heldForCard = false;
+    live.heldForAnswer = false;
+    live.toldPlaying = false;
+    live.explaining = false;
+    if (wasHere) playLiveEndTone();
+  }
+  return before;
+}
+
+listen("live-status", (event) => {
+  const p = (event && event.payload) || {};
+  const before = liveTake(p);
+  const line = (typeof p.say === "string" && p.say) || liveTransition(before, live.status, LIVE_ME);
+  if (line) sayAside(line);
+  paintLive();
+});
+
+/* Jarvis Live on the PHONE shows here too ("Jarvis Live is on your phone",
+   Move it here - the review: it was invisible on the PC). The PC's `live`
+   event carries the status; a session on THIS PC comes from live.rs's own
+   watcher instead (live-status above), so it is not taken twice. */
+onEvent((frame) => {
+  if (!frame || frame.kind !== "live" || !frame.data || typeof frame.data !== "object") return;
+  const s = frame.data;
+  if (liveOnHere() || s.device === LIVE_ME || s.ended_device === LIVE_ME) return;
+  liveTake({ status: s, stale: live.stale, lockUnknown: false, callUnknown: false });
+  paintLive();
+});
+
+listen("live-heard", (event) => {
+  const p = (event && event.payload) || {};
+  live.thinking = p.heard === true;
+  live.short = p.short === true;
+  live.flashUntil = Date.now() + LIVE_FLASH_MS;
+  paintLive();
+  setTimeout(paintLive, LIVE_FLASH_MS + 50);
+});
+
+/** "Resume Live" and "Move it here": the same chat carries on. */
+function liveResume() {
+  live.resuming = true;
+  live.elsewhere = "";
+  liveDo("live_start", { by: "button" });
+}
+
+if (dom.liveToggle) {
+  dom.liveToggle.addEventListener("click", toggleLive);
+  dom.liveEnd.addEventListener("click", () => liveDo("live_stop"));
+  dom.liveMute.addEventListener("click", () =>
+    liveDo("live_mute", { muted: !(live.status && live.status.muted) })
+  );
+  dom.liveCarryOn.addEventListener("click", () => liveDo("live_act", { action: "resume" }));
+  dom.liveResume.addEventListener("click", liveResume);
+  dom.liveMore.addEventListener("click", () => liveDo("live_act", { action: "extend", minutes: 20 }));
+  dom.liveShowCard.addEventListener("click", () => {
+    if (!dom.approval.hidden) {
+      dom.approval.scrollIntoView({ block: "nearest" });
+      dom.approval.focus({ preventScroll: true });
+    }
+  });
+  dom.liveMove.addEventListener("click", () => {
+    live.elsewhere = "";
+    liveDo("live_start", { by: "button" });
+  });
+  dom.liveFix.addEventListener("click", () => {
+    try {
+      localStorage.setItem(SETTINGS_PLACE_KEY, JSON.stringify({ place: LIVE_TRAIN_PLACE, at: Date.now() }));
+    } catch {
+      /* Settings opens at the top; the words say where */
+    }
+    invoke("open_fix_place", { place: "settings" });
+  });
+  dom.liveStopTalking.addEventListener("click", () => {
+    noteCutOff();
+    stopSpeaking();
+  });
+  invoke("live_status").then((p) => {
+    if (!p || typeof p !== "object") return;
+    // The first read counts too: an ended session read when the bar opens
+    // offers Resume Live from the PC's own count (the review's #5).
+    live.resuming = true;
+    liveTake(p);
+    live.resuming = false;
+    paintLive();
+  });
+}
+
 /** One fixed line, said on its own - not part of any answer, so none of an
  *  answer's queue or privacy rules apply to it, and it never stops one. */
 async function sayAside(line) {
+  // Jarvis Live: the microphone is held closed while a fixed line plays, so
+  // Jarvis's own voice is not sent as a sentence (live.rs `live_hold`).
+  const holdMic = liveOnHere();
   try {
+    if (holdMic) await invoke("live_hold", { what: "answer", on: true });
     const uri = await invokeStrict("speak_reply", { text: line });
-    if (!uri) return;
-    const audio = new Audio(uri);
-    // Lip-sync, as for an answer's sentence; `ended` stops following it.
-    const unfollow = followForFaces(audio, uri);
-    await audio.play().catch((error) => {
-      unfollow();
-      throw error;
-    });
+    if (uri) {
+      const audio = new Audio(uri);
+      // Lip-sync, as for an answer's sentence; `ended` stops following it.
+      const unfollow = followForFaces(audio, uri);
+      await new Promise((resolve) => {
+        const gaveUp = () => {
+          unfollow();
+          resolve();
+        };
+        audio.onended = resolve;
+        audio.onerror = gaveUp;
+        audio.play().catch(gaveUp);
+        // Never held for long, whatever the audio does.
+        setTimeout(resolve, 15000);
+      });
+    }
   } catch (error) {
     console.info("[quickbar] could not say it aloud:", error);
+  } finally {
+    if (holdMic) liveReleaseHold();
   }
 }
 listen("jarvis-resync", () => {

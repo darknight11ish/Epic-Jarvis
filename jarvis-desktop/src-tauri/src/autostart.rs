@@ -21,6 +21,24 @@
 //! elevation, and the installer runs `installMode: "currentUser"` anyway, so a
 //! machine-wide entry would point at an executable other users do not have.
 //!
+//! ## Task Manager's Startup tab
+//!
+//! Turning Jarvis off in Task Manager does not delete the value above. It
+//! leaves it where it is and records "disabled" beside it, under
+//!
+//! ```text
+//! HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run
+//!   JarvisDesktop = 03 00 00 00 <when, 8 bytes>     (02 or 06 = enabled)
+//! ```
+//!
+//! Reading only the Run value, Settings said "on" for a Jarvis Windows would
+//! not start (studio integration scout, 2026-09-27; the same byte test as the
+//! MIT `auto-launch` crate's `src/windows.rs`, the idea, not its code). So
+//! [`is_enabled`] also reads that marker, and turning it on here clears a
+//! "disabled" one - the owner asked for on, and Task Manager would otherwise
+//! keep it off. The exact bytes are Windows' own undocumented format: an odd
+//! first byte means disabled. Not yet checked on the owner's PC.
+//!
 //! ## `--autostart`
 //!
 //! The flag is not decoration. Launched at login the app must come up quiet —
@@ -46,6 +64,12 @@ const VALUE_NAME: &str = "JarvisDesktop";
 #[cfg(windows)]
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
+/// Where Task Manager's Startup tab records "switched off", beside the Run
+/// entry rather than instead of it.
+#[cfg(windows)]
+const APPROVED_KEY: &str =
+    r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
 /// The argument added to the autostart command line, and looked for on boot.
 pub const AUTOSTART_FLAG: &str = "--autostart";
 
@@ -54,7 +78,7 @@ pub const AUTOSTART_FLAG: &str = "--autostart";
 /// Read from the real command line rather than remembered in the store,
 /// because the store records what we *asked* Windows to do and this asks what
 /// Windows actually did — they differ after a failed write, and after the user
-/// removes the entry with Task Manager's Startup tab, which is where most
+/// turns the entry off with Task Manager's Startup tab, which is where most
 /// people turn these off.
 pub fn launched_at_login() -> bool {
     std::env::args().any(|a| a == AUTOSTART_FLAG)
@@ -66,10 +90,14 @@ pub fn launched_at_login() -> bool {
 /// a build from `target\release` having installed the MSI, a stale entry
 /// starts the *other* copy at login. Reporting "on" then would be a lie, and
 /// the fix — toggle off, toggle on — is only discoverable if the UI says off.
+///
+/// And has it not been switched off in Task Manager's Startup tab? That
+/// leaves the Run entry in place (see the module docs), so without this check
+/// Settings said "on" for a Jarvis Windows would not start.
 #[cfg(windows)]
 pub fn is_enabled() -> bool {
     match (read_value(), command_line()) {
-        (Some(stored), Some(want)) => paths_match(&stored, &want),
+        (Some(stored), Some(want)) => paths_match(&stored, &want) && !imp::approved_disabled(),
         _ => false,
     }
 }
@@ -87,6 +115,9 @@ pub fn set(enabled: bool) -> Result<bool, String> {
         let line = command_line()
             .ok_or_else(|| "could not work out where this program is installed".to_string())?;
         write_value(&line)?;
+        if imp::approved_disabled() {
+            imp::clear_approved_disabled()?;
+        }
     } else {
         delete_value()?;
     }
@@ -132,18 +163,31 @@ fn paths_match(stored: &str, want: &str) -> bool {
     }
 }
 
+/// Does a StartupApproved value say "switched off"? Windows writes 02 (or 06)
+/// as the first byte for enabled and 03 (or 07) for disabled: an odd first
+/// byte. An empty or missing value is not "off" - Windows only writes one
+/// once the owner has touched the Startup tab.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn approved_says_disabled(data: &[u8]) -> bool {
+    data.first().is_some_and(|b| b & 1 == 1)
+}
+
+/// The value Windows itself writes for "enabled": 02 and eleven zeros.
+#[cfg(windows)]
+const APPROVED_ENABLED: [u8; 12] = [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
 // ---------------------------------------------------------------------------
-// The three registry calls
+// The registry calls
 // ---------------------------------------------------------------------------
 
 #[cfg(windows)]
 mod imp {
-    use super::{RUN_KEY, VALUE_NAME};
+    use super::{approved_says_disabled, APPROVED_ENABLED, APPROVED_KEY, RUN_KEY, VALUE_NAME};
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
     use windows_sys::Win32::System::Registry::{
         RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY,
-        HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE, REG_SZ,
+        HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE, REG_BINARY, REG_SZ,
     };
 
     /// A NUL-terminated UTF-16 buffer, which is what every `*W` call wants.
@@ -166,19 +210,16 @@ mod imp {
     }
 
     fn open(access: u32) -> Result<Key, String> {
+        open_at(RUN_KEY, access)
+    }
+
+    fn open_at(path: &str, access: u32) -> Result<Key, String> {
         let mut key: HKEY = std::ptr::null_mut();
         // The Run key always exists on a working Windows install, so this
         // opens rather than creates: if it is genuinely absent, something is
         // wrong that writing a value will not fix, and the error says so.
-        let rc = unsafe {
-            RegOpenKeyExW(
-                HKEY_CURRENT_USER,
-                wide(RUN_KEY).as_ptr(),
-                0,
-                access,
-                &mut key,
-            )
-        };
+        let rc =
+            unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, wide(path).as_ptr(), 0, access, &mut key) };
         if rc != ERROR_SUCCESS {
             return Err(format!(
                 "could not open the Windows startup list (error {rc})"
@@ -260,6 +301,59 @@ mod imp {
         }
         Ok(())
     }
+
+    /// Has Task Manager's Startup tab switched Jarvis off? Any failure to
+    /// read - the key is absent until the owner first opens that tab - is
+    /// "not switched off", the state Windows itself assumes then.
+    pub fn approved_disabled() -> bool {
+        let Ok(key) = open_at(APPROVED_KEY, KEY_READ) else {
+            return false;
+        };
+        let name = wide(VALUE_NAME);
+        let mut kind: u32 = 0;
+        let mut buf = [0u8; 16];
+        let mut len = buf.len() as u32;
+        let rc = unsafe {
+            RegQueryValueExW(
+                key.0,
+                name.as_ptr(),
+                std::ptr::null(),
+                &mut kind,
+                buf.as_mut_ptr(),
+                &mut len,
+            )
+        };
+        if rc != ERROR_SUCCESS || kind != REG_BINARY {
+            return false;
+        }
+        approved_says_disabled(&buf[..(len as usize).min(buf.len())])
+    }
+
+    /// Write back the "enabled" bytes Windows itself writes, so a "disabled"
+    /// left by Task Manager does not keep Jarvis off after the owner turned
+    /// it on here.
+    pub fn clear_approved_disabled() -> Result<(), String> {
+        let key = open_at(APPROVED_KEY, KEY_SET_VALUE)?;
+        let name = wide(VALUE_NAME);
+        let rc = unsafe {
+            RegSetValueExW(
+                key.0,
+                name.as_ptr(),
+                0,
+                REG_BINARY,
+                APPROVED_ENABLED.as_ptr(),
+                APPROVED_ENABLED.len() as u32,
+            )
+        };
+        if rc != ERROR_SUCCESS {
+            return Err(format!(
+                "Jarvis was added to the Windows startup list, but Task Manager \
+                 still has it switched off (error {rc}). Turn it on in Task \
+                 Manager's Startup tab."
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(windows)]
@@ -313,6 +407,23 @@ mod tests {
             r#""C:\Jarvis\Jarvis Desktop.exe" --silent"#,
             r#""C:\Jarvis\Jarvis Desktop.exe" --autostart"#,
         ));
+    }
+
+    #[test]
+    fn task_managers_switched_off_marker_is_read_as_off() {
+        // Task Manager's own bytes: 03 = switched off (with the time after it),
+        // 02 or 06 = on, and nothing written yet = on.
+        assert!(approved_says_disabled(&[
+            3, 0, 0, 0, 0x10, 0x7a, 0x3c, 0x2e, 0x9b, 0x31, 0xdb, 0x01
+        ]));
+        assert!(approved_says_disabled(&[7, 0, 0, 0]));
+        assert!(!approved_says_disabled(&[
+            2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ]));
+        assert!(!approved_says_disabled(&[
+            6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ]));
+        assert!(!approved_says_disabled(&[]));
     }
 
     #[cfg(not(windows))]

@@ -157,6 +157,9 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -266,6 +269,19 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_trust_fully",
+              "live_button_start_only",
+              "live_like_hey_jarvis"
+            ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -297,6 +313,9 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_trust_fully",
+            "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -306,6 +325,9 @@
             "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -348,6 +370,8 @@
         "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_trust_fully",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -355,6 +379,12 @@
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
+      },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -466,6 +496,19 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_trust_fully",
+            "live_button_start_only",
+            "live_like_hey_jarvis"
+          ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -497,6 +540,9 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -506,6 +552,9 @@
           "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -740,6 +789,9 @@
         "enabled": true,
         "enrolled": false,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -844,6 +896,19 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_trust_fully",
+              "live_button_start_only",
+              "live_like_hey_jarvis"
+            ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -875,6 +940,9 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_trust_fully",
+            "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -884,6 +952,9 @@
             "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -926,6 +997,8 @@
         "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_trust_fully",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -933,6 +1006,12 @@
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
+      },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -1039,6 +1118,19 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_trust_fully",
+            "live_button_start_only",
+            "live_like_hey_jarvis"
+          ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -1070,6 +1162,9 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -1079,6 +1174,9 @@
           "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -1313,6 +1411,9 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -1422,6 +1523,19 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_trust_fully",
+              "live_button_start_only",
+              "live_like_hey_jarvis"
+            ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -1453,6 +1567,9 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_trust_fully",
+            "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -1462,6 +1579,9 @@
             "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -1504,6 +1624,8 @@
         "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_trust_fully",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -1511,6 +1633,12 @@
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
+      },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -1622,6 +1750,19 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_trust_fully",
+            "live_button_start_only",
+            "live_like_hey_jarvis"
+          ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -1653,6 +1794,9 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -1662,6 +1806,9 @@
           "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -1896,6 +2043,9 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -2005,6 +2155,19 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_trust_fully",
+              "live_button_start_only",
+              "live_like_hey_jarvis"
+            ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -2036,6 +2199,9 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_trust_fully",
+            "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -2045,6 +2211,9 @@
             "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -2087,6 +2256,8 @@
         "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_trust_fully",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -2094,6 +2265,12 @@
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
+      },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -2205,6 +2382,19 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_trust_fully",
+            "live_button_start_only",
+            "live_like_hey_jarvis"
+          ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -2236,6 +2426,9 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -2245,6 +2438,9 @@
           "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -2479,6 +2675,9 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -2593,6 +2792,19 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_trust_fully",
+              "live_button_start_only",
+              "live_like_hey_jarvis"
+            ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -2624,6 +2836,9 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_trust_fully",
+            "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -2633,6 +2848,9 @@
             "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -2675,6 +2893,8 @@
         "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_trust_fully",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": true,
         "push_to_talk_why": "",
@@ -2682,6 +2902,12 @@
         "wake_word_pending": false,
         "wake_word_why": "switched on"
       },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
+      },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -2798,6 +3024,19 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_trust_fully",
+            "live_button_start_only",
+            "live_like_hey_jarvis"
+          ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -2829,6 +3068,9 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -2838,6 +3080,9 @@
           "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -3072,6 +3317,9 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -3181,6 +3429,19 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_trust_fully",
+              "live_button_start_only",
+              "live_like_hey_jarvis"
+            ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -3212,6 +3473,9 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_trust_fully",
+            "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -3221,6 +3485,9 @@
             "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -3274,6 +3541,8 @@
         "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_trust_fully",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -3281,6 +3550,12 @@
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
+      },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -3392,6 +3667,19 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_trust_fully",
+            "live_button_start_only",
+            "live_like_hey_jarvis"
+          ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -3423,6 +3711,9 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -3432,6 +3723,9 @@
           "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -3666,6 +3960,9 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -3775,6 +4072,19 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_trust_fully",
+              "live_button_start_only",
+              "live_like_hey_jarvis"
+            ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -3806,6 +4116,9 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_trust_fully",
+            "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -3815,6 +4128,9 @@
             "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -3857,6 +4173,8 @@
         "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_trust_fully",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -3864,6 +4182,12 @@
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
+      },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -3975,6 +4299,19 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_trust_fully",
+            "live_button_start_only",
+            "live_like_hey_jarvis"
+          ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -4006,6 +4343,9 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -4015,6 +4355,9 @@
           "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -4249,6 +4592,9 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -4358,6 +4704,19 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_live": [
+              "live_trust_fully",
+              "live_button_start_only",
+              "live_like_hey_jarvis"
+            ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
+            "live_end": [
+              "live_end_app_lock",
+              "live_end_windows_lock"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -4389,6 +4748,9 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_live": "live_trust_fully",
+            "hands_free_screen": "screen_on_screen",
+            "live_end": "live_end_app_lock",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
@@ -4398,6 +4760,9 @@
             "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -4440,6 +4805,8 @@
         "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
+      "hands_free_live": "live_trust_fully",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -4447,6 +4814,12 @@
         "wake_word_pending": true,
         "wake_word_why": "waiting for you to approve the card"
       },
+      "live": {
+        "available": true,
+        "device": null,
+        "on": false
+      },
+      "live_end": "live_end_app_lock",
       "local_stt_on_client_allowed": false,
       "memory": "memory_aloud",
       "mode": "owner",
@@ -4558,6 +4931,19 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_live": [
+            "live_trust_fully",
+            "live_button_start_only",
+            "live_like_hey_jarvis"
+          ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
+          "live_end": [
+            "live_end_app_lock",
+            "live_end_windows_lock"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -4589,6 +4975,9 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_live": "live_trust_fully",
+          "hands_free_screen": "screen_on_screen",
+          "live_end": "live_end_app_lock",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -4598,6 +4987,9 @@
           "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
+        "hands_free_live": "live_trust_fully",
+        "hands_free_screen": "screen_on_screen",
+        "live_end": "live_end_app_lock",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",

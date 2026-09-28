@@ -42,6 +42,15 @@ import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
+import { validToFromText } from "./valid-to.js";
+// Whether a model can chat, and the words when it cannot (shared with the
+// phone through tests/fixtures/model-chat-cases.json).
+import { CANNOT_CHAT, canChat } from "./model-chat.js";
+// Brain -> Projects: its own module (projects-panel.js, projects.js).
+import { showProjects } from "./projects-panel.js";
+// Brain -> History -> "Forget a time frame": its own module too.
+import { openForgetRange, showForgetRange, takePlace } from "./forget-range-panel.js";
+import { BRAIN_PLACE_KEY } from "./forget-range.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -56,6 +65,28 @@ import {
   readFocus,
   toneOf as focusToneOf,
 } from "./focus.js";
+import {
+  actionsOf as chatbotActionsOf,
+  chatbotGroups,
+  moneyLine as chatbotMoneyLine,
+  usageLine as chatbotUsageLine,
+  compareFormProblem,
+  compareProgress,
+  compareStatusLine,
+  compareTalkingLine,
+  memberLine as chatbotMemberLine,
+  pickLine as chatbotPickLine,
+  formProblem as chatbotFormProblem,
+  limitOf as chatbotLimitOf,
+  neverWords,
+  POLL_MS as CHATBOT_POLL_MS,
+  progressLine as chatbotProgress,
+  readChatbot,
+  statusLine as chatbotStatusLine,
+  talkingLine as chatbotTalkingLine,
+  versionLine as chatbotVersionLine,
+  WORDS as CHATBOT,
+} from "./chatbot.js";
 import {
   actionsOf,
   addPlaceholder,
@@ -76,9 +107,26 @@ import {
   tagOf,
   titleOf,
   todoItems,
+  WAITING,
   WENT_OFF_ACTIONS,
   wentOffMeta,
 } from "./coming-up.js";
+import {
+  ACCEPT_LABEL,
+  ADD_STEP_LABEL,
+  BY_PLACEHOLDER,
+  checkinJobFor,
+  checkinLines,
+  EMPTY_GOALS,
+  GOALS_MISSING,
+  openCount,
+  planIsValid,
+  readGoals,
+  REMOVE_STEP_LABEL,
+  statusLabel,
+  STEP_PLACEHOLDER,
+  STOP_LABEL,
+} from "./goals.js";
 import {
   BUILDING as BRIEFING_BUILDING,
   EMPTY as BRIEFING_EMPTY,
@@ -290,6 +338,7 @@ import {
   RUNNING as DEEP_RUNNING,
   runningCount,
 } from "./deep.js";
+import { loadModelsCache, saveModelsCache } from "./models-cache.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -307,14 +356,17 @@ const VIEWS = {
   history: { title: "History", sub: "your conversations, kept on this PC" },
   faculties: { title: "Model", sub: "models, compute, skills, memory" },
   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
+  projects: { title: "Projects", sub: "what you are working on, and the numbers you track" },
   galaxy: { title: "Galaxy", sub: "the people and things Jarvis knows about" },
-  live: { title: "Live", sub: "what Jarvis is doing" },
+  // "Now" - called "Live" until 2026-09-28, renamed by the owner so it is
+  // not confused with Jarvis Live (the voice conversation).
+  now: { title: "Now", sub: "what Jarvis is doing" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
   watch: { title: "Watch", sub: "the GitHub watchlist" },
 };
 
 /** Views tucked behind the "Advanced" disclosure until it is opened. */
-const ADVANCED_VIEWS = ["galaxy", "live", "trust", "watch"];
+const ADVANCED_VIEWS = ["galaxy", "now", "trust", "watch"];
 
 /** Which sections each view needs, so a switch reads only what it will show. */
 const VIEW_SECTIONS = {
@@ -322,7 +374,7 @@ const VIEW_SECTIONS = {
   // the same Windows Hello rule, as "About <name>" on the Memory tab. Not
   // `graph` any more: privacy finding B1 (brain/routes.rs).
   galaxy: ["memory_entities"],
-  live: ["attention", "status"],
+  now: ["attention", "status"],
   faculties: ["models", "compute", "skills", "memory", "memory_pending"],
   // memory_entities: the names under each fact, for "About <name>"
   // (memory-entities.js). Hidden with the other memory lists.
@@ -334,6 +386,8 @@ const VIEW_SECTIONS = {
   // `history` half - see brain/routes.rs's own comment on why one more GET
   // to that route is the right way to reach it.
   work: ["jobs", "undo", "gate_history"],
+  // Read through its own command (brain/projects.rs), by projects-panel.js.
+  projects: [],
   trust: ["content_risk", "ledger"],
   watch: ["watch", "watch_report"],
 };
@@ -410,6 +464,26 @@ const dom = {
   focusOn: $("focus-on"),
   focusStart: $("focus-start"),
   focusReport: $("focus-report"),
+  chatbot: $("chatbot"),
+  chatbotLimits: $("chatbot-limits"),
+  chatbotLog: $("chatbot-log"),
+  chatbotVersion: $("chatbot-version"),
+  chatbotForm: $("chatbot-form"),
+  chatbotWhich: $("chatbot-which"),
+  chatbotGoal: $("chatbot-goal"),
+  chatbotMessages: $("chatbot-messages"),
+  chatbotMinutes: $("chatbot-minutes"),
+  chatbotNever: $("chatbot-never"),
+  chatbotStart: $("chatbot-start"),
+  chatbotCompare: $("chatbot-compare"),
+  chatbotCompareToggle: $("chatbot-compare-toggle"),
+  chatbotCompareDetail: $("chatbot-compare-detail"),
+  chatbotCompareNote: $("chatbot-compare-note"),
+  chatbotWhichLabel: $("chatbot-which-label"),
+  chatbotMoney: $("chatbot-money"),
+  chatbotSeveral: $("chatbot-several"),
+  chatbotSeveralLegend: $("chatbot-several-legend"),
+  chatbotSeveralList: $("chatbot-several-list"),
   comingUp: $("coming-up"),
   photoFile: $("photo-file"),
   photoChoose: $("photo-choose"),
@@ -432,6 +506,10 @@ const dom = {
   standbyEnd: $("standby-end"),
   standbyAdd: $("standby-add"),
   standbyIsSet: $("standby-is-set"),
+  goalsList: $("goals-list"),
+  goalsNewForm: $("goals-new-form"),
+  goalsNewText: $("goals-new-text"),
+  goalsNewAdd: $("goals-new-add"),
   today: $("today"),
   widgets: $("widgets"),
   widgetsForm: $("widgets-form"),
@@ -454,7 +532,7 @@ const dom = {
   watchAddOpen: $("watch-add-open"),
   watchCancel: $("watch-cancel"),
   watchSeen: $("watch-seen"),
-  countLive: $("count-live"),
+  countLive: $("count-now"),
   countWork: $("count-work"),
   countTrust: $("count-trust"),
   countWatch: $("count-watch"),
@@ -484,6 +562,26 @@ const state = {
 
 /** Whether the four views behind "Advanced" are on the rail right now. */
 let advancedOpen = false;
+
+/**
+ * Seeds the Model pane from disk before the first live read comes back
+ * (or fails), so a cold start with Jarvis not running has something to
+ * paint at once instead of a blank pane while the request times out
+ * (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md). `state.readAt.models` is set
+ * to when the cache was actually read, not to now, so the "as of" wording
+ * in `renderModels` is honest from the very first paint.
+ *
+ * If the first live read of "models" then succeeds, `load()` overwrites
+ * both in the ordinary way. If it fails, `load()`'s existing "keep the last
+ * good read, mark it stale" logic (`state.failed`) takes over unchanged -
+ * this cache is just that "last good read" surviving a restart.
+ */
+(function seedModelsFromDisk() {
+  const cached = loadModelsCache();
+  if (!cached) return;
+  state.data.models = { available: true, ...cached.models };
+  state.readAt.models = cached.at;
+})();
 
 /* "Bring in old chats" (history-import.js; JARVIS-API.md section 85): a
    ChatGPT, Claude, Gemini or DeepSeek export, picked on this PC by the Windows dialog
@@ -745,6 +843,13 @@ async function load(sections, { quiet = false } = {}) {
         // read that asks for it - which may be the Faculties view's, not
         // the Memory tab's. Noted here so it is not lost either way.
         if (section === "memory_pending" && value) noteSleepOffer(value.setup);
+        // Every good models read is written to disk (never on a failed or
+        // "absent" one - `value.available` covers both), so the Model pane
+        // has something honest to show after a restart, not only within
+        // this window's lifetime. See models-cache.js for what is kept.
+        if (section === "models" && value && value.available !== false) {
+          saveModelsCache(value, now);
+        }
         if (failedRead) {
           state.failed[section] = { why: String(value.error || "no reason given"), at: now };
         } else {
@@ -815,7 +920,7 @@ function render(name) {
     case "galaxy":
       renderGraph();
       break;
-    case "live":
+    case "now":
       renderLive();
       break;
     case "faculties":
@@ -837,14 +942,20 @@ function render(name) {
       break;
     case "history":
       renderHistory();
+      showForgetRange();
       break;
     case "work":
       renderFocus();
+      renderChatbot();
       renderComingUp();
+      renderGoals();
       renderBriefing();
       renderJobs();
       renderUndo();
       renderActivity();
+      break;
+    case "projects":
+      showProjects();
       break;
     case "trust":
       renderContentRisk();
@@ -981,10 +1092,60 @@ function renderCounts() {
    Faculties
    ========================================================================== */
 
+/** Shown when there is no data at all - never a good read this session,
+ *  and nothing cached from an earlier one either. Not "Could not read
+ *  this": that would read as a fault on a machine that has simply never
+ *  once been connected to Jarvis while it was running. */
+const MODELS_NEVER_CONNECTED =
+  "There's nothing to show yet — open this once while Jarvis is running on your PC.";
+
+/** The offline banner's "as of" time, in the same short form the rest of
+ *  the window uses for a moment in the past (not a duration - the owner
+ *  asked for a real time here, not "3h ago", since it may be days old). */
+function asOfWords(atMs) {
+  if (!atMs) return "an earlier connection";
+  try {
+    return new Date(atMs).toLocaleString(undefined, {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "an earlier connection";
+  }
+}
+
 function renderModels() {
-  const body = state.data.models || {};
-  const why = unavailable("models");
-  if (why) return rows(dom.models, [], null, whyNode("models"));
+  const live = sectionState("models");
+  const body = state.data.models;
+  // A body of `{available: false, ...}` (never read, or read but failed
+  // with nothing older to show, or an explicit "this backend does not have
+  // it") counts the same as no body at all here: none of them are data to
+  // draw the pane from. Checking `body` alone would treat a failed read's
+  // own `{available: false}` shape as "there is something to show" - it
+  // very nearly did.
+  const haveGoodData = Boolean(body) && body.available !== false;
+
+  if (!haveGoodData) {
+    // The backend itself says it has no models module (a 404/503, not "no
+    // answer at all") - a fact about this machine, not a stale read, so the
+    // cache (if load() kept one) is not shown in its place.
+    if (live.kind === "absent") return rows(dom.models, [], null, whyNode("models"));
+    // 'reading' or 'failed', and there is nothing to fall back to - not
+    // even a disk cache: never a good read, this session or any earlier
+    // one on this PC. Saying "could not read" would blame a fault where
+    // there has simply never once been a connection.
+    const node = el("p", "empty", live.kind === "reading" ? "Reading…" : MODELS_NEVER_CONNECTED);
+    if (live.kind === "failed") node.append(" ", retryButton("models"));
+    return rows(dom.models, [], null, node);
+  }
+
+  // The most recent read failed and this is the last one that worked -
+  // whether that was earlier this session or, via models-cache.js, from
+  // before the app last restarted. Either way it must never be painted as
+  // if it were live: rule 4, and the design doc's whole point.
+  const stale = live.kind === "stale";
 
   const current = body.current || body.active || "";
   const previous = body.previous || "";
@@ -1001,9 +1162,15 @@ function renderModels() {
     items,
     (m) => {
       const ref = String(m.ref || m.name || m.model || "");
+      // Which model is current is honestly cacheable, but only labelled as
+      // of the cache's own time, never drawn as "this is running now" -
+      // that claim needs a live read (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md
+      // section 5). The quieter note below the list carries it while stale.
       const isCurrent = ref && ref === current;
+      const showAsLiveCurrent = isCurrent && !stale;
+      const chats = canChat(m, ref);
       const actions = [];
-      if (ref && !isCurrent) {
+      if (ref && !isCurrent && chats) {
         actions.push(
           button("Use", () => modelAction("switch", ref), {
             title: `Ask to switch to this model. You approve it ${APPROVE_WHERE}.`,
@@ -1012,13 +1179,15 @@ function renderModels() {
         );
       }
       return row({
-        tag: isCurrent ? "active" : "installed",
-        state: isCurrent ? "present" : "",
+        tag: showAsLiveCurrent ? "active" : "installed",
+        state: showAsLiveCurrent ? "present" : "",
         title: ref || "(unnamed)",
         meta: [
           m.size ? bytes(m.size) : "",
           m.family || "",
           ref && ref === previous ? "the previous model" : "",
+          // Said rather than a greyed-out button: why there is no "Use".
+          chats ? "" : CANNOT_CHAT,
         ],
         actions,
       });
@@ -1026,29 +1195,58 @@ function renderModels() {
     "No models reported."
   );
 
-  // Is the model actually ON the graphics card? Nothing else anywhere says.
-  // llama.cpp spills layers to the CPU silently and Ollama still reports the
-  // model as loaded and healthy, so the only symptom is that everything got
-  // slow - and the owner blames Jarvis rather than the fit.
-  //
-  // Prepended after `rows()` rather than composed before it, because `rows()`
-  // calls replaceChildren on whatever it is given, and the rollback button
-  // below appends to the same element.
-  const off = body.offload || {};
-  if (off.status === "cpu" || off.status === "partial") {
+  if (stale) {
+    // The one clearly-labelled sentence this whole feature is for: what is
+    // shown below is old, roughly how old, and what is deliberately not
+    // shown because only a running Jarvis could know it.
     dom.models.prepend(
-      el("p", "banner", String(off.note || "The model is not on the graphics card."))
+      el(
+        "p",
+        "banner models-offline",
+        `Jarvis isn't running right now, so this list is from the last time it was: ` +
+          `${asOfWords(state.readAt.models)}. Sizes and names are probably still right. ` +
+          `What's actually loaded right now isn't shown, since only a running Jarvis knows that.`
+      )
     );
+    if (current) {
+      dom.models.append(
+        el("p", "note", `As of that last connection, ${current} was the one in use.`)
+      );
+    }
   }
 
-  // How fast answers have been (speed-record.patch). docs/JARVIS-API.md says
-  // show exactly three things: one line for the current model, the backend's
-  // own note only when it got slower, and its own old-vs-new sentence beside
-  // the rollback button. The phone does the same (ApiModels.kt ModelSpeed);
-  // this window ignored the block entirely.
-  const speed = modelSpeed(body.speed, current);
-  if (speed.line) dom.models.append(el("p", "model-speed", speed.line));
-  if (speed.slowdown) dom.models.append(el("p", "banner", speed.slowdown));
+  // Is the model actually ON the graphics card, and how fast have answers
+  // been? Both are live measurements of what Ollama is doing right now, not
+  // facts about a file on disk - shown stale they would read as "this is
+  // happening now" and be wrong, so they are skipped outright while stale
+  // rather than guessed at (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md section
+  // 5). `speed` is also never written to the disk cache in the first place
+  // (models-cache.js), so there would be nothing to show here even for a
+  // read this window never actually saw fail.
+  const speed = stale ? { line: "", slowdown: "", lastSwitch: "" } : modelSpeed(body.speed, current);
+  if (!stale) {
+    // llama.cpp spills layers to the CPU silently and Ollama still reports
+    // the model as loaded and healthy, so the only symptom is that
+    // everything got slow - and the owner blames Jarvis rather than the fit.
+    //
+    // Prepended after `rows()` rather than composed before it, because
+    // `rows()` calls replaceChildren on whatever it is given, and the
+    // rollback button below appends to the same element.
+    const off = body.offload || {};
+    if (off.status === "cpu" || off.status === "partial") {
+      dom.models.prepend(
+        el("p", "banner", String(off.note || "The model is not on the graphics card."))
+      );
+    }
+
+    // How fast answers have been (speed-record.patch). docs/JARVIS-API.md
+    // says show exactly three things: one line for the current model, the
+    // backend's own note only when it got slower, and its own old-vs-new
+    // sentence beside the rollback button. The phone does the same
+    // (ApiModels.kt ModelSpeed); this window ignored the block entirely.
+    if (speed.line) dom.models.append(el("p", "model-speed", speed.line));
+    if (speed.slowdown) dom.models.append(el("p", "banner", speed.slowdown));
+  }
 
   if (previous && previous !== current) {
     if (speed.lastSwitch) dom.models.append(el("p", "model-speed", speed.lastSwitch));
@@ -1158,6 +1356,13 @@ function modelSpeed(speed, current) {
     if (firstMs !== null) {
       const tenths = Math.round(firstMs / 100);
       parts.push(`first word after ${Math.floor(tenths / 10)}.${tenths % 10} s`);
+    }
+    // Milestone 7: the share of the conversation Ollama already had read
+    // from the last question and did not read again (its prompt cache;
+    // jarvis_speed.reused_percent). Missing on older rows and older Ollamas.
+    const reused = num(mine.median_reused_percent);
+    if (reused !== null) {
+      parts.push(`${Math.round(Math.min(100, reused))}% of the conversation reused, not read again`);
     }
     if (parts.length) {
       const n = num(mine.answers);
@@ -1601,24 +1806,24 @@ function dismissSleepOffer() {
  * `undefined` if the owner cancelled. `undefined` is a distinct answer from
  * `null` on purpose: the caller must abort the whole action on a cancel,
  * not quietly fall back to "just now" for a date the owner never confirmed.
+ *
+ * An answer that is not a usable date ("last week", a day next month) asks
+ * again, with the reason above the question and the typed words kept. It
+ * used to show an error and return `undefined` - so a Forget the owner had
+ * already confirmed was dropped without a word (play tester, 2026-09-27).
+ * What counts as a date is `validToFromText` (valid-to.js).
  */
 function promptValidTo(message) {
-  const raw = window.prompt(message, "");
-  if (raw === null) return undefined;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  // A bare YYYY-MM-DD is parsed as local midnight, not Date.parse's UTC
-  // midnight - west of Greenwich that shift lands the timestamp on the
-  // previous calendar day, the same trap the "as of" picker above avoids.
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-  const ts = dateOnly
-    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])).getTime()
-    : Date.parse(trimmed);
-  if (Number.isNaN(ts)) {
-    window.alert(`"${trimmed}" is not a date I understand. Try YYYY-MM-DD.`);
-    return undefined;
+  let typed = "";
+  let problem = "";
+  for (;;) {
+    const raw = window.prompt(problem ? `${problem}\n\n${message}` : message, typed);
+    if (raw === null) return undefined;
+    const answer = validToFromText(raw);
+    if (!("error" in answer)) return answer.seconds;
+    typed = raw;
+    problem = answer.error;
   }
-  return ts / 1000;
 }
 
 /** Dates before this are refused by "What did you know on…". The server
@@ -1739,6 +1944,7 @@ async function revealPrivate() {
   // The deep questions, on the Memory tab, come back with the lists.
   deep.at = 0;
   fx.at = 0;
+  cb.at = 0;
   if (state.view !== "memory") render(state.view);
   else loadDeep();
 }
@@ -1747,6 +1953,8 @@ async function revealPrivate() {
 // read the lists again - Rust decides whether they come back hidden.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   const reread = async () => {
+    // The chatbot card's goal and conversation are hidden with the lists too.
+    cb.at = 0;
     await load(VIEW_SECTIONS.memory, { quiet: true });
     render(state.view);
   };
@@ -2367,7 +2575,12 @@ function renderFacts() {
               "if it stopped being true a while ago and you are only telling " +
               "Jarvis about it now."
             );
-            if (validTo === undefined) return; // the date prompt was cancelled
+            if (validTo === undefined) {
+              // Cancel on the date box after "yes, forget it": say so, so
+              // the owner is not left thinking the fact is gone.
+              toast("Nothing was forgotten.");
+              return;
+            }
             const args = { id: Number(f.id) };
             if (validTo !== null) args.valid_to = validTo;
             await memoryWrite("brain_memory_forget", args, FORGOTTEN);
@@ -4427,6 +4640,644 @@ if (dom.focusStart) {
 }
 
 /* ==========================================================================
+   Talk to a chatbot for me (the owner's decisions of 2026-09-27 and
+   2026-09-28; JARVIS-API.md section 87; chatbot.js, brain/chatbot.rs).
+
+   The form (which chatbot, the goal - "these words will be sent" - the
+   most messages and minutes within the version's caps, never-send words)
+   asks the PC for ONE approval card; nothing is sent before a yes. Then the
+   conversation: its state in the PC's words, the counts, Pause / Resume /
+   Stop, Change limits (a NEW card), the transcript with the chatbot's words
+   in the outside-text style, and at the end the summary - kept on screen,
+   never read aloud (nothing in this window speaks). There is no event of
+   its own: it is read again every few seconds while a conversation is
+   live, and on every activity event. The last conversation's id is kept
+   here so its summary stays on screen after it ends.
+
+   "Ask several and compare" (jarvis_chatbot_compare.py): the same form with
+   a tick box per chatbot asks the PC for ONE card listing every one. While
+   it runs: each chatbot's line, Pause / Resume / Stop for the whole
+   comparison, each conversation under its chatbot's name, and at the end
+   ONE summary - where they agree and disagree (who said what), the sources
+   each gave (not checked by Jarvis), who dropped out and why - kept on
+   screen in the outside-text style, never read aloud.
+   ========================================================================== */
+
+const cb = { view: null, error: "", loading: false, again: false, at: 0, id: "", gone: false,
+  timer: null, filled: false, starting: false, limitsKey: "", logKey: "", limitsInFlight: false,
+  cmpId: "", cmpGone: false, lastKind: "", several: new Set(), severalKey: "" };
+const CHATBOT_READ_MS = 15000;
+
+async function loadChatbot() {
+  if (!IS_TAURI) return;
+  if (cb.loading) {
+    cb.again = true;
+    return;
+  }
+  cb.loading = true;
+  try {
+    // The latest live conversation first (it may have been started on the
+    // phone); else the one this window last showed, for its summary.
+    let view = readChatbot(await invoke("chatbot_status", { id: null, compare: null }));
+    cb.gone = false;
+    cb.cmpGone = false;
+    if (view.available && !view.session && cb.id) {
+      const named = readChatbot(await invoke("chatbot_status", { id: cb.id, compare: null }));
+      if (named.available && named.session) view = { ...view, session: named.session, limits: named.limits };
+      else if (named.available) {
+        cb.gone = true;
+        cb.id = "";
+      }
+    }
+    // The same for a comparison: the latest one still going, else the one
+    // this window last showed, for its summary.
+    if (view.available && !view.compare && cb.cmpId) {
+      const named = readChatbot(await invoke("chatbot_status", { id: null, compare: cb.cmpId }));
+      if (named.available && named.compare) view = { ...view, compare: named.compare };
+      else if (named.available) {
+        cb.cmpGone = true;
+        cb.cmpId = "";
+      }
+    }
+    if (view.available && view.session) cb.id = view.session.id;
+    if (view.available && view.compare) cb.cmpId = view.compare.id;
+    if (view.available && view.session && view.session.live) cb.lastKind = "session";
+    if (view.available && view.compare && view.compare.live) cb.lastKind = "compare";
+    cb.view = view;
+    cb.error = "";
+  } catch (error) {
+    cb.error = errorText(error);
+  } finally {
+    cb.loading = false;
+    cb.at = Date.now();
+  }
+  if (cb.again) {
+    cb.again = false;
+    await loadChatbot();
+    return;
+  }
+  if (state.view === "work") paintChatbot();
+}
+
+/** The PC's refusals are sometimes lower-case fragments ("nothing is running"). */
+function asSentence(text) {
+  const t = String(text || "").trim();
+  if (!t) return "Not changed.";
+  const s = t[0].toUpperCase() + t.slice(1);
+  return /[.!?]$/.test(s) ? s : `${s}.`;
+}
+
+async function chatbotAct(cmd, args = {}) {
+  try {
+    const out = await invoke(cmd, args);
+    const said = out && (out.message || out.said);
+    toast(asSentence(said || "Done."), "ok");
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  }
+  await loadChatbot();
+}
+
+/** "Ask several and compare" is ticked. */
+function compareMode() {
+  return Boolean(dom.chatbotCompare && dom.chatbotCompare.checked
+    && dom.chatbotCompareToggle && !dom.chatbotCompareToggle.hidden);
+}
+
+async function chatbotStart() {
+  const v = cb.view;
+  const several = compareMode();
+  const form = {
+    chatbot: dom.chatbotWhich ? dom.chatbotWhich.value : "",
+    // Ticked, in the order the list shows them (grouped by kind).
+    chatbots: v && v.available ? chatbotGroups(v).flatMap((g) => g.chatbots).filter((c) => cb.several.has(c.id)).map((c) => c.id) : [],
+    goal: dom.chatbotGoal ? dom.chatbotGoal.value : "",
+    messages: dom.chatbotMessages ? dom.chatbotMessages.value : "",
+    minutes: dom.chatbotMinutes ? dom.chatbotMinutes.value : "",
+  };
+  if (cb.starting) return;
+  const problem = several ? compareFormProblem(v, form) : chatbotFormProblem(v, form);
+  if (problem) {
+    toast(problem, "bad");
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  // One start at a time: a double press must not ask the PC twice.
+  cb.starting = true;
+  if (dom.chatbotStart) {
+    dom.chatbotStart.dataset.busy = "true";
+    syncLiveButton(dom.chatbotStart);
+  }
+  try {
+    const limits = {
+      goal: form.goal,
+      maxMessages: chatbotLimitOf(form.messages, v.tier.turnsMax),
+      maxMinutes: chatbotLimitOf(form.minutes, v.tier.minutesMax),
+      neverSend: neverWords(dom.chatbotNever ? dom.chatbotNever.value : ""),
+    };
+    let out;
+    if (several) {
+      out = await invoke("chatbot_compare_start", { chatbots: form.chatbots, ...limits });
+      if (out && out.compare) cb.cmpId = out.compare;
+      cb.lastKind = "compare";
+    } else {
+      out = await invoke("chatbot_start", { chatbot: form.chatbot, ...limits });
+      if (out && out.session) cb.id = out.session;
+      cb.lastKind = "session";
+    }
+    toast(asSentence((out && out.message) || CHATBOT.start_note), "ok");
+    if (dom.chatbotGoal) dom.chatbotGoal.value = "";
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  } finally {
+    cb.starting = false;
+  }
+  await loadChatbot();
+  // paintChatbotForm sets busy again only when nothing is built.
+  if (dom.chatbotStart && cb.view && cb.view.available) paintChatbotForm(cb.view);
+}
+
+function chatbotTurn(t, name) {
+  const item = el("div", `chatbot-turn${t.outside ? " chatbot-outside" : ""}`);
+  item.dataset.who = t.who;
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("span", "chatbot-who", t.who === "jarvis" ? `Jarvis, message ${t.n}` : name));
+  if (t.outside) head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  item.append(head);
+  item.append(el("p", "chatbot-text", t.text));
+  if (t.cutOff) item.append(el("p", "note chatbot-cut-off", CHATBOT.cut_off));
+  return item;
+}
+
+function chatbotSummary(s) {
+  const box = el("div", "chatbot-summary chatbot-outside");
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("h3", "subhead", CHATBOT.summary_title));
+  head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  box.append(head);
+  box.append(el("p", "note", CHATBOT.summary_note));
+  if (s.summary.answer) box.append(el("p", "chatbot-text", s.summary.answer));
+  if (s.summary.claims.length) {
+    const list = el("ul", "chatbot-claims");
+    for (const c of s.summary.claims) {
+      list.append(el("li", "", `${c.claim} - ${c.sourced ? CHATBOT.claim_sourced : CHATBOT.claim_unsourced}`));
+    }
+    box.append(list);
+  }
+  if (s.summary.open.length) {
+    box.append(el("p", "note", CHATBOT.open_title));
+    const list = el("ul", "chatbot-open");
+    for (const o of s.summary.open) list.append(el("li", "", o));
+    box.append(list);
+  }
+  return box;
+}
+
+function chatbotLimitsRow(v, s) {
+  const wrap = el("div", "");
+  const row = el("div", "row");
+  const field = (label, value, max, id) => {
+    const lab = el("label", "lbl", label);
+    const input = el("input", "field");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(max);
+    input.value = String(value);
+    input.id = id;
+    lab.append(input);
+    row.append(lab);
+    return input;
+  };
+  const msgs = field(CHATBOT.messages_label, s.max, v.tier.turnsMax, "chatbot-new-messages");
+  const mins = field(CHATBOT.minutes_label, s.maxMinutes, v.tier.minutesMax, "chatbot-new-minutes");
+  wrap.append(row);
+  const neverLab = el("label", "lbl", CHATBOT.never_label);
+  const never = el("input", "field");
+  never.type = "text";
+  never.id = "chatbot-new-never";
+  never.value = s.never.join(", ");
+  never.disabled = s.hidden;
+  neverLab.append(never);
+  wrap.append(neverLab);
+  const go = button(CHATBOT.change_limits, async () => {
+    const m = chatbotLimitOf(msgs.value, v.tier.turnsMax);
+    const n = chatbotLimitOf(mins.value, v.tier.minutesMax);
+    if (m === null || n === null) {
+      toast(`Most messages: 1 to ${v.tier.turnsMax}; most minutes: 1 to ${v.tier.minutesMax}.`, "bad");
+      return;
+    }
+    cb.limitsInFlight = true;
+    try {
+      await chatbotAct("chatbot_limits", {
+        id: s.id, maxMessages: m, maxMinutes: n,
+        // While the words are hidden the box shows none: keep the PC's list.
+        neverSend: s.hidden ? null : neverWords(never.value),
+      });
+    } finally {
+      cb.limitsInFlight = false;
+    }
+  }, { live: true });
+  go.id = "chatbot-limits-go";
+  wrap.append(go);
+  wrap.append(el("p", "note", CHATBOT.limits_note));
+  wrap.append(el("p", "note chatbot-limits-said"));
+  return wrap;
+}
+
+/**
+ * The limits row: rebuilt only when the conversation, its limits or what may
+ * be shown change - never by the 4-second re-read, which would wipe numbers
+ * being typed and take the focus away. Its last line is updated each time.
+ */
+function paintChatbotLimits(v, s) {
+  const box = dom.chatbotLimits;
+  if (!box) return;
+  const show = Boolean(s && (s.state === "running" || s.state === "paused"));
+  box.hidden = !show;
+  if (!show) {
+    box.replaceChildren();
+    cb.limitsKey = "";
+    return;
+  }
+  const key = JSON.stringify([s.id, s.max, s.maxMinutes, s.never, s.hidden, v.tier.turnsMax,
+    v.tier.minutesMax]);
+  if (key !== cb.limitsKey) {
+    box.replaceChildren(chatbotLimitsRow(v, s));
+    cb.limitsKey = key;
+  }
+  // Greyed while a card for new limits waits; its own click greys it while
+  // the request is on its way (button()), and that is left alone here.
+  const go = box.querySelector("#chatbot-limits-go");
+  if (go && !cb.limitsInFlight) {
+    go.dataset.busy = v.limits.waiting ? "true" : "false";
+    syncLiveButton(go);
+  }
+  const said = box.querySelector(".chatbot-limits-said");
+  if (said) {
+    said.textContent = v.limits.waiting ? "A card for new limits is waiting for your answer."
+      : v.limits.said;
+  }
+}
+
+/** The summary and the transcript: rebuilt only when they change. */
+function paintChatbotLog(s) {
+  const box = dom.chatbotLog;
+  if (!box) return;
+  const shown = s && !s.hidden ? s : null;
+  const key = shown ? "s" + JSON.stringify([shown.id, shown.summary, shown.transcript]) : "";
+  if (key === cb.logKey) return;
+  cb.logKey = key;
+  const out = [];
+  if (shown && shown.summary) out.push(chatbotSummary(shown));
+  if (shown && shown.transcript.length) {
+    const tr = el("div", "chatbot-transcript");
+    tr.append(el("h3", "subhead", CHATBOT.transcript_title));
+    tr.append(el("p", "note", CHATBOT.outside_note));
+    for (const t of shown.transcript) tr.append(chatbotTurn(t, shown.name));
+    out.push(tr);
+  }
+  box.replaceChildren(...out);
+}
+
+/** A list under a small heading, for the comparison's summary. */
+function summaryList(box, title, items, cls) {
+  if (!items.length) return;
+  box.append(el("p", "note", title));
+  const list = el("ul", cls);
+  for (const item of items) list.append(typeof item === "string" ? el("li", "", item) : item);
+  box.append(list);
+}
+
+function compareSummary(c) {
+  const sm = c.summary;
+  const box = el("div", "chatbot-summary chatbot-outside chatbot-compare-summary");
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("h3", "subhead", CHATBOT.compare_summary_title));
+  head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  box.append(head);
+  box.append(el("p", "note", CHATBOT.compare_summary_note));
+  if (sm.answer) box.append(el("p", "chatbot-text", sm.answer));
+  summaryList(box, CHATBOT.agree_title, sm.agree, "chatbot-agree");
+  summaryList(box, CHATBOT.disagree_title, sm.disagree.map((d) => {
+    const li = el("li", "", d.point);
+    const views = el("ul", "");
+    for (const v of d.views) views.append(el("li", "", `${v.who}: ${v.said}`));
+    li.append(views);
+    return li;
+  }), "chatbot-disagree");
+  summaryList(box, CHATBOT.sources_title, sm.sources.map((x) => `${x.who}: ${x.items.join("; ")}`),
+    "chatbot-sources");
+  summaryList(box, CHATBOT.dropped_title, sm.dropped.map((x) => `${x.who} - ${x.why}`),
+    "chatbot-dropped");
+  summaryList(box, CHATBOT.open_title, sm.open, "chatbot-open");
+  return box;
+}
+
+/** The comparison's summary and each conversation: rebuilt only when they change. */
+function paintCompareLog(c) {
+  const box = dom.chatbotLog;
+  if (!box) return;
+  const shown = c && !c.hidden ? c : null;
+  const key = shown ? "c" + JSON.stringify([shown.id, shown.summary,
+    shown.members.map((m) => m.transcript)]) : "";
+  if (key === cb.logKey) return;
+  cb.logKey = key;
+  const out = [];
+  if (shown && shown.summary) out.push(compareSummary(shown));
+  const talked = shown ? shown.members.filter((m) => m.transcript.length) : [];
+  if (talked.length) {
+    const tr = el("div", "chatbot-transcript");
+    tr.append(el("h3", "subhead", CHATBOT.conversations_title));
+    tr.append(el("p", "note", CHATBOT.outside_note));
+    for (const m of talked) {
+      const part = el("div", "chatbot-member-log");
+      part.dataset.chatbot = m.chatbot;
+      part.append(el("h4", "subhead", m.name));
+      for (const t of m.transcript) part.append(chatbotTurn(t, m.name));
+      tr.append(part);
+    }
+    out.push(tr);
+  }
+  box.replaceChildren(...out);
+}
+
+function hiddenBlock(title) {
+  const hid = el("div", "private-hidden");
+  hid.append(el("p", "empty", CHATBOT.hidden));
+  hid.append(button("Show", revealPrivate, { title }));
+  return hid;
+}
+
+function compareNow(c) {
+  const now = el("div", "chatbot-now chatbot-compare-now");
+  now.dataset.state = c.state;
+  now.append(el("p", "chatbot-head", c.live ? compareTalkingLine(c)
+    : `${CHATBOT.compare_title}: ${compareStatusLine(c)}`));
+  if (c.live) now.append(el("p", "chatbot-line", compareStatusLine(c)));
+  if (c.state !== "refused") now.append(el("p", "note", compareProgress(c)));
+  if (c.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${c.tierName}`));
+  if (c.hidden) {
+    now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the comparison."));
+  } else if (c.goal) {
+    now.append(el("p", "note", `Your goal (sent word for word to each): ${c.goal}`));
+  }
+  if (c.members.length) {
+    const list = el("ul", "chatbot-members");
+    for (const m of c.members) {
+      const li = el("li", "", chatbotMemberLine(m, c));
+      li.dataset.state = m.state;
+      // An API conversation's counts, per chatbot.
+      if (m.usage) li.append(el("p", "note chatbot-usage", chatbotUsageLine(m.usage)));
+      list.append(li);
+    }
+    now.append(list);
+  }
+  for (const m of c.hidden ? [] : c.members) {
+    if (!m.question) continue;
+    const q = el("div", "chatbot-question chatbot-outside");
+    q.append(el("p", "subhead", `${CHATBOT.question_title}: ${m.name}`));
+    q.append(el("p", "chatbot-text", m.question));
+    q.append(el("p", "note", CHATBOT.question_note));
+    now.append(q);
+  }
+  const actions = el("div", "row-actions");
+  for (const a of chatbotActionsOf(c)) {
+    if (a === "pause") actions.append(button(CHATBOT.pause, () => chatbotAct("chatbot_pause")));
+    if (a === "resume") actions.append(button(CHATBOT.resume, () => chatbotAct("chatbot_resume"), { live: true }));
+    if (a === "stop") actions.append(button(CHATBOT.stop, () => chatbotAct("chatbot_compare_stop", { id: c.id }), { danger: true }));
+  }
+  if (actions.childElementCount) now.append(actions);
+  return now;
+}
+
+function paintChatbot() {
+  const box = dom.chatbot;
+  if (!box) return;
+  const v = cb.view;
+  if (dom.chatbotVersion) dom.chatbotVersion.textContent = v ? chatbotVersionLine(v) : "";
+  if (!v) {
+    const line = el("p", "empty", cb.error ? `Could not read it: ${cb.error}` : "Reading…");
+    if (cb.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadChatbot));
+    }
+    box.replaceChildren(line);
+    if (dom.chatbotForm) dom.chatbotForm.hidden = true;
+    paintChatbotLimits(null, null);
+    paintChatbotLog(null);
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || CHATBOT.missing));
+    if (dom.chatbotForm) dom.chatbotForm.hidden = true;
+    paintChatbotLimits(null, null);
+    paintChatbotLog(null);
+    return;
+  }
+  const c = v.compare;
+  // A comparison going is shown; else the one this window started last.
+  const showCompare = Boolean(c && (c.live || (!(v.session && v.session.live)
+    && (cb.lastKind === "compare" || !v.session))));
+  const s = showCompare ? null : v.session;
+  const out = [];
+  if (cb.error) out.push(el("p", "empty failed", `Could not read it again: ${cb.error}`));
+  if (!v.anyBuilt) out.push(el("p", "note chatbot-none", CHATBOT.none_built));
+  if (cb.gone && !showCompare) out.push(el("p", "note", CHATBOT.gone));
+  if (cb.cmpGone && !s) out.push(el("p", "note", CHATBOT.compare_gone));
+  if (showCompare) {
+    out.push(compareNow(c));
+  } else if (s) {
+    const now = el("div", "chatbot-now");
+    now.dataset.state = s.state;
+    now.append(el("p", "chatbot-head", s.live ? chatbotTalkingLine(s) : `${s.name}: ${chatbotStatusLine(s)}`));
+    if (s.live) now.append(el("p", "chatbot-line", chatbotStatusLine(s)));
+    if (s.state !== "refused") now.append(el("p", "note", chatbotProgress(s)));
+    if (s.usage) now.append(el("p", "note chatbot-usage", chatbotUsageLine(s.usage)));
+    if (s.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${s.tierName}`));
+    if (s.hidden) {
+      now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the conversation."));
+    } else if (s.goal) {
+      now.append(el("p", "note", `Your goal (sent word for word): ${s.goal}`));
+    }
+    if (s.question) {
+      const q = el("div", "chatbot-question chatbot-outside");
+      q.append(el("p", "subhead", CHATBOT.question_title));
+      q.append(el("p", "chatbot-text", s.question));
+      q.append(el("p", "note", CHATBOT.question_note));
+      now.append(q);
+    }
+    const actions = el("div", "row-actions");
+    for (const a of chatbotActionsOf(s)) {
+      if (a === "pause") actions.append(button(CHATBOT.pause, () => chatbotAct("chatbot_pause")));
+      if (a === "resume") actions.append(button(CHATBOT.resume, () => chatbotAct("chatbot_resume"), { live: true }));
+      if (a === "stop") actions.append(button(CHATBOT.stop, () => chatbotAct("chatbot_stop", { id: s.id }), { danger: true }));
+    }
+    if (actions.childElementCount) now.append(actions);
+    out.push(now);
+  } else if (v.anyBuilt) {
+    out.push(el("p", "empty", "No conversation yet."));
+  }
+  box.replaceChildren(...out);
+  paintChatbotLimits(v, s);
+  if (showCompare) paintCompareLog(c);
+  else paintChatbotLog(s);
+  paintChatbotForm(v);
+  const live = Boolean((v.session && v.session.live) || (c && c.live));
+  if (live && !cb.timer) {
+    cb.timer = setInterval(() => {
+      if (state.view === "work" && !cb.loading) loadChatbot();
+    }, CHATBOT_POLL_MS);
+  }
+  if (!live && cb.timer) {
+    clearInterval(cb.timer);
+    cb.timer = null;
+  }
+}
+
+/** The tick boxes, one per chatbot: rebuilt only when the list changes. */
+function paintChatbotSeveral(v) {
+  if (dom.chatbotSeveralLegend) {
+    dom.chatbotSeveralLegend.textContent = v.canCompare ? chatbotPickLine(v) : CHATBOT.compare_not_enough;
+  }
+  const list = dom.chatbotSeveralList;
+  if (!list) return;
+  const key = JSON.stringify(v.chatbots);
+  if (key === cb.severalKey) return;
+  cb.severalKey = key;
+  for (const id of [...cb.several]) {
+    if (!v.chatbots.some((c) => c.id === id && c.built)) cb.several.delete(id);
+  }
+  // Grouped by how each is reached, like the single chooser; a chatbot
+  // that cannot be used yet says why under its name.
+  const rows = [];
+  for (const g of chatbotGroups(v)) {
+    if (g.title) rows.push(el("p", "note chatbot-kind", g.title));
+    for (const c of g.chatbots) {
+      const lab = el("label", "");
+      const box = el("input", "");
+      box.type = "checkbox";
+      box.value = c.id;
+      box.disabled = !c.built;
+      box.checked = c.built && cb.several.has(c.id);
+      box.addEventListener("change", () => {
+        if (box.checked) cb.several.add(c.id);
+        else cb.several.delete(c.id);
+      });
+      lab.append(box, ` ${c.name}`);
+      rows.push(lab);
+      if (!c.built) rows.push(el("p", "note chatbot-not-ready", c.note || "Not built yet."));
+      // An API service: how much of its monthly money limit is left.
+      const money = chatbotMoneyLine(c);
+      if (money) rows.push(el("p", "note chatbot-money-line", money));
+    }
+    if (g.kind === "api") rows.push(el("p", "note chatbot-money-note", CHATBOT.money_pc_only));
+  }
+  list.replaceChildren(...rows);
+}
+
+/**
+ * Under the single chooser: the chosen API service's money left this month
+ * (the PC's own amounts), and that limits and prices are set on the PC.
+ * Hidden for a website or the second AI on this PC.
+ */
+function paintChatbotMoney(v) {
+  const box = dom.chatbotMoney;
+  if (!box) return;
+  const id = dom.chatbotWhich ? dom.chatbotWhich.value : "";
+  const bot = v && v.available ? v.chatbots.find((c) => c.id === id) : null;
+  const several = compareMode();
+  if (!bot || bot.kind !== "api" || several) {
+    box.hidden = true;
+    box.textContent = "";
+    return;
+  }
+  box.textContent = [chatbotMoneyLine(bot), CHATBOT.money_pc_only].filter(Boolean).join(" ");
+  box.hidden = false;
+}
+
+function paintChatbotForm(v) {
+  const form = dom.chatbotForm;
+  if (!form) return;
+  form.hidden = Boolean((v.session && v.session.live) || (v.compare && v.compare.live));
+  if (form.hidden) return;
+  // An older PC has no comparisons: no tick box then.
+  if (dom.chatbotCompareToggle) dom.chatbotCompareToggle.hidden = !(v.tier.compareMax > 0);
+  const several = compareMode();
+  if (dom.chatbotCompareDetail) dom.chatbotCompareDetail.hidden = !several;
+  if (dom.chatbotCompareNote) dom.chatbotCompareNote.hidden = !several;
+  if (dom.chatbotWhichLabel) dom.chatbotWhichLabel.hidden = several;
+  if (dom.chatbotSeveral) dom.chatbotSeveral.hidden = !several;
+  if (several) paintChatbotSeveral(v);
+  const which = dom.chatbotWhich;
+  if (which) {
+    const was = which.value;
+    // Grouped by how each is reached: websites, with a key, on this PC.
+    const option = (c) => {
+      const o = el("option", "", c.built ? c.name : `${c.name} - ${c.note || "Not built yet."}`);
+      o.value = c.id;
+      o.disabled = !c.built;
+      return o;
+    };
+    which.replaceChildren(...chatbotGroups(v).map((g) => {
+      if (!g.title) return g.chatbots.map(option);
+      const group = el("optgroup", "");
+      group.label = g.title;
+      group.append(...g.chatbots.map(option));
+      return [group];
+    }).flat());
+    // The first usable one as the list shows it (grouped), not as the PC sent it.
+    const shown = chatbotGroups(v).flatMap((g) => g.chatbots);
+    const pick = shown.find((c) => c.id === was && c.built) || shown.find((c) => c.built)
+      || shown[0];
+    if (pick) which.value = pick.id;
+  }
+  paintChatbotMoney(v);
+  if (dom.chatbotMessages) dom.chatbotMessages.max = String(v.tier.turnsMax);
+  if (dom.chatbotMinutes) dom.chatbotMinutes.max = String(v.tier.minutesMax);
+  if (!cb.filled) {
+    if (dom.chatbotMessages) dom.chatbotMessages.value = String(v.tier.turnsDefault);
+    if (dom.chatbotMinutes) dom.chatbotMinutes.value = String(v.tier.minutesDefault);
+    cb.filled = true;
+  }
+  if (dom.chatbotStart) {
+    // Nothing built: Start stays greyed, with the reason as its title.
+    dom.chatbotStart.dataset.title = v.anyBuilt ? "" : CHATBOT.none_built;
+    dom.chatbotStart.dataset.busy = v.anyBuilt ? "false" : "true";
+    syncLiveButton(dom.chatbotStart);
+    if (!v.anyBuilt) dom.chatbotStart.title = CHATBOT.none_built;
+  }
+}
+
+function renderChatbot() {
+  paintChatbot();
+  if (IS_TAURI && !cb.loading && Date.now() - cb.at > CHATBOT_READ_MS) loadChatbot();
+}
+
+if (dom.chatbotForm) {
+  dom.chatbotForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    chatbotStart();
+  });
+}
+if (dom.chatbotCompare) {
+  dom.chatbotCompare.addEventListener("change", () => {
+    if (cb.view && cb.view.available) paintChatbotForm(cb.view);
+  });
+}
+if (dom.chatbotWhich) {
+  dom.chatbotWhich.addEventListener("change", () => {
+    if (cb.view && cb.view.available) paintChatbotMoney(cb.view);
+  });
+}
+if (dom.chatbotStart) {
+  liveButtons.add(dom.chatbotStart);
+  syncLiveButton(dom.chatbotStart);
+}
+
+/* ==========================================================================
    Coming up - timers, alarms, reminders and the to-do list (the owner's
    decisions of 2026-09-25; JARVIS-API.md section 21; coming-up.js).
 
@@ -4467,7 +5318,13 @@ async function loadComingUp() {
     await loadComingUp();
     return;
   }
-  if (state.view === "work") paintComingUp();
+  if (state.view === "work") {
+    paintComingUp();
+    // A goal's weekly check-in lives on this very list (goals.js's own
+    // module doc says why) - repaint it too, so its "waiting"/"paused"/next
+    // note stays in step with Coming up rather than needing its own read.
+    paintGoals();
+  }
 }
 
 async function scheduleAct(job, action) {
@@ -4906,6 +5763,282 @@ if (dom.standbyAdd) {
   syncLiveButton(dom.standbyAdd);
 }
 
+/* ==========================================================================
+   Goals - a plan the owner edits, one card per acting step (the owner's
+   "build it now", 2026-09-27; JARVIS-API.md section 59; goals.js).
+
+   Read through its own command (brain/goals.rs), not brain_read - the words
+   are taken out while the private lists are hidden, same as Coming up. A new
+   draft and marking a step raise no card; Stop tracking is one tap,
+   immediate, no confirm. Accepting a draft is the only place this can raise
+   a card, and it is the backend's own weekly-check-in card, never one this
+   window invents - see goals.js's own module doc for why that check-in's
+   live state is read from the very same Coming up list rather than a second
+   source of truth.
+   ========================================================================== */
+
+const gl = { view: null, error: "", loading: false, again: false, at: 0 };
+const GOALS_READ_MS = 20000;
+
+/** goal id -> its working plan while it is still a draft, edited but not yet
+ *  sent to Accept. Cleared once accepted (or the goal is gone). */
+const draftPlans = new Map();
+
+/** goal id -> the id of the weekly check-in job accept() handed back for
+ *  it, so a later read can find that SAME job even if its text ever
+ *  changed - a reload of the app still falls back to matching by text
+ *  (goals.js checkinJobFor). */
+const checkinJobIds = new Map();
+
+async function loadGoals() {
+  if (!IS_TAURI) return;
+  if (gl.loading) {
+    gl.again = true;
+    return;
+  }
+  gl.loading = true;
+  try {
+    gl.view = readGoals(await invoke("brain_goals"));
+    gl.error = "";
+  } catch (error) {
+    gl.error = errorText(error);
+  } finally {
+    gl.loading = false;
+    gl.at = Date.now();
+  }
+  if (gl.again) {
+    gl.again = false;
+    await loadGoals();
+    return;
+  }
+  if (state.view === "work") paintGoals();
+}
+
+/** The working copy of a draft's plan - made once, from what the PC sent,
+ *  then edited in place so typing does not get wiped by the next read. */
+function workingPlan(goal) {
+  if (!draftPlans.has(goal.id)) draftPlans.set(goal.id, goal.plan.map((s) => ({ ...s })));
+  return draftPlans.get(goal.id);
+}
+
+async function createGoal() {
+  const input = dom.goalsNewText;
+  const words = input ? input.value.trim() : "";
+  if (!words) return;
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_goals_create", { text: words });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else {
+      toast("Added as a draft.", "ok");
+      input.value = "";
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+}
+
+async function acceptGoal(goal) {
+  const limits = gl.view ? gl.view.limits : undefined;
+  const plan = workingPlan(goal);
+  if (!planIsValid(plan, limits)) {
+    toast("Add at least one step, each with some words, none of them too long.", "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_goals_accept", { id: goal.id, plan });
+    if (out && out.ok === false) {
+      toast(String(out.error || "Refused."), "bad");
+    } else {
+      toast("Accepted - Jarvis will check in once a week.", "ok");
+      draftPlans.delete(goal.id);
+      if (out && out.goal && out.goal.checkin && out.goal.checkin.id) {
+        checkinJobIds.set(goal.id, out.goal.checkin.id);
+      }
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+  // The new job is on Coming up's own list, not this read - fetch it too,
+  // straight away, so the check-in's state shows without a second visit.
+  await loadComingUp();
+}
+
+async function goalStep(goal, index, done) {
+  try {
+    const out = await invoke("brain_goals_step", { id: goal.id, index, done });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+}
+
+async function stopGoal(goal) {
+  try {
+    const out = await invoke("brain_goals_stop", { id: goal.id });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else toast("Stopped tracking.", "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  checkinJobIds.delete(goal.id);
+  await loadGoals();
+  await loadComingUp();
+}
+
+function goalStepEditorRow(plan, index) {
+  const line = el("div", "goal-editor-row");
+  const step = el("input", "field goal-step-field");
+  step.type = "text";
+  step.maxLength = (gl.view && gl.view.limits.text) || 300;
+  step.value = plan[index].step;
+  step.placeholder = STEP_PLACEHOLDER;
+  step.setAttribute("aria-label", STEP_PLACEHOLDER);
+  step.addEventListener("input", () => {
+    plan[index].step = step.value;
+  });
+  const by = el("input", "field goal-by-field");
+  by.type = "text";
+  by.maxLength = (gl.view && gl.view.limits.by) || 40;
+  by.value = plan[index].by;
+  by.placeholder = BY_PLACEHOLDER;
+  by.setAttribute("aria-label", BY_PLACEHOLDER);
+  by.addEventListener("input", () => {
+    plan[index].by = by.value;
+  });
+  line.append(step, by, button(REMOVE_STEP_LABEL, () => {
+    plan.splice(index, 1);
+    paintGoals();
+  }, { danger: true }));
+  return line;
+}
+
+function draftGoalBlock(goal) {
+  const plan = workingPlan(goal);
+  const block = el("div", "goal-block");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
+  head.append(el("span", "row-tag", statusLabel(goal.status)));
+  block.append(head);
+  const steps = el("div", "goal-steps");
+  plan.forEach((_, i) => steps.append(goalStepEditorRow(plan, i)));
+  block.append(steps);
+  const maxSteps = (gl.view && gl.view.limits.steps) || 7;
+  const actions = el("div", "goal-actions");
+  actions.append(button(ADD_STEP_LABEL, () => {
+    if (plan.length >= maxSteps) {
+      toast(`A plan can have at most ${maxSteps} steps - keep the big ones and drop the rest.`, "bad");
+      return;
+    }
+    plan.push({ step: "", by: "", done: false });
+    paintGoals();
+  }));
+  actions.append(button(ACCEPT_LABEL, () => acceptGoal(goal), { live: true }));
+  block.append(actions);
+  return block;
+}
+
+function goalStepRow(goal, step, index) {
+  const line = el("div", "goal-step");
+  const label = el("label", "goal-step-label");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = step.done;
+  const active = goal.status === "active";
+  box.disabled = !active;
+  if (active) {
+    liveButtons.add(box);
+    syncLiveButton(box);
+  }
+  box.addEventListener("change", async () => {
+    const want = box.checked;
+    box.disabled = true;
+    await goalStep(goal, index, want);
+  });
+  label.append(box, el("span", "goal-step-text", step.step));
+  line.append(label);
+  if (step.by) line.append(el("span", "goal-step-by", step.by));
+  return line;
+}
+
+function activeGoalBlock(goal, jobs) {
+  const block = el("div", "goal-block");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
+  const tag = el("span", "row-tag", statusLabel(goal.status));
+  if (goal.status === "active") tag.dataset.state = "running";
+  head.append(tag);
+  block.append(head);
+  const steps = el("div", "goal-steps");
+  goal.plan.forEach((s, i) => steps.append(goalStepRow(goal, s, i)));
+  block.append(steps);
+  if (goal.status === "active") {
+    const job = checkinJobFor(goal, jobs, checkinJobIds.get(goal.id));
+    if (job) checkinJobIds.set(goal.id, job.id);
+    for (const line of checkinLines(job, WAITING)) block.append(el("p", "goal-note", line));
+    block.append(button(STOP_LABEL, () => stopGoal(goal), { live: true, danger: true }));
+  }
+  return block;
+}
+
+function paintGoals() {
+  const box = dom.goalsList;
+  if (!box) return;
+  const v = gl.view;
+  if (!v) {
+    const line = el("p", "empty", gl.error ? `Could not read Goals: ${gl.error}` : "Reading…");
+    if (gl.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadGoals));
+    }
+    box.replaceChildren(line);
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || GOALS_MISSING));
+    if (dom.goalsNewForm) dom.goalsNewForm.hidden = true;
+    return;
+  }
+  const full = openCount(v) >= v.limits.goals;
+  if (dom.goalsNewForm) dom.goalsNewForm.hidden = full;
+  if (!v.goals.length) {
+    box.replaceChildren(el("p", "empty", EMPTY_GOALS));
+  } else {
+    const jobs = (upL.view && upL.view.jobs) || [];
+    box.replaceChildren(...v.goals.map((g) =>
+      (g.status === "draft" ? draftGoalBlock(g) : activeGoalBlock(g, jobs))));
+  }
+  // The rows above already carry no words while the private lists are
+  // hidden (Rust blanked them, same as Coming up) - this only adds the
+  // "Show" prompt underneath, exactly as paintComingUp does.
+  if (v.hidden) box.append(hiddenNode(0, "words"));
+  if (full) {
+    box.append(el("p", "empty", `${v.limits.goals} goals are already open - stop tracking one before adding another.`));
+  }
+}
+
+function renderGoals() {
+  paintGoals();
+  if (IS_TAURI && !gl.loading && Date.now() - gl.at > GOALS_READ_MS) loadGoals();
+}
+
+if (dom.goalsNewForm) {
+  dom.goalsNewForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createGoal();
+  });
+}
+if (dom.goalsNewAdd) {
+  liveButtons.add(dom.goalsNewAdd);
+  syncLiveButton(dom.goalsNewAdd);
+}
+
 // Private answers turned on or off, or a Show ran out: read it again - Rust
 // decides whether the words come back.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
@@ -4919,6 +6052,13 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   };
   TAURI.event.listen("security-changed", rereadSchedule);
   TAURI.event.listen("private-hidden", rereadSchedule);
+  // Goals hides its words the same way (brain/goals.rs redact_goals).
+  const rereadGoals = () => {
+    gl.at = 0;
+    if (state.view === "work") loadGoals();
+  };
+  TAURI.event.listen("security-changed", rereadGoals);
+  TAURI.event.listen("private-hidden", rereadGoals);
   // The deep questions are hidden with the lists too (commands.rs get_deep).
   const rereadDeep = () => {
     deep.at = 0;
@@ -5733,6 +6873,11 @@ function pushTrace(frame) {
   } else if (kind === "deep") {
     // The id and how it ended - never the question or the answer.
     body = `question ${String(data.id || "?")} ${String(data.state || "")}`.trim();
+  } else if (kind === "live") {
+    // Jarvis Live's session (jarvis_live.status(): fixed words and numbers,
+    // never anything said), in one readable line rather than raw JSON (the
+    // Live review, 2026-09-28).
+    body = liveTraceLine(data);
   } else if (kind === "hello") {
     body = `resumed from ${data.resumed_from ?? 0}${data.stale ? " · STALE" : ""}`;
   } else {
@@ -5745,7 +6890,7 @@ function pushTrace(frame) {
   // DOM nodes is a leak with a nice name.
   if (state.trace.length > 300) state.trace.splice(0, state.trace.length - 300);
 
-  if (state.view !== "live") return;
+  if (state.view !== "now") return;
   const li = el("li");
   li.append(
     el("span", "trace-time", time),
@@ -5755,6 +6900,21 @@ function pushTrace(frame) {
   dom.trace.append(li);
   while (dom.trace.childElementCount > 300) dom.trace.firstElementChild.remove();
   dom.trace.scrollTop = dom.trace.scrollHeight;
+}
+
+/** A `live` event (Jarvis Live's status) as one line. */
+function liveTraceLine(s) {
+  const d = s && typeof s === "object" ? s : {};
+  if (d.on === true) {
+    const where = d.device === "desktop" ? "this PC" : d.device === "phone" ? "the phone" : "a device";
+    const parts = [`Jarvis Live on ${where}`];
+    if (Number.isInteger(d.minutes_left)) parts.push(`${d.minutes_left} min left`);
+    const why = d.muted ? d.muted_words : d.paused ? d.pause_words : d.hint_words;
+    if (why) parts.push(String(why));
+    return parts.join(" · ");
+  }
+  if (d.state === "ended") return `Jarvis Live ended${d.ended_words ? `: ${d.ended_words}` : ""}`;
+  return "Jarvis Live off";
 }
 
 // stepText now lives in step-words.js, shared with the Jarvis bar
@@ -6853,7 +8013,7 @@ onLink((link) => {
   syncLiveButtons();
   if (historyImport) historyImport.sync();
   paintFreshness();
-  if (state.view === "live") renderLive();
+  if (state.view === "now") renderLive();
   renderCounts();
 });
 
@@ -6895,6 +8055,13 @@ onEvent((frame) => {
     fx.at = 0;
     if (state.view === "work") loadFocus();
   }
+  // A chatbot conversation has no event of its own: its progress travels on
+  // the one activity line ("Talking to Gemini: message 3 of 5."). Read it
+  // again on every activity change while the Work tab is showing.
+  if (kind === "activity") {
+    cb.at = 0;
+    if (state.view === "work") loadChatbot();
+  }
   if (kind === "schedule") {
     upL.at = 0;
     if (state.view === "work") loadComingUp();
@@ -6904,6 +8071,10 @@ onEvent((frame) => {
       brief.at = 0;
       if (state.view === "work") loadBriefing();
     }
+    // A goal's weekly check-in was approved, paused or changed (`{id, kind:
+    // "goal_checkin", state}`): Goals reads its state from the very same
+    // Coming up list (goals.js's own module doc says why), so loadComingUp()
+    // above already reads the job again - it repaints Goals itself once done.
   }
 
   const refreshes = {
@@ -6941,8 +8112,27 @@ onEvent((frame) => {
   }
 
   repaintTrace();
-  await showView("memory");
+  // "Forget what you learned last week", said or typed in the Jarvis bar:
+  // main.js left the place, so the Brain opens at History -> "Forget a time
+  // frame" with the list filled in (forget-range-panel.js). Navigation only.
+  if (takePlace()) {
+    await showView("history");
+    await openForgetRange();
+  } else {
+    await showView("memory");
+  }
 })();
+
+/** The Brain was already open when the Jarvis bar asked for the place. */
+async function goToForgetRange() {
+  if (!takePlace()) return;
+  await showView("history");
+  await openForgetRange();
+}
+window.addEventListener("focus", goToForgetRange);
+window.addEventListener("storage", (e) => {
+  if (e.key === BRAIN_PLACE_KEY && e.newValue) goToForgetRange();
+});
 
 console.info(
   `[brain] ready — backend ${IS_TAURI ? "connected" : "absent (browser preview)"}`

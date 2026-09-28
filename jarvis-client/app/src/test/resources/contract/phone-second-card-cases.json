@@ -247,6 +247,36 @@
       "body": {
         "error": "there is no second-card feature called 'telepathy'"
       }
+    },
+    {
+      "name": "third: no capable card, so assigning is refused",
+      "feature": "third",
+      "assign": "long_context",
+      "status": 503,
+      "body": {
+        "error": "there is no capable third graphics card right now."
+      }
+    },
+    {
+      "name": "third: the switch is not on yet, so assigning is refused",
+      "feature": "third",
+      "assign": "vision",
+      "status": 400,
+      "body": {
+        "error": "Turn \"Pictures\" on first (the switch above), then move it to the third card."
+      }
+    },
+    {
+      "name": "third: unassigning is immediate, even with nothing assigned",
+      "feature": "third",
+      "assign": null,
+      "status": 200,
+      "body": {
+        "ok": true,
+        "assigned": null,
+        "pending": false,
+        "message": "The third card is not running anything."
+      }
     }
   ]
 }

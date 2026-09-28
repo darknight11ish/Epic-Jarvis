@@ -7,6 +7,7 @@ import com.jarvis.client.audio.Recorder
 import com.jarvis.client.audio.Speaker
 import com.jarvis.client.audio.Wav
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.FlowStatus
 import com.jarvis.client.net.SaidAloud
 import com.jarvis.client.net.Heard
@@ -80,6 +81,28 @@ class VoiceSession(
      */
     private val onOpenChatPhrase: () -> Unit = {},
     /**
+     * Jarvis Live is on on this phone (voice.LiveRules): another voice over a
+     * reply LOWERS it instead of pausing it, and talking over the first
+     * three seconds counts too.
+     */
+    private val liveOn: () -> Boolean = { false },
+    /**
+     * An approval card is on this phone's screen now: no tap buttons after
+     * a Live answer while it is (LiveRules.chips).
+     */
+    private val cardShown: () -> Boolean = { false },
+    /**
+     * A reply that was about Jarvis Live and not a question to answer:
+     * "let's talk" started or was refused, the owner said "that's all", a
+     * clip too short, a pause, "move it here?" (LiveRules.reply). The
+     * runtime acts on it; nothing here speaks it.
+     */
+    private val onLive: (Heard) -> Unit = {},
+    /** A Live answer made its first sound ("Heard you - thinking" goes). */
+    private val onLiveSound: () -> Unit = {},
+    /** A Live answer was side talk: never spoken, "(not for Jarvis)" shown. */
+    private val onLiveSideTalk: () -> Unit = {},
+    /**
      * Sends a turn and returns the reply, or null if it could not be sent.
      * `onRoute` is called once with the answer's `X-Jarvis-Route` header (or
      * null) before any words; `onStatus` with each `: jarvis-status` word
@@ -90,6 +113,8 @@ class VoiceSession(
      */
     private val chat: suspend (
         String,
+        /** Said in Jarvis Live: `live: true` on the message (ChatHistory.messages). */
+        Boolean,
         onRoute: (String?) -> Unit,
         onStatus: (String) -> Unit,
         onDelta: (String) -> Unit,
@@ -178,6 +203,19 @@ class VoiceSession(
 
     private val recentSpeech = RecentSpeech()
 
+    private val _liveChips = MutableStateFlow<List<String>>(emptyList())
+
+    /**
+     * Jarvis Live's tap buttons after a spoken answer that ended with a
+     * question (LiveRules.chips) - each is sent as the owner's TYPED words.
+     * Empty otherwise, and never while a card is on screen.
+     */
+    val liveChips: StateFlow<List<String>> = _liveChips.asStateFlow()
+
+    fun clearLiveChips() {
+        _liveChips.value = emptyList()
+    }
+
     // -- The voice flow (VoiceFlow.kt; docs/JARVIS-API.md section 17) --------
 
     /** Interrupting by talking: pause first, decide second. */
@@ -205,6 +243,9 @@ class VoiceSession(
     private val bargeSeq = java.util.concurrent.atomic.AtomicLong(0)
 
     private val heardSound: ShortArray by lazy { HeardSound.samples() }
+
+    /** The whole of the last spoken question's answer (Jarvis Live's tap buttons). */
+    @Volatile private var lastAnswer: String = ""
 
     /** The last sentence of this turn's answer that started playing (not the fixed private line). */
     @Volatile private var lastPlayed: String? = null
@@ -243,7 +284,8 @@ class VoiceSession(
         val allowed = flow.bargeInUsable && linkBlocker() == null && !turn.silenced &&
             _phase.value == Phase.SPEAKING
         val id = bargeSeq.incrementAndGet()
-        if (interrupt.onset(SystemClock.elapsedRealtime(), id, allowed) != VoiceFlow.Action.PAUSE) return null
+        val grace = if (liveOn()) 0L else VoiceFlow.GRACE_MS
+        if (interrupt.onset(SystemClock.elapsedRealtime(), id, allowed, grace) != VoiceFlow.Action.PAUSE) return null
         pauseSpeaking()
         return id
     }
@@ -269,7 +311,9 @@ class VoiceSession(
     }
 
     private fun pauseSpeaking() {
-        speaker.pause()
+        // Jarvis Live: lowered, not paused (LiveRules.barge) - it stops only
+        // if the PC says the voice was the owner's.
+        if (liveOn()) speaker.duck(true) else speaker.pause()
         pauseTimer?.cancel()
         pauseTimer = scope.launch {
             delay(VoiceFlow.WAIT_MAX_MS)
@@ -282,6 +326,7 @@ class VoiceSession(
             VoiceFlow.Action.PAUSE -> pauseSpeaking()
             VoiceFlow.Action.RESUME -> {
                 pauseTimer?.cancel()
+                speaker.duck(false)
                 speaker.resume()
             }
             VoiceFlow.Action.STOP -> stopSpeaking()
@@ -435,6 +480,13 @@ class VoiceSession(
 
         /** "Stop" was said: nothing more of this turn's reply is spoken. See [stopSpeaking]. */
         @Volatile var silenced = false
+
+        /** Said in Jarvis Live, and what was asked (a second thought joins it: LiveRules.fold). */
+        @Volatile var live = false
+        @Volatile var question = ""
+
+        /** The reply has made a sound: a second thought no longer joins the question. */
+        @Volatile var sounded = false
     }
 
     private var current: Turn? = null
@@ -548,6 +600,9 @@ class VoiceSession(
         if (_phase.value != Phase.OFF) return null
         val turn = Turn()
         current = turn
+        // Normally already stopped when "hey Jarvis" was heard; this is
+        // the turn itself starting.
+        turnStarting()
         _notice.value = null
         _transcript.value = null
         var verdict: Heard? = null
@@ -564,6 +619,92 @@ class VoiceSession(
         job = running
         running.join()
         return verdict
+    }
+
+    /**
+     * One Jarvis Live clip (`source=live`), sent by the Live listener
+     * (service/LiveService.kt). The PC checks the voice before any words
+     * exist, as for every clip. Anything but the owner's question goes to
+     * [onLive]; the owner's question is answered and spoken. Returns once it
+     * has STARTED (not when the answer ends), so the listener keeps
+     * listening: a second thought said before Jarvis makes a sound joins the
+     * question ([LiveRules.fold]); a new question after it replaces the old
+     * answer. Null when it could not be sent.
+     */
+    suspend fun deliverLiveClip(wav: ByteArray, waitedMs: Long? = null): Heard? {
+        val result = api.utterance(wav, JarvisApi.SOURCE_LIVE, waitedMs)
+        val heard = (result as? ApiResult.Ok)?.value ?: return null
+        if (LiveRules.reply(heard.liveIn()).action != LiveRules.Action.ANSWER) {
+            onLive(heard)
+            return heard
+        }
+        var text = heard.text.trim()
+        val old = current
+        val running = job
+        if (running != null && !running.isCompleted) {
+            if (old != null && old.live && !old.sounded) text = LiveRules.fold(old.question, text, false)
+            stopSpeaking()
+            running.cancel()
+            running.join()
+        }
+        _liveChips.value = emptyList()
+        val turn = Turn().also { it.live = true }
+        current = turn
+        _notice.value = null
+        _transcript.value = null
+        val launched = scope.launch {
+            try {
+                answer(turn, heard, text)
+            } finally {
+                if (current === turn) {
+                    _micLevel.value = null
+                    if (_phase.value != Phase.OFF) _phase.value = Phase.OFF
+                }
+            }
+        }
+        job = launched
+        return heard
+    }
+
+    /** Jarvis Live: the reply being spoken was stopped (the owner's voice over it). */
+    fun replyStopped(): Boolean = current?.silenced == true
+
+    /** A fixed line is being said ([sayLine]): the Live listener treats it like Jarvis talking. */
+    @Volatile var lineSpeaking: Boolean = false
+        private set
+
+    /**
+     * One FIXED line of Jarvis Live's ("I'm listening.", "Two minutes
+     * left..."), in the PC's voice - or this phone's own offline voice when
+     * the PC says it may. Never anything heard, and not a turn: nothing goes
+     * to the model. Not over a reply that is being spoken: false then (the
+     * caller may try again when it ends), true when it was said or tried.
+     */
+    suspend fun sayLine(text: String): Boolean {
+        if (text.isBlank()) return true
+        if (_phase.value == Phase.SPEAKING) return false
+        lineSpeaking = true
+        try {
+            if (_phase.value == Phase.OFF) speaker.arm()
+            when (val said = api.say(text)) {
+                is ApiResult.Ok -> when (val out = said.value) {
+                    is SaidAloud.Audio -> speaker.play(out.wav)
+                    is SaidAloud.NoEngine -> if (out.fallbackOk) runCatching { speaker.speakOnDevice(text) }
+                }
+                is ApiResult.Failed -> Unit
+            }
+        } finally {
+            lineSpeaking = false
+        }
+        return true
+    }
+
+    /** Jarvis Live: stop the answer being spoken and the one being written (End, a card). */
+    fun endLiveTurn() {
+        if (current?.live != true) return
+        stopSpeaking()
+        job?.cancel()
+        _liveChips.value = emptyList()
     }
 
     /**
@@ -585,6 +726,8 @@ class VoiceSession(
                 "The talk button is using the microphone. Try again in a moment.",
             )
         }
+        // A "Try it" clip playing would be recorded as the owner's voice.
+        turnStarting()
         releasing?.join()
         return when (
             val r = recorder.record(
@@ -610,6 +753,92 @@ class VoiceSession(
     fun clearTranscript() { _transcript.value = null }
 
     /**
+     * "Try it" on the Voices screen: the PC says one fixed line in that
+     * animal's voice as it is now ([JarvisApi.voiceAnimalTry]), and it plays
+     * here - through the same [speaker] as every answer, so a face on screen
+     * moves with it too. Only while nothing else is being heard or said: a
+     * question in progress always wins, and a question that starts while it
+     * plays stops it at once ([turnStarting]), so the microphone never hears
+     * it. Changes nothing on the PC, so it is not held on a stale link.
+     * [progress] is told when it starts playing; the words to show at the
+     * end are returned, always (CustomVoices `TRY_*`, the desktop's words).
+     */
+    suspend fun tryAnimalVoice(
+        face: String,
+        name: String,
+        progress: (String) -> Unit = {},
+    ): String {
+        val seen = turnsStarted.get()
+        if (voiceBusy()) return CustomVoices.TRY_BUSY
+        return when (val r = api.voiceAnimalTry(face)) {
+            is ApiResult.Ok -> when (val t = r.value) {
+                is CustomVoices.Tried.Refused -> t.why
+                is CustomVoices.Tried.Sound -> playTry(t.wav, name, seen, progress)
+            }
+            is ApiResult.Failed -> when (r.error) {
+                com.jarvis.client.net.ApiError.NotFound -> CustomVoices.TRY_UPDATE
+                com.jarvis.client.net.ApiError.BadToken -> "The desktop refused this phone's pairing token."
+                else -> "Could not reach your PC to play it."
+            }
+        }
+    }
+
+    /**
+     * Plays a "Try it" clip unless a turn began since [seen] or one is
+     * running. [tryPlaying] is raised BEFORE that last look and
+     * [turnStarting] bumps [turnsStarted] BEFORE it reads [tryPlaying], so
+     * whichever comes second sees the other: either this refuses, or the
+     * turn stops the clip ([tryCut] covers a stop that lands before
+     * `arm()`, which would otherwise clear it).
+     */
+    private suspend fun playTry(
+        wav: ByteArray,
+        name: String,
+        seen: Long,
+        progress: (String) -> Unit,
+    ): String {
+        tryCut = false
+        tryPlaying = true
+        try {
+            if (turnsStarted.get() != seen || voiceBusy()) return CustomVoices.TRY_BUSY
+            speaker.arm()
+            if (!tryCut) {
+                progress(CustomVoices.tryPlaying(name))
+                speaker.play(wav)
+            }
+        } finally {
+            tryPlaying = false
+        }
+        return if (tryCut) CustomVoices.TRY_STOPPED else CustomVoices.tryDone(name)
+    }
+
+    /** Talking, listening or answering: what "Try it" must never play over. */
+    private fun voiceBusy(): Boolean = _phase.value != Phase.OFF || job?.isCompleted == false
+
+    /** Bumped by every turn that starts; see [playTry]. */
+    private val turnsStarted = java.util.concurrent.atomic.AtomicLong(0)
+
+    /** A "Try it" clip is (about to be) playing. */
+    @Volatile private var tryPlaying = false
+
+    /** A turn cut the "Try it" clip short. */
+    @Volatile private var tryCut = false
+
+    /**
+     * A question is starting - the talk button, "hey Jarvis" heard (called
+     * by [com.jarvis.client.service.WakeWordService] the moment the phrase
+     * is heard, before the rest is recorded), or Train my voice: a "Try it"
+     * clip playing stops now, so the microphone does not hear it. Stops
+     * nothing else: no answer is playing, or the turn would not be starting.
+     */
+    fun turnStarting() {
+        turnsStarted.incrementAndGet()
+        if (!tryPlaying) return
+        tryCut = true
+        speaker.stop()
+    }
+
+    /**
      * Opens the microphone.
      *
      * @param source `push_to_talk` or `wake_word`. The server refuses a
@@ -617,6 +846,13 @@ class VoiceSession(
      *   which is why this is passed through rather than assumed.
      */
     fun begin(source: String = JarvisApi.SOURCE_PUSH_TO_TALK) {
+        // Jarvis Live has the microphone - even while it is closed for a
+        // pause: the talk button does not open a second recorder beside it
+        // (the Live audit, fit 3). The PC's own words, as on the PC.
+        if (liveOn()) {
+            _notice.value = LiveRules.SEEN.getValue("busy_mic") + "."
+            return
+        }
         val previous = job
         if (previous != null && !previous.isCompleted) {
             // Not silent. The old guard returned having done nothing — no
@@ -634,6 +870,8 @@ class VoiceSession(
         // to carry on. See [Turn].
         val turn = Turn()
         current = turn
+        // A "Try it" clip playing stops before the microphone opens.
+        turnStarting()
         _notice.value = null
         _transcript.value = null
 
@@ -761,6 +999,17 @@ class VoiceSession(
         }
         val heard = (result as ApiResult.Ok).value
 
+        // Jarvis Live: "let's talk", "move it here?", and anything on a Live
+        // clip that is not a question to answer go to the runtime.
+        if (source == JarvisApi.SOURCE_LIVE || heard.live.isNotEmpty() || heard.liveElsewhere.isNotEmpty()) {
+            if (LiveRules.reply(heard.liveIn()).action != LiveRules.Action.ANSWER) {
+                setPhase(turn, Phase.OFF)
+                onLive(heard)
+                return heard
+            }
+            turn.live = source == JarvisApi.SOURCE_LIVE
+        }
+
         if (source == JarvisApi.SOURCE_WAKE_WORD) {
             when (WakeRules.verdict(heard)) {
                 // Not addressed to Jarvis (the desktop did not hear "hey
@@ -821,6 +1070,12 @@ class VoiceSession(
             return heard
         }
 
+        return answer(turn, heard, text)
+    }
+
+    /** The owner's words, checked and transcribed: to the model, and the answer spoken. */
+    private suspend fun answer(turn: Turn, heard: Heard, text: String): Heard {
+        turn.question = text
         setTranscript(turn, text)
         // "Open a chat" while Floating Jarvis is up: bring the real app to
         // the front, alongside the ordinary turn below - see the
@@ -836,10 +1091,21 @@ class VoiceSession(
         // "One moment." may be said once for this question, if a tool starts
         // before the answer makes a sound (VoiceFlow.kt).
         moment.turnStarted()
+        // Jarvis Live: and when the first answer is slow (the model loading).
+        if (turn.live) {
+            scope.launch {
+                delay(LIVE_SLOW_MS)
+                if (current === turn && !turn.sounded && !turn.silenced) toolStarted()
+            }
+        }
         // What the phone knows about tools as the question goes: every
         // sentence is checked against it before it is read aloud.
         try {
             speakStreamed(turn, text, heard, toolWatch())
+            // Jarvis Live: tap buttons after a spoken answer ending with a question.
+            if (turn.live && current === turn && !turn.silenced) {
+                _liveChips.value = LiveRules.chips(lastAnswer, cardShown())
+            }
         } finally {
             moment.turnEnded()
             interrupt.replyEnded()
@@ -910,7 +1176,10 @@ class VoiceSession(
         }
 
         try {
-            val reply = chat(text, { header -> route.set(PrivateAloud.route(header)) }, onStatus) { soFar ->
+            val reply = chat(text, turn.live, { header -> route.set(PrivateAloud.route(header)) }, onStatus) onDelta@{ soFar ->
+                // Jarvis Live: nothing is said while the answer could still
+                // be the side-talk marker ("[not for me]"), never spoken.
+                if (turn.live && LiveRules.couldBeSideTalk(soFar)) return@onDelta
                 // Nothing cut yet: the first piece may end at its first
                 // comma, so the phone starts speaking sooner (SpeechText).
                 val firstPiece = spokenUpTo == 0
@@ -924,7 +1193,10 @@ class VoiceSession(
                         ?.let { queue.trySend(it) }
                 }
             }
-            val remainder = reply.orEmpty()
+            lastAnswer = reply.orEmpty()
+            val sideTalk = turn.live && LiveRules.isSideTalk(reply)
+            if (sideTalk) onLiveSideTalk()
+            val remainder = (if (sideTalk) "" else reply.orEmpty())
                 .let { if (spokenUpTo <= it.length) it.substring(spokenUpTo) else "" }
                 .let(SpeechText::stripMarkdownForSpeech)
                 .trim()
@@ -978,6 +1250,8 @@ class VoiceSession(
         moment.replyStarted()
         momentJob?.join()
         if (turn.silenced) return
+        if (!turn.sounded && turn.live) onLiveSound()
+        turn.sounded = true
         interrupt.replyStarted(SystemClock.elapsedRealtime())
         // Only the answer's own words count as where the owner cut it off -
         // never a fixed line of Jarvis's ("It's on your screen.", a card line).
@@ -1039,5 +1313,22 @@ class VoiceSession(
 
     private companion object {
         const val TAG = "JarvisVoice"
+
+        /** A Live answer with no sound after this says "One moment." (under its own switch). */
+        const val LIVE_SLOW_MS = 2500L
     }
 }
+
+/** The fields of a reply [LiveRules] reads. */
+fun Heard.liveIn(): LiveRules.ReplyIn = LiveRules.ReplyIn(
+    ok = ok,
+    owner = owner,
+    available = available,
+    text = text,
+    live = live,
+    liveSay = liveSay,
+    liveShort = liveShort,
+    liveElsewhere = liveElsewhere,
+    stop = stop,
+    tooShort = tooShort,
+)

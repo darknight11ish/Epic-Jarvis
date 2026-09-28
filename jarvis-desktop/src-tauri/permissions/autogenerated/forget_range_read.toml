@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-forget-range-read"
+description = "Enables the forget_range_read command without any pre-configured scope."
+commands.allow = ["forget_range_read"]
+
+[[permission]]
+identifier = "deny-forget-range-read"
+description = "Denies the forget_range_read command without any pre-configured scope."
+commands.deny = ["forget_range_read"]

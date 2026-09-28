@@ -118,11 +118,12 @@ stop_head.bin - generated numbers, not audio (the same bytes in both)
   sherpa-onnx kokoro-en-v0_19 release). Neither voice is shipped by it.
 
 jarvis-client/app/src/test/resources/lipsync/*.wav - test audio, not shipped
-  Seven short clips (about 12 s in all) of Jarvis's own built-in voice,
+  Fifteen short clips (about 26 s in all) of Jarvis's own built-in voice,
   made for the lip-sync tests (docs/LIPSYNC.md) with Kokoro-82M v0.19
   (https://huggingface.co/hexgrad/Kokoro-82M, Apache-2.0, via the
   sherpa-onnx kokoro-en-v0_19 release) through backend/jarvis_speech.py's
-  own kokoro_speak - the default voice and the three animal voices. Test
+  own kokoro_speak - the default voice and the three animal voices, some
+  resampled (8 to 44.1 kHz), pitched down or mixed with generated noise. Test
   resources only: they are not in the phone app or the desktop app. The
   model itself is not shipped. lipsync-golden.json beside them is numbers
   computed from these clips.
@@ -302,6 +303,30 @@ ddgs (deedy5), MIT - https://github.com/deedy5/ddgs
   a dependency - its 2.22.2 source was only read, to confirm the request's
   address, header and field names, and none of it is copied.
 
+BROWSER WINDOWS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Playwright for Python (Microsoft), Apache-2.0 -
+https://github.com/microsoft/playwright-python
+  Used by backend/jarvis_browser_control.py (the "browser_control" tool)
+  and backend/jarvis_chatbot_web.py (Jarvis's chatbot website windows -
+  Gemini, ChatGPT and the others - for the chatbot driver). OPTIONAL: installed on the PC by the owner with pip
+  (`py -3 -m pip install playwright`), not by apply-patches.ps1, not
+  shipped here, and none of its code is copied. Version 1.56.0's wheel was
+  read on 2026-09-28: "License-Expression: Apache-2.0", "Portions Copyright
+  (c) Microsoft Corporation. Portions Copyright 2017 Google Inc."; the full
+  Apache-2.0 text is in section 4. Its bundled driver carries this NOTICE:
+
+    Playwright
+    Copyright (c) Microsoft Corporation
+
+    This software contains code derived from the Puppeteer project
+    (https://github.com/puppeteer/puppeteer), available under the Apache
+    2.0 license (https://github.com/puppeteer/puppeteer/blob/master/LICENSE).
+
+  The browser it drives (Chromium, downloaded by `py -3 -m playwright
+  install chromium`, or Microsoft Edge already on the PC) is a separate
+  program under its own licences; nothing of it is distributed with Jarvis.
+
 SPOKEN ANSWERS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 unmute (kyutai-labs), MIT - https://github.com/kyutai-labs/unmute
@@ -396,6 +421,66 @@ supermemory, MIT - https://github.com/supermemoryai/supermemory
   Copyright (c) 2025 supermemory. Licensed under the MIT License, whose
   full text is the one given for browser-use above with this copyright
   line in place of that one.
+THE ANIMALS' BODY LANGUAGE (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+How the three animal faces move (jarvis-desktop/src/critter-pose.js,
+critter-owl.js, critter-otter.js, and their phone copies CritterPose.kt,
+OwlPose.kt, OtterPose.kt; 2026-09-28) follows four MIT-licensed projects.
+Each was read, and the parts named below re-written in Jarvis's own pose
+code (a pure function of the clock, with a hash of the time in place of
+random numbers); no file of theirs is shipped. Each copyright line below
+goes with the MIT License text given for browser-use above, in place of
+that one.
+Spring-It-On (Daniel Holden), MIT - https://github.com/orangeduck/Spring-It-On
+  How a change of state settles ("inertialization"): common.h's
+  decay_spring_damper_exact and halflife_to_damping, and inertialization.c's
+  inertialize_transition / inertialize_update, worked out in closed form
+  from the time since the change, with Math.exp / kotlin.math.exp in place
+  of its fast_negexp. Read at commit
+  4d97b497a78e40c7b47d49e8a9da27e4aa5616d6. Copyright (c) 2021 Daniel
+  Holden.
+TalkingHead (met4citizen), MIT - https://github.com/met4citizen/TalkingHead
+  From modules/talkinghead.mjs: gaussianRandom (the average of five draws,
+  bent by a skew), the idea of
+  the idle body holding a pose and then easing to a new one
+  (animMoods.neutral), eyes that lead and a head that follows them part of
+  the way (animTemplateEyes and the "headmove" animation), and the blink
+  timing (animTemplateBlink: a skewed pause, a quick close, a short hold,
+  about one blink in seven a double). Read at commit
+  b3e277b3b46f88e557bf28a2c5612a5b04e075c3. Copyright (c) 2023-2024 Mika
+  Suominen.
+airi (moeru-ai), MIT - https://github.com/moeru-ai/airi
+  The table of pauses between the eyes' small jumps, 0.8 to 4.8 seconds
+  (packages/stage-ui-three/src/composables/vrm/utils/eye-motions.ts,
+  randomSaccadeInterval). Read at commit
+  49c15a6df2a1595dfd0ef2771abfc1229504d075. Copyright (c) 2024-PRESENT Neko
+  Ayaka.
+ChatVRM (pixiv), MIT - https://github.com/pixiv/ChatVRM
+  The idea, from src/lib/VRMLookAtSmootherLoaderPlugin/VRMLookAtSmoother.ts,
+  that the head takes part of a look (it gives the head 40%) and that the
+  eyes' small jumps are held at least half a second apart. The idea only.
+  Read at commit b542aa00e19dccf9fc48ba340cf7eee011d2329a. Copyright (c)
+  2023 pixiv Inc.
+
+THE SKY BEHIND THE ANIMALS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+"Show the sun and moon behind the animal" (backend/jarvis_sky.py and
+jarvis_sky_places.py; jarvis-desktop/src/sky.js and the phone's Sky.kt;
+2026-09-28).
+GeoNames (https://www.geonames.org), Creative Commons Attribution 4.0
+  (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  The list of towns and their latitudes and longitudes in
+  backend/jarvis_sky_places.py: GeoNames' "cities15000" table, cut to the
+  towns tools/gen_sky_places.py keeps, the coordinates rounded to two
+  decimals. Taken through the geonamescache Python package, 3.0.2 (MIT,
+  Copyright (C) 2021 Ramiro Gómez), which is used only to make that file and is
+  not shipped. Data (c) GeoNames.
+The astronomy is Jarvis's own code, written from published formulas, with
+nothing copied: NOAA Global Monitoring Division's Solar Calculator
+("General Solar Position Calculations"); Jean Meeus, "Astronomical
+Algorithms", 2nd ed., Willmann-Bell, 1998 (chapters 12, 14, 15, 22, 25 and
+48); and the low-precision lunar formulas of "The Astronomical Almanac"
+(US Naval Observatory and HM Nautical Almanac Office, section D).
 
 OFFERS NOBODY ASKED FOR (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
@@ -429,6 +514,28 @@ MarkItDown (Microsoft), MIT - https://github.com/microsoft/markitdown
   magika (Apache-2.0), beautifulsoup4 and markdownify (MIT), defusedxml
   (PSFL) and charset-normalizer (MIT).
 
+THE FACES' SHAPE MATHS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Inigo Quilez - https://iquilezles.org/articles/distfunctions/ and
+https://iquilezles.org/articles/distfunctions2d/
+  The animal faces (jarvis-desktop/critters/common_head.sksl, generated into
+  jarvis-desktop/src/critters-gen.js and the phone's face/CritterShaders.kt)
+  use his published distance formulas: the ellipsoid bound, the capsule, the
+  polynomial smooth minimum and the Newton-step distance to a 2D ellipse.
+  The Nucleus face (jarvis-desktop/src/faces.html, the phone's
+  face/Faces.kt) uses the same smooth minimum. Each is a few lines of maths
+  written out here, with a comment naming him and the address above. The
+  licence on those pages was NOT checked (the site could not be reached from
+  where this was written); this build is non-commercial either way (rule 5).
+
+LAUNCH VIDEO FONTS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Inter (The Inter Project Authors, https://github.com/rsms/inter) and
+Fraunces (The Fraunces Project Authors, https://github.com/undercasetype/Fraunces),
+SIL Open Font License 1.1. Used only in the launch videos
+(videos/v5 and videos/v6, composition/assets/fonts/, each with its
+licence file beside it), not in either app. The OFL text is the one given
+under FONTS below.
 TALK-TO-TYPE (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Handy - https://github.com/cjpais/Handy (read 2026-09-28)
@@ -624,6 +731,27 @@ https://huggingface.co/BAAI/bge-small-en-v1.5
   shipped in either app. Licence: MIT, as its model card states - recorded
   from memory, NOT re-checked here (huggingface.co is blocked from where
   this was written).
+
+MEMORY SELF-TEST DATA (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+LoCoMo (Snap Research), CC BY-NC 4.0 -
+https://github.com/snap-research/locomo
+  Test data only, never shipped to the PC's backend folder or in either
+  app: backend/fixtures/locomo_multihop.json holds the chat turns of five
+  of the ten conversations in its data/locomo10.json and their multi-hop
+  questions (answers and evidence turn ids), read out at commit
+  3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376 by tools/build_locomo_fixture.py
+  - cut down, with a few malformed evidence ids mended or dropped, as the
+  fixture's own "fixes" list says; the text itself is unchanged. Used by
+  `backend/eval_memory.py --locomo` (the memory self-test, milestone 13).
+  No LoCoMo code is used.
+  From "Evaluating Very Long-Term Conversational Memory of LLM Agents",
+  Adyasha Maharana, Dong-Ho Lee, Sergey Tulyakov, Mohit Bansal, Francesco
+  Barbieri and Yuwei Fang, ACL 2024. Licensed under the Creative Commons
+  Attribution-NonCommercial 4.0 International licence
+  (https://creativecommons.org/licenses/by-nc/4.0/legalcode), the text in
+  LoCoMo's LICENSE.txt. Non-commercial use only, which this build is
+  (rule 5).
 
 THE PHONE APP (not generated - keep when regenerating)
 ---------------------------------------------------------------------------

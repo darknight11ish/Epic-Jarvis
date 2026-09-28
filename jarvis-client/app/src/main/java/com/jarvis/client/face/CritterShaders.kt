@@ -60,12 +60,19 @@ uniform float uPit;
 uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
 const float ID_ORB = 9.0;
 
 float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
+
+// 2D & 3D Signed Distance Functions by Inigo Quilez
+// https://iquilezles.org/articles/distfunctions2d/
+// https://iquilezles.org/articles/distfunctions/
+// The ellipsoid bound, the capsule, the smooth minimum and the 2D ellipse
+// below follow his published formulas (THIRD-PARTY-NOTICES.txt).
 
 // Inigo Quilez's distance bounds. An ellipsoid has no exact distance
 // formula; this one is close enough near the surface, which is all the
@@ -88,9 +95,15 @@ float sdCapsule(float3 p, float3 a, float3 b, float r) {
 }
 
 // Polynomial smooth minimum: joins two shapes with a fillet of size k.
+// (Inigo Quilez's quadratic form - the same curve as the usual
+// clamp-and-mix one, to the last bit that matters, in fewer operations,
+// which counts: the march calls it a dozen times a step. See "program size".
+// Written with one division, not two - h / k squared times k is h squared
+// over k - which is two operations less a call, and about 950 less on the
+// red panda: its pictures came out the same to within a level of 255.)
 float smin(float a, float b, float k) {
-    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-    return mix(b, a, h) - k * h * (1.0 - h);
+    float h = max(k - abs(a - b), 0.0);
+    return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 
@@ -115,7 +128,11 @@ float seg2(float2 p, float2 a, float2 b) {
 // meets the lip in the middle, g.y how much higher the corners sit (the
 // smile's depth), g.z the half-width to the corners, g.w how far the lower
 // lip has dropped in the middle. `carved` is how much the point is on the jaw's carved hollow (the
-// hollow's own walls get the inside colours too). Returns the colour and
+// hollow's own walls get the inside colours too), and `roof` how much it is
+// on the hollow's roof - its walls that face down. The drawing is laid on
+// straight from the front, so the whole roof lies under the upper lip's
+// line, and seen from below it showed as a dark smudge across the roof: the
+// roof takes no line. Returns the colour and
 // the lighting code for common_tail.sksl: 0 fur, down to -2 for the inside
 // of a mouth, which takes no rim light (it used to catch it and read blue).
 // Distance to an ellipse in 2D (half-axes ab), exact to a hair however
@@ -136,7 +153,7 @@ float sdEllipse2(float2 p, float2 ab) {
 const float3 MOUTH_IN = float3(0.105, 0.012, 0.012);
 const float3 TONGUE = float3(0.320, 0.080, 0.085);
 const float3 TEETH = float3(0.780, 0.680, 0.560);
-float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved) {
+float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved, float roof) {
     // Two half-ellipses hanging from the corners' height, cy: the upper
     // lip is the small one (the shut smile, g.y deep), the lower lip the same
     // one stretched g.w further down. The opening is the crescent between
@@ -150,7 +167,16 @@ float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float 
     // upper lip.
     float f = q.y > cy ? -min(length(float2(ax - g.z, e.y)), e.y + g.y * s + 8.0 * max(ax - g.z, 0.0))
                        : min(sdEllipse2(e, g.zy), -sdEllipse2(e, float2(g.z, g.y + g.w)));
-    float line = 1.0 - smoothstep(0.004, 0.009, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))));
+    // The dark line: 0.013 wide (in the head's own units) where a pixel is
+    // smaller than that, and never under about a pixel where it is not
+    // (a small picture, or the phone's lower-resolution one). A fixed width
+    // fell between pixel centres at small sizes, and a shut mouth broke up
+    // into pieces or vanished. px is a pixel in the head's units, near
+    // enough for both animals (their heads sit about as far from the camera).
+    float px = 0.85 * uPx / max(uZoom, 0.1);
+    float lw = max(0.0065, 0.75 * px);
+    float lr = max(0.0025, 0.35 * px);
+    float line = (1.0 - smoothstep(lw - lr, lw + lr, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))))) * (1.0 - roof);
     float inside = max(smoothstep(0.0, 0.004, f), carved);
     // Inside: dark red, darker deeper in; the tongue low down in the
     // middle; a row of teeth under the upper lip when the mouth goes wide.
@@ -243,6 +269,7 @@ const float3 CAM_TARGET = float3(0.0, -0.08, 0.0);
 const float CAM_DIST = 3.35;
 const float CAM_PITCH = 0.0;
 const float BOUND_R = 1.35;
+const int MARCH_STEPS = 36;
 
 float3 toBody(float3 p) {
     float3 v = p - uBodyPos;
@@ -253,7 +280,7 @@ float3 toHead(float3 p) {
     return float3(dot(uHeadR0, v), dot(uHeadR1, v), dot(uHeadR2, v)) / HEAD_S;
 }
 // Where each eye sits: it drifts a little toward where it is looking.
-float2 eyeAt() { return float2(0.158 + 0.012 * uLook.x, 0.395 + 0.012 * uLook.y); }
+float2 eyeAt() { return float2(0.158, 0.395) + 0.012 * uLook; }
 // Ears are placed in the HEAD's frame, so they turn with it.
 float3 toEarL(float3 h) {
     float3 v = h - float3(-0.265, 0.60, 0.04);
@@ -267,9 +294,9 @@ float3 toEarR(float3 h) {
 // --- the parts, each in the frame it is modelled in ---------------------
 
 float partTorso(float3 b) {
-    float br = uBreath;
+    // (Written out as one multiply-add: this is in every march step.)
     return sdEllipsoid(b - float3(0.0, 0.31, 0.02),
-                       float3(0.38 * br, 0.39 * (0.5 + 0.5 * br), 0.33 * br));
+                       float3(0.38, 0.195, 0.33) * uBreath + float3(0.0, 0.195, 0.0));
 }
 // One piece per leg: the thigh, reaching forward into the foot.
 float partLegs(float3 b) {
@@ -304,7 +331,7 @@ float4 mouthSize() {
 // The hollow's half-height. It sits just inside the drawing - its top under
 // the upper lip's line, its sides in from the corners - so its edge is
 // always covered by the drawn line and never shows as a second outline.
-float mouthH() { return 0.0015 + uMouth.x * (0.035 - 0.014 * uMouth.y + 0.012 * uMouth.z); }
+float mouthH() { return 0.0015 + uMouth.x * (0.035 + dot(uMouth.yz, float2(-0.014, 0.012))); }
 // It bends up toward the corners, as the drawn smile does (a parabola,
 // near enough, and cheap: this runs in every march step). Inside so flat
 // a shape sdEllipsoid's estimate runs far too deep - it cut a slit along
@@ -312,7 +339,7 @@ float mouthH() { return 0.0015 + uMouth.x * (0.035 - 0.014 * uMouth.y + 0.012 * 
 // half-height, which is as deep as the inside of it can really be.
 float mouthShape(float3 h) {
     float3 m = uMouth;
-    float a = 0.034 + 0.030 * m.y - 0.020 * m.z + 0.024 * m.x;
+    float a = 0.034 + dot(m, float3(0.024, 0.030, -0.020));
     float hh = mouthH();
     float bend = (0.0047 + 0.0029 * m.y) * h.x * h.x / (a * a);
     return max(sdEllipsoid(h - float3(0.0, 0.186 - hh + bend, -0.395 - 0.012 * m.z), float3(a, hh, 0.075)), -hh);
@@ -321,7 +348,7 @@ float mouthShape(float3 h) {
 // surface altogether (by more than the fillet), so no groove is left under
 // the drawn line; it sinks in over the first quarter of an opening, while
 // the drawing is already parting, so nothing pops.
-float mouthCarve(float3 h) { return mouthShape(h) + 0.02 * (1.0 - min(uMouth.x * 4.0, 1.0)); }
+float mouthCarve(float3 h) { return mouthShape(h) + max(0.02 - 0.08 * uMouth.x, 0.0); }
 // The head (head frame, unscaled): skull, cheek fluff, muzzle and eyebrow
 // puffs, with the mouth carved out of it.
 float partHead(float3 h) {
@@ -330,8 +357,8 @@ float partHead(float3 h) {
     d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
     // The muzzle; its lower edge - the chin - drops as the jaw opens, and
     // it pushes forward a little for an "oo".
-    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205 - 0.045 * uMouth.x, -0.29 - 0.012 * uMouth.z),
-                            float3(0.155 - 0.012 * uMouth.z, 0.115 + 0.045 * uMouth.x, 0.13)), 0.07);
+    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205, -0.29) + float3(0.0, 0.045, 0.012) * uMouth.xxz,
+                            float3(0.155, 0.115, 0.13) + float3(-0.012, 0.045, 0.0) * uMouth.zxx), 0.07);
     // (The eyebrow spots are painted on - see headColour - not modelled:
     // two more shapes here cost more than they showed.)
     return smax(d, -mouthCarve(h), 0.012);
@@ -339,7 +366,7 @@ float partHead(float3 h) {
 // An ear: a flattened ellipsoid, pinched toward the tip.
 float earShape(float3 e) {
     return sdEllipsoid(e - float3(0.0, 0.13, 0.0),
-                       float3(0.13 * (1.0 - 0.30 * clamp(e.y / 0.28, 0.0, 1.0)), 0.17, 0.055));
+                       float3(0.13 - clamp(e.y * 0.1392857, 0.0, 0.039), 0.17, 0.055));
 }
 float partEars(float3 h) { return min(earShape(toEarL(h)), earShape(toEarR(h))); }
 float partNose(float3 h) {
@@ -399,7 +426,7 @@ float partAt(float3 p) {
     return id;
 }
 
-// A rough panda for shadows and occlusion, which are soft anyway: body,
+// A rough panda for shadows, which are soft anyway: body,
 // skull, arms and a two-piece tail. A fraction of map()'s size. Every piece
 // sits INSIDE the real shape, never outside it: a point on the real surface
 // that found itself inside this one would shadow itself (it drew a dark band
@@ -478,7 +505,7 @@ float4 material(float id, float3 pos, float3 n) {
         // the hollow behind it - darker the deeper in they are.
         if (h.z < -0.30) {
             float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
-            float4 c = mouthPaint(headColour(h), DARK * 2.0, h.xy, mouthSize(), 0.06, uMouth.y, carved);
+            float4 c = mouthPaint(headColour(h), DARK * 2.0, h.xy, mouthSize(), 0.06, uMouth.y, carved, carved * smoothstep(0.4, 0.8, -dot(uHeadR1, n)));
             return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.39, -0.34, h.z) * carved), c.w);
         }
         return float4(headColour(h), 0.0);
@@ -509,24 +536,27 @@ float3 sparkle(float id, float3 pos) {
 }
 
 // What a ray that ran out of march steps without reaching anything sees
-// (common_tail.sksl): nothing behind this animal to fill it in.
-float stuckRay(float3 ro, float3 rd) {
-    return -1.0;
+// (common_tail.sksl): nothing behind this animal to fill it in. (Where it
+// meets something, and map() there; -1 for nothing.)
+float2 stuckRay(float3 ro, float3 rd) {
+    return float2(-1.0, 0.0);
 }
 
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH
-// and BOUND_R.
+// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH,
+// BOUND_R and MARCH_STEPS.
 
-float3 normalAt(float3 p) {
+// The surface's direction at p, from how map() changes a hair away along
+// each axis. d0 is map() at p itself, which the march has already measured
+// (a hit's last step, or the closest pass): three more lookups of the
+// animal rather than the four a normal costs without it - one lookup is the
+// size of a march step, and steps are what the size limit is short of.
+float3 normalAt(float3 p, float d0) {
     float e = 0.0015;
-    float m1 = map(p + float3(e, -e, -e));
-    float m2 = map(p + float3(-e, -e, e));
-    float m3 = map(p + float3(-e, e, -e));
-    float m4 = map(p + float3(e, e, e));
-    return normalize(float3(m1 - m2 - m3 + m4, -m1 - m2 + m3 + m4, -m1 + m2 - m3 + m4));
+    return normalize(float3(map(p + float3(e, 0.0, 0.0)), map(p + float3(0.0, e, 0.0)),
+                            map(p + float3(0.0, 0.0, e))) - d0);
 }
 
 // Soft shadow toward the key light: how close the march back to the light
@@ -541,17 +571,6 @@ float softShadow(float3 ro, float3 rd) {
         if (res < 0.005 || t > 2.0) break;
     }
     return clamp(res, 0.0, 1.0);
-}
-
-float ambientOcclusion(float3 p, float3 n) {
-    float occ = 0.0;
-    float w = 1.0;
-    for (int i = 0; i < 3; i++) {
-        float hr = 0.03 + 0.09 * float(i);
-        occ += (hr - mapLite(p + n * hr)) * w;
-        w *= 0.6;
-    }
-    return clamp(1.0 - 1.8 * occ, 0.0, 1.0);
 }
 
 // The whole picture for one ray. `p` is the point on screen, -1..1 across
@@ -583,7 +602,7 @@ float4 critter(float2 p) {
     float tOrb = dot(oc, rd);
     float orbMiss = length(oc - rd * tOrb);
     float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
-                 smoothstep(0.55, 0.0, orbMiss);
+                 (1.0 - smoothstep(0.0, 0.55, orbMiss));
 
     // Skip rays that miss the animal's bounding sphere altogether.
     float3 oc2 = ro - target;
@@ -599,41 +618,65 @@ float4 critter(float2 p) {
     // misses by less than a pixel is shaded at that point anyway and drawn
     // partly see-through, by how close it came.
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
+    // (Kept as distance over t while marching - pixels times fp, the same
+    // thing one multiply cheaper per step. t is never 0: the camera is
+    // always outside the bounding sphere.)
     float bestR = 1000.0;
     float bestT = 0.0;
+    float d0 = 0.0;
     if (disc > 0.0) {
         float sq = sqrt(disc);
         float t = max(0.0, -bb - sq);
         float tMax = -bb + sq;
-        // 32 steps. The size limit (common_head.sksl) is what sets this: the march
-        // is by far the largest part of the program, one map() per step.
-        // Measured: rays need 9 steps on average; only rays skimming along a
-        // surface need more. One that runs out of steps while still inside
-        // the bounds is taken as a hit where it stopped - it is a hair from
-        // the surface by then - rather than as a see-through gap.
+        // MARCH_STEPS steps, set by each animal. The size limit
+        // (common_head.sksl) is what sets it: the march is by far the largest
+        // part of the program, one map() per step, so an animal with a
+        // cheaper map() can afford more. Rays need about 9 steps on average;
+        // it is the ones skimming along a surface - the outline, and every
+        // view from well above or below - that need the rest. One that runs
+        // out of steps close to a surface is taken as a hit where it stopped
+        // rather than as a see-through gap; it may be a few pixels short of
+        // that surface, or passing close by one it would have missed.
+        // Too few steps showed as both: see-through specks inside the animal
+        // and opaque ones just outside its outline (docs/CRITTERS.md has the
+        // measurements).
         bool escaped = false;
         float h = 1.0;
-        for (int i = 0; i < 32; i++) {
+        for (int i = 0; i < MARCH_STEPS; i++) {
             h = map(ro + rd * t);
             if (h < 0.0008 * t) { hitT = t; break; }
-            float r = h / max(t * fp, 0.000001);
+            float r = h / t;
             if (r < bestR) { bestR = r; bestT = t; }
             t += h * 0.95;
             if (t > tMax) { escaped = true; break; }
         }
-        if (hitT < 0.0 && !escaped && h < 0.05) hitT = t;
+        // (Shaded at the last point measured, where map() gave h.) "Close
+        // enough" is 0.05, or four pixels when a pixel is that big (a small
+        // picture): a ray a few pixels short of the surface on a small
+        // picture is the surface, and was showing as a see-through speck.
+        d0 = h;
+        if (hitT < 0.0 && !escaped && h < max(0.05, 4.0 * t * fp)) hitT = t - h * 0.95;
         // One that ran out further away still: the animal decides what is
         // behind it (the otter's pool; nothing, -1, for the others) -
         // otherwise its outline shows see-through specks where the pool
-        // should be.
-        if (hitT < 0.0 && !escaped) hitT = stuckRay(ro, rd);
+        // should be. It hands back where, and map() there.
+        if (hitT < 0.0 && !escaped) {
+            float2 st = stuckRay(ro, rd);
+            hitT = st.x;
+            d0 = st.y;
+        }
     }
     float cover = 1.0;
-    // A pixel and a half of feathering: one pixel alone still showed steps
-    // once the phone's half-resolution picture was enlarged.
-    if (hitT < 0.0 && bestR < 1.5) {
+    // The edge's coverage: a half where the pixel's centre sits right on the
+    // outline, down to none three quarters of a pixel out. Measured against
+    // the true coverage (8 x 8 samples a pixel), this is closer than the
+    // wider feather it replaces (which grew the outline by a third of a
+    // pixel all round) and than no feathering at all, both at small sizes and
+    // in the phone's lower-resolution picture once enlarged.
+    if (hitT < 0.0 && bestR < 0.75 * fp) {
         hitT = bestT;
-        cover = 0.75 * (1.0 - bestR / 1.5);
+        d0 = bestR * bestT;
+        cover = 0.5 - bestR / (1.5 * fp);
     }
 
     float3 haloCol = pow(aces(hot * halo), float3(1.0 / 2.2));
@@ -644,7 +687,15 @@ float4 critter(float2 p) {
 
     float3 pos = ro + rd * hitT;
     id = partAt(pos);
-    float3 n = normalAt(pos);
+    float3 n = normalAt(pos, d0);
+    // A hit is anywhere within a hair of the surface (closer the nearer the
+    // camera), and where a ray skims along a surface, where along it the
+    // march stopped varies from pixel to pixel in rows. Colours painted by
+    // position (the mouth's teeth and line on the roof of an open mouth,
+    // seen from below) then came out in dotted stripes - even with ten times
+    // the march steps. One step back along the surface's direction, by the
+    // distance map() gave there, puts the point on the surface itself.
+    pos -= n * d0;
     float3 v = -rd;
 
     if (id == ID_ORB) {
@@ -683,25 +734,45 @@ float4 critter(float2 p) {
     // Wrapped diffuse: light bleeds past the terminator, the way it does on
     // felt and fur, instead of cutting to black.
     float wrap = clamp((nl + 0.45) / 1.45, 0.0, 1.0);
-    float sh = softShadow(pos + n * 0.01, L);
-    float ao = ambientOcclusion(pos, n);
+    // Skipped when the host says so (uNoShadow): under about 200 device
+    // pixels, or at the Lower level, the shadow is a few pixels of shading
+    // and about a sixth of the cost. A uniform, so every pixel takes the
+    // same branch.
+    float sh = uNoShadow > 0.5 ? 1.0 : softShadow(pos + n * 0.01, L);
+    // (No ambient occlusion: measured, it came out exactly 1 - no effect - on
+    // 83-97% of each animal, darkened only a thin crease under the panda's
+    // chin by a few levels, and cost three more lookups of the animal. The
+    // size it freed went to the march, which shows far more.)
     float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
-
-    float3 col = alb * keyCol * wrap * wrap * mix(0.35, 1.0, sh);
-    col += alb * skyCol * (0.6 + 0.4 * n.y) * ao;
-    col += alb * groundCol * (0.5 - 0.5 * n.y) * ao;
-    // A warm glow along the shadow's edge: light scattering through fur.
-    col += alb * float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh;
 
     // The orb is a real light: whatever colour Jarvis is showing lands on
     // the animal's paws, chest and chin.
     float3 ol = uOrb.xyz - pos;
     float od = length(ol);
     float orbLight = uOrbGlow * 0.55 / (1.0 + od * od * 14.0);
-    col += alb * hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * ao * 3.0;
+    // All the light arriving at the point, before the surface's own colour:
+    // the key light, the sky above and the warm ground below, a warm glow
+    // along the shadow's edge (light scattering through fur), and the orb.
+    float3 lit = keyCol * wrap * wrap * mix(0.35, 1.0, sh) + skyCol * (0.6 + 0.4 * n.y) +
+                 groundCol * (0.5 - 0.5 * n.y) + float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh +
+                 hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // Inside a mouth it arrives without its colour, only its brightness: in
+    // there the key light is mostly shadowed, so the blue sky and the orb
+    // were most of what reached the teeth, and turned them grey-blue (and a
+    // red orb would have turned them pink). Everywhere else rimK is 1 and
+    // this is the light as it is.
+    float3 col = alb * mix(float3(dot(lit, float3(0.2126, 0.7152, 0.0722))), lit, rimK);
 
     // Rim light in the state's colour, the soft halo round the silhouette.
-    col += cool * fres * (0.55 + 0.45 * fuzz) * ao * 0.9 * rimK;
+    // It adds light whatever the fur's own colour, so an owner's own colour
+    // choice could flood the animal: a white rim made the panda's near-black
+    // legs over three times brighter, a pure blue one turned it blue. So it
+    // is held to the strength of the brightest default: no channel over 0.30
+    // and no more than 0.17 luminance (linear light). Every default state
+    // colour is under both (at most 0.284 and 0.161), so they are untouched.
+    float3 rim = cool * min(1.0, 0.30 / max(max(cool.r, max(cool.g, cool.b)), 0.0001));
+    rim *= min(1.0, 0.17 / max(dot(rim, float3(0.2126, 0.7152, 0.0722)), 0.0001));
+    col += rim * fres * (0.55 + 0.45 * fuzz) * 0.9 * rimK;
     // Fur sheen.
     col += keyCol * fres * fres * 0.10 * fuzz * sh;
 
@@ -711,7 +782,7 @@ float4 critter(float2 p) {
         float spec = pow(max(dot(r, L), 0.0), 60.0) * 3.0;
         spec += pow(max(dot(r, ol / od), 0.0), 90.0) * 2.0 * uOrbGlow;
         col += gloss * (keyCol * 0.4 * spec + hot * spec * 0.25 * uOrbGlow);
-        col += gloss * cool * fres * 0.4;
+        col += gloss * rim * fres * 0.4;
     }
     // Anything the animal paints on top of the lighting (the cartoon
     // catchlight in an eye).
@@ -793,12 +864,19 @@ uniform float uPit;
 uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
 const float ID_ORB = 9.0;
 
 float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
+
+// 2D & 3D Signed Distance Functions by Inigo Quilez
+// https://iquilezles.org/articles/distfunctions2d/
+// https://iquilezles.org/articles/distfunctions/
+// The ellipsoid bound, the capsule, the smooth minimum and the 2D ellipse
+// below follow his published formulas (THIRD-PARTY-NOTICES.txt).
 
 // Inigo Quilez's distance bounds. An ellipsoid has no exact distance
 // formula; this one is close enough near the surface, which is all the
@@ -821,9 +899,15 @@ float sdCapsule(float3 p, float3 a, float3 b, float r) {
 }
 
 // Polynomial smooth minimum: joins two shapes with a fillet of size k.
+// (Inigo Quilez's quadratic form - the same curve as the usual
+// clamp-and-mix one, to the last bit that matters, in fewer operations,
+// which counts: the march calls it a dozen times a step. See "program size".
+// Written with one division, not two - h / k squared times k is h squared
+// over k - which is two operations less a call, and about 950 less on the
+// red panda: its pictures came out the same to within a level of 255.)
 float smin(float a, float b, float k) {
-    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-    return mix(b, a, h) - k * h * (1.0 - h);
+    float h = max(k - abs(a - b), 0.0);
+    return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 
@@ -848,7 +932,11 @@ float seg2(float2 p, float2 a, float2 b) {
 // meets the lip in the middle, g.y how much higher the corners sit (the
 // smile's depth), g.z the half-width to the corners, g.w how far the lower
 // lip has dropped in the middle. `carved` is how much the point is on the jaw's carved hollow (the
-// hollow's own walls get the inside colours too). Returns the colour and
+// hollow's own walls get the inside colours too), and `roof` how much it is
+// on the hollow's roof - its walls that face down. The drawing is laid on
+// straight from the front, so the whole roof lies under the upper lip's
+// line, and seen from below it showed as a dark smudge across the roof: the
+// roof takes no line. Returns the colour and
 // the lighting code for common_tail.sksl: 0 fur, down to -2 for the inside
 // of a mouth, which takes no rim light (it used to catch it and read blue).
 // Distance to an ellipse in 2D (half-axes ab), exact to a hair however
@@ -869,7 +957,7 @@ float sdEllipse2(float2 p, float2 ab) {
 const float3 MOUTH_IN = float3(0.105, 0.012, 0.012);
 const float3 TONGUE = float3(0.320, 0.080, 0.085);
 const float3 TEETH = float3(0.780, 0.680, 0.560);
-float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved) {
+float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved, float roof) {
     // Two half-ellipses hanging from the corners' height, cy: the upper
     // lip is the small one (the shut smile, g.y deep), the lower lip the same
     // one stretched g.w further down. The opening is the crescent between
@@ -883,7 +971,16 @@ float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float 
     // upper lip.
     float f = q.y > cy ? -min(length(float2(ax - g.z, e.y)), e.y + g.y * s + 8.0 * max(ax - g.z, 0.0))
                        : min(sdEllipse2(e, g.zy), -sdEllipse2(e, float2(g.z, g.y + g.w)));
-    float line = 1.0 - smoothstep(0.004, 0.009, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))));
+    // The dark line: 0.013 wide (in the head's own units) where a pixel is
+    // smaller than that, and never under about a pixel where it is not
+    // (a small picture, or the phone's lower-resolution one). A fixed width
+    // fell between pixel centres at small sizes, and a shut mouth broke up
+    // into pieces or vanished. px is a pixel in the head's units, near
+    // enough for both animals (their heads sit about as far from the camera).
+    float px = 0.85 * uPx / max(uZoom, 0.1);
+    float lw = max(0.0065, 0.75 * px);
+    float lr = max(0.0025, 0.35 * px);
+    float line = (1.0 - smoothstep(lw - lr, lw + lr, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))))) * (1.0 - roof);
     float inside = max(smoothstep(0.0, 0.004, f), carved);
     // Inside: dark red, darker deeper in; the tongue low down in the
     // middle; a row of teeth under the upper lip when the mouth goes wide.
@@ -962,6 +1059,7 @@ const float3 CAM_TARGET = float3(0.0, -0.12, 0.0);
 const float CAM_DIST = 3.35;
 const float CAM_PITCH = 0.0;
 const float BOUND_R = 1.38;
+const int MARCH_STEPS = 48;
 
 // The branch it perches on, in world space. It does not move.
 const float3 BRANCH_A = float3(-0.92, -0.99, 0.02);
@@ -1082,7 +1180,7 @@ float partAt(float3 p) {
     return id;
 }
 
-// A rough owl for shadows and occlusion, sitting inside the real one.
+// A rough owl for shadows, sitting inside the real one.
 float mapLite(float3 p) {
     float d = sdEllipsoid(toBody(p) - float3(0.0, 0.38, 0.02), float3(0.34, 0.42, 0.30));
     d = min(d, sdEllipsoid(toHead(p) - float3(0.0, 0.30, 0.04), float3(0.42, 0.35, 0.34)));
@@ -1091,12 +1189,32 @@ float mapLite(float3 p) {
 
 // --- colours ------------------------------------------------------------
 
-// White spots in rows, for the crown, back and wings.
+// White spots in rows, for the back and wings.
 float spots(float2 q, float k) {
     float2 c = fract(q * k) - 0.5;
     float2 cell = floor(q * k);
-    float jitter = fract(sin(dot(cell, float2(12.9898, 78.233))) * 43758.5453);
+    float3 hj = fract(float3(cell.xyx) * 0.1031);
+    hj += dot(hj, hj.yzx + 33.33);
+    float jitter = fract((hj.x + hj.y) * hj.z);
     return (1.0 - smoothstep(0.16, 0.26, length(c))) * step(0.35, jitter);
+}
+
+// The crown's spots: the same spots, scattered through space in a grid of
+// cells and cut by the head's surface. (Laid out by angle and height round
+// the head, as the back's are, the rows squeezed together toward the very
+// top and stretched down its slope - seen from above, a starburst of radial
+// dashes.) A pattern in space has no top and no seam. Its cells are
+// narrower across than tall, so on the sides the spots are the same upright
+// dashes as the back's, and on top, where the surface lies flat across the
+// narrow sides, small round dots.
+float spots3(float3 q) {
+    float3 cell = floor(q);
+    float3 hq = fract(cell * 0.1031);
+    hq += dot(hq, hq.yzx + 33.33);
+    float n = fract((hq.x + hq.y) * hq.z);
+    // Each spot nudged off its cell's centre, so no grid shows from above.
+    float3 c = fract(q) - 0.5 - 0.4 * (fract(float3(n * 7.0, n * 13.0, n * 29.0)) - 0.5);
+    return (1.0 - smoothstep(0.20, 0.32, length(c))) * step(0.2, n);
 }
 
 float3 headColour(float3 h) {
@@ -1107,11 +1225,8 @@ float3 headColour(float3 h) {
     float brow = 1.0 - smoothstep(0.012, 0.024,
         seg2(hs.xy, float2(0.03, 0.43 + 0.02 * uFace.z), float2(0.25, 0.49 + 0.03 * uFace.z)));
     brow *= front;
-    // Spots are laid out by angle round the head, so near the very top the
-    // rows squeeze to a point - a starburst of slivers seen from above.
-    // They fade out before they get there.
-    float crown = spots(float2(atan(h.x, h.z), h.y), 7.0) * smoothstep(-0.1, 0.12, h.z + h.y * 0.3)
-                * smoothstep(0.20, 0.36, length(float2(h.x, h.z - 0.02)));
+    // The crown's spots, on the back and top of the head (not the face).
+    float crown = spots3(h * float3(14.7, 7.0, 14.7)) * smoothstep(-0.1, 0.12, h.z + h.y * 0.3);
     float3 c = mix(BROWN, CREAM, max(disc * 0.85, crown * 0.8));
     return mix(c, CREAM * 1.05, brow);
 }
@@ -1182,24 +1297,27 @@ float3 sparkle(float id, float3 pos) {
 }
 
 // What a ray that ran out of march steps without reaching anything sees
-// (common_tail.sksl): nothing behind this animal to fill it in.
-float stuckRay(float3 ro, float3 rd) {
-    return -1.0;
+// (common_tail.sksl): nothing behind this animal to fill it in. (Where it
+// meets something, and map() there; -1 for nothing.)
+float2 stuckRay(float3 ro, float3 rd) {
+    return float2(-1.0, 0.0);
 }
 
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH
-// and BOUND_R.
+// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH,
+// BOUND_R and MARCH_STEPS.
 
-float3 normalAt(float3 p) {
+// The surface's direction at p, from how map() changes a hair away along
+// each axis. d0 is map() at p itself, which the march has already measured
+// (a hit's last step, or the closest pass): three more lookups of the
+// animal rather than the four a normal costs without it - one lookup is the
+// size of a march step, and steps are what the size limit is short of.
+float3 normalAt(float3 p, float d0) {
     float e = 0.0015;
-    float m1 = map(p + float3(e, -e, -e));
-    float m2 = map(p + float3(-e, -e, e));
-    float m3 = map(p + float3(-e, e, -e));
-    float m4 = map(p + float3(e, e, e));
-    return normalize(float3(m1 - m2 - m3 + m4, -m1 - m2 + m3 + m4, -m1 + m2 - m3 + m4));
+    return normalize(float3(map(p + float3(e, 0.0, 0.0)), map(p + float3(0.0, e, 0.0)),
+                            map(p + float3(0.0, 0.0, e))) - d0);
 }
 
 // Soft shadow toward the key light: how close the march back to the light
@@ -1214,17 +1332,6 @@ float softShadow(float3 ro, float3 rd) {
         if (res < 0.005 || t > 2.0) break;
     }
     return clamp(res, 0.0, 1.0);
-}
-
-float ambientOcclusion(float3 p, float3 n) {
-    float occ = 0.0;
-    float w = 1.0;
-    for (int i = 0; i < 3; i++) {
-        float hr = 0.03 + 0.09 * float(i);
-        occ += (hr - mapLite(p + n * hr)) * w;
-        w *= 0.6;
-    }
-    return clamp(1.0 - 1.8 * occ, 0.0, 1.0);
 }
 
 // The whole picture for one ray. `p` is the point on screen, -1..1 across
@@ -1256,7 +1363,7 @@ float4 critter(float2 p) {
     float tOrb = dot(oc, rd);
     float orbMiss = length(oc - rd * tOrb);
     float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
-                 smoothstep(0.55, 0.0, orbMiss);
+                 (1.0 - smoothstep(0.0, 0.55, orbMiss));
 
     // Skip rays that miss the animal's bounding sphere altogether.
     float3 oc2 = ro - target;
@@ -1272,41 +1379,65 @@ float4 critter(float2 p) {
     // misses by less than a pixel is shaded at that point anyway and drawn
     // partly see-through, by how close it came.
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
+    // (Kept as distance over t while marching - pixels times fp, the same
+    // thing one multiply cheaper per step. t is never 0: the camera is
+    // always outside the bounding sphere.)
     float bestR = 1000.0;
     float bestT = 0.0;
+    float d0 = 0.0;
     if (disc > 0.0) {
         float sq = sqrt(disc);
         float t = max(0.0, -bb - sq);
         float tMax = -bb + sq;
-        // 32 steps. The size limit (common_head.sksl) is what sets this: the march
-        // is by far the largest part of the program, one map() per step.
-        // Measured: rays need 9 steps on average; only rays skimming along a
-        // surface need more. One that runs out of steps while still inside
-        // the bounds is taken as a hit where it stopped - it is a hair from
-        // the surface by then - rather than as a see-through gap.
+        // MARCH_STEPS steps, set by each animal. The size limit
+        // (common_head.sksl) is what sets it: the march is by far the largest
+        // part of the program, one map() per step, so an animal with a
+        // cheaper map() can afford more. Rays need about 9 steps on average;
+        // it is the ones skimming along a surface - the outline, and every
+        // view from well above or below - that need the rest. One that runs
+        // out of steps close to a surface is taken as a hit where it stopped
+        // rather than as a see-through gap; it may be a few pixels short of
+        // that surface, or passing close by one it would have missed.
+        // Too few steps showed as both: see-through specks inside the animal
+        // and opaque ones just outside its outline (docs/CRITTERS.md has the
+        // measurements).
         bool escaped = false;
         float h = 1.0;
-        for (int i = 0; i < 32; i++) {
+        for (int i = 0; i < MARCH_STEPS; i++) {
             h = map(ro + rd * t);
             if (h < 0.0008 * t) { hitT = t; break; }
-            float r = h / max(t * fp, 0.000001);
+            float r = h / t;
             if (r < bestR) { bestR = r; bestT = t; }
             t += h * 0.95;
             if (t > tMax) { escaped = true; break; }
         }
-        if (hitT < 0.0 && !escaped && h < 0.05) hitT = t;
+        // (Shaded at the last point measured, where map() gave h.) "Close
+        // enough" is 0.05, or four pixels when a pixel is that big (a small
+        // picture): a ray a few pixels short of the surface on a small
+        // picture is the surface, and was showing as a see-through speck.
+        d0 = h;
+        if (hitT < 0.0 && !escaped && h < max(0.05, 4.0 * t * fp)) hitT = t - h * 0.95;
         // One that ran out further away still: the animal decides what is
         // behind it (the otter's pool; nothing, -1, for the others) -
         // otherwise its outline shows see-through specks where the pool
-        // should be.
-        if (hitT < 0.0 && !escaped) hitT = stuckRay(ro, rd);
+        // should be. It hands back where, and map() there.
+        if (hitT < 0.0 && !escaped) {
+            float2 st = stuckRay(ro, rd);
+            hitT = st.x;
+            d0 = st.y;
+        }
     }
     float cover = 1.0;
-    // A pixel and a half of feathering: one pixel alone still showed steps
-    // once the phone's half-resolution picture was enlarged.
-    if (hitT < 0.0 && bestR < 1.5) {
+    // The edge's coverage: a half where the pixel's centre sits right on the
+    // outline, down to none three quarters of a pixel out. Measured against
+    // the true coverage (8 x 8 samples a pixel), this is closer than the
+    // wider feather it replaces (which grew the outline by a third of a
+    // pixel all round) and than no feathering at all, both at small sizes and
+    // in the phone's lower-resolution picture once enlarged.
+    if (hitT < 0.0 && bestR < 0.75 * fp) {
         hitT = bestT;
-        cover = 0.75 * (1.0 - bestR / 1.5);
+        d0 = bestR * bestT;
+        cover = 0.5 - bestR / (1.5 * fp);
     }
 
     float3 haloCol = pow(aces(hot * halo), float3(1.0 / 2.2));
@@ -1317,7 +1448,15 @@ float4 critter(float2 p) {
 
     float3 pos = ro + rd * hitT;
     id = partAt(pos);
-    float3 n = normalAt(pos);
+    float3 n = normalAt(pos, d0);
+    // A hit is anywhere within a hair of the surface (closer the nearer the
+    // camera), and where a ray skims along a surface, where along it the
+    // march stopped varies from pixel to pixel in rows. Colours painted by
+    // position (the mouth's teeth and line on the roof of an open mouth,
+    // seen from below) then came out in dotted stripes - even with ten times
+    // the march steps. One step back along the surface's direction, by the
+    // distance map() gave there, puts the point on the surface itself.
+    pos -= n * d0;
     float3 v = -rd;
 
     if (id == ID_ORB) {
@@ -1356,25 +1495,45 @@ float4 critter(float2 p) {
     // Wrapped diffuse: light bleeds past the terminator, the way it does on
     // felt and fur, instead of cutting to black.
     float wrap = clamp((nl + 0.45) / 1.45, 0.0, 1.0);
-    float sh = softShadow(pos + n * 0.01, L);
-    float ao = ambientOcclusion(pos, n);
+    // Skipped when the host says so (uNoShadow): under about 200 device
+    // pixels, or at the Lower level, the shadow is a few pixels of shading
+    // and about a sixth of the cost. A uniform, so every pixel takes the
+    // same branch.
+    float sh = uNoShadow > 0.5 ? 1.0 : softShadow(pos + n * 0.01, L);
+    // (No ambient occlusion: measured, it came out exactly 1 - no effect - on
+    // 83-97% of each animal, darkened only a thin crease under the panda's
+    // chin by a few levels, and cost three more lookups of the animal. The
+    // size it freed went to the march, which shows far more.)
     float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
-
-    float3 col = alb * keyCol * wrap * wrap * mix(0.35, 1.0, sh);
-    col += alb * skyCol * (0.6 + 0.4 * n.y) * ao;
-    col += alb * groundCol * (0.5 - 0.5 * n.y) * ao;
-    // A warm glow along the shadow's edge: light scattering through fur.
-    col += alb * float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh;
 
     // The orb is a real light: whatever colour Jarvis is showing lands on
     // the animal's paws, chest and chin.
     float3 ol = uOrb.xyz - pos;
     float od = length(ol);
     float orbLight = uOrbGlow * 0.55 / (1.0 + od * od * 14.0);
-    col += alb * hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * ao * 3.0;
+    // All the light arriving at the point, before the surface's own colour:
+    // the key light, the sky above and the warm ground below, a warm glow
+    // along the shadow's edge (light scattering through fur), and the orb.
+    float3 lit = keyCol * wrap * wrap * mix(0.35, 1.0, sh) + skyCol * (0.6 + 0.4 * n.y) +
+                 groundCol * (0.5 - 0.5 * n.y) + float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh +
+                 hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // Inside a mouth it arrives without its colour, only its brightness: in
+    // there the key light is mostly shadowed, so the blue sky and the orb
+    // were most of what reached the teeth, and turned them grey-blue (and a
+    // red orb would have turned them pink). Everywhere else rimK is 1 and
+    // this is the light as it is.
+    float3 col = alb * mix(float3(dot(lit, float3(0.2126, 0.7152, 0.0722))), lit, rimK);
 
     // Rim light in the state's colour, the soft halo round the silhouette.
-    col += cool * fres * (0.55 + 0.45 * fuzz) * ao * 0.9 * rimK;
+    // It adds light whatever the fur's own colour, so an owner's own colour
+    // choice could flood the animal: a white rim made the panda's near-black
+    // legs over three times brighter, a pure blue one turned it blue. So it
+    // is held to the strength of the brightest default: no channel over 0.30
+    // and no more than 0.17 luminance (linear light). Every default state
+    // colour is under both (at most 0.284 and 0.161), so they are untouched.
+    float3 rim = cool * min(1.0, 0.30 / max(max(cool.r, max(cool.g, cool.b)), 0.0001));
+    rim *= min(1.0, 0.17 / max(dot(rim, float3(0.2126, 0.7152, 0.0722)), 0.0001));
+    col += rim * fres * (0.55 + 0.45 * fuzz) * 0.9 * rimK;
     // Fur sheen.
     col += keyCol * fres * fres * 0.10 * fuzz * sh;
 
@@ -1384,7 +1543,7 @@ float4 critter(float2 p) {
         float spec = pow(max(dot(r, L), 0.0), 60.0) * 3.0;
         spec += pow(max(dot(r, ol / od), 0.0), 90.0) * 2.0 * uOrbGlow;
         col += gloss * (keyCol * 0.4 * spec + hot * spec * 0.25 * uOrbGlow);
-        col += gloss * cool * fres * 0.4;
+        col += gloss * rim * fres * 0.4;
     }
     // Anything the animal paints on top of the lighting (the cartoon
     // catchlight in an eye).
@@ -1466,12 +1625,19 @@ uniform float uPit;
 uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
 const float ID_ORB = 9.0;
 
 float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
+
+// 2D & 3D Signed Distance Functions by Inigo Quilez
+// https://iquilezles.org/articles/distfunctions2d/
+// https://iquilezles.org/articles/distfunctions/
+// The ellipsoid bound, the capsule, the smooth minimum and the 2D ellipse
+// below follow his published formulas (THIRD-PARTY-NOTICES.txt).
 
 // Inigo Quilez's distance bounds. An ellipsoid has no exact distance
 // formula; this one is close enough near the surface, which is all the
@@ -1494,9 +1660,15 @@ float sdCapsule(float3 p, float3 a, float3 b, float r) {
 }
 
 // Polynomial smooth minimum: joins two shapes with a fillet of size k.
+// (Inigo Quilez's quadratic form - the same curve as the usual
+// clamp-and-mix one, to the last bit that matters, in fewer operations,
+// which counts: the march calls it a dozen times a step. See "program size".
+// Written with one division, not two - h / k squared times k is h squared
+// over k - which is two operations less a call, and about 950 less on the
+// red panda: its pictures came out the same to within a level of 255.)
 float smin(float a, float b, float k) {
-    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-    return mix(b, a, h) - k * h * (1.0 - h);
+    float h = max(k - abs(a - b), 0.0);
+    return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 
@@ -1521,7 +1693,11 @@ float seg2(float2 p, float2 a, float2 b) {
 // meets the lip in the middle, g.y how much higher the corners sit (the
 // smile's depth), g.z the half-width to the corners, g.w how far the lower
 // lip has dropped in the middle. `carved` is how much the point is on the jaw's carved hollow (the
-// hollow's own walls get the inside colours too). Returns the colour and
+// hollow's own walls get the inside colours too), and `roof` how much it is
+// on the hollow's roof - its walls that face down. The drawing is laid on
+// straight from the front, so the whole roof lies under the upper lip's
+// line, and seen from below it showed as a dark smudge across the roof: the
+// roof takes no line. Returns the colour and
 // the lighting code for common_tail.sksl: 0 fur, down to -2 for the inside
 // of a mouth, which takes no rim light (it used to catch it and read blue).
 // Distance to an ellipse in 2D (half-axes ab), exact to a hair however
@@ -1542,7 +1718,7 @@ float sdEllipse2(float2 p, float2 ab) {
 const float3 MOUTH_IN = float3(0.105, 0.012, 0.012);
 const float3 TONGUE = float3(0.320, 0.080, 0.085);
 const float3 TEETH = float3(0.780, 0.680, 0.560);
-float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved) {
+float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved, float roof) {
     // Two half-ellipses hanging from the corners' height, cy: the upper
     // lip is the small one (the shut smile, g.y deep), the lower lip the same
     // one stretched g.w further down. The opening is the crescent between
@@ -1556,7 +1732,16 @@ float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float 
     // upper lip.
     float f = q.y > cy ? -min(length(float2(ax - g.z, e.y)), e.y + g.y * s + 8.0 * max(ax - g.z, 0.0))
                        : min(sdEllipse2(e, g.zy), -sdEllipse2(e, float2(g.z, g.y + g.w)));
-    float line = 1.0 - smoothstep(0.004, 0.009, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))));
+    // The dark line: 0.013 wide (in the head's own units) where a pixel is
+    // smaller than that, and never under about a pixel where it is not
+    // (a small picture, or the phone's lower-resolution one). A fixed width
+    // fell between pixel centres at small sizes, and a shut mouth broke up
+    // into pieces or vanished. px is a pixel in the head's units, near
+    // enough for both animals (their heads sit about as far from the camera).
+    float px = 0.85 * uPx / max(uZoom, 0.1);
+    float lw = max(0.0065, 0.75 * px);
+    float lr = max(0.0025, 0.35 * px);
+    float line = (1.0 - smoothstep(lw - lr, lw + lr, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))))) * (1.0 - roof);
     float inside = max(smoothstep(0.0, 0.004, f), carved);
     // Inside: dark red, darker deeper in; the tongue low down in the
     // middle; a row of teeth under the upper lip when the mouth goes wide.
@@ -1628,12 +1813,14 @@ const float3 FUR_LIGHT = float3(0.110, 0.056, 0.032);
 const float3 FACE = float3(0.640, 0.540, 0.400);
 const float3 INK = float3(0.004, 0.004, 0.006);
 const float3 WATER = float3(0.006, 0.060, 0.090);
+const float3 WATER_NEAR = float3(0.012, 0.100, 0.120);
 const float3 FOAM = float3(0.700, 0.820, 0.880);
 
 const float3 CAM_TARGET = float3(0.0, -0.30, 0.0);
 const float CAM_DIST = 3.30;
 const float CAM_PITCH = 0.50;
 const float BOUND_R = 1.25;
+const int MARCH_STEPS = 48;
 // The pool: a thin round disc of water, this wide.
 const float POOL_R = 1.02;
 
@@ -1714,13 +1901,12 @@ float partEyes(float3 h) {
     float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.19);
     return sdEllipsoid(ep, float3(0.036, max(0.006, 0.040 * open), 0.028));
 }
-// The water: a thin round disc, its top rippling with rings that spread
-// out from the otter. Thin, so its rounded rim is all that shows of its
-// side - a deep column of water read as a drum.
+// The water: a thin round disc. Thin, so its rounded rim is all that shows
+// of its side - a deep column of water read as a drum. Its top is flat
+// here: the waves and the rings are painted on (waterSlope, below), which
+// costs once a pixel instead of once a march step, and shows far more.
 float waterAt(float3 p) {
-    float r = length(p.xz - uBodyPos.xz);
-    float ripple = uWater.z * sin(r * 13.0 - uWater.y) / (1.0 + r * 3.0);
-    float slab = max(p.y - (uWater.x + ripple), (uWater.x - 0.05) - p.y);
+    float slab = max(p.y - uWater.x, (uWater.x - 0.05) - p.y);
     return smax(slab, length(p.xz) - POOL_R, 0.04);
 }
 
@@ -1759,7 +1945,7 @@ float partAt(float3 p) {
     return id;
 }
 
-// A rough otter for shadows and occlusion, inside the real one. The water
+// A rough otter for shadows (and the foam), inside the real one. The water
 // is left out: it does not cast shadows on the otter worth the cost.
 float mapLite(float3 p) {
     float d = sdCapsule(toBody(p), float3(-0.30, 0.0, 0.0), float3(0.34, -0.02, 0.0), 0.21);
@@ -1769,45 +1955,132 @@ float mapLite(float3 p) {
 
 // --- colours ------------------------------------------------------------
 
+// How much of a pattern whose stripes repeat every `size` (world units) a
+// pixel can show: 1 while a stripe spans several pixels, fading to 0 as it
+// narrows to about two - finer than that it would only sparkle and crawl
+// as the otter moves (a small picture, or the phone's lower-resolution
+// one). A pixel is about uPx * CAM_DIST / 3.1 across at the otter.
+float fine(float size) {
+    return 1.0 - smoothstep(0.16, 0.45, uPx * 1.07 / max(uZoom, 0.1) / size);
+}
+
+// Where the camera is (common_tail.sksl's own sum), for the water's
+// shine and the fur's soft edge.
+float3 eyePos() {
+    float cp = cos(uPit + CAM_PITCH);
+    return CAM_TARGET + float3(-CAM_DIST * cp * sin(uYaw), CAM_DIST * sin(uPit + CAM_PITCH), -CAM_DIST * cp * cos(uYaw));
+}
+
+// Fur: soft wavy strands lying along q.y, q.x across them - clumps a
+// finger wide, and finer hairs inside each clump where the picture is big
+// enough to hold them. -1 (the dark between strands) to 1. `edge` is how
+// side-on the surface is seen: there, at the outline, the strands stand
+// out more, so the outline reads soft and furry rather than smooth.
+float furTex(float2 q, float edge) {
+    float clump = sin(q.x * 110.0 + 1.6 * sin(q.y * 13.0 + q.x * 9.0)) * (0.35 + 0.65 * smoothstep(-0.3, 0.9, sin(q.y * 46.0 + q.x * 57.0)));
+    float hair = sin(q.x * 270.0 + 2.2 * sin(q.y * 23.0 + q.x * 31.0)) * (0.5 + 0.5 * sin(q.y * 71.0 + q.x * 130.0));
+    return (clump * 0.6 * fine(0.057) + hair * 0.4 * fine(0.023)) * (1.0 + 1.2 * edge);
+}
+
 float3 headColour(float3 h) {
     // Pale and grizzled on the face, darkening to chocolate behind and at
     // the neck. (The mouth is drawn on top of this - see material().)
     float pale = (1.0 - smoothstep(-0.10, 0.12, h.z)) * smoothstep(-0.26, -0.05, h.y + 0.1 * h.z);
     float grizzle = 0.85 + 0.15 * felt(h * 2.0);
-    return mix(FUR_LIGHT, FACE * grizzle, pale);
+    // The fur fans out from the nose in short tufts. (Whole numbers of
+    // strands and tufts round, so the pattern meets itself where the angle
+    // wraps round.)
+    float2 f = h.xy - float2(0.0, -0.05);
+    float a = atan(f.y, f.x);
+    float fan = sin(a * 26.0 + 1.5 * sin(length(f) * 40.0)) * (0.3 + 0.7 * smoothstep(-0.2, 0.9, sin(length(f) * 70.0 + a * 13.0)));
+    fan *= fine(0.045) * smoothstep(0.06, 0.2, length(f));
+    float3 c = mix(FUR_LIGHT * (1.0 + 0.3 * fan), FACE * grizzle * (1.0 + 0.09 * fan), pale);
+    // Whisker dots: three staggered rows on each side of the muzzle, above
+    // the mouth's corners. The mouth is drawn over them.
+    float2 w = float2(abs(h.x) - 0.036, h.y + 0.058) / 0.023;
+    w.x += 0.5 * fract(floor(w.y) * 0.5);
+    float pad = (1.0 - smoothstep(0.7, 1.0, length((float2(abs(h.x), h.y) - float2(0.072, -0.075)) / float2(0.042, 0.032)))) * step(h.z, -0.18);
+    float dots = (1.0 - smoothstep(0.20, 0.32, length(fract(w) - 0.5))) * pad * fine(0.03);
+    return mix(c, FUR * 1.5, dots * 0.75);
+}
+
+// The water's slope, (x, z): small wavelets crossing each other, and rings
+// spreading out from the otter - stronger while its feet paddle. Every
+// movement runs off the rings' own clock (uWater.y, one turn every 2.6
+// seconds), in whole turns, so nothing jumps when that clock wraps round.
+// All of it slow: a wavelet moves about its own length in two to three
+// seconds. `dl` is the distance from the otter (mapLite).
+float3 waterSlope(float3 pos, float dl) {
+    float2 q = pos.xz;
+    float ph = uWater.y;
+    // Calmer asleep (uWater.z halves), and nothing at all on a picture too
+    // small to hold a wavelet - there it would only sparkle.
+    float k = uWater.z * 100.0 * fine(0.20);
+    q += 0.045 * sin(q.yx * 9.0 + float2(0.0, 2.0));
+    float2 g = float2(1.0, 0.0) * cos(q.x * 24.0 - ph);
+    g += float2(0.57, 0.82) * cos(dot(q, float2(19.0, 27.0)) - ph + 1.3);
+    g += float2(-0.57, 0.82) * cos(dot(q, float2(-25.0, 36.0)) - 2.0 * ph + 4.0);
+    float2 away = (q - uBodyPos.xz) / max(length(q - uBodyPos.xz), 0.001);
+    float ring = (0.9 + 2.2 * uFace.z) * exp(-2.5 * dl);
+    float wv = dl * 30.0 - ph;
+    return float3(g * 0.055 + away * ring * 0.16 * cos(wv), ring * smoothstep(0.6, 1.0, sin(wv))) * k;
 }
 
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
+    float3 v = normalize(eyePos() - pos);
+    float edge = smoothstep(0.55, 0.92, 1.0 - abs(dot(n, v)));
     if (id == ID_EYE) return float4(INK, 1.0);
     if (id == ID_NOSE) return float4(INK * 2.0, 0.7);
     if (id == ID_HEAD) {
         // The drawn mouth on the front of the muzzle, and the walls of the
-        // hollow behind it - darker the deeper in they are.
-        if (h.z < -0.20) {
+        // hollow behind it - darker the deeper in they are. (Painted on the
+        // whole front of the head, not just the muzzle's face: wide open,
+        // the lower lip reaches round under the chin, and held to the
+        // muzzle's face it was cut off there. Further back is kept out, where
+        // the back of the head lines up with the drawing.)
+        if (h.z < -0.05) {
             float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
-            float4 c = mouthPaint(headColour(h), INK * 3.0, h.xy, mouthSize(), 0.04, uMouth.y, carved);
+            float4 c = mouthPaint(headColour(h), INK * 3.0, h.xy, mouthSize(), 0.04, uMouth.y, carved, carved * smoothstep(0.4, 0.8, -dot(uHeadR1, n)));
             return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.27, -0.23, h.z) * carved), c.w);
         }
-        return float4(headColour(h), 0.0);
+        return float4(headColour(h) * (1.0 + 0.25 * furTex(float2(atan(h.x, h.y) * 0.24, h.z), edge)), 0.0);
     }
     if (id == ID_WATER) {
-        // Deep teal, with white foam where the water meets the otter.
-        float foam = 1.0 - smoothstep(0.0, 0.06, mapLite(pos) - 0.02);
-        float edge = smoothstep(POOL_R - 0.25, POOL_R, length(pos.xz));
-        float3 c = mix(WATER, FOAM, foam * 0.8);
-        return float4(mix(c, WATER * 0.4, edge), 0.12);
+        // Lighter and clearer close in, where the otter's own light and
+        // shallow-looking water are, deepening outward to near-dark at the
+        // rim, so the pool's edge melts into the background. The wavelets
+        // shade it - facets turned to the light brighter - and catch the key
+        // light in soft broken glints. A thin line of foam, broken and
+        // drifting, where the otter meets the water.
+        float dl = mapLite(pos);
+        float r = length(pos.xz);
+        float3 g = waterSlope(pos, dl);
+        float3 nw = normalize(n + float3(-g.x, 0.0, -g.y));
+        // (A ring's crest catches a little light of its own, so the rings
+        // read from any side, not only where they face the light.)
+        float3 c = mix(WATER_NEAR, WATER, smoothstep(0.02, 0.45, dl));
+        c *= 1.0 + 3.0 * dot(nw - n, float3(-0.55, 0.75, -0.55)) + 0.6 * g.z;
+        c += float3(0.05, 0.09, 0.11) * pow(1.0 - max(dot(nw, v), 0.0), 4.0);
+        c += float3(0.30, 0.34, 0.36) * pow(max(dot(reflect(-v, nw), normalize(float3(-0.55, 0.75, -0.55))), 0.0), 30.0) * fine(0.2);
+        float foam = (1.0 - smoothstep(0.0, 0.035, dl - 0.03)) * (0.7 + 0.3 * sin(pos.x * 47.0 + 3.0 * sin(pos.z * 31.0) - uWater.y));
+        c = mix(c, FOAM, foam * 0.8);
+        float rim = smoothstep(POOL_R - 0.5, POOL_R + 0.02, r);
+        return float4(mix(c, WATER * 0.12, rim), 0.04 * (1.0 - rim));
     }
     // Arms in the body's own brown, so they read as part of it; the paws
-    // and feet a shade darker.
+    // and feet darker, with the toes' creases.
+    float3 b = toBody(pos);
+    float fur = 1.0 + 0.24 * furTex(float2(atan(b.z, b.y) * 0.25, b.x), edge);
     if (id == ID_PAW) {
         float paw = 1.0 - smoothstep(0.05, 0.10, min(length(pos - uPawL), length(pos - uPawR)));
-        return float4(mix(FUR_LIGHT, FUR * 0.7, paw), 0.0);
+        return float4(mix(FUR_LIGHT * fur, FUR * 0.55, paw), 0.0);
     }
-    if (id == ID_FEET) return float4(FUR * 0.8, 0.0);
-    // The belly is a touch lighter than the back and sides.
-    float3 b = toBody(pos);
-    return float4(mix(FUR, FUR_LIGHT, smoothstep(0.05, 0.22, b.y)), 0.0);
+    if (id == ID_FEET) return float4(FUR * 0.6 * (1.0 - 0.35 * smoothstep(0.5, 1.0, sin(abs(b.z) * 80.0)) * fine(0.08)), 0.0);
+    // A dark back, a lighter belly, and a pale chest under the chin.
+    float3 c = mix(FUR, FUR_LIGHT, smoothstep(0.05, 0.22, b.y));
+    c = mix(c, FACE * 0.45, smoothstep(0.12, 0.24, b.y) * (1.0 - smoothstep(-0.30, 0.05, b.x)));
+    return float4(c * fur, 0.0);
 }
 
 // A painted catchlight in each eye.
@@ -1827,26 +2100,30 @@ float3 sparkle(float id, float3 pos) {
 // (common_tail.sksl). Rays that skim the otter's outline use up their steps
 // creeping along its fur before they reach the pool behind it: meet the
 // water directly, so the edge shows water rather than see-through specks.
-float stuckRay(float3 ro, float3 rd) {
-    if (rd.y > -0.001) return -1.0;
+// Hands back where it meets it (-1 for nowhere) and map() there, which the
+// shading needs (common_tail.sksl's normalAt).
+float2 stuckRay(float3 ro, float3 rd) {
+    if (rd.y > -0.001) return float2(-1.0, 0.0);
     float t = (uWater.x - ro.y) / rd.y;
     float3 q = ro + rd * t;
-    return length(q.xz) < POOL_R - 0.02 ? t : -1.0;
+    return float2(length(q.xz) < POOL_R - 0.02 ? t : -1.0, map(q));
 }
 
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH
-// and BOUND_R.
+// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH,
+// BOUND_R and MARCH_STEPS.
 
-float3 normalAt(float3 p) {
+// The surface's direction at p, from how map() changes a hair away along
+// each axis. d0 is map() at p itself, which the march has already measured
+// (a hit's last step, or the closest pass): three more lookups of the
+// animal rather than the four a normal costs without it - one lookup is the
+// size of a march step, and steps are what the size limit is short of.
+float3 normalAt(float3 p, float d0) {
     float e = 0.0015;
-    float m1 = map(p + float3(e, -e, -e));
-    float m2 = map(p + float3(-e, -e, e));
-    float m3 = map(p + float3(-e, e, -e));
-    float m4 = map(p + float3(e, e, e));
-    return normalize(float3(m1 - m2 - m3 + m4, -m1 - m2 + m3 + m4, -m1 + m2 - m3 + m4));
+    return normalize(float3(map(p + float3(e, 0.0, 0.0)), map(p + float3(0.0, e, 0.0)),
+                            map(p + float3(0.0, 0.0, e))) - d0);
 }
 
 // Soft shadow toward the key light: how close the march back to the light
@@ -1861,17 +2138,6 @@ float softShadow(float3 ro, float3 rd) {
         if (res < 0.005 || t > 2.0) break;
     }
     return clamp(res, 0.0, 1.0);
-}
-
-float ambientOcclusion(float3 p, float3 n) {
-    float occ = 0.0;
-    float w = 1.0;
-    for (int i = 0; i < 3; i++) {
-        float hr = 0.03 + 0.09 * float(i);
-        occ += (hr - mapLite(p + n * hr)) * w;
-        w *= 0.6;
-    }
-    return clamp(1.0 - 1.8 * occ, 0.0, 1.0);
 }
 
 // The whole picture for one ray. `p` is the point on screen, -1..1 across
@@ -1903,7 +2169,7 @@ float4 critter(float2 p) {
     float tOrb = dot(oc, rd);
     float orbMiss = length(oc - rd * tOrb);
     float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
-                 smoothstep(0.55, 0.0, orbMiss);
+                 (1.0 - smoothstep(0.0, 0.55, orbMiss));
 
     // Skip rays that miss the animal's bounding sphere altogether.
     float3 oc2 = ro - target;
@@ -1919,41 +2185,65 @@ float4 critter(float2 p) {
     // misses by less than a pixel is shaded at that point anyway and drawn
     // partly see-through, by how close it came.
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
+    // (Kept as distance over t while marching - pixels times fp, the same
+    // thing one multiply cheaper per step. t is never 0: the camera is
+    // always outside the bounding sphere.)
     float bestR = 1000.0;
     float bestT = 0.0;
+    float d0 = 0.0;
     if (disc > 0.0) {
         float sq = sqrt(disc);
         float t = max(0.0, -bb - sq);
         float tMax = -bb + sq;
-        // 32 steps. The size limit (common_head.sksl) is what sets this: the march
-        // is by far the largest part of the program, one map() per step.
-        // Measured: rays need 9 steps on average; only rays skimming along a
-        // surface need more. One that runs out of steps while still inside
-        // the bounds is taken as a hit where it stopped - it is a hair from
-        // the surface by then - rather than as a see-through gap.
+        // MARCH_STEPS steps, set by each animal. The size limit
+        // (common_head.sksl) is what sets it: the march is by far the largest
+        // part of the program, one map() per step, so an animal with a
+        // cheaper map() can afford more. Rays need about 9 steps on average;
+        // it is the ones skimming along a surface - the outline, and every
+        // view from well above or below - that need the rest. One that runs
+        // out of steps close to a surface is taken as a hit where it stopped
+        // rather than as a see-through gap; it may be a few pixels short of
+        // that surface, or passing close by one it would have missed.
+        // Too few steps showed as both: see-through specks inside the animal
+        // and opaque ones just outside its outline (docs/CRITTERS.md has the
+        // measurements).
         bool escaped = false;
         float h = 1.0;
-        for (int i = 0; i < 32; i++) {
+        for (int i = 0; i < MARCH_STEPS; i++) {
             h = map(ro + rd * t);
             if (h < 0.0008 * t) { hitT = t; break; }
-            float r = h / max(t * fp, 0.000001);
+            float r = h / t;
             if (r < bestR) { bestR = r; bestT = t; }
             t += h * 0.95;
             if (t > tMax) { escaped = true; break; }
         }
-        if (hitT < 0.0 && !escaped && h < 0.05) hitT = t;
+        // (Shaded at the last point measured, where map() gave h.) "Close
+        // enough" is 0.05, or four pixels when a pixel is that big (a small
+        // picture): a ray a few pixels short of the surface on a small
+        // picture is the surface, and was showing as a see-through speck.
+        d0 = h;
+        if (hitT < 0.0 && !escaped && h < max(0.05, 4.0 * t * fp)) hitT = t - h * 0.95;
         // One that ran out further away still: the animal decides what is
         // behind it (the otter's pool; nothing, -1, for the others) -
         // otherwise its outline shows see-through specks where the pool
-        // should be.
-        if (hitT < 0.0 && !escaped) hitT = stuckRay(ro, rd);
+        // should be. It hands back where, and map() there.
+        if (hitT < 0.0 && !escaped) {
+            float2 st = stuckRay(ro, rd);
+            hitT = st.x;
+            d0 = st.y;
+        }
     }
     float cover = 1.0;
-    // A pixel and a half of feathering: one pixel alone still showed steps
-    // once the phone's half-resolution picture was enlarged.
-    if (hitT < 0.0 && bestR < 1.5) {
+    // The edge's coverage: a half where the pixel's centre sits right on the
+    // outline, down to none three quarters of a pixel out. Measured against
+    // the true coverage (8 x 8 samples a pixel), this is closer than the
+    // wider feather it replaces (which grew the outline by a third of a
+    // pixel all round) and than no feathering at all, both at small sizes and
+    // in the phone's lower-resolution picture once enlarged.
+    if (hitT < 0.0 && bestR < 0.75 * fp) {
         hitT = bestT;
-        cover = 0.75 * (1.0 - bestR / 1.5);
+        d0 = bestR * bestT;
+        cover = 0.5 - bestR / (1.5 * fp);
     }
 
     float3 haloCol = pow(aces(hot * halo), float3(1.0 / 2.2));
@@ -1964,7 +2254,15 @@ float4 critter(float2 p) {
 
     float3 pos = ro + rd * hitT;
     id = partAt(pos);
-    float3 n = normalAt(pos);
+    float3 n = normalAt(pos, d0);
+    // A hit is anywhere within a hair of the surface (closer the nearer the
+    // camera), and where a ray skims along a surface, where along it the
+    // march stopped varies from pixel to pixel in rows. Colours painted by
+    // position (the mouth's teeth and line on the roof of an open mouth,
+    // seen from below) then came out in dotted stripes - even with ten times
+    // the march steps. One step back along the surface's direction, by the
+    // distance map() gave there, puts the point on the surface itself.
+    pos -= n * d0;
     float3 v = -rd;
 
     if (id == ID_ORB) {
@@ -2003,25 +2301,45 @@ float4 critter(float2 p) {
     // Wrapped diffuse: light bleeds past the terminator, the way it does on
     // felt and fur, instead of cutting to black.
     float wrap = clamp((nl + 0.45) / 1.45, 0.0, 1.0);
-    float sh = softShadow(pos + n * 0.01, L);
-    float ao = ambientOcclusion(pos, n);
+    // Skipped when the host says so (uNoShadow): under about 200 device
+    // pixels, or at the Lower level, the shadow is a few pixels of shading
+    // and about a sixth of the cost. A uniform, so every pixel takes the
+    // same branch.
+    float sh = uNoShadow > 0.5 ? 1.0 : softShadow(pos + n * 0.01, L);
+    // (No ambient occlusion: measured, it came out exactly 1 - no effect - on
+    // 83-97% of each animal, darkened only a thin crease under the panda's
+    // chin by a few levels, and cost three more lookups of the animal. The
+    // size it freed went to the march, which shows far more.)
     float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
-
-    float3 col = alb * keyCol * wrap * wrap * mix(0.35, 1.0, sh);
-    col += alb * skyCol * (0.6 + 0.4 * n.y) * ao;
-    col += alb * groundCol * (0.5 - 0.5 * n.y) * ao;
-    // A warm glow along the shadow's edge: light scattering through fur.
-    col += alb * float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh;
 
     // The orb is a real light: whatever colour Jarvis is showing lands on
     // the animal's paws, chest and chin.
     float3 ol = uOrb.xyz - pos;
     float od = length(ol);
     float orbLight = uOrbGlow * 0.55 / (1.0 + od * od * 14.0);
-    col += alb * hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * ao * 3.0;
+    // All the light arriving at the point, before the surface's own colour:
+    // the key light, the sky above and the warm ground below, a warm glow
+    // along the shadow's edge (light scattering through fur), and the orb.
+    float3 lit = keyCol * wrap * wrap * mix(0.35, 1.0, sh) + skyCol * (0.6 + 0.4 * n.y) +
+                 groundCol * (0.5 - 0.5 * n.y) + float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh +
+                 hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // Inside a mouth it arrives without its colour, only its brightness: in
+    // there the key light is mostly shadowed, so the blue sky and the orb
+    // were most of what reached the teeth, and turned them grey-blue (and a
+    // red orb would have turned them pink). Everywhere else rimK is 1 and
+    // this is the light as it is.
+    float3 col = alb * mix(float3(dot(lit, float3(0.2126, 0.7152, 0.0722))), lit, rimK);
 
     // Rim light in the state's colour, the soft halo round the silhouette.
-    col += cool * fres * (0.55 + 0.45 * fuzz) * ao * 0.9 * rimK;
+    // It adds light whatever the fur's own colour, so an owner's own colour
+    // choice could flood the animal: a white rim made the panda's near-black
+    // legs over three times brighter, a pure blue one turned it blue. So it
+    // is held to the strength of the brightest default: no channel over 0.30
+    // and no more than 0.17 luminance (linear light). Every default state
+    // colour is under both (at most 0.284 and 0.161), so they are untouched.
+    float3 rim = cool * min(1.0, 0.30 / max(max(cool.r, max(cool.g, cool.b)), 0.0001));
+    rim *= min(1.0, 0.17 / max(dot(rim, float3(0.2126, 0.7152, 0.0722)), 0.0001));
+    col += rim * fres * (0.55 + 0.45 * fuzz) * 0.9 * rimK;
     // Fur sheen.
     col += keyCol * fres * fres * 0.10 * fuzz * sh;
 
@@ -2031,7 +2349,832 @@ float4 critter(float2 p) {
         float spec = pow(max(dot(r, L), 0.0), 60.0) * 3.0;
         spec += pow(max(dot(r, ol / od), 0.0), 90.0) * 2.0 * uOrbGlow;
         col += gloss * (keyCol * 0.4 * spec + hot * spec * 0.25 * uOrbGlow);
-        col += gloss * cool * fres * 0.4;
+        col += gloss * rim * fres * 0.4;
+    }
+    // Anything the animal paints on top of the lighting (the cartoon
+    // catchlight in an eye).
+    col += sparkle(id, pos);
+
+    // The glow round the orb - but not through the animal: where the orb is
+    // behind the surface this ray hit (the owl's orb circling behind its
+    // head), the head hides it.
+    col += hot * halo * 0.25 * (1.0 - smoothstep(0.0, 0.15, tOrb - hitT));
+    float3 outc = pow(aces(col), float3(1.0 / 2.2));
+    // Premultiplied: a partly covered edge pixel lets the orb's glow (or,
+    // with none, the background) show through by the uncovered share.
+    return float4(outc * cover + haloCol * (1.0 - cover), cover + haloA * (1.0 - cover));
+}
+
+uniform float2 uCenter;
+uniform float uR;
+half4 main(float2 fragCoord) {
+    // fragCoord counts y DOWN the screen; critter() wants it up.
+    float2 p = (fragCoord - uCenter) / uR;
+    p.y = -p.y;
+    return half4(critter(p));
+}
+"""
+
+    const val MONKEY = """// SHARED START of every animal face's shader ("critters").
+//
+// `tools/gen_critters.py` builds each animal's shader as
+//     common_head.sksl + <animal>.sksl + common_tail.sksl
+// and copies the result into both apps: the desktop's GLSL
+// (`jarvis-desktop/src/critters-gen.js`, where a few #defines turn AGSL's type
+// names into GLSL's) and the phone's AGSL (`jarvis-client/.../face/
+// CritterShaders.kt`, used as-is by android.graphics.RuntimeShader). Edit
+// these files, then re-run the generator; `tools/gen_critters.py --check`
+// (run by CI) fails if a copy is stale.
+//
+// This part holds what every animal shares: the uniforms the host sets for
+// all of them, and the small shape and colour helpers. The animal's own file
+// supplies its body (map, mapLite, partAt) and its colouring (material,
+// sparkle) plus where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R). The
+// shared end (common_tail.sksl) does the rest: the march, the soft outline,
+// the lighting, the orb and its glow.
+//
+// There is no mesh and no model file. Every body part is a simple rounded
+// shape - an ellipsoid, a capsule - merged with a smooth minimum, so parts
+// melt into each other with a soft fillet instead of a seam. That is the
+// "made of felt" look, and why an animal can bend freely: a pose is just new
+// numbers for where each shape sits.
+//
+// PROGRAM SIZE - the rule that shapes all of this. Android compiles AGSL in
+// Skia's strict mode, which refuses (and the app crashes on) any shader whose
+// flattened size is over 100,000: every operation counts 1, a call counts the
+// whole size of the function called, and a loop counts its body once per
+// step. The march calls map() once per step, so map()'s size times the
+// number of steps is most of the total. The first red panda was about four
+// times over and crashed on Android while the desktop, and a newer Skia on a
+// PC, accepted it. `tools/shader_size.py` measures it (CI runs --check), so
+// keep map() small, give the shadows the cheap mapLite(), and ask which part
+// was hit only once, in partAt().
+//
+// Written in the common subset of GLSL ES 3.0 and AGSL (Android 13): no
+// arrays, no structs, no `out` parameters, loops with constant bounds, and
+// every literal a float. The pose arrives as uniforms, worked out once a
+// frame by each animal's pose code (critter-pose.js and friends on the
+// desktop, CritterPose.kt and friends on the phone); nothing here decides
+// WHAT the animal is doing, only how it looks doing it.
+//
+// Coordinates: x to the viewer's right, y up, the animal faces -z.
+// Rotations arrive as the three rows of each INVERSE matrix (world to
+// local), so turning a point into a body part's own frame is three dots.
+
+// Set by the host for every animal.
+uniform float4 uOrb;       // centre, radius
+uniform float uOrbGlow;
+uniform float3 uHot;       // the state's bright colour: the orb, and its light
+uniform float3 uCool;      // the state's structural colour: the rim light
+uniform float uYaw;
+uniform float uPit;
+uniform float uTime;
+uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
+uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
+
+const float PI = 3.14159265;
+// The part id every animal gives its orb. Its own ids are its business.
+const float ID_ORB = 9.0;
+
+float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
+
+// 2D & 3D Signed Distance Functions by Inigo Quilez
+// https://iquilezles.org/articles/distfunctions2d/
+// https://iquilezles.org/articles/distfunctions/
+// The ellipsoid bound, the capsule, the smooth minimum and the 2D ellipse
+// below follow his published formulas (THIRD-PARTY-NOTICES.txt).
+
+// Inigo Quilez's distance bounds. An ellipsoid has no exact distance
+// formula; this one is close enough near the surface, which is all the
+// march needs.
+float sdEllipsoid(float3 p, float3 r) {
+    float k0 = length(p / r);
+    float k1 = length(p / (r * r));
+    return k0 * (k0 - 1.0) / max(k1, 0.0001);
+}
+
+// A capsule: every point within r of the segment ab. The tail and arms are
+// made of these. (A tapered capsule would look a little better, but costs
+// three times as much, and size is the budget that matters on the phone -
+// see "program size" above.)
+float sdCapsule(float3 p, float3 a, float3 b, float r) {
+    float3 pa = p - a;
+    float3 ba = b - a;
+    float k = clamp(dot(pa, ba) / max(dot(ba, ba), 0.00001), 0.0, 1.0);
+    return length(pa - ba * k) - r;
+}
+
+// Polynomial smooth minimum: joins two shapes with a fillet of size k.
+// (Inigo Quilez's quadratic form - the same curve as the usual
+// clamp-and-mix one, to the last bit that matters, in fewer operations,
+// which counts: the march calls it a dozen times a step. See "program size".
+// Written with one division, not two - h / k squared times k is h squared
+// over k - which is two operations less a call, and about 950 less on the
+// red panda: its pictures came out the same to within a level of 255.)
+float smin(float a, float b, float k) {
+    float h = max(k - abs(a - b), 0.0);
+    return min(a, b) - h * h * 0.25 / k;
+}
+float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// The orb: held, not grown, so never blended into the body.
+float orbDist(float3 p) { return length(p - uOrb.xyz) - uOrb.w; }
+
+// Distance from point p to the segment ab, in 2D.
+float seg2(float2 p, float2 a, float2 b) {
+    float2 ba = b - a;
+    float k = clamp(dot(p - a, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(p - a - ba * k);
+}
+
+// THE PAINTED MOUTH of the panda and the otter: one drawing for every
+// opening, so shutting and opening is one mouth changing shape, never two
+// pictures swapping. Shut, it is the little line under the nose - a stem
+// down from the nose, and a small smile curving out and up to the corners.
+// Opening, the smile stays put as the upper lip and a lower lip curves down
+// away from it; the same dark line runs round the whole opening, so a slight
+// opening reads as the line thickening and parting, and the inside fills in
+// between. `q` is the point in the head's own x, y; g.x is where the stem
+// meets the lip in the middle, g.y how much higher the corners sit (the
+// smile's depth), g.z the half-width to the corners, g.w how far the lower
+// lip has dropped in the middle. `carved` is how much the point is on the jaw's carved hollow (the
+// hollow's own walls get the inside colours too), and `roof` how much it is
+// on the hollow's roof - its walls that face down. The drawing is laid on
+// straight from the front, so the whole roof lies under the upper lip's
+// line, and seen from below it showed as a dark smudge across the roof: the
+// roof takes no line. Returns the colour and
+// the lighting code for common_tail.sksl: 0 fur, down to -2 for the inside
+// of a mouth, which takes no rim light (it used to catch it and read blue).
+// Distance to an ellipse in 2D (half-axes ab), exact to a hair however
+// flat it is - a few Newton steps toward the nearest point on it (Inigo
+// Quilez's method). Only used once per pixel, for the painted mouth.
+float sdEllipse2(float2 p, float2 ab) {
+    p = abs(p);
+    float2 q = ab * (p - ab);
+    float w = q.x < q.y ? 1.5707963 : 0.0;
+    for (int i = 0; i < 4; i++) {
+        float2 u = ab * float2(cos(w), sin(w));
+        float2 v = ab * float2(-sin(w), cos(w));
+        w += dot(p - u, v) / (dot(p - u, u) + dot(v, v));
+    }
+    float d = length(p - ab * float2(cos(w), sin(w)));
+    return dot(p / ab, p / ab) > 1.0 ? d : -d;
+}
+const float3 MOUTH_IN = float3(0.105, 0.012, 0.012);
+const float3 TONGUE = float3(0.320, 0.080, 0.085);
+const float3 TEETH = float3(0.780, 0.680, 0.560);
+float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved, float roof) {
+    // Two half-ellipses hanging from the corners' height, cy: the upper
+    // lip is the small one (the shut smile, g.y deep), the lower lip the same
+    // one stretched g.w further down. The opening is the crescent between
+    // them - nothing at all while they coincide, which is the shut mouth.
+    float ax = abs(q.x);
+    float cy = g.x + g.y;
+    float s = sqrt(max(1.0 - ax * ax / (g.z * g.z), 0.0));
+    float2 e = float2(ax, q.y - cy);
+    // How far inside the opening, from its nearest edge (negative outside).
+    // Above the corners' height it is the way down to a corner, or to the
+    // upper lip.
+    float f = q.y > cy ? -min(length(float2(ax - g.z, e.y)), e.y + g.y * s + 8.0 * max(ax - g.z, 0.0))
+                       : min(sdEllipse2(e, g.zy), -sdEllipse2(e, float2(g.z, g.y + g.w)));
+    // The dark line: 0.013 wide (in the head's own units) where a pixel is
+    // smaller than that, and never under about a pixel where it is not
+    // (a small picture, or the phone's lower-resolution one). A fixed width
+    // fell between pixel centres at small sizes, and a shut mouth broke up
+    // into pieces or vanished. px is a pixel in the head's units, near
+    // enough for both animals (their heads sit about as far from the camera).
+    float px = 0.85 * uPx / max(uZoom, 0.1);
+    float lw = max(0.0065, 0.75 * px);
+    float lr = max(0.0025, 0.35 * px);
+    float line = (1.0 - smoothstep(lw - lr, lw + lr, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))))) * (1.0 - roof);
+    float inside = max(smoothstep(0.0, 0.004, f), carved);
+    // Inside: dark red, darker deeper in; the tongue low down in the
+    // middle; a row of teeth under the upper lip when the mouth goes wide.
+    // t runs 0 at the lower lip to 1 at the upper.
+    float t = clamp((q.y - cy + (g.y + g.w) * s) / max(g.w * s, 0.0001), 0.0, 1.0);
+    float u = ax / g.z;
+    float3 c = MOUTH_IN * mix(1.0, 0.45, smoothstep(0.004, 0.03, f));
+    c = mix(c, TONGUE, (1.0 - smoothstep(0.22, 0.5, t)) * (1.0 - smoothstep(0.35, 0.8, u)) * smoothstep(0.02, 0.06, g.w));
+    c = mix(c, TEETH, smoothstep(0.74, 0.86, t) * smoothstep(0.1, 0.6, wide) * smoothstep(0.02, 0.05, g.w));
+    return float4(mix(mix(fur, c, inside), ink, line), -2.0 * inside);
+}
+
+// Cheap fixed-pattern variation, standing in for felt or feathers: small
+// lumps in the colour, never moving, never flickering.
+float felt(float3 p) {
+    return sin(p.x * 41.0 + sin(p.y * 37.0)) * sin(p.y * 43.0 + sin(p.z * 31.0)) * sin(p.z * 39.0 + p.x * 7.0);
+}
+
+float3 aces(float3 x) {
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+
+// ---- the animal's own part (<animal>.sksl) follows ----
+
+// THE MONKEY - its body, its vine, its banana and its colours.
+//
+// One part of three: tools/gen_critters.py builds the full shader as
+// common_head.sksl + this file + common_tail.sksl. Read common_head.sksl
+// first: it explains the scheme and the size rule every animal must keep to
+// (tools/shader_size.py measures it).
+//
+// A cartoon monkey from the owner's picture (2026-09-28): warm brown fur, a
+// big pale peach face shaped like a heart - a round lobe round each eye and
+// a wide lower part over the muzzle - big round ears with peach insides, a
+// small tuft on top, a peach belly, long arms and legs with peach hands and
+// feet, and a long thin tail ending in a curl. It hangs by one arm from a
+// green vine across the top of the picture and swings gently; asleep, it
+// sits on the vine with its tail curled round it. It holds a banana, and
+// THE BANANA IS ITS ORB: it glows in the state colour, lights the monkey
+// and throws the same halo the other animals' orbs do (common_tail.sksl),
+// while staying a banana - yellow, bent, with brown tips.
+//
+// Frames: the body's own frame (toBody) has its origin in the middle of the
+// torso, y up, face toward -z. The head's frame (toHead) has its origin at
+// the neck. The arms, the tail, the vine and the banana arrive in world
+// coordinates - the pose code (critter-monkey.js, MonkeyPose.kt on the phone)
+// works out the swing, so the shader only draws.
+
+uniform float3 uBodyPos;
+uniform float3 uBodyR0;
+uniform float3 uBodyR1;
+uniform float3 uBodyR2;
+uniform float uBreath;
+uniform float3 uNeck;
+uniform float3 uHeadR0;
+uniform float3 uHeadR1;
+uniform float3 uHeadR2;
+uniform float3 uFace;      // eye open L, eye open R, brow
+uniform float3 uMouth;     // open, wide, round - all 0 unless it is speaking
+uniform float2 uLook;      // where the eyes look, -1..1
+uniform float2 uEars;      // each ear's turn toward a sound, left and right
+// The arms (world), each shoulder, elbow and hand: A is the one reaching up
+// to the vine (the viewer's right), B the one holding the banana.
+uniform float3 uShA;
+uniform float3 uElbA;
+uniform float3 uHandA;
+uniform float3 uShB;
+uniform float3 uElbB;
+uniform float3 uHandB;
+// The legs, in the body's frame: each knee and foot (hips are fixed).
+uniform float3 uKneeL;
+uniform float3 uKneeR;
+uniform float3 uFootL;
+uniform float3 uFootR;
+// The tail: five points along it (world), and the thickness of the piece
+// that starts there.
+uniform float4 uTail0;
+uniform float4 uTail1;
+uniform float4 uTail2;
+uniform float4 uTail3;
+uniform float4 uTail4;
+// The vine: its height and depth, and where (x) and how much it dips under
+// the monkey's weight.
+uniform float4 uVine;
+// The banana's own frame: world to banana, row by row. It lies along its x,
+// its ends curving up toward its y. (Its middle is uOrb.xyz.)
+uniform float3 uBan0;
+uniform float3 uBan1;
+uniform float3 uBan2;
+
+const float ID_BODY = 1.0;
+const float ID_LIMB = 2.0;
+const float ID_HEAD = 3.0;
+const float ID_EYE = 4.0;
+const float ID_NOSE = 5.0;
+const float ID_EAR = 6.0;
+const float ID_TAIL = 7.0;
+const float ID_VINE = 8.0;
+// (9 is ID_ORB, which this animal does not use: its orb is a banana.)
+const float ID_BANANA = 10.0;
+
+// The head is modelled at 1 and drawn this much bigger: a cartoon's head is
+// most of the animal.
+const float HEAD_S = 1.10;
+
+// Linear-light colours (sRGB to the power 2.2), from the owner's picture.
+const float3 FUR = float3(0.290, 0.056, 0.019);
+const float3 FUR_DEEP = float3(0.160, 0.030, 0.011);
+const float3 PEACH = float3(0.920, 0.480, 0.200);
+const float3 PEACH_DEEP = float3(0.600, 0.240, 0.085);
+const float3 INK = float3(0.010, 0.004, 0.003);
+const float3 VINE = float3(0.075, 0.170, 0.035);
+const float3 BANANA = float3(0.880, 0.560, 0.030);
+const float3 BANANA_TIP = float3(0.160, 0.075, 0.020);
+
+const float3 CAM_TARGET = float3(-0.08, 0.055, 0.0);
+const float CAM_DIST = 3.31;
+const float CAM_PITCH = 0.0;
+const float BOUND_R = 1.58;
+const int MARCH_STEPS = 36;
+
+float3 toBody(float3 p) {
+    float3 v = p - uBodyPos;
+    return float3(dot(uBodyR0, v), dot(uBodyR1, v), dot(uBodyR2, v));
+}
+float3 toHead(float3 p) {
+    float3 v = p - uNeck;
+    return float3(dot(uHeadR0, v), dot(uHeadR1, v), dot(uHeadR2, v)) / HEAD_S;
+}
+float3 toBanana(float3 p) {
+    float3 v = p - uOrb.xyz;
+    return float3(dot(uBan0, v), dot(uBan1, v), dot(uBan2, v));
+}
+// Where each eye sits: it drifts a little toward where it is looking.
+float2 eyeAt() { return float2(0.118, 0.400) + 0.010 * uLook; }
+
+// --- the parts ----------------------------------------------------------
+
+// A small pear of a body; the belly swells with each breath.
+float partTorso(float3 b) {
+    return sdEllipsoid(b, float3(0.175, 0.215, 0.150) * uBreath + float3(0.0, 0.0, 0.0));
+}
+// The legs: thigh, shin and a round foot on each. Each side is worked out
+// only for its own half (the panda's eyes' trick), which halves the cost.
+float partLegs(float3 b) {
+    bool l = b.x < 0.0;
+    float3 hip = float3(l ? -0.085 : 0.085, -0.13, 0.0);
+    float3 kn = l ? uKneeL : uKneeR;
+    float3 ft = l ? uFootL : uFootR;
+    return min(min(sdCapsule(b, hip, kn, 0.058), sdCapsule(b, kn, ft, 0.050)), length(b - ft) - 0.066);
+}
+// The arms, each ending in a round hand.
+float partArms(float3 p) {
+    float d = min(sdCapsule(p, uShA, uElbA, 0.052), sdCapsule(p, uElbA, uHandA, 0.050));
+    d = min(d, min(sdCapsule(p, uShB, uElbB, 0.052), sdCapsule(p, uElbB, uHandB, 0.050)));
+    return min(d, min(length(p - uHandA), length(p - uHandB)) - 0.066);
+}
+// Four pieces, each as thick as its first point says (the pose code hands
+// the piece's thickness over ready-made); they share their ends, so a plain
+// min joins them without a seam. (Four, not five: the arm's elbow took the
+// fifth's share of the size limit.)
+float partTail(float3 p) {
+    float d = sdCapsule(p, uTail0.xyz, uTail1.xyz, uTail0.w);
+    d = min(d, sdCapsule(p, uTail1.xyz, uTail2.xyz, uTail1.w));
+    d = min(d, sdCapsule(p, uTail2.xyz, uTail3.xyz, uTail2.w));
+    return min(d, sdCapsule(p, uTail3.xyz, uTail4.xyz, uTail3.w));
+}
+// The vine: a long tube across the picture, bowed a little, dipping where
+// the monkey's weight is, with rounded ends. Bending the space rather than
+// the tube keeps it cheap; the bend is gentle enough for the march.
+float partVine(float3 p) {
+    float dx = p.x - uVine.z;
+    float y = uVine.x - 0.035 * p.x * p.x - uVine.w / (1.0 + 18.0 * dx * dx);
+    return length(float3(max(abs(p.x) - 1.25, 0.0), p.y - y, p.z - uVine.y)) - 0.034;
+}
+// The banana: a tube along its x, bent so its ends curve up, fat in the
+// middle and thin at the tips. (Held well short of its true distance - by a third:
+// the bend stretches space near the tips.)
+float partBanana(float3 p) {
+    float3 q = toBanana(p);
+    float x = clamp(q.x, -0.150, 0.150);
+    float r = 0.044 - 0.95 * x * x;
+    return 0.68 * (length(float3(q.x - x, q.y - 2.6 * x * x, q.z)) - r);
+}
+
+// The mouth, drawn (mouthPaint in common_head.sksl) and carved into the
+// muzzle behind the drawing exactly as the red panda's is: open drops the
+// jaw, wide pulls the corners out and flattens it, round draws it in,
+// taller and a little forward.
+// The drawing's size: where the stem meets the lip, how much higher the
+// corners sit, the half-width, and how far the lower lip has dropped.
+float4 mouthSize() {
+    float3 m = uMouth;
+    return float4(0.180, 0.022 + 0.006 * m.y, 0.080 + 0.030 * m.y - 0.030 * m.z + 0.012 * m.x,
+                  m.x * (0.092 - 0.036 * m.y + 0.030 * m.z));
+}
+// The hollow's half-height; it sits just inside the drawing, its top under
+// the upper lip's line, so the drawn line always covers its edge.
+float mouthH() { return 0.0015 + uMouth.x * (0.032 + dot(uMouth.yz, float2(-0.013, 0.011))); }
+// It bends up toward the corners, as the drawn smile does (a parabola, near
+// enough, and cheap: this runs in every march step), and is held to its
+// half-height, which is as deep as the inside of so flat a shape can be.
+float mouthShape(float3 h) {
+    float3 m = uMouth;
+    float a = 0.050 + dot(m, float3(0.010, 0.026, -0.026));
+    float hh = mouthH();
+    float bend = (0.020 + 0.004 * m.y) * h.x * h.x / (a * a);
+    return max(sdEllipsoid(h - float3(0.0, 0.180 - hh + bend, -0.330 - 0.010 * m.z), float3(a, hh, 0.07)), -hh);
+}
+// What is actually carved: nothing while it is shut (pulled back out of the
+// surface by more than the fillet), sinking in over the first quarter of an
+// opening while the drawing is already parting, so nothing pops.
+float mouthCarve(float3 h) { return mouthShape(h) + max(0.02 - 0.08 * uMouth.x, 0.0); }
+// The head (head frame): a round skull, a wide lower face with the muzzle,
+// and a small tuft of hair on top, with the mouth carved out of it.
+float partHead(float3 h) {
+    float d = sdEllipsoid(h - float3(0.0, 0.38, 0.0), float3(0.350, 0.325, 0.315));
+    // The lower face; its chin drops as the jaw opens, and it pushes
+    // forward a little for an "oo".
+    d = smin(d, sdEllipsoid(h - float3(0.0, 0.195, -0.135) + float3(0.0, 0.030, 0.010) * uMouth.xxz,
+                            float3(0.265, 0.150, 0.200) + float3(0.0, 0.030, 0.0) * uMouth.x), 0.09);
+    // The tuft: a flick of hair, bent over to one side at the tip.
+    float3 t = h - float3(0.03, 0.72, 0.0);
+    d = smin(d, sdEllipsoid(t - float3(3.0 * t.y * t.y, 0.0, 0.0), float3(0.040, 0.085, 0.034)), 0.045);
+    return smax(d, -mouthCarve(h), 0.012);
+}
+// Big round ears at the sides, their flat faces turned forward and out;
+// each can turn a little toward a sound.
+float3 earFrame(float3 h) {
+    float s = 0.35 + (h.x < 0.0 ? uEars.x : uEars.y);
+    float3 e = float3(abs(h.x) - 0.375, h.y - 0.385, h.z - 0.04);
+    return float3(e.x + s * e.z, e.y, e.z - s * e.x);
+}
+float partEars(float3 h) { return sdEllipsoid(earFrame(h), float3(0.135, 0.140, 0.045)); }
+float partNose(float3 h) {
+    return sdEllipsoid(h - float3(0.0, 0.262, -0.338), float3(0.050, 0.030, 0.030));
+}
+// Button eyes. Closing is squashing: a shut eye is a thin dark line.
+float partEyes(float3 h) {
+    float open = h.x < 0.0 ? uFace.x : uFace.y;
+    float2 ea = eyeAt();
+    float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.285);
+    return sdEllipsoid(ep, float3(0.052, max(0.007, 0.066 * open), 0.042));
+}
+
+// The whole monkey, its vine and its banana: distance to the nearest
+// surface. The march calls this over and over, so it returns the distance
+// only; which part was hit is asked once, afterwards, by partAt().
+float map(float3 p) {
+    float3 b = toBody(p);
+    float d = min(smin(partTorso(b), partLegs(b), 0.05), partTail(p));
+    // The head is only worked out near it.
+    float3 h = toHead(p);
+    float hd = (length(h - float3(0.0, 0.38, 0.0)) - 0.62) * HEAD_S;
+    if (hd < 0.2) {
+        hd = min(min(smin(partHead(h), partEars(h), 0.04), partNose(h)), partEyes(h)) * HEAD_S;
+    }
+    d = smin(hd, d, 0.08);
+    // The arms join after the neck's thick fillet, with a small one of their
+    // own: the arm reaching up passes beside the head, and the neck's fillet
+    // melted it into the ear, so it read as growing out of the head.
+    d = smin(d, partArms(p), 0.04);
+    // The vine and the banana stand apart: held, not grown.
+    return min(min(d, partVine(p)), partBanana(p));
+}
+
+float partAt(float3 p) {
+    float3 b = toBody(p);
+    float3 h = toHead(p);
+    float best = partTorso(b);
+    float id = ID_BODY;
+    float d = min(partLegs(b), partArms(p));
+    if (d < best) { best = d; id = ID_LIMB; }
+    d = partTail(p);
+    if (d < best) { best = d; id = ID_TAIL; }
+    d = partHead(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_HEAD; }
+    d = partEars(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_EAR; }
+    d = partNose(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_NOSE; }
+    d = partEyes(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_EYE; }
+    d = partVine(p);
+    if (d < best) { best = d; id = ID_VINE; }
+    // (The banana's distance is held short - see partBanana - so it is
+    // compared as short too, or the belly beside its tip counted as banana.)
+    if (partBanana(p) < 0.68 * best) { id = ID_BANANA; }
+    return id;
+}
+
+// A rough monkey for shadows, inside the real one: body, skull and arms.
+float mapLite(float3 p) {
+    float d = partTorso(toBody(p));
+    d = min(d, sdEllipsoid(toHead(p) - float3(0.0, 0.36, 0.0), float3(0.31, 0.29, 0.28)) * HEAD_S);
+    d = min(d, sdCapsule(p, uShA, uElbA, 0.04));
+    return min(d, sdCapsule(p, uShB, uHandB, 0.04));
+}
+
+// --- colours ------------------------------------------------------------
+
+// The face: brown fur with the big peach mask of the picture - a round lobe
+// round each eye, the two meeting in a notch between the brows, over a wide
+// lower part across the cheeks and muzzle. The brow lifts the lobes a touch.
+float3 headColour(float3 h) {
+    float2 q = float2(abs(h.x), h.y);
+    float lobes = length(q - float2(0.118, 0.405 + 0.018 * uFace.z)) - 0.124;
+    float low = (length((q - float2(0.0, 0.215 - 0.02 * uMouth.x)) / float2(0.285, 0.165)) - 1.0) * 0.16;
+    float mask = (1.0 - smoothstep(-0.006, 0.006, smin(lobes, low, 0.06))) * (1.0 - smoothstep(-0.16, -0.06, h.z));
+    return mix(mix(FUR, FUR_DEEP, smoothstep(0.0, 0.3, h.z) * 0.5), PEACH, mask);
+}
+
+float4 material(float id, float3 pos, float3 n) {
+    float3 h = toHead(pos);
+    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_NOSE) return float4(float3(0.080, 0.022, 0.012), 0.6);
+    if (id == ID_HEAD) {
+        // The painted mouth on the front of the head, and the walls of the
+        // hollow behind it - darker the deeper in they are. (The whole front,
+        // as the otter's: wide open, the lower lip reaches round under the
+        // chin. The roof of the hollow takes no line - see mouthPaint.)
+        if (h.z < -0.10) {
+            float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
+            float4 c = mouthPaint(headColour(h), FUR_DEEP * 0.35, h.xy, mouthSize(), 0.06, uMouth.y, carved,
+                                  carved * smoothstep(0.4, 0.8, -dot(uHeadR1, n)));
+            return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.33, -0.28, h.z) * carved), c.w);
+        }
+        return float4(headColour(h), 0.0);
+    }
+    if (id == ID_EAR) {
+        // Peach inside, on the front face; brown rim and back.
+        float3 e = earFrame(h);
+        float inner = (1.0 - smoothstep(0.070, 0.090, length(e.xy / float2(1.0, 1.05)))) * (1.0 - smoothstep(-0.02, 0.005, e.z));
+        return float4(mix(FUR, PEACH_DEEP, inner), 0.0);
+    }
+    if (id == ID_VINE) {
+        // Matte green, faintly striped along its length.
+        return float4(VINE * (0.85 + 0.15 * sin(pos.x * 60.0 + 3.0 * pos.y)), -1.0);
+    }
+    if (id == ID_BANANA) {
+        // Yellow, with brown tips.
+        float x = abs(toBanana(pos).x);
+        return float4(mix(BANANA * 0.5, BANANA_TIP, smoothstep(0.125, 0.150, x)), 0.25);
+    }
+    if (id == ID_LIMB) {
+        // Brown arms and legs, peach hands and feet.
+        float3 b = toBody(pos);
+        float hand = min(min(length(pos - uHandA), length(pos - uHandB)), min(length(b - uFootL), length(b - uFootR)));
+        return float4(mix(PEACH * float3(0.92, 0.86, 0.80), FUR, smoothstep(0.060, 0.080, hand)), 0.0);
+    }
+    if (id == ID_TAIL) return float4(FUR, 0.0);
+    // The body: a peach belly on the front.
+    float3 b = toBody(pos);
+    float belly = (1.0 - smoothstep(0.85, 1.0, length((b.xy - float2(0.0, -0.02)) / float2(0.115, 0.165)))) *
+                  (1.0 - smoothstep(-0.10, -0.04, b.z));
+    return float4(mix(FUR, PEACH_DEEP, belly), 0.0);
+}
+
+// Painted on top of the lighting: a catchlight in each eye, riding with the
+// gaze - and the banana's own glow. The banana is the orb: it glows in the
+// state's colour as much as the orb would (uOrbGlow), brightest where you
+// look into it, so it reads as a banana lit from inside.
+float3 sparkle(float id, float3 pos) {
+    if (id == ID_BANANA) {
+        float3 q = toBanana(pos);
+        float core = 1.0 - smoothstep(0.0, 0.16, abs(q.x));
+        return toLinear(uHot) * uOrbGlow * 0.6 * core * core;
+    }
+    if (id != ID_EYE) return float3(0.0);
+    float3 h = toHead(pos);
+    float2 eyeC = eyeAt();
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float2 q = float2(h.x - side * eyeC.x, h.y - eyeC.y);
+    float2 sparkAt = float2(-0.017 + 0.010 * uLook.x, 0.022 + 0.008 * uLook.y);
+    float spark = 1.0 - smoothstep(0.009, 0.016, length(q - sparkAt));
+    float spark2 = 1.0 - smoothstep(0.004, 0.007, length(q - sparkAt - float2(0.026, -0.028)));
+    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y));
+    return float3(1.6) * max(spark, spark2 * 0.8) * lit * (h.z < -0.26 ? 1.0 : 0.0);
+}
+
+// What a ray that ran out of march steps without reaching anything sees
+// (common_tail.sksl): nothing behind this animal to fill it in.
+float2 stuckRay(float3 ro, float3 rd) {
+    return float2(-1.0, 0.0);
+}
+
+// ---- SHARED END of every animal face's shader (see common_head.sksl) ----
+//
+// Needs from the animal's part: map(), mapLite(), partAt(), material(),
+// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH,
+// BOUND_R and MARCH_STEPS.
+
+// The surface's direction at p, from how map() changes a hair away along
+// each axis. d0 is map() at p itself, which the march has already measured
+// (a hit's last step, or the closest pass): three more lookups of the
+// animal rather than the four a normal costs without it - one lookup is the
+// size of a march step, and steps are what the size limit is short of.
+float3 normalAt(float3 p, float d0) {
+    float e = 0.0015;
+    return normalize(float3(map(p + float3(e, 0.0, 0.0)), map(p + float3(0.0, e, 0.0)),
+                            map(p + float3(0.0, 0.0, e))) - d0);
+}
+
+// Soft shadow toward the key light: how close the march back to the light
+// came to being blocked.
+float softShadow(float3 ro, float3 rd) {
+    float res = 1.0;
+    float t = 0.03;
+    for (int i = 0; i < 10; i++) {
+        float h = mapLite(ro + rd * t);
+        res = min(res, 8.0 * h / t);
+        t += clamp(h, 0.04, 0.3);
+        if (res < 0.005 || t > 2.0) break;
+    }
+    return clamp(res, 0.0, 1.0);
+}
+
+// The whole picture for one ray. `p` is the point on screen, -1..1 across
+// the square the animal is framed in, y up. Returns premultiplied colour and
+// coverage; 0 alpha where there is no animal (and no orb glow) at all.
+float4 critter(float2 p) {
+    float3 hot = toLinear(uHot);
+    float3 cool = toLinear(uCool);
+
+    // Camera: a gentle perspective, orbiting the origin by yaw and pitch
+    // exactly as the other ray-traced face (Nucleus) does.
+    float3 dir = normalize(float3(p / max(uZoom, 0.1), 3.1));
+    // CAM_PITCH is the animal's own resting angle: 0 looks straight at it;
+    // the otter, lying on the water, is looked down on.
+    float cp = cos(uPit + CAM_PITCH);
+    float sp = sin(uPit + CAM_PITCH);
+    float cy = cos(uYaw);
+    float sy = sin(uYaw);
+    float ry1 = dir.y * cp - dir.z * sp;
+    float rz1 = dir.y * sp + dir.z * cp;
+    float3 rd = float3(dir.x * cy + rz1 * sy, ry1, -dir.x * sy + rz1 * cy);
+    float dist = CAM_DIST;
+    float3 target = CAM_TARGET;
+    float3 ro = target + float3(-dist * cp * sy, dist * sp, -dist * cp * cy);
+
+    // The orb's glow reaches past its edge, and past the animal's silhouette,
+    // so it is worked out for every ray: the ray's closest pass by the orb.
+    float3 oc = uOrb.xyz - ro;
+    float tOrb = dot(oc, rd);
+    float orbMiss = length(oc - rd * tOrb);
+    float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
+                 (1.0 - smoothstep(0.0, 0.55, orbMiss));
+
+    // Skip rays that miss the animal's bounding sphere altogether.
+    float3 oc2 = ro - target;
+    float bb = dot(oc2, rd);
+    float cc = dot(oc2, oc2) - BOUND_R * BOUND_R;
+    float disc = bb * bb - cc;
+    float hitT = -1.0;
+    float id = 0.0;
+    // A soft outline. A ray either hits or misses, so without this the edge
+    // is a staircase - most visible on the phone, which draws the animal at
+    // lower resolution and enlarges it. While marching, remember where the
+    // ray passed closest to the surface, measured in pixels; a ray that
+    // misses by less than a pixel is shaded at that point anyway and drawn
+    // partly see-through, by how close it came.
+    float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
+    // (Kept as distance over t while marching - pixels times fp, the same
+    // thing one multiply cheaper per step. t is never 0: the camera is
+    // always outside the bounding sphere.)
+    float bestR = 1000.0;
+    float bestT = 0.0;
+    float d0 = 0.0;
+    if (disc > 0.0) {
+        float sq = sqrt(disc);
+        float t = max(0.0, -bb - sq);
+        float tMax = -bb + sq;
+        // MARCH_STEPS steps, set by each animal. The size limit
+        // (common_head.sksl) is what sets it: the march is by far the largest
+        // part of the program, one map() per step, so an animal with a
+        // cheaper map() can afford more. Rays need about 9 steps on average;
+        // it is the ones skimming along a surface - the outline, and every
+        // view from well above or below - that need the rest. One that runs
+        // out of steps close to a surface is taken as a hit where it stopped
+        // rather than as a see-through gap; it may be a few pixels short of
+        // that surface, or passing close by one it would have missed.
+        // Too few steps showed as both: see-through specks inside the animal
+        // and opaque ones just outside its outline (docs/CRITTERS.md has the
+        // measurements).
+        bool escaped = false;
+        float h = 1.0;
+        for (int i = 0; i < MARCH_STEPS; i++) {
+            h = map(ro + rd * t);
+            if (h < 0.0008 * t) { hitT = t; break; }
+            float r = h / t;
+            if (r < bestR) { bestR = r; bestT = t; }
+            t += h * 0.95;
+            if (t > tMax) { escaped = true; break; }
+        }
+        // (Shaded at the last point measured, where map() gave h.) "Close
+        // enough" is 0.05, or four pixels when a pixel is that big (a small
+        // picture): a ray a few pixels short of the surface on a small
+        // picture is the surface, and was showing as a see-through speck.
+        d0 = h;
+        if (hitT < 0.0 && !escaped && h < max(0.05, 4.0 * t * fp)) hitT = t - h * 0.95;
+        // One that ran out further away still: the animal decides what is
+        // behind it (the otter's pool; nothing, -1, for the others) -
+        // otherwise its outline shows see-through specks where the pool
+        // should be. It hands back where, and map() there.
+        if (hitT < 0.0 && !escaped) {
+            float2 st = stuckRay(ro, rd);
+            hitT = st.x;
+            d0 = st.y;
+        }
+    }
+    float cover = 1.0;
+    // The edge's coverage: a half where the pixel's centre sits right on the
+    // outline, down to none three quarters of a pixel out. Measured against
+    // the true coverage (8 x 8 samples a pixel), this is closer than the
+    // wider feather it replaces (which grew the outline by a third of a
+    // pixel all round) and than no feathering at all, both at small sizes and
+    // in the phone's lower-resolution picture once enlarged.
+    if (hitT < 0.0 && bestR < 0.75 * fp) {
+        hitT = bestT;
+        d0 = bestR * bestT;
+        cover = 0.5 - bestR / (1.5 * fp);
+    }
+
+    float3 haloCol = pow(aces(hot * halo), float3(1.0 / 2.2));
+    float haloA = max(haloCol.r, max(haloCol.g, haloCol.b));
+    if (hitT < 0.0) {
+        return float4(haloCol, haloA);
+    }
+
+    float3 pos = ro + rd * hitT;
+    id = partAt(pos);
+    float3 n = normalAt(pos, d0);
+    // A hit is anywhere within a hair of the surface (closer the nearer the
+    // camera), and where a ray skims along a surface, where along it the
+    // march stopped varies from pixel to pixel in rows. Colours painted by
+    // position (the mouth's teeth and line on the roof of an open mouth,
+    // seen from below) then came out in dotted stripes - even with ten times
+    // the march steps. One step back along the surface's direction, by the
+    // distance map() gave there, puts the point on the surface itself.
+    pos -= n * d0;
+    float3 v = -rd;
+
+    if (id == ID_ORB) {
+        // Glassy, lit from inside: bright at the centre where you look
+        // through the most of it, deeper toward the rim, a slow swirl.
+        float facing = clamp(dot(n, v), 0.0, 1.0);
+        float swirl = 0.5 + 0.5 * sin(dot(n, float3(5.0, 7.0, 3.0)) + uTime * 1.3);
+        float3 c = hot * (0.9 + 1.6 * uOrbGlow) * (0.55 + 0.45 * facing) * (0.85 + 0.25 * swirl);
+        c += float3(1.0) * pow(facing, 6.0) * (0.3 + 0.9 * uOrbGlow);
+        float3 r = reflect(rd, n);
+        c += float3(1.0) * pow(max(dot(r, normalize(float3(-0.5, 0.8, -0.6))), 0.0), 40.0) * 0.8;
+        float3 outc = pow(aces(c + hot * halo * 0.3), float3(1.0 / 2.2));
+        return float4(outc * cover + haloCol * (1.0 - cover), cover + haloA * (1.0 - cover));
+    }
+
+    // The animal's own colours. material() hands back the albedo and, in w,
+    // how the surface takes light: 0 is fur or feathers (felt texture, soft
+    // sheen, no shine), above 0 is glossy (eyes, nose, beak, water) by that
+    // much, -1 is matte with no fur (bark), and -2 is the inside of a mouth:
+    // matte and out of the rim light, which would light it cold blue. In
+    // between blends smoothly, so a mouth's painted edge does not pop.
+    float4 mat = material(id, pos, n);
+    float3 alb = mat.rgb;
+    float gloss = max(mat.w, 0.0);
+    float fuzz = mat.w > 0.0 ? 0.0 : clamp(1.0 + mat.w, 0.0, 1.0);
+    float rimK = clamp(2.0 + mat.w, 0.0, 1.0);
+    alb *= 1.0 + 0.06 * fuzz * felt(pos);
+
+    // --- light ---
+    float3 L = normalize(float3(-0.55, 0.75, -0.55));   // key: upper left, in front
+    float3 keyCol = float3(1.00, 0.93, 0.84) * 2.6;
+    float3 skyCol = float3(0.50, 0.58, 0.78) * 0.55;
+    float3 groundCol = float3(0.40, 0.22, 0.13) * 0.30;
+
+    float nl = dot(n, L);
+    // Wrapped diffuse: light bleeds past the terminator, the way it does on
+    // felt and fur, instead of cutting to black.
+    float wrap = clamp((nl + 0.45) / 1.45, 0.0, 1.0);
+    // Skipped when the host says so (uNoShadow): under about 200 device
+    // pixels, or at the Lower level, the shadow is a few pixels of shading
+    // and about a sixth of the cost. A uniform, so every pixel takes the
+    // same branch.
+    float sh = uNoShadow > 0.5 ? 1.0 : softShadow(pos + n * 0.01, L);
+    // (No ambient occlusion: measured, it came out exactly 1 - no effect - on
+    // 83-97% of each animal, darkened only a thin crease under the panda's
+    // chin by a few levels, and cost three more lookups of the animal. The
+    // size it freed went to the march, which shows far more.)
+    float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
+
+    // The orb is a real light: whatever colour Jarvis is showing lands on
+    // the animal's paws, chest and chin.
+    float3 ol = uOrb.xyz - pos;
+    float od = length(ol);
+    float orbLight = uOrbGlow * 0.55 / (1.0 + od * od * 14.0);
+    // All the light arriving at the point, before the surface's own colour:
+    // the key light, the sky above and the warm ground below, a warm glow
+    // along the shadow's edge (light scattering through fur), and the orb.
+    float3 lit = keyCol * wrap * wrap * mix(0.35, 1.0, sh) + skyCol * (0.6 + 0.4 * n.y) +
+                 groundCol * (0.5 - 0.5 * n.y) + float3(1.0, 0.35, 0.15) * 0.22 * fuzz * (1.0 - abs(nl)) * sh +
+                 hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * 3.0;
+    // Inside a mouth it arrives without its colour, only its brightness: in
+    // there the key light is mostly shadowed, so the blue sky and the orb
+    // were most of what reached the teeth, and turned them grey-blue (and a
+    // red orb would have turned them pink). Everywhere else rimK is 1 and
+    // this is the light as it is.
+    float3 col = alb * mix(float3(dot(lit, float3(0.2126, 0.7152, 0.0722))), lit, rimK);
+
+    // Rim light in the state's colour, the soft halo round the silhouette.
+    // It adds light whatever the fur's own colour, so an owner's own colour
+    // choice could flood the animal: a white rim made the panda's near-black
+    // legs over three times brighter, a pure blue one turned it blue. So it
+    // is held to the strength of the brightest default: no channel over 0.30
+    // and no more than 0.17 luminance (linear light). Every default state
+    // colour is under both (at most 0.284 and 0.161), so they are untouched.
+    float3 rim = cool * min(1.0, 0.30 / max(max(cool.r, max(cool.g, cool.b)), 0.0001));
+    rim *= min(1.0, 0.17 / max(dot(rim, float3(0.2126, 0.7152, 0.0722)), 0.0001));
+    col += rim * fres * (0.55 + 0.45 * fuzz) * 0.9 * rimK;
+    // Fur sheen.
+    col += keyCol * fres * fres * 0.10 * fuzz * sh;
+
+    // Gloss: the eyes and nose catch the key light and the orb.
+    if (gloss > 0.0) {
+        float3 r = reflect(rd, n);
+        float spec = pow(max(dot(r, L), 0.0), 60.0) * 3.0;
+        spec += pow(max(dot(r, ol / od), 0.0), 90.0) * 2.0 * uOrbGlow;
+        col += gloss * (keyCol * 0.4 * spec + hot * spec * 0.25 * uOrbGlow);
+        col += gloss * rim * fres * 0.4;
     }
     // Anything the animal paints on top of the lighting (the cartoon
     // catchlight in an eye).

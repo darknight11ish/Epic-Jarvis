@@ -96,7 +96,7 @@ class OwnNetworkTest {
     /** CONTROL: the names the pairing screen asks for still pass. */
     @Test
     fun `a meshnet or tailscale name still pairs`() {
-        assertNull(OwnNetwork.problem(BaseUrl.normalise("marioirelan11-alps.nord")!!))
+        assertNull(OwnNetwork.problem(BaseUrl.normalise("my-pc.nord")!!))
         assertNull(OwnNetwork.problem(BaseUrl.normalise("desktop.tail1234.ts.net/")!!))
         assertNull(OwnNetwork.problem(BaseUrl.normalise("[fd7a:115c:a1e0::1]")!!))
     }

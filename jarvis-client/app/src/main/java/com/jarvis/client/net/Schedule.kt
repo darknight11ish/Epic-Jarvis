@@ -138,8 +138,22 @@ object Schedule {
     /** Stands in for words the private lists hide. */
     const val HIDDEN_TEXT = "(hidden)"
 
-    /** Under an answer made without the model (X-Jarvis-Route `quick`). */
+    /**
+     * Under an answer made without the model (X-Jarvis-Route `quick`) - the
+     * PC's own words, word for word (jarvis_quick.DONE_LINE, coming-up.js).
+     * Kept here unchanged because the desktop's tests/coming-up.mjs holds
+     * this file to it. The phone shows [DONE_LINE_HERE] instead.
+     */
     const val DONE_LINE = "Done - answered on this PC without the AI model."
+
+    /**
+     * [DONE_LINE] as the phone shows it. "This PC" is right on the desktop
+     * and wrong on a phone, where the owner is holding something that is not
+     * a PC at all (phone walk-through, 2026-09-27). Made FROM the shared
+     * sentence rather than typed out again, so a change to the PC's words
+     * still reaches the phone; ScheduleTest checks the swap really happened.
+     */
+    val DONE_LINE_HERE: String = DONE_LINE.replace("on this PC", "on your PC")
 
     /** The phone's line about where reminders go off. */
     const val PC_IS_THE_CLOCK =
@@ -246,6 +260,11 @@ object Schedule {
     fun tag(kind: String): String = when (kind) {
         "todo" -> "to-do"
         TELLME -> "tell me when"
+        // Goals' own weekly check-in (backend jarvis_goals.KIND) - the
+        // literal is repeated rather than imported, so this file (which
+        // Goals.kt itself depends on for [job] and [Job]) never depends
+        // back on Goals.kt.
+        "goal_checkin" -> "goal check-in"
         NEXT_TIME -> "next time"
         TODAY_CARD -> "today card"
         else -> kind
@@ -585,8 +604,18 @@ object Schedule {
         return "{\"kind\":\"standby\",\"repeat\":{\"every\":\"day\",\"at\":\"$at\",\"until\":\"$until\"}}"
     }
 
-    /** The buttons one row offers, as action names, in order. Never "all". */
+    /**
+     * The buttons one row offers, as action names, in order. Never "all".
+     *
+     * A goal's own weekly check-in ("goal_checkin") offers NONE: pausing or
+     * deleting it here, directly, would leave the goal itself `active` with
+     * no way to bring the check-in back (Goals has no route that
+     * re-creates one for an existing goal - see net/Goals.kt's own doc
+     * comment). Stop tracking, on the goal itself, is the one control that
+     * takes both down together.
+     */
     fun actionsOf(job: Job): List<String> = when {
+        job.kind == "goal_checkin" -> emptyList()
         job.kind == "todo" -> listOf("done", "delete")
         job.state == "waiting" -> listOf("delete")
         // A reminder for next time has no time of its own to pause.

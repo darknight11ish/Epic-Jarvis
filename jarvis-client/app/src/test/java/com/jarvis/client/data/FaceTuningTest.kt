@@ -55,7 +55,8 @@ class FaceTuningTest {
     /** One bad field falls back on its own; the others keep what the owner chose. */
     @Test
     fun unknownValuesFallBackFieldByField() {
-        val t = FaceTuning.decode("q=ultra;f=90;s=fast;a=maybe;b=1")
+        // 90 is a real choice since 2026-09-28; 75 is not one.
+        val t = FaceTuning.decode("q=ultra;f=75;s=fast;a=maybe;b=1")
         assertEquals(QualityTier.DEFAULT, t.quality)
         assertEquals(FrameRateTarget.DEFAULT, t.frameRate)
         assertEquals(1f, t.speed, 0f)
@@ -66,6 +67,19 @@ class FaceTuningTest {
         assertEquals(QualityTier.LOW, partial.quality)
         assertEquals(FrameRateTarget.AUTO, partial.frameRate)
         assertTrue(partial.autoAdjust)
+    }
+
+    /** 30 and 90 (added 2026-09-28) are stored and read back; the old ids still read. */
+    @Test
+    fun theNewFrameRatesAndTheOldIdsRoundTrip() {
+        assertEquals(FrameRateTarget.FPS_30, FaceTuning.decode("f=30").frameRate)
+        assertEquals(FrameRateTarget.FPS_90, FaceTuning.decode("f=90").frameRate)
+        // The quality ids never changed with the new names (Lower, Balanced, Maximum).
+        assertEquals(QualityTier.LOW, FaceTuning.decode("q=low").quality)
+        assertEquals(QualityTier.MEDIUM, FaceTuning.decode("q=medium").quality)
+        assertEquals(QualityTier.MAX, FaceTuning.decode("q=max").quality)
+        val t = FaceTuning(QualityTier.MAX, FrameRateTarget.FPS_90, 1f, false, false)
+        assertEquals(t, FaceTuning.decode(t.encode()))
     }
 
     @Test

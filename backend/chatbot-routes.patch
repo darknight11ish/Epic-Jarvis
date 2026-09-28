@@ -1,0 +1,24 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3280,6 +3280,21 @@
+     except Exception as exc:
+         print(f"  projects   NOT ON ({type(exc).__name__}) - Projects is off")
+         print("             until jarvis_projects.py is back: run apply-patches.ps1 again")
++    # chatbot-routes.patch ("Talk to a chatbot for me", the owner's decisions of
++    # 2026-09-27 and 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md, JARVIS-API
++    # section 87): GET /api/chatbot/status, POST /api/chatbot/start (ONE
++    # approval card per conversation - nothing is sent before a person's
++    # yes), /api/chatbot/stop (never a card) and /api/chatbot/limits (a NEW
++    # card). Pause and Resume are /api/task/*'s own. Wrapped round Handler
++    # here, before anything listens, like sources and projects above; the routes are in
++    # jarvis_chatbot_routes.py and every rule is in jarvis_chatbot.py.
++    try:
++        import jarvis_chatbot_routes
++        print(jarvis_chatbot_routes.install(Handler, origin_ok=_origin_ok,
++                                            token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  chatbot    NOT ON ({type(exc).__name__}) - Talk to a chatbot for me is off")
++        print("             until jarvis_chatbot_routes.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

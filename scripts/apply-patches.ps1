@@ -633,6 +633,56 @@ $PATCHES = @(
     # tool loop already makes - for the local model only. Needs nothing new
     # copied in: jarvis_agent.py is already in this list.
     'rules-first-relay.patch'
+    # The owner's yes for one question, to the cloud lane
+    # jarvis_router.choose() already offers but never uses on its own
+    # (docs/ARCHITECTURE.md "Cloud / API keys", "the owner chose 'ask each
+    # time'"). One line added to the ALREADY-EXISTING choose() call this
+    # repository had never patched before 2026-09-27 - real, verified
+    # against the owner's own file by hand, not a stand-in, because no
+    # earlier patch's hunk touches this call at all (see the patch's own
+    # comment for why that matters). Every privacy gate above it in
+    # choose() still runs first and in the same order; this can only ever
+    # turn an "offer" into an "escalate" for a question that had already
+    # cleared every other gate on its own.
+    'cloud-say-yes.patch'
+    # "Goals with one card per step" (the owner's "build it now",
+    # 2026-09-27, after the Jarvis evaluation; design:
+    # docs/creativity-2026-09-25/future.md idea 3). One try/except block,
+    # append-only, right after answer-sources.patch's own new route block -
+    # jarvis_goals.py is a brand-new whole module, so this adds a route the
+    # same way news.patch and tool-updates.patch each did. Never batches an
+    # approval: every acting step still gets its own separate card through
+    # ordinary chat tool use, exactly as today - this is NOT the "plan
+    # card" (docs/FEASIBILITY-AUDIT-2026-09-26.md I61) still gated behind
+    # the multi-step safety tests; see jarvis_goals.py's own docstring for
+    # why the two are different and why this one was never waiting on that.
+    'goals.patch'
+    # "One card, several steps" (feasibility I61, "the plan card"; the
+    # owner's own words, 2026-09-28). Two small hunks against jarvis_gate.py
+    # only: a risk entry for run_plan and a tier line for propose_plan/
+    # run_plan, both append-only next to their own kind's existing entries
+    # (control_computer's own risk line; draft_email's own tier line).
+    # jarvis_plan.py itself is SWITCHED OFF until tools/tool_eval's real
+    # results clear the bar - see that module's own docstring - so this
+    # patch alone changes nothing the model can reach yet; it only teaches
+    # the gate the two new action names for when it is turned on.
+    'plan-gate.patch'
+    # Reading phone notifications (the owner's decision, 2026-09-26; built
+    # 2026-09-28, CLAUDE.md): GET and POST /api/notifications/phone - OFF by
+    # default (Jarvis never reads a phone notification), ON is one approval
+    # card (phone_notifications_read), OFF is instant. Three hunks: its
+    # jarvis_gate.py "acts only on tier ask" line (context is backup.patch's
+    # own restore_backup line, so it goes after it) and its jarvis_gate.py
+    # _RISK entry (context is plan-gate.patch's own run_plan entry, so it
+    # goes after it); and its jarvis_hud.py install() block (context is
+    # goals.patch's own block, so it goes after it - last, like every new
+    # patch touching that block). Needs jarvis_phone_notifications.py copied
+    # in; without it, or on any error, the banner says so and the route is
+    # not there. Everything else (which apps, the one-time-code redaction,
+    # never SMS, the allow list) lives entirely on the phone
+    # (jarvis-client/), proved by that app's own tests - this patch and its
+    # module never see a notification's text.
+    'phone-notifications.patch'
     # The Brain upgrades (the owner's choice, 2026-09-28; docs/JARVIS-API.md
     # section 71): GET /api/history/search ("search what was said in old
     # chats" - each kept turn opened in memory for that one search, no
@@ -674,6 +724,65 @@ $PATCHES = @(
     # jarvis_history_import.py and import_history.py copied in; without them
     # the banner says so and the routes are simply not there (404).
     'history-import.patch'
+    # Projects, build steps 1 and 2 (the owner's decision of 2026-09-28,
+    # docs/PROJECTS-DESIGN.md): GET and POST /api/projects and its
+    # benchmarks. One hunk, the startup install() block; its context is
+    # answer-sources.patch's own install block (second-card-suggest.patch,
+    # just above, touches a different part of the file), so it goes after
+    # both - last, like every new patch. Needs jarvis_projects.py copied
+    # in; without it, or on any error, the banner says so and the routes
+    # are not there. goals.patch (continuation branch) anchors on the SAME
+    # lines: whichever of the two lands second is re-anchored on the
+    # other's block when that branch merges.
+    'projects.patch'
+    # Talking to an AI chatbot for the owner (jarvis_chatbot.py and its
+    # Gemini adapter, jarvis_chatbot_gemini.py, both shipped whole): the
+    # gate's _RISK line for `chatbot_session` (it leaves this PC and cannot
+    # be taken back, so its approval is a risky one), and its line in the
+    # "a no is not a standing rule" list. Two hunks in jarvis_gate.py, whose
+    # context is backup.patch's own lines (so it goes after it, like every
+    # new patch). No route yet: the feature is still not reachable from
+    # either app.
+    'chatbot.patch'
+    # "Talk to a chatbot for me" (the owner's decisions of 2026-09-27 and
+    # 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md, JARVIS-API section 87): GET
+    # /api/chatbot/status, POST /api/chatbot/start (ONE approval card per
+    # conversation; nothing is sent before a person's yes), /api/chatbot/stop
+    # (never a card) and /api/chatbot/limits (a NEW card). Its jarvis_hud.py
+    # context is projects.patch's own install block (which itself follows
+    # answer-sources.patch's), so it goes after it - last, like every new
+    # patch. Needs jarvis_chatbot.py and jarvis_chatbot_routes.py copied in;
+    # without them, or on any error, the banner says so and the routes are
+    # simply not there.
+    'chatbot-routes.patch'
+    # Jarvis Live (the owner's decision and answers of 2026-09-28;
+    # docs/LIVE-DESIGN.md, JARVIS-API section 63): GET and POST
+    # /api/voice/live - start, stop, extend and resume a Live conversation
+    # (no card: the owner's own act). Its jarvis_hud.py context is
+    # chatbot-routes.patch's own install block, so it goes after it - last,
+    # like every new patch. Needs jarvis_live.py copied in; without it, or
+    # on any error, the banner says so and the route is simply not there.
+    'live.patch'
+    # "Forget a time frame" (the owner's decision of 2026-09-28; JARVIS-API
+    # section 64): GET /api/memory/forget_range and /preview, POST
+    # /api/memory/forget_range (ONE approval card listing every fact and
+    # chat; nothing changes before a person approves) and /undo (10
+    # minutes, no card). Three hunks: two in jarvis_gate.py, whose context
+    # is chatbot.patch's own lines (the "a no is not a standing rule" list
+    # and the risk table), and the startup install() block in jarvis_hud.py,
+    # whose context is live.patch's own block - so it goes after both, last,
+    # like every new patch. Needs jarvis_forget_range.py copied in; without
+    # it, or on any error, the banner says so and the routes are simply not
+    # there.
+    'forget-range.patch'
+    # The sun, the moon and the weather behind the animal faces (the owner's
+    # decisions of 2026-09-28): GET /api/sky and POST /api/sky. Its
+    # jarvis_hud.py context is answer-sources.patch's own startup install()
+    # block (second-card-suggest.patch, just above, touches a different part
+    # of the file), so it goes last, like every new patch. Needs jarvis_sky.py
+    # and jarvis_sky_places.py copied in; without them, or on any error, the
+    # banner says so and the route answers 503 - the faces are drawn as before.
+    'sky.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -777,6 +886,7 @@ $SHIPPED = @(
     'jarvis_stop_all.py'         # stop-all.patch: POST /api/stop_all, and the hook other features register with
     'jarvis_tellme.py'           # "tell me when ..." (an email from someone, a device changing): a kind of job on the one scheduler, no patch; NOT a model tool
     # --- focus sessions (focus.patch) ---
+    'jarvis_front.py'            # what is in front on this PC: the one front-window reader focus sessions and "Watch with me" share (split out of jarvis_focus.py, 2026-09-28); no patch
     'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
     # --- what asks first (asks-first.patch) ---
     'jarvis_asks_first.py'       # "What asks first": every action and whether it asks; stricter from either app, looser on the PC only; lights without a card
@@ -807,6 +917,14 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
+    # --- the app builder's workspace (2026-09-28, docs/APP-BUILDER-DESIGN.md milestone A) ---
+    'jarvis_app_workspace.py'    # app projects, a separate copy per task, one card with the full diff before a merge; runs nothing; no patch or tool yet
+    # --- "Goals with one card per step" (goals.patch) ---
+    'jarvis_goals.py'            # goals.patch: a goal's own plan and weekly check-in; accepting raises one card, like a repeating reminder; every acting step still asks through ordinary chat
+    # --- "One card, several steps" (plan-gate.patch) ---
+    'jarvis_plan.py'             # plan-gate.patch: the plan card's own module - SWITCHED OFF until tools/tool_eval's real results clear the bar; see its own docstring
+    # --- reading phone notifications (2026-09-28, phone-notifications.patch) ---
+    'jarvis_phone_notifications.py'  # off by default; ON is one approval card, phone_notifications_read; OFF is instant; never sees a notification's own text
     # --- the Brain upgrades (2026-09-28, brain-reads.patch) ---
     'jarvis_brain_reads.py'      # brain-reads.patch: GET /api/history/search, /api/memory/fact-history, /api/memory/conversation-facts and /api/pc/help, reads for the apps only
     # --- "remind me next time I talk about X" and "ring my phone" (2026-09-28) ---
@@ -829,6 +947,35 @@ $SHIPPED = @(
     'jarvis_history_import.py'   # history-import.patch: the Brain's button runs import_history.run() in the background; every fact waits for a yes
     # --- "Widgets you describe" (2026-09-28, no patch of its own) ---
     'jarvis_widgets.py'          # a widget as a small checked description (never code): the model's JSON from a fixed menu; /api/widgets routes, switched on by jarvis_brain_reads.py
+    # --- talking to an AI chatbot for the owner (2026-09-28): the core and the Gemini adapter; routes in chatbot-routes.patch, the gate's _RISK line in chatbot.patch ---
+    'jarvis_chatbot.py'          # the driver, the last check before every message, one card per conversation
+    # --- Projects, build steps 1 and 2 (projects.patch, 2026-09-28) ---
+    'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
+    'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
+    'jarvis_chatbot_routes.py'   # chatbot-routes.patch: GET /api/chatbot/status, POST /api/chatbot/start (ONE card), /stop and /limits (a new card)
+    # --- more chatbot websites, driven the same open way (2026-09-28, "the chatbot driver becomes versatile"); reached through chatbot-routes.patch ---
+    'jarvis_chatbot_web.py'      # what every website adapter shares: the visible window, the typing, the host lock, every "needs you" page, sign-in and self-check; jarvis_chatbot.py loads it, and it loads the site files below
+    'jarvis_chatbot_chatgpt.py'  # ChatGPT (chatgpt.com): a thin site file - its selectors, host and words; its own profile and spare account
+    'jarvis_chatbot_claude.py'   # Claude (claude.ai): a thin site file
+    'jarvis_chatbot_copilot.py'  # Microsoft Copilot (copilot.microsoft.com): a thin site file
+    'jarvis_chatbot_perplexity.py' # Perplexity (www.perplexity.ai): a thin site file; its listed sources are read as text, never opened
+    'jarvis_chatbot_deepseek.py' # DeepSeek (chat.deepseek.com): a thin site file
+    'jarvis_chatbot_grok.py'     # Grok (grok.com): a thin site file
+    'jarvis_chatbot_lechat.py'   # Le Chat by Mistral AI (chat.mistral.ai): a thin site file
+    'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
+    'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
+    'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
+    # --- looking at the screen, build steps 1 and 2 (2026-09-28): the session rules only; no route, no Windows readers yet ---
+    'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list; not reachable from the apps yet
+    'jarvis_chatbot_compare.py'  # "Ask several and compare": 2 or more chatbots, ONE card listing every one, one after another, ONE summary; routes in jarvis_chatbot_routes.py
+    # --- Jarvis Live (2026-09-28): talking back and forth; the camera off until the second card passes the photo test ---
+    'jarvis_live.py'             # the Live session (start, stop, time limit, quiet, pauses), the source=live rules jarvis_speech follows, GET/POST /api/voice/live (live.patch)
+    'jarvis_live_photo_test.py'  # the camera's photo test: run once, when the 12 GB card is in; a pass is what lets the camera switch appear on the phone
+    # --- "Forget a time frame" (2026-09-28): a checked list, ONE card, 10 minutes to undo ---
+    'jarvis_forget_range.py'     # forget-range.patch: GET/POST /api/memory/forget_range, /preview and /undo; jarvis_quick.py (already SHIPPED) calls it for "forget what you learned last week"
+    # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
+    'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
+    'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -976,7 +1123,9 @@ if (-not (Test-Path -LiteralPath $BackendPath)) {
 }
 if (-not (Test-Path -LiteralPath (Join-Path $BackendPath 'jarvis_hud.py'))) {
     Bad "That folder exists but has no jarvis_hud.py in it: $BackendPath"
-    Say "  This needs the OpenJarvis backend folder, not this repository." Yellow
+    Say "  Point it at your own Jarvis backend folder - the one with jarvis_hud.py in it -" Yellow
+    Say "  not at this repository, and not at OpenJarvis (an unrelated project with a similar name)." Yellow
+    Say "  docs\INSTALL.md, step 1.3, says where the backend files come from." Yellow
     exit 1
 }
 

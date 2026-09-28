@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chatbot-stop"
+description = "Enables the chatbot_stop command without any pre-configured scope."
+commands.allow = ["chatbot_stop"]
+
+[[permission]]
+identifier = "deny-chatbot-stop"
+description = "Denies the chatbot_stop command without any pre-configured scope."
+commands.deny = ["chatbot_stop"]

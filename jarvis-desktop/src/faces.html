@@ -78,6 +78,10 @@ input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;
 .card:hover{border-color:var(--line-hot)}
 .card canvas{display:block;width:100%;aspect-ratio:1/1;touch-action:pan-y;cursor:grab}
 .card canvas.drag{cursor:grabbing}
+/* The card clips its contents, so the global focus ring (offset 2px outward)
+   would be cut off: draw it inside the picture instead. */
+.card canvas:focus-visible{outline:2px solid var(--pick);outline-offset:-3px}
+.card:focus-within{border-color:var(--line-hot)}
 .meta{position:absolute;left:0;right:0;bottom:0;padding:7px 10px 9px;
       background:linear-gradient(180deg,transparent,rgba(0,0,0,.92) 40%);
       display:flex;flex-direction:column;gap:5px}
@@ -161,7 +165,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 
 <div class="grid" id="grid"></div>
 
-<div id="solo" hidden>
+<div id="solo" hidden role="dialog" aria-modal="true" aria-labelledby="solo-name">
   <div class="solo-top">
     <span class="nm" id="solo-name">—</span>
     <span class="mono" id="solo-read">—</span>
@@ -188,15 +192,18 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
   <pre id="exout">—</pre>
 </div>
 
-<footer>Hand-written Canvas 2D — no WebGL, no three.js, nothing fetched at runtime. Speed ranges differ per face because nine of these integrate their state every frame and cannot simply be handed a faster clock; those are sub-stepped instead.</footer>
+<footer>Most faces are hand-written Canvas 2D; Nucleus, Membrane, Tokamak and the four animals are drawn by the graphics card through WebGL 2, and fall back to Canvas 2D when WebGL is missing or the card cannot keep up. No three.js, nothing fetched at runtime. Speed ranges differ per face because nine of these integrate their state every frame and cannot simply be handed a faster clock; those are sub-stepped instead.</footer>
 </div>
 
 <script src="faces-spec.js"></script>
+<script src="face-pace.js"></script>
 <script src="critter-pose.js"></script>
 <script src="critter-owl.js"></script>
 <script src="critter-otter.js"></script>
+<script src="critter-monkey.js"></script>
 <script src="critters-gen.js"></script>
 <script src="lipsync.js"></script>
+<script src="sky.js"></script>
 <script>
 "use strict";
 // The spec is loaded from `faces-spec.js`, generated from
@@ -513,6 +520,23 @@ let BATCH_TRIED = false;
 const GPU = (() => {
   let cv = null, gl = null, state = "untried", envTex = null, envAt = 0;
   const progs = new Map(), meshes = new Map();
+  // Two optional extensions, looked up once per context:
+  //  - KHR_parallel_shader_compile lets a shader build in the background. A
+  //    ray-marched animal took 246 ms to compile under a software driver,
+  //    and reading its status straight away froze the whole page for that
+  //    long. With it, the face shows its flat drawing until the build is done.
+  //  - EXT_disjoint_timer_query_webgl2 reports how long the graphics card
+  //    actually spent on a pass. Without it the watchdog could only time the
+  //    JavaScript that SUBMITS the work, which is under a millisecond however
+  //    slow the card is: the panda ran at about one frame a second at 1200 px
+  //    while the watchdog saw nothing wrong. A fence is the fallback.
+  let par = null, tq = null, gen = 0, lostCount = 0;
+  // When a program last finished building, so the watchdog can ignore the
+  // frame (or two) that paid for it.
+  let builtAt = -1e9;
+  // Per-surface timing records: pending timer queries, or one fence.
+  const timing = new WeakMap();
+  let timingNow = null;
 
   function ctx(){
     if(state === "dead") return null;
@@ -526,11 +550,16 @@ const GPU = (() => {
         powerPreference:"high-performance", desynchronized:false
       });
       if(!gl){ state = "dead"; return null; }
+      try{ par = gl.getExtension("KHR_parallel_shader_compile"); }catch(e){ par = null; }
+      try{ tq = gl.getExtension("EXT_disjoint_timer_query_webgl2"); }catch(e){ tq = null; }
       // Losing the context is normal on mobile. Drop everything and let the
       // faces fall back; a later frame can re-init from scratch.
       cv.addEventListener("webglcontextlost", e => {
         e.preventDefault(); gl = null; envTex = null;
         progs.clear(); meshes.clear(); state = "lost";
+        // Queries and fences die with the context; `gen` makes every
+        // surface's record from before the loss read as empty.
+        par = null; tq = null; gen++; timingNow = null; lostCount++;
       }, false);
       cv.addEventListener("webglcontextrestored", () => { state = "untried"; }, false);
       state = "live";
@@ -546,36 +575,145 @@ const GPU = (() => {
       gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
     }`;
 
+  // Returns the ready program, or null while it is still building in the
+  // background (KHR_parallel_shader_compile) or if it failed - both of which
+  // the caller treats the same way: draw the fallback this frame.
   function build(key, fs, vsSrc){
     const G = ctx(); if(!G) return null;
-    if(progs.has(key)) return progs.get(key);
+    if(progs.has(key)){
+      const r = progs.get(key);
+      return r && r.building ? finish(G, key, r) : r;
+    }
     const mk = (type, src) => {
       const sh = G.createShader(type);
       G.shaderSource(sh, src); G.compileShader(sh);
-      if(!G.getShaderParameter(sh, G.COMPILE_STATUS)){
-        console.warn("[gpu] shader", key, G.getShaderInfoLog(sh));
-        G.deleteShader(sh); return null;
-      }
       return sh;
     };
     const v = mk(G.VERTEX_SHADER, vsSrc || VS), f = mk(G.FRAGMENT_SHADER, fs);
-    if(!v || !f){ progs.set(key, null); return null; }
     const pr = G.createProgram();
     G.attachShader(pr, v); G.attachShader(pr, f); G.linkProgram(pr);
-    G.deleteShader(v); G.deleteShader(f);
-    if(!G.getProgramParameter(pr, G.LINK_STATUS)){
-      console.warn("[gpu] link", key, G.getProgramInfoLog(pr));
-      progs.set(key, null); return null;
+    // Nothing above waits for the driver. Asking for a status does - so with
+    // the extension, nothing is asked until the build says it is complete.
+    const rec = { building: true, pr, v, f };
+    progs.set(key, rec);
+    return finish(G, key, rec);
+  }
+  function finish(G, key, rec){
+    if(par && !G.getProgramParameter(rec.pr, par.COMPLETION_STATUS_KHR)) return null;
+    const { pr, v, f } = rec;
+    let ok = true;
+    for(const sh of [v, f]){
+      if(!G.getShaderParameter(sh, G.COMPILE_STATUS)){
+        console.warn("[gpu] shader", key, G.getShaderInfoLog(sh)); ok = false;
+      }
     }
+    if(ok && !G.getProgramParameter(pr, G.LINK_STATUS)){
+      console.warn("[gpu] link", key, G.getProgramInfoLog(pr)); ok = false;
+    }
+    G.deleteShader(v); G.deleteShader(f);
+    builtAt = performance.now();
+    if(!ok){ G.deleteProgram(pr); progs.set(key, null); return null; }
     // Uniform locations are looked up once, not per frame.
     const loc = {}, n = G.getProgramParameter(pr, G.ACTIVE_UNIFORMS);
     for(let i=0;i<n;i++){
       const nm = G.getActiveUniform(pr, i).name.replace(/\[0\]$/, "");
       loc[nm] = G.getUniformLocation(pr, nm);
     }
-    const rec = { pr, loc };
-    progs.set(key, rec);
-    return rec;
+    const done = { pr, loc };
+    progs.set(key, done);
+    return done;
+  }
+
+  /* GPU TIMING, per surface. begin() before a face draws, end() after it;
+     poll() hands back what the graphics card has since reported for that
+     surface, a frame or more later - nothing here ever waits for it.
+
+     Each result is { at, ms }: `at` is when the work was submitted (so the
+     caller can ignore work from just after a resize or a shader build), `ms`
+     the time it cost. With the timer extension that is the card's own
+     measurement of this surface's passes. With only a fence it is how long
+     after submitting the card caught up - 0 when it had by the next frame,
+     so a card that keeps up never reads as slow.
+
+     And a LATE one counts as well: work still unfinished `lateMs` after it
+     was handed over is reported then, as { late: true, ms: its age }, once.
+     A card far behind reports nothing at all for seconds - measured in this
+     project's test browser (a software driver, a busy machine), the panda's
+     work came back 1 to 14 seconds after it was handed over, depending on
+     size, while the page kept handing it more - so waiting for the number
+     would be waiting far too long. Up to four pieces of work are tracked
+     per surface. */
+  function rec(tok){
+    let r = timing.get(tok);
+    if(!r || r.gen !== gen){ r = { gen, qs: [] }; timing.set(tok, r); }
+    return r;
+  }
+  function begin(tok){
+    timingNow = null;
+    // Only a context that already exists: a canvas-only face must not create
+    // one just to be timed.
+    if(!gl || state !== "live") return;
+    const r = rec(tok);
+    const t = { tok, at: performance.now(), q: null };
+    if(tq && r.qs.length < 4){
+      t.q = gl.createQuery();
+      gl.beginQuery(tq.TIME_ELAPSED_EXT, t.q);
+    }
+    timingNow = t;
+  }
+  function end(touched){
+    const t = timingNow; timingNow = null;
+    if(!t || !gl) return;
+    const r = rec(t.tok);
+    if(t.q){
+      gl.endQuery(tq.TIME_ELAPSED_EXT);
+      if(touched) r.qs.push({ q: t.q, at: t.at, late: false });
+      else gl.deleteQuery(t.q);
+      return;
+    }
+    if(!tq && touched && r.qs.length < 4 && typeof gl.fenceSync === "function"){
+      const f = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      // Flushed, or the fence may sit in this page's queue and never signal.
+      if(f){ gl.flush(); r.qs.push({ f, at: t.at, polls: 0, late: false }); }
+    }
+  }
+  function poll(tok, lateMs){
+    const out = [];
+    if(!gl) return out;
+    const r = timing.get(tok);
+    if(!r || r.gen !== gen) return out;
+    const disjoint = tq ? gl.getParameter(tq.GPU_DISJOINT_EXT) : false;
+    while(r.qs.length){
+      const e = r.qs[0];
+      let ms;
+      if(e.q){
+        if(!gl.getQueryParameter(e.q, gl.QUERY_RESULT_AVAILABLE)) break;
+        ms = gl.getQueryParameter(e.q, gl.QUERY_RESULT) / 1e6;
+        gl.deleteQuery(e.q);
+        // A disjoint period (the card changed clocks, or was reset) makes
+        // the number meaningless; drop it rather than act on it.
+        if(disjoint) ms = -1;
+      } else {
+        if(gl.getSyncParameter(e.f, gl.SYNC_STATUS) !== gl.SIGNALED){ e.polls++; break; }
+        gl.deleteSync(e.f);
+        ms = e.polls === 0 ? 0 : performance.now() - e.at;
+      }
+      r.qs.shift();
+      if(e.late || ms < 0) continue;
+      // Seen too long after it was handed over: the card (or whatever sits
+      // between it and the screen) is behind, whatever its own clock says.
+      const age = performance.now() - e.at;
+      if(lateMs > 0 && age > lateMs) out.push({ at: e.at, ms: age, late: true });
+      else out.push({ at: e.at, ms });
+    }
+    const now = performance.now();
+    for(const e of r.qs){
+      if(!e.late && lateMs > 0 && now - e.at > lateMs){
+        e.late = true;
+        out.push({ at: e.at, ms: now - e.at, late: true });
+      }
+    }
+    return out;
   }
 
   // The panorama used for reflections, uploaded once it has decoded.
@@ -599,6 +737,14 @@ const GPU = (() => {
   return {
     get live(){ return state === "live" || state === "untried"; },
     get dead(){ return state === "dead"; },
+    /** performance.now() of the last shader build that finished. */
+    get builtAt(){ return builtAt; },
+    /** How many times the context has been lost. */
+    get lost(){ return lostCount; },
+    /** Which of the two ways GPU time is being measured, for tests. */
+    get timer(){ return tq ? "query" : gl && typeof gl.fenceSync === "function" ? "fence" : "none"; },
+    get parallel(){ return !!par; },
+    begin, end, poll,
     /* Render one full-screen pass and hand back the canvas to blit.
        set(gl, loc) uploads whatever uniforms the shader declares. */
     pass(key, fs, w, h, set){
@@ -781,6 +927,7 @@ uniform float uT, uBlend, uRing, uDisp, uBeat, uPump, uYaw, uPit, uDist;
 uniform vec3 uGlow, uHot, uBg;
 uniform int uSteps;
 
+// Smooth minimum by Inigo Quilez (his "distance functions" article, iquilezles.org)
 float smin(float a, float b, float k){
   float h = clamp(0.5 + 0.5*(b-a)/k, 0.0, 1.0);
   return b + (a-b)*h - k*h*(1.0-h);
@@ -1120,8 +1267,8 @@ void main(){
 
 
 /* ============================== the faces ============================= */
-/* THE ANIMAL FACES ("critters") - the red panda, the pygmy owl and the
-   sea otter.
+/* THE ANIMAL FACES ("critters") - the red panda, the pygmy owl, the sea
+   otter and the monkey.
 
    Every other face here is an instrument: rings, orbits, a drum skin. These
    are characters, so they are built differently in two ways.
@@ -1129,19 +1276,111 @@ void main(){
    A CHARACTER, not a table of speeds. The shell hands most faces one of four
    motion tables and borrows for the rest; an animal declares all eight
    states in `st`, so drawSurface() hands it the real one (see its `motion`
-   line) and it can sleep through standby, wave for an approval and be
-   puzzled at an error rather than borrow idle's pose. The shell's
+   line) and it can sleep through standby, sit up still and attentive while
+   waiting on an approval (no wave - it may be a serious moment) and wear a
+   still, concerned look at an error rather than borrow idle's pose. The shell's
    transforms (dim, the approval clock, the error hitch) still apply on top,
    exactly as they do for every other face.
 
    And the pose is worked out outside the shader, once a frame, by the
-   animal's pose code (critter-pose.js, critter-owl.js, critter-otter.js) -
+   animal's pose code (critter-pose.js, critter-owl.js, critter-otter.js,
+   critter-monkey.js) -
    the same maths the phone runs, checked against it by a fixture. The
    shader (critters/, one source for both apps) only draws the animal in
    whatever pose it is given.
 
-   critterFace() is everything the three share; each passes its own name,
+   critterFace() is everything the four share; each passes its own name,
    words and flat fallback. */
+const CRITTER_TIME_WRAP = (2 * Math.PI / 1.3) * 1000;
+// Seconds an animal's option weight (calm, serious, still) takes to ease
+// fully on or off.
+const OPTION_EASE_S = 1;
+// The "Still" option (the animals only breathe and blink): Settings ->
+// Appearance -> "Face on this computer" -> "Keep the animal still"
+// (face-tuning.js, this computer's localStorage). Read by every page that
+// draws a face - display mode (the Widget, the floating face, the HUD) and
+// the Faces window itself - when it starts and whenever Settings changes it
+// (see applyFaceStill). Off by default; the animals only.
+let FACE_STILL = false;
+function applyFaceStill(tune){ FACE_STILL = !!(tune && tune.still === true); }
+// THE SKY BEHIND THE ANIMALS (the owner's decisions of 2026-09-28, both off
+// by default): the real sun and moon for the owner's town, and the weather.
+// sky.js works them out and draws them; this reads what Settings, the Widget
+// and the floating face keep in this computer's localStorage (sky-feed.js:
+// on or off, the position rounded to 0.1 degree, the weather as five
+// numbers) - this page holds no command of its own - and paints it right
+// after the ground, BEFORE an animal is drawn, so the animal is in front and
+// its dim (dimOver) covers the sky too. Only for the animals. Moves with
+// real time; under calm (reduced) motion the weather holds still.
+let SKY_DOC = null;
+// Whether the surface being drawn has the sky under it this frame.
+let SKY_UNDER = false;
+function readSkyDoc(){
+  try { SKY_DOC = JSON.parse(localStorage.getItem("jarvis.sky.v1") || "null"); }
+  catch(e){ SKY_DOC = null; }
+}
+readSkyDoc();
+window.addEventListener("storage", (event) => {
+  if(event.key === "jarvis.sky.v1" || event.key === null) readSkyDoc();
+});
+function paintSky(g, w, h){
+  window.__faceSky = null;
+  SKY_UNDER = false;
+  if(typeof JarvisSky === "undefined") return;
+  const now = Date.now();
+  const live = JarvisSky.liveInput(SKY_DOC, now);
+  if(!live) return;
+  const k = Math.min(w, h);
+  const sc = JarvisSky.scene(now, now / 1000, live.place, live.weather,
+                             { calm: CALM.matches, ax: w / k, ay: h / k });
+  JarvisSky.draw(g, w, h, sc);
+  SKY_UNDER = true;
+  // For tests: what this frame drew.
+  window.__faceSky = { drawn: true, sun: sc.sun ? sc.sun.alpha : 0, moon: sc.moon ? sc.moon.alpha : 0,
+                       rain: sc.rain.length, snow: sc.snow.length, clouds: sc.clouds.length };
+}
+// Whether the surface being drawn cannot reach Jarvis (drawSurface sets it
+// from the surface's own `offline`). An animal on standby then shows the
+// hollow ring alone and no sleeping Zs - "not connected" is not "asleep".
+let FACE_OFFLINE = false;
+// Seconds the Zs take to fade out (or back in) when the link drops (or
+// comes back) while the animal sleeps.
+const ZS_FADE_S = 0.5;
+/** The Zs' offline weight one step on: down while not connected, back up
+ *  only while the state is standby, and held otherwise. Back up only on
+ *  standby because a link that returns straight into an awake state starts
+ *  the animal waking at the same moment - fading back in then, while the
+ *  pose's own asleep weight was still falling, flashed the Zs for ~0.7 s.
+ *  The phone's ZsRule.step (FaceShellRules.kt). */
+function zsStep(r, offline, standby, k){
+  if(offline) return Math.max(0, r - k);
+  return standby ? Math.min(1, r + k) : r;
+}
+/** The colour the owner bound to `state` (its pattern's own colour if the
+ *  binding names none), as a fixed #hex - never the pattern's colour of the
+ *  moment, so what is drawn in it does not breathe or pulse. The neutral
+ *  grey when there is none (a sweep). The phone's `bindings.of(state).tint
+ *  ?: NEUTRAL_3`. Used for the Zs and the offline ring. */
+function boundTint(state){
+  const b = (typeof BIND !== "undefined" && BIND[state]) || {};
+  const P = SPEC.patterns.find(p => p.id === b.pattern);
+  const id = b.color || (b.params && b.params.color) || (P && P.params && P.params.color) || "neutral-3";
+  return hexOf(id);
+}
+// A serious moment (docs/JARVIS-API.md section 38.1): the `wellbeing`
+// event's `serious`, and when it was last true. The animals hold a calm,
+// plain, neutral pose while it is on. A safety net: 900 s after the last
+// true with no false, it is over by itself, so a missed frame can never
+// leave the face neutral for good.
+let LIVE_SERIOUS = false, SERIOUS_AT = -1e9;
+const SERIOUS_NET_S = 900;
+function setSerious(on){
+  LIVE_SERIOUS = on === true;
+  if(LIVE_SERIOUS) SERIOUS_AT = performance.now() / 1000;
+}
+function faceSerious(){
+  return LIVE_SERIOUS && performance.now() / 1000 - SERIOUS_AT < SERIOUS_NET_S;
+}
 function critterFace(o){
   return Object.assign({
     family:"critter", dim:"3d", wave:4,
@@ -1185,20 +1424,35 @@ function critterFace(o){
       const now = performance.now() / 1000;
       let m = this.mem.get(VIEW);
       if(!m){
-        m = { st, prev: st, prev2: st, at: -1e9, gap: 1e9, prevAmp: amp, prevAmp2: amp, lastAmp: amp,
-              lookW: 0, lookAt: now };
+        m = { st, prev: st, at: -1e9, lastAmp: amp, past: [],
+              lookW: 0, lookAt: now, tx: TOUCH.x, ty: TOUCH.y,
+              // The option weights start where they are, not eased in from 0.
+              calmR: CALM.matches ? 1 : 0, seriousR: faceSerious() ? 1 : 0, stillR: FACE_STILL ? 1 : 0,
+              zsR: FACE_OFFLINE ? 0 : 1, optAt: now };
         this.mem.set(VIEW, m);
       }
       if(m.st !== st){
         // What CritterPose.pose needs to carry on from what was on screen:
-        // the loudness at the change (and at the change before, which the
-        // state before that was drawn with), and whether the state being
-        // left was itself still melting in. Order matters: critter-pose.js
-        // makePose's own note.
-        m.prev2 = m.prev; m.gap = now - m.at; m.prevAmp2 = m.prevAmp; m.prevAmp = m.lastAmp;
+        // every change it may still be settling from, newest first - the
+        // state left, how long it had shown, and the loudness it was drawn
+        // with (critter-pose.js makePose's own note). With the whole list,
+        // three or four changes inside a second or two all carry on
+        // smoothly; one level of memory snapped the oldest.
+        m.past = [{ state: m.st, gap: now - m.at, amp: m.lastAmp }].concat(m.past).slice(0, 6);
         m.prev = m.st; m.st = st; m.at = now;
       }
       m.lastAmp = amp;
+      // Calm motion (the OS's reduced motion), a serious moment (the
+      // `wellbeing` event) and the "Still" option, each eased over about a
+      // second so switching one never snaps the animal (CritterPose's opts).
+      const dt = Math.min(0.25, Math.max(0, now - m.optAt)); m.optAt = now;
+      const step = dt / OPTION_EASE_S;
+      const ramp = (r, on, k = step) => on ? Math.min(1, r + k) : Math.max(0, r - k);
+      m.calmR = ramp(m.calmR, CALM.matches);
+      m.seriousR = ramp(m.seriousR, faceSerious());
+      m.stillR = ramp(m.stillR, FACE_STILL);
+      // The Zs fade out while Jarvis cannot be reached (and back in).
+      m.zsR = zsStep(m.zsR, FACE_OFFLINE, st === "standby", dt / ZS_FADE_S);
       return m;
     },
     look(m){
@@ -1212,18 +1466,35 @@ function critterFace(o){
       const want = Math.max(0, Math.min(1, 1 - (age - 2) / 1.5));
       const dt = Math.max(0, now - m.lookAt); m.lookAt = now;
       m.lookW += (want - m.lookW) * (1 - Math.exp(-dt / 0.3));
-      return { x: TOUCH.x, y: -TOUCH.y, w: m.lookW };
+      // The pointer itself is smoothed too (a quarter of a second): taken
+      // raw, a quick sweep across the face swung the head round at over a
+      // thousand degrees a second.
+      const k = 1 - Math.exp(-dt / 0.25);
+      m.tx += (TOUCH.x - m.tx) * k; m.ty += (TOUCH.y - m.ty) * k;
+      return { x: m.tx, y: -m.ty, w: m.lookW };
     },
     pose(t, st, amp){
       if(!this.species) return null;
       const m = this.track(st, amp);
+      const e = (r) => r * r * (3 - 2 * r);
       return this.species.pose(st, m.prev, performance.now() / 1000 - m.at, t, amp, this.look(m),
-                              { prev2: m.prev2, gap: m.gap, prevAmp: m.prevAmp, prevAmp2: m.prevAmp2 });
+                              { past: m.past },
+                              { calm: e(m.calmR), serious: e(m.seriousR), still: e(m.stillR) });
     },
     gpu(g, w, h, t, st, amp, P){
       if(typeof GPU === "undefined" || GPU.dead || !GPUOK || !P) return false;
       if(typeof JARVIS_CRITTERS === "undefined") return false;
-      const rw = Math.max(96, Math.min(w, GPUPX));
+      // How many pixels a side it is traced at: the level's share of the
+      // screen's pixels (GPUPX), times its supersample - 2x2 at Maximum,
+      // capped at FacePace.MAX_PX - and then drawn into the w-pixel canvas
+      // below with high-quality smoothing, which averages the extra samples
+      // down. uPx follows rw, so the soft outline is one TRACED pixel wide.
+      const rw = typeof FacePace !== "undefined" ? FacePace.tracePx(w, GPUPX, QNAME)
+                                                  : Math.max(96, Math.min(w, GPUPX));
+      // For the readout under the full-size face (solo-read): traced / drawn.
+      // One object per view, reused - not a new one every frame.
+      const tr = VIEW.trace || (VIEW.trace = { px: 0, of: 0 });
+      tr.px = rw; tr.of = w;
       // FACE_MOUTH: the mouth track of the voice being heard, or null (shut)
       // - see LIP-SYNC. The pose scales it by how much it is speaking.
       const U = this.species.uniforms(P, FACE_MOUTH);
@@ -1243,13 +1514,26 @@ function critterFace(o){
         G.uniform3f(L.uHot, hot[0]/255, hot[1]/255, hot[2]/255);
         G.uniform3f(L.uCool, cool[0]/255, cool[1]/255, cool[2]/255);
         G.uniform3f(L.uBg, bg[0]/255, bg[1]/255, bg[2]/255);
+        // The sky is drawn behind (paintSky): leave the picture's uncovered
+        // part see-through so it shows, instead of laying it over uBg.
+        if(L.uSeeThrough) G.uniform1f(L.uSeeThrough, SKY_UNDER ? 1 : 0);
         G.uniform1f(L.uYaw, VIEW.yaw);
         G.uniform1f(L.uPit, VIEW.pitch);
         G.uniform1f(L.uZoom, VIEW.zoom || 1);
-        G.uniform1f(L.uTime, PHASE);
+        // Wrapped: PHASE grows for as long as the window is open, and a
+        // 32-bit float uniform loses the swirl's smoothness after days of it.
+        // The shader's only use of uTime is sin(... + uTime * 1.3), so any
+        // whole number of 2pi/1.3 periods can be taken off without a jump.
+        // A new use of uTime must repeat over CRITTER_TIME_WRAP too.
+        G.uniform1f(L.uTime, PHASE % CRITTER_TIME_WRAP);
         // One pixel in the shader's own units (it spans -1..1 across rw), for
         // its soft outline.
         G.uniform1f(L.uPx, 2 / rw);
+        // No soft shadow on a small face or at Lower (spec
+        // frame_rate.animals.no_shadow_below_px): measured on the face's own
+        // device pixels, w, not the traced ones.
+        if(L.uNoShadow) G.uniform1f(L.uNoShadow,
+          typeof FacePace !== "undefined" && FacePace.noShadow(w, QNAME) ? 1 : 0);
       });
       if(!out) return false;
       g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
@@ -1258,12 +1542,88 @@ function critterFace(o){
     },
     draw(g, w, h, t, st, amp){
       const P = this.pose(t, st, amp);
-      if(this.gpu(g, w, h, t, st, amp, P)) return;
+      // Whether one of its idle happenings is playing, for the frame pacer
+      // (dueFrame, display mode's tick): at rest an animal is drawn 30 or 60
+      // times a second, and at the full rate while a stretch or a scratch
+      // plays. Not under "Still" or reduced motion, which take them away.
+      VIEW.busy = !!(this.species && this.species.busy && !FACE_STILL && !CALM.matches
+                     && this.species.busy(st, t));
+      // Standby's dim follows the pose nodding off and waking (sleepDim).
+      FACE_DIM = sleepDim(FACE_DIM_AWAKE, P ? Math.max(0, Math.min(1, +P.asleep || 0)) : (st === "standby" ? 1 : 0));
+      if(this.gpu(g, w, h, t, st, amp, P)){
+        this.dimOver(g, w, h, this.swatch[0]);
+        this.drawZs(g, w, h, t, st, P);
+        return;
+      }
       // The flat drawing opens the same mouth the shader would: the pose
       // code's own mouthOf, [open, wide, round], shut with no real voice.
       const M = P && this.species && this.species.mouth ? this.species.mouth(P, FACE_MOUTH) : [0, 0, 0];
       window.__faceVoice.lastMouth = Array.from(M);
-      this.flat(g, w, h, st, P, M);
+      // No pose script (it failed to load): a still, neutral pose rather
+      // than an empty square.
+      this.flat(g, w, h, st, P || this.restPose(st), M);
+      this.dimOver(g, w, h, BG);
+      this.drawZs(g, w, h, t, st, P);
+    },
+    // THE SLEEPING Zs (owner, 2026-09-28): small z's rising from beside the
+    // head while the animal is on standby - never while Jarvis cannot be
+    // reached (FACE_OFFLINE: the hollow ring alone says that). Where each z
+    // is, how big and how see-through comes from the pose code
+    // (CritterPose.zs, the phone's copy checked against it), as a pure
+    // function of the clock, so both apps draw the same Zs. Drawn flat, over
+    // the picture and inside the same framing, from overlay()'s point, which
+    // is carried with the head as it breathes. Calm (reduced motion) is one
+    // still z. The letter is three strokes, not a font's "z", so it is the
+    // same shape in both apps. Nothing is said to a screen reader: the face
+    // already says it is on standby.
+    drawZs(g, w, h, t, st, P){
+      const sp = this.species;
+      if(!P || !sp || !sp.overlay || typeof CritterPose === "undefined" || !CritterPose.zs) return;
+      const m = this.mem.get(VIEW);
+      const e = (r) => r * r * (3 - 2 * r);
+      const ov = sp.overlay(P, { yaw: VIEW.yaw, pitch: VIEW.pitch, zoom: VIEW.zoom || 1 });
+      ov.asleep *= m ? e(m.zsR) : (FACE_OFFLINE ? 0 : 1);
+      // For tests: what this frame drew, in the zs() units.
+      const seen = window.__faceZs = { at: performance.now(), asleep: ov.asleep, x: ov.x, y: ov.y, shown: 0, w, h };
+      if(!(ov.asleep > 0.002)) return;
+      const Z = CritterPose.ZS;
+      const list = CritterPose.zs(t, ov, m ? e(m.calmR) : (CALM.matches ? 1 : 0));
+      const k = Math.min(w, h) / 2;
+      g.save();
+      g.strokeStyle = lift(boundTint(st), Z.LIGHTEN);
+      g.lineCap = "round"; g.lineJoin = "round";
+      for(const z of list){
+        if(!(z[3] > 0.004)) continue;
+        const sz = z[2] * k, hw = sz * Z.WIDTH / 2, hh = sz / 2;
+        g.save();
+        g.translate(w / 2 + z[0] * k, h / 2 - z[1] * k);
+        g.rotate(-z[4]);                 // counter-clockwise on screen (y up in zs())
+        g.globalAlpha = z[3];
+        g.lineWidth = Math.max(1, sz * Z.STROKE);
+        g.beginPath();
+        g.moveTo(-hw, -hh); g.lineTo(hw, -hh); g.lineTo(-hw, hh); g.lineTo(hw, hh);
+        g.stroke();
+        g.restore();
+      }
+      g.restore();
+      seen.shown = list.filter(z => z[3] > 0.004).length;
+    },
+    // Standby, banked (and, slightly, error) dim the WHOLE animal toward its
+    // background - see faceDim. Drawn over the picture: a fill of the
+    // background at (1 - dim) is exactly mix(bg, pixel, dim).
+    dimOver(g, w, h, bg){
+      if(!(FACE_DIM < 0.999)) return;
+      g.save();
+      g.globalAlpha = 1 - Math.max(0, FACE_DIM);
+      g.fillStyle = bg;
+      g.fillRect(0, 0, w, h);
+      g.restore();
+    },
+    // The neutral pose for the flat drawing when the pose script is missing:
+    // this animal's `rest` numbers, eyes closed asleep and half shut dozing.
+    restPose(st){
+      const eye = st === "standby" ? 0.08 : st === "banked" ? 0.45 : 1;
+      return Object.assign({}, this.rest, { eyeL: eye, eyeR: eye });
     },
   }, o);
 }
@@ -3032,6 +3392,11 @@ const THEMES = [
 
 critterFace({
   id:"redpanda", name:"Red Panda", tagline:"A friend who keeps the light on",
+  // Idle, looking ahead (critter-pose.js at rest) - used only if that script
+  // did not load.
+  rest:{ bob:0, breath:1, tailSwing:0, headRoll:0, headYaw:0, headPitch:0, earL:.2, earR:.2,
+         eyeL:1, eyeR:1, lookX:0, lookY:0, pawLx:-.15, pawLy:.3, pawRx:.15, pawRy:.3,
+         orbX:0, orbY:.34, orbR:.095, orbGlow:.55 },
   swatch:["#04060b","#ff8a3d","#1d6f8a","#f2e2c8"],
   spec:"A red panda made of maths rather than a model file. Its head, cheeks, ears, paws and ringed tail are simple rounded shapes melted together with a smooth minimum, so it bends like felt instead of hinging like a toy, and every pixel is ray-traced with soft shadows and occlusion. The glowing orb it holds is the state colour, and it is a real light: it tints the panda's paws and chin, and the rim light round its fur is the state's second colour.",
   // Without a GPU: the same panda as a flat sticker, in the same pose. Not
@@ -3103,8 +3468,10 @@ critterFace({
 }),
 critterFace({
   id:"pygmyowl", name:"Pygmy Owl", tagline:"Small, round, and paying attention",
+  rest:{ bob:0, breath:1, fluff:1, wingL:0, wingR:0, neckDrop:0, headRoll:0, headYaw:0, headPitch:0,
+         eyeL:1, eyeR:1, lookX:0, lookY:0, orbX:.5, orbY:.3, orbR:.09, orbGlow:.55 },
   swatch:["#04060b","#ffc14d","#1d6f8a","#e6d2b2"],
-  spec:"A pygmy owl on a branch, made of maths rather than a model file: one egg of a body, a big round head with huge yellow eyes in pale facial discs, folded spotted wings and a streaked front, all ray-traced with soft shadows. Owls have no hands, so its orb floats beside it - the state colour, and a real light on its feathers. It turns its head to follow what is going on, tips it right over while it thinks, waves a wing when something is waiting on you and puffs up round to sleep.",
+  spec:"A pygmy owl on a branch, made of maths rather than a model file: one egg of a body, a big round head with huge yellow eyes in pale facial discs, folded spotted wings and a streaked front, all ray-traced with soft shadows. Owls have no hands, so its orb floats beside it - the state colour, and a real light on its feathers. It turns its head to follow what is going on, tips it a little to follow its orb circling while it thinks, draws itself up and looks at you, still, when something is waiting on you and puffs up round to sleep.",
   // Without a GPU: a flat owl in the same pose - head tilt, eyes, beak,
   // wings and orb - without the lighting.
   flat(g, w, h, st, P, M){
@@ -3157,8 +3524,10 @@ critterFace({
 }),
 critterFace({
   id:"seaotter", name:"Sea Otter", tagline:"Afloat, and keeping your stone safe",
+  rest:{ wave:0, bob:0, paddle:0, headRoll:0, eyeL:1, eyeR:1,
+         pawLx:-.14, pawLy:.33, pawRx:-.14, pawRy:.337, orbX:-.12, orbY:.34, orbR:.075, orbGlow:.55 },
   swatch:["#04060b","#7fe3ff","#1d6f8a","#d8c8b0"],
-  spec:"A sea otter floating on its back in a small round pool, made of maths rather than a model file and ray-traced with soft shadows; rings spread across the water from it as it bobs. It holds a glowing pebble on its chest - the orb, in the state colour, and a real light on its paws and face. It taps the pebble while it thinks, puts its paws to its cheeks to listen, waves while something is waiting on you and covers its eyes with its paws to sleep.",
+  spec:"A sea otter floating on its back in a small round pool, made of maths rather than a model file and ray-traced with soft shadows; rings spread across the water from it as it bobs. It holds a glowing pebble on its chest - the orb, in the state colour, and a real light on its paws and face. It taps the pebble while it thinks, lifts its head to listen, holds the pebble up a little toward you, still, while something is waiting on you and covers its eyes with its paws to sleep.",
   // Without a GPU: a flat otter on a flat pool, in the same pose, without
   // the lighting.
   flat(g, w, h, st, P, M){
@@ -3198,6 +3567,110 @@ critterFace({
     og.addColorStop(0, rgba(p.hot, .55 * Math.min(1, P.orbGlow + .2))); og.addColorStop(1, rgba(p.hot, 0));
     g.fillStyle = og; g.beginPath(); g.arc(X(ox), Y(oy), R(or * 3.2), 0, TAU); g.fill();
     ell(ox, oy, or, or, lift(p.hot, .25));
+  }
+}),
+critterFace({
+  id:"monkey", name:"Monkey", tagline:"Hanging around, banana in hand",
+  // Idle, hanging still (critter-monkey.js at rest) - used only if that
+  // script did not load.
+  rest:{ swing:0, headRoll:0, eyeL:1, eyeR:1, lookX:0, lookY:0, orbGlow:.55, orbR:.09 },
+  // Where its parts are at rest, for the same case: critter-monkey.js's
+  // uniforms() for that pose, rounded.
+  restU:{ uBodyPos:[-.14,-.203,.05], uNeck:[-.14,-.018,.038], uShA:[.02,-.083,.069], uElbA:[.372,.336,.127],
+          uHandA:[.46,.876,.13], uShB:[-.29,-.093,.049], uElbB:[-.39,-.213,.02], uHandB:[-.45,-.334,-.039],
+          uKneeL:[-.101,-.287,-.029], uKneeR:[.101,-.287,-.029], uFootL:[-.116,-.44,.014], uFootR:[.116,-.44,.014],
+          uTail0:[-.14,-.362,.162,.034], uTail1:[-.12,-.532,.153,.031], uTail2:[-.12,-.702,.115,.029],
+          uTail3:[-.05,-.823,.076,.027], uTail4:[0,-.743,.066,.026],
+          uVine:[.93,.16,.46,.035], uOrb:[-.371,-.352,-.055,.09], uBan0:[.964,.102,.245] },
+  swatch:["#04060b","#ffc14d","#1d6f8a","#f6cf9c"],
+  spec:"A cartoon monkey from the owner's own picture, made of maths rather than a model file and ray-traced with soft shadows: warm brown fur, a big peach heart of a face, round ears, a tuft on top and a long tail ending in a curl. It hangs by one arm from a vine across the top and swings gently round its hand, like a slow pendulum. Its banana is its orb: it glows in the state colour and is a real light on the monkey. A little livelier than the other animals - it kicks its legs, curls its tail, looks at its banana - but still smooth. It holds its banana up and looks into it while it thinks, hangs still and looks at you, banana held out a little, while something is waiting on you, and climbs up to sit on the vine, tail curled round it, to sleep.",
+  // Without a GPU: a flat monkey on a flat vine, in the same pose, without
+  // the lighting. Where its parts are comes from its own pose code (its
+  // uniforms), so it swings and climbs exactly as the 3D one does.
+  flat(g, w, h, st, P, M){
+    if(!P) return;
+    M = M || [0, 0, 0];
+    const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1) * 3.1 / 3.31;
+    const sp = this.species;
+    const U = sp ? sp.uniforms(P, null) : this.restU;
+    const X = x => w / 2 + (x + 0.08) * S, Y = y => h / 2 - (y - 0.055) * S, R = r => r * S;
+    const FUR = "#b85a32", DEEP = "#7a3518", PEACH = "#f6cf9c", PDEEP = "#e0a06a", INK = "#1a0c08";
+    const ell = (x, y, rx, ry, col, rot) => {
+      g.fillStyle = col; g.beginPath(); g.ellipse(X(x), Y(y), R(rx), R(ry), rot || 0, 0, TAU); g.fill();
+    };
+    const line = (pts, width, col) => {
+      g.strokeStyle = col; g.lineWidth = R(width); g.lineCap = "round"; g.lineJoin = "round";
+      g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(X(q[0]), Y(q[1])) : g.moveTo(X(q[0]), Y(q[1]))); g.stroke();
+    };
+    // The body's frame: its x and y axes in the world (uBodyR* are its
+    // columns), for the legs, which the pose gives in that frame.
+    const B = U.uBodyR0 ? [U.uBodyR0, U.uBodyR1] : [[1, 0, 0], [0, 1, 0]];
+    const onBody = v => [U.uBodyPos[0] + v[0] * B[0][0] + v[1] * B[0][1], U.uBodyPos[1] + v[0] * B[1][0] + v[1] * B[1][1]];
+    // The vine, bowed a little, dipping under its hand.
+    const vine = [];
+    for(let i = 0; i <= 24; i++){
+      const x = -1.3 + i * 2.6 / 24, dx = x - U.uVine[2];
+      vine.push([x, U.uVine[0] - 0.035 * x * x - U.uVine[3] / (1 + 18 * dx * dx)]);
+    }
+    line(vine, .068, "#557a2e");
+    line([0, 1, 2, 3, 4].map(i => U["uTail" + i]), .06, DEEP);
+    for(const s of ["L", "R"]){
+      const hip = onBody([s === "L" ? -.085 : .085, -.13]);
+      line([hip, onBody(U["uKnee" + s]), onBody(U["uFoot" + s])], .1, FUR);
+      const ft = onBody(U["uFoot" + s]); ell(ft[0], ft[1], .066, .066, PEACH);
+    }
+    line([U.uShA, U.uElbA || U.uShA, U.uHandA], .1, FUR);
+    // The body, with a soft halo in the state's second colour for the rim light.
+    const bc = onBody([0, 0]);
+    g.save(); g.shadowColor = rgba(p.glow, .9); g.shadowBlur = S * .09;
+    ell(bc[0], bc[1], .175 * (P.breath || 1), .215, FUR);
+    g.restore();
+    const bl = onBody([0, -.02]); ell(bl[0], bl[1], .11, .155, PDEEP);
+    // The head: it tips with the body's swing and its own roll.
+    const up = U.uHeadR0 ? [U.uHeadR0[1], U.uHeadR1[1]] : [0, 1];
+    const hs = 1.1, hc = [U.uNeck[0] + up[0] * .38 * hs, U.uNeck[1] + up[1] * .38 * hs];
+    g.save();
+    g.translate(X(hc[0]), Y(hc[1])); g.rotate(Math.atan2(up[0], up[1])); g.translate(-X(hc[0]), -Y(hc[1]));
+    const hx = hc[0], hy = hc[1];
+    for(const side of [-1, 1]){
+      ell(hx + side * .41 * hs, hy, .15 * hs, .155 * hs, FUR);
+      ell(hx + side * .41 * hs, hy, .09 * hs, .095 * hs, PDEEP);
+    }
+    ell(hx, hy, .36 * hs, .34 * hs, FUR);
+    ell(hx - .03 * hs, hy + .36 * hs, .04 * hs, .07 * hs, FUR, -.3);
+    // The peach heart of a face: a lobe round each eye over a wide lower part.
+    ell(hx - .118 * hs, hy + .025 * hs, .128 * hs, .128 * hs, PEACH);
+    ell(hx + .118 * hs, hy + .025 * hs, .128 * hs, .128 * hs, PEACH);
+    ell(hx, hy - .165 * hs, .285 * hs, .165 * hs, PEACH);
+    for(const side of [-1, 1]){
+      const open = Math.max(.08, Math.min(1.2, side < 0 ? P.eyeL : P.eyeR));
+      const ex = hx + side * .118 * hs + .01 * (P.lookX || 0) * hs, ey = hy + .02 * hs + .01 * (P.lookY || 0) * hs;
+      ell(ex, ey, .052 * hs, .066 * hs * open, INK);
+      if(open > .3) ell(ex - .017 * hs, ey + .022 * hs, .014 * hs, .014 * hs, "#ffffff");
+    }
+    ell(hx, hy - .118 * hs, .05 * hs, .03 * hs, "#4a1c10");
+    // The mouth: the smile, or open with the voice's shape.
+    if(M[0] > .05) ell(hx, hy - .2 * hs, .08 * hs * (1 + .4 * M[1] - .35 * M[2]), .05 * hs * M[0], "#4a0d10");
+    else {
+      g.strokeStyle = "#4a1c10"; g.lineWidth = Math.max(1, R(.012));
+      g.beginPath(); g.ellipse(X(hx), Y(hy - .178 * hs), R(.08 * hs), R(.03 * hs), 0, 0, Math.PI); g.stroke();
+    }
+    g.restore();
+    // The banana arm, then the hands, then the banana - its orb - and its glow.
+    line([U.uShB, U.uElbB, U.uHandB], .1, FUR);
+    ell(U.uHandA[0], U.uHandA[1], .066, .066, PEACH);
+    const ox = U.uOrb[0], oy = U.uOrb[1], or = U.uOrb[3];
+    const og = g.createRadialGradient(X(ox), Y(oy), 0, X(ox), Y(oy), R(or * 3.2));
+    og.addColorStop(0, rgba(p.hot, .55 * Math.min(1, (P.orbGlow || .55) + .2))); og.addColorStop(1, rgba(p.hot, 0));
+    g.fillStyle = og; g.beginPath(); g.arc(X(ox), Y(oy), R(or * 3.2), 0, TAU); g.fill();
+    const a = Math.atan2(U.uBan0[1], U.uBan0[0]);
+    g.save(); g.translate(X(ox), Y(oy)); g.rotate(-a);
+    g.strokeStyle = "#e8c030"; g.lineWidth = R(.075); g.lineCap = "round";
+    g.beginPath(); g.moveTo(-R(.14), -R(.05)); g.quadraticCurveTo(0, R(.07), R(.14), -R(.05)); g.stroke();
+    g.strokeStyle = lift(p.hot, .35); g.lineWidth = R(.03);
+    g.beginPath(); g.moveTo(-R(.06), R(.005)); g.quadraticCurveTo(0, R(.03), R(.06), R(.005)); g.stroke();
+    g.restore();
+    ell(U.uHandB[0], U.uHandB[1], .066, .066, PEACH);
   }
 }),
 ];
@@ -3627,7 +4100,13 @@ function driveAmp(state, s){
 const listenAmp = driveAmp;
 function voiceLevel(s){
   const stale = (performance.now() / 1000 - HUD.voiceAt) > VOICE.stale_s;
-  return stale ? synthVoice((s && s.fxAge) || 0) : HUD.voice;
+  if(!stale) return HUD.voice;
+  // An animal with no real voice gets no made-up beat: a 4.2 Hz pulse of its
+  // whole body and orb, with no sound behind it, read as a twitch. It talks
+  // with its head and eyes (its pose); its mouth is the Faces preview's own
+  // (faceMouth).
+  if(s && s.theme && s.theme.family === "critter") return 0;
+  return synthVoice((s && s.fxAge) || 0);
 }
 function stepAmp(dt){
   const target = HUD.raw < AMP.gate ? AMP.floor : HUD.raw;
@@ -3702,12 +4181,49 @@ const LIP_END_SLACK_S = 0.25;
 const LIP_QUIET_HOLD_S = 2;
 // ...and for this long, a face whose state says idle/thinking still shows
 // speaking (lipState): the last sentences often play after the answer's text
-// has finished streaming, when the backend already says `idle`.
-const LIP_STATE_HOLD_S = 0.6;
+// has finished streaming, when the backend already says `idle`. Two seconds,
+// the pause between two spoken sentences: at 0.6 an animal dropped out of
+// speaking and back in at every full stop (34 flips in ten minutes of talk).
+const LIP_STATE_HOLD_S = 2.0;
 // A microphone level older than this is the microphone closing: back to 0.
 const MIC_STALE_S = 0.3;
 // Where the next frame will draw the animals' mouth from; see drawSurface.
 let FACE_MOUTH = null;
+// How bright the next frame draws an animal's whole picture, 0..1 - see
+// faceDim and sleepDim.
+let FACE_DIM = 1;
+// faceDim's answer for this surface: the dim of the awake state before
+// standby's is laid over it (sleepDim).
+let FACE_DIM_AWAKE = 1;
+/** The state's `dim` (STATE_FX: error 0.9, banked 0.45; 1 for the rest),
+ *  eased per surface over the same ~0.3 s as the colour fade so a change of
+ *  state never steps the brightness in one frame. Every other face gets its
+ *  dim on its state colours (drawSurface); an animal's colours are its fur,
+ *  so it gets it on the whole picture instead: pixel = mix(bg, pixel, dim),
+ *  the same blend. The phone uses the same rule.
+ *
+ *  Standby is not eased here: on standby this holds the dim of the state
+ *  before it, and standby's own 0.6 is laid over that by sleepDim, as far
+ *  as the animal has nodded off. */
+function faceDim(s, state, dt){
+  const fx = STATE_FX[state];
+  if(state !== "standby") s.dimWant = fx && fx.dim < 1 ? fx.dim : 1;
+  const want = typeof s.dimWant === "number" ? s.dimWant : 1;
+  if(typeof s.dimShown !== "number" || !(dt > 0)) s.dimShown = typeof s.dimShown === "number" ? s.dimShown : want;
+  else s.dimShown += (want - s.dimShown) * (1 - Math.exp(-dt / (COLOR_EASE_S / 3)));
+  if(Math.abs(s.dimShown - want) < 0.002) s.dimShown = want;
+  return s.dimShown;
+}
+/** The dim an animal is drawn with: `awake` (faceDim's) blended toward
+ *  standby's own dim by how far asleep its pose is, 0..1 (the pose's
+ *  `asleep`, what the Zs fade with). So it darkens in step with nodding off
+ *  and brightens in step with waking, instead of all at once while the pose
+ *  takes ~3 s to fall asleep (and ~2 s to wake). Banked and error are
+ *  faceDim's, unchanged. The phone's DimRule.sleep (FaceShellRules.kt). */
+function sleepDim(awake, asleep){
+  const k = Math.max(0, Math.min(1, +asleep || 0));
+  return awake + (STATE_FX.standby.dim - awake) * k;
+}
 
 /** One message from face-voice.js: a clip's track and/or clock, or {mic}. */
 function lipCue(c){
@@ -3815,7 +4331,15 @@ window.HUD = HUD;
 // The blocky look was the second one: a mesh or volumetric buffer sized for
 // a 232px thumbnail, then upscaled across a full-width phone card.
 //   post    - whether the glow/bloom layer is drawn at all (medium tier and up)
-const Q = { ss: 1.5, detail: 1.0, gpu: 0.80, post: true };
+//   shaderSS - samples per screen pixel, each way, an ANIMAL is traced at
+//             (2 at Maximum: 2x2, averaged down - see critterFace.gpu)
+const Q = { ss: 1.5, detail: 1.0, gpu: 0.80, post: true, shaderSS: 1 };
+// Every setting of Q from a tier goes through here, so a new lever cannot be
+// forgotten in one of the five places that pick a tier.
+function useQ(name){
+  const t = TIERS[name] || TIERS.high;
+  Q.ss = t.ss; Q.detail = t.detail; Q.gpu = t.gpu; Q.post = t.post; Q.shaderSS = t.shaderSS || 1;
+}
 const surfaces = [];
 
 /* ====================================================================== *
@@ -3919,9 +4443,110 @@ function makeSurface(theme, canvas, fpsEl){
     speed:1, clock:0, last:0, vis:true,
     frames:0, fpsT:0, fps:0, cost:0, ss:Q.ss, detail:Q.detail, w:0, h:0,
     devpx:0, gpuOk:true, gpuSlow:0,
+    // The GPU watchdog's memory - see GPU WATCHDOG below.
+    gpuMs:0, gpuTrips:0, gpuRetryAt:0, quietUntil:0, sizeKey:"",
+    // Drawn as a hollow ring: Jarvis cannot be reached (display mode only).
+    offline:false,
     // One flash governor per surface - see the module note on governedResolve.
     flashGov: newFlashGovernor(),
   };
+}
+
+/* ====================================================================== *
+ * GPU WATCHDOG
+ * A face drawn by the graphics card gives the card back - and is drawn flat
+ * instead - if the card cannot keep up. Three things make that judgement
+ * honest:
+ *
+ *  - It looks at the CARD'S time, not only at the JavaScript. Handing work
+ *    to the card takes well under a millisecond however long the card then
+ *    takes, so timing the script alone missed a panda running at about one
+ *    frame a second (GPU.begin/end/poll measure the card itself).
+ *  - It ignores the half second after a resize, a quality change or a shader
+ *    build, which are one-off costs: thirty quick resizes of the window used
+ *    to flip the otter to its flat drawing for good.
+ *  - It is not for ever. The flat drawing tries the card again after a
+ *    minute, then two, four... up to sixteen - a card that was only busy
+ *    (a game, a video export) gets its faces back.
+ * ====================================================================== */
+const GPU_QUIET_MS = 500;
+const GPU_STRIKES = 3;
+const GPU_RETRY_MS = 60000, GPU_RETRY_MAX_MS = 16 * 60000;
+function gpuLimitMs(){ return Math.max(48, CLOCK.budget * 3); }
+/* THE STALL CHECK. A card far enough behind stops the page's frames
+ * altogether. Measured: the 1200-pixel panda under a software driver drew a
+ * burst of frames, each costing the card about 100 ms, and then the page got
+ * no frame at all for fourteen seconds while its timers kept running - the
+ * backlog was downstream of the face's own work, so even asking the card
+ * "are you done?" said yes. No check that runs once a frame can see a frame
+ * that never comes, so this one runs on a timer: when the page has had no
+ * frame for over a second, a face that drew on the card just before, and was
+ * already being counted as slow, goes flat (after three seconds, counted or
+ * not). What the card had already been handed still has to drain before the
+ * flat drawing can show: measured, that took about ten seconds more. */
+const GPU_STALL_MS = 1000;
+const GPU_FACES = new Set();
+let FRAME_AT = performance.now();       // the last animation frame, either loop
+setInterval(() => {
+  if(document.visibilityState !== "visible" || !GPU_FACES.size) return;
+  const now = performance.now();
+  const stalled = now - FRAME_AT > GPU_STALL_MS && FRAME_AT > GPU_QUIET_ALL;
+  for(const s of GPU_FACES){
+    if(s.gpuOk === false || now - (s.gpuAt || 0) > 10000){ GPU_FACES.delete(s); continue; }
+    if(!stalled || s.gpuAt < FRAME_AT - 250) continue;
+    // Already counted slow - or, with no count yet (a quality step had just
+    // wiped it), a stall three times as long, which nothing else explains.
+    if(s.gpuSlow > 0 || s.gpuMs > gpuLimitMs() / 2 || now - FRAME_AT > GPU_STALL_MS * 3){
+      GPU_FACES.delete(s);
+      gpuTrip(s, now);
+    }
+  }
+}, 250);
+// A page that was hidden (minimised, another desktop, a covered window) gets
+// no frames at all, so every piece of work from before would come back
+// looking seconds late. Everything handed over before it is visible again,
+// and for half a second after, is ignored.
+let GPU_QUIET_ALL = 0;
+document.addEventListener("visibilitychange", () => {
+  GPU_QUIET_ALL = performance.now() + GPU_QUIET_MS;
+});
+/** One frame's verdict. Only a frame the card reported on may take a strike
+ *  away; the script alone can only add one (a fast script says nothing
+ *  about the card). */
+function gpuJudge(s, ms, now, fromCard){
+  if(s.gpuOk === false) return;
+  // Ten times over is not a hiccup to wait out. A page that slow gets so few
+  // frames that three strikes took the best part of a minute to arrive.
+  if(fromCard && ms > gpuLimitMs() * 10){ gpuTrip(s, now); return; }
+  if(ms > gpuLimitMs()){
+    if(++s.gpuSlow >= GPU_STRIKES) gpuTrip(s, now);
+  } else if(fromCard && s.gpuSlow > 0) s.gpuSlow--;
+}
+/* Measured under a software driver in this project's own test browser:
+   drawing the panda 1200 pixels wide, the card's work came back 1.1 to 1.5
+   seconds after it was handed over and the page got a handful of frames in
+   eight seconds; before this watchdog looked at the card at all, it never
+   tripped. */
+function gpuTrip(s, now){
+  s.gpuOk = false; s.gpuSlow = 0;
+  s.gpuTrips = (s.gpuTrips || 0) + 1;
+  s.gpuRetryAt = now + Math.min(GPU_RETRY_MAX_MS, GPU_RETRY_MS * Math.pow(2, s.gpuTrips - 1));
+  // The backing store was sized for a shader. The CPU path wants the
+  // supersampled size and its own, much lower, pixel ceiling - nucleus
+  // draws through a 140px buffer and gains nothing from a 1400px canvas
+  // except an eight-times upscale. Resize on the way down or the
+  // fallback looks worse than it needs to.
+  sizeSurface(s);
+}
+function gpuRetry(s, now){
+  if(s.gpuOk !== false || !s.gpuRetryAt || now < s.gpuRetryAt) return;
+  s.gpuOk = true; s.gpuSlow = 0; s.gpuRetryAt = 0;
+  sizeSurface(s);
+}
+/** A different face on the same surface starts with a clean slate. */
+function gpuReset(s){
+  s.gpuOk = true; s.gpuSlow = 0; s.gpuTrips = 0; s.gpuRetryAt = 0; s.gpuMs = 0;
+  s.quietUntil = performance.now() + GPU_QUIET_MS;
 }
 
 // A face reaches the GPU through one of two entry points, and checking only
@@ -3961,7 +4586,7 @@ function sizeSurface(s){
   // upscaled nine times and reads as blocky. Matching the backing store to
   // what the face can actually produce is what makes it look sharp.
   const px = Math.min(s.f.render.max_px || 1800, Math.round(css * scale));
-  if(s.canvas.width !== px){ s.canvas.width = px; s.canvas.height = px; }
+  if(s.canvas.width !== px || s.canvas.height !== px){ s.canvas.width = px; s.canvas.height = px; }
   s.w = px; s.h = px;
   // What the screen can actually show. Note this uses the REAL device pixel
   // ratio, not the capped one above: the cap exists to stop CPU faces
@@ -3969,6 +4594,16 @@ function sizeSurface(s){
   // 2.75x the pixels for a shader to fill.
   const trueDpr = Math.min(window.devicePixelRatio || 1, 3);
   s.devpx = Math.round(css * trueDpr);
+  // Anything that changes how much the graphics card is asked to draw - a
+  // resize, a quality step, a switch between the shader and the flat
+  // drawing - starts a short quiet spell for the GPU watchdog, and forgets
+  // the last GPU time, which was measured at the old size.
+  const key = px + "/" + s.devpx + "/" + (typeof Q !== "undefined" ? Q.gpu : 0) + "/" + shader;
+  if(s.sizeKey !== key){
+    s.sizeKey = key;
+    s.quietUntil = performance.now() + GPU_QUIET_MS;
+    s.gpuMs = 0;
+  }
 }
 function f_maxScale(s){ return (s.f.render.supersample_max || 2) * 2; }
 
@@ -4044,6 +4679,34 @@ function drawStateOverlay(g, w, h, s, fx, col){
   }
 }
 
+/* JARVIS ISN'T CONNECTED. When the window cannot reach Jarvis, it shows the
+ * standby state (jarvis-link.js faceSignal) with this hollow ring round it -
+ * the same "nothing is coming through" shape the tray icon uses, one look for
+ * every face. Static on purpose: no pulse, no fade in and out, nothing that
+ * could read as a flash. Drawn outside the face's own transforms, so the
+ * shake and the tap flinch never move it.
+ *
+ * Geometry and colour, shared with the phone (FaceView.kt drawOfflineRing):
+ * a full circle at 1.03 x the overlay radius (0.44 x the short side, so
+ * 0.4532 of it - just outside the approval clock's 0.95 and the notches'
+ * 0.93), a stroke of max(1.5 px, 0.008 x the short side), fully opaque, in
+ * the colour bound to the state shown (standby's neutral grey unless the
+ * owner bound another - boundTint), dimmed toward the ground by that state's
+ * own `dim`. A FIXED colour: it used to be the pattern's second colour of
+ * the moment at 60% opacity, which breathed with standby's pattern (so the
+ * "static" ring pulsed) and measured about 1.1:1 against the ground - next
+ * to invisible. This one is about 1.6:1: quiet, but there. */
+function drawOfflineRing(g, w, h, s, state){
+  if(!s.offline) return;
+  const side = Math.min(w, h);
+  const fx = STATE_FX[state];
+  g.save();
+  g.strokeStyle = mix(BG, boundTint(state), fx && fx.dim < 1 ? fx.dim : 1);
+  g.lineWidth = Math.max(1.5, side * 0.008);
+  g.beginPath(); g.arc(w / 2, h / 2, side * 0.44 * 1.03, 0, TAU); g.stroke();
+  g.restore();
+}
+
 function drawSurface(s, dt, state){
   const th = s.theme, f = s.f;
   // Per-face clock. A face that is a pure function of t can simply be handed
@@ -4056,6 +4719,7 @@ function drawSurface(s, dt, state){
 
   VIEW = s.view; TOUCH = s.touch;
   QUALITY = s.detail;
+  gpuRetry(s, performance.now());
   // Geometry density is chosen from `w` inside the faces (detail(w,...)), and
   // `w` just got smaller for shader faces. Without this the 1:1 change would
   // have made tokamak's mesh coarser at the same moment it made the pixels
@@ -4092,7 +4756,10 @@ function drawSurface(s, dt, state){
   // governedResolve's own doc.
   let col = governedResolve(s.flashGov, BIND[state], s.clock, driveAmp(state, s),
                             s.seed || 0, performance.now() / 1000);
-  if(fx && fx.dim < 1){
+  // An animal dims its WHOLE picture (FACE_DIM, below), so it is handed the
+  // undimmed colours - dimming them here as well would dim its orb twice.
+  const dimsItself = th.family === "critter";
+  if(fx && fx.dim < 1 && !dimsItself){
     // Dimming is a blend toward the background, not a multiply toward zero.
     // On an OLED panel a multiply lands banked's already-dark colour at a
     // relative luminance around 0.002, which many panels quantise to black -
@@ -4132,6 +4799,9 @@ function drawSurface(s, dt, state){
   const paintBg = () => {
     g.fillStyle = BG;
     g.fillRect(0,0,w,h);
+    // The sky behind an animal, when the owner has switched it on (paintSky).
+    if(th.family === "critter") paintSky(g, w, h);
+    else SKY_UNDER = false;
   };
   if(!th.persistent) paintBg();
   // GLOW SPRITE - the canvas-side answer to bloom. Bloom on a GPU is a blur of
@@ -4181,7 +4851,10 @@ function drawSurface(s, dt, state){
       // The shake used to run unconditionally - the one motion in this file
       // the OS "reduce motion" setting never reached, while everything else
       // here already paces itself down for it (item 3, UI-AUDIT-2026-09-26.md).
-      shake = CALM.matches ? 0 : e.shake;
+      // Not for an animal either: an error shows a STILL, concerned look
+      // (the owner's call, 2026-09-28), and an 8 Hz shake of the whole
+      // animal undid it.
+      shake = CALM.matches || th.family === "critter" ? 0 : e.shake;
     }
   }
   // The speed itself is eased, not snapped. A face whose rate steps from 0.22
@@ -4209,7 +4882,9 @@ function drawSurface(s, dt, state){
   // a flash, but both are exactly the "grows" and "shake" reduced motion is
   // asked to remove (item 3, UI-AUDIT-2026-09-26.md). The face itself still
   // changes state and colour; it just stops moving because of them.
-  const push = CALM.matches ? 1 : 1 + voice * SPEECH_SCALE * (th.persistent ? 0 : 1);
+  // Not for an animal: its mouth carries the speech now, and the whole
+  // animal swelling two or three times a second read as bouncy, not calm.
+  const push = CALM.matches || th.family === "critter" ? 1 : 1 + voice * SPEECH_SCALE * (th.persistent ? 0 : 1);
   let fx0 = 0, fy0 = 0;
   if(s.ack && !CALM.matches){
     const k2 = Math.min(1, s.ack.age / ACK.flinch_s);
@@ -4219,6 +4894,16 @@ function drawSurface(s, dt, state){
   const scaled = (fit !== 1 || push !== 1 || fx0 || fy0) && !th.persistent;
   // The animals' mouth for this surface (LIP-SYNC): read by critterFace.
   FACE_MOUTH = faceMouth(state, s);
+  // FACE_DIM: how far the animals blend their whole picture toward the
+  // background - see critterFace's draw.
+  FACE_DIM_AWAKE = faceDim(s, state, dt);
+  // What anything but an animal's own draw sees: standby's dim at once. An
+  // animal replaces it with its pose's (critterFace's draw, sleepDim).
+  FACE_DIM = sleepDim(FACE_DIM_AWAKE, state === "standby" ? 1 : 0);
+  // Not connected: an animal on standby shows no Zs (critterFace.drawZs).
+  FACE_OFFLINE = s.offline === true;
+  const timed = GPUOK && isShaderFace(th) && typeof GPU !== "undefined";
+  if(timed) GPU.begin(s);
   withOverride(th, motion, col, () => {
     for(let i=0;i<reps;i++){
       s.clock += dt * sub;
@@ -4244,29 +4929,46 @@ function drawSurface(s, dt, state){
       if(scaled || shake > 0) g.restore();
     }
   });
-  if(glowNow && glowOnTop) drawGlow(g, w, h, col.a, glowStrength * 0.55);
-  drawStateOverlay(g, w, h, s, fx, col);
-  drawAck(g, w, h, s, col, dt);
+  if(timed) GPU.end(GPU_TOUCHED);
+  // What is drawn over an animal is dimmed like every other face's colours.
+  const colO = dimsItself && FACE_DIM < 1
+    ? { a: mix(BG, col.a, FACE_DIM), b: mix(BG, col.b, FACE_DIM) } : col;
+  if(glowNow && glowOnTop) drawGlow(g, w, h, colO.a, glowStrength * 0.55);
+  drawStateOverlay(g, w, h, s, fx, colO);
+  drawOfflineRing(g, w, h, s, state);
+  drawAck(g, w, h, s, colO, dt);
   SPEED = 1;
   if(GPUOK){
     const ms = performance.now() - wt0;
     if(BATCH_TRIED && !isShaderFace(th)) CAL.report(th.id, GPU_TOUCHED, ms);
   }
-  if(GPUOK && GPU_TOUCHED && isShaderFace(th)){
-    const ms = performance.now() - wt0;
-    // Three strikes, not one: a single slow frame is usually a shader compile
-    // or a texture upload, and giving up on those would be a mistake.
-    if(ms > Math.max(48, CLOCK.budget * 3)){
-      if(++s.gpuSlow >= 3){
-        s.gpuOk = false;
-        // The backing store was sized for a shader. The CPU path wants the
-        // supersampled size and its own, much lower, pixel ceiling - nucleus
-        // draws through a 140px buffer and gains nothing from a 1400px canvas
-        // except an eight-times upscale. Resize on the way down or the
-        // fallback looks worse than it needs to.
-        sizeSurface(s);
-      }
-    } else if(s.gpuSlow > 0) s.gpuSlow--;
+  if(timed){
+    // GPU WATCHDOG (above). Three strikes, not one: a single slow frame is
+    // usually a shader compile or a texture upload, and giving up on those
+    // would be a mistake.
+    const now = performance.now();
+    if(GPU_TOUCHED){ s.gpuAt = now; GPU_FACES.add(s); }
+    // The context was lost while this face was on the card - on Windows that
+    // is what a card that takes too long gets (the driver resets it after two
+    // seconds). The strongest sign there is: flat until the next retry.
+    if(s.lostSeen !== GPU.lost){
+      const hadGpu = typeof s.lostSeen === "number" && s.gpuAt && now - s.gpuAt < 5000;
+      s.lostSeen = GPU.lost;
+      if(hadGpu){ gpuTrip(s, now); return; }
+    }
+    if(GPU.builtAt >= wt0) s.quietUntil = now + GPU_QUIET_MS;
+    const quiet = Math.max(s.quietUntil, GPU_QUIET_ALL);
+    // One verdict per frame, on the worst of: this frame's script, and what
+    // the card has reported since (for earlier frames, never waited for),
+    // late work included. Judging each separately counted one slow frame
+    // twice whenever the script had to wait for the card.
+    let worst = GPU_TOUCHED && now >= quiet ? now - wt0 : -1, card = false;
+    for(const r of GPU.poll(s, gpuLimitMs() * 2)){
+      if(r.at < quiet) continue;
+      s.gpuMs = r.ms; card = true;
+      worst = Math.max(worst, r.ms);
+    }
+    if(worst >= 0) gpuJudge(s, worst, now, card);
   }
 }
 
@@ -4485,6 +5187,10 @@ const CALM = typeof matchMedia === "function"
   ? matchMedia("(prefers-reduced-motion: reduce)")
   : { matches: false, addEventListener(){} };
 const CALM_HZ = 10;
+// An animal under reduced motion is not paced down to CALM_HZ: its pose is
+// already calmer (its option weights), and at 10 frames a second its slow,
+// eased movements stepped visibly. 30 keeps them smooth.
+const CRITTER_CALM_HZ = 30;
 
 // A picker grid does not need the panel's refresh rate. Twenty procedural
 // faces redrawn 144 times a second are 144 redraws of thumbnails nobody reads
@@ -4498,13 +5204,17 @@ const CALM_HZ = 10;
 // face being looked at gets whatever the governor thinks it can afford.
 const GRID_HZ = 30;
 let GRID_ONLY = true;    // not `!SOLO`: SOLO is declared far below this line
+let SOLO_CRITTER = false; // the one face being looked at is an animal
 
 function applyTarget(){
   const t = CLOCK.target;
   let want = t === "auto" || t === "max" ? CLOCK.hz : Math.min(+t, CLOCK.hz);
   if(GRID_ONLY && t === "auto") want = Math.min(want, GRID_HZ);
-  if(CALM.matches) want = Math.min(want, CALM_HZ);
-  CLOCK.stride = Math.max(1, Math.round(CLOCK.hz / want));
+  if(CALM.matches) want = Math.min(want, SOLO_CRITTER ? CRITTER_CALM_HZ : CALM_HZ);
+  // The pick rule (spec frame_rate.pick_rule): a whole share of the
+  // screen's rate, rounded up - never slower than the pick - so 90 draws
+  // 144 on a 144 Hz screen. The same function display mode and the phone use.
+  CLOCK.stride = FacePace.strideNear(CLOCK.hz, want);
   CLOCK.minStride = CLOCK.stride;
   CLOCK.budget = 1000 / (CLOCK.hz / CLOCK.stride);
   paintClock();
@@ -4525,6 +5235,7 @@ function paintClock(){
 
 let rafId = null, prev = 0, lastDrawn = 0, vsync = 0;
 function frame(now){
+  FRAME_AT = performance.now();
   const raw = now - prev;
   prev = now;
   measureClock(raw);
@@ -4543,12 +5254,17 @@ function frame(now){
   stepAmp(dt);
   lastDrawn = now;
   const t0 = performance.now();
-  let drew = 0;
+  let drew = 0, cardMs = 0;
   if(SOLO){
     // While solo is open the grid is not visible, so nothing else is drawn -
     // the whole frame budget goes to the one face you are actually looking at.
-    if(dueFrame(SOLO, dt, PREVIEW)) drawSurface(SOLO, SOLO.acc, PREVIEW), SOLO.acc = 0;
-    budget(performance.now() - t0, 1);
+    const due = dueFrame(SOLO, dt, PREVIEW);
+    if(due) drawSurface(SOLO, SOLO.acc, PREVIEW), SOLO.acc = 0;
+    // The card's own time counts too (GPU WATCHDOG): the script alone says
+    // nothing about how long a shader face takes to draw.
+    const soloCost = Math.max(performance.now() - t0, SOLO.gpuOk !== false ? SOLO.gpuMs || 0 : 0);
+    budget(soloCost, due ? 1 : 0);
+    if(due) soloStats(now, soloCost);
     rafId = requestAnimationFrame(frame);
     return;
   }
@@ -4556,6 +5272,7 @@ function frame(now){
     if(!s.vis) continue;
     if(!dueFrame(s, dt, PREVIEW)) continue;
     drawSurface(s, s.acc, PREVIEW); s.acc = 0;
+    if(s.gpuOk !== false) cardMs += s.gpuMs || 0;
     drew++;
     s.frames++;
     if(now - s.fpsT > 800){
@@ -4570,7 +5287,9 @@ function frame(now){
     CLOCK.achieved = Math.round(drawn / ((now - fpsWin) / 1000));
     drawn = 0; fpsWin = now; paintClock();
   }
-  budget(cost, drew);
+  // The card works alongside the script, so a frame takes about the longer
+  // of the two, not their sum.
+  budget(Math.max(cost, cardMs), drew);
   rafId = requestAnimationFrame(frame);
 }
 
@@ -4585,15 +5304,40 @@ function frame(now){
  * never seen to stutter. Active states are untouched. */
 function dueFrame(s, dt, state){
   s.acc = (s.acc || 0) + dt;
-  const fps = STATE_FPS[state];
+  const fps = restFpsOf(s, state, CLOCK.target, HEADROOM.on);
   if(!fps || (s.fxState === state && s.fxAge < 0.6) || s.fxState !== state || s.ack) return true;
-  return s.acc >= (1 / fps) - 0.002;
+  return s.acc >= restStep(fps, CLOCK.hz) - 0.002;
 }
+/* The resting rate for a surface. An ANIMAL follows the spec's
+ * frame_rate.animals.rest_fps (FacePace.restFps): with Frame rate on Auto it
+ * rests at 60 while frames are cheap (HEADROOM) and 30 when not, and draws
+ * every frame while an idle happening plays (its pose's busy(), recorded by
+ * critterFace.draw as view.busy); a picked 30/60/90/120/Max sets its
+ * resting rate; standby 15 and banked 2 always. The other faces keep
+ * state_fps, as before. Shared with display mode's tick(). */
+function restFpsOf(s, state, target, headroom){
+  if(s.theme && s.theme.family === "critter" && typeof FacePace !== "undefined")
+    return FacePace.restFps(state, target, headroom, !!(s.view && s.view.busy));
+  return STATE_FPS[state] || 0;
+}
+/* Seconds between resting frames: on whole vsyncs of the screen (the pick
+ * rule, rounded up), so 60 on a 144 Hz screen is every other vsync (72), not
+ * every 2.4th. */
+function restStep(fps, hz){
+  if(typeof FacePace === "undefined" || !(hz > 0)) return 1 / fps;
+  return FacePace.strideNear(hz, fps) / hz;
+}
+/* Whether frames are cheap enough for an animal to rest at 60 (spec
+ * frame_rate.animals.headroom), from the frame costs budget() is given. */
+const HEADROOM = typeof FacePace !== "undefined" ? FacePace.makeHeadroom() : { frame(){ return false; }, on: false, reset(){} };
 
 // Adaptive quality: if a frame costs more than the budget, step the
 // supersample down rather than letting the browser thermally throttle into
 // uneven stutter. It steps back up when there is room.
 let costAvg = 0, lastQ = 0, drawn = 0, fpsWin = 0;
+// The animal ladder's holds (FacePace.makeHolds): a step just come down
+// from is not climbed back to for a while, longer each time.
+const EDITOR_HOLDS = typeof FacePace !== "undefined" ? FacePace.makeHolds() : null;
 // The readout element, looked up once. It used to be `getElementById` on every
 // frame, and the `textContent` write next to it forced a full document layout
 // per rendered frame — measured one-for-one with the draw rate. A developer
@@ -4602,6 +5346,8 @@ let costAvg = 0, lastQ = 0, drawn = 0, fpsWin = 0;
 let perfEl = null, perfAt = 0;
 function budget(cost, drew){
   costAvg = costAvg * .9 + cost * .1;
+  // Only frames that drew something say what a frame costs.
+  if(drew) HEADROOM.frame(cost);
   const nowMs = performance.now();
   if(nowMs - perfAt > 250){
     perfAt = nowMs;
@@ -4615,6 +5361,22 @@ function budget(cost, drew){
   // between the two thresholds, and at most one change every two seconds.
   const now = performance.now();
   if(!AUTO || now - lastQ < 2000) return;   // you picked a tier; it stays picked
+  // An ANIMAL, alone in the full-size view, follows the spec's own ladder
+  // (frame_rate.animals.auto): Maximum -> High, then the frame rate to 60,
+  // then Balanced, then 30, then Lower - and may climb to Maximum when its
+  // frames take under a quarter of their budget.
+  if(SOLO && SOLO_CRITTER && typeof FacePace !== "undefined"){
+    const L = FacePace.ladder(CLOCK.hz, CLOCK.minStride);
+    const i = FacePace.rungOf(L, QNAME, CLOCK.stride);
+    const j = FacePace.decide(L, i, costAvg / CLOCK.budget, "max", EDITOR_HOLDS, now);
+    const r = L[j];
+    if(r.tier === QNAME && r.stride === CLOCK.stride) return;
+    const tierChanged = r.tier !== QNAME;
+    QNAME = r.tier; CLOCK.stride = r.stride; CLOCK.budget = 1000 / (CLOCK.hz / CLOCK.stride);
+    lastQ = now; paintClock();
+    if(tierChanged){ useQ(QNAME); applyQuality(); }
+    return;
+  }
   const order = ["low","medium","high","max"];
   const i = order.indexOf(QNAME);
   // Thresholds are fractions of the REAL budget, not fixed milliseconds. At
@@ -4636,8 +5398,24 @@ function budget(cost, drew){
     lastQ = now; paintClock(); return;
   }
   else return;
-  Q.ss = TIERS[QNAME].ss; Q.detail = TIERS[QNAME].detail; Q.gpu = TIERS[QNAME].gpu; Q.post = TIERS[QNAME].post;
+  useQ(QNAME);
   lastQ = now; applyQuality();
+}
+/* The line under the full-size face's name (solo-read): what it is, then
+ * how it is running - frames a second, milliseconds a frame, and for an
+ * animal the resolution it is traced at (FacePace.readout). Written twice a
+ * second, not per frame: a text write forces a layout. */
+let SOLO_BASE = "", soloN = 0, soloMs = 0, soloAt = 0;
+function soloStats(now, cost){
+  soloN++; soloMs += cost;
+  if(!soloAt){ soloAt = now; return; }
+  if(now - soloAt < 500) return;
+  const fps = soloN / ((now - soloAt) / 1000), ms = soloMs / Math.max(1, soloN);
+  soloN = 0; soloMs = 0; soloAt = now;
+  const el = $("solo-read");
+  if(!el || !SOLO) return;
+  const trace = SOLO.theme && SOLO.theme.family === "critter" ? SOLO.view.trace : null;
+  el.textContent = SOLO_BASE + " · " + FacePace.readout(fps, ms, trace);
 }
 function applyQuality(){
   surfaces.forEach(s => {
@@ -4803,10 +5581,15 @@ const TIERS = {
   // it - so unlike ss, this tops out at one.
   // post is the glow/bloom layer. Off at low: a machine that has already been
   // pushed to the low tier has no budget for a halo, however cheap.
-  low:    { ss: 1,   detail: 0.75, gpu: 0.62, post: false },
-  medium: { ss: 1.5, detail: 1.0,  gpu: 0.80, post: true  },
-  high:   { ss: 2,   detail: 1.4,  gpu: 1.00, post: true  },
-  max:    { ss: 2,   detail: 2.0,  gpu: 1.00, post: true  },
+  // shaderSS is for the ANIMALS only (critterFace.gpu): at Maximum each is
+  // traced at 2x2 samples per screen pixel and averaged down, which is what
+  // takes the last jagged edge off them (the owner's "sharp animals on
+  // capable hardware", 2026-09-28). Their names on screen are the spec's
+  // frame_rate.animals.levels labels: Lower, Balanced, High, Maximum.
+  low:    { ss: 1,   detail: 0.75, gpu: 0.62, post: false, shaderSS: 1 },
+  medium: { ss: 1.5, detail: 1.0,  gpu: 0.80, post: true,  shaderSS: 1 },
+  high:   { ss: 2,   detail: 1.4,  gpu: 1.00, post: true,  shaderSS: 1 },
+  max:    { ss: 2,   detail: 2.0,  gpu: 1.00, post: true,  shaderSS: 2 },
 };
 let QNAME = "medium", AUTO = true;
 function buildFps(){
@@ -4815,7 +5598,9 @@ function buildFps(){
   // past the display's own rate - but both are listed because the Android
   // renderer treats them differently: there, "max" also REQUESTS the highest
   // supported mode from the system, which auto does not.
-  [["auto","auto"],["60","60"],["120","120"],["max","max"]].forEach(([id,label]) => {
+  // 30 and 90 joined them (2026-09-28): 30 for a quiet machine, 90 for a
+  // 90 Hz screen. Each lands on whole vsyncs (FacePace.strideNear).
+  [["auto","auto"],["30","30"],["60","60"],["90","90"],["120","120"],["max","max"]].forEach(([id,label]) => {
     const b = document.createElement("button");
     b.className = "chip"; b.dataset.f = id; b.textContent = label;
     b.onclick = () => {
@@ -4834,10 +5619,12 @@ function buildQuality(){
   Object.keys(TIERS).forEach(name => {
     const b = document.createElement("button");
     b.className = "chip"; b.dataset.q = name;
-    b.textContent = name;
+    // The same words as Settings and the phone: Lower, Balanced, High, Maximum.
+    b.textContent = typeof FacePace !== "undefined" ? FacePace.level(name).label : name;
+    b.title = typeof FacePace !== "undefined" ? FacePace.level(name).note || "" : "";
     b.onclick = () => {
       QNAME = name; AUTO = false;            // an explicit choice is not overridden
-      Q.ss = TIERS[name].ss; Q.detail = TIERS[name].detail; Q.gpu = TIERS[name].gpu; Q.post = TIERS[name].post;
+      useQ(name);
       applyQuality();
     };
     box.appendChild(b);
@@ -4862,12 +5649,47 @@ function syncUI(){
 }
 
 /* ---------------------------- the cards ---------------------------- */
+/** The card that opened the solo view, to give focus back to on close. */
+let SOLO_OPENER = null;
+/** The card an arrow key moves to from `cv`, by where the cards actually sit
+ *  (the grid reflows with the window, so the row length is measured). */
+function gridNeighbour(cv, key){
+  const all = [...document.querySelectorAll("#grid .card canvas[data-face]")];
+  const i = all.indexOf(cv);
+  if(i < 0) return null;
+  const top = all[0].getBoundingClientRect().top;
+  let cols = all.findIndex(c => Math.abs(c.getBoundingClientRect().top - top) > 2);
+  if(cols < 1) cols = all.length;
+  const j = key === "ArrowRight" ? i + 1 : key === "ArrowLeft" ? i - 1
+          : key === "ArrowDown" ? i + cols : key === "ArrowUp" ? i - cols
+          : key === "Home" ? 0 : key === "End" ? all.length - 1 : -1;
+  return j >= 0 && j < all.length && j !== i ? all[j] : null;
+}
 function buildGrid(){
   const grid = $("grid"); grid.innerHTML = "";
   SPEC.faces.forEach((f, idx) => {
     const th = THEME[f.id]; if(!th) return;
     const card = document.createElement("div"); card.className = "card";
     const cv = document.createElement("canvas");
+    // A card is a button as far as the keyboard and a screen reader are
+    // concerned: it opens the face full screen, where "Use this face" is.
+    // Tab reaches it, Enter or Space opens it, the arrow keys move between
+    // cards the way they sit on screen.
+    cv.tabIndex = 0;
+    cv.setAttribute("role", "button");
+    cv.setAttribute("aria-label", f.name + " face");
+    cv.setAttribute("aria-haspopup", "dialog");
+    cv.dataset.face = f.id;
+    cv.addEventListener("keydown", e => {
+      if(e.key === "Enter" || e.key === " "){
+        e.preventDefault();
+        SOLO_OPENER = cv; openSolo(th);
+        const use = $("solo-use"); if(use) use.focus();
+        return;
+      }
+      const next = gridNeighbour(cv, e.key);
+      if(next){ e.preventDefault(); next.focus(); }
+    });
     const fps = document.createElement("div"); fps.className = "fps";
     const meta = document.createElement("div"); meta.className = "meta";
     meta.innerHTML =
@@ -4933,7 +5755,7 @@ function buildGrid(){
     let dx0 = 0, dy0 = 0;
     cv.addEventListener("pointerdown", e => { dx0 = e.clientX; dy0 = e.clientY; });
     cv.addEventListener("pointerup", e => {
-      if(Math.hypot(e.clientX - dx0, e.clientY - dy0) < 6) openSolo(th);
+      if(Math.hypot(e.clientX - dx0, e.clientY - dy0) < 6){ SOLO_OPENER = cv; openSolo(th); }
     });
   });
 
@@ -4988,7 +5810,12 @@ function openSolo(theme){
   // line and the captured-surface `fit` below close the hole rather than rely
   // on that staying true.
   if(SOLO && SOLO._fit) window.removeEventListener("resize", SOLO._fit);
-  GRID_ONLY = false; applyTarget();   // the one face being looked at
+  GRID_ONLY = false; SOLO_CRITTER = theme.family === "critter";
+  applyTarget();   // the one face being looked at
+  // An animal starts at High under Auto (spec frame_rate.animals.auto.start),
+  // whatever the grid had settled on; the ladder in budget() takes it from
+  // there, up to Maximum on a capable graphics chip. A picked level stays.
+  if(AUTO && SOLO_CRITTER && QNAME !== "high"){ QNAME = "high"; useQ("high"); applyQuality(); }
   SOLO = makeSurface(theme, cv, null);
   SOLO.seed = 99;
   SOLO.ss = 2;                                  // always full pixel density
@@ -4998,7 +5825,9 @@ function openSolo(theme){
   $("solo-name").textContent = theme.name;
   syncFaceChoice();
   const f = FACE[theme.id];
-  $("solo-read").textContent = `${f.geometry} · ${f.integrates_per_frame ? "sub-stepped" : f.dim}`;
+  SOLO_BASE = `${f.geometry} · ${f.integrates_per_frame ? "sub-stepped" : f.dim}`;
+  $("solo-read").textContent = SOLO_BASE;
+  soloN = 0; soloMs = 0; soloAt = 0;
   // `surf`, not the global SOLO: a listener should only ever resize the
   // surface it was created for, and reading the global is what made a stray
   // listener able to throw after SOLO went null.
@@ -5054,10 +5883,17 @@ function openSolo(theme){
   cv.ondblclick = () => { SOLO.view = { yaw:0, pitch:0, zoom:1 }; };
 }
 function closeSolo(){
+  const wasOpen = !$("solo").hidden;
   if(SOLO && SOLO._fit) window.removeEventListener("resize", SOLO._fit);
   stopSoloCycle();
   SOLO = null; $("solo").hidden = true;
-  GRID_ONLY = true; applyTarget();
+  GRID_ONLY = true; SOLO_CRITTER = false; applyTarget();
+  // Maximum is for one animal on its own: twenty cards at 2x2 would be
+  // twenty times the work. Under Auto the grid goes back to High.
+  if(AUTO && QNAME === "max"){ QNAME = "high"; useQ("high"); applyQuality(); }
+  // Back to the card it was opened from, so a keyboard user is not dropped
+  // at the top of the page.
+  if(wasOpen && SOLO_OPENER && document.contains(SOLO_OPENER)) SOLO_OPENER.focus();
 }
 
 /* ---------------------------- export ---------------------------- */
@@ -5440,6 +6276,15 @@ function boot(){
     CAL.reset();
   };
   $("solo-close").onclick = closeSolo;
+  // The solo view covers the page (aria-modal), so Tab stays inside it.
+  $("solo").addEventListener("keydown", e => {
+    if(e.key !== "Tab") return;
+    const f = [...$("solo").querySelectorAll("button, input")].filter(x => !x.disabled && x.offsetParent);
+    if(!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  });
   window.addEventListener("keydown", e => { if(e.key === "Escape") closeSolo(); });
   document.querySelectorAll("#extabs button").forEach(b => b.onclick = () => {
     EXTAB = b.dataset.x;
@@ -5476,6 +6321,9 @@ function boot(){
 
 /** What `drawSurface` is told to paint. Updated by `onLink` below. */
 let LIVE_STATE = "idle";
+/** True while the window driving this frame cannot reach Jarvis: the face
+ *  shows standby with the hollow ring (drawOfflineRing). */
+let LIVE_OFFLINE = false;
 
 /** Port of `attention::face_state()`. */
 function faceStateFromActivity(activity, banked) {
@@ -5494,8 +6342,10 @@ function faceStateFromActivity(activity, banked) {
 
 /** Port of `tray::spec_state()`. */
 function specState(link) {
+  // Not connected is asleep; never "approval" while the link is stale.
+  if (!link.connected) return "standby";
   if (link.activity === "error") return "error";
-  if (link.approvals > 0) return "approval";
+  if (link.approvals > 0 && !link.stale) return "approval";
   const composed = faceStateFromActivity(link.activity, Boolean(link.attention && link.attention.banked));
   if (composed !== "idle") return composed;
   return link.power === "standby" || link.power === "quiet" ? "standby" : "idle";
@@ -5512,7 +6362,18 @@ async function bootDisplay() {
   document.head.appendChild(style);
   const canvas = document.createElement("canvas");
   canvas.id = "display-canvas";
+  // A picture with a name. The windows that embed this frame hide it from
+  // screen readers and say the same thing in their own words; this is for
+  // the frame opened on its own.
+  canvas.setAttribute("role", "img");
   document.body.appendChild(canvas);
+  let spoken = "";
+  const describe = () => {
+    const words = LIVE_OFFLINE ? "Jarvis isn't connected" : "Jarvis's face: " + LIVE_STATE;
+    if(words !== spoken){ spoken = words; canvas.setAttribute("aria-label", words); }
+    document.documentElement.setAttribute("data-face-offline", String(LIVE_OFFLINE));
+  };
+  describe();
 
   const params = new URLSearchParams(location.search);
   // `&feed=parent`: this frame is inside the HUD, which drives it by
@@ -5554,7 +6415,7 @@ async function bootDisplay() {
   // governor exists for twenty full-size tiles at once. "high" and not "max"
   // because high is as far as budget() itself ever climbs on its own - this
   // copies what the kit actually does, rather than going past it.
-  Q.ss = TIERS.high.ss; Q.detail = TIERS.high.detail; Q.gpu = TIERS.high.gpu; Q.post = TIERS.high.post;
+  useQ("high");
   QNAME = "high";
 
   const surface = makeSurface(THEME[faceId], canvas, null);
@@ -5578,10 +6439,19 @@ async function bootDisplay() {
   let hz = 60, stride = 1, baseStride = 1;
   const gaps = [];
   let costAvg = 0, lastStep = 0;
+  // The tier Auto last stepped DOWN from, and when. It is not stepped back up
+  // to for half a minute: the card's time is only known a few frames after
+  // a change, so without this a card that is too slow for High but fine on
+  // Medium would bounce between the two every two seconds, each bounce a
+  // resize.
+  let downFrom = null, downAt = 0;
+  // Whether frames are cheap enough for an animal to rest at 60 (spec
+  // frame_rate.animals.headroom).
+  const headroom = FacePace.makeHeadroom();
   function useTier(name) {
     const t = TIERS[name] || TIERS.high;
     tier = TIERS[name] ? name : "high";
-    Q.ss = t.ss; Q.detail = t.detail; Q.gpu = t.gpu; Q.post = t.post; QNAME = tier;
+    useQ(tier); QNAME = tier;
     // High and Max keep the kit's solo floor and full pixel density - what
     // this frame always drew. Low and Medium deliberately do not: with the
     // floor they would cost the same as High and save nothing (FaceBudget.kt).
@@ -5599,12 +6469,13 @@ async function bootDisplay() {
     stride = baseStride;
     useTier(TUNE.autoAdjust ? "high" : TUNE.quality);
   }
-  // The kit's divisor rule (face-tuning.js strideFor), inlined so the pacing
-  // does not wait on the module.
+  // The pick rule (FacePace.strideFor - the same one face-tuning.js, the
+  // Faces window and the phone use): rounded up, so 90 draws 144 on a
+  // 144 Hz screen.
   function strideForRate(rate) {
-    const want = rate === "60" ? 60 : rate === "120" ? 120 : hz;
-    return Math.max(1, Math.round(hz / Math.min(want, hz)));
+    return FacePace.strideFor(rate, hz);
   }
+  const isAnimal = () => !!(surface.theme && surface.theme.family === "critter");
   import("./face-tuning.js").then((m) => {
     applyTune(m.loadFaceTuning());
     // A change made in Settings, which is another window on the same origin.
@@ -5616,18 +6487,36 @@ async function bootDisplay() {
   // step the quality down, then the frame rate; comfortably under, step back
   // up - to High at most, as far as budget() itself ever climbs. At most one
   // change every two seconds, because each quality change resizes the canvas.
+  // An animal follows the spec's ladder instead (FacePace.ladder /
+  // decide): Maximum -> High, the frame rate to 60, Balanced, 30, Lower -
+  // and climbs to Maximum only while its frames take under a quarter of
+  // their budget. Starts at High, as before.
+  const holds = FacePace.makeHolds();
   function govern(cost, now) {
-    if (!TUNE.autoAdjust) return;
     costAvg = costAvg * 0.9 + cost * 0.1;
+    if (!TUNE.autoAdjust) return;
     if (now - lastStep < 2000) return;
+    if (isAnimal()) {
+      const L = FacePace.ladder(hz, baseStride);
+      const i = FacePace.rungOf(L, tier, stride);
+      const r = L[FacePace.decide(L, i, costAvg / (1000 / (hz / stride)), "max", holds, now)];
+      if (r.tier === tier && r.stride === stride) return;
+      if (r.tier !== tier) useTier(r.tier);
+      stride = r.stride;
+      lastStep = now;
+      return;
+    }
+    // Maximum is for an animal: another face worn after one goes back to High.
+    if (tier === "max") { useTier("high"); lastStep = now; return; }
     const order = ["low", "medium", "high"];
     const i = Math.max(0, order.indexOf(tier));
     const budgetMs = 1000 / (hz / stride);
     if (costAvg > budgetMs * 1.45) {
-      if (i > 0) useTier(order[i - 1]);
+      if (i > 0) { downFrom = tier; downAt = now; useTier(order[i - 1]); }
       else if (hz / (stride + 1) >= 30) stride++;
       else return;
-    } else if (costAvg < budgetMs * 0.55 && i < 2) {
+    } else if (costAvg < budgetMs * 0.55 && i < 2
+               && !(order[i + 1] === downFrom && now - downAt < 30000)) {
       useTier(order[i + 1]);
     } else if (costAvg < budgetMs * 0.33 && stride > baseStride) {
       stride--;
@@ -5646,6 +6535,7 @@ async function bootDisplay() {
   let last = performance.now();
   let owed = 0, lastDraw = -Infinity, vsync = 0;
   function tick(now) {
+    FRAME_AT = performance.now();
     const gap = now - last;
     owed += Math.max(0, gap / 1000);
     last = now;
@@ -5661,19 +6551,46 @@ async function bootDisplay() {
     }
     vsync++;
     const paced = stride <= 1 || vsync % stride === 0;
-    if (paced && (!CALM.matches || now - lastDraw >= 1000 / CALM_HZ)) {
-      const dt = Math.min(0.1, owed);   // the same 0.1s cap as before
+    const calmHz = isAnimal() ? CRITTER_CALM_HZ : CALM_HZ;
+    // The resting rates (dueFrame's rule, which this loop used to skip): the
+    // other faces keep state_fps (idle 30, standby 15, banked 2); an animal
+    // follows FacePace.restFps - with Frame rate on Auto 60 while frames
+    // are cheap, else 30, and every frame while an idle happening plays; a
+    // picked rate lifts its rest to that. The first 600 ms after a change of
+    // state run at the full rate, so no change is seen to stutter.
+    // Jarvis's real voice first (LIP-SYNC), on every paced tick as before -
+    // not only on drawn ones - so a voice that starts while the face rests
+    // at 2 or 15 a second turns it to speaking straight away.
+    if (paced) lipStep();
+    const shownNow = lipState(LIVE_STATE);
+    const rest = restFpsOf(surface, shownNow, TUNE.autoAdjust ? "auto" : TUNE.frameRate, headroom.on);
+    const fresh = surface.fxState !== shownNow || (surface.fxAge || 0) < 0.6;
+    const restStepS = rest > 0 ? restStep(rest, hz) : 0;
+    const restDue = !rest || fresh || owed >= restStepS - 0.002;
+    if (paced && restDue && (!CALM.matches || now - lastDraw >= 1000 / calmHz)) {
+      // The same 0.1 s cap as before - or one resting step, when that is
+      // longer (banked's half second), so a slow rest keeps its real speed.
+      const dt = Math.min(Math.max(0.1, restStepS * 1.5), owed);
       owed = 0;
       lastDraw = now;
       const t0 = performance.now();
-      // Jarvis's real voice first (LIP-SYNC): the level every face moves
-      // with, the animals' mouth, and speaking while it plays.
-      lipStep();
+      // (lipStep ran above.) The level every face moves with.
       stepAmp(dt);
       const shown = lipState(LIVE_STATE);
       window.__faceVoice.lastState = shown;
+      surface.offline = LIVE_OFFLINE;
+      describe();
+      // The watchdog's "slow" is measured against this loop's real budget.
+      CLOCK.budget = 1000 / (hz / stride);
       drawSurface(surface, dt, shown);
-      govern(performance.now() - t0, now);
+      // Auto adjust judges the frame by whichever took longer: the script,
+      // or the graphics card's own time for this face (a few frames old -
+      // GPU WATCHDOG). The script alone reads well under a millisecond while
+      // the card takes most of a second.
+      const cardMs = surface.gpuOk !== false ? (surface.gpuMs || 0) : 0;
+      const frameMs = Math.max(performance.now() - t0, cardMs);
+      headroom.frame(frameMs);
+      govern(frameMs, now);
     }
     requestAnimationFrame(tick);
   }
@@ -5693,6 +6610,15 @@ async function bootDisplay() {
       // A state id this build of the spec does not know is ignored, not
       // guessed at: the face keeps showing the last state it was told.
       if (typeof data.state === "string" && known.has(data.state)) LIVE_STATE = data.state;
+      // Not connected: the sender has already turned the state into standby
+      // (jarvis-link.js faceSignal); this adds the ring. Anything but `true`
+      // means connected, so an older sender that never sends it draws none.
+      LIVE_OFFLINE = data.offline === true;
+      // A serious moment, if the embedding page passes the `wellbeing`
+      // frame's `serious` on (section 38.1). Absent: unchanged.
+      if (typeof data.serious === "boolean") setSerious(data.serious);
+      // How many things are waiting - banked's notches. Only a number counts.
+      if (typeof data.waiting === "number" && data.waiting >= 0) HUD.waiting = data.waiting;
       if (data.appearance && typeof data.appearance === "object") {
         try {
           mergeBindings(data.appearance);
@@ -5701,6 +6627,7 @@ async function bootDisplay() {
             faceId = next;
             surface.theme = THEME[faceId];
             surface.f = FACE[faceId];
+            gpuReset(surface);
             fit();
           }
         } catch (error) { console.error("[faces] could not apply the HUD's appearance", error); }
@@ -5715,8 +6642,21 @@ async function bootDisplay() {
   // subscribe to (see jarvis-link.js's module note: Rust fans one event
   // stream out to every window) — no new Rust event needed for this.
   try {
-    const { onLink, start } = await import("./jarvis-link.js");
-    onLink((link) => { LIVE_STATE = specState(link); });
+    const { onLink, start, faceSignal, onEvent } = await import("./jarvis-link.js");
+    // A serious moment starts or ends (docs/JARVIS-API.md section 38.1):
+    // `{"serious": true|false}`, one boolean, never a word.
+    if (typeof onEvent === "function") onEvent((frame) => {
+      if (frame && frame.kind === "wellbeing" && frame.data && typeof frame.data.serious === "boolean") {
+        setSerious(frame.data.serious);
+      }
+    });
+    onLink((link) => {
+      // faceSignal is specState plus the link itself: standby and the ring
+      // while Jarvis cannot be reached, never "approval" while Approve is
+      // blocked (rule 4), and banked's waiting count.
+      const f = typeof faceSignal === "function" ? faceSignal(link) : { state: specState(link), offline: false, waiting: 0 };
+      LIVE_STATE = f.state; LIVE_OFFLINE = f.offline; HUD.waiting = f.waiting;
+    });
     start();
   } catch (error) { /* browser preview, or the module failed to load: stay idle */ }
 
@@ -5731,6 +6671,7 @@ async function bootDisplay() {
           faceId = loaded.face;
           surface.theme = THEME[faceId];
           surface.f = FACE[faceId];
+          gpuReset(surface);
           fit();
         }
       } catch (error) { /* keep showing what was already loaded */ }
@@ -5740,6 +6681,17 @@ async function bootDisplay() {
 
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", DISPLAY_MODE ? bootDisplay : boot);
 else (DISPLAY_MODE ? bootDisplay : boot)();
+
+// "Keep the animal still" (FACE_STILL), in every mode - the Faces window as
+// well as the Widget's, the floating face's and the HUD's frames: this
+// computer's face settings (face-tuning.js), read now and again whenever
+// Settings, another window on the same origin, saves them.
+import("./face-tuning.js").then((m) => {
+  applyFaceStill(m.loadFaceTuning());
+  window.addEventListener("storage", (event) => {
+    if (event.key === m.FACE_TUNING_KEY) applyFaceStill(m.loadFaceTuning());
+  });
+}).catch(() => { /* the default: not still */ });
 
 /* ==========================================================================
    Persistence
@@ -5805,6 +6757,11 @@ function syncFaceChoice() {
   const chosen = SOLO_ON_SCREEN && SOLO_ON_SCREEN === SOLO_FACE;
   b.textContent = chosen ? "✓ In use" : "Use this face";
   b.setAttribute("aria-pressed", String(Boolean(chosen)));
+  // The grid says which face is in use too, to a screen reader.
+  document.querySelectorAll("#grid .card canvas[data-face]").forEach(cv => {
+    if(cv.dataset.face === SOLO_FACE) cv.setAttribute("aria-current", "true");
+    else cv.removeAttribute("aria-current");
+  });
 }
 
 /**

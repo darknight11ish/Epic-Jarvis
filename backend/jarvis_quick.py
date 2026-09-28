@@ -129,6 +129,29 @@ once. "Turn off lockdown" goes through the same path as the apps' button:
 from the PC, ONE approval card plus Windows Hello; from anywhere else it
 says where to do it. "Is lockdown on?" says whether it is.
 
+A NUMBER FOR A PROJECT (jarvis_projects.py, 2026-09-28, Projects build
+step 2) is here too: "log 5 km run", "log my weight as 72.5 kg", "I ran 5
+km", "I walked 10,000 steps today", "my weight is 72 kg" - but ONLY when
+one of the owner's life projects has a benchmark it fits (the name's
+words and the unit; 5 km is never logged as miles). With no such
+benchmark the sentence is not ours and goes to the model as before;
+projects.db is read only after the sentence already has that shape, and
+never created by it. No card: the owner is writing down their own
+number. A health or money benchmark's answer is `private`, so the apps
+keep it on screen and never read it aloud.
+
+"FORGET A TIME FRAME" (jarvis_forget_range.py, the owner's decision of
+2026-09-28) is here too: "forget what you learned last week", "delete my
+chats from 1 to 15 September", "forget what I said this morning". It
+REMOVES NOTHING: it fills in the checked list in both apps' Brain (under
+"Forget a time frame"), says how many facts and chats are on it, and puts
+`open_brain: "forget-range"` in X-Jarvis-Route so the app it was asked from
+opens that place. The owner unticks, taps Forget these, and approves ONE
+card by tapping - a spoken "yes" or "approve" matches nothing here and
+approves nothing. A date it cannot be sure of ("on Monday" said on a
+Monday, "3/9", "the 3rd", "last night", a month that has not happened yet
+this year) is a question instead, and opens nothing.
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
@@ -771,6 +794,14 @@ def _match(text, now: float) -> Optional[Intent]:
     if _WIDGET.fullmatch(s):
         return Intent("widget_make", {"words": str(text)})
 
+    # --- "forget what you learned last week" (jarvis_forget_range.py) ----------
+    # Before everything that starts with "delete"/"remove": this one names
+    # what Jarvis learned or the chats, and a time frame. It only ever fills
+    # in the checked list in Brain - it removes nothing.
+    got = _forget_range(s, now)
+    if got is not None:
+        return got
+
     # --- focus sessions (jarvis_focus.py) --------------------------------------
     got = _focus(s)
     if got is not None:
@@ -986,6 +1017,11 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- "tell me when ..." (jarvis_tellme.py) ------------------------------------------
     got = _tellme(s, text, now)
+    if got is not None:
+        return got
+
+    # --- a number for a project's benchmark (jarvis_projects.py, 2026-09-28) ---------
+    got = _project_log(s)
     if got is not None:
         return got
 
@@ -2563,6 +2599,71 @@ MEDIA_MISSING = ("Your PC's Jarvis cannot control music or video yet - run apply
                  "on the PC.")
 
 
+def _forget_range(s: str, now: float) -> Optional[Intent]:
+    """"forget what you learned last week", "delete my chats from 1 to 15
+    September" - jarvis_forget_range.parse_phrase. Without that module, or
+    on any error: not ours (the model has no tool that forgets anything)."""
+    try:
+        import jarvis_forget_range as FR
+        got = FR.parse_phrase(s, now)
+    except Exception:
+        return None
+    if got is None:
+        return None
+    return Intent("forget_range", {"got": got})
+
+
+FORGET_RANGE_MISSING = ("Your PC's Jarvis cannot forget a time frame yet - run apply-patches.ps1 "
+                        "on the PC.")
+
+
+def _run_forget_range(f: dict, now: float) -> Result:
+    """Never removes anything: it fills in the checked list in both apps'
+    Brain and says where it is. The owner unticks, taps Forget these, and
+    approves ONE card by tapping - a spoken "yes" approves nothing. A date
+    it is not sure of is a question instead, and opens nothing."""
+    try:
+        import jarvis_forget_range as FR
+        reply, opens = FR.quick_answer(f.get("got") or {}, now)
+    except Exception:
+        return Result(FORGET_RANGE_MISSING, "forget_range")
+    return Result(reply, "forget_range", open_brain="forget-range" if opens else None)
+
+
+def _project_log(s: str) -> Optional[Intent]:
+    """"log 5 km run", "I ran 5 km": ours only when a life project has a
+    benchmark it fits (jarvis_projects.quick_match). Without
+    jarvis_projects.py, or on any error reading it: not ours."""
+    try:
+        import jarvis_projects as PJ
+        found = PJ.quick_match(s)
+    except Exception:
+        return None
+    if not found:
+        return None
+    return Intent("project_log", {"found": found})
+
+
+def _run_project_log(f: dict, now: float) -> Result:
+    """Logged at once, no card - the owner's own number. A sensitive
+    (health or money) benchmark's answer is private: kept on screen."""
+    try:
+        import jarvis_projects as PJ
+    except Exception:
+        return Result("Your PC's Jarvis cannot keep projects yet - run apply-patches.ps1 "
+                      "on the PC.", "project_log")
+    found = f.get("found") or {}
+    private = any(b.get("sensitive") for b in
+                  ([found["match"]] if found.get("match") else found.get("ambiguous") or []))
+    try:
+        out = PJ.quick_log(found, now=now)
+    except Exception as exc:
+        why = str(PJ._err(exc)[1].get("error") or "it could not be saved")
+        return Result("That was not logged: " + why[:1].lower() + why[1:], "project_log",
+                      private=private)
+    return Result(out["said"], "project_log", private=bool(out.get("private")) or private)
+
+
 def _run_media(intent: Intent) -> Result:
     """Play/pause/next/previous act at once, no card (the owner's own
     words are the only permission this needs); "what's playing" says the
@@ -2688,6 +2789,10 @@ class Result:
     # sensitive one stays on screen like any memory answer (route_fields).
     facts: list = field(default_factory=list)
     facts_sensitive: int = 0
+    # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the place in
+    # Brain both apps open - "forget-range" - after "forget what you learned
+    # last week" filled in its list. Navigation only; nothing is removed.
+    open_brain: Optional[str] = None
 
 
 def _join(items: list) -> str:
@@ -2826,6 +2931,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "bulk":
         return Result("Jarvis does not clear everything at once. Delete them one at a time, "
                       "here or under Coming up.", n)
+    if n == "forget_range":
+        return _run_forget_range(f, now)
     if n == "missed":
         return _run_missed(sched, now, seen)
     if n == "snooze":
@@ -2875,6 +2982,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_lockdown(intent, peer, local)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
+    if n == "project_log":
+        return _run_project_log(f, now)
     if n.startswith("focus_"):
         return _run_focus(intent)
     if n == "timer_set":
@@ -3656,6 +3765,11 @@ def route_fields(res: Result) -> dict:
         # existing reader of X-Jarvis-Route that does not look for this key
         # is unaffected, exactly like `gate` above.
         out["open_settings"] = res.open_settings
+    if res.open_brain:
+        # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the
+        # Brain place both apps open, with the list already filled in.
+        # Additive, like open_settings.
+        out["open_brain"] = res.open_brain
     return out
 
 

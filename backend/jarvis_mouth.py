@@ -47,8 +47,9 @@ HOW IT FITS (docs/LIPSYNC.md, "Mouths from Kokoro's own timing"):
      with an exact copy of sherpa-onnx's own ScaleSilence (scale_silence()),
      so it knows where every sample went. The sound is byte-for-byte what
      sherpa-onnx would have made on its own (measured: docs/LIPSYNC.md).
-  5. times / the animal's pitch factor (jarvis_speech.pitch_up plays the
-     sound faster) -> seconds in the final clip.
+  5. times / the animal's pitch factor f = 2^(semitones/12) (jarvis_speech.
+     pitch_up plays the sound faster, or for a deeper voice slower, by f) ->
+     seconds in the final clip.
   6. sounds -> mouth shapes at 100 frames a second (build_track()).
 """
 from __future__ import annotations
@@ -78,6 +79,18 @@ except Exception:  # pragma: no cover - numpy is a requirement
 
 FPS = 100                     #: frames a second - lipsync.js's FPS
 KOKORO_FRAME = 600            #: samples per Kokoro duration frame (25 ms at 24 kHz)
+#: Kokoro's sound runs AHEAD of its own plan: each speech sound is heard
+#: about 50-60 ms before the frames its durations give it (measured on the
+#: raw sound, before any pause shortening or pitch change, and the same at
+#: speed 1.0 and 0.8 - so a fixed number of Kokoro frames, not a share of
+#: each sound's length: hiss of s/sh/f/th a median 60 ms early, speech
+#: edges 25-50 ms, onsets after a pause 40 ms, stop releases 70 ms; the
+#: mouth corpus, 2026-09-28, independently of the fallback tester's -60 ms
+#: over 220 fricatives). So every planned time moves this much earlier,
+#: two Kokoro frames - slightly under the measured lead, so the mouth is
+#: never pulled ahead of the sound by this correction. The clip's length,
+#: and the sample-exact check, are untouched.
+SOUND_LEAD = 2 * KOKORO_FRAME  #: samples of the raw sound (50 ms at 24 kHz)
 DURATION_NODE = "/Cast_output_0"  #: Kokoro v0.19's per-sound durations (after Round -> Clip)
 DURATIONS_FILE = "model.durations.onnx"
 CHUNK_ID = b"jmth"
@@ -134,6 +147,13 @@ _V = {
     "i": (0.22, 0.90, 0.0), "ʊ": (0.30, 0.0, 0.75), "u": (0.22, 0.0, 1.0),
     "ɵ": (0.35, 0.0, 0.5), "ø": (0.3, 0.0, 0.7), "y": (0.22, 0.2, 0.8),
     "ɯ": (0.25, 0.3, 0.0), "ɨ": (0.25, 0.4, 0.0), "œ": (0.5, 0.0, 0.5),
+    # Kokoro's other vowels. en-us never emits them, but espeak-ng's other
+    # English voices do if [voice] tts_lang is changed: en-gb-scotland says
+    # every "oo" as ʉ, which used to get no rounding at all (the mouth
+    # corpus, backend/test_mouth_corpus.py).
+    "ʉ": (0.22, 0.0, 0.9), "ɝ": (0.40, 0.05, 0.30), "ɘ": (0.35, 0.15, 0.0),
+    "ɞ": (0.50, 0.0, 0.50), "ɤ": (0.40, 0.2, 0.0), "ʏ": (0.25, 0.1, 0.7),
+    "ɶ": (0.80, 0.0, 0.45),
 }
 # Consonants: class, and the shape its class pulls towards. None = this
 # sound does not pull that channel at all (the lips borrow the neighbours').
@@ -161,6 +181,10 @@ _C = {
     "ɹ": "R", "r": "R", "ɻ": "R", "ɽ": "R",
     "w": "W", "ʍ": "W", "ɥ": "W", "ɰ": "W",
     "j": "J", "ʝ": "J",
+    # the rest of Kokoro's consonants (implosives, clicks, ...), by place
+    "ʘ": "BIL", "ⱱ": "LAB", "ɗ": "ALV", "ɮ": "ALV", "ɺ": "ALV", "ǀ": "ALV",
+    "ǁ": "ALV", "ǂ": "ALV", "ǃ": "ALV", "ʄ": "VEL", "ɠ": "VEL", "ʛ": "VEL",
+    "ʟ": "VEL", "ɧ": "PAL",
 }
 _CLASS = {
     #      open  wide  round   (None: does not pull that channel)
@@ -405,6 +429,19 @@ _ESPEAK_LOCK = threading.Lock()
 _ESPEAK = {"lib": None, "data": None, "voice": None, "why": ""}
 ESPEAK_IPA = 0x02
 ESPEAK_CHARS_UTF8 = 1
+#: What piper-phonemize (inside sherpa-onnx) passes (espeakCHARS_AUTO):
+#: UTF-8, with any invalid byte read as 8-bit Latin-1 instead.
+ESPEAK_CHARS_AUTO = 0
+#: The espeak-ng inside sherpa-onnx (and the piper-phonemize wheel) also
+#: takes U+FFFD (the "unknown character" mark) for invalid and re-reads its
+#: three bytes as Latin-1 - "i-umlaut, inverted question mark, one half" -
+#: where the espeak-ng 1.52 that espeakng-loader ships reads nothing at all.
+#: So it is spelled out that way before espeak-ng sees it. Found by the
+#: mouth corpus (backend/test_mouth_corpus.py): those sentences came out
+#: shorter than the sound and lost their mouth; measured since, sherpa-onnx
+#: speaks "hello \ufffd." exactly as long as this predicts (a mark straight
+#: after the U+FFFD still differs, and that sentence simply has no mouth).
+_FFFD_AS_PIPER = "\u00ef\u00bf\u00bd"
 AUDIO_OUTPUT_SYNCHRONOUS = 2
 #: Without this, espeak-ng calls exit() when its data cannot be read - which
 #: would end the whole Jarvis backend. With it, it returns an error instead.
@@ -476,20 +513,43 @@ _CLOSERS = "\"'()[]{}`\u201c\u201d\u2018\u2019\u00ab\u00bb"
 _ENDS = ".?!,:;\u2026\u2014\u2013"
 
 
-def _clause_end(chunk: str, more: bool) -> str:
+def _alnum(ch: str) -> bool:
+    """"A letter or digit" as the espeak-ng inside sherpa-onnx has it
+    (ucd-tools: a letter, a letter-like number such as a Roman numeral,
+    or 0-9). NOT other numbers: sherpa-onnx reads "\u00bd." and "\u00b2!" as
+    clauses with no letter or digit, although newer espeak-ng (and the
+    piper-phonemize wheel) count them - measured by speaking them. Symbols
+    count only when Unicode calls them "Other_Alphabetic", which Python
+    cannot ask: the circled and squared Latin letters are listed."""
+    cat = unicodedata.category(ch)
+    if cat[0] == "L" or cat == "Nl" or "0" <= ch <= "9":
+        return True
+    o = ord(ch)
+    return cat == "So" and (0x24B6 <= o <= 0x24E9 or 0x1F130 <= o <= 0x1F149
+                            or 0x1F150 <= o <= 0x1F169 or 0x1F170 <= o <= 0x1F189)
+
+
+def _clause_end(chunk: str, more: bool, lead: str = "") -> str:
     """How espeak-ng ended the clause it just read, from the text it read
-    (`chunk`; `more`: text follows). piper-phonemize gets this from its own
-    espeak-ng build (espeak_TextToPhonemesWithTerminator), which the
-    standard library lacks. Returns ".", "?", "!", ",", ":", ";", "P" (a
-    paragraph: a sentence ends, nothing is added) or "". Rules measured
+    (`chunk`; `more`: text follows; `lead`: the one character the previous
+    call read past its own clause, which belongs to this one). piper-phonemize
+    gets this from its own espeak-ng build (espeak_TextToPhonemesWithTerminator),
+    which the standard library lacks. Returns ".", "?", "!", ",", ":", ";",
+    "P" (a paragraph: a sentence ends, nothing is added) or "". Rules measured
     against piper-phonemize (docs/LIPSYNC.md): espeak reads one character
     past the clause; blank lines end a sentence with nothing added; closing
     quotes and brackets after the mark do not count; of a run of marks the
-    first decides ("?!" is a question); two or more dots, or "…", add
-    nothing and do not end the sentence; a dash between spaces is ";"."""
+    first decides ("?!" is a question); two or more dots, or "\u2026", add
+    nothing and do not end the sentence; a dash between spaces is ";"; and a
+    mark in a clause with no letter or digit in it at all ("!", a thumbs-up
+    emoji and ".", "\u00a9 \u00ae.") ends nothing unless a line break follows it
+    (espeak-ng readclause.c, `any_alnum`: "no letters or digits yet, so
+    probably not a sentence terminator") - found by the mouth corpus
+    (backend/test_mouth_corpus.py)."""
     s = chunk[:-1] if (more and chunk) else chunk
     body = s.rstrip()
-    if s[len(body):].replace("\r", "").count("\n") >= 2:
+    after = s[len(body):].replace("\r", "")
+    if after.count("\n") >= 2:
         return "P"
     t = body.rstrip(_CLOSERS + " \t")
     i = len(t)
@@ -497,6 +557,8 @@ def _clause_end(chunk: str, more: bool) -> str:
         i -= 1
     run = t[i:]
     if not run or run.startswith("..") or run[0] == "\u2026":
+        return ""
+    if "\n" not in after and not any(_alnum(c) for c in lead + t[:i]):
         return ""
     if run[0] in "\u2014\u2013":
         return ";"
@@ -506,7 +568,9 @@ def _clause_end(chunk: str, more: bool) -> str:
 def phonemize(text: str, data_dir: str, voice: str = "en-us") -> Optional[List[str]]:
     """Speech sounds for `text`, one string per sentence, exactly as
     sherpa-onnx's piper-phonemize makes them for Kokoro v0.19 - or None."""
-    raw = text.encode("utf-8", "replace")
+    # espeak-ng reads a C string: nothing after a NUL character exists for
+    # it (or for sherpa-onnx), so nothing after one may count here either.
+    raw = text.replace("\ufffd", _FFFD_AS_PIPER).encode("utf-8", "replace").split(b"\0", 1)[0]
     with _ESPEAK_LOCK:
         lib = _espeak_ready(data_dir, voice)
         if lib is None:
@@ -517,12 +581,13 @@ def phonemize(text: str, data_dir: str, voice: str = "en-us") -> Optional[List[s
         sentences: List[List[str]] = []
         cur: Optional[List[str]] = None
         guard = 0
+        lead = ""
         while ptr.value is not None:
             guard += 1
             if guard > len(raw) + 8:
                 return None
             start = ptr.value
-            ph = lib.espeak_TextToPhonemes(ctypes.byref(ptr), ESPEAK_CHARS_UTF8, ESPEAK_IPA)
+            ph = lib.espeak_TextToPhonemes(ctypes.byref(ptr), ESPEAK_CHARS_AUTO, ESPEAK_IPA)
             end = ptr.value
             if end is not None and not (start <= end <= base + len(raw)):
                 return None
@@ -533,8 +598,9 @@ def phonemize(text: str, data_dir: str, voice: str = "en-us") -> Optional[List[s
                 cur = []
                 sentences.append(cur)
             cur.extend(phon)
+            said = chunk.decode("utf-8", "replace")
             if phon:
-                mark = _clause_end(chunk.decode("utf-8", "replace"), end is not None)
+                mark = _clause_end(said, end is not None, lead)
             else:
                 mark = "P" if end is None else ""
             if mark in (".", "?", "!"):
@@ -544,6 +610,8 @@ def phonemize(text: str, data_dir: str, voice: str = "en-us") -> Optional[List[s
                 cur.extend([mark, " "])
             elif mark == "P" or end is None:
                 cur = None
+            # the character read past this clause starts the next one
+            lead = said[-1:] if end is not None else ""
     return ["".join(s) for s in sentences]
 
 
@@ -865,13 +933,17 @@ def speak(engine, text: str, sid: int, speed: float, semitones: float, *,
     with the mouth shapes when they can be made - or raises NotHere before
     any sound was made (the caller then speaks exactly as before). `speed`
     is the pace asked for; Kokoro is asked for speed / f and the sound is
-    then raised by `semitones` (pitch_up), as kokoro_speak always did."""
+    then raised - or, below 0, lowered - by `semitones` (pitch_up), as
+    kokoro_speak does."""
     try:
         import sherpa_onnx
         make_config = sherpa_onnx.GenerationConfig
     except Exception:
         raise NotHere("sherpa-onnx has no GenerationConfig")
-    f = 2.0 ** (max(0.0, float(semitones or 0.0)) / 12.0)
+    # The same f pitch_up plays the sound at: above 1 higher and shorter,
+    # below 1 (a deeper animal voice) lower and longer - either way every
+    # time below is divided by it (finish()).
+    f = 2.0 ** (float(semitones or 0.0) / 12.0)
     model_speed = float(speed) / f
     job = begin(text, sid, model_speed, lang, paths)
     if job is None:
@@ -947,6 +1019,9 @@ def finish(job: Job, pieces, remaps, final_samples, rate: int, f: float,
             _note(False, f"a sentence is {len(raw)} samples, the timing says {want}", job.ms)
             return None
         edges = np.concatenate(([0], np.cumsum(frames))) * KOKORO_FRAME
+        # the sound comes SOUND_LEAD before the plan (see SOUND_LEAD); the
+        # piece still starts at 0 and ends at its last sample
+        edges = np.concatenate((np.clip(edges[:-1] - SOUND_LEAD, 0, None), edges[-1:]))
         shortened = rm(float(len(raw)))
         for lab, a, b in zip(labels, edges[:-1], edges[1:]):
             segs.append((lab, (offset + rm(float(a))) / f / rate,
@@ -1094,9 +1169,14 @@ def loudness(samples, rate: int):
     wsum = float(np.sum(w * w))
     pad = np.concatenate((np.zeros(half), x, np.zeros(N)))
     centres = (np.arange(n) * rate) // FPS
-    idx = centres[:, None] + np.arange(N)[None, :]
-    frames = pad[idx] if n else np.zeros((0, N))
-    e = np.sum((frames * w[None, :]) ** 2, axis=1)
+    # A block of frames at a time: all n windows at once is n x N numbers
+    # (float64), which for a clip minutes long was gigabytes (the mouth
+    # corpus: a 25-minute answer took over 3 GB here). Same numbers.
+    e = np.zeros(n)
+    offs = np.arange(N)[None, :]
+    for a in range(0, n, 2048):
+        frames = pad[centres[a:a + 2048, None] + offs]
+        e[a:a + 2048] = np.sum((frames * w[None, :]) ** 2, axis=1)
     db = 10.0 * np.log10(e / wsum + 1e-12)
     level = np.zeros(n)
     live = np.sort(db[db > -80])

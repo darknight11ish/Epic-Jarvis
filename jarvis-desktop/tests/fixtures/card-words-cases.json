@@ -23,6 +23,10 @@
       "title": "Jarvis wants to start a helper task"
     },
     {
+      "action": "app_merge_change",
+      "title": "Jarvis wants to add its change to one of your apps"
+    },
+    {
       "action": "append_logseq_journal",
       "title": "Jarvis wants to add to today's Logseq journal"
     },
@@ -49,6 +53,10 @@
     {
       "action": "change_own_config",
       "title": "Jarvis wants to change one of its settings"
+    },
+    {
+      "action": "chatbot_session",
+      "title": "Jarvis wants to hold a conversation with an AI chatbot for you"
     },
     {
       "action": "check_tool_updates",
@@ -159,6 +167,10 @@
       "title": "Jarvis wants to loosen what asks first"
     },
     {
+      "action": "memory_forget_range",
+      "title": "Jarvis wants to forget what it learned and delete chats from the days you chose"
+    },
+    {
       "action": "memory_manage",
       "title": "Jarvis wants to change what it remembers"
     },
@@ -185,6 +197,10 @@
     {
       "action": "page_read",
       "title": "Jarvis wants to fetch a web page you're watching"
+    },
+    {
+      "action": "phone_notifications_read",
+      "title": "Jarvis wants to start reading notifications from apps you choose on your phone"
     },
     {
       "action": "post_to_external_service",
@@ -223,6 +239,10 @@
       "title": "Jarvis wants to go back to the AI model you had before"
     },
     {
+      "action": "run_plan",
+      "title": "Jarvis wants to run the safe steps of an approved plan"
+    },
+    {
       "action": "run_shell_on_host",
       "title": "Jarvis wants to run a command on this PC"
     },
@@ -245,6 +265,10 @@
     {
       "action": "second_card_enable",
       "title": "Jarvis wants to start using the second graphics card"
+    },
+    {
+      "action": "second_card_third_assign",
+      "title": "Jarvis wants to move a second-card feature onto a third graphics card"
     },
     {
       "action": "send_email",

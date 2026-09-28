@@ -128,6 +128,29 @@ fun FaceView(
      * "remove animations" when that setting says to follow the phone).
      */
     calmMotion: Boolean = false,
+    /**
+     * Jarvis cannot be reached: the link to the PC is down or stale
+     * (`JarvisRuntime.faceOffline`, whose rules are [FaceLink]'s). The caller
+     * passes [state] as STANDBY then; this adds the one thing that tells the
+     * two apart - a thin hollow ring just outside the face, still and
+     * unflashing, on every face - and TalkBack says "Jarvis isn't connected".
+     */
+    offline: Boolean = false,
+    /**
+     * A serious moment (`JarvisRuntime.faceSerious`: a crisis answer is
+     * being given or spoken, docs/JARVIS-API.md section 38.1). The animal
+     * faces hold a calm, plain, neutral pose - no happenings, gestures,
+     * playful poses or tilts - eased in and out over about a second; the
+     * mouth still follows the voice. The other faces ignore it.
+     */
+    serious: Boolean = false,
+    /**
+     * The owner's "Still" option for the animals ("Keep the animal still",
+     * Appearance - `Look.stillAnimal`): they only breathe and blink, eyes
+     * resting on you (docs/CRITTERS.md). Eased in and out like [serious].
+     * The other faces ignore it.
+     */
+    stillMotion: Boolean = false,
 ) {
     val host = remember { FaceHost() }
     var frame by remember { mutableStateOf(host.snapshot()) }
@@ -163,6 +186,9 @@ fun FaceView(
     // Motion setting changed while the face is on screen has to reach it
     // through here rather than being captured once when the loop started.
     val calm by rememberUpdatedState(calmMotion)
+    val seriousNow by rememberUpdatedState(serious)
+    val stillNow by rememberUpdatedState(stillMotion)
+    val offlineNow by rememberUpdatedState(offline)
 
     // Clamped once, here, so no draw below can be handed more than 1. NaN is
     // treated as "the designed amount" rather than passed on, because
@@ -195,7 +221,8 @@ fun FaceView(
 
     // A new face's first frames include one-off work (a shader compiling, a
     // point cloud being built), which is not what it costs to keep drawing.
-    LaunchedEffect(face.id) { FaceQuality.onFaceChanged() }
+    // An animal may be taken up to Maximum by Auto, and rests by its own rule.
+    LaunchedEffect(face.id) { FaceQuality.onFaceChanged(isAnimal = face is CritterFace) }
 
     // The frame loop is suspended while the app is not at least STARTED.
     //
@@ -228,7 +255,16 @@ fun FaceView(
     }
 
     LaunchedEffect(face, bindings, frameLoopOwner) {
+        // False for the block's first run in this effect, which is a new face
+        // or new colours on a screen being looked at; true for every later
+        // run, each a return from ON_STOP - the screen was off or the app
+        // was in the background.
+        var returning = false
         frameLoopOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            // Nobody saw the face while it was stopped, so this is when its
+            // clocks are brought back toward zero (FaceClock) - unseen.
+            if (returning) host.onLoopStart()
+            returning = true
             var last = 0L
             // Every vsync, drawn or skipped: for the divisor count and for the
             // fastest vsync gap seen lately (see FramePacing.vsyncPeriodMs).
@@ -252,6 +288,8 @@ fun FaceView(
                 return host.advance(
                     dt, liveState, mic(), if (voiced) voiceNow[0] else speech(), bindings, face,
                     calm || b.calm, b.speed, if (voiced) voiceNow else null,
+                    serious = seriousNow, still = stillNow, offline = offlineNow,
+                    pace = FaceQuality.pace,
                 )
             }
 
@@ -263,10 +301,33 @@ fun FaceView(
             com.jarvis.client.platform.GpuProbe.await(GPU_PROBE_WAIT_MS)
                 ?.let { FaceQuality.onGpuProbed(it) }
 
-            // One drawn frame, reported to the Auto adjust governor. A few
-            // float operations; it never measures anything itself.
-            fun report(nowNs: Long, intervalNs: Long, expectedMs: Float, b: ResolvedBudget) {
-                if (!b.governed) return
+            // The Face editor's readout: frames drawn and their cost, published
+            // twice a second (FaceQuality.stats).
+            var statFrames = 0
+            var statMs = 0f
+            var statFrom = 0L
+            fun countStat(nowNs: Long) {
+                statFrames++
+                statMs += drawCost.nanos / 1_000_000f
+                if (statFrom == 0L) {
+                    statFrom = nowNs
+                    return
+                }
+                val span = nowNs - statFrom
+                if (span < 500_000_000L) return
+                FaceQuality.publishStats(statFrames * 1e9f / span, statMs / max(1, statFrames))
+                statFrames = 0
+                statMs = 0f
+                statFrom = nowNs
+            }
+
+            // One drawn frame, for Auto adjust and for headroom - a few float
+            // operations; it never measures anything itself. [effStride]
+            // is the stride actually waited this frame - the resting rate's,
+            // when it is slower than the active one - so its deliberate wait
+            // is not taken for lateness.
+            fun report(nowNs: Long, intervalNs: Long, expectedMs: Float, b: ResolvedBudget, effStride: Int = b.stride) {
+                countStat(nowNs)
                 val periodMs = FramePacing.vsyncPeriodMs(b.panelHz, min(windowMin, prevWindowMin))
                 val budgetMs = periodMs * b.stride
                 // A mesh face draws on its own GL thread, so its lateness shows
@@ -275,31 +336,32 @@ fun FaceView(
                 val costMs = FramePacing.frameCostMs(
                     drawMs = drawCost.nanos / 1_000_000f,
                     intervalMs = intervalMs,
-                    expectedIntervalMs = if (expectedMs > 0f) expectedMs else budgetMs,
+                    expectedIntervalMs = if (expectedMs > 0f) expectedMs else periodMs * max(b.stride, effStride),
                     budgetMs = budgetMs,
                 )
                 FaceQuality.onFrame(nowNs / 1_000_000L, costMs, budgetMs)
             }
 
             while (true) {
-                val fps = Spec.fpsFor(liveState)
-                if (fps in 1..30) {
-                    // Was `1..15`, which left IDLE and APPROVAL (both 30,
-                    // per fpsFor) waking the Choreographer at the display
-                    // rate to decide to do nothing 60-120 times a second,
-                    // across what the spec itself calls nine tenths of
-                    // screen-on time - the exact waste this branch exists to
-                    // avoid for STANDBY and BANKED, just below the line that
-                    // used to stop at them. The screen-off concern that
-                    // keeps STANDBY/BANKED on `delay` rather than
-                    // `withFrameNanos` (see the comment above this loop)
-                    // does not apply here: IDLE and APPROVAL are foreground,
-                    // screen-on states by definition - if the screen goes
-                    // off from either, `repeatOnLifecycle` below STARTED
-                    // suspends this whole loop regardless of which branch
-                    // it is in. Sleeping to the next due instant costs
-                    // nothing in between.
-                    val stepMs = 1000L / fps
+                // The resting rate for what the face shows now (FaceHost.restFps):
+                // 0 for every frame; an animal's by its own rule (AnimalPace),
+                // every other face's by the spec's state_fps.
+                val rest = host.restFps(face, FaceQuality.pace)
+                if (rest in 1..DELAY_MAX_FPS) {
+                    // STANDBY (15) and BANKED (2) only. They sleep on `delay`
+                    // rather than `withFrameNanos` because these are the states
+                    // a phone sits in while pocketed, and `delay` asks nothing
+                    // of the display between frames; `repeatOnLifecycle` stops
+                    // the whole loop once the screen is off anyway.
+                    //
+                    // IDLE and APPROVAL used to be here too (at 30). They are
+                    // on the vsync branch below now, with a stride: a frame
+                    // timed by `delay` lands between vsyncs and is shown on
+                    // whichever comes next, so on a 120 Hz panel "30 a second"
+                    // arrived as uneven gaps of 25 and 33 ms - a visible
+                    // judder on an animal's slow, eased movements. The cost is
+                    // a cheap callback on each skipped vsync while resting.
+                    val stepMs = 1000L / rest
                     // Sleep to the next due instant - or until a tap arrives,
                     // whichever is first. The tap's own frame then draws now
                     // rather than at the end of the step.
@@ -340,8 +402,12 @@ fun FaceView(
                         // panel, every other vsync is skipped here and costs
                         // nothing. `last` is left alone, so the next drawn
                         // frame's dt covers the skipped time - frame skipping,
-                        // not slow motion.
-                        if (b.stride > 1 && last != 0L && vsyncs % b.stride != 0L) return@withFrameNanos
+                        // not slow motion. A resting face strides further, to
+                        // its resting rate on whole vsyncs (the pick rule,
+                        // rounded up: 30 on 120 Hz is every 4th, 60 on
+                        // 144 Hz every 2nd, 30 on 144 Hz every 4th = 36).
+                        val eff = if (rest > 0) max(b.stride, FramePacing.strideNear(b.panelHz, rest.toFloat())) else b.stride
+                        if (eff > 1 && last != 0L && vsyncs % eff != 0L) return@withFrameNanos
                         val fresh = last == 0L || !onVsync
                         if (last == 0L) last = now
                         // Measured on the surface that actually matters, rather
@@ -353,12 +419,13 @@ fun FaceView(
                         val dt = (interval / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                         last = now
                         onVsync = true
-                        // Resting states draw at 30 rather than the display rate.
-                        // The accumulated dt is handed to the draw, so motion covers
-                        // the same distance — frame skipping, not slow motion.
+                        // The accumulated dt is handed to the draw, so motion
+                        // covers the same distance - frame skipping, not slow
+                        // motion. (FaceHost.advance paces the resting states
+                        // itself too, with a little slack, so the two agree.)
                         if (step(dt, b)) {
                             frame = host.snapshot()
-                            if (!fresh) report(now, interval, 0f, b)
+                            if (!fresh) report(now, interval, 0f, b, eff)
                         }
                     }
                 }
@@ -375,16 +442,15 @@ fun FaceView(
     // A live region, because the point of this surface is that it CHANGES.
     // Polite rather than assertive: it should not interrupt what is being read,
     // and the approval card below it is the thing that actually needs reading.
-    val spoken = when (state) {
-        FaceState.ERROR -> "Jarvis has a problem"
-        FaceState.APPROVAL -> "Jarvis is waiting for your decision"
-        FaceState.LISTENING -> "Jarvis is listening"
-        FaceState.THINKING -> "Jarvis is working"
-        FaceState.SPEAKING -> "Jarvis is speaking"
-        FaceState.BANKED -> "Jarvis has notes saved for later"
-        FaceState.STANDBY -> "Jarvis is on standby and will not speak"
-        FaceState.IDLE -> "Jarvis is idle"
-    }
+    //
+    // While Jarvis cannot be reached it says so, whatever pose is showing:
+    // the old link-down ladder ended in BANKED and read "Jarvis has notes
+    // saved for later" about a PC this phone could not hear (FaceWords).
+    val spoken = FaceWords.spoken(state, offline)
+    // The offline ring's colour: the shown state's own bound colour, dimmed
+    // toward the ground by that state's `dim` - fixed, not the pattern's
+    // colour of the moment, so the ring never breathes or pulses.
+    val ringColour = if (offline) offlineRingColour(bindings, state, background) else null
     Box(
         modifier
             .semantics {
@@ -435,7 +501,7 @@ fun FaceView(
             // its draw lambda; the lambda gives the mesh branch the same shape,
             // read only where it is used (see GLFaceSurface).
             key(face.id) {
-                GLFaceSurface(mesh, { frame }, face, notches, background, glowK, drawCost)
+                GLFaceSurface(mesh, { frame }, face, notches, background, glowK, drawCost, ringColour)
             }
         } else {
             Canvas(Modifier.matchParentSize()) {
@@ -444,6 +510,7 @@ fun FaceView(
                 // The quality tier's `post`: no glow at Low or in battery saver.
                 val postGlow = if (FaceQuality.current.post) glowK else 0f
                 drawFace(frame, face, notches, glowSprite, background, postGlow)
+                if (ringColour != null) drawOfflineRing(size.minDimension, ringColour)
                 drawCost.nanos = System.nanoTime() - t0
             }
         }
@@ -510,6 +577,12 @@ private const val STILL_FRAME_STEPS = 38
 
 /** How often FaceView re-reads the panel's refresh rate. Never per frame. */
 private const val PANEL_POLL_MS = 2_000L
+
+/**
+ * Resting rates at or under this sleep on `delay` (standby's 15, banked's 2);
+ * faster ones stride on vsync. See the frame loop.
+ */
+private const val DELAY_MAX_FPS = 15
 
 /**
  * How long a face's frame loop waits, once per process, for GpuProbe's answer
@@ -660,6 +733,8 @@ private fun GLFaceSurface(
     background: Color,
     glow: Float,
     drawCost: DrawCost,
+    /** The offline ring's colour, or null for no ring (see FaceView's `offline`). */
+    ringColour: Color?,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     // AndroidView's factory runs exactly once per call site and hands back
@@ -782,6 +857,8 @@ private fun GLFaceSurface(
                 style = Stroke(width = max(1f, w * 0.006f)),
             )
         }
+
+        if (ringColour != null) drawOfflineRing(w, ringColour)
     }
 }
 
@@ -848,6 +925,45 @@ data class FaceFrame(
      */
     val prevAmp2: Float = prevAmp,
     /**
+     * Every change of state the animals may still be settling from, newest
+     * first (see `CritterPose.Hist.past`): with it, three or four changes
+     * inside a second or two carry on smoothly instead of the oldest one
+     * snapping. Null: a host that keeps only the fields above.
+     */
+    val past: List<CritterPose.Change>? = null,
+    /**
+     * How far each way of moving less is switched on, 0..1, eased by the host
+     * so nothing snaps (`CritterPose.Opts`): calm motion, a serious moment,
+     * the "Still" option. Only the animals read them.
+     */
+    val calmW: Float = 0f,
+    val seriousW: Float = 0f,
+    val stillW: Float = 0f,
+    /**
+     * How much of the animals' sleeping Zs to show, 0..1: 1 unless Jarvis
+     * cannot be reached (FaceView's `offline`), when the host eases it to 0
+     * over [ZS_FADE_S] - not connected is the hollow ring alone, never Zs -
+     * and eases it back in only on standby (`ZsRule.step`), so a link that
+     * returns straight into an awake state never flashes the Zs while the
+     * animal wakes. The Zs themselves only show asleep; see `CritterFace.drawZs`.
+     */
+    val zsW: Float = 1f,
+    /**
+     * The dim of the state shown, or on standby of the state before it: what
+     * an animal is dimmed by while awake. Its standby dim is laid over this
+     * as far as its pose has nodded off (`DimRule.sleep`), so it darkens and
+     * brightens in step with falling asleep and waking. [dim] stays the
+     * state's own, for every other face.
+     */
+    val awakeDim: Float = 1f,
+    /**
+     * The Zs' colour: the colour bound to the state shown (its fixed tint,
+     * never the pattern's colour of the moment), lightened toward white by
+     * `CritterPose.Zs.LIGHTEN` so it reads on the dark ground - the desktop's
+     * `lift(boundTint(state), ZS.LIGHTEN)`.
+     */
+    val zsTint: Color = Color.White,
+    /**
      * The mouth of the voice being heard right now: open, wide, round, each
      * 0..1 (docs/LIPSYNC.md). Null when no real voice is playing - a typed
      * answer, Quiet mode, an answer kept on screen - and then the animals
@@ -878,8 +994,27 @@ const val CALM_MOTION_RATE = 2f / 3f
 /** The states a playing voice shows as SPEAKING (the desktop's LIP_TALKS_OVER). */
 private val TALKS_OVER = setOf(FaceState.IDLE, FaceState.THINKING, FaceState.STANDBY, FaceState.BANKED)
 
-/** How long after the voice stops that still counts (the desktop's LIP_STATE_HOLD_S). */
-private const val VOICE_STATE_HOLD_S = 0.6f
+/**
+ * How long after the voice stops that still counts (the desktop's
+ * LIP_STATE_HOLD_S). Two seconds: long enough to cover the pause between
+ * two spoken sentences, so an animal does not drop out of speaking and
+ * back in again at every full stop (measured: 34 such flips in ten minutes
+ * of talk at 0.6 s, none at 2).
+ */
+internal const val VOICE_STATE_HOLD_S = 2.0f
+
+/** Seconds an option weight (calm, serious, still) takes to ease fully on or off. */
+private const val OPTION_EASE_S = 1.0f
+
+/** Seconds the Zs take to fade out when the link drops (or back in) - the desktop's ZS_FADE_S. */
+private const val ZS_FADE_S = 0.5f
+
+/**
+ * How early a resting frame may arrive and still be drawn - the desktop's
+ * dueFrame's 0.002. Without it, a frame a hair short of its step (vsync or
+ * timer jitter) waited a whole extra step, halving the rate now and then.
+ */
+internal const val PACE_SLACK_S = 0.002f
 
 class FaceHost {
 
@@ -898,7 +1033,13 @@ class FaceHost {
      */
     private val seed = (0..9_999).random()
 
-    private var t = 0f
+    /**
+     * The real clock, in seconds. Accumulated in a Double and handed on as
+     * [t], a Float, kept small by [wrapClocks] - see [FaceClock] for why a
+     * Float accumulator jittered after a day on screen and froze after a few.
+     */
+    private var clock = 0.0
+    private val t: Float get() = clock.toFloat()
 
     /**
      * The clock handed to faces as [FaceFrame.t]. The same as [t] unless calm
@@ -912,10 +1053,11 @@ class FaceHost {
      * comment in [advance] gives - so turning calm on or off mid-flight is a
      * change of speed, not a jump.
      */
-    private var motionT = 0f
+    private var motionT = 0.0
     private var calm = false
-    private var angle = 0f
-    private var tableAngle = 0f
+    // Double for the same reason as [clock]; handed on as Floats.
+    private var angle = 0.0
+    private var tableAngle = 0.0
     private var rate = 1f
     private var rateTarget = 1f
 
@@ -942,6 +1084,19 @@ class FaceHost {
     private var prevAmp = 0f
     private var prevAmp2 = 0f
     private var lastDrive = 0f
+    // Every change the animals may still be settling from, newest first (a
+    // new list at each change, never per frame - see FaceFrame.past).
+    private var past: List<CritterPose.Change> = emptyList()
+
+    // The option weights before and after easing (FaceFrame.calmW...).
+    private var calmRamp = 0f
+    private var seriousRamp = 0f
+    private var stillRamp = 0f
+    // The Zs' weight (FaceFrame.zsW), eased; starts shown.
+    private var zsRamp = 1f
+    // FaceFrame.awakeDim: the dim standby's is laid over (DimRule.awakeAfter).
+    private var awakeDim = 1f
+    private var zsTint: Color = Color.White
 
     // The voice's mouth this frame (see FaceFrame.mouth); meaningful only
     // while `voiced`.
@@ -969,6 +1124,7 @@ class FaceHost {
         prevGap = t - changedAt
         prevAmp2 = prevAmp
         prevAmp = lastDrive
+        past = (listOf(CritterPose.Change(state, t - changedAt, lastDrive)) + past).take(PAST_MAX)
         prevState = state
         state = next
         changedAt = t
@@ -1008,6 +1164,46 @@ class FaceHost {
     }
 
     /**
+     * The frame loop is starting again - the screen came back on, or the app
+     * came back to the front - so the face was not on screen a moment ago.
+     * That makes this the unseen moment to bring the clocks back toward zero
+     * (see [FaceClock]), once they have run past [FaceClock.SOFT_S].
+     */
+    fun onLoopStart() = wrapClocks(FaceClock.SOFT_S, FaceClock.ANGLE_SOFT)
+
+    /**
+     * Takes whole multiples of [FaceClock.WRAP_S] off the time clocks and of
+     * [FaceClock.ANGLE_WRAP] off the angles, once each passes its threshold.
+     *
+     * Every moment the host remembers on the real clock (when the state
+     * changed, the tap, the voice, the approval clock) and the flash
+     * governor's and strobe budget's memories move back with it, so every
+     * "how long since" the face reads is unchanged by a wrap.
+     */
+    private fun wrapClocks(after: Double, angleAfter: Double) {
+        val w = FaceClock.excess(clock, FaceClock.WRAP_S, after)
+        if (w != 0.0) {
+            clock -= w
+            // A whole multiple of 4096 well under 2^24: exact as a Float, so
+            // each difference below is exactly what it was.
+            val by = w.toFloat()
+            changedAt -= by
+            heardAt -= by
+            lastVoiceAt -= by
+            clockStartedAt -= by
+            tapStartedAt -= by
+            governor.shift(by)
+            strobeBudget.shift(by)
+        }
+        motionT -= FaceClock.excess(motionT, FaceClock.WRAP_S, after)
+        angle -= FaceClock.excess(angle, FaceClock.ANGLE_WRAP, angleAfter)
+        tableAngle -= FaceClock.excess(tableAngle, FaceClock.ANGLE_WRAP, angleAfter)
+    }
+
+    /** For the tests: the real clock, the face's clock and the two angles, unrounded. */
+    internal fun clocksForTest(): DoubleArray = doubleArrayOf(clock, motionT, angle, tableAngle)
+
+    /**
      * @return true when this frame should be drawn. False means the state's
      *   frame rate says skip — the dt is kept and handed to the next draw.
      */
@@ -1033,6 +1229,18 @@ class FaceHost {
          * Copied out, never kept: the caller refills the same array.
          */
         voiceMouth: FloatArray? = null,
+        /** A serious moment - see FaceView's `serious`. Eased here. */
+        serious: Boolean = false,
+        /** The "Still" option - see FaceView's `stillMotion`. Eased here. */
+        still: Boolean = false,
+        /** Jarvis cannot be reached - see FaceView's `offline`. Fades the Zs out. */
+        offline: Boolean = false,
+        /**
+         * How an ANIMAL rests (FaceQuality.pace): with it, an animal's
+         * resting rate is [AnimalPace.restFps] rather than [Spec.fpsFor].
+         * Null - every caller but the live frame loop - keeps the spec's.
+         */
+        pace: RestPace? = null,
     ): Boolean {
         // While Jarvis's voice is actually playing - and for a moment after -
         // a resting or busy face shows SPEAKING whatever the state says: the
@@ -1052,19 +1260,32 @@ class FaceHost {
         // Exactly 1 when calm is off and speed is 1, so a default face
         // advances exactly as it always has.
         val motionK = if (calm) CALM_MOTION_RATE * min(speedK, 1f) else speedK
-        t += dtIn
-        motionT += dtIn * motionK
+        clock += dtIn
+        motionT += (dtIn * motionK).toDouble()
         accum += dtIn
+        // The animals' option weights ramp at one full switch per
+        // OPTION_EASE_S of real time, every advance (drawn or not), so a
+        // switch is never a snap whatever the frame rate.
+        val step = dtIn / OPTION_EASE_S
+        calmRamp = ramp(calmRamp, calm, step)
+        seriousRamp = ramp(seriousRamp, serious, step)
+        stillRamp = ramp(stillRamp, still, step)
+        zsRamp = ZsRule.step(zsRamp, offline, state == FaceState.STANDBY, dtIn / ZS_FADE_S)
+        awakeDim = DimRule.awakeAfter(awakeDim, state)
+        zsTint = lift(bindings.of(state).tint ?: Palette.NEUTRAL_3, CritterPose.Zs.LIGHTEN)
+        // Seen only by a face left on screen for about nine hours without a
+        // break - otherwise the loop's restart has already done it, unseen.
+        wrapClocks(FaceClock.HARD_S, FaceClock.ANGLE_HARD)
 
         val tf = Spec.transformFor(state)
 
         // Frame pacing. The first 600 ms after any change and any live tap run
-        // at full rate so no transition stutters.
-        val fps = Spec.fpsFor(state)
-        val settled = (t - changedAt) > Spec.FULL_RATE_WINDOW_S &&
-            (t - tapStartedAt) > Spec.FULL_RATE_WINDOW_S
-        if (fps > 0 && settled) {
-            if (accum < 1f / fps) return false
+        // at full rate so no transition stutters. PACE_SLACK_S: a frame that
+        // arrives a hair early (vsync or timer jitter) is not put off a whole
+        // extra step - which halved the rate now and then.
+        val fps = restFps(face, pace)
+        if (fps > 0 && settled()) {
+            if (accum < 1f / fps - PACE_SLACK_S) return false
         }
         val dt = accum
         accum = 0f
@@ -1076,10 +1297,15 @@ class FaceHost {
         if (voiceIn != null) {
             lastVoiceAt = t
             voice = smooth(voice, voiceIn.coerceIn(0f, 1f), dt, Spec.VOICE_ATTACK_S, Spec.VOICE_RELEASE_S)
-        } else if (state == FaceState.SPEAKING && (t - lastVoiceAt) > Spec.SPEECH_FALLBACK_AFTER_S) {
+        } else if (state == FaceState.SPEAKING && (t - lastVoiceAt) > Spec.SPEECH_FALLBACK_AFTER_S &&
+            face !is CritterFace
+        ) {
             // Speaking is never frozen, even before TTS is wired: a
             // speech-shaped stand-in keeps the face moving. It is not his
-            // voice, but it is not a still picture either.
+            // voice, but it is not a still picture either. Not for an
+            // animal: a made-up 4 Hz pulse of its whole body and orb, with no
+            // sound behind it, read as a twitch - with no real voice it
+            // talks with its head and eyes (its pose), and the pulse stays 0.
             voice = smooth(voice, syntheticVoice(t), dt, Spec.VOICE_ATTACK_S, Spec.VOICE_RELEASE_S)
         } else {
             voice = smooth(voice, 0f, dt, Spec.VOICE_ATTACK_S, Spec.VOICE_RELEASE_S)
@@ -1114,8 +1340,8 @@ class FaceHost {
         rate = smooth(rate, rateTarget, dt, Spec.RATE_EASE_S, Spec.RATE_EASE_S)
         val motion = tf.borrow
         val faceSpeed = face.speedFor(motion)
-        angle += dt * rate * tf.dir * faceSpeed * motionK
-        tableAngle += dt * rate * faceSpeed * motionK
+        angle += (dt * rate * tf.dir * faceSpeed * motionK).toDouble()
+        tableAngle += (dt * rate * faceSpeed * motionK).toDouble()
 
         // Colour: resolve the target, then crossfade from what is on screen.
         val target = resolve(bindings.of(state), t, drive, governor, strobeBudget, seed)
@@ -1143,6 +1369,25 @@ class FaceHost {
         }
 
         return true
+    }
+
+    /** Past the full-rate window after the last change of state and the last tap. */
+    private fun settled(): Boolean =
+        (t - changedAt) > Spec.FULL_RATE_WINDOW_S && (t - tapStartedAt) > Spec.FULL_RATE_WINDOW_S
+
+    /**
+     * The resting rate for the state on screen now, in frames a second; 0 for
+     * every frame. An animal with a [pace] follows [AnimalPace.restFps] -
+     * busy while one of its idle happenings plays, unless "Still" or calm
+     * motion has taken those away - and every other face [Spec.fpsFor]. Also
+     * 0 during the full-rate window after a change or a tap, so the frame
+     * loop draws those at the display's rate too.
+     */
+    fun restFps(face: Face, pace: RestPace?): Int {
+        if (!settled()) return 0
+        if (pace == null || face !is CritterFace) return Spec.fpsFor(state)
+        val busy = !calm && stillRamp < 0.99f && face.busyAt(state, motionT.toFloat())
+        return AnimalPace.restFps(state, pace.target, pace.headroom, busy)
     }
 
     fun snapshot(): FaceFrame {
@@ -1203,12 +1448,13 @@ class FaceHost {
         return FaceFrame(
             state = state,
             swatch = colShown,
-            angle = angle,
-            tableAngle = tableAngle,
+            angle = angle.toFloat(),
+            tableAngle = tableAngle.toFloat(),
             motion = tf.borrow,
             amp = drive,
             speechPush = if (state == FaceState.SPEAKING) voice else mic,
             dim = tf.dim,
+            awakeDim = awakeDim,
             overlay = tf.overlay,
             clockFrac = clockFrac,
             hitchPhase = sinceChange,
@@ -1218,7 +1464,7 @@ class FaceHost {
             ringFrac = ringFrac,
             yaw = yaw,
             pitch = pitch,
-            t = motionT,
+            t = motionT.toFloat(),
             calm = calm,
             prevMotion = Spec.transformFor(prevState).borrow,
             prevState = prevState,
@@ -1226,6 +1472,12 @@ class FaceHost {
             prevGap = prevGap,
             prevAmp = prevAmp,
             prevAmp2 = prevAmp2,
+            past = past,
+            calmW = smoothstep(calmRamp),
+            seriousW = smoothstep(seriousRamp),
+            stillW = smoothstep(stillRamp),
+            zsW = smoothstep(zsRamp),
+            zsTint = zsTint,
             // A new three-float array only while a voice plays: a frame is
             // an immutable snapshot, and the draw may still hold the last.
             mouth = if (voiced) floatArrayOf(mouthOpen, mouthWide, mouthRound) else null,
@@ -1244,6 +1496,13 @@ class FaceHost {
 }
 
 private fun smoothstep(x: Float) = x * x * (3f - 2f * x)
+
+/** [from] moved [step] toward 1 (on) or 0 (off). */
+private fun ramp(from: Float, on: Boolean, step: Float): Float =
+    if (on) min(1f, from + step) else max(0f, from - step)
+
+/** The most past changes kept for the animals (CritterPose looks back through six). */
+private const val PAST_MAX = 6
 
 /** 0..1, and NaN (a bad sample) as 0. */
 private fun unit(x: Float) = if (x.isNaN()) 0f else x.coerceIn(0f, 1f)
@@ -1288,6 +1547,10 @@ private fun DrawScope.drawFace(
     // keeps that single-ground guarantee while letting the ground itself be
     // themed, since a theme applies to every face identically or not at all.
     drawRect(background, size = Size(size.width, size.height))
+    // The sun, moon and weather behind an animal, when the owner has switched
+    // them on (the owner's decisions of 2026-09-28; SkyDraw.kt). Before the
+    // animal, so it is in front; never on a picker's still thumbnail.
+    if (face is CritterFace && !f.still) drawSkyBehind(face, f, background)
 
     val hot = dimmed(f.swatch.a, f.dim, background)
     val cool = dimmed(f.swatch.b, f.dim, background)
@@ -1296,10 +1559,17 @@ private fun DrawScope.drawFace(
     // Positional, not luminance, so it is not a flash. Off under calm motion:
     // it is a jolt on every loud syllable. The brightness lift just below is
     // not motion and stays.
-    val push = if (f.calm) 1f else 1f + Spec.SPEECH_SCALE * f.speechPush
+    // Not for an animal either: its mouth carries the speech now, and the
+    // whole animal swelling two or three times a second read as bouncy, not
+    // calm (the owner asked for calm).
+    val critter = face is CritterFace
+    val push = if (f.calm || critter) 1f else 1f + Spec.SPEECH_SCALE * f.speechPush
     val lifted = lift(hot, Spec.SPEECH_BRIGHTNESS * f.speechPush)
+    // The error shake is not for an animal: an error shows a STILL, concerned
+    // look (the owner's call, 2026-09-28).
+    val shake = if (critter) Offset.Zero else f.shake
 
-    translate(f.flinch.x + f.shake.x, f.flinch.y + f.shake.y) {
+    translate(f.flinch.x + shake.x, f.flinch.y + shake.y) {
         // A cached-gradient halo rather than a blur. A real blur over a canvas
         // face was measured at 3-6 ms on a mid-range phone; this is one draw.
         if (glow != null && glowScale > 0f && Spec.isActive(f.state)) {
@@ -1321,7 +1591,21 @@ private fun DrawScope.drawFace(
             )
         }
 
-        face.draw(this, cx, cy, radius * push, lifted, cool, f)
+        if (face is CritterFace) {
+            // An animal is dimmed as a whole picture (DimRule): its fur keeps
+            // its own colours, so dimming only the two state colours left a
+            // standby panda as bright as an idle one. It gets the UNdimmed
+            // orb and rim colours for the same reason - the picture's dim
+            // covers them, and dimming them first as well would be dim
+            // squared (banked at 0.2, not 0.45).
+            face.drawDimmed(
+                this, cx, cy, radius * push,
+                lift(f.swatch.a, Spec.SPEECH_BRIGHTNESS * f.speechPush), f.swatch.b, f,
+                background,
+            )
+        } else {
+            face.draw(this, cx, cy, radius * push, lifted, cool, f)
+        }
 
         when (f.overlay) {
             Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, w, lifted, f)
@@ -1409,6 +1693,45 @@ private fun DrawScope.drawApprovalClock(
         )
     }
 }
+
+/**
+ * The offline ring: Jarvis cannot be reached (FaceView's `offline`).
+ *
+ * One thin, hollow circle just outside the face - at [OFFLINE_RING_R] of the
+ * kit's overlay radius, so outside the face's own rim (0.44 of the box) and
+ * outside the approval clock (0.95) and the notch ring (0.93) too. Drawn
+ * after, and outside, the shake and flinch, and never animated: it is a
+ * standing fact, not an event, and nothing about it flashes. The echo of the
+ * desktop tray's hollow icon for the same news.
+ *
+ * @param w the face's box, its shorter side - see [OVERLAY_R_FRAC].
+ */
+private fun DrawScope.drawOfflineRing(w: Float, colour: Color) {
+    drawCircle(
+        colour,
+        w * OVERLAY_R_FRAC * OFFLINE_RING_R,
+        Offset(size.width / 2f, size.height / 2f),
+        style = Stroke(width = max(1.5f, w * OFFLINE_RING_W)),
+    )
+}
+
+/** The offline ring's radius, as a share of the overlay radius. */
+private const val OFFLINE_RING_R = 1.03f
+
+/** The offline ring's line, as a share of the face's box: thin. */
+private const val OFFLINE_RING_W = 0.008f
+
+/**
+ * The offline ring's colour: [state]'s own bound colour (the neutral grey,
+ * for standby, unless the owner bound another), blended toward the ground by
+ * that state's `dim`, fully opaque. A fixed colour, not the pattern's colour
+ * of the moment - standby BREATHES, and a ring that breathed would be a ring
+ * that moved. The desktop's drawOfflineRing uses exactly this rule since
+ * 2026-09-28 (it had used the pattern's second colour at 60% opacity, which
+ * breathed and measured about 1.1:1 against the ground; this is about 1.6:1).
+ */
+private fun offlineRingColour(bindings: Bindings, state: FaceState, background: Color): Color =
+    dimmed(bindings.of(state).tint ?: Palette.NEUTRAL_3, Spec.transformFor(state).dim, background)
 
 /**
  * The rim ring drawn full, with one notch per waiting item.

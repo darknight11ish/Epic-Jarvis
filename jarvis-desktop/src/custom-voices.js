@@ -17,7 +17,9 @@
  * own voices the built-in one uses is the PC's `speaker` block, the same
  * shape: no card either way. "Voice follows the face" (an animal face
  * speaks in its own built-in voice) is the PC's `face_voice` block, an
- * on/off switch: no card either way.
+ * on/off switch: no card either way. Under it, each animal's own voice,
+ * pitch and pace (`face_voice.animals`), with "Try it" and "Reset to its
+ * own voice": no card either way.
  *
  * The server's sentences (`why`, `error`, `fallback`) are written for the
  * owner and are shown as they are, first letter raised.
@@ -113,6 +115,96 @@ export function faceVoiceView(status) {
     line: String(fv.line || ""),
   };
 }
+
+/** The pitch range when the PC does not say: 3 steps deeper to 4 higher. */
+export const PITCH_RANGE = Object.freeze({ min: -3, max: 4, step: 0.5 });
+
+/**
+ * A pitch in plain words, for the slider's value and for a screen reader:
+ * "2 steps higher", "1.5 steps deeper", "Normal pitch". The same words the
+ * PC uses in its own lines (jarvis_voices.pitch_words).
+ */
+export function pitchWords(semis) {
+  const s = num(semis);
+  if (Math.abs(s) < 1e-9) return "Normal pitch";
+  const n = String(Math.abs(s));
+  return `${n} step${n === "1" ? "" : "s"} ${s > 0 ? "higher" : "deeper"}`;
+}
+
+/** The slider's short value: "+2", "-1.5", "0". */
+export function pitchShort(semis) {
+  const s = num(semis);
+  return s > 0 ? `+${s}` : String(s);
+}
+
+/**
+ * Each animal's voice, under "Voice follows the face": `{show, title,
+ * detail, voices: [{id, label}], paces: [{id, label}], pitch: {min, max,
+ * step}, animals: [{face, name, speaker, semitones, pace, changed, line}]}`
+ * from the PC's `face_voice` block. Every choice and word is the PC's; no
+ * card either way. `show` is false on a PC too old to have it.
+ */
+export function animalVoicesView(status) {
+  const fv = obj(obj(status).face_voice);
+  const ch = obj(fv.animal_choices);
+  const pick = (list) => (Array.isArray(list) ? list : [])
+    .filter((c) => c && typeof c.id === "string" && c.id && typeof c.label === "string" && c.label)
+    .map((c) => ({ id: c.id, label: c.label }));
+  const voices = pick(ch.voices);
+  const paces = pick(ch.paces);
+  const p = obj(ch.pitch);
+  const fin = (v, d) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+  const pitch = {
+    min: fin(p.min, PITCH_RANGE.min),
+    max: fin(p.max, PITCH_RANGE.max),
+    step: fin(p.step, PITCH_RANGE.step) > 0 ? fin(p.step, PITCH_RANGE.step) : PITCH_RANGE.step,
+  };
+  const animals = (Array.isArray(fv.animals) ? fv.animals : [])
+    .filter((a) => a && typeof a.face === "string" && a.face && typeof a.name === "string"
+      && typeof a.speaker === "string" && typeof a.pace === "string"
+      && typeof a.semitones === "number" && Number.isFinite(a.semitones))
+    .map((a) => ({
+      face: a.face,
+      name: a.name,
+      speaker: a.speaker,
+      semitones: a.semitones,
+      pace: a.pace,
+      changed: yes(a.changed),
+      line: String(a.line || ""),
+    }));
+  if (!animals.length || !voices.length || !paces.length) {
+    return { show: false, title: "", detail: "", voices: [], paces: [], pitch, animals: [] };
+  }
+  return {
+    show: true,
+    title: String(fv.animals_title || "Each animal's voice"),
+    detail: String(fv.animals_detail || ""),
+    voices,
+    paces,
+    pitch,
+    animals,
+  };
+}
+
+/*
+ * "Try it" for one animal, in words. The phone says exactly the same
+ * (CustomVoices.kt `TRY_*`, held together by tests/custom-voices.mjs).
+ * The sound plays in the window that asked for it - Settings here - and
+ * never over Jarvis: it is refused while Jarvis is talking or listening,
+ * and stopped the moment a question or an answer starts.
+ */
+/** While the PC makes the sound. */
+export const TRY_ASKING = "Asking the PC for the sound…";
+/** Refused: Jarvis is talking, or listening to the owner. */
+export const TRY_BUSY = "Jarvis is busy talking or listening. Try it again in a moment.";
+/** Cut short: a question or an answer started while it played. */
+export const TRY_STOPPED = "Stopped, because Jarvis is talking or listening now.";
+/** A PC whose backend has no "Try it" route yet (said by the Rust, voice_training.rs). */
+export const TRY_UPDATE = "Your PC cannot play an animal's voice yet. Run the patch script on the PC first.";
+/** While it plays. */
+export const tryPlaying = (name) => `Playing the ${name}'s voice.`;
+/** Once it has played to the end. */
+export const tryDone = (name) => `That was the ${name}'s voice.`;
 
 /** Which voice Jarvis speaks in, and what makes the next sentence. */
 export function speakingLine(status) {

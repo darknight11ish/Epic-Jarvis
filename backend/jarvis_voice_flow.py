@@ -341,21 +341,41 @@ def _reference_sources() -> list:
                          else float(S._cfg("tts_speed", 1.0) or 1.0))
                 semis = 0.0
 
-            def load_builtin(S=S, sid=sid, speed=speed, semis=semis):
-                engine = S._tts_engine()
-                if engine is None:
-                    return None
-                if hasattr(S, "kokoro_speak"):
-                    got = S.kokoro_speak(engine, REFERENCE_TEXT, int(sid), float(speed), semis)
-                    if got is None:
+            def builtin_loader(sid, speed, semis, S=S):
+                def load_builtin():
+                    engine = S._tts_engine()
+                    if engine is None:
                         return None
-                    return np.asarray(got[0], dtype=np.float32), int(got[1])
-                audio = engine.generate(REFERENCE_TEXT, sid=int(sid), speed=float(speed))
-                if audio is None or len(audio.samples) == 0:
-                    return None
-                return np.asarray(audio.samples, dtype=np.float32), int(audio.sample_rate)
+                    if hasattr(S, "kokoro_speak"):
+                        got = S.kokoro_speak(engine, REFERENCE_TEXT, int(sid), float(speed),
+                                             semis)
+                        if got is None:
+                            return None
+                        return np.asarray(got[0], dtype=np.float32), int(got[1])
+                    audio = engine.generate(REFERENCE_TEXT, sid=int(sid), speed=float(speed))
+                    if audio is None or len(audio.samples) == 0:
+                        return None
+                    return np.asarray(audio.samples, dtype=np.float32), int(audio.sample_rate)
+                return load_builtin
             out.append((("builtin", str(sid), size, str(speed), str(semis)),
-                        "the built-in voice", load_builtin))
+                        "the built-in voice", builtin_loader(sid, speed, semis)))
+            # A crisis answer is said in the PLAIN built-in voice, whatever
+            # face is showing (jarvis_speech.plain_voice_now; the owner's
+            # decision of 2026-09-28) - so while one may be being spoken,
+            # talking over it is checked against that voice too, not only
+            # the animal's it no longer sounds like. Only then: an extra
+            # voice to compare against is one more way for the owner's own
+            # words to be taken for Jarvis's.
+            try:
+                plain_now = (hasattr(S, "plain_voice_now") and hasattr(S, "tts_voice")
+                             and bool(S.plain_voice_now()))
+                p_sid, p_speed, p_semis = S.tts_voice(plain=True) if plain_now else (
+                    sid, speed, semis)
+            except Exception:
+                p_sid, p_speed, p_semis = sid, speed, semis
+            if (str(p_sid), str(p_speed), str(p_semis)) != (str(sid), str(speed), str(semis)):
+                out.append((("builtin", str(p_sid), size, str(p_speed), str(p_semis)),
+                            "the built-in voice", builtin_loader(p_sid, p_speed, p_semis)))
     return out
 
 
@@ -513,7 +533,7 @@ def note_heard(t0: float, steps: dict, *, source: str, mic: str, waited_ms=None,
         row = {k: None for k in FIELDS}
         row.update({"at": int(time.time()),
                     "mic": mic if mic in ("phone", "desktop") else "",
-                    "source": source if source in ("push_to_talk", "wake_word") else "",
+                    "source": source if source in ("push_to_talk", "wake_word", "live") else "",
                     "cold": bool(cold), "end_wait_ms": clean_wait(waited_ms),
                     "turn_ms": smart, "heard_ms": _ms((now - t0) * 1000.0)})
         for k in ("vad", "wake", "owner_check", "stt"):

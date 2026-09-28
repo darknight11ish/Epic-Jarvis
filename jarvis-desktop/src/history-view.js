@@ -25,6 +25,7 @@
  *
  * @module history-view
  */
+import { isSideTalk, SEEN } from "./live-rules.js";
 
 /** Section 5's words. The phone says the same (JARVIS-API.md section 18). */
 export const SWITCH_LABEL = "Keep chat history on this PC";
@@ -265,7 +266,10 @@ export function readConversation(answer) {
       .filter((t) => t && (t.role === "user" || t.role === "assistant"))
       .map((t) => ({
         role: t.role,
-        text: text(t.text),
+        // Jarvis Live's side-talk marker, in a chat kept before side remarks
+        // stopped being kept at all (the owner's answer of 2026-09-28): shown
+        // as "(not for Jarvis)", never the raw marker (live-rules.js).
+        text: t.role === "assistant" && isSideTalk(text(t.text)) ? SEEN.not_for_me : text(t.text),
         at: num(t.at),
         // Only user turns carry one. Missing on a user turn is "unknown".
         provenance: t.role === "user" ? text(t.provenance) || "unknown" : "",

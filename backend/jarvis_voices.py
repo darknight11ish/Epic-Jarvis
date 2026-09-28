@@ -401,7 +401,7 @@ SPEAKER_LABEL = dict(KOKORO_VOICES)
 SPEAKER_DEFAULT = "0"
 SPEAKER_TITLE = "Jarvis's built-in voice"
 SPEAKER_DETAIL = ("Which of Kokoro's voices Jarvis's built-in voice uses - never a voice "
-                  "you recorded, which stays under \"Voices\" above.")
+                  "you recorded, which stays under \"Voices\" below.")
 
 
 def speaker() -> int:
@@ -493,19 +493,59 @@ def set_speaker(body) -> tuple:
 # descriptions, not by ear (no Kokoro files where this was written). Change
 # a row here; nothing else needs to know. The pitch is capped at MAX_SEMITONES:
 # much above +3 turns small-and-cute into a chipmunk.
+#
+# EACH ANIMAL'S VOICE, THE OWNER'S OWN (2026-09-28). The rows below are only
+# where each animal starts: for each one the owner may pick any of the
+# built-in voices (KOKORO_VOICES), a pitch from MIN_SEMITONES (deeper) to
+# MAX_SEMITONES (higher) in PITCH_STEP steps, and a pace (the speaking-speed
+# words: Slower / Normal / Faster, still times the owner's own speed) - POST
+# /api/voice/voices/face_animal, kept in voices/state.json `face_animals`,
+# only for an animal whose choice differs from its row ("Reset to its own
+# voice" takes it out). NO CARD EITHER WAY, the switch's own reason. "Try
+# it" (POST /api/voice/voices/face_animal/try) plays a short fixed line in
+# that animal's voice as it is now - made here, sent to the app that asked,
+# kept nowhere. The mouths keep matching whatever is chosen: jarvis_mouth
+# divides its times by the same pitch factor the sound is played at
+# (docs/LIPSYNC.md).
 
-#: face id -> (its name, Kokoro voice, pace, pitch rise in semitones).
+#: face id -> (its name, Kokoro voice, pace, pitch rise in semitones) - where
+#: each animal STARTS; the owner's own choice per animal is in state.json.
 FACE_VOICES = {
     "redpanda": {"name": "Red Panda", "speaker": "1", "speed": 1.0, "semitones": 2.0},
     "pygmyowl": {"name": "Pygmy Owl", "speaker": "2", "speed": 0.85, "semitones": 1.0},
-    "seaotter": {"name": "Sea Otter", "speaker": "4", "speed": 1.15, "semitones": 3.0},
+    # Not "4" ("Sky"): the owner's 2026-09-28 decision - its name matches the
+    # voice OpenAI withdrew in 2024 over a likeness complaint. Sarah, with the
+    # same playful lift and pace the otter had.
+    "seaotter": {"name": "Sea Otter", "speaker": "3", "speed": 1.15, "semitones": 3.0},
+    # The fourth animal (owner, 2026-09-28): "a male voice, a touch
+    # energetic". Michael, one step higher at normal pace. Made with the real
+    # Kokoro model (kokoro-en-v0_19) and MEASURED, not judged by ear: his
+    # middle pitch goes from about 123 to 132 Hz - still plainly a man's
+    # voice, a little brighter, the same kind of lift that makes the other
+    # three sound small - and his pitch moves over a slightly wider range.
+    # ("Faster" was made too: about a tenth quicker, same pitch.)
+    "monkey": {"name": "Monkey", "speaker": "6", "speed": 1.0, "semitones": 1.0},
 }
+#: The pitch the owner may pick for an animal, in semitones ("steps" on
+#: screen): 3 deeper to 4 higher, in half steps.
+MIN_SEMITONES = -3.0
 MAX_SEMITONES = 4.0
-FACE_VOICE_DEFAULT = True
+PITCH_STEP = 0.5
+#: Off until the owner turns it on (the owner's 2026-09-28 decision: the
+#: switch stays, but starts off). Turning it on or off never asks first.
+FACE_VOICE_DEFAULT = False
 FACE_VOICE_TITLE = "Voice follows the face"
 FACE_VOICE_DETAIL = ("With an animal face showing, Jarvis's built-in voice becomes that "
-                     "animal's: its own voice, pace and a slightly higher pitch. A voice you "
-                     "recorded still wins. It changes nothing else, so it never asks first.")
+                     "animal's: its own voice, pace and pitch, which you can change for each "
+                     "animal. A voice you recorded still wins. It changes nothing else, so it "
+                     "never asks first.")
+ANIMALS_TITLE = "Each animal's voice"
+ANIMALS_DETAIL = ("Pick a voice, a pitch and a pace for each animal. Its mouth moves with "
+                  "whatever you pick. It changes nothing else, so it never asks first.")
+PACE_LABEL = {"slower": "Slower", "normal": "Normal", "faster": "Faster"}
+#: "Try it": the one line an animal says. Fixed here - an app never sends
+#: words to be spoken this way.
+TRY_LINE = "Hello, it's Jarvis. This is how I sound as the {name}."
 
 
 def appearance_face() -> str:
@@ -523,21 +563,78 @@ def face_voice_on() -> bool:
     return FACE_VOICE_DEFAULT if v is None else bool(v)
 
 
+def _pace_of(value: float) -> str:
+    """The pace word for a row's number (FACE_VOICES `speed`)."""
+    return min(SPEEDS, key=lambda kv: abs(kv[1] - float(value)))[0]
+
+
+def _animal_own(face: str) -> dict:
+    """Where an animal starts: {"speaker", "semitones", "pace"} from its row."""
+    row = FACE_VOICES[face]
+    return {"speaker": row["speaker"], "semitones": float(row["semitones"]),
+            "pace": _pace_of(row["speed"])}
+
+
+def _semitones_ok(v) -> Optional[float]:
+    """`v` as a pitch the owner may pick (a number, MIN..MAX, a whole number
+    of PITCH_STEPs), else None."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    v = float(v)
+    if not math.isfinite(v) or not MIN_SEMITONES <= v <= MAX_SEMITONES:
+        return None
+    steps = v / PITCH_STEP
+    if abs(steps - round(steps)) > 1e-9:
+        return None
+    return round(steps) * PITCH_STEP + 0.0  # + 0.0: never a "-0.0" in state.json
+
+
+def _clean_animals(raw) -> dict:
+    """state.json `face_animals`, every entry checked; a damaged one is no
+    choice (the animal's own voice) - the safe reading."""
+    out = {}
+    if not isinstance(raw, dict):
+        return out
+    for face, v in raw.items():
+        if face not in FACE_VOICES or not isinstance(v, dict):
+            continue
+        sk, pace = v.get("speaker"), v.get("pace")
+        semis = _semitones_ok(v.get("semitones"))
+        if isinstance(sk, str) and sk in SPEAKER_LABEL and isinstance(pace, str) \
+                and pace in SPEED_VALUE and semis is not None:
+            out[face] = {"speaker": sk, "semitones": semis, "pace": pace}
+    return out
+
+
+def animal_voice(face: str) -> Optional[dict]:
+    """One animal's voice as it is now - {"face", "name", "speaker", "speed",
+    "semitones", "pace", "changed"} - the owner's choice for it, else its
+    own row; None for a face that is not an animal. `speed` is the animal's
+    pace only (builtin_voice() multiplies in the owner's speaking speed)."""
+    row = FACE_VOICES.get(face)
+    if row is None:
+        return None
+    own = _animal_own(face)
+    chosen = _read_state()["face_animals"].get(face)
+    use = chosen or own
+    return {"face": face, "name": row["name"], "speaker": use["speaker"],
+            "speed": SPEED_VALUE[use["pace"]], "semitones": float(use["semitones"]),
+            "pace": use["pace"], "changed": chosen is not None and chosen != own}
+
+
 def face_voice() -> Optional[dict]:
-    """The animal voice the built-in voice speaks in now - {"face", "name",
-    "speaker", "speed", "semitones"} - or None: the switch is off, or the
-    face showing is not an animal."""
+    """The animal voice the built-in voice speaks in now - animal_voice()'s
+    shape - or None: the switch is off, or the face showing is not an
+    animal."""
     if not face_voice_on():
         return None
-    face = appearance_face()
-    row = FACE_VOICES.get(face)
-    return dict(row, face=face) if row else None
+    return animal_voice(appearance_face())
 
 
 def builtin_voice() -> tuple:
-    """(Kokoro voice number, speed, pitch rise in semitones, face id or "")
-    for the built-in voice - THE one place jarvis_speech (tts_speaker,
-    tts_speed, tts_pitch) reads it. Never raises."""
+    """(Kokoro voice number, speed, pitch in semitones - below 0 is deeper -,
+    face id or "") for the built-in voice - THE one place jarvis_speech
+    (tts_voice, tts_speaker, tts_speed, tts_pitch) reads it. Never raises."""
     try:
         fv = face_voice()
     except Exception:
@@ -545,16 +642,49 @@ def builtin_voice() -> tuple:
     if fv is None:
         return speaker(), speed(), 0.0, ""
     pace = min(2.0, max(0.5, float(fv["speed"]) * speed()))
-    semis = min(MAX_SEMITONES, max(0.0, float(fv["semitones"])))
+    semis = min(MAX_SEMITONES, max(MIN_SEMITONES, float(fv["semitones"])))
     return int(fv["speaker"]), pace, semis, fv["face"]
 
 
+def _voice_name(sid: str) -> str:
+    """"Bella" for a named voice, else its whole label ("American (female)")."""
+    label = SPEAKER_LABEL.get(sid, f"voice {sid}")
+    return label.split(" - ")[-1]
+
+
+def pitch_words(semis: float) -> str:
+    """"2 steps higher", "1.5 steps deeper", "normal pitch"."""
+    if abs(semis) < 1e-9:
+        return "normal pitch"
+    n = f"{abs(semis):g}"
+    return f"{n} step{'' if n == '1' else 's'} {'higher' if semis > 0 else 'deeper'}"
+
+
+def _pace_words(pace: str) -> str:
+    return {"slower": "a little slower", "faster": "a little faster"}.get(pace,
+                                                                         "at normal pace")
+
+
+def _animal_row(face: str) -> dict:
+    """One animal in GET /api/voice/voices `face_voice.animals`."""
+    av = animal_voice(face)
+    own = _animal_own(face)
+    return {"face": face, "name": av["name"], "speaker": av["speaker"],
+            "voice": _voice_name(av["speaker"]), "semitones": av["semitones"],
+            "pace": av["pace"], "changed": av["changed"],
+            "own": {"speaker": own["speaker"], "semitones": own["semitones"],
+                    "pace": own["pace"]},
+            "line": (f"{_voice_name(av['speaker'])}, {pitch_words(av['semitones'])}, "
+                     f"{_pace_words(av['pace'])}.")}
+
+
 def face_voice_view() -> dict:
-    """GET /api/voice/voices `face_voice`: the switch, and the one line both
-    apps show under it saying what is happening now."""
+    """GET /api/voice/voices `face_voice`: the switch, the one line both
+    apps show under it saying what is happening now, and each animal's
+    voice with the choices and words for changing it."""
     on = face_voice_on()
     face = appearance_face()
-    row = FACE_VOICES.get(face)
+    row = animal_voice(face)
     st = _read_state()
     # A recorded voice that cannot be used right now falls back to the
     # built-in voice - which is then the animal's. _predict() is what
@@ -569,7 +699,7 @@ def face_voice_view() -> dict:
     elif row is None:
         if (_config_dir() / "appearance.json").is_file():
             line = ("The face showing has no voice of its own. Choose the Red Panda, "
-                    "Pygmy Owl or Sea Otter face to hear one.")
+                    "Pygmy Owl, Sea Otter or Monkey face to hear one.")
         else:
             line = "No face is saved on this PC yet, so there is no animal voice to use."
     elif not builtin_speaks:
@@ -579,12 +709,19 @@ def face_voice_view() -> dict:
         line = (f"The voice you recorded cannot be used right now, so the {row['name']} "
                 f"speaks instead.")
     else:
-        line = (f"Speaking as the {row['name']}: "
-                f"{SPEAKER_LABEL[row['speaker']].split(' - ')[-1]}, a little higher.")
+        s = row["semitones"]
+        how = ", a little higher" if s > 0 else ", a little deeper" if s < 0 else ""
+        line = f"Speaking as the {row['name']}: {_voice_name(row['speaker'])}{how}."
     return {"enabled": on, "default": FACE_VOICE_DEFAULT, "face": face,
             "speaking": bool(on and row is not None and builtin_speaks),
             "name": row["name"] if row else "", "line": line,
-            "title": FACE_VOICE_TITLE, "detail": FACE_VOICE_DETAIL}
+            "title": FACE_VOICE_TITLE, "detail": FACE_VOICE_DETAIL,
+            "animals": [_animal_row(f) for f in FACE_VOICES],
+            "animals_title": ANIMALS_TITLE, "animals_detail": ANIMALS_DETAIL,
+            "animal_choices": {
+                "voices": [{"id": k, "label": v} for k, v in KOKORO_VOICES],
+                "paces": [{"id": k, "label": PACE_LABEL[k]} for k, _ in SPEEDS],
+                "pitch": {"min": MIN_SEMITONES, "max": MAX_SEMITONES, "step": PITCH_STEP}}}
 
 
 def set_face_voice(body) -> tuple:
@@ -603,6 +740,123 @@ def set_face_voice(body) -> tuple:
                  "message": ("Jarvis's voice now follows the face." if on else
                              "Jarvis's voice now stays the same whatever the face."),
                  "face_voice": face_voice_view()}
+
+
+_NO_ANIMAL = "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey"
+
+
+def set_face_animal(body) -> tuple:
+    """POST /api/voice/voices/face_animal - one animal's voice, at once, no
+    card either way (see above):
+
+        {"face": "redpanda", "speaker": "3", "semitones": 1.5, "pace": "normal"}
+        {"face": "redpanda", "reset": true}     back to its own voice
+
+    Every field is needed (the apps send the whole row). A choice that is
+    the animal's own voice is kept as no choice at all."""
+    if not isinstance(body, dict) or not isinstance(body.get("face"), str) \
+            or body["face"] not in FACE_VOICES:
+        return 400, {"ok": False, "error": _NO_ANIMAL}
+    face = body["face"]
+    name = FACE_VOICES[face]["name"]
+    reset = set(body) == {"face", "reset"}
+    if reset:
+        if body["reset"] is not True:
+            return 400, {"ok": False, "error": "to reset, send reset: true"}
+    elif set(body) != {"face", "speaker", "semitones", "pace"}:
+        return 400, {"ok": False, "error": "choose a voice, a pitch and a pace for the animal"}
+    else:
+        if not isinstance(body["speaker"], str) or body["speaker"] not in SPEAKER_LABEL:
+            return 400, {"ok": False, "error": "choose one of the listed voices"}
+        semis = _semitones_ok(body["semitones"])
+        if semis is None:
+            return 400, {"ok": False, "error": (
+                f"the pitch must be from {abs(MIN_SEMITONES):g} steps deeper to "
+                f"{MAX_SEMITONES:g} steps higher, in half steps")}
+        if not isinstance(body["pace"], str) or body["pace"] not in SPEED_VALUE:
+            return 400, {"ok": False, "error": "the pace must be slower, normal or faster"}
+        choice = {"speaker": body["speaker"], "semitones": semis, "pace": body["pace"]}
+    with _STATE_LOCK:
+        animals = dict(_read_state()["face_animals"])
+        if reset or choice == _animal_own(face):
+            animals.pop(face, None)
+        else:
+            animals[face] = choice
+        err = _write_state(face_animals=animals)
+    if err:
+        return 500, {"ok": False, "error": err}
+    if reset:
+        _audit("voices.face_animal", {"face": face, "reset": True})
+        _publish({"what": "face_animal", "outcome": "reset"})
+        message = f"The {name} speaks in its own voice again."
+    else:
+        _audit("voices.face_animal", dict(choice, face=face))
+        _publish({"what": "face_animal", "outcome": "set"})
+        message = (f"The {name}'s voice is now {_voice_name(choice['speaker'])}, "
+                   f"{pitch_words(semis)}, {_pace_words(choice['pace'])}.")
+    if not face_voice_on():
+        message += f" \"{FACE_VOICE_TITLE}\" is off, so you will hear it once that is on."
+    return 200, {"ok": True, "message": message, "face_voice": face_voice_view()}
+
+
+def try_face_animal(body, speech_module=None) -> tuple:
+    """POST /api/voice/voices/face_animal/try {"face": "redpanda"} -> (200,
+    WAV bytes) or (4xx/503, {"ok": false, "error"}): TRY_LINE in that
+    animal's voice as it is now (with the owner's speaking speed, and the
+    mouth shapes when the PC makes them - the same kokoro_speak every
+    spoken answer uses), whether or not that face is showing or the switch
+    is on. Kept nowhere, logged nowhere; no card - it is a sound for the
+    app that asked, nothing more."""
+    if not isinstance(body, dict) or set(body) != {"face"} \
+            or not isinstance(body["face"], str) or body["face"] not in FACE_VOICES:
+        return 400, {"ok": False, "error": _NO_ANIMAL}
+    # One at a time: the voice is made on the graphics card, and a second
+    # "Try it" (another tap, the other app) while one is being made would
+    # only queue behind it. Refused at once, in words, rather than waited on.
+    if not _TRY_LOCK.acquire(blocking=False):
+        return 429, {"ok": False, "error": _TRY_BUSY}
+    try:
+        return _try_face_animal(body["face"], speech_module)
+    finally:
+        _TRY_LOCK.release()
+
+
+_TRY_LOCK = threading.Lock()
+_TRY_BUSY = "the PC is still making the sound for the last Try it. Try it again in a moment"
+
+
+def _try_face_animal(face: str, speech_module=None) -> tuple:
+    """try_face_animal once its body is checked and the one-at-a-time lock
+    is held."""
+    av = animal_voice(face)
+    S = speech_module
+    if S is None:
+        try:
+            import jarvis_speech as S
+        except Exception:
+            S = None
+    engine = None
+    if S is not None:
+        try:
+            engine = S._tts_engine()
+        except Exception:
+            engine = None
+    if engine is None:
+        return 503, {"ok": False, "error": "this PC has no built-in voice to play it with"}
+    pace = min(2.0, max(0.5, float(av["speed"]) * speed()))
+    semis = min(MAX_SEMITONES, max(MIN_SEMITONES, float(av["semitones"])))
+    mouth: list = []
+    try:
+        audio = S.kokoro_speak(engine, TRY_LINE.format(name=av["name"]), int(av["speaker"]),
+                               pace, semis, mouth=mouth)
+    except Exception as exc:
+        return 503, {"ok": False, "error": f"the built-in voice failed ({type(exc).__name__})"}
+    if audio is None:
+        return 503, {"ok": False, "error": "the built-in voice made no sound"}
+    wav = S._write_wav(audio[0], audio[1])
+    if mouth and mouth[0]:
+        wav = S._mouth("add_chunk", wav, mouth[0]) or wav
+    return 200, wav
 
 
 def _audit(event: str, detail: dict) -> None:
@@ -650,11 +904,12 @@ _STATE_LOCK = threading.RLock()
 
 def _read_state() -> dict:
     """{"active": id, "better_voice": bool, "speed": choice or None,
-    "speaker": choice or None, "face_voice": bool or None}. Missing or
-    broken is the built-in voice, the better voice off and no speed,
-    built-in-voice or face-voice choice made - the safe reading."""
+    "speaker": choice or None, "face_voice": bool or None, "face_animals":
+    {face: {"speaker", "semitones", "pace"}}}. Missing or broken is the
+    built-in voice, the better voice off and no speed, built-in-voice,
+    face-voice or animal-voice choice made - the safe reading."""
     out = {"active": BUILTIN, "better_voice": False, "speed": None, "speaker": None,
-           "face_voice": None}
+           "face_voice": None, "face_animals": {}}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -674,6 +929,7 @@ def _read_state() -> dict:
     fv = raw.get("face_voice")
     if isinstance(fv, bool):
         out["face_voice"] = fv
+    out["face_animals"] = _clean_animals(raw.get("face_animals"))
     return out
 
 
@@ -2720,7 +2976,9 @@ def _decide_better(pid: str, gate: Callable) -> None:
 ROUTES = {"/api/voice/voices/create": create, "/api/voice/voices/active": switch,
           "/api/voice/voices/delete": delete, "/api/voice/voices/better": set_better,
           "/api/voice/voices/speed": set_speed, "/api/voice/voices/speaker": set_speaker,
-          "/api/voice/voices/face": set_face_voice}
+          "/api/voice/voices/face": set_face_voice,
+          "/api/voice/voices/face_animal": set_face_animal,
+          "/api/voice/voices/face_animal/try": try_face_animal}
 
 
 def handle_post(route: str, body) -> tuple:

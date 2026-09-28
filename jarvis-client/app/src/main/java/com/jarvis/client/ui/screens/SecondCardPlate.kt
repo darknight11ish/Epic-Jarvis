@@ -48,6 +48,10 @@ import com.jarvis.client.ui.theme.LocalChrome
  * @param onSetSuggest "When to suggest the bigger model"'s one write - a
  *   signal id ("struggle"/"correction") and on/off. Unlike [onSet], NO
  *   approval card either way: see [SecondCard.Suggest]'s own doc.
+ * @param onSetThird moves a switch onto the third graphics card, or moves
+ *   it back off (2026-09-28) - null means "not used". Assigning raises its
+ *   own approval card (`second_card_third_assign`), the same shape as
+ *   [onSet]'s own ON; unassigning is immediate, like its OFF.
  */
 @Composable
 internal fun SecondCardPlate(
@@ -57,6 +61,7 @@ internal fun SecondCardPlate(
     canAct: Boolean,
     onSet: (feature: String, enabled: Boolean) -> Unit,
     onSetSuggest: (signal: String, enabled: Boolean) -> Unit,
+    onSetThird: (assign: String?) -> Unit,
     onRecheck: () -> Unit,
     onOpenApprovals: ((cardId: String?) -> Unit)?,
 ) {
@@ -115,6 +120,19 @@ internal fun SecondCardPlate(
             Gap(8)
             Kicker("One bigger model on both cards", Modifier.semantics { heading() })
             ApprovalSwitchRow(view, busy, canAct, onSet)
+            Rule()
+        }
+
+        // A third graphics card (2026-09-28): moving one of the switches
+        // above onto it, alongside the second card's own lane - never a
+        // default (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3).
+        // Shown only once one is capable, or a choice is still kept for
+        // one that is not here right now.
+        val third = status.third
+        if (third != null && (third.capable || third.assigned != null)) {
+            Gap(8)
+            Kicker("Third graphics card", Modifier.semantics { heading() })
+            ThirdCardRow(status, third, busy, canAct, onSetThird)
             Rule()
         }
 
@@ -255,6 +273,62 @@ internal fun ApprovalSwitchRow(
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
         view.modelLine?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+    }
+}
+
+/**
+ * The third card's own plate: a card found (or a kept choice, if it is not
+ * here right now), then one chip per option - "Not used" plus one per
+ * switch that is actually on ([SecondCard.thirdOptions]). Picking a chip
+ * sends [onSetThird] at once, the same "the choice itself is the request"
+ * shape [OptionChip] already uses for every other multi-way setting in
+ * this app; the approval card that follows an assignment is the real gate,
+ * not an extra confirm step here.
+ */
+@Composable
+internal fun ThirdCardRow(
+    status: SecondCard.Status,
+    third: SecondCard.ThirdCard,
+    busy: String?,
+    canAct: Boolean,
+    onSetThird: (assign: String?) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val options = SecondCard.thirdOptions(status) ?: return
+    val waitingHere = busy == SecondCard.THIRD
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        third.cardName?.let { name ->
+            val size = third.cardTotalMb?.let { " (${(it + 512) / 1024} GB)" }.orEmpty()
+            Text(
+                "Found: $name$size",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            Gap(6)
+        }
+        for (option in options) {
+            Gap(4)
+            OptionChip(
+                label = option.label,
+                isSelected = option.selected,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = canAct && busy == null && SecondCard.thirdCanChange(status) &&
+                    !option.selected,
+                onClick = { onSetThird(option.value) },
+            )
+        }
+        Gap(6)
+        Text(
+            if (waitingHere) "Asking your PC…" else SecondCard.thirdLine(status),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (third.pending || waitingHere) chrome.warnInk else chrome.textMid,
+        )
+        SecondCard.thirdLastLine(status)?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
+        SecondCard.thirdModelLine(third)?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
     }

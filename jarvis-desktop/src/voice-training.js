@@ -388,6 +388,9 @@ const SETTING_NAMES = {
   talk_to_type: "talk-to-type",
   wake_confirm: "the second \"hey Jarvis\" check",
   voice_id_model: "the voice-ID model",
+  hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
+  hands_free_live: "how far Jarvis Live is trusted",
+  live_end: "when Jarvis Live ends on this PC",
 };
 
 /** The choices, in the order they are shown, with plain words for each. */
@@ -539,11 +542,110 @@ export const VOICE_ID_MODEL = Object.freeze([
   },
 ]);
 
+/**
+ * The owner's decision of 2026-09-28: under "Only trust the talk button",
+ * an answer about the screen ("Look at this", "Watch with me") to a
+ * question started with "Hey Jarvis" stays on screen, with this setting to
+ * allow reading it aloud even then. Keeping it on screen is the default and
+ * applies at once; "Read aloud" is the looser choice - the voice card, and
+ * held on a stale link. Under "Same as the talk button" it changes nothing
+ * (`SCREEN_ONLY_WHEN_STRICT_NOTE`).
+ */
+export const HANDS_FREE_SCREEN = Object.freeze([
+  {
+    id: "screen_on_screen",
+    label: "Keep on screen",
+    recommended: true,
+    detail: "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Jarvis\" gets a written answer only.",
+  },
+  {
+    id: "screen_aloud",
+    label: "Read aloud",
+    detail: "Those answers are read aloud, even with \"Only trust the talk button\" chosen. Anyone near the speaker will hear them.",
+  },
+]);
+
+/**
+ * Jarvis Live under "Only trust the talk button" (the owner's answers of
+ * 2026-09-28): a Live session is trusted like the talk button by default,
+ * however it was started - the owner pressed Start, or said "Hey Jarvis,
+ * let's talk". Two stricter choices apply at once; each looser one is the
+ * voice card, held on a stale link. The phone's StrictVoice.HANDS_FREE_LIVE
+ * has the same words. Under "Same as the talk button" it changes nothing
+ * (`LIVE_ONLY_WHEN_STRICT_NOTE`).
+ */
+export const HANDS_FREE_LIVE = Object.freeze([
+  {
+    id: "live_trust_fully",
+    label: "Trust Live fully",
+    isDefault: true,
+    detail: "What you say in Jarvis Live is trusted like the talk button, however you started Live.",
+  },
+  {
+    id: "live_button_start_only",
+    label: "Only when I start it with the button",
+    detail: "A Live you start with the button is trusted like the talk button. One started by saying \"Hey Jarvis, let's talk\" gets the \"Hey Jarvis\" caution.",
+  },
+  {
+    id: "live_like_hey_jarvis",
+    label: "Be as careful as with \"Hey Jarvis\"",
+    detail: "Everything said in Jarvis Live gets the \"Hey Jarvis\" caution: no facts learned without a card, and memory or private answers stay on screen.",
+  },
+]);
+
+/**
+ * When App lock ends Jarvis Live on this PC (the owner's decision of
+ * 2026-09-28): by default when App lock would ask again ("Lock again
+ * after", counted from when you last touched a Jarvis window - talking does
+ * not count); the looser choice, only when Windows itself locks, is the
+ * voice card, held on a stale link. A PC setting - the phone keeps App
+ * lock's own rule (docs/ARCHITECTURE.md section 8).
+ */
+export const LIVE_END = Object.freeze([
+  {
+    id: "live_end_app_lock",
+    label: "When App lock would ask again",
+    recommended: true,
+    detail: "With App lock on, Jarvis Live ends when App lock would ask for Windows Hello again (\"Lock again after\" in Security), counted from when you last touched a Jarvis window. Talking does not count.",
+  },
+  {
+    id: "live_end_windows_lock",
+    label: "Only when Windows locks",
+    detail: "Jarvis Live keeps going until Windows itself locks, even after App lock would ask again. Someone who sits down at this PC before then could talk to Jarvis.",
+  },
+]);
+
+/** Under the Live end choices: what they depend on. */
+export const LIVE_END_NOTE = "This only matters while App lock is on (Settings, Security).";
+
+/** Under the Live choices while "Same as the talk button" is chosen. */
+export const LIVE_ONLY_WHEN_STRICT_NOTE =
+  "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", Jarvis Live is trusted like the talk button already.";
+
+/** Whether the Live setting does nothing now (see LIVE_ONLY_WHEN_STRICT_NOTE). */
+export function liveCovered(view) {
+  return Boolean(view && view.handsFree === "same_as_button");
+}
+
+/** Under the screen choices while "Same as the talk button" is chosen:
+ *  then answers about the screen are read aloud already, so this setting
+ *  changes nothing. The choices stay usable - it takes over if the
+ *  hands-free choice changes. */
+export const SCREEN_ONLY_WHEN_STRICT_NOTE =
+  "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", answers about your screen or the camera are read aloud already.";
+
+/** Whether the screen setting does nothing now (see SCREEN_ONLY_WHEN_STRICT_NOTE). */
+export function screenCovered(view) {
+  return Boolean(view && view.handsFree === "same_as_button");
+}
+
 function choiceWords(setting, value) {
   const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY
     : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY
       : setting === "hands_free" ? HANDS_FREE : setting === "talk_to_type" ? TALK_TO_TYPE
-        : setting === "wake_confirm" ? WAKE_CONFIRM : setting === "voice_id_model" ? VOICE_ID_MODEL : [];
+        : setting === "wake_confirm" ? WAKE_CONFIRM : setting === "voice_id_model" ? VOICE_ID_MODEL
+          : setting === "hands_free_screen" ? HANDS_FREE_SCREEN
+            : setting === "hands_free_live" ? HANDS_FREE_LIVE : setting === "live_end" ? LIVE_END : [];
   return list.find((c) => c.id === value) || null;
 }
 
@@ -595,18 +697,32 @@ export function currentSetting(status, setting) {
   return setting === "strictness" ? view.strictness : setting === "privacy" ? view.privacy
     : setting === "memory" ? view.memory : setting === "sensitive_memory" ? view.sensitiveMemory
       : setting === "hands_free" ? view.handsFree : setting === "talk_to_type" ? view.talkToType
-        : setting === "wake_confirm" ? view.wakeConfirm : setting === "voice_id_model" ? view.voiceIdModel : "";
+        : setting === "wake_confirm" ? view.wakeConfirm : setting === "voice_id_model" ? view.voiceIdModel
+          : setting === "hands_free_screen" ? view.handsFreeScreen
+            : setting === "hands_free_live" ? view.handsFreeLive
+              : setting === "live_end" ? view.liveEnd : "";
 }
 
-/** Whether choosing `value` for `setting` loosens it (a card), by the server's rule. */
-export function loosens(setting, value) {
+/** Whether choosing `value` for `setting` loosens it (a card), by the server's rule.
+ *  `current` matters for Jarvis Live's three choices only: a move towards
+ *  "Trust Live fully" loosens; an unknown one counts as from the strictest. */
+export function loosens(setting, value, current = "") {
+  if (setting === "hands_free_live") {
+    const order = HANDS_FREE_LIVE.map((c) => c.id);
+    const v = order.indexOf(value);
+    const c = order.indexOf(current);
+    if (v < 0) return true;
+    return v < (c < 0 ? order.length - 1 : c);
+  }
   return (setting === "strictness" && value === "balanced") || (setting === "privacy" && value === "voice_is_enough")
     || (setting === "memory" && value === "memory_aloud")
     || (setting === "sensitive_memory" && value === "sensitive_aloud")
     || (setting === "hands_free" && value === "same_as_button")
     || (setting === "talk_to_type" && value === "on")
     || (setting === "wake_confirm" && value === "one")
-    || (setting === "voice_id_model" && value === "resnet221");
+    || (setting === "voice_id_model" && value === "resnet221")
+    || (setting === "hands_free_screen" && value === "screen_aloud")
+    || (setting === "live_end" && value === "live_end_windows_lock");
 }
 
 /** The choice of each "Better voice" setting that needs something installed. */
@@ -663,6 +779,22 @@ export function settingsView(status) {
   const rawModel = s.voice_id_model !== undefined ? s.voice_id_model : gate.voice_id_model;
   const voiceIdModel = rawModel === undefined || rawModel === null || rawModel === ""
     ? "" : rawModel === "resnet221" ? "resnet221" : "titanet";
+  // The sixth, answers about the screen after "Hey Jarvis" (the owner's
+  // decision of 2026-09-28): `gate.settings.hands_free_screen` (or
+  // `gate.hands_free_screen`). "" from a PC that does not have it - not
+  // offered.
+  const rawScreen = s.hands_free_screen !== undefined ? s.hands_free_screen : gate.hands_free_screen;
+  const handsFreeScreen = rawScreen === "screen_on_screen" || rawScreen === "screen_aloud" ? rawScreen : "";
+  // The seventh, Jarvis Live (the owner's answers of 2026-09-28):
+  // `gate.settings.hands_free_live` (or `gate.hands_free_live`). "" from a
+  // PC that does not have it - not offered.
+  const rawLive = s.hands_free_live !== undefined ? s.hands_free_live : gate.hands_free_live;
+  const handsFreeLive = HANDS_FREE_LIVE.some((c) => c.id === rawLive) ? rawLive : "";
+  // The eighth, when App lock ends Jarvis Live on this PC (the owner's
+  // decision of 2026-09-28): `gate.settings.live_end` (or `gate.live_end`).
+  // "" from a PC that does not have it - not offered.
+  const rawEnd = s.live_end !== undefined ? s.live_end : gate.live_end;
+  const liveEnd = LIVE_END.some((c) => c.id === rawEnd) ? rawEnd : "";
   return {
     wakeConfirm,
     voiceIdModel,
@@ -672,6 +804,9 @@ export function settingsView(status) {
     sensitiveMemory,
     handsFree,
     talkToType,
+    handsFreeScreen,
+    handsFreeLive,
+    liveEnd,
     voiceIsEnoughAllowed: yes(s.voice_is_enough_allowed) && strictness === "very_strict",
     minSeconds: min,
     waiting: waiting && waiting.name ? { setting: String(waiting.name), value: String(waiting.value || "") } : null,

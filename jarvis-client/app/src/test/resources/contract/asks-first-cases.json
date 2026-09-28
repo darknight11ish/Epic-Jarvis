@@ -259,6 +259,32 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
+    },
+    {
+     "rows": [
+      {
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
@@ -380,6 +406,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -412,6 +447,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
       },
       {
        "fixed": true,
@@ -453,6 +497,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -533,6 +586,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -543,6 +605,18 @@
       }
      ],
      "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
     },
     {
      "rows": [
@@ -610,6 +684,15 @@
        "title": "Change what it remembers"
       },
       {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -644,6 +727,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -1061,6 +1153,32 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
+    },
+    {
+     "rows": [
+      {
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
@@ -1182,6 +1300,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -1214,6 +1341,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
       },
       {
        "fixed": true,
@@ -1255,6 +1391,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -1335,6 +1480,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -1345,6 +1499,18 @@
       }
      ],
      "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
     },
     {
      "rows": [
@@ -1412,6 +1578,15 @@
        "title": "Change what it remembers"
       },
       {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -1446,6 +1621,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -1860,6 +2044,32 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
+    },
+    {
+     "rows": [
+      {
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
@@ -1980,6 +2190,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -2012,6 +2231,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
       },
       {
        "fixed": true,
@@ -2053,6 +2281,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -2132,6 +2369,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -2142,6 +2388,18 @@
       }
      ],
      "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
     },
     {
      "rows": [
@@ -2209,6 +2467,15 @@
        "title": "Change what it remembers"
       },
       {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -2243,6 +2510,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -2652,6 +2928,32 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
+    },
+    {
+     "rows": [
+      {
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
@@ -2772,6 +3074,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -2804,6 +3115,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
       },
       {
        "fixed": true,
@@ -2845,6 +3165,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -2924,6 +3253,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -2934,6 +3272,18 @@
       }
      ],
      "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
     },
     {
      "rows": [
@@ -3001,6 +3351,15 @@
        "title": "Change what it remembers"
       },
       {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -3035,6 +3394,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -3444,6 +3812,32 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
+    },
+    {
+     "rows": [
+      {
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
@@ -3564,6 +3958,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -3596,6 +3999,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
       },
       {
        "fixed": true,
@@ -3637,6 +4049,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -3716,6 +4137,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -3726,6 +4156,18 @@
       }
      ],
      "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
     },
     {
      "rows": [
@@ -3793,6 +4235,15 @@
        "title": "Change what it remembers"
       },
       {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -3827,6 +4278,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -4248,6 +4708,32 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
+    },
+    {
+     "rows": [
+      {
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
@@ -4369,6 +4855,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -4401,6 +4896,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
       },
       {
        "fixed": true,
@@ -4442,6 +4946,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -4522,6 +5035,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -4532,6 +5054,18 @@
       }
      ],
      "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
     },
     {
      "rows": [
@@ -4599,6 +5133,15 @@
        "title": "Change what it remembers"
       },
       {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -4633,6 +5176,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -5047,6 +5599,32 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:projects",
+       "note": "Your own taps or words. Deleting asks \"are you sure?\" in the app. A coding project's folder and a benchmark's command are set on the PC only.",
+       "says": "Does it without asking",
+       "title": "Make, change or delete a project, and log your own numbers"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_share",
+       "note": "Turning it off is instant. Nothing from a project is sent anywhere yet.",
+       "says": "Asks you first, every time",
+       "title": "Make a project Shareable"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:project_unmark",
+       "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
+       "says": "Asks when Jarvis made the mark",
+       "title": "Take a private mark off a benchmark"
+      }
+     ],
+     "title": "Projects"
+    },
+    {
+     "rows": [
+      {
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
@@ -5167,6 +5745,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -5199,6 +5786,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
       },
       {
        "fixed": true,
@@ -5240,6 +5836,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -5319,6 +5924,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -5329,6 +5943,18 @@
       }
      ],
      "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
     },
     {
      "rows": [
@@ -5396,6 +6022,15 @@
        "title": "Change what it remembers"
       },
       {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -5430,6 +6065,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",

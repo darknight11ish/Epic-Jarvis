@@ -105,6 +105,12 @@ fun ApprovalCard(
      * field threaded through from outside.
      */
     onAmend: suspend (note: String) -> Unit = {},
+    /**
+     * Security's "Swipe to approve or deny" (the owner, 2026-09-28). False:
+     * no swipe decides this card, whatever `risk.swipe_ok` says, and the
+     * card's help line stops offering the gesture. Buttons are unchanged.
+     */
+    swipeAllowed: Boolean = true,
     modifier: Modifier = Modifier,
     /**
      * The "Nothing runs until you decide." line under the buttons.
@@ -228,7 +234,9 @@ fun ApprovalCard(
     // decision of EITHER kind could be sent, and only the completed drag
     // decides which direction is honoured.
     val swipeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
-    val swipeModifier = if (canDecide && item.swipeable && !decided) {
+    // The owner's switch comes first: off, the gesture is not there at all.
+    val swipeOn = item.swipeable && swipeAllowed
+    val swipeModifier = if (canDecide && swipeOn && !decided) {
         Modifier.pointerInput(item.id) {
             detectHorizontalDragGestures(
                 onDragEnd = {
@@ -389,7 +397,7 @@ fun ApprovalCard(
                 // otherwise drawn and monochrome, and it looked different on
                 // every phone maker's emoji set. Decorative: the sentence
                 // beside it says the same thing in words.
-                if (item.swipeable) {
+                if (swipeOn) {
                     SwipeGlyph(chrome.okMark)
                 } else {
                     TapGlyph(chrome.textMid)
@@ -397,9 +405,9 @@ fun ApprovalCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = when {
-                        item.swipeable && canApprove ->
+                        swipeOn && canApprove ->
                             "Swipe right to approve, left to deny — ${item.risk.why}"
-                        item.swipeable -> "Swipe left to deny — ${item.risk.why}"
+                        swipeOn -> "Swipe left to deny — ${item.risk.why}"
                         else -> item.risk.why
                     },
                     style = MaterialTheme.typography.bodySmall,

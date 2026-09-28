@@ -106,6 +106,36 @@ def t_round_trip_and_no_plain_text_on_disk():
         w.done()
 
 
+def t_side_talk_in_live_is_not_kept():
+    """The owner's answer of 2026-09-28: a remark the model called "not for
+    me" in Jarvis Live is not kept in chat history at all - not the words,
+    not the marker - and the conversation around it is kept as usual."""
+    w = World()
+    try:
+        w.log.record_turn(req("what's the weather", cid="conv-live01", prov="voice"),
+                          turn=local("Sunny, 14 degrees."))
+        turn = dict(local("[not for me]"), side_talk=True)
+        out = w.log.record_turn(req("can you pass me the salt", cid="conv-live01", prov="voice"),
+                                turn=turn)
+        check("a side remark is not recorded, and says why",
+              out == {"recorded": False, "why": H.SIDE_TALK_WHY}, out)
+        conv = w.log.get("conv-live01")
+        texts = [t["text"] for t in conv["turns"]]
+        check("...neither the owner's words nor the marker are in the chat",
+              "can you pass me the salt" not in texts and "[not for me]" not in texts
+              and texts == ["what's the weather", "Sunny, 14 degrees."], texts)
+        raw = w.raw()
+        check("...nor anywhere on disk", b"salt" not in raw and b"not for me" not in raw)
+        out = w.log.record_turn(req("and tomorrow?", cid="conv-live01", prov="voice"),
+                                turn=local("Rain."))
+        check("the next turn is kept as usual", out.get("recorded"), out)
+        got = w.log.live_turn("conv-live01", "can you pass me the salt")
+        check("...and the remark counts only as 'temporary' for learning (never a saved fact)",
+              got is not None and got.get("provenance") == "temporary", got)
+    finally:
+        w.done()
+
+
 def t_rows_cannot_be_moved_between_conversations():
     w = World()
     try:

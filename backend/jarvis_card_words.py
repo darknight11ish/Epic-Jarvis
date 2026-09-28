@@ -64,6 +64,7 @@ TITLES = {
     "run_shell_on_host": "run a command on this PC",
     "control_computer": "use the mouse and keyboard on this PC",
     "control_phone": "tap and type on your phone",
+    "run_plan": "run the safe steps of an approved plan",
     "control_browser": "work a web page for you in a browser",
     "spend_money": "spend money",
     "post_to_external_service": "post to an outside service",
@@ -72,6 +73,8 @@ TITLES = {
     "web_research": "search GitHub",
     "research_authenticated": "search GitHub signed in as you",
     "search_the_web": "search the web",
+    # jarvis_chatbot.py: ONE card per conversation with an AI chatbot (not routed yet)
+    "chatbot_session": "hold a conversation with an AI chatbot for you",
     "stop_asking_before_every_web_search": "stop asking before every web search",
     # --- notes
     "read_joplin_note": "read a note in Joplin",
@@ -104,6 +107,7 @@ TITLES = {
     "second_card_enable": "start using the second graphics card",
     "second_card_browser_enable": "turn on browser control, which works real web pages",
     "second_card_combined_enable": "run one bigger model across both graphics cards",
+    "second_card_third_assign": "move a second-card feature onto a third graphics card",
     "big_model_enable": "start the big model for background jobs",
     # --- its own settings and code
     "change_own_config": "change one of its settings",
@@ -121,14 +125,19 @@ TITLES = {
     "learning_sensitive_enable": "also learn sensitive topics automatically",
     "history_enable": "keep your chat history",
     "memory_manage": "change what it remembers",
+    # jarvis_forget_range.py (2026-09-28): ONE card for a whole time frame
+    "memory_forget_range": "forget what it learned and delete chats from the days you chose",
     "user_profile_manage": "change your profile",
     # --- voices
     "custom_voice": "keep or use a custom voice",
     "better_voice_enable": "turn on the better custom voice",
     # --- notifications
     "watch_notifications_enable": "let your notifications show on a smartwatch too",
+    "phone_notifications_read": "start reading notifications from apps you choose on your phone",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
+    # --- the app builder (docs/APP-BUILDER-DESIGN.md)
+    "app_merge_change": "add its change to one of your apps",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

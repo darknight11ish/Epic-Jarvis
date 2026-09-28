@@ -63,6 +63,14 @@ await check("the question is both apps' words, word for word, and names the fact
   assert.equal(ERASED, "Erased.");
 });
 
+await check("the 'also delete the chat' question says what OK and Cancel each do", async () => {
+  // Play tester, 2026-09-27: Cancel read as "cancel the erase". A native
+  // dialog cannot rename its buttons, so the words say it instead.
+  assert.ok(ERASE_ALSO_CHAT_CONFIRM.startsWith("The fact's words will be erased either way."));
+  assert.ok(ERASE_ALSO_CHAT_CONFIRM.endsWith("OK: delete that chat too.\nCancel: keep the chat."));
+  assert.match(ERASE_ALSO_CHAT_CONFIRM, /Also delete the chat this fact came from\?/);
+});
+
 await check("only a real erased_at makes a fact erased", async () => {
   assert.equal(erasedAt({ erased_at: 1790000000.5 }), 1790000000.5);
   for (const v of [null, undefined, "1790000000", 0, NaN, true]) {

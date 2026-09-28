@@ -197,6 +197,13 @@ object ChatHistory {
         asking: List<UserTurn>,
         picture: String? = null,
         interrupted: String? = null,
+        /**
+         * Jarvis Live (docs/LIVE-DESIGN.md): the newest message was SAID in a
+         * Live conversation - `live: true` on it, so the PC adds its Live
+         * note (short answers, choices in words, side talk answered with the
+         * marker only). Never on the history, never on a typed message.
+         */
+        live: Boolean = false,
     ): JsonArray =
         buildJsonArray {
             for (ex in window) {
@@ -208,7 +215,11 @@ object ChatHistory {
                 // voice flow, docs/JARVIS-API.md section 17, 6): on the
                 // NEWEST message only, never replayed with the history.
                 val cut = interrupted?.takeIf { i == asking.lastIndex && it.isNotBlank() }
-                if (picture != null && i == asking.lastIndex) {
+                val liveHere = live && i == asking.lastIndex && u.provenance == Provenance.VOICE
+                if (liveHere) {
+                    val base = userTurn(u) + (if (cut != null) mapOf("interrupted" to JsonPrimitive(cut)) else emptyMap())
+                    add(JsonObject(base + ("live" to JsonPrimitive(true))))
+                } else if (picture != null && i == asking.lastIndex) {
                     add(
                         buildJsonObject {
                             put("role", "user")
@@ -242,9 +253,20 @@ object ChatHistory {
         conversationId: String? = null,
         interrupted: String? = null,
         temporary: Boolean = false,
+        /**
+         * `true` only when the owner just said yes to [CloudOffer]'s "Try
+         * the cloud model" for THIS one question
+         * ([ChatSession.tryCloudForLast]) - never sent as `false`, like
+         * [temporary]. `cloud_yes` is the real field name
+         * `backend/cloud-say-yes.patch` reads, verified against the
+         * owner's real `jarvis_hud.py` (2026-09-27) - see [CloudOffer]'s
+         * own doc.
+         */
+        cloudYes: Boolean = false,
+        live: Boolean = false,
     ): String =
         buildJsonObject {
-            put("messages", messages(window, asking, picture, interrupted))
+            put("messages", messages(window, asking, picture, interrupted, live))
             put("has_image", picture != null)
             put("stream", true)
             put("auto", true)
@@ -253,6 +275,7 @@ object ChatHistory {
             }
             put("device", DEVICE)
             if (temporary) put(TemporaryChat.FIELD, true)
+            if (cloudYes) put("cloud_yes", true)
         }.toString()
 
     private fun userTurn(u: UserTurn): JsonObject = buildJsonObject {

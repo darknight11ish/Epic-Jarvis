@@ -68,7 +68,10 @@ for i in range(30):
     slow = i >= 20
     log.append({"kind": "answer", "model": "qwen3:8b", "first_word_ms": 900 if slow else 800,
                 "words_per_s": 9.0 if slow else 14.2, "tokens_per_s": 12.0 if slow else 19.0,
-                "on_gpu_percent": 100, "at": 1700000000 + i})
+                "on_gpu_percent": 100, "at": 1700000000 + i,
+                # Milestone 7: Ollama's prompt counts, from i >= 10 only - the
+                # first ten stand for older rows written before the counts.
+                **({"prompt_tokens": 4000, "cached_tokens": 3600} if i >= 10 else {})})
 log.append({"kind": "switch", "old_model": "llama3.1:8b", "new_model": "qwen3:8b",
             "old_tokens_per_s": 21.0, "new_tokens_per_s": 19.0, "old_source": "measured"})
 print(json.dumps(S.view(log=log, current="qwen3:8b")))
@@ -129,6 +132,8 @@ await check("Models shows how fast recent answers were, from the real speed bloc
   const text = await page.locator("#models").innerText();
   await page.close();
   assert.match(text, /Recent answers: about \d+ words a second, first word after \d\.\d s/);
+  // Milestone 7: the reused share, from the rows that have it; older rows skipped.
+  assert.match(text, /, 90% of the conversation reused, not read again/);
   assert.match(text, /slower than the 20 before them/, "the backend's own slowdown note");
   assert.ok(SPEED.last_switch_note && text.includes(SPEED.last_switch_note.trim()),
     "the backend's own old-vs-new sentence, word for word");
@@ -233,6 +238,53 @@ await check("CONTROL: there is no catalogue - no list of models that could be in
   const lists = await page.locator("#models datalist, #models select").count();
   await page.close();
   assert.equal(lists, 0);
+});
+
+/* ── Models: no "Use" on a model that cannot chat ────────────────────────── */
+
+// Play tester, 2026-09-27: "Use" was offered on nomic-embed-text, a model
+// that only turns text into numbers for memory search. Switching to it would
+// leave Jarvis unable to answer anything.
+const modelRow = (page, ref) =>
+  page.locator("#models .row-item").filter({ has: page.locator(".row-title", { hasText: ref }) });
+
+await check("an embedding model has no Use, and says why", async () => {
+  const page = await tab("faculties", {});
+  const embed = modelRow(page, "nomic-embed-text");
+  const embedButtons = await embed.locator("button").allInnerTexts();
+  const embedText = await embed.innerText();
+  const chatButtons = await modelRow(page, "llama3.1:8b").locator("button").allInnerTexts();
+  await page.close();
+  assert.deepEqual(embedButtons, [], "Use offered on an embedding model");
+  assert.match(embedText, /for memory search only - it cannot chat/);
+  assert.deepEqual(chatButtons, ["Use"], "a chat model lost its Use");
+});
+
+await check("...in the real route's shape too: bare names, no family", async () => {
+  // gpu-offload.patch: `installed` is MM.installed(), a list of names.
+  const models = { available: true, current: "qwen3:8b",
+    installed: ["qwen3:8b", "llama3.1:8b", "mxbai-embed-large", "all-minilm", "bge-m3"] };
+  const page = await tab("faculties", { models });
+  const uses = {};
+  for (const ref of models.installed.slice(1)) {
+    uses[ref] = (await modelRow(page, ref).locator("button").allInnerTexts()).includes("Use");
+  }
+  await page.close();
+  assert.deepEqual(uses, { "llama3.1:8b": true, "mxbai-embed-large": false,
+    "all-minilm": false, "bge-m3": false });
+});
+
+await check("Ollama's own capabilities list wins over the name", async () => {
+  const models = { available: true, current: "qwen3:8b", installed: [
+    { ref: "qwen3:8b", capabilities: ["completion", "tools"] },
+    { ref: "my-embedder", capabilities: ["embedding"] },
+    { ref: "embed-chat-tuned", capabilities: ["completion"] }] };
+  const page = await tab("faculties", { models });
+  const a = await modelRow(page, "my-embedder").locator("button").allInnerTexts();
+  const b = await modelRow(page, "embed-chat-tuned").locator("button").allInnerTexts();
+  await page.close();
+  assert.deepEqual(a, []);
+  assert.deepEqual(b, ["Use"]);
 });
 
 /* ── Rush latch: `quote` as well as `phrase` ─────────────────────────────── */

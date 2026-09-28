@@ -6,8 +6,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  * What the owner typed as the desktop's address, made into the base URL every
  * request is built from.
  *
- * **A bare name now gets Jarvis's port.** `marioirelan11-alps.nord` used to
- * become `http://marioirelan11-alps.nord` - port 80, where nothing listens -
+ * **A bare name now gets Jarvis's port.** `my-pc.nord` used to
+ * become `http://my-pc.nord` - port 80, where nothing listens -
  * with no warning, and the pairing screen's Meshnet hint did not even mention
  * `:4719`. The backend's port is 4719 unless someone changed it
  * (`JARVIS_HUD_PORT`, the desktop's `DEFAULT_BASE`), so an address with no

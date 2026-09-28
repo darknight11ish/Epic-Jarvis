@@ -121,6 +121,23 @@ fun AppearanceIcon(tint: Color, modifier: Modifier = Modifier) {
     }
 }
 
+/** Jarvis Live: five sound bars - a conversation going on. */
+@Composable
+fun LiveIcon(tint: Color, modifier: Modifier = Modifier) {
+    Glyph(modifier) { stroke, u ->
+        val bars = listOf(4f to 2.5f, 8f to 5f, 12f to 7.5f, 16f to 5f, 20f to 2.5f)
+        for ((x, half) in bars) {
+            drawLine(
+                color = tint,
+                start = Offset(x * u, (12f - half) * u),
+                end = Offset(x * u, (12f + half) * u),
+                strokeWidth = stroke.width,
+                cap = StrokeCap.Round,
+            )
+        }
+    }
+}
+
 /** Help: an "i" in a ring - the plain, universal mark for "read more here",
  *  not the question-mark-as-decoration a FAQ page usually reaches for. */
 @Composable

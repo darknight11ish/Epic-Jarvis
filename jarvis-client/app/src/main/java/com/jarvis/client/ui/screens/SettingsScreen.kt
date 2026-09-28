@@ -83,7 +83,8 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "folders" to 9,
     "backup" to 10,
     "watch-notify" to 11,
-    "quick-tiles" to 12,
+    "phone-notify" to 12,
+    "quick-tiles" to 13,
 )
 
 /**
@@ -134,13 +135,24 @@ fun SettingsScreen(
     quickTiles: List<TileAction?> = List(QuickTiles.SLOTS) { null },
     onQuickTileChange: (slot: Int, action: TileAction?) -> Unit = { _, _ -> },
     /**
+     * "Reading phone notifications" (docs/JARVIS-API.md §61): whether
+     * Android's own "Notification access" is currently granted
+     * (`NotificationManagerCompat.getEnabledListenerPackages`, re-read on
+     * resume - the same `tick` pattern [overlayGranted] already uses), and
+     * the button that opens that OS screen.
+     */
+    notificationAccessGranted: Boolean = false,
+    onOpenNotificationAccess: () -> Unit = {},
+    /**
      * "Open <a settings section>" by voice or chat
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
      * section id `MainActivity` read off `ChatSession.openSettings`, or
-     * null. A new (distinct) value scrolls to that item once; an id this
-     * screen has no row for (any desktop-only section) is a harmless no-op -
-     * the screen still opened, and the answer already named the place in
-     * words. Voice, Security and Appearance (above) are real
+     * null. A new (distinct) value scrolls to that item once. Since the
+     * phone walk-through of 2026-09-27 only ids with a row here arrive -
+     * [com.jarvis.client.ui.OpenPlace] sends the rest to Help, Checks,
+     * Brain or "Jarvis's voice", or says the place is only on the PC - but
+     * an unknown id (one newer than this app) is still a harmless no-op
+     * here. Voice, Security and Appearance (above) are real
      * `item(key = ...)` rows too, with their own entries in
      * [SETTINGS_ITEM_INDEX], so an id naming one of them scrolls to it like
      * any other section - it does not fall into that no-op case.
@@ -284,6 +296,14 @@ fun SettingsScreen(
             item(key = "folders") { FoldersSection() }
             item(key = "backup") { BackupSection() }
             item(key = "watch-notify") { WatchNotifySection(canAct = canAct) }
+            item(key = "phone-notify") {
+                PhoneNotificationsSection(
+                    canAct = canAct,
+                    notificationAccessGranted = notificationAccessGranted,
+                    onOpenNotificationAccess = onOpenNotificationAccess,
+                )
+            }
+
             item(key = "quick-tiles") {
                 QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
             }

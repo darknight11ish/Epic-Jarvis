@@ -161,6 +161,12 @@ fn main() {
             "get_backend_capabilities",
             "get_second_card",
             "set_second_card",
+            // Moving one of the second card's own switches onto a third,
+            // capable graphics card, or moving it back off (2026-09-28).
+            // Its own command (the wire shape differs: "assign", not
+            // "enabled"); read is folded into get_second_card's own
+            // answer (status()'s "third" key). Settings window only.
+            "set_third_card",
             // "When to suggest the bigger model" (2026-09-27): no approval
             // card either way, folded into the same Settings section. read
             // is folded into get_second_card's own answer.
@@ -205,6 +211,14 @@ fn main() {
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.
             "get_reach",
+            // The sun, the moon and the weather behind the animal faces
+            // (backend/sky.patch, 2026-09-28): the settings and the weather
+            // now (a read - Settings, the Widget and the floating face keep
+            // what drawing needs in this computer's localStorage); ONE
+            // change at a time (Settings only; Open-Meteo ON raises one
+            // approval card on the PC; adding is held on a stale link).
+            "get_sky",
+            "set_sky",
             // Settings' "What asks first" (backend/asks-first.patch): every
             // action and whether it asks, in the PC's words; "Ask me first"
             // on ONE action of the short safe list (stricter at once, never
@@ -294,6 +308,9 @@ fn main() {
             "set_voice_speed",
             "set_voice_speaker",
             "set_voice_face",
+            "set_voice_animal",
+            "reset_voice_animal",
+            "try_voice_animal",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",
@@ -388,6 +405,17 @@ fn main() {
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",
+            // Goals (backend/goals.patch, JARVIS-API.md section 59): a
+            // read, one new draft, accepting it (the backend's own one
+            // approval card, through jarvis_schedule.py, never a card of
+            // this app's own making), one step done or not, and Stop
+            // tracking. No card raised here directly; every write held on
+            // a stale link. Brain only.
+            "brain_goals",
+            "brain_goals_create",
+            "brain_goals_accept",
+            "brain_goals_step",
+            "brain_goals_stop",
             // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
             // dates in a picture, read on the PC and PROPOSED (a scan sets
             // nothing up), and the owner's tap adding ONE reminder - no
@@ -402,6 +430,23 @@ fn main() {
             "history_import_status",
             "history_import_start",
             "history_import_cancel",
+            // Projects (backend/projects.patch; JARVIS-API section 88; the
+            // owner's decision of 2026-09-28): read the projects, ONE change
+            // named by an action from a fixed list (the PC raises the only
+            // cards: Shareable ON, and taking off a mark Jarvis made), and a
+            // coding project's folder by the Windows picker. Every change
+            // held on a stale link except Shareable OFF. Brain only.
+            "projects_read",
+            "projects_write",
+            "projects_choose_folder",
+            // "Forget a time frame" (backend/forget-range.patch; JARVIS-API
+            // section 64; the owner's decision of 2026-09-28): read the
+            // status or the list for some days (hidden in Rust with the
+            // private lists), and ONE of two things - "Forget these" (the
+            // PC raises ONE card; held on a stale link, refused while the
+            // list is hidden) or Undo (no card, never held). Brain only.
+            "forget_range_read",
+            "forget_range_write",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on
@@ -409,6 +454,22 @@ fn main() {
             "focus_status",
             "focus_start",
             "focus_act",
+            // "Talk to a chatbot for me" (backend/chatbot-routes.patch): read the
+            // conversation (a read; the words taken out in Rust while the
+            // private lists are hidden), start one (ONE card on the PC; held
+            // on a stale link), new limits (a NEW card; held), stop (never
+            // held), and pause/resume through /api/task/* (resume held - it
+            // raises its own card). "Ask several and compare": start one (ONE
+            // card listing every chatbot; held) and stop it (never held).
+            // Brain only.
+            "chatbot_status",
+            "chatbot_start",
+            "chatbot_limits",
+            "chatbot_stop",
+            "chatbot_pause",
+            "chatbot_resume",
+            "chatbot_compare_start",
+            "chatbot_compare_stop",
             // The morning briefing (backend/briefing.patch): read the latest
             // one and "Brief me now" (a read, not held on a stale link) -
             // Brain only; and its setup - read it, set one up that repeats
@@ -446,6 +507,17 @@ fn main() {
             "start_automatic_listening",
             "stop_automatic_listening",
             "speak_reply",
+            // Jarvis Live (live.rs): read the session, start it (no card;
+            // held on a stale link and under App lock), stop it (never
+            // held), more time / carry on, mute, and hold the microphone
+            // closed while the bar shows a card. The Jarvis bar's and the
+            // Live badge's; neither records or reads any words.
+            "live_status",
+            "live_start",
+            "live_stop",
+            "live_act",
+            "live_mute",
+            "live_hold",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.
