@@ -113,9 +113,9 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
 - **Three animal faces and "voice follows the face"** - on
   `claude/jarvis-3d-animal-mascot-8dr0tb`. The owner's 2026-09-28 decision
   (offer the voice once, switch off by default, the otter not on "Sky") was
-  not yet applied there as of 2026-09-28 02:07 UTC. That branch also has
+  not yet applied there as of 2026-09-28 03:05 UTC (`FACE_VOICE_DEFAULT = True`, the otter still speaker "4"). That branch also has
   **real lip-sync**: the animals' mouths follow Jarvis's voice through a
-  mouth track carried in the WAV, on both apps (fixes the studio's finding
+  mouth track carried in the WAV, timed by Kokoro itself per sentence, on both apps (fixes the studio's finding
   that the desktop mouth ran on a made-up rhythm).
 - On this branch (`claude/jarvis-ai-assistant-research-ff37vy`): the
   chatbot driver (core, websites, API services, second local AI; API §60),
