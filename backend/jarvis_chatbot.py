@@ -104,7 +104,7 @@ so it is outside text too (`read_aloud: False`).
 
 WHAT THIS STEP DOES NOT DO, SAID PLAINLY
   * No route and no app screen: start()/view()/stop()/change_limits() are
-    what the routes will call (docs/JARVIS-API.md section 59, "not routed
+    what the routes will call (docs/JARVIS-API.md section 60, "not routed
     yet").
   * The transcript is kept in memory only, like jarvis_task_control's state:
     a backend restart loses it. Storing it in the encrypted chat history,

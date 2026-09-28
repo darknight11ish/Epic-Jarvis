@@ -13750,7 +13750,7 @@ has the phone-parity row.
 # Talking to an AI chatbot for you, the core: `jarvis_chatbot.py` (2026-09-28)
 
 Step 1 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`, the owner's
-answers of 2026-09-28; `docs/JARVIS-API.md` section 59). **Not usable
+answers of 2026-09-28; `docs/JARVIS-API.md` section 60). **Not usable
 yet**: no route, no app screen, and no real chatbot - Gemini's adapter is
 listed and says "not built yet". Shipped whole (`apply-patches.ps1` copies
 it; no patch), so the next steps build on code that is already tested.

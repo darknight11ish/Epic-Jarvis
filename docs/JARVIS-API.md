@@ -8855,7 +8855,7 @@ second version of any of it.
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
 
-## 59. Chatbot conversations - Jarvis talks to an AI chatbot for you (core built 2026-09-28, not routed yet)
+## 60. Chatbot conversations - Jarvis talks to an AI chatbot for you (core built 2026-09-28, not routed yet)
 
 **Not routed yet. Neither app calls anything here, and no route exists on
 the backend.** This section is a stub, so both apps build against one
@@ -8867,7 +8867,7 @@ patch, tested by `backend/test_chatbot.py` against a stand-in chatbot
 (`FakeChatbot`). **No real chatbot works yet**: Gemini is listed, and its
 adapter says "not built yet".
 
-### 59.1 What it is
+### 60.1 What it is
 
 The owner gives a goal ("find out how to keep houseplants alive in a dark
 flat"). Jarvis sends the goal, word for word, to the chatbot, then writes
@@ -8880,7 +8880,7 @@ back to the owner, never answered). It **pauses and asks** at a captcha, a
 sign-in page or an "unusual activity" page (never solved or skipped), and
 when its own message is blocked twice by the last check.
 
-### 59.2 The card
+### 60.2 The card
 
 Gate action `chatbot_session`, tier `ask` only (any other tier refuses to
 start; `never` switches the feature off). A risky approval: it leaves the
@@ -8893,7 +8893,7 @@ per conversation; **any** change to a limit is a new card; Resume is
 same last check as every message **before** the card; a goal that fails is
 refused with the reason and no card.
 
-### 59.3 The planned routes (none exists yet)
+### 60.3 The planned routes (none exists yet)
 
 | route | body | answer |
 |---|---|---|
@@ -8921,7 +8921,7 @@ the owner, handed back), `problem`, `summary`, `read_aloud: false`, and
 too. Apps show them, never read them aloud, and never offer to remember
 anything from them.
 
-### 59.4 Not decided or not built
+### 60.4 Not decided or not built
 
 The routes; both apps' screens and the phone's ongoing notification; the
 Gemini adapter (Playwright, a visible window, one browser profile, the

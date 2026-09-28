@@ -243,7 +243,7 @@ Whether a git-undoable edit counts as risky depends on the risk table.
   always ask (`MUST_ASK`, `HARD_LIMITS`); fixed no-card rows: "Re-running a
   saved benchmark you start yourself", "Logging your own number", "Undo of
   Jarvis's change".
-- API: a new section 60 in `docs/JARVIS-API.md`. No new row in
+- API: a new section 61 in `docs/JARVIS-API.md` (59 is Goals, 60 the chatbot driver). No new row in
   `jarvis_reach.KINDS` unless question 1 is "yes".
 
 ## 9. Build plan (small testable steps)
