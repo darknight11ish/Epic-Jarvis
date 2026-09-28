@@ -179,6 +179,11 @@ WORDS = {
     "money_pc_only": ("Each service with a key needs a monthly money limit before Jarvis uses "
                       "it. Limits and prices are set on the PC only, like keys; the amounts "
                       "are estimates."),
+    # Under a chatbot's answer that the money limit's answer-length cap cut
+    # short (`cut_off: true` on that transcript entry;
+    # jarvis_chatbot_api.CUT_OFF, word for word).
+    "cut_off": ("Jarvis asked for a short answer so it stays within your limit; the rest was "
+                "cut off."),
 }
 
 #: The states in which a conversation is still going (jarvis_chatbot._live).

@@ -907,8 +907,9 @@ def _chatbot_api(ctx: Ctx) -> dict:
                 "most messages and minutes, and about how much of the monthly money limit is "
                 "left. Each message costs a little on that account; Jarvis stops using a "
                 "service when the monthly limit you set on the PC is reached (an estimate from "
-                "a price list you can correct there). Nothing private is sent, and what the "
-                "chatbot says is outside text.")
+                "a price list you can correct there), and asks each service it can to keep "
+                "every answer short enough to stay within it. Nothing private is sent, and "
+                "what the chatbot says is outside text.")
 
 
 #: Every way Jarvis can reach something outside itself, in the order both

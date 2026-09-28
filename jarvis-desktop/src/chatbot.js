@@ -114,6 +114,9 @@ export const WORDS = {
     "About {left} of {limit} left this month for {company} (prices are estimates you can correct on the PC).",
   money_pc_only:
     "Each service with a key needs a monthly money limit before Jarvis uses it. Limits and prices are set on the PC only, like keys; the amounts are estimates.",
+  // Under an answer the money limit's answer-length cap cut short (the
+  // PC's `cut_off: true` on that transcript entry).
+  cut_off: "Jarvis asked for a short answer so it stays within your limit; the rest was cut off.",
 };
 
 /** How each chatbot is reached (`kind`), in the order the chooser groups them. */
@@ -156,6 +159,9 @@ function readTurn(t) {
     // the flag says.
     outside: who === "chatbot" || o.outside_text === true,
     move: text(o.move),
+    // Cut short by the answer-length cap Jarvis asked for (an API
+    // service's money limit): WORDS.cut_off is shown under it.
+    cutOff: who === "chatbot" && o.cut_off === true,
   };
 }
 

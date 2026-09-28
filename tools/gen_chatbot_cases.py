@@ -198,6 +198,14 @@ class ApiBot(CB.FakeChatbot):
                 "dollars": round(spent, 8), "cost": A.dollars(spent)}
 
 
+class CutApiBot(ApiBot):
+    """An API stand-in whose FIRST answer the money limit's answer-length
+    cap cut short (jarvis_chatbot_api's cut_off())."""
+
+    def cut_off(self):
+        return len(self.sent) == 1
+
+
 def fresh():
     CB._reset_for_tests()
     R._reset_for_tests()
@@ -409,6 +417,11 @@ def cases() -> dict:
     api_bot.sent.clear()
     cid = compare(d, chatbots=["gemini_web", "openai_api"])[1]["compare"]
     out["compare_usage"] = status(d, compare_id=cid)
+    # An answer the money limit's cap cut short: `cut_off` on its entry,
+    # and both apps show WORDS.cut_off under it.
+    entry("openai_api", "", CutApiBot(OTHER_REPLIES))
+    sid = start(d, chatbot="openai_api", max_messages=2)[1]["session"]
+    out["cut_off"] = status(d, sid)
 
     # ---- the money limit: reached, and never set ---------------------------
     fresh()

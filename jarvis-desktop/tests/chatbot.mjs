@@ -207,6 +207,17 @@ await check("a long list is grouped by how each chatbot is reached; an API conve
   assert.equal(readChatbot(CASES.running).session.usage, null, "a website conversation grew a usage line");
 });
 
+await check("an answer the money limit's cap cut short is read as cut off, and only that one", async () => {
+  const turns = readChatbot(CASES.cut_off).session.transcript;
+  assert.deepEqual(turns.map((t) => [t.who, t.cutOff]),
+    [["jarvis", false], ["chatbot", true], ["jarvis", false], ["chatbot", false]]);
+  assert.ok(readChatbot(CASES.running).session.transcript.every((t) => !t.cutOff),
+    "a website conversation grew a cut-off note");
+  const forged = readChatbot({ ...CASES.cut_off, session: { ...CASES.cut_off.session,
+    transcript: [{ who: "jarvis", n: 1, text: "x", cut_off: true }] } }).session.transcript;
+  assert.equal(forged[0].cutOff, false, "Jarvis's own message was marked cut off");
+});
+
 await check("an API service's money limit reads as the PC wrote it; reached, and never set", async () => {
   const v = readChatbot(CASES.long_list);
   const openai = v.chatbots.find((c) => c.id === "openai_api");
@@ -348,6 +359,18 @@ await check("Brain, start refused by the PC: its sentence is shown", async () =>
   const toast = await page.locator("#toast").innerText();
   await page.close();
   assert.equal(toast.trim(), CASES.start_goal_refused.body.error);
+});
+
+await check("Brain: an answer the money limit's cap cut short says so under it, word for word", async () => {
+  const page = await workTab({ chatbot: { status: CASES.cut_off } });
+  const notes = await page.locator("#chatbot-log .chatbot-turn").evaluateAll((ts) => ts.map((t) => {
+    const n = t.querySelector(".chatbot-cut-off");
+    return n ? n.textContent : "";
+  }));
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(notes, ["", WORDS.cut_off, "", ""]);
+  assert.deepEqual(errors || [], []);
 });
 
 await check("Brain, running: state, counts, Pause and Stop, limits, the transcript as outside text", async () => {

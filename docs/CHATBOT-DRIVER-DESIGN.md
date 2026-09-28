@@ -140,17 +140,34 @@ conversation. How it works (`backend/jarvis_chatbot_api.py`, JARVIS-API
   the PC holding numbers only - never the key. The month rolls over on the
   1st, PC local time. The file survives a restart.
 - **Stops before going over**: a service at its limit is refused before any
-  card; before every message, that message's worst case (everything resent
-  plus 8,000 word-pieces of answer) must fit in what is left, or the
-  conversation ends there with plain words. In a comparison, that chatbot
-  drops out and the others carry on.
+  card; before every message, that message must fit in what is left, or
+  the conversation ends there with plain words. In a comparison, that
+  chatbot drops out and the others carry on.
+- **A hard stop: each answer's length is capped** (the owner chose this on
+  2026-09-28, after the limit was built): every request asks the service
+  itself to write no more than a cap - the smaller of 8,000 word-pieces
+  and what the rest of the month's limit pays for at that model's price -
+  so one long answer cannot carry a month past the limit. The cap shrinks
+  as the month is used; when what is left cannot pay for even 256
+  word-pieces, the message is not sent. An answer the cap cut short is
+  shown with "Jarvis asked for a short answer so it stays within your
+  limit; the rest was cut off." in both apps.
+- **Each service's own name for the cap was checked** in its own code on
+  GitHub (their documentation sites were blocked from where this was
+  built): OpenAI, Groq and OpenRouter `max_completion_tokens`; Mistral
+  `max_tokens`; xAI `max_tokens` (from xAI's own client code, not its API
+  reference). **DeepSeek's could not be confirmed, so no cap is sent
+  there**; its only guard stays the worst-case check (everything resent
+  plus 8,000 word-pieces of answer plus 8,000 for hidden reasoning).
+- **Hidden reasoning ("thinking")**: OpenAI's own words count it inside
+  the cap, so there the cap bounds the whole bill. Groq, OpenRouter,
+  Mistral and xAI do not say, so Jarvis keeps room for 8,000 word-pieces
+  of it on top of the cap - a guess.
 - **Set on the PC only**, like keys - raising a limit is a loosening, so
   there is no route for it; both apps only show the amounts.
-- **Honest limit**: it is an estimate; a wrong price, or one very long
-  answer (a "thinking" model's hidden reasoning is billed as answer), can
-  put a month a little over. Jarvis does not yet ask services to cap the
-  length of an answer (the request field differs by service and was not
-  checked).
+- **Honest limit**: it is an estimate; a wrong price can put a month a
+  little over, and so can hidden reasoning longer than the room kept for
+  it (every service but OpenAI) or a very long DeepSeek answer (uncapped).
 
 ## 3. Rule 1: nothing private goes out
 

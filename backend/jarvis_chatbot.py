@@ -292,6 +292,10 @@ class Adapter:
     reason the conversation must end before it (jarvis_chatbot_api: the
     monthly money limit). Asked right before every send; one that raises
     ends the conversation too (fail closed).
+    Optional: cut_off() -> True when the reply just read was cut short by
+    the answer-length cap the adapter asked for (jarvis_chatbot_api: the
+    money limit's hard stop). The transcript marks that reply `cut_off`, and
+    both apps show WORDS["cut_off"] under it.
     An adapter never decides anything: no retries of a send, no clicking
     through a captcha, a sign-in or a warning page, no hiding that it is a
     program. When its page is anything but the normal chat, status() says
@@ -1692,8 +1696,13 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
                     if elapsed() >= s.limits.max_minutes * 60:
                         raise _End("limit_time")
             reply = str(reply)[:MAX_REPLY_CHARS]
-            s.transcript.append({"who": "chatbot", "n": s.turns_used, "text": reply,
-                                 "at": d.clock(), "outside_text": True, "source": SOURCE})
+            turn = {"who": "chatbot", "n": s.turns_used, "text": reply,
+                    "at": d.clock(), "outside_text": True, "source": SOURCE}
+            if _cut_off(s.adapter):
+                # Cut short by the adapter's own answer-length cap (an API
+                # service's money limit): both apps say so under it.
+                turn["cut_off"] = True
+            s.transcript.append(turn)
             s.usage = _usage_of(s.adapter) or s.usage
             look()
             q = asks_about_owner(reply)
@@ -1747,6 +1756,16 @@ def _before_send(adapter, text: str) -> str:
     except Exception as exc:
         return (f"Jarvis could not check the money limit before the next message "
                 f"({type(exc).__name__}), so nothing more was sent.")
+
+
+def _cut_off(adapter) -> bool:
+    """An adapter's own "the reply just read was cut short by the cap I
+    asked for" (jarvis_chatbot_api), or False."""
+    fn = getattr(adapter, "cut_off", None)
+    try:
+        return bool(fn()) if callable(fn) else False
+    except Exception:
+        return False
 
 
 def _held_for_owner(adapter) -> bool:

@@ -14688,7 +14688,8 @@ of the chatbot driver, **not yet tried against the real services**.
   example if a price is wrong, or one answer is much longer than usual
   ("thinking" models are billed for their hidden reasoning too). For a hard
   stop, also set a spending limit on the company's own website if it offers
-  one.
+  one. (Updated the same day: Jarvis now also asks most services to cap
+  each answer's length - see "The money limit becomes a hard stop" below.)
 - **Limits and prices are set on the PC only**, in PowerShell, the same
   place keys are added. The phone and the desktop app can only show them.
   Raising a limit lets more money be spent, so it is kept where only a
@@ -14800,3 +14801,132 @@ near its limit drops out after one message and the other carries on.
   request switch for it that Jarvis does not send (not checked, so not
   added); without it, OpenRouter's answers are estimated like the others.
 - Not tried against any real service, like the rest of the API adapters.
+
+# The money limit becomes a hard stop: each answer's length is capped (2026-09-28)
+
+Owner's decision (CLAUDE.md, "Built 2026-09-28; the owner then chose to
+make it a hard stop too"): "Jarvis also asks each service to cap how long
+an answer can be, so one long answer cannot carry a month past the limit.
+Each service names that setting differently, so each one's own
+documentation is checked before it is used." Built on the backend and
+shown in both apps (`docs/JARVIS-API.md` 60.4.1). **Not yet tried against
+the real services.**
+
+## In plain words
+
+- **Every message now asks the service to keep its answer short enough to
+  fit in what is left of your monthly limit.** The most is 8,000
+  word-pieces (tokens) a message; as the month's spending grows, the cap
+  gets smaller, so the service itself stops writing - and charging -
+  before your limit would be passed.
+- **When so little is left that not even a short answer fits** (256
+  word-pieces), Jarvis does not send the message, with the same plain
+  words as before ("could cost up to about ..., which would pass the ...
+  you set").
+- **An answer that was cut short says so**, under it, in both apps:
+  "Jarvis asked for a short answer so it stays within your limit; the rest
+  was cut off."
+- **Each company calls this setting something different, so each name was
+  checked in that company's own code** (their documentation websites could
+  not be opened from where this was built):
+  - OpenAI: `max_completion_tokens` (openai/openai-python). OpenAI's own
+    words say it **includes the hidden "thinking"**, so for OpenAI the cap
+    really does bound the whole bill.
+  - Groq: `max_completion_tokens` (groq/groq-python).
+  - OpenRouter: `max_completion_tokens` (OpenRouterTeam/typescript-sdk).
+  - Mistral: `max_tokens` (mistralai/client-python).
+  - xAI (Grok): `max_tokens` - taken from **xAI's own client program**
+    (xai-org/grok-build), not from its published API reference, which
+    could not be opened. Very likely right, but not from the reference.
+  - For Groq, OpenRouter, Mistral and xAI, their code **does not say
+    whether hidden "thinking" counts inside the cap**. So Jarvis also keeps
+    room for 8,000 word-pieces of thinking when it works out the cap. That
+    room is a guess: very long hidden thinking could still carry a month a
+    little over.
+- **DeepSeek: no cap is sent.** Its setting's name could not be confirmed
+  (its documentation could not be opened, and it has no program on GitHub
+  for this API), and guessing a name was ruled out. So DeepSeek keeps only
+  the old check: before each message, the longest possible answer (8,000
+  word-pieces) plus 8,000 for thinking must fit in what is left. Its card
+  and `spent` say this plainly.
+
+## What to do on the PC
+
+1. Run `apply-patches.ps1` as usual (it copies the changed files).
+2. Nothing else. To see, per service, which setting caps its answers and
+   what happens to hidden thinking:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_api.py spent
+   ```
+
+## What changed
+
+- `backend/jarvis_chatbot_api.py`: each preset names its cap field
+  (`cap_field`), where it was checked (`cap_source`) and whether hidden
+  reasoning is inside it (`reasoning`); `reply_cap` works out the cap (the
+  smaller of `MOST_REPLY_TOKENS`, 8,000, and what the rest of the month
+  pays for, less `REASONING_ROOM`, 8,000, where reasoning is not said to be
+  inside; refused below `LEAST_REPLY_TOKENS`, 256); `money_check` returns
+  the problem and the cap (`money_problem` still returns the words);
+  `send()` checks again and puts the cap in the request; an answer with
+  `finish_reason` "length" (with a cap sent) is marked cut off
+  (`cut_off()`), and one cut off before any words ends with plain words
+  (`CUT_OFF_EMPTY`); the card's note says whether Jarvis asks that service
+  for short answers; `spent` says per service how the limit is kept
+  (`cap_words`). `WORST_REPLY_TOKENS` stays as the old name for
+  `MOST_REPLY_TOKENS`.
+- `backend/jarvis_chatbot.py` (the core) - small, listed exactly: an
+  adapter's optional `cut_off()`, read after each reply (`_cut_off`); a
+  chatbot turn it says yes for gets `"cut_off": true` in the transcript.
+- `backend/jarvis_chatbot_routes.py`: `WORDS` gains `cut_off`.
+- `backend/jarvis_reach.py`: the "Chatbot conversations with a key" line
+  adds "and asks each service it can to keep every answer short enough to
+  stay within it".
+- Both apps: `cut_off` read from each chatbot turn, and `WORDS.cut_off`
+  shown under it. Desktop `src/chatbot.js`, `src/brain.js`; phone
+  `net/Chatbot.kt`, `ui/screens/ChatbotPlate.kt`. No Rust change.
+- `tools/gen_chatbot_cases.py`: a `cut_off` case; both fixtures and
+  `tools/gen_reach_cases.py`'s regenerated.
+
+## Test it
+
+```
+python3 backend/test_chatbot_api.py
+python3 backend/test_chatbot.py
+python3 backend/test_chatbot_routes.py
+python3 backend/test_chatbot_compare.py
+python3 backend/test_reach.py
+python3 tools/gen_chatbot_cases.py --check
+node jarvis-desktop/tests/chatbot.mjs
+```
+
+The fake OpenAI-style server now writes no more than the cap a request
+carries, like a real service. Proved: each service sends its own field and
+no other (DeepSeek none); the cap is 8,000 with plenty left and shrinks
+message by message as spending grows (8,000, then about 7,000, 4,000,
+1,000), the month ends at or under the limit, and the next message is
+refused in the old words; too little left refuses before the goal is sent,
+and the card warns; the arithmetic of `reply_cap` for OpenAI (reasoning
+inside) and Groq (room kept); a "length" answer is marked cut off, the next
+whole one is not, and a "length" from DeepSeek (no cap sent) gets no note;
+a cap used up before any words ends plainly; DeepSeek is still refused by
+the worst-case check when it may not fit, and sends no cap field when it
+does; the card and `spent` say how each service is guarded; the key is in
+no log line, output, session view or the money file.
+
+## Not checked, said plainly
+
+- **None of the field names was read in a company's published API
+  reference** - every documentation site was blocked from the build
+  container. Each comes from that company's own code on GitHub; xAI's from
+  its own client program rather than an SDK for this API.
+- **Whether hidden reasoning counts inside the cap** for Groq, OpenRouter,
+  Mistral and xAI: not stated in their code. The 8,000 of room is a guess.
+- **DeepSeek's field**: not confirmed, so not sent.
+- **One real-world side effect to watch:** on OpenAI, hidden reasoning
+  counts inside the cap, so a "thinking" model (the default `gpt-5-mini`
+  is one) could spend much of a small cap thinking and return a short or
+  empty answer near the end of the month. An empty one ends the
+  conversation with plain words.
+- Not tried against any real service.

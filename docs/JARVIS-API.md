@@ -9029,7 +9029,11 @@ everything (`/api/stop_all`) stops a conversation too.
 in plain words), `ended` (why), `question` (the chatbot's question about
 the owner, handed back), `problem`, `summary`, `read_aloud: false`, `usage`, and
 `transcript`: `[{"who": "jarvis" | "chatbot", "n", "text", "at",
-"outside_text", "source"?, "move"?}]`.
+"outside_text", "source"?, "move"?, "cut_off"?}]`. `cut_off: true` (a
+chatbot turn only, and only when true) marks an answer that the money
+limit's answer-length cap cut short (§60.4.1); both apps show
+`WORDS.cut_off` under it: "Jarvis asked for a short answer so it stays
+within your limit; the rest was cut off."
 
 **Outside text.** Every chatbot turn has `outside_text: true` and `source:
 "chatbot_transcript"`; the summary (`answer`, `claims` with
@@ -9124,7 +9128,8 @@ shows.
 ### 60.4.1 Through an official API with a key (`jarvis_chatbot_api.py`, 2026-09-28)
 
 One adapter family speaking the OpenAI-style "Chat Completions" API
-(`POST <base>/chat/completions`, `{"model", "messages", "stream": false}`,
+(`POST <base>/chat/completions`, `{"model", "messages", "stream": false}`
+plus that service's answer-length cap field - see "The hard stop" below -
 one answer back), registered as one chatbot per service so the card names
 the exact service, host and model. `chatbots[].kind` is `"api"` for these,
 `"website"` for Gemini and `"local"` for 60.4.2.
@@ -9134,7 +9139,7 @@ the exact service, host and model. `chatbots[].kind` is `"api"` for these,
 | `openai_api` | ChatGPT (OpenAI API) | `https://api.openai.com/v1` | `gpt-5-mini` | yes - openai/openai-python |
 | `deepseek_api` | DeepSeek (API) | `https://api.deepseek.com` | `deepseek-chat` | **unverified** (docs blocked from the build container) |
 | `mistral_api` | Mistral (API) | `https://api.mistral.ai/v1` | `mistral-small-latest` | yes - mistralai/client-python |
-| `xai_api` | Grok (xAI API) | `https://api.x.ai/v1` | `grok-4.6` | host yes (xai-sdk-python); the `/v1/chat/completions` path **unverified** |
+| `xai_api` | Grok (xAI API) | `https://api.x.ai/v1` | `grok-4.6` | host yes (xai-sdk-python); the `/v1/chat/completions` path seen in xAI's own client (xai-org/grok-build), **not** in its API reference (blocked) |
 | `openrouter_api` | OpenRouter (API) | `https://openrouter.ai/api/v1` | `openai/gpt-5-mini` | yes - OpenRouterTeam/typescript-sdk |
 | `groq_api` | Groq (API) | `https://api.groq.com/openai/v1` | `openai/gpt-oss-20b` | yes - groq/groq-python |
 
@@ -9213,9 +9218,12 @@ and correct, and the card says 'about'."
   `ready: false` ("You set $5.00 a month for OpenAI; about $5.02 is used
   this month. Raise the limit on the PC or wait until October 1."), so no
   card. And right before EVERY message the core asks the adapter's
-  `before_send()`: the worst case of that request - everything it resends
-  (3 characters a word-piece, erring high) plus 8,000 word-pieces of answer
-  - must fit in what is left, or the conversation ends there
+  `before_send()` (and `send()` checks again): that request must fit in
+  what is left - with the answer-length cap below, at least 256
+  word-pieces of answer after everything it resends (3 characters a
+  word-piece, erring high); for DeepSeek (no cap), its worst case,
+  8,000 word-pieces of answer plus 8,000 for hidden reasoning - or the
+  conversation ends there
   (`ended_code` "money_limit", ok, not an error) with "The next message to
   ... could cost up to about $0.02, which would pass the $0.02 a month you
   set for OpenAI (about $0.01 is used this month). Nothing more was sent.
@@ -9228,11 +9236,59 @@ and correct, and the card says 'about'."
   month for OpenAI (prices are estimates you can correct on the PC)." and,
   when what is left may not cover even one message, "That may not be
   enough for one more message; if so, Jarvis stops before sending it."
-- **Honest limits.** It is an estimate: a default price may be wrong until
-  the owner corrects it, and one answer can be longer than 8,000
-  word-pieces (a "thinking" model's hidden reasoning is billed as answer),
-  so a month can end a little over. Jarvis does not ask a service to cut
-  answers short (that field differs between services and was not checked).
+  Its note adds "It also asks OpenAI to keep each answer short enough to
+  stay within that limit." - or, for DeepSeek, "Jarvis cannot yet ask
+  DeepSeek to keep answers short (that setting could not be checked), so
+  it stops earlier instead."
+
+**The hard stop: each answer's length is capped** (the owner's decision,
+2026-09-28: "Jarvis also asks each service to cap how long an answer can
+be, so one long answer cannot carry a month past the limit. Each service
+names that setting differently, so each one's own documentation is checked
+before it is used.")
+
+- **Every request carries a cap** in that service's own field. The cap is
+  the SMALLER of 8,000 word-pieces (a sensible most for one message) and
+  what is left of the month's limit, after the worst case of what the
+  message sends, turned into answer word-pieces at that model's out price
+  (`reply_cap`) - less 8,000 word-pieces of room for hidden reasoning
+  where the service does not say its cap covers it. So the cap shrinks as
+  the month is used, and the service itself will not write, or bill, an
+  answer past the limit, as far as its own counting goes. When what is
+  left cannot pay for even 256 word-pieces, the message is refused with
+  the "could cost up to ... would pass" words above.
+- **The field per service** (checked 2026-09-28; every provider's
+  documentation site was blocked from the build container, so each was
+  read in the provider's own code on GitHub):
+
+  | service | field | where it was checked | hidden reasoning |
+  |---|---|---|---|
+  | `openai_api` | `max_completion_tokens` | openai/openai-python `src/openai/types/chat/completion_create_params.py`: "An upper bound for the number of tokens that can be generated for a completion, including visible output tokens and reasoning tokens"; `max_tokens` there is "deprecated in favor of `max_completion_tokens`, and is not compatible with o-series models" | **inside the cap** (OpenAI's own words): the cap bounds the whole bill |
+  | `groq_api` | `max_completion_tokens` | groq/groq-python, the same file name; `max_tokens`: "Deprecated in favor of `max_completion_tokens`" | not stated; 8,000 of room kept |
+  | `openrouter_api` | `max_completion_tokens` | OpenRouterTeam/typescript-sdk `src/models/chatrequest.ts`: "Maximum tokens in completion"; `max_tokens`: "deprecated, use max_completion_tokens" | not stated (it passes the request on to the model's company); 8,000 of room kept |
+  | `mistral_api` | `max_tokens` | mistralai/client-python `src/mistralai/client/models/chatcompletionrequest.py`: "The maximum number of tokens to generate in the completion" | not stated; 8,000 of room kept |
+  | `xai_api` | `max_tokens` | **xAI's own client code, not its API reference** (blocked): xai-org/grok-build sends `max_tokens` in its Chat Completions request to `<base>/chat/completions`, base `https://api.x.ai/v1`; xai-org/xai-sdk-python `chat.py` names the same for its gRPC API | not stated; 8,000 of room kept |
+  | `deepseek_api` | **none sent - unverified** | DeepSeek's API reference could not be opened and it has no SDK for this API on GitHub (its own deepseek-harness speaks the Anthropic-style endpoint, a different API) | the worst-case check above is its only guard |
+
+- **An answer cut short** (`finish_reason` "length", with a cap sent) is
+  kept and marked `cut_off: true` in the transcript; both apps show
+  `WORDS.cut_off` under it. A "length" with no cap sent (DeepSeek) is not
+  Jarvis's doing and gets no note. An answer the cap stopped before any
+  of it was written (a "thinking" model spent it all on hidden reasoning)
+  ends the conversation with "... used up the answer length Jarvis asked
+  for, to stay within your money limit, before writing any answer."
+- `py -3 jarvis_chatbot_api.py spent` says, per service, which field caps
+  its answers and where that was checked, whether hidden reasoning counts
+  inside it, and, for DeepSeek, "NO CAP IS SENT" with why.
+- **Honest limits.** It is still an estimate: a default price may be wrong
+  until the owner corrects it. Only OpenAI's cap is known to bound the
+  whole bill. For Groq, OpenRouter, Mistral and xAI the cap bounds the
+  visible answer and 8,000 word-pieces of room is kept for hidden
+  reasoning - a guess; for DeepSeek nothing is capped. On those, a longer
+  hidden reasoning (or a longer DeepSeek answer) can still carry a month a
+  little over. xAI's field comes from xAI's own client code, not its
+  published reference; if xAI ever refused it, the conversation would end
+  with "refused the message (error 400)".
 
 ### 60.4.2 A second AI on this PC (`jarvis_chatbot_local.py`, 2026-09-28)
 

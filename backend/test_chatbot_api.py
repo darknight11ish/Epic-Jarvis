@@ -43,7 +43,16 @@ jarvis_search, jarvis_mail_mask, jarvis_task_control and jarvis_stop_all:
     reported cost is used when present; a price corrected on the command
     line is used; a model with no price is refused; an unreadable money file
     fails closed; the card shows "About $X of $Y left"; in a comparison the
-    API chatbot near its limit drops out and the other carries on.
+    API chatbot near its limit drops out and the other carries on;
+  - THE HARD STOP (the owner's decision of 2026-09-28, "make it a hard stop
+    too"): each service's own name for the answer-length cap (DeepSeek's
+    unverified, so none is sent there); every request carries it; it shrinks
+    as the month's spending grows, and the month never passes the limit as
+    far as the service counts; a message that cannot pay for even a short
+    answer is refused in the existing words; an answer the cap cut short is
+    marked cut_off with the shared note; DeepSeek is still guarded by the
+    worst-case check (with room for hidden reasoning); the key is never in a
+    log, the session view or the money file.
 
 No pytest. The only sockets are to the two fake servers on 127.0.0.1.
 """
@@ -150,6 +159,10 @@ class Server:
         self.script: list = []
         self.delay = 0.0
         self.n = 0
+        #: Like a real service, write no more than the cap a request sent
+        #: (max_completion_tokens or max_tokens): a scripted answer longer
+        #: than it comes back cut to the cap, finish_reason "length".
+        self.obey = True
         outer = self
 
         class H(http.server.BaseHTTPRequestHandler):
@@ -170,6 +183,8 @@ class Server:
                 else:
                     status, headers, body = 200, {}, reply_body(
                         REPLIES[(outer.n - 1) % len(REPLIES)])
+                if outer.obey and isinstance(body, dict):
+                    body = obey_cap(body, raw)
                 data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
                 try:
                     self.send_response(status)
@@ -198,6 +213,27 @@ class Server:
         self.script = []
         self.delay = 0.0
         self.n = 0
+        self.obey = True
+
+
+def obey_cap(body: dict, raw: bytes) -> dict:
+    """The answer a real service would send under the request's cap."""
+    try:
+        req = json.loads(raw.decode("utf-8"))
+    except ValueError:
+        return body
+    cap = req.get("max_completion_tokens", req.get("max_tokens"))
+    use = body.get("usage")
+    if not isinstance(cap, int) or not isinstance(use, dict) \
+            or not isinstance(use.get("completion_tokens"), int) \
+            or use["completion_tokens"] <= cap:
+        return body
+    body = json.loads(json.dumps(body))
+    body["usage"]["completion_tokens"] = cap
+    body["usage"]["total_tokens"] = body["usage"].get("prompt_tokens", 0) + cap
+    for c in body.get("choices") or []:
+        c["finish_reason"] = "length"
+    return body
 
 
 REPLIES = [
@@ -518,9 +554,12 @@ def t_key_goes_to_the_pinned_host_only():
     check("... and nowhere in the body", KEY not in r["body"])
     body = json.loads(r["body"])
     check("the body is the model and exactly the message - no system prompt, nothing else",
-          body == {"model": "gpt-5-mini", "stream": False,
-                   "messages": [{"role": "user", "content": "Which plants like shade?"}]},
+          {k: v for k, v in body.items() if k != "max_completion_tokens"}
+          == {"model": "gpt-5-mini", "stream": False,
+              "messages": [{"role": "user", "content": "Which plants like shade?"}]},
           body)
+    check("... plus the answer-length cap, the whole most with plenty left this month",
+          body.get("max_completion_tokens") == API.MOST_REPLY_TOKENS, body)
     check("the reply comes back", got == REPLIES[0], got)
     check("another service's key is never sent with it", OTHER_KEY not in json.dumps(r))
     a.close()
@@ -830,6 +869,8 @@ def t_money_counted_per_month():
     point_all(limit=5.0)
     STORE[API.KEY_TARGETS["openai_api"]] = KEY
     # 1,000,000 in and 100,000 out at the default $0.25 / $2.00: $0.45 each.
+    # A service that ignores the cap: Jarvis still counts what it reports.
+    SRV.obey = False
     SRV.script = [(200, {}, big_reply(REPLIES[0], 1_000_000, 100_000))]
     d = deps()
     s = CB.plan("openai_api", GOAL, max_turns=2, deps=d)
@@ -896,43 +937,247 @@ def t_money_refused_at_the_limit():
           "You set $0.50 a month" in API.ready_for("openai_api"))
 
 
-def t_money_worst_case_before_each_message():
+def t_money_cap_shrinks_then_stops():
+    """The hard stop: every message carries a cap; the cap shrinks as the
+    month's spending grows; the service cannot bill past the limit; and a
+    message that cannot pay for even a short answer is not sent."""
     clean()
     point_all(limit=0.02)
     STORE[API.KEY_TARGETS["openai_api"]] = KEY
-    # The first answer is long: 3,000 out = $0.006. The next message's worst
-    # case (8,000 out = $0.016, plus what is resent) no longer fits in $0.02.
-    SRV.script = [(200, {}, big_reply(REPLIES[0], 40, 3000))]
-    d = deps()
-    s = CB.plan("openai_api", GOAL, max_turns=4, deps=d)
-    card = CB.describe(s)
+    # Every answer WANTS 3,000 word-pieces ($0.006 at the default $2 a
+    # million); the fake service, like a real one, writes no more than the
+    # cap each request carries.
+    SRV.script = [(200, {}, big_reply(r, 40, 3000)) for r in REPLIES]
+    with captured() as logs:
+        d = deps()
+        s = CB.plan("openai_api", GOAL, max_turns=6, deps=d)
+        card = CB.describe(s)
+        CB.start(s, deps=d, wait=True)
+        view = CB.session_view(s)
     check("the card shows what is left: about $0.02 of $0.02",
           "About $0.02 of $0.02 left this month for OpenAI" in card, card)
-    CB.start(s, deps=d, wait=True)
-    check("the conversation ended before the second message, keeping to the limit",
-          s.ended_code == "money_limit" and len(SRV.requests) == 1 and s.turns_used == 1,
+    check("the card says Jarvis asks OpenAI to keep answers short enough",
+          "asks OpenAI to keep each answer short enough to stay within that limit" in card,
+          card)
+    caps = [b.get("max_completion_tokens") for b in sent_bodies()]
+    check("every message carried a cap, and the cap shrank as the month's spending grew",
+          len(caps) == 4 and all(isinstance(c, int) for c in caps)
+          and caps[0] == API.MOST_REPLY_TOKENS
+          and all(a > b for a, b in zip(caps, caps[1:])), caps)
+    check("... down to a short answer before the last message",
+          bool(caps) and API.LEAST_REPLY_TOKENS <= caps[-1] < 3000, caps)
+    spent = API.spent_of("openai_api")
+    check("the month never went past the limit, as far as the service's own counting goes",
+          0.018 < spent <= 0.02 + 1e-12, spent)
+    replies = [t for t in s.transcript if t["who"] == "chatbot"]
+    check("the answer the cap cut short is marked cut_off; the others are not",
+          [bool(t.get("cut_off")) for t in replies] == [False, False, False, True],
+          [t.get("cut_off") for t in replies])
+    check("... and the session view carries the mark to both apps",
+          [bool(t.get("cut_off")) for t in view["transcript"] if t["who"] == "chatbot"]
+          == [False, False, False, True])
+    check("then the next message could not pay for even a short answer: it was not sent",
+          s.ended_code == "money_limit" and len(SRV.requests) == 4 and s.turns_used == 4,
           (s.ended_code, len(SRV.requests), s.ended_words))
-    check("... with plain words: what it could cost, the limit, what to do",
-          "could cost up to about $0.02" in s.ended_words
-          and "would pass the $0.02 a month you set for OpenAI" in s.ended_words
+    check("... with the same plain words as before: the limit, what to do",
+          "would pass the $0.02 a month you set for OpenAI" in s.ended_words
           and "Nothing more was sent" in s.ended_words
           and "wait until October 1" in s.ended_words, s.ended_words)
     check("a money stop is not an error (ok), and the window was closed",
           s.state == "done" and s.adapter is None)
-    # So little left that one message may not fit: the card says so, and
-    # nothing at all is sent.
+    blob = logs() + json.dumps(view) + API.money_path().read_text(encoding="utf-8")
+    check("the key is in no log line, output, session view or the money file",
+          KEY not in blob and KEY[-10:] not in blob)
+    # So little left that not even a short answer fits: the card says so,
+    # and nothing at all is sent.
     clean()
     point_all(limit=0.01)
     STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    API.record_spend("openai_api", "gpt-5-mini", 0, 4850)       # $0.0097: $0.0003 left
     d = deps()
     s = CB.plan("openai_api", GOAL, deps=d)
     card = CB.describe(s)
-    check("too little left for one message: the card warns before the yes",
+    check("too little left for a short answer: the card warns before the yes",
           "may not be enough for one more message" in card, card)
     CB.start(s, deps=d, wait=True)
     check("... and after the yes, the goal itself is not sent",
           s.ended_code == "money_limit" and not SRV.requests and s.turns_used == 0,
           (s.ended_code, len(SRV.requests)))
+    check("... in the existing plain words",
+          "would pass the $0.01 a month you set for OpenAI" in s.ended_words, s.ended_words)
+
+
+def t_money_cap_arithmetic():
+    """reply_cap: the smaller of the most and what the rest of the month pays
+    for, less room for hidden reasoning where the service does not say its
+    cap covers it."""
+    clean()
+    # OpenAI: $0.25 in, $2 out a million (default). A message of 300
+    # characters: 300/3 + 20 = 120 word-pieces in at worst = $0.00003.
+    cap, worst, fits = API.reply_cap("openai_api", "gpt-5-mini", 0.01, 300, 1)
+    check("OpenAI: $0.01 left pays for (0.01 - 0.00003) / $2 a million = 4,985 out",
+          (cap, fits) == (4985, True) and worst <= 0.01, (cap, worst, fits))
+    cap, _, fits = API.reply_cap("openai_api", "gpt-5-mini", 5.0, 300, 1)
+    check("OpenAI: plenty left: the cap is the most, 8,000", (cap, fits) == (8000, True))
+    cap, worst, fits = API.reply_cap("openai_api", "gpt-5-mini", 0.0005, 300, 1)
+    check("OpenAI: $0.0005 left pays for fewer than 256: refused",
+          (cap, fits) == (0, False) and worst > 0.0005, (cap, worst, fits))
+    # Groq's own code does not say its cap covers hidden reasoning: 8,000
+    # word-pieces of room are kept for it. $0.10 / $0.50 a million (default).
+    cap, worst, fits = API.reply_cap("groq_api", "openai/gpt-oss-20b", 0.01, 300, 1)
+    want = int((0.01 - 120 * 0.10 / 1e6) * 1e6 / 0.50) - API.REASONING_ROOM
+    check("Groq: the rest of the month less 8,000 of room for hidden reasoning",
+          (cap, fits) == (min(8000, want), True) and worst <= 0.01 + 1e-12,
+          (cap, want, worst))
+    cap, _, fits = API.reply_cap("groq_api", "openai/gpt-oss-20b", 0.004, 300, 1)
+    check("Groq: $0.004 pays for 8,000 of room but not 256 more: refused",
+          (cap, fits) == (0, False), cap)
+    check("only OpenAI's own words put hidden reasoning inside the cap",
+          {pid: API.reasoning_room(p) for pid, p in API.PRESETS.items()}
+          == {"openai_api": 0, "deepseek_api": 8000, "mistral_api": 8000, "xai_api": 8000,
+              "openrouter_api": 8000, "groq_api": 8000})
+
+
+def t_cap_field_per_service():
+    """Each service's own name for the cap, as its own code names it;
+    DeepSeek's could not be confirmed, so none is sent there."""
+    clean()
+    point_all()
+    want = {"openai_api": "max_completion_tokens", "groq_api": "max_completion_tokens",
+            "openrouter_api": "max_completion_tokens", "mistral_api": "max_tokens",
+            "xai_api": "max_tokens", "deepseek_api": ""}
+    check("the field per service", {pid: p.cap_field for pid, p in API.PRESETS.items()}
+          == want, {pid: p.cap_field for pid, p in API.PRESETS.items()})
+    where = {"openai_api": "openai/openai-python", "groq_api": "groq/groq-python",
+             "openrouter_api": "OpenRouterTeam/typescript-sdk",
+             "mistral_api": "mistralai/client-python", "xai_api": "xai-org/grok-build"}
+    check("each field says where it was checked; DeepSeek's says unverified",
+          all(where[pid] in API.PRESETS[pid].cap_source for pid in where)
+          and API.PRESETS["deepseek_api"].cap_source.startswith("unverified"),
+          {pid: p.cap_source for pid, p in API.PRESETS.items()})
+    for pid, field in want.items():
+        SRV.reset()
+        STORE[API.KEY_TARGETS[pid]] = KEY
+        a = CB.ADAPTERS[pid].factory()
+        a.open()
+        a.send("Which plants like shade?")
+        wait_reply(a)
+        body = sent_bodies()[0]
+        others = {"max_completion_tokens", "max_tokens"} - {field}
+        if field:
+            check(f"{pid}: the request carries {field} and no other cap field",
+                  body.get(field) == API.MOST_REPLY_TOKENS
+                  and not any(k in body for k in others), body)
+        else:
+            check(f"{pid}: no cap field is sent (unverified)",
+                  not any(k in body for k in others), body)
+        a.close()
+
+
+def t_cut_off_note():
+    import jarvis_chatbot_routes as R
+    clean()
+    point_all()
+    check("both apps' note is the module's own, word for word",
+          R.WORDS["cut_off"] == API.CUT_OFF
+          == ("Jarvis asked for a short answer so it stays within your limit; the rest "
+              "was cut off."))
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    body = reply_body("Snake plants cope with")
+    body["choices"][0]["finish_reason"] = "length"
+    SRV.script = [(200, {}, body)]
+    a = CB.ADAPTERS["openai_api"].factory()
+    a.open()
+    a.send("Which plants like shade?")
+    got = wait_reply(a)
+    check("an answer cut short by the cap still comes back, marked cut off",
+          got == "Snake plants cope with" and a.cut_off() is True, (got, a.cut_off()))
+    SRV.reset()
+    a.send("And?")
+    wait_reply(a)
+    check("... and the next, whole answer is not", a.cut_off() is False)
+    a.close()
+    # DeepSeek: no cap was sent, so a "length" there is not Jarvis's doing.
+    SRV.reset()
+    SRV.script = [(200, {}, body)]
+    STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
+    a = CB.ADAPTERS["deepseek_api"].factory()
+    a.open()
+    a.send("Which plants like shade?")
+    wait_reply(a)
+    check("with no cap sent (DeepSeek), a 'length' gets no note", a.cut_off() is False)
+    a.close()
+    # All of the cap spent on hidden reasoning: no answer at all.
+    SRV.reset()
+    empty = reply_body("")
+    empty["choices"][0]["finish_reason"] = "length"
+    SRV.script = [(200, {}, empty)]
+    a = CB.ADAPTERS["openai_api"].factory()
+    a.open()
+    a.send("Which plants like shade?")
+    err = expect_error(a)
+    check("a cap used up before any answer ends with plain words, not 'empty'",
+          err is not None and err.code == "cut_off"
+          and "used up the answer length Jarvis asked for" in err.owner_words,
+          err and err.owner_words)
+    a.close()
+    # Through the core: the transcript entry both apps read.
+    clean()
+    point_all()
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    SRV.script = [(200, {}, body), (200, {}, reply_body(REPLIES[1]))]
+    d = deps()
+    s = CB.plan("openai_api", GOAL, max_turns=2, deps=d)
+    CB.start(s, deps=d, wait=True)
+    replies = [t for t in CB.session_view(s)["transcript"] if t["who"] == "chatbot"]
+    check("the core marks the cut-off answer, and only that one",
+          [t.get("cut_off") for t in replies] == [True, None], replies)
+
+
+def t_unverified_service_keeps_the_worst_case_check():
+    """DeepSeek's cap field could not be confirmed: no cap is sent, and the
+    old worst-case check (8,000 answer + 8,000 reasoning) is its only guard."""
+    clean()
+    point_all(limit=0.01)
+    STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
+    # Default $0.28 in, $0.42 out: 16,000 out at worst = $0.00672.
+    API.record_spend("deepseek_api", "deepseek-chat", 0, 10_000)     # $0.0042: $0.0058 left
+    a = CB.ADAPTERS["deepseek_api"].factory()
+    a.open()
+    why = a.before_send("Which plants like shade?")
+    check("DeepSeek with $0.0058 left: refused, since its worst case ($0.0067+) may not fit",
+          "would pass the $0.01 a month you set for DeepSeek" in why, why)
+    try:
+        a.send("Which plants like shade?")
+        refused = False
+    except API.ApiUnavailable as exc:
+        refused = exc.code == "money_limit"
+    check("... and send() refuses it too; nothing reaches the service",
+          refused and not SRV.requests, (refused, len(SRV.requests)))
+    a.close()
+    API.set_limit("deepseek_api", 0.02)
+    a = CB.ADAPTERS["deepseek_api"].factory()
+    a.open()
+    check("with enough left for the worst case, it may be sent",
+          a.before_send("Which plants like shade?") == "")
+    a.send("Which plants like shade?")
+    wait_reply(a)
+    body = sent_bodies()[0]
+    check("... and carries no cap field (none was confirmed)",
+          "max_tokens" not in body and "max_completion_tokens" not in body, body)
+    a.close()
+    text = CB.describe(CB.plan("deepseek_api", GOAL, deps=deps()))
+    check("DeepSeek's card says plainly that it cannot yet ask for short answers",
+          "cannot yet ask DeepSeek to keep answers short" in text, text)
+    lines = "\n".join(API.spent_lines())
+    check("`spent` says per service how the limit is kept, DeepSeek's plainly",
+          "deepseek: " in lines and "NO CAP IS SENT" in lines
+          and "The only guard is the check before each message" in lines
+          and "capped with max_completion_tokens" in lines
+          and "capped with max_tokens" in lines
+          and "count hidden reasoning inside that cap" in lines
+          and "does not say whether hidden reasoning counts inside" in lines, lines)
+    check("... and never the key", KEY not in lines)
 
 
 def t_money_openrouter_real_cost():
@@ -940,7 +1185,9 @@ def t_money_openrouter_real_cost():
     point_all(limit=5.0)
     STORE[API.KEY_TARGETS["openrouter_api"]] = KEY
     STORE[API.KEY_TARGETS["openai_api"]] = KEY
-    # OpenRouter reports its own cost: counted instead of the estimate.
+    # OpenRouter reports its own cost: counted instead of the estimate. (The
+    # fake ignores the cap here, to keep round numbers.)
+    SRV.obey = False
     SRV.script = [(200, {}, big_reply(REPLIES[0], 1_000_000, 100_000, cost=0.5))]
     a = CB.ADAPTERS["openrouter_api"].factory()
     a.open()
@@ -954,6 +1201,7 @@ def t_money_openrouter_real_cost():
     # Without it, OpenRouter's answer is estimated; another service's "cost"
     # field is never trusted.
     SRV.reset()
+    SRV.obey = False
     SRV.script = [(200, {}, big_reply(REPLIES[0], 1_000_000, 100_000))]
     a = CB.ADAPTERS["openrouter_api"].factory()
     a.open()
@@ -964,6 +1212,7 @@ def t_money_openrouter_real_cost():
           abs(row["dollars"] - 0.95) < 1e-9, row)
     a.close()
     SRV.reset()
+    SRV.obey = False
     SRV.script = [(200, {}, big_reply(REPLIES[0], 1_000_000, 100_000, cost=0.0001))]
     a = CB.ADAPTERS["openai_api"].factory()
     a.open()
@@ -1073,12 +1322,27 @@ def t_money_file_unreadable_fails_closed():
     a = CB.ADAPTERS["openai_api"].factory()
     a.open()
     check("before: the next message may be sent", a.before_send("Hello?") == "")
-    API.money_path().write_text("[1, 2", encoding="utf-8")
+    SRV.delay = 0.6
     a.send("Hello?")
+    time.sleep(0.2)
+    API.money_path().write_text("[1, 2", encoding="utf-8")
     got = wait_reply(a)
     check("an answer whose cost cannot be written down still comes back", got == REPLIES[0])
     check("... but the next message is refused, in plain words",
           "could not write down what" in a.before_send("And?"), a.before_send("And?"))
+    a.close()
+    # A file that is broken BEFORE a message: send() cannot work out the
+    # cap, so it refuses that message too (fail closed).
+    SRV.reset()
+    a = CB.ADAPTERS["openai_api"].factory()
+    a.open()
+    try:
+        a.send("Hello?")
+        refused = ""
+    except API.ApiUnavailable as exc:
+        refused = exc.owner_words
+    check("a file broken before a message: send() refuses it, nothing is sent",
+          "cannot be read" in refused and not SRV.requests, refused)
     a.close()
 
 
@@ -1086,9 +1350,10 @@ def t_money_compare_near_the_limit():
     import jarvis_chatbot_compare as CMP
     clean()
     CMP._reset_for_tests()
-    point_all(limit=0.02)
+    point_all(limit=0.01)
     STORE[API.KEY_TARGETS["openai_api"]] = KEY
-    SRV.script = [(200, {}, big_reply(REPLIES[0], 40, 3000))]
+    # The first answer ($0.0098) leaves too little for even a short second.
+    SRV.script = [(200, {}, big_reply(REPLIES[0], 40, 4900))]
     fake = CB.FakeChatbot(list(REPLIES))
     CB.register_adapter(CB.AdapterInfo("fake", CB.FakeChatbot.name, CB.FakeChatbot.host,
                                        lambda: fake, test_only=True, how="a stand-in"))
@@ -1100,7 +1365,7 @@ def t_money_compare_near_the_limit():
           not c.problem, c.problem)
     check("the one card shows what is left for the API chatbot, and that its money limit "
           "can make it drop out",
-          "About $0.02 of $0.02 left this month for OpenAI" in card
+          "About $0.01 of $0.01 left this month for OpenAI" in card
           and "its monthly money limit" in card, card)
     CMP.start(c, deps=d, wait=True)
     api_m, fake_m = c.members

@@ -501,6 +501,10 @@ private fun TurnPart(name: String, t: Chatbot.Turn) {
                 Pill("outside text", color = chrome.warnInk)
             }
             Text(t.text, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+            if (t.cutOff) {
+                Text(Chatbot.CUT_OFF, style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo)
+            }
         }
     } else {
         Text("Jarvis, message ${t.n}", style = MaterialTheme.typography.labelSmall,
