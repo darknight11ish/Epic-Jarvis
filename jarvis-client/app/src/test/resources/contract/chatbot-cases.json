@@ -1764,6 +1764,190 @@
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
+  "cut_off": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "chatgpt.com",
+        "id": "chatgpt_web",
+        "kind": "website",
+        "name": "ChatGPT",
+        "note": "Jarvis's ChatGPT window has never been signed in. Sign in once, by hand, to the spare OpenAI account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_chatgpt.py sign-in",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "api.openai.com",
+        "id": "openai_api",
+        "kind": "api",
+        "money": {
+          "company": "OpenAI",
+          "left": "$4.55",
+          "limit": "$5.00",
+          "reached": false,
+          "spent": "$0.45",
+          "until": "October 1"
+        },
+        "name": "ChatGPT (OpenAI API)",
+        "note": "",
+        "ready": true
+      },
+      {
+        "built": true,
+        "host": "this PC",
+        "id": "local_ai",
+        "kind": "local",
+        "name": "A second AI on this PC",
+        "note": "Choose which model on this PC Jarvis should talk to: add the line local_model = \"<name>\" under [chatbot] in jarvis-framework.toml, using a name that `ollama list` shows, then restart Jarvis.",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "kind": "website",
+        "name": "Gemini",
+        "note": "",
+        "ready": true
+      },
+      {
+        "built": true,
+        "host": "api.deepseek.com",
+        "id": "deepseek_api",
+        "kind": "api",
+        "name": "DeepSeek (API)",
+        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit deepseek 5",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "www.perplexity.ai",
+        "id": "perplexity_web",
+        "kind": "website",
+        "name": "Perplexity",
+        "note": "Jarvis's Perplexity window has never been signed in. Sign in once, by hand, to the spare Perplexity account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_perplexity.py sign-in",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "api.groq.com",
+        "id": "groq_api",
+        "kind": "api",
+        "name": "Groq (API)",
+        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit groq 5",
+        "ready": false
+      }
+    ],
+    "compare": null,
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": {
+      "chatbot": "openai_api",
+      "ended": "It used all 2 messages you allowed.",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "chat_000000000010",
+      "max_messages": 2,
+      "max_minutes": 10,
+      "messages_used": 2,
+      "minutes_used": 0.1,
+      "name": "ChatGPT (OpenAI API)",
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "",
+      "problem": "",
+      "question": "",
+      "read_aloud": false,
+      "state": "done",
+      "summary": {
+        "answer": "Pick a low-light plant such as a snake plant, ZZ plant or pothos, and add a small grow lamp if the corner is very dark.",
+        "by_model": true,
+        "claims": [
+          {
+            "claim": "Snake plants cope with dim light",
+            "source_given": true
+          },
+          {
+            "claim": "Spider plants are safe around cats",
+            "source_given": false
+          }
+        ],
+        "ended": "It used all 2 messages you allowed.",
+        "messages": 2,
+        "minutes": 0.1,
+        "open": [
+          "Which grow lamp to buy"
+        ],
+        "outside_text": true,
+        "question": "",
+        "read_aloud": false,
+        "source": "chatbot_transcript"
+      },
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000048.0,
+          "move": "goal",
+          "n": 1,
+          "outside_text": false,
+          "text": "Find out how to keep houseplants alive in a flat that gets very little light.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000048.0,
+          "cut_off": true,
+          "n": 1,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Low light suits pothos and philodendrons; see https://example.org/low-light-plants.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000056.0,
+          "move": "deeper",
+          "n": 2,
+          "outside_text": false,
+          "text": "Could you narrow that down to plants that are safe around cats?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000056.0,
+          "n": 2,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Calatheas are fussy: they want bright, indirect light and steady humidity.",
+          "who": "chatbot"
+        }
+      ],
+      "usage": {
+        "completion_tokens": 410,
+        "cost": "$0.01",
+        "dollars": 0.00142,
+        "model": "gpt-5-mini",
+        "prompt_tokens": 2400,
+        "requests": 2,
+        "retries": 0,
+        "total_tokens": 2810
+      }
+    },
+    "tier": {
+      "compare_max": 3,
+      "compare_min": 2,
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
   "done_goal_met": {
     "available": true,
     "chatbots": [
@@ -2368,7 +2552,7 @@
     "body": {
       "error": "You set $1.00 a month for OpenAI; about $1.02 is used this month. Raise the limit on the PC or wait until October 1.",
       "ok": false,
-      "session": "chat_000000000010"
+      "session": "chat_000000000011"
     },
     "code": 400
   },
@@ -2376,7 +2560,7 @@
     "body": {
       "error": "No monthly money limit is set for Mistral AI, so Jarvis will not use Mistral (API) yet. Set one on the PC, in PowerShell in Jarvis's folder - for example $5 a month: py -3 jarvis_chatbot_api.py limit mistral 5.",
       "ok": false,
-      "session": "chat_000000000011"
+      "session": "chat_000000000012"
     },
     "code": 400
   },
@@ -2737,6 +2921,7 @@
     "compare_too_few": "Pick at least {min} chatbots to compare.",
     "compare_too_many": "Pick at most {max} chatbots in this version.",
     "conversations_title": "Each conversation",
+    "cut_off": "Jarvis asked for a short answer so it stays within your limit; the rest was cut off.",
     "detail": "Jarvis asks an AI chatbot about something for you, and writes its own follow-up questions on this PC, within limits you set. One approval card covers the whole conversation. While it does this, Jarvis knows only your goal - not your memory, email, calendar, notes or files.",
     "disagree_title": "They disagree",
     "dropped_title": "Dropped out",

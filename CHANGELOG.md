@@ -6,6 +6,22 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The money limit for chatbots with a key is now a hard stop.** Every
+  message asks the service to keep its answer short enough to fit in what
+  is left of your monthly limit (at most 8,000 word-pieces, fewer as the
+  month is used), so one long answer cannot carry a month past it. An
+  answer cut short says so under it in both apps: "Jarvis asked for a
+  short answer so it stays within your limit; the rest was cut off." Each
+  company calls this setting something different; each name was checked in
+  that company's own code (OpenAI, Groq, OpenRouter, Mistral, and xAI from
+  its own client program). **DeepSeek's could not be confirmed, so no cap
+  is sent to DeepSeek** - it keeps the old check before each message. For
+  every service except OpenAI, whether hidden "thinking" counts inside the
+  cap is not stated, so Jarvis leaves room for it - a guess, so a month
+  can still end slightly over there. See it per service with
+  `cd "<your backend folder>"; py -3 jarvis_chatbot_api.py spent`. Not yet
+  tried against the real services.
+
 - **A monthly money limit for chatbots with a key.** Each service Jarvis
   reaches with an API key (OpenAI, DeepSeek, Mistral, xAI, OpenRouter,
   Groq) now needs a monthly limit before it is used - set on the PC with

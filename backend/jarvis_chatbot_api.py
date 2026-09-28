@@ -34,7 +34,12 @@ that was possible):
     xai_api         https://api.x.ai/v1               HOST VERIFIED (xai-org/xai-sdk-python:
                                                       "The API is hosted on api.x.ai");
                                                       the /v1/chat/completions path is
-                                                      UNVERIFIED (that SDK speaks gRPC)
+                                                      not in that SDK (it speaks gRPC);
+                                                      seen 2026-09-28 in xAI's own
+                                                      client, xai-org/grok-build (base
+                                                      https://api.x.ai/v1, then
+                                                      "chat/completions"), not in the
+                                                      API reference (blocked)
     openrouter_api  https://openrouter.ai/api/v1      VERIFIED: OpenRouterTeam/typescript-sdk
                                                       (lib/config.ts; chatSend.ts
                                                       /chat/completions)
@@ -101,17 +106,69 @@ correct, and the card says 'about'."
     shows the month, the limits and the price list.
   * When it stops: ready_for() refuses a conversation once the month's
     estimate has reached the limit (so the card is never shown); and before
-    EVERY message (before_send, which jarvis_chatbot.run() asks) the
-    worst case of that message - everything resent plus WORST_REPLY_TOKENS
-    of answer - must fit in what is left, or the conversation ends there
-    with plain words. In a comparison that chatbot drops out and the others
-    carry on (jarvis_chatbot_compare's own rule).
-  * Honest limits: it is an ESTIMATE. A price may be wrong until the owner
-    corrects it, and one answer can be longer than WORST_REPLY_TOKENS (a
-    "thinking" model's hidden reasoning is counted by the service as
-    answer), so a month can end a little over the limit. Jarvis does not
-    ask the service to cut answers short (that request field differs by
-    service and was not checked).
+    EVERY message (before_send, which jarvis_chatbot.run() asks, and send()
+    again) that message must fit in what is left, or the conversation ends
+    there with plain words. In a comparison that chatbot drops out and the
+    others carry on (jarvis_chatbot_compare's own rule).
+
+A HARD STOP: EACH ANSWER'S LENGTH IS CAPPED (the owner's decision, CLAUDE.md,
+2026-09-28: "Jarvis also asks each service to cap how long an answer can be,
+so one long answer cannot carry a month past the limit. Each service names
+that setting differently, so each one's own documentation is checked before
+it is used.")
+  * Every request to a service whose field is confirmed carries a cap on
+    the answer's length (Preset.cap_field). The cap is the SMALLER of
+    MOST_REPLY_TOKENS (8,000 word-pieces, a sensible most for one message)
+    and what is left of the month's limit, less the worst case of what the
+    message sends, turned into answer word-pieces at that model's price
+    (reply_cap). So the service itself will not write - and bill - an answer
+    past the limit, as far as its own counting goes. When what is left
+    cannot pay for even LEAST_REPLY_TOKENS (256), the message is refused
+    with the same plain words as before.
+  * An answer cut short by the cap (finish_reason "length") is kept and
+    shown with CUT_OFF under it in both apps (the transcript's `cut_off`).
+  * Where each field was confirmed (2026-09-28; every provider's
+    documentation site was blocked from the container this was written in,
+    so each was read in the provider's OWN code on GitHub):
+      openai_api      max_completion_tokens  openai/openai-python, types/chat/
+                      completion_create_params.py: "An upper bound for the
+                      number of tokens that can be generated for a completion,
+                      including visible output tokens and reasoning tokens"
+                      (max_tokens there: "deprecated in favor of
+                      max_completion_tokens", "not compatible with o-series")
+      groq_api        max_completion_tokens  groq/groq-python, the same file
+                      name (max_tokens: "Deprecated in favor of
+                      max_completion_tokens")
+      mistral_api     max_tokens             mistralai/client-python, client/
+                      models/chatcompletionrequest.py: "The maximum number of
+                      tokens to generate in the completion"
+      openrouter_api  max_completion_tokens  OpenRouterTeam/typescript-sdk,
+                      models/chatrequest.ts: "Maximum tokens in completion"
+                      (max_tokens: "deprecated, use max_completion_tokens")
+      xai_api         max_tokens             xAI's own code, not its API
+                      reference: xai-org/grok-build sends `max_tokens` in its
+                      Chat Completions request to <base>/chat/completions, base
+                      https://api.x.ai/v1; xai-org/xai-sdk-python's chat.py
+                      names the same (gRPC)
+      deepseek_api    UNVERIFIED - NO CAP IS SENT. DeepSeek's API reference was
+                      blocked and it has no SDK for this API on GitHub (its own
+                      deepseek-harness speaks the Anthropic-style endpoint, a
+                      different API). The worst-case check below stays its only
+                      guard.
+  * Hidden reasoning ("thinking"): OpenAI's own words put reasoning INSIDE
+    max_completion_tokens, so for openai_api the cap bounds the whole bill
+    (Preset.reasoning "inside"). For every other service its own code does
+    not say whether the cap also covers hidden reasoning ("not_stated"), so
+    the check keeps REASONING_ROOM word-pieces of room for it on top of the
+    cap: the cap bounds the visible answer, and the room is a guess for the
+    rest.
+  * A service with no confirmed field (DeepSeek) keeps the old worst-case
+    check only: everything resent plus MOST_REPLY_TOKENS of answer plus
+    REASONING_ROOM must fit in what is left.
+  * Honest limits: it is still an ESTIMATE. A price may be wrong until the
+    owner corrects it; for the "not_stated" services and DeepSeek, hidden
+    reasoning longer than REASONING_ROOM, or an answer longer than the most
+    (DeepSeek, uncapped), can carry a month a little over the limit.
 
 ERRORS, IN PLAIN WORDS (raised from read_reply as ApiUnavailable, whose
 `owner_words` jarvis_chatbot.run() shows): the key refused (401/403), no
@@ -159,6 +216,15 @@ class Preset:
     note: str = ""     # anything the card must say about this one
     #: Where the owner checks the price (UNVERIFIED addresses, from memory).
     price_page: str = ""
+    #: The request field that caps how long an answer can be, as this
+    #: service's own code names it; "" when it could not be confirmed - then
+    #: no cap is sent and the worst-case check is the only guard.
+    cap_field: str = ""
+    #: Where cap_field was confirmed, or why it is unverified.
+    cap_source: str = ""
+    #: Whether hidden reasoning counts inside the cap: "inside" (the
+    #: service's own words say so) or "not_stated".
+    reasoning: str = "not_stated"
 
     @property
     def host(self) -> str:
@@ -174,34 +240,55 @@ PRESETS: dict = {p.id: p for p in (
            "https://api.openai.com/v1", "gpt-5-mini",
            "https://platform.openai.com/api-keys",
            "openai/openai-python _client.py",
-           price_page="https://openai.com/api/pricing"),
+           price_page="https://openai.com/api/pricing",
+           cap_field="max_completion_tokens",
+           cap_source=("openai/openai-python src/openai/types/chat/"
+                       "completion_create_params.py (checked 2026-09-28)"),
+           reasoning="inside"),
     Preset("deepseek_api", "deepseek", "DeepSeek (API)", "DeepSeek",
            "https://api.deepseek.com", "deepseek-chat",
            "https://platform.deepseek.com/api_keys",
            "unverified",
-           price_page="https://api-docs.deepseek.com/quick_start/pricing"),
+           price_page="https://api-docs.deepseek.com/quick_start/pricing",
+           cap_field="",
+           cap_source=("unverified: DeepSeek's API reference could not be opened and it has "
+                       "no SDK for this API on GitHub")),
     Preset("mistral_api", "mistral", "Mistral (API)", "Mistral AI",
            "https://api.mistral.ai/v1", "mistral-small-latest",
            "https://console.mistral.ai/api-keys",
            "mistralai/client-python README and chat.py",
-           price_page="https://mistral.ai/pricing"),
+           price_page="https://mistral.ai/pricing",
+           cap_field="max_tokens",
+           cap_source=("mistralai/client-python src/mistralai/client/models/"
+                       "chatcompletionrequest.py (checked 2026-09-28)")),
     Preset("xai_api", "xai", "Grok (xAI API)", "xAI",
            "https://api.x.ai/v1", "grok-4.6",
            "https://console.x.ai",
-           "host from xai-org/xai-sdk-python; the /v1/chat/completions path unverified",
-           price_page="https://docs.x.ai/docs/models"),
+           ("host from xai-org/xai-sdk-python; the /v1/chat/completions path from xAI's own "
+            "client xai-org/grok-build, not its API reference"),
+           price_page="https://docs.x.ai/docs/models",
+           cap_field="max_tokens",
+           cap_source=("xAI's own client code, xai-org/grok-build (xai-grok-sampling-types "
+                       "types.rs and xai-grok-sampler client.rs), not xAI's API reference, "
+                       "which could not be opened (checked 2026-09-28)")),
     Preset("openrouter_api", "openrouter", "OpenRouter (API)", "OpenRouter",
            "https://openrouter.ai/api/v1", "openai/gpt-5-mini",
            "https://openrouter.ai/keys",
            "OpenRouterTeam/typescript-sdk lib/config.ts",
            note=("OpenRouter passes each message on to the company that runs the model "
                  "you chose (for the default, OpenAI), under that company's terms too."),
-           price_page="https://openrouter.ai/models"),
+           price_page="https://openrouter.ai/models",
+           cap_field="max_completion_tokens",
+           cap_source=("OpenRouterTeam/typescript-sdk src/models/chatrequest.ts "
+                       "(checked 2026-09-28)")),
     Preset("groq_api", "groq", "Groq (API)", "Groq",
            "https://api.groq.com/openai/v1", "openai/gpt-oss-20b",
            "https://console.groq.com/keys",
            "groq/groq-python _client.py and completions.py",
-           price_page="https://groq.com/pricing"),
+           price_page="https://groq.com/pricing",
+           cap_field="max_completion_tokens",
+           cap_source=("groq/groq-python src/groq/types/chat/completion_create_params.py "
+                       "(checked 2026-09-28)")),
 )}
 
 BY_SHORT = {p.short: p.id for p in PRESETS.values()}
@@ -478,11 +565,19 @@ DEFAULT_PRICES = {
     ("groq_api", "openai/gpt-oss-20b"): (0.10, 0.50),       # UNVERIFIED
 }
 
-#: The worst case of one answer, in word-pieces, for the check before each
-#: message. An ESTIMATE: Jarvis does not ask the service to cut answers
-#: short, and a "thinking" model's hidden reasoning is counted as answer,
-#: so one answer can be longer than this.
-WORST_REPLY_TOKENS = 8000
+#: The most one answer may be, in word-pieces: the cap sent with every
+#: message (smaller when less of the month is left - reply_cap), and the
+#: worst case assumed for a service whose cap field is unverified.
+MOST_REPLY_TOKENS = 8000
+#: The old name, kept for anything that still reads it.
+WORST_REPLY_TOKENS = MOST_REPLY_TOKENS
+#: Below this, an answer is too short to be worth asking for: the message is
+#: refused instead (the month's limit is as good as reached).
+LEAST_REPLY_TOKENS = 256
+#: Room kept for hidden reasoning where the service does not say its cap
+#: covers it (Preset.reasoning "not_stated"), and for DeepSeek (no cap). A
+#: guess: a longer hidden reasoning can still carry a month a little over.
+REASONING_ROOM = 8000
 #: For the worst case of what is sent: fewer characters per word-piece than
 #: the usual four, so the guess errs high; plus a few per message.
 WORST_CHARS_PER_TOKEN = 3
@@ -514,6 +609,14 @@ MONEY_LEFT = ("About {left} of {limit} left this month for {company} (prices are
 #: Added on the card when what is left may not cover one more message.
 MONEY_THIN = (" That may not be enough for one more message; if so, Jarvis stops before "
               "sending it.")
+#: Shown under an answer the cap cut short (jarvis_chatbot_routes.WORDS
+#: "cut_off" is this, word for word; both apps show it).
+CUT_OFF = ("Jarvis asked for a short answer so it stays within your limit; the rest was "
+           "cut off.")
+#: An answer the cap cut short before any of it was written (a "thinking"
+#: model can spend the whole cap on hidden reasoning).
+CUT_OFF_EMPTY = ("{name} used up the answer length Jarvis asked for, to stay within your "
+                 "money limit, before writing any answer. Nothing more was sent.")
 
 
 class MoneyFileError(RuntimeError):
@@ -773,29 +876,76 @@ def would_pass_words(p: Preset, limit: float, spent: float, worst: float) -> str
             f"the PC or wait until {next_month_words()}.")
 
 
-def money_problem(pid: str, model: str, *, next_chars: int = 0, next_messages: int = 0) -> str:
-    """"" when the limit allows; else why not, in plain words. With
-    `next_messages` (the next request: everything it resends), the worst
-    case of that request must fit in what is left too."""
+def reasoning_room(p: Preset) -> int:
+    """The word-pieces kept for hidden reasoning on top of the cap: none
+    where the service's own words put reasoning inside its cap."""
+    return 0 if (p.cap_field and p.reasoning == "inside") else REASONING_ROOM
+
+
+def reply_cap(pid: str, model: str, left: float, next_chars: int, next_messages: int,
+              data: Optional[dict] = None) -> tuple:
+    """(cap, worst, fits) for the next message, with `left` dollars left
+    this month.
+      cap    the answer-length cap to send (0: none - the service's field is
+             unverified, or the message does not fit)
+      worst  the most that message can cost, in dollars, as far as the
+             service's own counting goes (with the smallest cap, when it
+             does not fit)
+      fits   whether it may be sent
+    The cap is the SMALLER of MOST_REPLY_TOKENS and what is left after the
+    worst case of what is sent, turned into answer word-pieces at this
+    model's price, less the room kept for hidden reasoning; below
+    LEAST_REPLY_TOKENS the message does not fit."""
+    p = PRESETS[pid]
+    pr = price_of(pid, model, data)
+    if pr is None:
+        return 0, 0.0, False
+    pin, pout = pr[0], pr[1]
+    tin = worst_tokens(next_chars, next_messages)
+    room = reasoning_room(p)
+    if not p.cap_field:
+        worst = (tin * pin + (MOST_REPLY_TOKENS + room) * pout) / 1_000_000
+        return 0, worst, worst <= left
+    spare = left - tin * pin / 1_000_000
+    if pout <= 0:
+        cap = MOST_REPLY_TOKENS if spare >= 0 else 0
+    else:
+        cap = min(MOST_REPLY_TOKENS, int(math.floor(spare * 1_000_000 / pout)) - room)
+    if cap < LEAST_REPLY_TOKENS:
+        return 0, (tin * pin + (LEAST_REPLY_TOKENS + room) * pout) / 1_000_000, False
+    return cap, (tin * pin + (cap + room) * pout) / 1_000_000, True
+
+
+def money_check(pid: str, model: str, *, next_chars: int = 0,
+                next_messages: int = 0) -> tuple:
+    """("", cap) when the limit allows; else (why not, in plain words, 0).
+    With `next_messages` (the next request: everything it resends), that
+    request must fit in what is left too, and `cap` is the answer-length
+    cap to send with it (0 for none: reply_cap)."""
     p = PRESETS[pid]
     try:
         data = _load()
     except MoneyFileError as exc:
-        return _file_words(str(exc)) + "."
+        return _file_words(str(exc)) + ".", 0
     limit = limit_of(pid, data)
     if limit is None:
-        return no_limit_words(p)
+        return no_limit_words(p), 0
     if price_of(pid, model, data) is None:
-        return no_price_words(p, model)
+        return no_price_words(p, model), 0
     spent = spent_of(pid, data)
     if spent >= limit:
-        return reached_words(p, limit, spent)
-    if next_messages:
-        worst = cost_of(pid, model, worst_tokens(next_chars, next_messages),
-                        WORST_REPLY_TOKENS, data) or 0.0
-        if spent + worst > limit:
-            return would_pass_words(p, limit, spent, worst)
-    return ""
+        return reached_words(p, limit, spent), 0
+    if not next_messages:
+        return "", 0
+    cap, worst, fits = reply_cap(pid, model, limit - spent, next_chars, next_messages, data)
+    if not fits:
+        return would_pass_words(p, limit, spent, worst), 0
+    return "", cap
+
+
+def money_problem(pid: str, model: str, *, next_chars: int = 0, next_messages: int = 0) -> str:
+    """"" when the limit allows; else why not, in plain words (money_check)."""
+    return money_check(pid, model, next_chars=next_chars, next_messages=next_messages)[0]
 
 
 def money_view(pid: str) -> Optional[dict]:
@@ -818,9 +968,9 @@ def money_view(pid: str) -> Optional[dict]:
     left_words = dollars(left) if left >= 0.005 else "$0.00"
     line = MONEY_LEFT.format(left=left_words, limit=dollars(limit), company=p.company)
     if pr is not None and left > 0:
-        worst = cost_of(pid, model, worst_tokens(CB.MAX_GOAL_CHARS, 1), WORST_REPLY_TOKENS,
-                        data) or 0.0
-        if left < worst:
+        # The longest goal, as the first message: can it be sent at all
+        # (with the smallest cap, for a service that caps)?
+        if not reply_cap(pid, model, left, CB.MAX_GOAL_CHARS, 1, data)[2]:
             line += MONEY_THIN
     return {"company": p.company, "limit": dollars(limit), "left": left_words,
             "spent": dollars(spent), "until": next_month_words(), "reached": spent >= limit,
@@ -866,6 +1016,10 @@ class ApiChatbot(CB.Adapter):
         #: message is refused (a count that is not kept must not read as
         #: nothing spent).
         self._money_broken = ""
+        #: The answer-length cap sent with the request on its way (0: none).
+        self._cap = 0
+        #: Whether the last answer was cut short by that cap.
+        self._cut_off = False
 
     # ---- the interface ----------------------------------------------------
 
@@ -894,10 +1048,18 @@ class ApiChatbot(CB.Adapter):
             if self._busy:
                 raise ApiUnavailable(f"{self.name} is still answering the last message.",
                                      "busy")
+        # The money check again, right here, because it also gives the cap
+        # this very request carries (the driver asked before_send already;
+        # anything else that calls send() gets the same check).
+        why, cap = self._money(text)
+        if why:
+            raise ApiUnavailable(why, "money_limit")
+        with self._lock:
             self._history.append({"role": "user", "content": str(text)})
             self._history = self._history[-MAX_HISTORY:]
             messages = [dict(m) for m in self._history]
             self._busy, self._reply, self._error = True, None, None
+            self._cap, self._cut_off = cap, False
             self._done.clear()
         threading.Thread(target=self._work, args=(messages,), name="jarvis-chatbot-api",
                          daemon=True).start()
@@ -935,15 +1097,26 @@ class ApiChatbot(CB.Adapter):
     def before_send(self, text: str) -> str:
         """jarvis_chatbot.run() asks this right before every message: "" to
         send it, else why not (the conversation then ends with these words).
-        The worst case of this request - everything it resends plus
-        WORST_REPLY_TOKENS of answer - must fit in this month's limit."""
+        This request must fit in this month's limit: with a cap on the
+        answer, at least LEAST_REPLY_TOKENS of it; with none (DeepSeek), its
+        worst case (reply_cap)."""
+        return self._money(text)[0]
+
+    def cut_off(self) -> bool:
+        """Whether the last answer was cut short by the cap Jarvis sent
+        (jarvis_chatbot marks it `cut_off` in the transcript)."""
+        with self._lock:
+            return self._cut_off
+
+    def _money(self, text: str) -> tuple:
+        """(why not, "" to send; the cap to send with it)."""
         if self._money_broken:
-            return self._money_broken
+            return self._money_broken, 0
         with self._lock:
             texts = [str(m.get("content") or "") for m in self._history]
         texts = (texts + [str(text)])[-MAX_HISTORY:]
-        return money_problem(self.preset.id, self.model,
-                             next_chars=sum(len(t) for t in texts), next_messages=len(texts))
+        return money_check(self.preset.id, self.model,
+                           next_chars=sum(len(t) for t in texts), next_messages=len(texts))
 
     # ---- the request ------------------------------------------------------
 
@@ -958,8 +1131,11 @@ class ApiChatbot(CB.Adapter):
             # pinned host or to nothing.
             raise ApiUnavailable(f"Jarvis will not send your {self.preset.company} key "
                                  f"there: {why or 'no key'}.", "pinned")
-        body = json.dumps({"model": self.model, "messages": messages, "stream": False},
-                          ensure_ascii=False).encode("utf-8")
+        payload = {"model": self.model, "messages": messages, "stream": False}
+        if self.preset.cap_field and self._cap > 0:
+            # The hard stop: the service itself will not write past this.
+            payload[self.preset.cap_field] = int(self._cap)
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         return urllib.request.Request(url, data=body, method="POST", headers={
             "Content-Type": "application/json", "Accept": "application/json",
             "Authorization": "Bearer " + self._key})
@@ -1052,6 +1228,16 @@ class ApiChatbot(CB.Adapter):
                         counts[k] = v
         text = _content(got)
         self._count_money(use, counts, messages or [], text)
+        # Cut short by the cap Jarvis sent: "length" is the finish reason
+        # OpenAI's, Groq's, Mistral's and OpenRouter's own code name for it
+        # (xAI's grok-build has a Length reason too). Without a cap sent, a
+        # "length" is not Jarvis's doing and gets no note.
+        cut = bool(self.preset.cap_field and self._cap > 0
+                   and _finish_reason(got) == "length")
+        with self._lock:
+            self._cut_off = cut
+        if cut and (text is None or not text.strip()):
+            raise ApiUnavailable(CUT_OFF_EMPTY.format(name=self.name), "cut_off")
         if text is None:
             raise ApiUnavailable(UNREADABLE.format(name=self.name), "unreadable")
         if not text.strip():
@@ -1090,6 +1276,15 @@ class ApiChatbot(CB.Adapter):
         with self._lock:
             self._usage["dollars"] = round(self._usage["dollars"] + float(got or 0.0), 8)
             self._usage["cost"] = dollars(self._usage["dollars"])
+
+
+def _finish_reason(got: dict) -> str:
+    """choices[0].finish_reason, or ""."""
+    choices = got.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return ""
+    fr = choices[0].get("finish_reason")
+    return fr if isinstance(fr, str) else ""
 
 
 def _content(got: dict) -> Optional[str]:
@@ -1186,8 +1381,12 @@ def _card_note(p: Preset) -> str:
            f"sent anywhere else, and a redirect is refused. Each message costs a little on "
            f"your {p.company} account: Jarvis estimates the cost from the word-pieces "
            f"(tokens) {p.company} reports and its price list, and stops before a message "
-           f"that could pass the monthly money limit you set on the PC. What you send is kept "
-           f"under {p.company}'s own API terms.")
+           f"that could pass the monthly money limit you set on the PC. "
+           + (f"It also asks {p.company} to keep each answer short enough to stay within "
+              f"that limit. " if p.cap_field else
+              f"Jarvis cannot yet ask {p.company} to keep answers short (that setting could "
+              f"not be checked), so it stops earlier instead. ")
+           + f"What you send is kept under {p.company}'s own API terms.")
     if p.note:
         out += " " + p.note
     return out
@@ -1278,10 +1477,31 @@ def spent_lines() -> list:
         else:
             price = (f"${pr[0]:g} in, ${pr[1]:g} out per million word-pieces (default written "
                      f"{PRICES_WRITTEN}, UNVERIFIED - check {p.price_page})")
-        out.append(f"{p.short}: {p.name}, model {model or problem}: {lim}. Price: {price}.")
+        out.append(f"{p.short}: {p.name}, model {model or problem}: {lim}. Price: {price}. "
+                   f"{cap_words(p)}")
     out.append("Prices change: check each against the company's price page and correct it "
                "with: " + PRICE_LINE.format(short="<service>"))
     return out
+
+
+def cap_words(p: Preset) -> str:
+    """How the limit is kept for one service, for `spent`: the answer-length
+    cap and where its name was checked, and what hidden reasoning does."""
+    if not p.cap_field:
+        return (f"Answer length: NO CAP IS SENT - the name of that setting could not be "
+                f"checked in {p.company}'s own documentation ({p.cap_source}). The only guard "
+                f"is the check before each message, which assumes the longest answer "
+                f"({MOST_REPLY_TOKENS:,} word-pieces) plus {REASONING_ROOM:,} for hidden "
+                f"reasoning; a longer answer can still carry a month a little over.")
+    out = (f"Answer length: capped with {p.cap_field} (at most {MOST_REPLY_TOKENS:,} "
+           f"word-pieces, fewer as the month's limit nears; the name checked in "
+           f"{p.cap_source}). ")
+    if p.reasoning == "inside":
+        return out + (f"{p.company}'s own words count hidden reasoning inside that cap, so the "
+                      f"cap bounds the whole answer.")
+    return out + (f"{p.company}'s own code does not say whether hidden reasoning counts inside "
+                  f"that cap, so the check also keeps room for {REASONING_ROOM:,} word-pieces "
+                  f"of it; longer hidden reasoning can still carry a month a little over.")
 
 
 def _main(argv, *, ask_secret=None, out=print) -> int:

@@ -143,6 +143,9 @@ object Chatbot {
     const val MONEY_PC_ONLY =
         "Each service with a key needs a monthly money limit before Jarvis uses it. Limits and " +
             "prices are set on the PC only, like keys; the amounts are estimates."
+    /** Under an answer the money limit's answer-length cap cut short (the PC's `cut_off`). */
+    const val CUT_OFF =
+        "Jarvis asked for a short answer so it stays within your limit; the rest was cut off."
 
     /** Every sentence above by the PC's own key, for ChatbotTest. */
     val WORDS: Map<String, String> = mapOf(
@@ -172,6 +175,7 @@ object Chatbot {
         "notify_compare_paused" to NOTIFY_COMPARE_PAUSED, "member_waiting" to MEMBER_WAITING,
         "kind_website" to KIND_WEBSITE, "kind_api" to KIND_API, "kind_local" to KIND_LOCAL,
         "usage_line" to USAGE_LINE, "money_left" to MONEY_LEFT, "money_pc_only" to MONEY_PC_ONLY,
+        "cut_off" to CUT_OFF,
     )
 
     /** How each chatbot is reached (`kind`), in the order the chooser groups them. */
@@ -243,7 +247,14 @@ object Chatbot {
         val compareMax: Int = 0,
     )
 
-    data class Turn(val who: String, val n: Int, val text: String, val outside: Boolean)
+    /** One message. [cutOff]: a chatbot's answer the money limit's cap cut short. */
+    data class Turn(
+        val who: String,
+        val n: Int,
+        val text: String,
+        val outside: Boolean,
+        val cutOff: Boolean = false,
+    )
 
     data class Claim(val claim: String, val sourced: Boolean)
 
@@ -440,7 +451,8 @@ object Chatbot {
             }
             // Anything the chatbot said is outside text, whatever the flag says.
             Turn(who, t.num("n")?.toInt() ?: 0, t.raw("text") ?: "",
-                who == "chatbot" || t.flag("outside_text") == true)
+                who == "chatbot" || t.flag("outside_text") == true,
+                cutOff = who == "chatbot" && t.flag("cut_off") == true)
         } ?: emptyList()
         val sum = (o["summary"] as? JsonObject)?.let { s ->
             Summary(

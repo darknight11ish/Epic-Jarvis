@@ -344,6 +344,16 @@ class ChatbotTest {
     }
 
     @Test
+    fun `an answer the money limit's cap cut short is marked, and only that one`() {
+        val turns = view("cut_off").session!!.transcript
+        assertEquals(listOf("jarvis" to false, "chatbot" to true, "jarvis" to false,
+            "chatbot" to false), turns.map { it.who to it.cutOff })
+        assertTrue(view("running").session!!.transcript.none { it.cutOff })
+        assertEquals("Jarvis asked for a short answer so it stays within your limit; the rest " +
+            "was cut off.", Chatbot.CUT_OFF)
+    }
+
+    @Test
     fun `an older PC is not a chatbot view`() {
         assertNull(Chatbot.parse(JarvisJson.parseToJsonElement("{\"available\": false}") as JsonObject))
         assertNull(Chatbot.parse(JarvisJson.parseToJsonElement("{}") as JsonObject))

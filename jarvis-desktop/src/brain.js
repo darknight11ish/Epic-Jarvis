@@ -4107,6 +4107,7 @@ function chatbotTurn(t, name) {
   if (t.outside) head.append(el("span", "history-mark history-mark-taint", "outside text"));
   item.append(head);
   item.append(el("p", "chatbot-text", t.text));
+  if (t.cutOff) item.append(el("p", "note chatbot-cut-off", CHATBOT.cut_off));
   return item;
 }
 
