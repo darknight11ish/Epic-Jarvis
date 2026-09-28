@@ -16,6 +16,8 @@
  */
 
 import { fallbackTitle } from "./card-words.js";
+import { markMigrated, migrated, storeAnimal } from "./animal-shared.js";
+import { loadFaceTuning } from "./face-tuning.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -1075,8 +1077,68 @@ function readAppearanceColours() {
 export function followAppearance() {
   if (!IS_TAURI || appearanceFollowed) return;
   appearanceFollowed = true;
-  TAURI.event.listen("appearance-changed", () => readAppearanceColours());
+  TAURI.event.listen("appearance-changed", () => {
+    readAppearanceColours();
+    readAnimalOptions();
+  });
   readAppearanceColours();
+  readAnimalOptions();
+}
+
+/* ==========================================================================
+   The shared animal options, kept for the face frames
+   --------------------------------------------------------------------------
+   "Keep the animal still" and the behaviour switches live on the PC and come
+   with the appearance document (animal.patch; appearance.rs `animal`). The
+   face frames hold no command, so every window that follows the appearance
+   keeps a copy in this computer's localStorage (animal-shared.js), where
+   every face page reads it - the same road the sky takes. From memory
+   (`appearance_snapshot`), never the network, so it is safe on every
+   `appearance-changed`.
+   ========================================================================== */
+
+let stillMoveTried = false;
+
+function readAnimalOptions() {
+  if (!IS_TAURI) return;
+  TAURI.core
+    .invoke("appearance_snapshot")
+    .then((doc) => {
+      const animal = doc && doc.animal;
+      if (!animal || typeof animal !== "object") return;   // an older PC, or not heard yet
+      storeAnimal(animal);
+      moveOldStill(animal);
+    })
+    .catch(() => {
+      /* an older shell: the face frames keep this computer's own Still */
+    });
+}
+
+/**
+ * This computer's old "Keep the animal still" (face-tuning.js, before it was
+ * shared) goes to the PC once, and only if it was on - "if either device had
+ * Still on, keep it on" (animal.rs migrate_animal_still). Tried once per
+ * window; a failure (the PC not reachable) is tried again next time a window
+ * opens. Until it lands, an old "on" still counts on this computer
+ * (animal-shared.js effectiveStill).
+ */
+function moveOldStill(animal) {
+  if (stillMoveTried || migrated()) return;
+  if (loadFaceTuning().still !== true) {
+    markMigrated();       // nothing to move
+    return;
+  }
+  stillMoveTried = true;
+  if (animal.still === true) {
+    markMigrated();       // already on, on the PC
+    return;
+  }
+  TAURI.core
+    .invoke("migrate_animal_still")
+    .then(() => markMigrated())
+    .catch(() => {
+      /* not now: tried again when a window next opens */
+    });
 }
 
 /* ==========================================================================

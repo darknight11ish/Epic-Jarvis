@@ -1457,7 +1457,7 @@ startLink();
   // The sun, the moon and the weather behind the animal (sky-feed.js): kept
   // in this computer's localStorage for the face frame, which holds no
   // command of its own (capability sky-read).
-  startSkyFeed();
+  startSkyFeed({ onEvent });
 
   // Ollama and the LiteLLM proxy are not on the bus, so their dots still need
   // one probe. Once, at boot — there is no timer here any more.

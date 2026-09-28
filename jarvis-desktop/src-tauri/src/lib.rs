@@ -19,6 +19,7 @@
 
 pub mod account_secrets;
 pub mod aec;
+pub mod animal;
 pub mod appearance;
 pub mod asks_first;
 pub mod attention;
@@ -898,6 +899,9 @@ pub fn run() {
             plain_errors::open_fix_place,
             sky::get_sky,
             sky::set_sky,
+            animal::get_animal,
+            animal::set_animal,
+            animal::migrate_animal_still,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,

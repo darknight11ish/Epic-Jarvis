@@ -172,6 +172,13 @@ jobs:
           python tools/gen_sky.py --check
           python tools/gen_sky_cases.py --check
           node jarvis-desktop/tests/sky.mjs
+      # "Animal options" (2026-09-28): what GET /api/animal answers and the
+      # one rule for "make the animal sharper", made by jarvis_animal.py, for
+      # both apps - so their fallback words and their stepping cannot drift.
+      - name: Animal options - both apps' contract matches jarvis_animal.py
+        run: |
+          python tools/gen_animal_cases.py --check
+          node jarvis-desktop/tests/animal-settings.mjs
       # A command registered in lib.rs but missing from build.rs's own ACL
       # export list has no permission at all, and every window's call to it
       # is refused at runtime - a compile-time-invisible break that bit two

@@ -1183,6 +1183,34 @@ class JarvisApi(
         }
 
     /**
+     * `GET /api/animal` - "Keep the animal still" and the animal's behaviour
+     * switches, shared with the desktop, with the PC's own words
+     * ([AnimalOptions.parse]). A read. 404: an older PC.
+     */
+    suspend fun animal(): ApiResult<JsonObject> = probe(AnimalOptions.PATH)
+
+    /**
+     * `POST /api/animal` with ONE change made by [AnimalOptions.body]. No card
+     * either way - these only change how the animal moves.
+     */
+    suspend fun animalPost(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(AnimalOptions.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/hardware` - the cards, what runs now, the three setups the PC
      * worked out for its own cards ([Hardware.parse]). Reads only. A 404 is
      * an older backend and a 503 a module that did not load.

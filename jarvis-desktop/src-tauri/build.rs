@@ -196,6 +196,15 @@ fn main() {
             // approval card on the PC; adding is held on a stale link).
             "get_sky",
             "set_sky",
+            // "Animal options" (backend/animal.patch, 2026-09-28): "Keep the
+            // animal still" and the behaviour switches, shared with the
+            // phone - a read and ONE change at a time (Settings only; no card
+            // either way; turning one on is held on a stale link); and, from
+            // any window with jarvis-link, sending this computer's old Still
+            // to the PC once, only if it was on.
+            "get_animal",
+            "set_animal",
+            "migrate_animal_still",
             // Settings' "What asks first" (backend/asks-first.patch): every
             // action and whether it asks, in the PC's words; "Ask me first"
             // on ONE action of the short safe list (stricter at once, never

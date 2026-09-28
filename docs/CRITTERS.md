@@ -623,8 +623,10 @@ and `frame_rate.pick_rule`); the desktop reads them through `face-pace.js`,
 the phone keeps the same numbers in `FaceBudget.kt` (`QualityTier`,
 `AnimalPace`) and its SpecDriftTest fails if they drift.
 
-**Quality levels** - the same words in both apps (Settings, "Face on this
-computer" on the PC; Appearance, Face editor on the phone). The stored ids
+**Quality levels** - the same words in both apps (Settings, "Animal
+options", "Sharpness and frame rate on this computer" on the PC, where the
+row is called Sharpness; Appearance, Animal options and the Face editor on
+the phone). The stored ids
 are still `low`, `medium`, `high`, `max`, so a saved setting keeps working.
 The lowest is "Lower", not "Battery saver": the phone already has a Battery
 saver switch, and it still overrides everything here.
@@ -783,9 +785,8 @@ decisions of 2026-09-28). In plain words:
 - **"Weather in the animal's scene"** adds soft rain, slow snow, or a few
   faint lines of wind and drifting clouds.
 
-Where to switch them on: the desktop's Settings, Appearance, "Sun, moon and
-weather" (the town is typed there, once); the phone's Appearance, "Sun, moon
-and weather" (it shows the town the PC has, and can switch the sky on or
+Where to switch them on: the desktop's Settings, "Animal options" (the town
+is typed there, once); the phone's Appearance, "Animal options" (it shows the town the PC has, and can switch the sky on or
 off, forget the town, or choose the weather source). docs/JARVIS-API.md
 section 59 has the route; ARCHITECTURE section 4 the one part that goes
 online (Open-Meteo, only if chosen, after an approval card).
@@ -845,6 +846,61 @@ of that moment rather than jump. Positions are to about 0.3 degree for the
 moon (a few minutes in its rising time) - far finer than the picture shows.
 Not yet seen on a real phone: the phone's drawing (`SkyDraw.kt`) is checked
 by CI's compiler and the emulator only.
+
+## Animal options: every option in one place (2026-09-28)
+
+The owner's decision: "Every animal option lives in one place in both apps'
+settings ... and Jarvis can change any of them when asked", with the look
+and behaviour shared between the PC and the phone, and sharpness and frame
+rate kept per device. Where it is: the desktop's Settings, **Animal
+options** (its own card, in the jump list under Everyday); the phone's
+Appearance, **Animal options** (next to the face). The route and the rules
+are docs/JARVIS-API.md section 60. Despite the name it covers every
+character face - the four animals and the robot: no option names a face,
+and "Go to the face's voice" goes to the one voice screen whichever face is
+worn, so a new face slots in with no change to the section.
+
+| Part of the section | Kept | Notes |
+|---|---|---|
+| Keep the animal still | the PC, shared | Off by default. Built: the animal only breathes and blinks. |
+| Listening nods | the PC, shared | On by default. Saved and shared now; the animal starts nodding in the next update. |
+| Focus buddy | the PC, shared | On by default. Next update. |
+| Small acknowledgements | the PC, shared | On by default. Next update. |
+| Petting | the PC, shared | On by default. Next update. |
+| Cute idle moments | the PC, shared | On by default (owner, later the same day). Two per face, alternating, after resting a while. Next update. |
+| Seasonal touches | the PC, shared | Off by default. Next update. |
+| Sun and moon, your town, the weather and its source | the PC, shared (`/api/sky`) | Unchanged; moved into the section. Open-Meteo still asks with its card. |
+| Sharpness and frame rate (and Auto adjust, speed) | this device only | "on this computer" / "on this phone". |
+| The animal's voice | the PC's voice settings | A button goes there. |
+| Calm motion | this device | The PC follows Windows' "Animation effects"; the phone its Motion setting and "remove animations". |
+
+**Adding a behaviour** is one entry in `backend/jarvis_animal.py`'s
+`SWITCHES` (id, words, default, `built`, the names the owner might say) and
+the same entry in each app's fallback copy (`animal-shared.js SWITCHES`,
+`AnimalOptions.SWITCHES`) - `tools/gen_animal_cases.py --check` fails until
+they match. Both apps draw whatever the PC lists, and "turn on/off <any of
+its names>" works at once. The drawing code reads the switch from this
+computer's copy (`animal-shared.js loadAnimal`, the face frames) or the
+phone's (`AppearanceStore.animal`). The decided rules for every behaviour:
+Still and serious moments switch it off; calm makes it smaller; never
+humming, yawning, mood-guessing, reacting to email or screen content, guilt
+or streaks, roaming the screen, or anything cute during an approval or an
+error.
+
+**Asking Jarvis** (no AI model involved, the owner's own words only): "keep
+the animal still", "let the animal move again", "stop the animal's
+nodding", "turn on seasonal touches", "turn on the sun and moon", "turn off
+the weather", "use Open-Meteo for the weather" (its card), "make the animal
+sharper / softer / smoother", "set the frame rate to 60", "turn on auto
+adjust". Sharpness and frame rate change only the device that was asked.
+Anything unclear ("turn on the weather" - which source?) gets a plain
+question back.
+
+**Moving each device's old Still.** Before this, each device kept its own
+"Keep the animal still". If either had it on, it stays on: each device
+sends its old "on" to the PC once (unless a switch was already changed on
+the PC since - that newer choice wins), and until that has happened the old
+"on" keeps counting on that device.
 
 ## What was used from Gemini's notes, and what was not
 

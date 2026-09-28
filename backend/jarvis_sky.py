@@ -126,7 +126,7 @@ PLACE_LABEL = "Your town"
 PLACE_DETAIL = ("Type it once on the PC. Jarvis finds it in a list of towns it carries and keeps "
                 "only a rough position (about 11 km). Not found? Type the position instead, "
                 "like 39.7, -105.0.")
-PLACE_PHONE = "Your town is typed on the PC, in Settings, Appearance."
+PLACE_PHONE = "Your town is typed on the PC, in Settings, Animal options."
 PLACE_NONE = "No town yet, so there is no sun or moon to show. Type your town on the PC."
 FORGET_LABEL = "Forget my town"
 WEATHER_LABEL = "Weather in the animal's scene"
@@ -263,6 +263,28 @@ def _audit(event: str, detail: dict) -> None:
     try:
         if fw is not None:
             fw.audit_log(event, detail)
+    except Exception:
+        pass
+
+
+def _default_publish(kind: str, data: dict) -> None:
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish(kind, data)
+    except Exception:
+        pass
+
+
+#: A doorbell for both apps (2026-09-28, "Animal options": one request
+#: changes both): `{"changed": true}` and nothing else - never the town, a
+#: position or the weather. An app that is open reads GET /api/sky again on
+#: it. Replaceable, so the tests see it.
+publish: Callable[[str, dict], None] = _default_publish
+
+
+def _ring() -> None:
+    try:
+        publish("sky", {"changed": True})
     except Exception:
         pass
 
@@ -854,6 +876,7 @@ def _decide(pid: str, place: dict, gate: Callable, tier_of: Callable) -> None:
         except Exception as exc:
             return _finish(pid, "failed", type(exc).__name__)
     _finish(pid, "changed")
+    _ring()
 
 
 def _withdraw_pending() -> None:
@@ -916,7 +939,7 @@ def request_weather(src, *, gate: Optional[Callable] = None,
 def request_place(text, *, here: bool) -> tuple:
     if not here:
         return 403, {"ok": False, "error": "Your town is typed on the PC, in Settings, "
-                                           "Appearance - never sent from the phone."}
+                                           "Animal options - never sent from the phone."}
     got = find_place(text)
     if not got["ok"]:
         return 400, {"ok": False, "error": got["error"]}
@@ -970,7 +993,15 @@ def handle_post(body, *, here: bool, deps: Optional[Deps] = None) -> tuple:
          {"place": "Denver"}                the PC only
          {"forget_place": true}             at once, either app
          {"weather": "off"|"home_assistant"|"open_meteo"}
-    """
+    Every change that lands (and a card that is raised) rings the `sky`
+    doorbell, so the other app repaints without waiting for its next read."""
+    code, out = _handle_post(body, here=here, deps=deps)
+    if code < 300:
+        _ring()
+    return code, out
+
+
+def _handle_post(body, *, here: bool, deps: Optional[Deps] = None) -> tuple:
     if not isinstance(body, dict) or len(body) != 1:
         return 400, {"ok": False, "error": "Send one change at a time."}
     (k, v), = body.items()

@@ -178,7 +178,8 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
 | `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written (`voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
-| `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
+| `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen). Since 2026-09-28 it also rings when an animal switch changes (`{"part": "animal", "animal": {...}}`, §60); the document then carries the new `animal` values, and every window keeps them for its face frames (`jarvis-link.js`, `animal-shared.js`) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`), `animal` included (`AppearanceStore.animal`) |
+| `sky` | **Since 2026-09-28** (`jarvis_sky.py`, §59): `{"changed": true}` only - never the town, a position or the weather - on every change that lands (and a card raised or answered). Fanned out; `sky-feed.js` (Settings, the Widget, the floating face) and Settings' own section read `GET /api/sky` again at once | Reads `GET /api/sky` again (`JarvisRuntime.onEvent` -> `sky()`), so the face and Appearance show it now |
 | `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on the phone's Brain screen; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
 | `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed" \| "ready", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on) - except for a briefing, whose toast comes on `ready` (`brain/briefing.rs` `toast_ready`, always only "Jarvis: your morning briefing is ready.", section 22); the Brain reads Coming up again, and the briefing too for kind `briefing` (`brain.js`) | the Brain's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`). For kind `briefing`: the Brain's Morning briefing reads itself again, and on `ready` (not `fired`) a notification with only the fixed words, which opens the Brain (`JarvisRuntime.onBriefingReady`) |
 | `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | the Brain's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
@@ -1120,7 +1121,8 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/digest` | GET | `attention.rs:81`, `routes.rs:35` | `JarvisApi.kt:280` | List key: `digest`. |
 | `/api/config` | GET | `routes.rs:36` | **no** | **Read-only: writing answers 501.** This is why there is no shared place to store a preference — `API-DISAGREEMENTS.md` §11. |
 | `/api/visual-spec` | GET | `spec_drift.rs:50` | **no** | Desktop checks its bundled spec against the server's at startup. The phone never fetches it. |
-| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. Not in this document, on purpose: display choices kept on ONE device - the face's quality, frame rate and speed, and "Keep the animal still" (2026-09-28; the animals only breathe and blink). The desktop keeps them in its own storage (`jarvis.faceTuning`, `face-tuning.js`), the phone in its Look (`still_animal`, `AppearanceStore.kt`); neither is sent to the PC's backend or the other device, and none raises a card. |
+| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. Since 2026-09-28 a GET also carries `animal` - "Keep the animal still" and the behaviour switches (`animal.patch`, §60) - read only: a POST ignores it (they change through `/api/animal`). Not in this document, on purpose: display choices kept on ONE device - the face's sharpness (quality), frame rate and speed. The desktop keeps them in its own storage (`jarvis.faceTuning`, `face-tuning.js`), the phone in its `FaceTuning` (`AppearanceStore.kt`); neither is sent to the PC's backend or the other device, and none raises a card. ("Keep the animal still" was one of these until 2026-09-28; each device's old "on" is sent to the PC once, §60.4.) |
+| `/api/animal` | GET / POST | `animal.rs` | `JarvisApi.animal` / `animalPost` | `animal.patch` (2026-09-28): the shared animal switches with the PC's words; ONE change per POST, no card. §60. |
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
@@ -8916,6 +8918,7 @@ the REST route does, never a copy of its logic:
 | Morning briefing senders shown | "turn on/off senders in my briefing" | `jarvis_briefing.handle_senders()` (§22) |
 | "What asks first" - loosen/stricter | "stop asking before my calendar" / "ask me before my calendar" | `jarvis_asks_first.handle_tier()` (§32) |
 | Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§43) |
+| Animal options (2026-09-28) | "keep the animal still", "stop the animal's nodding", "turn on the sun and moon", "turn off the weather", "use Open-Meteo for the weather", "make the animal sharper" | `jarvis_animal.set_switch()`, `jarvis_sky.handle_post()`; sharpness and frame rate go back in X-Jarvis-Route for the asking device - §60.3 |
 
 Every one of these keeps its EXISTING gate exactly:
 
@@ -9103,3 +9106,114 @@ preview. It dims with the animal on standby, keeps showing while Jarvis is
 not connected and in a serious moment, is unchanged by "Keep the animal
 still" (it is the sky, not the animal), and under calm (reduced) motion the
 weather holds still. Weather older than 90 minutes is not drawn.
+
+## 60. Animal options (added 2026-09-28)
+
+The owner's decisions (`CLAUDE.md`, 2026-09-28): "Every animal option lives
+in one place in both apps' settings (Still, sun and moon, weather and its
+source, resolution, frame rate, and every new one), and Jarvis can change any
+of them when asked ... cosmetic options change at once; anything that opens a
+way out of the PC (online weather) still raises its approval card.
+Look-and-behaviour options are shared between the PC and the phone (one
+request changes both); sharpness and frame rate stay per device."
+
+`backend/jarvis_animal.py`, shipped whole; `animal.patch` adds two small
+hunks to `jarvis_hud.py` - the route at start-up (right after `sky.patch`'s)
+and the values in `GET /api/appearance`. Tested by `backend/test_animal.py`.
+
+**Where each option lives - one home each, nothing kept twice:**
+
+| Option | Kept | Changed by | Card? |
+|---|---|---|---|
+| "Keep the animal still", listening nods, focus buddy, small acknowledgements, petting, cute idle moments, seasonal touches | the PC, `<config dir>/animal.json` - shared by both apps | `POST /api/animal` (either app), or asking Jarvis | never - cosmetic |
+| Sun and moon on/off, the town, the weather source | the PC, `sky.json` (§59) - shared by both apps | `POST /api/sky` (either app; the town on the PC only), or asking Jarvis | Open-Meteo ON only - ONE card, never skipped |
+| Sharpness (quality) and frame rate | each device (`face-tuning.js`, the phone's `FaceTuning`) - never sent | the device's own Settings, or asking Jarvis from that device | never |
+| The animal's voice | the PC's voice settings (§15) | Jarvis's voice screen; the section links there | as before |
+| Calm motion | each device's own "less motion" (Windows' Animation effects; the phone's Motion setting or its "remove animations") | the device | never |
+
+### 60.1 The route
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/animal` | - | **200** the view below |
+| `POST /api/animal` | ONE change: `{"<switch id>": true \| false}` | **200** `{"ok": true, "said", "changed", "view"}` - at once, with an `appearance` event (`{"part": "animal", "animal": {...values}}`); the same value again says "Keep the animal still: already on." and rings nothing; **400** `{"ok": false, "error"}` in words (two changes, an unknown id, not true/false) |
+
+```
+{"available": true, "title": "Animal options", "intro",
+ "shared_title", "shared_note", "serious_note", "coming",
+ "switches": [{"id": "still" | "nods" | "focus_buddy" | "acks" | "petting" | "cute_moments" | "seasonal",
+               "label", "detail", "default": bool, "built": bool, "on": bool}, ...],
+ "values": {"still": false, "nods": true, "focus_buddy": true, "acks": true,
+            "petting": true, "cute_moments": true, "seasonal": false},
+ "changed": seconds (0 before any change),
+ "device": {"title", "note", "sharpness": [{"id", "label"}...], "frame_rates": [{"id", "label"}...]}}
+```
+
+The defaults are the owner's: nods, focus buddy, acknowledgements, petting and
+cute idle moments on; Still and seasonal touches off. Every option applies to
+every character face - the four animals and the robot (a fifth face,
+2026-09-28) - and nothing names a face, so a new face needs no change here. `built: false` means the switch is stored
+and shared today and the animal starts doing it in the next update - both
+apps say so under the switch (`coming`), and so does Jarvis's answer. Both
+apps draw whatever the PC lists, so a new behaviour is ONE entry in
+`jarvis_animal.SWITCHES` (and in each app's fallback copy, held equal by
+`tools/gen_animal_cases.py`'s `animal-cases.json`). Turning a switch ON is
+held on a stale link by each app (rule 4, the sky's line); OFF never is.
+
+`GET /api/appearance` carries `"animal": <values>` too (`animal.patch`), so the
+`appearance` event both apps already follow repaints every face from one read;
+a `POST /api/appearance` never touches them (their own file).
+
+### 60.2 The sun, moon and weather
+
+Unchanged (§59), and shown inside each app's Animal options section. One
+addition: `jarvis_sky.py` rings a `sky` event (`{"changed": true}`) on every
+change, so the other app shows it at once instead of at its next read.
+
+### 60.3 Asking Jarvis
+
+`jarvis_quick.py` (`_animal`), answered without the AI model, the owner's own
+typed or spoken words only (never pasted or shared text), each in one short
+plain sentence:
+
+| Said | Does |
+|---|---|
+| "keep the animal still", "let the animal move again", "turn on/off listening nods", "stop the animal's nodding", "turn off the focus buddy", "turn off the cute moments", "turn on seasonal touches", "disable petting", "keep the robot still" ... (every switch by every name in `jarvis_animal.SWITCHES`) | `jarvis_animal.set_switch` - at once, no card, both devices |
+| "turn on the sun and moon", "hide the sun and moon" | `jarvis_sky.handle_post({"show": ...})` - at once |
+| "turn off the weather" | `jarvis_sky.handle_post({"weather": "off"})` - at once |
+| "use Open-Meteo for the weather", "get the weather from Home Assistant" | the same; Open-Meteo raises its ONE card and the answer says nothing is sent until it is approved |
+| "make the animal sharper / softer / smoother", "lower the frame rate", "set the sharpness to maximum", "set the frame rate to 60", "turn on auto adjust" | nothing on the PC: X-Jarvis-Route gets `"face_tuning": "<change>"` and the app that asked applies it to itself (below); the answer says "on this device only" |
+| "turn on the weather" (which source?), "set the frame rate to 45", "turn off the animal", "make the animal bigger" | a plain question back - never a guess |
+
+`face_tuning` is one of `jarvis_animal.DEVICE_CHANGES`: `sharper`, `softer`,
+`smoother`, `less_smooth`, `auto`, `sharpness:<low|medium|high|max>`,
+`frame_rate:<30|60|90|120|max>`. Both apps apply it with the PC's own rule,
+`jarvis_animal.step_device` (the desktop's `animal-shared.js stepTuning` in the
+Jarvis bar, `main.js`; the phone's `AnimalOptions.step` in `MainActivity`),
+held equal by the fixture: a step picks a value, so Auto adjust goes off - as
+a tap in Settings does; while Auto adjust is on a step starts from High and
+60. Anything else in the field is ignored. The desktop's Rust passes the
+field on only as a string (`commands.rs route_line_from_header`); the HUD's
+own chat box applies it the same way (`jarvis_hud.html`). An app older than
+this feature ignores the field, so there the answer's "Done" is not true -
+update the app.
+
+"Open animal options" is a section (§58.1): the desktop's
+`settings.html#animal-options`; on the phone it scrolls Settings to the
+Appearance row, whose button opens it.
+
+### 60.4 Moving each device's old "Keep the animal still"
+
+Before 2026-09-28 each device kept its own Still. The rule: **if either device
+had Still on, it stays on.** Each device sends its old "on" to the PC ONCE,
+and only if the PC's value is off and nobody has changed a switch there yet
+(`changed` is 0 - a choice made since, on the other device or by asking
+Jarvis, is newer and wins): the desktop from whichever window opens
+first (`jarvis-link.js` -> `animal.rs migrate_animal_still`, which can only
+ever send `{"still": true}`, once - a settings-store flag), the phone on its
+first read of the shared values (`JarvisRuntime.moveOldStill`). Until that
+lands, an old "on" still counts on that device (`effectiveStill`); an older
+PC without `/api/animal` keeps each device's own switch, offered in the
+section with the line "Kept on this computer/phone only until your PC's Jarvis
+is updated."
+

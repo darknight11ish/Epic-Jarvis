@@ -27,6 +27,11 @@ permissions = [
   # (jarvis-link.js followAppearance), and the widget's live face wears them.
   "allow-appearance-snapshot",
   "allow-appearance-colours",
+  # This computer's old "Keep the animal still", sent to the PC ONCE and
+  # only if it was on (animal.rs migrate_animal_still) - from whichever
+  # window opens first, since Settings may never be opened. It can only
+  # ever send {"still": true}, once; cosmetic, approves nothing.
+  "allow-migrate-animal-still",
 ]
 
 # Reading the theme and nothing else: the first-run window paints the
@@ -407,6 +412,12 @@ permissions = [
   # stale link in Rust; hiding, forgetting and "off" never are.
   "allow-get-sky",
   "allow-set-sky",
+  # "Animal options" (backend/animal.patch, 2026-09-28): "Keep the animal
+  # still" and the behaviour switches, shared with the phone - a read and
+  # ONE change at a time. Cosmetic: no card either way; turning one on is
+  # held on a stale link in Rust.
+  "allow-get-animal",
+  "allow-set-animal",
   # "What asks first" (backend/asks-first.patch, 2026-09-26): every action
   # and whether it asks first, in the PC's words (a read); "Ask me first" on
   # ONE action of the short safe list - stricter at once, looser only as one

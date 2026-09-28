@@ -1213,6 +1213,11 @@ object JarvisRuntime {
             // just re-reads the shared document; nothing here redraws
             // anything directly.
             "appearance" -> refreshAppearance()
+            // The sun, moon or weather changed on the PC (a change made on
+            // the desktop, or asked of Jarvis; `{"changed": true}` only - a
+            // doorbell, never the town or the weather): read them again so
+            // the face and Appearance show it now, not at the next poll.
+            "sky" -> runCatching { sky() }
             // One step of the tool loop - asking the model, a tool starting,
             // finishing or refused - kept for Mind's "What Jarvis is doing".
             // It used to fall through to "unhandled" below.
@@ -1810,6 +1815,77 @@ object JarvisRuntime {
         return com.jarvis.client.net.SkySettings.replyLine(r)
     }
 
+    // ------------------------------------------------- animal options ----
+
+    /**
+     * `GET /api/animal` (the owner's decisions of 2026-09-28, "Animal
+     * options"): "Keep the animal still" and the behaviour switches, shared
+     * with the desktop. A good answer is kept ([AppearanceStore.setAnimal])
+     * for the face, and this phone's old Still is moved to the PC once
+     * ([moveOldStill]).
+     */
+    suspend fun animalOptions(): ApiResult<JsonObject> {
+        val r = api.animal()
+        if (r is ApiResult.Ok) {
+            com.jarvis.client.net.AnimalOptions.parse(r.value)?.let {
+                appearance.setAnimal(it.shared)
+                moveOldStill(it.shared)
+            }
+        }
+        return r
+    }
+
+    /**
+     * ONE animal switch. No card either way (cosmetic); turning one ON is
+     * held on a stale link ([actionBlocker], rule 4, as the sky's switch is),
+     * turning one OFF never is. Returns the PC's sentence, or the plain words
+     * of a failure.
+     */
+    suspend fun setAnimalOption(id: String, on: Boolean): String {
+        val body = com.jarvis.client.net.AnimalOptions.body(id, on) ?: return "That is not an animal option."
+        if (on) actionBlocker()?.let { return it }
+        val r = api.animalPost(body)
+        if (r is ApiResult.Ok) {
+            (r.value["view"] as? JsonObject)?.let { com.jarvis.client.net.AnimalOptions.parse(it) }?.let {
+                appearance.setAnimal(it.shared)
+            }
+        }
+        return com.jarvis.client.net.AnimalOptions.replyLine(r)
+    }
+
+    /**
+     * This phone's old "Keep the animal still" (`Look.stillAnimal`, kept on
+     * the phone only before 2026-09-28) goes to the PC ONCE, and only if it
+     * was on - "if either device had Still on, keep it on". Until it lands
+     * an old "on" still counts on this phone
+     * ([com.jarvis.client.net.AnimalOptions.effectiveStill]); a failure (the
+     * PC not reachable, the link catching up) is tried again next time.
+     */
+    private suspend fun moveOldStill(shared: com.jarvis.client.net.AnimalOptions.Shared) {
+        if (appearance.animalMigrated.value) return
+        if (!appearance.look.value.stillAnimal || shared.still) {
+            appearance.markAnimalMigrated()
+            return
+        }
+        if (actionBlocker() != null) return
+        // Only while nobody has chosen anything on the PC yet: a switch
+        // changed there since (on the desktop, or by asking Jarvis) is newer
+        // than this phone's old choice, and wins.
+        val now = api.animal()
+        if (now !is ApiResult.Ok) return
+        if (!com.jarvis.client.net.AnimalOptions.stillMoveNeeded(now.value)) {
+            appearance.markAnimalMigrated()
+            return
+        }
+        val r = api.animalPost(com.jarvis.client.net.AnimalOptions.body("still", true) ?: return)
+        if (r is ApiResult.Ok) {
+            appearance.markAnimalMigrated()
+            (r.value["view"] as? JsonObject)?.let { com.jarvis.client.net.AnimalOptions.parse(it) }?.let {
+                appearance.setAnimal(it.shared)
+            }
+        }
+    }
+
     /** Re-reads `/api/deep`. Starts nothing on the PC. */
     suspend fun refreshDeep() {
         _deep.value = BigModel.deepReadOf(api.deep())
@@ -2232,6 +2308,9 @@ object JarvisRuntime {
         noteAppearanceRoute(result)
         if (result is ApiResult.Ok) {
             appearance.applySyncDocument(org.json.JSONObject(result.value.toString()))
+            // The shared animal switches ride along (animal.patch): an old
+            // Still of this phone's moves to the PC once they are known.
+            appearance.animal.value?.let { moveOldStill(it) }
         }
     }
 

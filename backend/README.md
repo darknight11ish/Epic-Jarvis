@@ -140,6 +140,7 @@ on a throwaway copy instead.
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
+| `animal.patch` | `jarvis_hud.py` | **Animal options** (the owner's decisions of 2026-09-28). Adds `GET /api/animal` and `POST /api/animal` (ONE switch: "Keep the animal still" or one of the animal's behaviour switches; at once, no card) and puts the same values in `GET /api/appearance` as `animal`. Two hunks: one in `appearance.patch`'s `_appearance_view`, one right after `sky.patch`'s startup `install()` block, so it goes last. Needs `jarvis_animal.py` copied in; without it, or on any error, the banner says so and the route answers 503 - the faces are drawn as before. See "Animal options", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -13935,7 +13936,7 @@ With the real voice files (`JARVIS_KOKORO_DIR` = a kokoro-en-v0_19 folder)
 
 Two options for the animal faces, both off until switched on: the real sun
 and moon for your town behind the animal, and rain, snow or wind. You type
-your town once on the PC (Settings, Appearance, "Sun, moon and weather");
+your town once on the PC (Settings, "Animal options");
 the PC finds it in a list of towns it carries and keeps only a rough
 position. Nothing goes online for the sun and moon - each app works them out
 itself. The weather comes from your own Home Assistant, or from Open-Meteo
@@ -13945,7 +13946,7 @@ on the internet if you choose it and approve its card.
 
 Nothing new to install: `apply-patches.ps1` copies the two modules and
 applies `sky.patch`, like every other feature. Then, in the desktop's
-Settings, Appearance: switch on "Show the sun and moon behind the animal",
+Settings, "Animal options": switch on "Show the sun and moon behind the animal",
 type your town and press Set. For the weather from Home Assistant, it must
 already be set up for Jarvis (the same device the morning briefing reads).
 
@@ -13985,4 +13986,63 @@ already be set up for Jarvis (the same device the morning briefing reads).
   drawn.
 - A Home Assistant weather device whose attributes run past 500 characters
   (`jarvis_home`'s cap) loses its wind; the condition still draws.
+
+# Animal options: `jarvis_animal.py`, `animal.patch` (2026-09-28)
+
+## In plain words
+
+Every animal option is in one place in both apps now ("Animal options"),
+and Jarvis changes any of them when you ask. "Keep the animal still" and
+six new switches for the behaviours coming next (listening nods, focus
+buddy, small acknowledgements, petting, cute idle moments - on to start -
+and seasonal touches, off) are kept on the PC, so the desktop and the phone always agree.
+Sharpness and frame rate stay on each device. None of them asks with a card
+- they only change how the animal moves. The weather from Open-Meteo still
+does.
+
+## Owner steps (one line each, in PowerShell)
+
+Nothing new to install: `apply-patches.ps1` copies `jarvis_animal.py` and
+applies `animal.patch`, like every other feature. If either device had "Keep
+the animal still" on before, it stays on (each device sends its old "on"
+once - unless you have already changed a switch since, which then wins).
+
+## What the code does
+
+- `jarvis_animal.py`: the switches (`SWITCHES` - one entry each: its words,
+  its default, whether the animal does it yet, and what you might call it),
+  `<config dir>/animal.json` (its own file, so the Faces window's save can
+  never overwrite it), `GET/POST /api/animal` (ONE change, at once, an
+  `appearance` event after it), and `step_device`, the one rule both apps
+  use for "make the animal sharper".
+- `jarvis_settings_registry.py`: "open animal options", and the three
+  functions the spoken requests call - `set_animal_switch` (the same
+  function the switch's route calls), `set_sky_show` and
+  `set_weather_source` (the sky's own `handle_post`, so Open-Meteo keeps its
+  card).
+- `jarvis_quick.py`: the sentences ("keep the animal still", "stop the
+  animal's nodding", "turn off the weather", "make the animal sharper", ...),
+  a plain question for anything unclear, and `face_tuning` in
+  X-Jarvis-Route for sharpness and frame rate (the asking app applies it).
+- `jarvis_sky.py`: a `sky` event (`{"changed": true}`, nothing else) on
+  every change, so the other app shows it at once.
+- `animal.patch`: the route at start-up, and the values in
+  `GET /api/appearance`.
+
+## Test it
+
+    python3 backend/test_animal.py
+    python3 tools/gen_animal_cases.py --check
+    python3 backend/run_suites.py
+
+## Not checked, said plainly
+
+- **Not run on the owner's PC.** `animal.patch` was rehearsed against the
+  text the earlier patches write (`_stack.stand_in`), not the real
+  `jarvis_hud.py`; `apply-patches.ps1` on the PC is the proof.
+- **The six behaviours are switches only today.** They are saved and
+  shared; the animal starts doing each one when it is built.
+- An app older than this feature ignores `face_tuning`, so "make the animal
+  sharper" answered on it says "Done" while nothing changes - update both
+  apps.
 

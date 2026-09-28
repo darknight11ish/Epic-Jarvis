@@ -43,7 +43,7 @@ object SkySettings {
             "waxing, waning) - worked out on your own devices. Nothing goes online for it. For the " +
             "animal faces; the others are not changed."
     const val PLACE_LABEL = "Your town"
-    const val PLACE_PHONE = "Your town is typed on the PC, in Settings, Appearance."
+    const val PLACE_PHONE = "Your town is typed on the PC, in Settings, Animal options."
     const val PLACE_NONE = "No town yet, so there is no sun or moon to show. Type your town on the PC."
     const val FORGET_LABEL = "Forget my town"
     const val WEATHER_LABEL = "Weather in the animal's scene"

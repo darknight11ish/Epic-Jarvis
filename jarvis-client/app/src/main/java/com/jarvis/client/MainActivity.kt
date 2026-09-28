@@ -589,6 +589,14 @@ class MainActivity : FragmentActivity() {
         // The face editor's quality, frame rate, speed, Auto adjust and
         // Battery saver. Phone-only - see AppearanceStore.faceTuning.
         val faceTuning by appearance.faceTuning.collectAsState()
+        // "Keep the animal still", shared with the desktop since 2026-09-28
+        // (kept on the PC): the PC's value once heard, else - or until this
+        // phone's old "on" has reached the PC - this phone's own old switch.
+        val animalShared by appearance.animal.collectAsState()
+        val animalMigrated by appearance.animalMigrated.collectAsState()
+        val stillAnimal = com.jarvis.client.net.AnimalOptions.effectiveStill(
+            animalShared, look.stillAnimal, animalMigrated,
+        )
 
         // Android's own Battery Saver, and how hot the phone is, for the face
         // editor's Battery saver (which turns itself on while Android's is on)
@@ -797,6 +805,23 @@ class MainActivity : FragmentActivity() {
             pendingSettingsSection = target
             nav.go(Screen.SETTINGS)
             chat.consumeOpenSettings()
+        }
+        // "Make the animal sharper" by voice or chat (X-Jarvis-Route
+        // `face_tuning`, 2026-09-28): per device, so the PC changed nothing
+        // and this phone applies it to its own face settings - once, then it
+        // is consumed, like openSettings above. Said on screen only when
+        // nothing could change ("already Maximum"); the answer itself already
+        // says what was done.
+        val faceTuningTarget by chat.faceTuningChange.collectAsState()
+        LaunchedEffect(faceTuningTarget) {
+            val change = faceTuningTarget ?: return@LaunchedEffect
+            val step = com.jarvis.client.net.AnimalOptions.step(appearance.faceTuning.value, change)
+            if (step.changed) {
+                appearance.setFaceTuning(step.tuning)
+            } else if (step.line.isNotBlank()) {
+                JarvisRuntime.setNotice(step.line.replace("{device}", "this phone"))
+            }
+            chat.consumeFaceTuningChange()
         }
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
@@ -1925,6 +1950,14 @@ class MainActivity : FragmentActivity() {
                         faceTuning = faceTuning,
                         onFaceTuningChange = appearance::setFaceTuning,
                         phoneBatterySaver = phoneSaver,
+                        // "Animal options" (2026-09-28): the shared Still the
+                        // preview wears, and the way to the animal's voice.
+                        stillAnimal = stillAnimal,
+                        onOpenVoices = if (paired) {
+                            { nav.go(Screen.VOICES) }
+                        } else {
+                            null
+                        },
                         // Still pictures, one per face, instead of name-only chips.
                         faceTile = { f, selected, onClick ->
                             FaceSpecimen(face = f, bindings = bindings, isSelected = selected, onClick = onClick)
@@ -1965,7 +1998,7 @@ class MainActivity : FragmentActivity() {
                             tapFaceOpensMind = look.tapFaceOpensMind,
                             glow = look.glow,
                             calmMotion = calmMotion,
-                            stillAnimal = look.stillAnimal,
+                            stillAnimal = stillAnimal,
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                             conversationTurns = conversation.size,

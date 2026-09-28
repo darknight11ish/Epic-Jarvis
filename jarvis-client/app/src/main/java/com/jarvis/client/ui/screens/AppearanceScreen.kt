@@ -201,6 +201,13 @@ fun AppearanceScreen(
     onFaceTuningChange: (FaceTuning) -> Unit = {},
     /** Android's own Battery Saver is on, which turns the face's on too. */
     phoneBatterySaver: Boolean = false,
+    /**
+     * "Keep the animal still" as the face wears it: shared with the desktop
+     * since 2026-09-28 (AnimalOptions.effectiveStill), for the preview.
+     */
+    stillAnimal: Boolean = look.stillAnimal,
+    /** "Go to the animal's voice" in Animal options; null hides the button (not paired). */
+    onOpenVoices: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // What the face is actually running with right now - what Auto picked, or
@@ -461,9 +468,10 @@ fun AppearanceScreen(
                     "Shared with your desktop",
                     if (desktopSyncs) {
                         "The face and the state colours are sent to your desktop, and a " +
-                            "change made there shows up here too. The sun, moon and weather " +
-                            "settings are kept on your PC and shared the same way. Nothing " +
-                            "else on this screen leaves the phone."
+                            "change made there shows up here too. The animal options are kept " +
+                            "on your PC and shared the same way - except sharpness and frame " +
+                            "rate, which stay on this phone. Nothing else on this screen " +
+                            "leaves the phone."
                     } else {
                         "Not synced: your desktop doesn't support it yet. For now the face " +
                             "and the state colours stay on this phone."
@@ -500,7 +508,7 @@ fun AppearanceScreen(
                                 // Home. Both can only dim and slow the face.
                                 glow = chrome.postScale * look.glow,
                                 calmMotion = look.motion.calmFace(LocalMotion.current.reduced),
-                                stillMotion = look.stillAnimal,
+                                stillMotion = stillAnimal,
                             )
                         }
                         Gap(8)
@@ -611,10 +619,21 @@ fun AppearanceScreen(
                 }
             }
 
-            // The sun, moon and weather behind the animal (the owner's
-            // decisions of 2026-09-28): kept on the PC and shared by both
-            // apps, so next to the face, not in this phone's own "More".
-            item(key = "sky") { SkySection() }
+            // "Animal options" (the owner's decisions of 2026-09-28): every
+            // animal option in one place - the shared switches and the sun,
+            // moon and weather (kept on the PC, shared with the desktop),
+            // sharpness and frame rate (this phone only), and a way to the
+            // animal's voice. Next to the face, not in this phone's "More".
+            item(key = "animal-options") {
+                AnimalOptionsSection(
+                    faceTuning = faceTuning,
+                    onFaceTuningChange = onFaceTuningChange,
+                    phoneBatterySaver = phoneBatterySaver,
+                    legacyStill = look.stillAnimal,
+                    onLegacyStill = { onLookChange(look.copy(stillAnimal = it)) },
+                    onOpenVoices = onOpenVoices,
+                )
+            }
 
             item(key = "colours") {
                 Section("State colours") {
@@ -683,7 +702,7 @@ fun AppearanceScreen(
                 Plate {
                     SwitchRow(
                         title = "More options",
-                        detail = if (moreOpen) null else "Glow, motion, keeping the animal still, text size, spacing and how Home behaves.",
+                        detail = if (moreOpen) null else "Glow, motion, text size, spacing and how Home behaves.",
                         checked = moreOpen,
                         onChange = { moreOpen = it },
                     )
@@ -763,16 +782,8 @@ fun AppearanceScreen(
                                     onPick = { onLookChange(look.copy(motion = it)) },
                                 )
                             }
-                            // The owner's "Still" option (2026-09-28). Next to
-                            // Motion, where the desktop keeps its twin (Settings,
-                            // "Face on this computer"). Cosmetic, so no card.
-                            SwitchRow(
-                                title = "Keep the animal still",
-                                detail = "It only breathes and blinks - no looking around. " +
-                                    "For the animal faces; the others are not changed.",
-                                checked = look.stillAnimal,
-                                onChange = { onLookChange(look.copy(stillAnimal = it)) },
-                            )
+                            // "Keep the animal still" moved to Animal options
+                            // (2026-09-28): shared with the desktop now.
                             Setting(title = "Spacing") {
                                 Choices(
                                     options = listOf(false, true),

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-animal"
+description = "Enables the set_animal command without any pre-configured scope."
+commands.allow = ["set_animal"]
+
+[[permission]]
+identifier = "deny-set-animal"
+description = "Denies the set_animal command without any pre-configured scope."
+commands.deny = ["set_animal"]

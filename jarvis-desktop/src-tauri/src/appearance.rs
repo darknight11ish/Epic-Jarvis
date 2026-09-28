@@ -81,6 +81,14 @@ pub struct Appearance {
     /// Unix seconds at the last write. The tie-break between two clients.
     #[serde(default)]
     pub updated: f64,
+    /// "Keep the animal still" and the animal's behaviour switches
+    /// (animal.patch, 2026-09-28): the PC puts them in this document so every
+    /// window, and the HUD, learns them from the one read it already makes on
+    /// each `appearance` event (jarvis-link.js keeps them for the face
+    /// frames, animal-shared.js). Read only: the PC ignores it in a
+    /// `POST /api/appearance` - they change through `set_animal` (animal.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub animal: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 /// The appearance as the rest of the process sees it.
@@ -481,6 +489,7 @@ mod tests {
             .into_iter()
             .collect(),
             updated: 1.0,
+            animal: None,
         });
         assert!(state.binding("idle").is_some(), "the bound state was lost");
         assert!(
@@ -508,6 +517,7 @@ mod tests {
             .into_iter()
             .collect(),
             updated: 1.0,
+            animal: None,
         });
         assert!(state.binding("idle").is_none());
     }
@@ -533,6 +543,7 @@ mod tests {
             .into_iter()
             .collect(),
             updated: 1.0,
+            animal: None,
         });
         let bound = state.binding("thinking").expect("binding lost");
         assert_eq!(bound.params.get("span_deg"), Some(&serde_json::json!(58)));
@@ -594,6 +605,23 @@ mod tests {
         let a: Appearance = serde_json::from_str("{}").unwrap();
         assert!(a.face.is_none());
         assert!(a.bindings.is_empty());
+    }
+
+    #[test]
+    fn the_animal_switches_ride_along_and_reach_the_hud() {
+        // animal.patch puts them in GET /api/appearance; the HUD and every
+        // window read them from this same document.
+        let json = r#"{"face":"redpanda","bindings":{},"updated":1.0,"animal":{"still":true,"nods":false}}"#;
+        let a: Appearance = serde_json::from_str(json).unwrap();
+        let state = AppearanceState::default();
+        state.put(&a);
+        let pushed = serde_json::to_value(state.snapshot()).unwrap();
+        assert_eq!(pushed["animal"]["still"], true);
+        assert_eq!(pushed["animal"]["nods"], false);
+        // An older PC sends none, and none is written back.
+        let old: Appearance = serde_json::from_str(r#"{"face":"orbit"}"#).unwrap();
+        assert!(old.animal.is_none());
+        assert!(serde_json::to_value(&old).unwrap().get("animal").is_none());
     }
 
     #[test]

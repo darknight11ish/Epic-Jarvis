@@ -1810,6 +1810,12 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
         "second_card",
         "quick",
         "open_settings",
+        // Sharpness or frame rate asked for by voice or chat (jarvis_quick.py,
+        // 2026-09-28's Animal options): per device, so this computer
+        // applies it to itself (main.js applyFaceTuningFromRoute,
+        // animal-shared.js stepTuning). One of a short fixed list of words,
+        // checked again on the page; nothing else rides with it.
+        "face_tuning",
     ] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(
@@ -5792,6 +5798,22 @@ mod turn_tests {
     /// pass on as booleans, and the facts an answer used as ids alone -
     /// "mem:<id>" as a number, each once, in order - never "fact:<n>",
     /// never a word, never the raw `injected_ids`.
+    /// "Make the animal sharper" (2026-09-28): the page applies
+    /// `face_tuning` to this computer, so it must survive this filter - as a
+    /// string only, like `open_settings`.
+    #[test]
+    fn the_route_line_carries_face_tuning() {
+        let line = super::route_line_from_header(
+            r#"{"quick": "animal_device", "face_tuning": "sharper", "lane": "no AI model"}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["face_tuning"], "sharper");
+        let odd = super::route_line_from_header(r#"{"lane": "x", "face_tuning": 3}"#).unwrap();
+        let got: serde_json::Value = serde_json::from_str(&odd).unwrap();
+        assert!(got.get("face_tuning").is_none());
+    }
+
     #[test]
     fn the_route_line_carries_temporary_and_the_ids_of_the_facts_used() {
         let line = super::route_line_from_header(

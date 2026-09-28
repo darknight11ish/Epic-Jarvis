@@ -6,6 +6,29 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Animal options: every animal option in one place, on both apps, and
+  Jarvis changes them when asked.** The desktop's Settings has a new
+  "Animal options" card; the phone's Appearance has the same section. It
+  holds "Keep the animal still", the sun, moon and weather (moved there),
+  sharpness and frame rate (marked "on this computer" / "on this phone"),
+  a button to the face's voice, and six new switches for the behaviours
+  coming in the next update - listening nods, focus buddy, small
+  acknowledgements, petting and cute idle moments (on to start) and seasonal
+  touches (off). It covers every character face, the robot included.
+  Those six are saved and shared now; each says plainly that the animal
+  starts doing it in the next update. **"Keep the animal still" and the
+  switches are now shared**: kept on the PC, so a change on either device
+  changes both (before, each device had its own Still - if either had it on,
+  it stays on). Sharpness and frame rate stay per device. Say "keep the
+  animal still", "stop the animal's nodding", "turn off the weather", "turn
+  on the sun and moon" or "make the animal sharper" - answered at once,
+  without the AI model; "make the animal sharper" changes only the device
+  you asked from; switching the weather to Open-Meteo still shows its
+  approval card first. Anything unclear gets a plain question back. Needs
+  `apply-patches.ps1` on the PC (new: `jarvis_animal.py`, `animal.patch`).
+  See `docs/JARVIS-API.md` section 60 and `docs/CRITTERS.md`, "Animal
+  options".
+
 - **Sharper animals, and more frame-rate choices, on both apps.** Quality
   now reads **Lower, Balanced, High, Maximum**, each with a one-line note on
   what it costs (your saved choice still works). At Maximum the PC draws an

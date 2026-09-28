@@ -634,6 +634,15 @@ $PATCHES = @(
     # and jarvis_sky_places.py copied in; without them, or on any error, the
     # banner says so and the route answers 503 - the faces are drawn as before.
     'sky.patch'
+    # Animal options (the owner's decisions of 2026-09-28): GET /api/animal
+    # and POST /api/animal - "Keep the animal still" and the animal's
+    # behaviour switches, shared by both apps, at once and with no card - and
+    # the same values in GET /api/appearance as "animal". Two hunks: one in
+    # appearance.patch's _appearance_view, one right after sky.patch's own
+    # startup install() block (so it goes after it, like every new patch).
+    # Needs jarvis_animal.py copied in; without it, or on any error, the
+    # banner says so, the route answers 503 and the faces are drawn as before.
+    'animal.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -770,6 +779,8 @@ $SHIPPED = @(
     # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
     'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
     'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online
+    # --- Animal options (2026-09-28, animal.patch) ---
+    'jarvis_animal.py'           # animal.patch: GET/POST /api/animal - "Keep the animal still" and the behaviour switches, shared by both apps, no card
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -1295,11 +1295,12 @@ const CRITTER_TIME_WRAP = (2 * Math.PI / 1.3) * 1000;
 // fully on or off.
 const OPTION_EASE_S = 1;
 // The "Still" option (the animals only breathe and blink): Settings ->
-// Appearance -> "Face on this computer" -> "Keep the animal still"
-// (face-tuning.js, this computer's localStorage). Read by every page that
-// draws a face - display mode (the Widget, the floating face, the HUD) and
-// the Faces window itself - when it starts and whenever Settings changes it
-// (see applyFaceStill). Off by default; the animals only.
+// "Animal options" -> "Keep the animal still", shared with the phone and
+// kept on the PC; this computer's copy is in localStorage (animal-shared.js).
+// Read by every page that draws a face - display mode (the Widget, the
+// floating face, the HUD) and the Faces window itself - when it starts and
+// whenever it changes (see the end of this file). Off by default; the
+// animals only.
 let FACE_STILL = false;
 function applyFaceStill(tune){ FACE_STILL = !!(tune && tune.still === true); }
 // THE SKY BEHIND THE ANIMALS (the owner's decisions of 2026-09-28, both off
@@ -6427,7 +6428,7 @@ async function bootDisplay() {
   fit();
 
   // ---- This computer's face settings --------------------------------------
-  // Settings → Appearance → "Face on this computer" (face-tuning.js): the
+  // Settings → "Animal options" → "Sharpness and frame rate on this computer" (face-tuning.js): the
   // phone's face editor controls, for the desktop's own face. The defaults -
   // High, Auto frame rate, 1x, Auto adjust on - draw exactly what this frame
   // drew before the setting existed. Read without `await`: in the HUD the
@@ -6682,13 +6683,20 @@ if(document.readyState === "loading") document.addEventListener("DOMContentLoade
 else (DISPLAY_MODE ? bootDisplay : boot)();
 
 // "Keep the animal still" (FACE_STILL), in every mode - the Faces window as
-// well as the Widget's, the floating face's and the HUD's frames: this
-// computer's face settings (face-tuning.js), read now and again whenever
-// Settings, another window on the same origin, saves them.
-import("./face-tuning.js").then((m) => {
-  applyFaceStill(m.loadFaceTuning());
+// well as the Widget's, the floating face's and the HUD's frames. Shared
+// with the phone since 2026-09-28 ("Animal options"): kept on the PC, and
+// every window with jarvis-link.js keeps this computer's copy
+// (animal-shared.js STORE_KEY), read now and again whenever it changes.
+// Before this computer has heard the PC (an older PC), its own old switch
+// (face-tuning.js `still`) counts - animal-shared.js effectiveStill.
+Promise.all([import("./face-tuning.js"), import("./animal-shared.js")]).then(([t, a]) => {
+  const read = () => applyFaceStill({
+    still: a.effectiveStill(a.loadAnimal(), t.loadFaceTuning(), a.migrated()),
+  });
+  read();
   window.addEventListener("storage", (event) => {
-    if (event.key === m.FACE_TUNING_KEY) applyFaceStill(m.loadFaceTuning());
+    if (event.key === null || event.key === t.FACE_TUNING_KEY || event.key === a.STORE_KEY
+        || event.key === a.MIGRATED_KEY) read();
   });
 }).catch(() => { /* the default: not still */ });
 

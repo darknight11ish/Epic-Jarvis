@@ -199,6 +199,9 @@ SHIPPED = (
     # the sun, the moon and the weather behind the animal faces, and the
     # town list it finds a place in without going online (sky.patch)
     "jarvis_sky.py", "jarvis_sky_places.py",
+    # every animal option in one place: "Keep the animal still" and the
+    # behaviour switches, shared by both apps (animal.patch)
+    "jarvis_animal.py",
 )
 
 

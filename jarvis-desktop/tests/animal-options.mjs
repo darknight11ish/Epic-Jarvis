@@ -242,23 +242,26 @@ await check("standby's dim follows the animal nodding off and waking; banked and
   assert.deepEqual(errors || [], []);
 });
 
-await check("Keep the animal still: saved in Settings, read by every face page, eased into the pose", async () => {
-  // Settings writes it, to this computer's storage...
+await check("Keep the animal still: shared with the phone, set in Settings' Animal options, read by every face page, eased into the pose", async () => {
+  // Settings sends it to the PC (set_animal) and keeps the PC's answer in
+  // this computer's storage for the face pages...
   const settings = await K.open(browser, base, "settings.html", {}, { width: 760, height: 1400 });
-  await settings.locator("#face-tuning > summary").click();
-  assert.equal(await settings.locator("#face-still").isChecked(), false, "on by default");
-  await settings.locator("#face-still").check();
-  const saved = await settings.evaluate(() => JSON.parse(localStorage.getItem("jarvis.faceTuning")));
+  await settings.waitForSelector("#animal-still", { timeout: 15000 });
+  assert.equal(await settings.locator("#animal-still").isChecked(), false, "off by default");
+  await settings.locator("#animal-still").check();
+  await settings.waitForFunction(() => /still/.test(document.getElementById("animal-status").textContent));
+  const sent = await settings.evaluate(() => window.__calls.filter(([c]) => c === "set_animal").map(([, a]) => a.change));
+  assert.deepEqual(sent, [{ still: true }], "ONE change, to the PC");
+  const saved = await settings.evaluate(() => JSON.parse(localStorage.getItem("jarvis.animal.v1")));
   assert.equal(saved.still, true);
-  assert.match(await settings.locator("#face-status").textContent(), /keep still/);
-  assert.equal(await settings.locator("#face-still").isChecked(), true);
+  assert.equal(await settings.locator("#animal-still").isChecked(), true);
   assert.deepEqual(settings.__errors, []);
   await settings.close();
 
   // ...a face page opened afterwards starts with it (the same storage,
   // shared by every page of this computer's origin)...
   const context = await browser.newContext({ viewport: { width: 700, height: 600 } });
-  await context.addInitScript((v) => localStorage.setItem("jarvis.faceTuning", v), JSON.stringify(saved));
+  await context.addInitScript((v) => localStorage.setItem("jarvis.animal.v1", v), JSON.stringify(saved));
   const page = await editor(null, context);
   const start = await page.evaluate(() => FACE_STILL);
   const eased = await page.evaluate(() => {
@@ -266,17 +269,68 @@ await check("Keep the animal still: saved in Settings, read by every face page, 
     const r = __run(s, "idle", 1.2, (s) => THEME.seaotter.mem.get(s.view).stillR);
     return { first: r[0], last: r[r.length - 1] };
   });
-  // ...and a face page already open follows when another window saves.
+  // ...and a face page already open follows when another window stores the
+  // PC's new value (the phone turned it off, say).
   const other = await context.newPage();
   await other.goto(`${base}/faces.html?mode=display&face=arc`, { timeout: 90000 });
-  await other.evaluate((v) => localStorage.setItem("jarvis.faceTuning", v), JSON.stringify({ ...saved, still: false }));
+  await other.evaluate((v) => localStorage.setItem("jarvis.animal.v1", v), JSON.stringify({ ...saved, still: false }));
   await page.waitForTimeout(400);
   const after = await page.evaluate(() => FACE_STILL);
   await context.close();
 
-  assert.equal(start, true, "the Faces window did not read the saved choice");
+  assert.equal(start, true, "the Faces window did not read the shared choice");
   assert.ok(eased.first >= 0.99 && eased.last === 1, `still did not reach the pose: ${JSON.stringify(eased)}`);
   assert.equal(after, false, "an open face page did not hear the change");
+});
+
+await check("this computer's old Still: still counts until it has reached the PC, then the PC's value rules", async () => {
+  const context = await browser.newContext({ viewport: { width: 700, height: 600 } });
+  await context.addInitScript(() => {
+    localStorage.setItem("jarvis.faceTuning", JSON.stringify({ quality: "high", frameRate: "auto", speed: 1, autoAdjust: true, still: true }));
+    localStorage.removeItem("jarvis.animal.v1");
+    localStorage.removeItem("jarvis.animal.migrated");
+  });
+  const page = await editor(null, context);
+  const olderPc = await page.evaluate(() => FACE_STILL);
+  // The PC answers "off" but the old "on" has not reached it yet: still on.
+  await page.evaluate(() => localStorage.setItem("jarvis.animal.v1", JSON.stringify({ still: false })));
+  const other = await context.newPage();
+  await other.goto(`${base}/faces.html?mode=display&face=arc`, { timeout: 90000 });
+  await other.evaluate(() => localStorage.setItem("jarvis.animal.v1", JSON.stringify({ still: false, nods: true })));
+  await page.waitForTimeout(300);
+  const pending = await page.evaluate(() => FACE_STILL);
+  await other.evaluate(() => localStorage.setItem("jarvis.animal.migrated", "1"));
+  await page.waitForTimeout(300);
+  const moved = await page.evaluate(() => FACE_STILL);
+  await context.close();
+  assert.equal(olderPc, true, "an older PC: this computer's own Still counts");
+  assert.equal(pending, true, "the old 'on' was lost before it reached the PC");
+  assert.equal(moved, false, "after the move the PC's value did not rule");
+
+  // The move itself: the first window that hears the PC sends it, once.
+  const p2 = await K.open(browser, base, "settings.html", {
+    storage: { "jarvis.faceTuning": JSON.stringify({ still: true }), "jarvis.animal.migrated": null },
+  }, { width: 760, height: 900 });
+  await p2.waitForFunction(() => localStorage.getItem("jarvis.animal.migrated") === "1", null, { timeout: 15000 });
+  const calls = await p2.evaluate(() => window.__calls.filter(([c]) => c === "__migratedStill").length);
+  const errs = p2.__errors;
+  await p2.close();
+  assert.deepEqual(errs, []);
+  assert.equal(calls, 1, "the old Still was not sent to the PC exactly once");
+});
+
+await check("an older PC: Settings offers Keep the animal still on this computer only, and says so", async () => {
+  const page = await K.open(browser, base, "settings.html", { animal: null }, { width: 760, height: 1200 });
+  await page.waitForSelector("#animal-still", { timeout: 15000 });
+  assert.match(await page.textContent("#animal-state"), /cannot share the animal options yet/);
+  assert.equal(await page.locator("#animal-switches input").count(), 1, "only Still, locally");
+  assert.match(await page.textContent('[data-animal="still"]'), /this computer only/);
+  await page.locator("#animal-still").check();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("jarvis.faceTuning")));
+  const sent = await page.evaluate(() => window.__calls.filter(([c]) => c === "set_animal").length);
+  await page.close();
+  assert.equal(saved.still, true);
+  assert.equal(sent, 0, "nothing was sent to a PC that cannot take it");
 });
 
 await check("the monkey does what every animal does: sleeps with Zs, none offline, wakes, Still and serious ease in", async () => {

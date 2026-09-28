@@ -10,7 +10,7 @@
  * than inventing a second way to talk to that page.
  */
 
-import { currentLink, faceSignal, onLink, onSerious, start as startLink } from "./jarvis-link.js";
+import { currentLink, faceSignal, onEvent, onLink, onSerious, start as startLink } from "./jarvis-link.js";
 import { relayFaceVoice } from "./face-voice.js";
 import { startSkyFeed } from "./sky-feed.js";
 
@@ -92,4 +92,4 @@ startLink();
 // The sun, the moon and the weather behind the animal (sky-feed.js): this
 // window may read them (capability sky-read) and keeps what the face frame
 // draws in this computer's localStorage - the frame itself holds no command.
-startSkyFeed();
+startSkyFeed({ onEvent });

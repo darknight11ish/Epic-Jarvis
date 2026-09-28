@@ -55,6 +55,7 @@
           <a href="#connection">Connection</a>
           <a href="#faq">FAQ</a>
           <a href="#appearance-card">Appearance</a>
+          <a href="#animal-options">Animal options</a>
           <a href="#voice">Voice</a>
           <a href="#manner">How Jarvis talks</a>
           <a href="#briefing-settings">Morning briefing</a>
@@ -458,74 +459,11 @@
           </p>
         </div>
 
-        <!-- The face on THIS computer: the widget's and the HUD's. Closed
-             every visit, like the phone's Face editor. Per computer and never
-             sent to the phone - what one machine's graphics card can draw
-             says nothing about another's. -->
-        <details class="more" id="face-tuning">
-          <summary>
-            <span class="more-title">Face on this computer</span>
-            <span class="more-detail">Quality, frame rate, speed and keeping the animal still.</span>
-          </summary>
-          <p class="note">
-            For the faces on this computer only: the widget, the floating face
-            and the HUD. The phone has its own.
-          </p>
-
-          <label class="toggle">
-            <input id="face-auto" type="checkbox" />
-            <span>
-              Auto adjust
-              <span class="toggle-detail">
-                Picks quality and frame rate for this computer, and steps down
-                if the face runs slow. On a capable graphics chip an animal can
-                go up to Maximum.
-              </span>
-            </span>
-          </label>
-
-          <div class="field">
-            <span class="label" id="face-quality-label">Quality</span>
-            <div class="choices" id="face-quality" role="group" aria-labelledby="face-quality-label"></div>
-            <p class="note" id="face-quality-note">High matches the reactor kit. Lower is easiest on the graphics chip.</p>
-            <!-- One plain line per level: what it costs (face-tuning.js
-                 QUALITIES, the same words as the phone's Face editor). -->
-            <ul class="note face-level-notes" id="face-quality-levels"></ul>
-          </div>
-
-          <div class="field">
-            <span class="label" id="face-fps-label">Frame rate</span>
-            <div class="choices" id="face-fps" role="group" aria-labelledby="face-fps-label"></div>
-            <p class="note" id="face-fps-note">How many times a second the face is drawn.</p>
-          </div>
-
-          <div class="field">
-            <span class="label" id="face-speed-label">All speeds</span>
-            <div class="choices" id="face-speed" role="group" aria-labelledby="face-speed-label"></div>
-            <p class="note">How fast the face moves. It never goes above 1×.</p>
-          </div>
-
-          <!-- The owner's "Still" option (2026-09-28). Cosmetic, so no card:
-               it only takes movement away. Shown whatever face is worn - the
-               line says it is for the animals, as the phone's does. -->
-          <label class="toggle">
-            <input id="face-still" type="checkbox" />
-            <span>
-              Keep the animal still
-              <span class="toggle-detail">
-                It only breathes and blinks - no looking around. For the animal
-                faces; the others are not changed.
-              </span>
-            </span>
-          </label>
-          <span class="status" id="face-status" role="status"></span>
-        </details>
-
         <!-- The floating face: a small, always-on-top window with just the
              face on it - no chat box, voice only. Off by default. Its own
-             toggle, not inside "Face on this computer": that details is
-             about how the SAME face is drawn (quality, speed); this is
-             about whether a second window shows it at all. -->
+             toggle, not inside "Sharpness and frame rate on this computer"
+             (Animal options): that is about how the SAME face is drawn;
+             this is about whether a second window shows it at all. -->
         <label class="toggle">
           <input id="floating-enabled" type="checkbox" />
           <span>
@@ -539,10 +477,57 @@
           </span>
         </label>
 
+        <h3 class="subhead">Shared with your phone</h3>
+        <p class="note">
+          The face and the state colours — which face Jarvis wears, and the
+          colour and pattern for each thing it can be doing — are shared with
+          your phone. A change made there shows up here too. So are the
+          animal options below - except sharpness and frame rate, which each
+          device keeps for itself. Nothing else in Appearance leaves this
+          computer.
+        </p>
+        <p class="state" id="appearance-shared">Checking whether they are shared…</p>
+        <div class="row">
+          <button class="btn" id="open-faces" type="button">Open Faces</button>
+          <span class="status" id="faces-status" role="status"></span>
+        </div>
+      </section>
+
+      <!-- ── Animal options ─────────────────────────────────────────────────
+           The owner's decisions of 2026-09-28: every animal option in one
+           place, and Jarvis changes any of them when asked. Three parts,
+           each labelled with where it is kept:
+             - shared with the phone, kept on the PC: "Keep the animal
+               still" and the behaviour switches (animal-settings.js;
+               animal.rs get_animal/set_animal; backend jarvis_animal.py) -
+               no card either way; turning one on is held on a stale link;
+             - shared with the phone, kept on the PC: the sun, moon and
+               weather (sky-settings.js - moved here unchanged; Open-Meteo
+               still raises its ONE approval card);
+             - this computer only: sharpness and frame rate (face-tuning.js).
+           Plus a way to the animal's voice, and where calm motion comes
+           from. A new behaviour is one entry in jarvis_animal.SWITCHES: its
+           switch appears here by itself. -->
+      <section class="card" id="animal-options">
+        <h2 id="animal-title">Animal options</h2>
+        <p class="note" id="animal-intro">
+          Everything about the animal and robot faces, in one place. You can
+          also ask Jarvis, like "keep the animal still" or "turn off the
+          weather".
+        </p>
+
+        <h3 class="subhead" id="animal-shared-title">Shared with your phone</h3>
+        <p class="note" id="animal-shared-note"></p>
+        <p class="state" id="animal-state" role="status">Asking Jarvis…</p>
+        <div id="animal-switches"></div>
+        <p class="note" id="animal-serious-note"></p>
+        <span class="status" id="animal-status" role="status"></span>
+
         <!-- The sun, the moon and the weather behind the animal (the owner's
              decisions of 2026-09-28; sky-settings.js; sky.rs get_sky, set_sky;
              backend jarvis_sky.py). Kept on the PC and shared with the phone,
-             so it is not inside "Face on this computer". Both off by default.
+             so it sits with the other shared animal options. Both off by
+             default.
              The town is typed here only; Open-Meteo ON raises ONE approval
              card; off, Home Assistant and forgetting the town are at once. -->
         <div id="sky" class="sky-settings">
@@ -577,20 +562,82 @@
           </div>
         </div>
 
-        <h3 class="subhead">Shared with your phone</h3>
-        <p class="note">
-          The face and the state colours — which face Jarvis wears, and the
-          colour and pattern for each thing it can be doing — are shared with
-          your phone. A change made there shows up here too. So are the sun,
-          moon and weather settings above (your phone is shown your town, but
-          only this PC can set it). Nothing else on this page leaves this
-          computer.
+
+        <h3 class="subhead">On this computer only</h3>
+        <!-- Sharpness and frame rate on THIS computer: the widget's, the
+             floating face's and the HUD's (face-tuning.js). Closed every
+             visit, like the phone's Face editor. Per computer and never sent
+             to the phone - what one machine's graphics card can draw says
+             nothing about another's. Jarvis changes it when asked ("make the
+             animal sharper"): the answer names the change and this computer
+             applies it (main.js, animal-shared.js stepTuning). -->
+        <details class="more" id="face-tuning">
+          <summary>
+            <span class="more-title">Sharpness and frame rate on this computer</span>
+            <span class="more-detail">Also Auto adjust and speed. For every face on this computer; your phone keeps its own.</span>
+          </summary>
+          <p class="note">
+            For the faces on this computer only: the widget, the floating face
+            and the HUD - every face, not only the animals. The phone has its
+            own. You can also ask Jarvis: "make the animal sharper" or "make
+            the animal smoother" changes the device you asked from.
+          </p>
+
+          <label class="toggle">
+            <input id="face-auto" type="checkbox" />
+            <span>
+              Auto adjust
+              <span class="toggle-detail">
+                Picks quality and frame rate for this computer, and steps down
+                if the face runs slow. On a capable graphics chip an animal can
+                go up to Maximum.
+              </span>
+            </span>
+          </label>
+
+          <div class="field">
+            <span class="label" id="face-quality-label">Sharpness</span>
+            <div class="choices" id="face-quality" role="group" aria-labelledby="face-quality-label"></div>
+            <p class="note" id="face-quality-note">High matches the reactor kit. Lower is easiest on the graphics chip.</p>
+            <!-- One plain line per level: what it costs (face-tuning.js
+                 QUALITIES, the same words as the phone's Face editor). -->
+            <ul class="note face-level-notes" id="face-quality-levels"></ul>
+          </div>
+
+          <div class="field">
+            <span class="label" id="face-fps-label">Frame rate</span>
+            <div class="choices" id="face-fps" role="group" aria-labelledby="face-fps-label"></div>
+            <p class="note" id="face-fps-note">How many times a second the face is drawn.</p>
+          </div>
+
+          <div class="field">
+            <span class="label" id="face-speed-label">All speeds</span>
+            <div class="choices" id="face-speed" role="group" aria-labelledby="face-speed-label"></div>
+            <p class="note">How fast the face moves. It never goes above 1×.</p>
+          </div>
+
+          <span class="status" id="face-status" role="status"></span>
+        </details>
+
+        <!-- Face-generic: every character face (the four animals and the
+             robot, 2026-09-28) has its voice with the others; the button
+             goes to that one place whichever face is worn. -->
+        <h3 class="subhead" id="animal-voice-title">The face's voice</h3>
+        <p class="note" id="animal-voice-note">
+          Each character face - the animals and the robot - can speak in its
+          own voice. It is set with Jarvis's other voices: "Voice follows the
+          face", and each face's own voice, pitch and pace.
         </p>
-        <p class="state" id="appearance-shared">Checking whether they are shared…</p>
         <div class="row">
-          <button class="btn" id="open-faces" type="button">Open Faces</button>
-          <span class="status" id="faces-status" role="status"></span>
+          <button class="btn" id="animal-voice-go" type="button">Go to the face's voice</button>
         </div>
+
+        <h3 class="subhead">Calm motion</h3>
+        <p class="note" id="animal-calm-note">
+          The faces move more calmly - smaller and slower - while Windows
+          asks for less motion: Settings, Accessibility, Visual effects,
+          "Animation effects" off. This computer follows that switch.
+        </p>
       </section>
 
       <!-- ── Voice ─────────────────────────────────────────────────────────
@@ -1833,6 +1880,7 @@
     <script type="module" src="reach-settings.js"></script>
     <script type="module" src="asks-first-settings.js"></script>
     <script type="module" src="sky-settings.js"></script>
+    <script type="module" src="animal-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
     <script type="module" src="backup-settings.js"></script>

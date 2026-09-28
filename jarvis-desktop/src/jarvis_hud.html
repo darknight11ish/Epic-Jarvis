@@ -1799,6 +1799,19 @@ async function send(){
       const routeRaw = res.headers.get("X-Jarvis-Route");
       if(routeRaw){
         const route = JSON.parse(routeRaw);
+        // "Make the animal sharper" (Animal options, 2026-09-28; JARVIS-API
+        // section 60.3): sharpness and frame rate are kept per device, so
+        // the PC names the change and THIS computer applies it - the same
+        // rule and the same storage as the Jarvis bar (animal-shared.js
+        // stepTuning, face-tuning.js). Only a listed change is acted on.
+        if(typeof route.face_tuning === "string"){
+          const change = route.face_tuning;
+          Promise.all([import("./animal-shared.js"), import("./face-tuning.js")]).then(([a, t]) => {
+            if(!a.DEVICE_CHANGES.includes(change)) return;
+            const step = a.stepTuning(t.loadFaceTuning(), change);
+            if(step.changed) t.saveFaceTuning(step.tuning);
+          }).catch(() => {});
+        }
         // second-card.patch: `second_card` is set only on a turn the second
         // graphics card answered; `lane` is then the model really answering.
         const secondCard = typeof route.second_card === "string" && route.second_card;

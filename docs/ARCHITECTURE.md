@@ -1386,10 +1386,18 @@ never paints the approval colour (`tray.rs` `spec_state`).
 
 **The animal faces' display options** - the sleeping Zs, "Keep the animal
 still", the serious moment and calm motion - are on both apps, drawn from
-the same numbers (docs/CRITTERS.md, "How they move"). "Keep the animal
-still" is a display choice saved on each device, like the Motion setting:
-on the PC in its own storage (Settings, "Face on this computer"), on the
-phone in its Look. No card - it only ever takes movement away.
+the same numbers (docs/CRITTERS.md, "How they move"). Since 2026-09-28
+every animal option is in ONE place in each app, "Animal options"
+(docs/JARVIS-API.md section 60): "Keep the animal still" and the behaviour
+switches (listening nods, focus buddy, small acknowledgements, petting,
+cute idle moments, seasonal touches - for every character face, the robot
+included) are kept on the PC and shared by both apps
+(`jarvis_animal.py`, `/api/animal`; the values also ride in
+`/api/appearance`), like the sun, moon and weather (`/api/sky`); sharpness
+and frame rate stay on each device. Jarvis changes any of them when asked,
+with the same rules as the switch. No card for any of them - they only
+change how the animal moves - except Open-Meteo weather, which keeps its
+one card.
 
 **Android** (`jarvis-client/`): Kotlin, native, over Tailscale or NordVPN
 Meshnet. It is a
@@ -1578,7 +1586,7 @@ backend routes, in both directions; the rest are listed here only.
 | Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
 | On the Hardware screen: the memory bars, the "Details" arithmetic, Copy for the one PowerShell line, and the "exactly what is made" Modelfile (desktop Settings, Hardware and models) | The phone shows the cards (names and memory), what runs now, the three setups in the PC's words, their steps, Measure, and the line itself to read (the phone's Brain, Hardware - the design's section 4.6 asks for that much and no more). The line runs on the PC, so Copy belongs there; the bars and the arithmetic are the design's "Details", which a phone screen does not need to choose a setup. Every route is on both apps (JARVIS-API §20). |
 | The Faces window's "Portable output" (`faces.html`) | Code for building a client (the look spec as JSON, Kotlin, TypeScript). It is a developer's tool, and the phone already ships its own copy of the spec. |
-| The animal on the floating face: its sleeping Zs, "Keep the animal still", the serious pose (2026-09-28) and the sun, moon and weather behind it (2026-09-28) | Written with the features. The desktop's floating face draws the real animal (`faces.html` in display mode), so it gets all three, like every other desktop face. The phone's "Floating Jarvis" is the app's own icon with a status dot (`AvatarOverlayService.kt`), not the animal - there is no animal there to sleep, keep still or go serious, or to put a sky behind. On the phone the Zs and Still reach every place the animal is drawn (Home and the Appearance preview), and the serious pose reaches Home (the preview shows the state being edited, not what Jarvis is doing). |
+| The animal on the floating face: its sleeping Zs, "Keep the animal still", the serious pose (2026-09-28) and the sun, moon and weather behind it (2026-09-28) | Written with the features. The desktop's floating face draws the real animal (`faces.html` in display mode), so it gets all three, like every other desktop face. The phone's "Floating Jarvis" is the app's own icon with a status dot (`AvatarOverlayService.kt`), not the animal - there is no animal there to sleep, keep still or go serious, or to put a sky behind. On the phone the Zs and Still reach every place the animal is drawn (Home and the Appearance preview), and the serious pose reaches Home (the preview shows the state being edited, not what Jarvis is doing). The same holds for the animal behaviour switches of "Animal options" (2026-09-28; shared by both apps, `/api/animal`): they reach wherever each app draws the animal, which on the phone is not "Floating Jarvis". |
 | Typing the town for "Show the sun and moon behind the animal" (`POST /api/sky {"place"}`; the owner's decision of 2026-09-28: "a town the owner types once on the PC (the phone gets it from the PC)") | Written with the feature. The backend refuses a town from any device but this PC (`jarvis_owner_check.from_this_pc`), so a stolen token cannot move where Jarvis thinks the owner lives. Everything else is on both apps, in the PC's words (`/api/sky`, `ported` in `tools/check_parity.py`): the switch, which town is set and today's rise and set times (each app's own maths), "Forget my town" (at once, from either), and the weather source (Open-Meteo's card answered on either). |
 | A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). |
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |

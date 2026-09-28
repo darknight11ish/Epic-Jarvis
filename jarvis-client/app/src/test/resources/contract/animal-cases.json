@@ -1,0 +1,1431 @@
+{
+ "defaults": {
+  "acks": true,
+  "cute_moments": true,
+  "focus_buddy": true,
+  "nods": true,
+  "petting": true,
+  "seasonal": false,
+  "still": false
+ },
+ "device_changes": [
+  "sharper",
+  "softer",
+  "smoother",
+  "less_smooth",
+  "auto",
+  "sharpness:low",
+  "sharpness:medium",
+  "sharpness:high",
+  "sharpness:max",
+  "frame_rate:30",
+  "frame_rate:60",
+  "frame_rate:90",
+  "frame_rate:120",
+  "frame_rate:max"
+ ],
+ "device_said": {
+  "auto": "Done - sharpness and frame rate are picked automatically again, on this device only.",
+  "frame_rate:120": "Done - frame rate 120, on this device only.",
+  "frame_rate:30": "Done - frame rate 30, on this device only.",
+  "frame_rate:60": "Done - frame rate 60, on this device only.",
+  "frame_rate:90": "Done - frame rate 90, on this device only.",
+  "frame_rate:max": "Done - frame rate Max, on this device only.",
+  "less_smooth": "Done - a lower frame rate, on this device only.",
+  "sharper": "Done - one step sharper, on this device only.",
+  "sharpness:high": "Done - sharpness High, on this device only.",
+  "sharpness:low": "Done - sharpness Lower, on this device only.",
+  "sharpness:max": "Done - sharpness Maximum, on this device only.",
+  "sharpness:medium": "Done - sharpness Balanced, on this device only.",
+  "smoother": "Done - one step smoother (a higher frame rate), on this device only.",
+  "softer": "Done - one step softer, on this device only."
+ },
+ "missing": "Your PC's Jarvis cannot share the animal options yet - run apply-patches.ps1 on the PC.",
+ "steps": [
+  {
+   "change": "sharper",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Maximum.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "softer",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "smoother",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "less_smooth",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "auto",
+   "changed": false,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Auto adjust is on for {device}: it picks sharpness and frame rate.",
+   "tuning": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharpness:low",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Lower.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "sharpness:medium",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "sharpness:high",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: High.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharpness:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Maximum.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:30",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "frame_rate:60",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 60.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "frame_rate:90",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "frame_rate:120",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 120.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "frame_rate:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: Max.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharper",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "softer",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Sharpness is already Lower on {device}.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "smoother",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 60.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "less_smooth",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Frame rate is already 30 on {device}.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "auto",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Auto adjust is on for {device}: it picks sharpness and frame rate.",
+   "tuning": {
+    "autoAdjust": true,
+    "frameRate": "30",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "sharpness:low",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: Lower.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "sharpness:medium",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "sharpness:high",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: High.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharpness:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: Maximum.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:30",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "frame_rate:60",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 60.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "frame_rate:90",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "frame_rate:120",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 120.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "frame_rate:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: Max.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "sharper",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Sharpness on {device}: High.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "softer",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Sharpness on {device}: Lower.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "smoother",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "less_smooth",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "auto",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Auto adjust is on for {device}: it picks sharpness and frame rate.",
+   "tuning": {
+    "autoAdjust": true,
+    "frameRate": "60",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "sharpness:low",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Sharpness on {device}: Lower.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "sharpness:medium",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "sharpness:high",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Sharpness on {device}: High.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharpness:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Sharpness on {device}: Maximum.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:30",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "frame_rate:60",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Frame rate on {device}: 60.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "frame_rate:90",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "frame_rate:120",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Frame rate on {device}: 120.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "frame_rate:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "medium"
+   },
+   "line": "Frame rate on {device}: Max.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "sharper",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Sharpness is already Maximum on {device}.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "softer",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Sharpness on {device}: High.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "smoother",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Frame rate is already Max on {device}.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "less_smooth",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Frame rate on {device}: 120.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "auto",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Auto adjust is on for {device}: it picks sharpness and frame rate.",
+   "tuning": {
+    "autoAdjust": true,
+    "frameRate": "max",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "sharpness:low",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Sharpness on {device}: Lower.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "sharpness:medium",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "sharpness:high",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Sharpness on {device}: High.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharpness:max",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Sharpness on {device}: Maximum.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:30",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:60",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Frame rate on {device}: 60.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:90",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:120",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Frame rate on {device}: 120.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:max",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   },
+   "line": "Frame rate on {device}: Max.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "sharper",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Maximum.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "softer",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "smoother",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "less_smooth",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "auto",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Auto adjust is on for {device}: it picks sharpness and frame rate.",
+   "tuning": {
+    "autoAdjust": true,
+    "frameRate": "auto",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharpness:low",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Lower.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "sharpness:medium",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "sharpness:high",
+   "changed": false,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: High.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharpness:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Sharpness on {device}: Maximum.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:30",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "frame_rate:60",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 60.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "frame_rate:90",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "frame_rate:120",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: 120.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "frame_rate:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": false,
+    "frameRate": "auto",
+    "quality": "high"
+   },
+   "line": "Frame rate on {device}: Max.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharper",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: Maximum.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "softer",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "smoother",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "less_smooth",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "auto",
+   "changed": false,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Auto adjust is on for {device}: it picks sharpness and frame rate.",
+   "tuning": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "sharpness:low",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: Lower.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "sharpness:medium",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: Balanced.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "medium"
+   }
+  },
+  {
+   "change": "sharpness:high",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: High.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "high"
+   }
+  },
+  {
+   "change": "sharpness:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Sharpness on {device}: Maximum.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "max"
+   }
+  },
+  {
+   "change": "frame_rate:30",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 30.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "30",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "frame_rate:60",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 60.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "60",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "frame_rate:90",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 90.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "90",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "frame_rate:120",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: 120.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "120",
+    "quality": "low"
+   }
+  },
+  {
+   "change": "frame_rate:max",
+   "changed": true,
+   "from": {
+    "autoAdjust": true,
+    "frameRate": "120",
+    "quality": "low"
+   },
+   "line": "Frame rate on {device}: Max.",
+   "tuning": {
+    "autoAdjust": false,
+    "frameRate": "max",
+    "quality": "low"
+   }
+  }
+ ],
+ "view": {
+  "available": true,
+  "changed": 0.0,
+  "coming": "Coming in the next update: saved now, and the animal starts doing it then.",
+  "device": {
+   "frame_rates": [
+    {
+     "id": "auto",
+     "label": "Auto"
+    },
+    {
+     "id": "30",
+     "label": "30"
+    },
+    {
+     "id": "60",
+     "label": "60"
+    },
+    {
+     "id": "90",
+     "label": "90"
+    },
+    {
+     "id": "120",
+     "label": "120"
+    },
+    {
+     "id": "max",
+     "label": "Max"
+    }
+   ],
+   "note": "Each device keeps its own: what one graphics chip can draw says nothing about another's. They apply to every face, not only the animals.",
+   "sharpness": [
+    {
+     "id": "low",
+     "label": "Lower"
+    },
+    {
+     "id": "medium",
+     "label": "Balanced"
+    },
+    {
+     "id": "high",
+     "label": "High"
+    },
+    {
+     "id": "max",
+     "label": "Maximum"
+    }
+   ],
+   "title": "Sharpness and frame rate"
+  },
+  "intro": "Everything about the animal and robot faces, in one place. You can also ask Jarvis, like \"keep the animal still\" or \"turn off the weather\".",
+  "serious_note": "\"Keep the animal still\" and serious moments (an approval, an error, a crisis answer) switch the behaviours off; calm motion makes them smaller.",
+  "shared_note": "Kept on your PC: a change here, on your phone or by asking Jarvis changes both. No approval card - these only change how the animal moves.",
+  "shared_title": "Shared with your phone",
+  "switches": [
+   {
+    "built": true,
+    "default": false,
+    "detail": "It only breathes and blinks - no looking around, gestures or little idle events. For the animal and robot faces; the others are not changed.",
+    "id": "still",
+    "label": "Keep the animal still",
+    "on": false
+   },
+   {
+    "built": false,
+    "default": true,
+    "detail": "Small nods in your pauses while you talk, and gestures that land at the ends of Jarvis's sentences.",
+    "id": "nods",
+    "label": "Listening nods",
+    "on": true
+   },
+   {
+    "built": false,
+    "default": true,
+    "detail": "In a focus session the animal works quietly beside you and stretches at the end. It never sees your screen and never scolds.",
+    "id": "focus_buddy",
+    "label": "Focus buddy",
+    "on": true
+   },
+   {
+    "built": false,
+    "default": true,
+    "detail": "A small nod when Jarvis saves a fact (not while App lock or \"Hide memory lists\" is on), and a glow when a long answer is ready.",
+    "id": "acks",
+    "label": "Small acknowledgements",
+    "on": true
+   },
+   {
+    "built": false,
+    "default": true,
+    "detail": "Stroke the animal and it leans in. On the phone it is a long press on the face, which does not open the Brain.",
+    "id": "petting",
+    "label": "Petting",
+    "on": true
+   },
+   {
+    "built": false,
+    "default": true,
+    "detail": "Now and then, after the face has rested a while, one of its two short cute moments plays, then it settles back. Never during an approval or an error.",
+    "id": "cute_moments",
+    "label": "Cute idle moments",
+    "on": true
+   },
+   {
+    "built": false,
+    "default": false,
+    "detail": "Small touches for the time of year, from the date on your device. Off by default.",
+    "id": "seasonal",
+    "label": "Seasonal touches",
+    "on": false
+   }
+  ],
+  "title": "Animal options",
+  "values": {
+   "acks": true,
+   "cute_moments": true,
+   "focus_buddy": true,
+   "nods": true,
+   "petting": true,
+   "seasonal": false,
+   "still": false
+  }
+ }
+}

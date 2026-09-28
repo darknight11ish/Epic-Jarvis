@@ -199,6 +199,21 @@ class ChatSession(
 
     private val _openSettings = MutableStateFlow<String?>(null)
 
+    private val _faceTuningChange = MutableStateFlow<String?>(null)
+
+    /**
+     * "Make the animal sharper" by voice or chat (docs/JARVIS-API.md section
+     * 60): one of [AnimalOptions.DEVICE_CHANGES], read off the same
+     * `X-Jarvis-Route` header ([AnimalOptions.fromRoute]), or null. Per
+     * device, so the PC changed nothing: `MainActivity` applies it to this
+     * phone's own face settings once, then calls [consumeFaceTuningChange].
+     */
+    val faceTuningChange: StateFlow<String?> = _faceTuningChange.asStateFlow()
+
+    fun consumeFaceTuningChange() {
+        _faceTuningChange.value = null
+    }
+
     /**
      * "Open <a settings section>" by voice or chat
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
@@ -472,6 +487,8 @@ class ChatSession(
                         // registry.py, docs/JARVIS-API.md section 58.1):
                         // pure navigation, read the same way.
                         _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
+                        // Sharpness or frame rate, for this phone only.
+                        _faceTuningChange.value = AnimalOptions.fromRoute(routeHeader)
                     }
                     val temporaryNotes = TemporaryChat.notes(asTemporary, routeHeader)
                     // Decoded as CHARACTERS, not as whatever bytes happened
