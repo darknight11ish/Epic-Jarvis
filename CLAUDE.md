@@ -863,9 +863,11 @@ straight from `jarvis_watch_notify.py`'s already-approved shape
   heuristic, applied before anything is stored); `data/
   NotificationAllowList.kt` + `.../NotificationAllowListStore.kt` (empty
   by default; a package the OS itself reports as the default SMS handler,
-  `RoleManager.ROLE_SMS`, is refused outright, and so is one whose Play
-  Store category or package name looks like a bank, brokerage or payment
-  app); `data/CapturedNotifications.kt` (a capped, per-device store, never
+  `Telephony.Sms.getDefaultSmsPackage` (see the CI fix below - not
+  `RoleManager.ROLE_SMS` as first built), is refused outright, and so is
+  one whose Play Store category or package name looks like a bank,
+  brokerage or payment app); `data/CapturedNotifications.kt` (a capped,
+  per-device store, never
   synced). `PhoneNotificationsPlate.kt` (Settings → Phone notifications:
   the switch, Android's "Notification access" explained before it is
   opened, and the allow list). Reading one into a chat reuses the Share
@@ -897,6 +899,41 @@ straight from `jarvis_watch_notify.py`'s already-approved shape
   was read back by eye instead, and the redaction/allow-list logic was
   additionally checked by hand-simulating the regex in Python first, since
   neither can be compiled in this container.
+
+Fixed 2026-09-28, from the first real CI round on the phone changes above
+(GitHub Actions is the only Kotlin compiler this container has - "How the
+Android apps get built" above) - two real, unverified-until-now bugs, both
+caught by the compiler itself, neither by a review:
+
+- **A missing import broke `onOk` everywhere in `JarvisRuntime.kt`.**
+  Merging the offline-models phone half (`Brain -> Model remembers its
+  last list...`, above) removed the one call site that removal alone made
+  look unused, and dropped `import com.jarvis.client.net.onOk` along with
+  it - but `onOk` (an extension function on `ApiResult<T>`, `net
+  /JarvisApi.kt`) was still used at several OTHER, unrelated call sites
+  (`refreshStatus`, `refreshAttention`, the jobs read in `refreshAll`),
+  none of which the merge touched or re-scanned for. Every one of those
+  had been silently broken since that merge - re-added the import; nothing
+  else needed to change.
+- **`RoleManager.getRoleHolders(ROLE_SMS)`, the SMS-exclusion check built
+  above, does not exist in the public SDK stub Gradle compiles against**
+  (`RoleManager.isRoleAvailable` and `.isRoleHeld` do; this one specific
+  method does not - confirmed by the compiler, not guessed). Replaced with
+  `Telephony.Sms.getDefaultSmsPackage`, the long-standing public API for
+  exactly this question, plus the `<queries>` element it needs for Android
+  11+ package visibility (`AndroidManifest.xml`). No change to what the
+  feature actually blocks or how strictly - same signal, same static
+  fallback list, same "checked twice" design; only the OS call underneath
+  changed.
+- Both fixes verified by reading the actual compile error text (not by
+  reasoning about what "should" work) and cross-checked against public
+  documentation before writing the replacement, per "Do not claim more
+  than the evidence supports" above. Every existing test still passes;
+  none tested the broken code paths directly (the pure `onOk`-adjacent
+  logic wasn't unit-tested at that granularity, and the SMS check's
+  Android-backed half was already documented as untestable without a
+  device) - written down here so that gap is visible, not papered over by
+  "tests passed."
 
 ## Every new feature gets its own audit, without being asked
 

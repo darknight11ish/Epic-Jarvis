@@ -15,6 +15,7 @@ import com.jarvis.client.net.CachedModels
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.onOk
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
 import com.jarvis.client.net.GateHistoryItem

@@ -9265,11 +9265,19 @@ the allow-list screen both say plainly that Jarvis cannot always tell,
 and ask the owner not to add one regardless.
 
 **SMS/Messages is blocked by what the phone itself says its default SMS
-app is, not by a name guess:** `RoleManager.ROLE_SMS` (API 29+) names
+app is, not by a name guess:** `Telephony.Sms.getDefaultSmsPackage` names
 whichever package currently sends and receives text messages on this
 phone - whatever it is called, OEM rebrand or third-party app included.
-`NotificationAllowList.KNOWN_SMS_PACKAGES` is kept only as a second,
-static line of defence for a phone where that role cannot be read. Even a
+(Fixed 2026-09-28: the original build called `RoleManager
+.getRoleHolders(ROLE_SMS)` for this, which turned out to be hidden from
+the public SDK stub the app actually compiles against - a real CI compile
+failure caught it, not a review. `Telephony.Sms.getDefaultSmsPackage` is
+the public, working equivalent; it needs the `<queries>` element for
+`android.provider.Telephony.SMS_DELIVER` that `AndroidManifest.xml` now
+has, the same Android 11+ package-visibility reason the app-picker's own
+`<queries>` entry exists.) `NotificationAllowList.KNOWN_SMS_PACKAGES` is
+kept only as a second, static line of defence for a phone where that call
+answers nothing. Even a
 package that somehow reached the list some other way is dropped a second
 time, in `PhoneNotificationListenerService` itself, by the same check -
 CLAUDE.md's "even if the owner tries to add the Messages app" is met at

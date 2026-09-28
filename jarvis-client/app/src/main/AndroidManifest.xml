@@ -27,6 +27,15 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Telephony.Sms.getDefaultSmsPackage (§61's SMS exclusion,
+             NotificationAllowListStore.kt / PhoneNotificationListenerService
+             .kt): Android 11+ package visibility hides which app answers
+             this without declaring the intent action its own contract is
+             built on, even though no special runtime permission is needed
+             to ask the question itself. -->
+        <intent>
+            <action android:name="android.provider.Telephony.SMS_DELIVER" />
+        </intent>
     </queries>
 
     <!-- "Also on my phone" (2026-09-26): the owner's tap hands an alarm to the

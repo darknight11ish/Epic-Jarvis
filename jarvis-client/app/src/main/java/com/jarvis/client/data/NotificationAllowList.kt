@@ -31,11 +31,15 @@ package com.jarvis.client.data
  *
  * SMS/MESSAGES: BLOCKED BY WHAT THE PHONE ITSELF SAYS IS ITS SMS APP, NOT
  * A NAME GUESS. The stronger of the two signals: Android's own
- * `RoleManager.ROLE_SMS` names whichever package the phone currently uses
- * to send and receive text messages - whatever it is called, including a
- * third-party SMS app, an OEM's own Messages app, or a rebrand this list
- * has never heard of. [KNOWN_SMS_PACKAGES] is kept only as a second,
- * static line of defence for a phone where that role cannot be read.
+ * `Telephony.Sms.getDefaultSmsPackage` names whichever package the phone
+ * currently uses to send and receive text messages - whatever it is
+ * called, including a third-party SMS app, an OEM's own Messages app, or a
+ * rebrand this list has never heard of. (Not `RoleManager
+ * .getRoleHolders(ROLE_SMS)`, the newer-looking API: that call is hidden
+ * from the public SDK stub this app compiles against - a real compile
+ * failure caught this, not a guess.) [KNOWN_SMS_PACKAGES] is kept only as
+ * a second, static line of defence for a phone where that call answers
+ * nothing.
  */
 object NotificationAllowList {
 
@@ -69,10 +73,10 @@ object NotificationAllowList {
 
     /**
      * Best-effort SECOND line of defence, for a phone where
-     * `RoleManager.ROLE_SMS` cannot be read (an old Android version, or the
-     * call failing for any reason). NOT exhaustive on its own - an OEM's
+     * `Telephony.Sms.getDefaultSmsPackage` answers nothing (the call
+     * failing for any reason). NOT exhaustive on its own - an OEM's
      * differently-named Messages app, or a third-party SMS app, is caught
-     * only by the role check above, never by this static list alone.
+     * only by the check above, never by this static list alone.
      */
     private val KNOWN_SMS_PACKAGES = setOf(
         "com.google.android.apps.messaging",
@@ -113,8 +117,9 @@ object NotificationAllowList {
 
     /**
      * True when [packageName] is the phone's SMS/Messages app - because the
-     * OS itself says so ([smsRoleHolders], from `RoleManager.ROLE_SMS`), or
-     * because it is on the static fallback list.
+     * OS itself says so ([smsRoleHolders], from `Telephony.Sms
+     * .getDefaultSmsPackage`), or because it is on the static fallback
+     * list.
      */
     fun isSmsPackage(packageName: String, smsRoleHolders: Set<String> = emptySet()): Boolean =
         packageName in smsRoleHolders || packageName in KNOWN_SMS_PACKAGES

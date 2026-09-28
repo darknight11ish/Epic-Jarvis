@@ -1,9 +1,9 @@
 package com.jarvis.client.data
 
-import android.app.role.RoleManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Telephony
 import androidx.core.content.edit
 
 /**
@@ -29,21 +29,25 @@ class NotificationAllowListStore(private val context: Context) {
     fun contains(packageName: String): Boolean = packageName in packages()
 
     /**
-     * This phone's own default SMS/Messages app(s), from Android's own
-     * `RoleManager.ROLE_SMS` (API 29+) - the strong signal
+     * This phone's own default SMS/Messages app, from Android's own
+     * `Telephony.Sms.getDefaultSmsPackage` - the strong signal
      * [NotificationAllowList.isSmsPackage] is built around. Empty, never a
-     * guess, on an older phone or if the call fails for any reason; the
-     * static fallback list in [NotificationAllowList] still applies either
-     * way.
+     * guess, if the call fails or answers nothing; the static fallback
+     * list in [NotificationAllowList] still applies either way.
+     *
+     * NOT `RoleManager.getRoleHolders(RoleManager.ROLE_SMS)`: that call is
+     * hidden from the public SDK stub Gradle actually compiles against
+     * (confirmed by a real compile failure, not a guess -
+     * "Unresolved reference 'getRoleHolders'" against compileSdk 36) -
+     * `Telephony.Sms.getDefaultSmsPackage` is the long-standing public
+     * equivalent for exactly this question. Needs the `<queries>` element
+     * in `AndroidManifest.xml` for the `SMS_DELIVER` action (Android 11+
+     * package visibility), same reason the app-list picker below needs one
+     * for `MAIN`/`LAUNCHER`.
      */
-    private fun smsRoleHolders(): Set<String> {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return emptySet()
-        return runCatching {
-            val rm = context.getSystemService(RoleManager::class.java) ?: return emptySet()
-            if (!rm.isRoleAvailable(RoleManager.ROLE_SMS)) return emptySet()
-            rm.getRoleHolders(RoleManager.ROLE_SMS).toSet()
-        }.getOrDefault(emptySet())
-    }
+    private fun smsRoleHolders(): Set<String> = runCatching {
+        Telephony.Sms.getDefaultSmsPackage(context)?.let { setOf(it) } ?: emptySet()
+    }.getOrDefault(emptySet())
 
     /**
      * [packageName]'s declared Play Store category (`ApplicationInfo

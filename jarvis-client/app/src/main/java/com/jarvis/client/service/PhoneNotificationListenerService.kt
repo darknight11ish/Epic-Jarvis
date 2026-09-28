@@ -1,8 +1,7 @@
 package com.jarvis.client.service
 
 import android.app.Notification
-import android.app.role.RoleManager
-import android.os.Build
+import android.provider.Telephony
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.jarvis.client.JarvisRuntime
@@ -119,13 +118,12 @@ class PhoneNotificationListenerService : NotificationListenerService() {
     /** Same signal [NotificationAllowListStore] checks before adding a
      * package to the list in the first place - read again here so a
      * package that reached the list some other way (a future Android
-     * version, a bug) still cannot store an SMS notification. */
-    private fun smsRoleHolders(): Set<String> {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return emptySet()
-        return runCatching {
-            val rm = getSystemService(RoleManager::class.java) ?: return emptySet()
-            if (!rm.isRoleAvailable(RoleManager.ROLE_SMS)) return emptySet()
-            rm.getRoleHolders(RoleManager.ROLE_SMS).toSet()
-        }.getOrDefault(emptySet())
-    }
+     * version, a bug) still cannot store an SMS notification. See that
+     * class's own doc comment for why this is `Telephony.Sms
+     * .getDefaultSmsPackage`, not `RoleManager.getRoleHolders` (the
+     * latter is hidden from the public SDK stub this app actually
+     * compiles against). */
+    private fun smsRoleHolders(): Set<String> = runCatching {
+        Telephony.Sms.getDefaultSmsPackage(this)?.let { setOf(it) } ?: emptySet()
+    }.getOrDefault(emptySet())
 }
