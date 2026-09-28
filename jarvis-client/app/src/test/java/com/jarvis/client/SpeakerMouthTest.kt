@@ -224,14 +224,35 @@ class SpeakerMouthTest {
 
     @Test
     fun `the loudness at the change before last is kept for the animals`() {
+        // A level with no mouth track (the phone's own fallback voice): no
+        // "voice playing shows speaking" hold, so every change below happens
+        // exactly when asked - that rule has its own test, next.
+        fun level(steps: Int, state: FaceState, voice: Float?, h: FaceHost): FaceFrame {
+            repeat(steps) { h.advance(1f / 60f, state, null, voice, Bindings.DEFAULTS, Arc) }
+            return h.snapshot()
+        }
         val h = FaceHost()
-        host(30, FaceState.IDLE, null, h)
-        val loud = host(60, FaceState.SPEAKING, floatArrayOf(0.9f, 0.8f, 0f, 0f), h)
-        host(5, FaceState.IDLE, null, h)
-        val f = host(1, FaceState.SPEAKING, null, h)
+        level(30, FaceState.IDLE, null, h)
+        val loud = level(60, FaceState.SPEAKING, 0.9f, h)
+        level(5, FaceState.IDLE, null, h)
+        val f = level(1, FaceState.SPEAKING, null, h)
         // Changes: idle->speaking, speaking->idle (at the loud amp), idle->speaking.
         assertEquals(loud.amp, f.prevAmp2, 0.05f)
         assertTrue(f.prevAmp2 > 0.5f)
+    }
+
+    @Test
+    fun `a playing voice shows speaking, and a moment after it stops`() {
+        // The answer's text finishes streaming (the PC says idle) before its
+        // last sentences are spoken: while the voice plays, and for 0.6 s
+        // after, a resting face shows SPEAKING - the desktop's lipState.
+        val h = FaceHost()
+        val voice = floatArrayOf(0.7f, 0.6f, 0f, 0f)
+        assertEquals(FaceState.SPEAKING, host(30, FaceState.IDLE, voice, h).state)
+        assertEquals(FaceState.SPEAKING, host(18, FaceState.IDLE, null, h).state)  // 0.3 s after
+        assertEquals(FaceState.IDLE, host(30, FaceState.IDLE, null, h).state)      // 0.8 s after
+        // An approval is never talked over.
+        assertEquals(FaceState.APPROVAL, host(30, FaceState.APPROVAL, voice, FaceHost()).state)
     }
 
     @Test
