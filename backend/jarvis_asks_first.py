@@ -251,6 +251,7 @@ HARD_LIMITS = frozenset({
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
+    "chatbot_session",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -265,7 +266,7 @@ MUST_ASK = frozenset({
     "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
-    "restore_backup", "check_tool_updates",
+    "restore_backup", "check_tool_updates", "chatbot_session",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -284,7 +285,7 @@ GROUPS = (
                             "delete_calendar_event"]),
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
                       "control_browser", "post_to_external_service", "open_public_tunnel",
-                      "news_read", "page_read"]),
+                      "news_read", "page_read", "chatbot_session"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage"]),

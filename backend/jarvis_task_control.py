@@ -430,9 +430,19 @@ def resume_card_text(task_id: str, rec: dict, module) -> str:
     the same function that wrote the first card - so nothing is summarised.
     """
     done = rec["done"]
-    lines = [f"Continue the task Jarvis paused? {done} step{'s' if done != 1 else ''} "
-             f"already ran and stay done. Only the steps below would run, and each "
-             f"one is checked against the screen again just before it runs.", ""]
+    # A module whose "steps" are not on the screen (jarvis_chatbot.py: its
+    # steps are messages to a chatbot) words its own first line; every other
+    # module keeps this one, unchanged.
+    header = getattr(module, "RESUME_HEADER", None)
+    first = None
+    if callable(header):
+        try:
+            first = str(header(rec["plan"], done))
+        except Exception:
+            first = None
+    lines = [first or (f"Continue the task Jarvis paused? {done} step{'s' if done != 1 else ''} "
+                       f"already ran and stay done. Only the steps below would run, and each "
+                       f"one is checked against the screen again just before it runs."), ""]
     lines.append(module.describe(rec["plan"]))
     with _lock:
         note = _notes.get(task_id)

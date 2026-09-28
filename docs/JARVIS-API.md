@@ -8854,3 +8854,77 @@ second version of any of it.
   before it: tested in the dev container only, against a real Windows
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
+
+## 59. Chatbot conversations - Jarvis talks to an AI chatbot for you (core built 2026-09-28, not routed yet)
+
+**Not routed yet. Neither app calls anything here, and no route exists on
+the backend.** This section is a stub, so both apps build against one
+shape when the routes land. The design is `docs/CHATBOT-DRIVER-DESIGN.md`
+(with "The owner's answers (2026-09-28)"); the owner's decisions are in
+`CLAUDE.md` (2026-09-27 and 2026-09-28). What exists today is step 1 of
+the build, the backend core: `backend/jarvis_chatbot.py`, shipped whole, no
+patch, tested by `backend/test_chatbot.py` against a stand-in chatbot
+(`FakeChatbot`). **No real chatbot works yet**: Gemini is listed, and its
+adapter says "not built yet".
+
+### 59.1 What it is
+
+The owner gives a goal ("find out how to keep houseplants alive in a dark
+flat"). Jarvis sends the goal, word for word, to the chatbot, then writes
+its own follow-ups on this PC and sends them **without asking each time**,
+within limits the owner approved on **one** card: the most messages, the
+longest time, and words it must never send. It stops by itself when the
+goal looks met, a limit is reached, the chatbot refuses twice, the answers
+go in circles, or the chatbot asks about the owner (that question comes
+back to the owner, never answered). It **pauses and asks** at a captcha, a
+sign-in page or an "unusual activity" page (never solved or skipped), and
+when its own message is blocked twice by the last check.
+
+### 59.2 The card
+
+Gate action `chatbot_session`, tier `ask` only (any other tier refuses to
+start; `never` switches the feature off). A risky approval: it leaves the
+PC and cannot be taken back. The card text is `jarvis_chatbot.describe()`:
+the chatbot and how it is reached, the goal marked "These words will be
+sent first", the limits, the built-in and the owner's never-send words, the
+version (one card or two), and "If you say no: nothing is sent". One card
+per conversation; **any** change to a limit is a new card; Resume is
+`/api/task/resume`'s own card. No "always allow". The goal goes through the
+same last check as every message **before** the card; a goal that fails is
+refused with the reason and no card.
+
+### 59.3 The planned routes (none exists yet)
+
+| route | body | answer |
+|---|---|---|
+| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()`: `{"routed", "chatbots": [{"id","name","host","built","note"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max"}, "session": <session> or null}` |
+| `POST /api/chatbot/start` | `{"chatbot", "goal", "max_messages"?, "max_minutes"?, "never_send"?: [..]}` | 202 `{"ok", "session", "asking": true, "message"}` - nothing is sent until the card is approved; 400 with `error` when `plan()` refused it (the reason in plain words); 409 while another conversation runs or is paused |
+| `POST /api/chatbot/stop` | `{"id"}` | 200; never a card |
+| `POST /api/chatbot/limits` | `{"id", "max_messages"?, "max_minutes"?, "never_send"?}` | a new card; the limits change only on a yes |
+
+Pause and Resume are the existing `/api/task/pause` and `/api/task/resume`
+(tool name `chatbot_session`); Stop is also `/api/task/stop`, and Stop
+everything (`/api/stop_all`) stops a conversation too.
+
+`<session>` is `jarvis_chatbot.session_view()`: `id`, `chatbot`, `name`,
+`goal`, `state` (`asking`, `approved`, `running`, `paused`, `done`,
+`stopped`, `refused`), `tier`, `tier_name`, `messages_used`,
+`max_messages`, `minutes_used`, `max_minutes`, `never_send`, `paused` (why,
+in plain words), `ended` (why), `question` (the chatbot's question about
+the owner, handed back), `problem`, `summary`, `read_aloud: false`, and
+`transcript`: `[{"who": "jarvis" | "chatbot", "n", "text", "at",
+"outside_text", "source"?, "move"?}]`.
+
+**Outside text.** Every chatbot turn has `outside_text: true` and `source:
+"chatbot_transcript"`; the summary (`answer`, `claims` with
+`source_given`, `open`, `messages`, `minutes`, `ended`) is outside text
+too. Apps show them, never read them aloud, and never offer to remember
+anything from them.
+
+### 59.4 Not decided or not built
+
+The routes; both apps' screens and the phone's ongoing notification; the
+Gemini adapter (Playwright, a visible window, one browser profile, the
+spare account); keeping the transcript in the encrypted chat history (today
+it is in memory only and lost on a restart); the "What Jarvis can reach"
+row and the gate's `_RISK` line; the two-card version's measurements.

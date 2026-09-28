@@ -758,6 +758,8 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
+    # --- talking to an AI chatbot for the owner (2026-09-28): the core only, no route, no patch yet ---
+    'jarvis_chatbot.py'          # the driver, the last check before every message, one card per conversation; not reachable from the apps yet
 )
 
 # The settings file. Installed only where none exists; never overwritten.

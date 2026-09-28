@@ -194,6 +194,10 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # A conversation with an AI chatbot for the owner: the driver, the last
+    # check, one card per conversation (the core only; not routed yet, no
+    # patch)
+    "jarvis_chatbot.py",
 )
 
 

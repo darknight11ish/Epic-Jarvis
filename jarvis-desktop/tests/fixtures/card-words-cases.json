@@ -51,6 +51,10 @@
       "title": "Jarvis wants to change one of its settings"
     },
     {
+      "action": "chatbot_session",
+      "title": "Jarvis wants to hold a conversation with an AI chatbot for you"
+    },
+    {
       "action": "check_tool_updates",
       "title": "Jarvis wants to check PyPI, crates.io and GitHub for tool updates"
     },
