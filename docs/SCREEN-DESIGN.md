@@ -204,6 +204,12 @@ picture model can push the long-conversation model off the card unless
 - **Read aloud:** yes, unless a sensitive fact was used or the strict
   hands-free setting says otherwise. `read_screen` joins the read-aloud list
   (`private-aloud-cases.json`, both apps) as a named exception.
+- **Under "Only trust the talk button"** (2026-09-28): a "Hey Jarvis"
+  turn's answer about the screen stays on screen; the voice setting
+  "Answers about your screen after "Hey Jarvis"" (`hands_free_screen`, in
+  both apps, off by default; on is a card, off is immediate) lets it be
+  read aloud even then. Built: the setting, the utterance reply's
+  `screen_aloud` and both apps' rule (JARVIS-API §16, §62.7).
 
 ## 9. Questions for the owner (answered above)
 

@@ -6,6 +6,17 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **A new voice setting in both apps: "Answers about your screen after
+  "Hey Jarvis"".** If you choose "Only trust the talk button" for
+  hands-free, an answer about your screen to a question that starts with
+  "Hey Jarvis" now stays on screen - written, not read aloud. This setting
+  lets you allow reading those answers aloud anyway: "Read aloud" shows an
+  approval card first; "Keep on screen" (the default) applies at once. With
+  "Same as the talk button" it changes nothing, and the settings page says
+  so. It is under Settings -> Voice on the PC, and Checks -> Voice check on
+  the phone. Said plainly: Jarvis cannot look at your screen from either
+  app yet, so for now the setting is stored and waiting.
+
 - **The chatbot driver can now work eight more chatbot websites - still not
   usable from either app.** ChatGPT, Claude, Microsoft Copilot and
   Perplexity, plus DeepSeek, Grok, Le Chat (Mistral) and Meta AI (these

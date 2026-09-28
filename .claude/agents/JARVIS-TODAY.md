@@ -122,7 +122,10 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   Projects steps 1-2 (`jarvis_projects.py`, API §61), the phone's
   "Swipe to approve or deny" switch, and the rules for looking at the
   screen, steps 1-2 (`jarvis_screen.py`, with Focus's reader moved to
-  `jarvis_front.py`, API §62 - no Windows readers, route or app screens yet).
+  `jarvis_front.py`, API §62 - no Windows readers, route or app screens yet;
+  the voice setting "Answers about your screen after "Hey Jarvis""
+  (`hands_free_screen`, `screen_aloud` on the utterance reply) is in both
+  apps).
 - **Third graphics card: detection only** - on
   `claude/jarvis-continuation-03kls1` (2026-09-28): a third NVIDIA card is
   now detected and explained, but runs nothing yet. The owner asked that
