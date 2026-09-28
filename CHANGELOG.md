@@ -4,6 +4,15 @@ Newest first. One version number covers the desktop app, the phone app and
 the backend files (the `VERSION` file). Builds made by GitHub add a build
 number as the last part - `0.2.57` is a build of 0.2.
 
+## Next version (not numbered yet)
+
+**Fixed**
+
+- **Desktop security update.** The desktop app's framework (Tauri) goes from
+  2.11.5 to 2.11.6, which closes a published hole (GHSA-w28w-mhc8-qvjv) where
+  one window of an app could read data queued for another window. Jarvis has
+  several windows and streams chat answers that way, so it was affected.
+
 ## 0.2.0 - 26 September 2026
 
 The first numbered version. It gathers the work of the last few days.
