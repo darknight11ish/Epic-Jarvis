@@ -135,6 +135,7 @@ def fresh():
         TC._signals.clear()
         TC._notes.clear()
         TC._resuming.clear()
+    CB.ADAPTERS.clear()
     CB.register_adapter(_SHIPPED_GEMINI)
 
 

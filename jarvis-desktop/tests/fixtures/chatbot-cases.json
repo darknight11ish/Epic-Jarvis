@@ -6,6 +6,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "",
         "ready": true
@@ -93,7 +94,8 @@
           "text": "Could you tell me your full name and age first?",
           "who": "chatbot"
         }
-      ]
+      ],
+      "usage": null
     },
     "tier": {
       "id": "one_card",
@@ -113,6 +115,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "",
         "ready": true
@@ -144,7 +147,8 @@
       "summary": null,
       "tier": "one_card",
       "tier_name": "the limited version (one graphics card)",
-      "transcript": []
+      "transcript": [],
+      "usage": null
     },
     "tier": {
       "id": "one_card",
@@ -164,6 +168,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "",
         "ready": true
@@ -195,7 +200,8 @@
       "summary": null,
       "tier": "one_card",
       "tier_name": "the limited version (one graphics card)",
-      "transcript": []
+      "transcript": [],
+      "usage": null
     },
     "tier": {
       "id": "one_card",
@@ -215,6 +221,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "",
         "ready": true
@@ -334,7 +341,8 @@
           "text": "Parlour palms, calatheas and spider plants are generally considered pet friendly.",
           "who": "chatbot"
         }
-      ]
+      ],
+      "usage": null
     },
     "tier": {
       "id": "one_card",
@@ -354,6 +362,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "",
         "ready": true
@@ -383,6 +392,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "",
         "ready": true
@@ -428,6 +438,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "Jarvis's Gemini window has never been signed in. Sign in once, by hand, to the spare Google account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_gemini.py sign-in",
         "ready": false
@@ -457,6 +468,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "",
         "ready": true
@@ -521,7 +533,8 @@
           "text": "Horticultural extension services publish guidance about snake plant resilience.",
           "who": "chatbot"
         }
-      ]
+      ],
+      "usage": null
     },
     "tier": {
       "id": "one_card",
@@ -541,6 +554,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "",
         "ready": true
@@ -597,7 +611,8 @@
           "text": "What sources support the claim about snake plants?",
           "who": "jarvis"
         }
-      ]
+      ],
+      "usage": null
     },
     "tier": {
       "id": "one_card",
@@ -673,6 +688,7 @@
         "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
+        "kind": "website",
         "name": "Gemini",
         "note": "",
         "ready": true
@@ -749,7 +765,8 @@
           "text": "Horticultural extension services publish guidance about snake plant resilience.",
           "who": "chatbot"
         }
-      ]
+      ],
+      "usage": null
     },
     "tier": {
       "id": "one_card",
