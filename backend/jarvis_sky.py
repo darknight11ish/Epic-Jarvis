@@ -1,4 +1,5 @@
-"""jarvis_sky.py - the sun, the moon and the weather behind the animal faces.
+"""jarvis_sky.py - the sun, the moon and the weather behind the animal faces
+and the robot (which counts as an animal face for every option).
 
 NEW MODULE, shipped whole, with its town list `jarvis_sky_places.py`.
 sky.patch adds one call at start-up, `install(Handler, ...)` (the same shape
@@ -118,10 +119,10 @@ HOME_ACTION = "home_read"
 # --------------------------------------------------------------------------
 
 TITLE = "Sun, moon and weather"
-SHOW_LABEL = "Show the sun and moon behind the animal"
+SHOW_LABEL = "Show the sun and moon behind the face"
 SHOW_DETAIL = ("The real sun and moon for your town - sunrise and sunset, and the moon's shape "
                "(full, waxing, waning) - worked out on your own devices. Nothing goes online "
-               "for it. For the animal faces; the others are not changed.")
+               "for it. For the animal and robot faces; the others are not changed.")
 PLACE_LABEL = "Your town"
 PLACE_DETAIL = ("Type it once on the PC. Jarvis finds it in a list of towns it carries and keeps "
                 "only a rough position (about 11 km). Not found? Type the position instead, "
@@ -129,8 +130,8 @@ PLACE_DETAIL = ("Type it once on the PC. Jarvis finds it in a list of towns it c
 PLACE_PHONE = "Your town is typed on the PC, in Settings, Animal options."
 PLACE_NONE = "No town yet, so there is no sun or moon to show. Type your town on the PC."
 FORGET_LABEL = "Forget my town"
-WEATHER_LABEL = "Weather in the animal's scene"
-WEATHER_DETAIL = "Rain, snow or wind behind the animal. Off by default."
+WEATHER_LABEL = "Weather behind the face"
+WEATHER_DETAIL = "Rain, snow or wind behind the face. Off by default."
 MISSING = ("Your PC's Jarvis cannot show the sun, moon or weather yet - run apply-patches.ps1 "
            "on the PC.")
 WAITING = "Waiting for your yes on the approval card."
@@ -666,7 +667,7 @@ def read_home(place: Optional[dict], deps: Deps) -> tuple:
         return None, str(p.reason_empty)[:200]
     text = HOME.describe(p)
     try:
-        v = deps.gate(HOME_ACTION, {"text": text, "for": "the weather in the animal's scene"},
+        v = deps.gate(HOME_ACTION, {"text": text, "for": "the weather behind the face"},
                       text)
     except Exception:
         v = None
@@ -805,13 +806,13 @@ _P_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
 def card(place: dict) -> str:
     pos = position_key(place).replace(",", ", ")
     return "\n".join([
-        "Let Jarvis get the weather for the animal's scene from Open-Meteo?",
+        "Let Jarvis get the weather for the scene behind the face from Open-Meteo?",
         "",
         f"Sends: your rough position, {pos} (rounded to about 11 km) - nothing else. No "
         "name, no account, no key.",
         f"To: {OPEN_METEO_HOST}, a free weather service on the internet, about every 20 "
         "minutes while a face is showing.",
-        "Back: the weather now - rain, snow, cloud and wind - drawn behind the animal. It is "
+        "Back: the weather now - rain, snow, cloud and wind - drawn behind the face. It is "
         "never given to the AI model.",
         "",
         "Turning it off is instant, from either app. Typing another town switches it off "
@@ -847,8 +848,8 @@ def _person_said_yes(v) -> bool:
 
 def _decide(pid: str, place: dict, gate: Callable, tier_of: Callable) -> None:
     text = card(place)
-    detail = {"text": text, "what": "get the weather for the animal's scene from Open-Meteo",
-              "setting": "weather in the animal's scene", "to": OPEN_METEO_HOST,
+    detail = {"text": text, "what": "get the weather for the scene behind the face from Open-Meteo",
+              "setting": "weather behind the face", "to": OPEN_METEO_HOST,
               "leaves_this_pc": True}
     try:
         v = gate(CARD_ACTION, detail, text)
@@ -1013,7 +1014,7 @@ def _handle_post(body, *, here: bool, deps: Optional[Deps] = None) -> tuple:
         except Exception as exc:
             return 500, {"ok": False, "error": f"could not save ({type(exc).__name__})"}
         _audit("sky.show", {"on": v})
-        said = ("The sun and moon now show behind the animal." if v
+        said = ("The sun and moon now show behind the face." if v
                 else "The sun and moon are no longer shown.")
         return 200, {"ok": True, "said": said, "view": view(here=here)}
     if k == "place":

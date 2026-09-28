@@ -1,8 +1,8 @@
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH,
-// BOUND_R and MARCH_STEPS.
+// sparkle(), stuckRay(), ground(), and the constants CAM_TARGET, CAM_DIST,
+// CAM_PITCH, BOUND_R and MARCH_STEPS.
 
 // The surface's direction at p, from how map() changes a hair away along
 // each axis. d0 is map() at p itself, which the march has already measured
@@ -138,7 +138,10 @@ float4 critter(float2 p) {
     float3 haloCol = pow(aces(hot * halo), float3(1.0 / 2.2));
     float haloA = max(haloCol.r, max(haloCol.g, haloCol.b));
     if (hitT < 0.0) {
-        return float4(haloCol, haloA);
+        // Nothing hit: the orb's glow - and the face's own soft shadow on the
+        // ground below it, if it has one (ground(): the robot's; 0 for the
+        // animals, who sit, perch, hang or float on something of their own).
+        return float4(haloCol, max(haloA, ground(ro, rd)));
     }
 
     float3 pos = ro + rd * hitT;

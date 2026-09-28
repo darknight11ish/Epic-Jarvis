@@ -514,7 +514,7 @@ def _sky_here(peer, local) -> bool:
 
 
 def set_sky_show(on: bool, *, peer=None, local=None) -> Outcome:
-    """"Show the sun and moon behind the animal": at once either way, the
+    """"Show the sun and moon behind the face": at once either way, the
     same jarvis_sky.handle_post({"show": ...}) both apps' switch calls."""
     try:
         import jarvis_sky as SK

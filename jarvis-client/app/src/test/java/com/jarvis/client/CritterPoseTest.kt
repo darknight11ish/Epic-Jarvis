@@ -6,6 +6,7 @@ import com.jarvis.client.face.Faces
 import com.jarvis.client.face.MonkeyPose
 import com.jarvis.client.face.OtterPose
 import com.jarvis.client.face.OwlPose
+import com.jarvis.client.face.RobotPose
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.float
@@ -46,6 +47,7 @@ class CritterPoseTest {
             "pygmyowl" -> OwlPose::pose
             "seaotter" -> OtterPose::pose
             "monkey" -> MonkeyPose::pose
+            "robot" -> RobotPose::pose
             else -> error("no Kotlin pose for '$species' - add one, or drop it from tools/gen_critters.py")
         }
 
@@ -54,6 +56,7 @@ class CritterPoseTest {
         "pygmyowl" -> OwlPose::overlay
         "seaotter" -> OtterPose::overlay
         "monkey" -> MonkeyPose::overlay
+        "robot" -> RobotPose::overlay
         else -> error("no Kotlin pose for '$species'")
     }
 
@@ -62,13 +65,14 @@ class CritterPoseTest {
         "pygmyowl" -> OwlPose::uniforms
         "seaotter" -> OtterPose::uniforms
         "monkey" -> MonkeyPose::uniforms
+        "robot" -> RobotPose::uniforms
         else -> error("no Kotlin pose for '$species'")
     }
 
     @Test
     fun `every pose matches the desktop's`() {
         val species = cases.map { it.jsonObject["species"]!!.jsonPrimitive.content }.toSet()
-        assertEquals("the fixture should cover every animal", setOf("redpanda", "pygmyowl", "seaotter", "monkey"), species)
+        assertEquals("the fixture should cover every animal and the robot", setOf("redpanda", "pygmyowl", "seaotter", "monkey", "robot"), species)
         assertTrue("the fixture should cover every state", cases.size >= 4 * 8 * 5)
         for (c in cases) {
             val o = c.jsonObject
@@ -173,6 +177,7 @@ class CritterPoseTest {
         val phone = mapOf<String, (FaceState, Float) -> Boolean>(
             "redpanda" to { s, t -> CritterPose.busy(s, t) }, "pygmyowl" to { s, t -> OwlPose.busy(s, t) },
             "seaotter" to { s, t -> OtterPose.busy(s, t) }, "monkey" to { s, t -> MonkeyPose.busy(s, t) },
+            "robot" to { s, t -> RobotPose.busy(s, t) },
         )
         assertEquals(phone.keys, busy.keys)
         for ((sp, fn) in phone) {
@@ -200,6 +205,9 @@ class CritterPoseTest {
             ).keys),
             "MONKEY" to (CritterShaders.MONKEY to MonkeyPose.uniforms(
                 MonkeyPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),
+            ).keys),
+            "ROBOT" to (CritterShaders.ROBOT to RobotPose.uniforms(
+                RobotPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),
             ).keys),
         )
         for ((const, pair) in shaders) {
@@ -318,12 +326,17 @@ class CritterPoseTest {
             OtterPose.uniforms(OtterPose.pose(s, p, since, t, 0.3f, hist = h)) },
         "monkey" to { s: FaceState, p: FaceState, since: Float, t: Float, h: CritterPose.Hist ->
             MonkeyPose.uniforms(MonkeyPose.pose(s, p, since, t, 0.3f, hist = h)) },
+        "robot" to { s: FaceState, p: FaceState, since: Float, t: Float, h: CritterPose.Hist ->
+            RobotPose.uniforms(RobotPose.pose(s, p, since, t, 0.3f, hist = h)) },
     )
 
     // The eyelids and pupils may be quick (a blink, a glance) and the water's
-    // ripple phase wraps round by design; everything else must glide.
+    // ripple phase wraps round by design; everything else must glide. (The
+    // robot's eyelids are uEyes' first two, and the gleam crossing its visor
+    // - uFins' last - starts at one side and is gone at the other.)
     private fun glides(name: String, i: Int) =
-        !(name == "uFace" && i < 2) && name != "uLook" && !(name == "uWater" && i == 1)
+        !(name == "uFace" && i < 2) && !(name == "uEyes" && i < 2) && name != "uLook" &&
+            !(name == "uWater" && i == 1) && !(name == "uFins" && i == 3)
 
     @Test
     fun `a change of state never jumps`() {
@@ -447,7 +460,7 @@ class CritterPoseTest {
             val first = u(s, s, 99f, 200f, CritterPose.Hist())
             for (f in 1..100) {
                 val now = u(s, s, 99f, 200f + f / 10f, CritterPose.Hist())
-                for (name in listOf("uPawL", "uPawR", "uWingL0", "uWingR0", "uHeadR0", "uHeadR1")) {
+                for (name in listOf("uPawL", "uPawR", "uWingL0", "uWingR0", "uHandL", "uHandR", "uHeadR0", "uHeadR1")) {
                     val a = first[name] ?: continue
                     val b = now.getValue(name)
                     for (i in a.indices) {
@@ -459,8 +472,8 @@ class CritterPoseTest {
     }
 
     @Test
-    fun `all four animals are offered`() {
-        for (id in listOf("redpanda", "pygmyowl", "seaotter", "monkey")) {
+    fun `all four animals and the robot are offered`() {
+        for (id in listOf("redpanda", "pygmyowl", "seaotter", "monkey", "robot")) {
             assertTrue("$id is not in Faces.all", Faces.all.any { it.id == id })
         }
     }
@@ -492,6 +505,8 @@ class CritterPoseTest {
             OtterPose.uniforms(OtterPose.pose(s, s, 99f, t, 0.3f, opts = o)) },
         "monkey" to { s: FaceState, t: Float, o: CritterPose.Opts ->
             MonkeyPose.uniforms(MonkeyPose.pose(s, s, 99f, t, 0.3f, opts = o)) },
+        "robot" to { s: FaceState, t: Float, o: CritterPose.Opts ->
+            RobotPose.uniforms(RobotPose.pose(s, s, 99f, t, 0.3f, opts = o)) },
     )
     // The head's own tilt (its roll, relative to the body): the head's turn
     // is ry(yaw) rx(pitch) rz(roll) in every animal, so the roll is read off
@@ -637,6 +652,8 @@ class CritterPoseTest {
                 OtterPose.overlay(OtterPose.pose(s, p, since, 30f, 0f)) },
             "monkey" to { s: FaceState, p: FaceState, since: Float ->
                 MonkeyPose.overlay(MonkeyPose.pose(s, p, since, 30f, 0f)) },
+            "robot" to { s: FaceState, p: FaceState, since: Float ->
+                RobotPose.overlay(RobotPose.pose(s, p, since, 30f, 0f)) },
         )
         for ((id, ov) in sleepers) {
             val asleep = ov(FaceState.STANDBY, FaceState.STANDBY, 99f)
@@ -737,6 +754,9 @@ class CritterPoseTest {
         Sleeper("monkey", MonkeyPose::pose, { s, p, since, t, amp, h, o ->
             CritterPose.blend(MonkeyPose::stateTargets, MonkeyPose.HALF, s, p, since, t, amp, CritterPose.Look(), h, o)
         }, MonkeyPose::uniforms, MonkeyPose::overlay),
+        Sleeper("robot", RobotPose::pose, { s, p, since, t, amp, h, o ->
+            CritterPose.blend(RobotPose::stateTargets, RobotPose.HALF, s, p, since, t, amp, CritterPose.Look(), h, o)
+        }, RobotPose::uniforms, RobotPose::overlay),
     )
     // Asleep for 9 s (awake for 20 before that), and awake for 20 s.
     private val asleep9 = CritterPose.Hist(past = listOf(
@@ -761,6 +781,10 @@ class CritterPoseTest {
         var worst = 0f
         for ((name, v) in a) for (i in v.indices) {
             if (name == "uFace" && i < 2) continue
+            // (The robot's eyes are all of uEyes and uEyes2, where they look
+            // (uLook: painted on its visor, not a turning eyeball) and the
+            // light they throw, uOrbGlow: their shape and glow are the eyes too.)
+            if (name == "uEyes" || name == "uEyes2" || (a.containsKey("uEyes") && (name == "uOrbGlow" || name == "uLook"))) continue
             if (vine && ((name == "uVine" && i == 1) || (name == "uHandA" && i == 2) || name == "uElbA")) continue
             worst = maxOf(worst, abs(v[i] - b.getValue(name)[i]))
         }
@@ -777,7 +801,7 @@ class CritterPoseTest {
             val most = (1..40).maxOf { f -> bodyGap(woke(f * 0.05f), was(f * 0.05f)) }
             assertTrue("${a.id}: the wake-up did nothing (${most})", most > 0.02f)
             // And the eyes open more slowly than they used to (in 0.1 s, before).
-            val eyes = woke(0.3f).getValue("uFace")[0]
+            val eyes = eyesOf(woke(0.3f))[0]
             assertTrue("${a.id}: eyes already ${eyes} open 0.3 s in", eyes < 0.6f)
             // It is over by 2.2 s: from then on, what the plain settling was.
             for (f in 0..20) {
@@ -805,9 +829,9 @@ class CritterPoseTest {
             val gone = a.overlay(a.pose(FaceState.IDLE, FaceState.STANDBY, 1.0f, 121f, 0f, CritterPose.Look(), asleep9, opts()), 0f, 0f, 1f)[0]
             assertEquals("${a.id}: Zs a second after waking", 0f, gone, 1e-6f)
             // Eyes shut by the end, heavy (not yet shut) half a second in.
-            val half = a.uniforms(nod(0.4f), null).getValue("uFace")[0]
+            val half = eyesOf(a.uniforms(nod(0.4f), null))[0]
             assertTrue("${a.id}: eyes ${half} 0.4 s into nodding off", half in 0.3f..1.0f)
-            assertEquals("${a.id}: eyes open at 3 s", 0f, a.uniforms(nod(3.0f), null).getValue("uFace")[0], 1e-6f)
+            assertEquals("${a.id}: eyes open at 3 s", 0f, eyesOf(a.uniforms(nod(3.0f), null))[0], 1e-6f)
         }
     }
 
@@ -916,7 +940,7 @@ class CritterPoseTest {
             val x = f * 0.05f
             val got = a.uniforms(a.pose(FaceState.SPEAKING, FaceState.STANDBY, x, 170f + x, 0.4f, CritterPose.Look(), asleep9, opts()), voice)
             val was = a.uniforms(a.plain(FaceState.SPEAKING, FaceState.STANDBY, x, 170f + x, 0.4f, asleep9, opts()), voice)
-            for (i in 0 until 3) assertEquals("${a.id}: mouth[$i] at $x s", was.getValue("uMouth")[i], got.getValue("uMouth")[i], 1e-6f)
+            for (i in voiceOf(was).indices) assertEquals("${a.id}: mouth[$i] at $x s", voiceOf(was)[i], voiceOf(got)[i], 1e-6f)
         }
     }
 
@@ -926,6 +950,14 @@ class CritterPoseTest {
     private fun u(a: Sleeper, s: FaceState, since: Float, t: Float, o: CritterPose.Opts, prev: FaceState = s,
                   h: CritterPose.Hist = CritterPose.Hist(), mouth: FloatArray? = null) =
         a.uniforms(a.pose(s, prev, since, t, ampOf(s), CritterPose.Look(), h, o), mouth)
+    /**
+     * The eyes (open left, open right, ...), the voice's mark (the mouth -
+     * or, on the robot, which has none, its eyes' pulse) and the orb's glow
+     * (the robot's eyes') of any face.
+     */
+    private fun eyesOf(u: Map<String, FloatArray>) = u["uFace"] ?: u.getValue("uEyes")
+    private fun voiceOf(u: Map<String, FloatArray>) = u["uMouth"] ?: floatArrayOf(u.getValue("uEyes2")[3])
+    private fun glowOf(u: Map<String, FloatArray>) = if (u.containsKey("uEyes")) u.getValue("uEyes2")[2] else u.getValue("uOrbGlow")[0]
     private fun gap(a: Map<String, FloatArray>, b: Map<String, FloatArray>): Float {
         var worst = 0f
         for ((name, v) in a) for (i in v.indices) worst = maxOf(worst, abs(v[i] - b.getValue(name)[i]))
@@ -992,9 +1024,9 @@ class CritterPoseTest {
         val voice = floatArrayOf(0.6f, 0.4f, 0.2f)
         for (a in sleepers) for (f in 0 until 60) {
             val t = 80f + f * 0.11f
-            val plain = u(a, FaceState.SPEAKING, 20f, t, opts(), mouth = voice).getValue("uMouth")
-            val busy = u(a, FaceState.SPEAKING, 20f, t, everything(), mouth = voice).getValue("uMouth")
-            for (i in 0 until 3) assertEquals("${a.id}: mouth[$i]", plain[i], busy[i], 1e-6f)
+            val plain = voiceOf(u(a, FaceState.SPEAKING, 20f, t, opts(), mouth = voice))
+            val busy = voiceOf(u(a, FaceState.SPEAKING, 20f, t, everything(), mouth = voice))
+            for (i in plain.indices) assertEquals("${a.id}: mouth[$i]", plain[i], busy[i], 1e-6f)
         }
     }
 
@@ -1078,21 +1110,23 @@ class CritterPoseTest {
         // At a phrase end one plays (most phrase ends; one near a look is let go).
         for (a in sleepers) {
             var played = 0
-            for (n in 1..20) {
+            for (n in 1..60) {
                 val t = 100f + n * 3.1f
                 val g = gap(u(a, FaceState.SPEAKING, 20f, t, opts().copy(phraseN = 0)),
                     u(a, FaceState.SPEAKING, 20f, t, opts().copy(phraseN = n, phraseEnd = 0.5f)))
                 if (g > 0.005f) played++
             }
-            assertTrue("${a.id}: only $played of 20 phrase ends had a gesture", played >= 8)
+            // (Sixty, not twenty: about half are let go for a look, and twenty
+            // was too few to tell a face that never gestures from bad luck.)
+            assertTrue("${a.id}: only $played of 60 phrase ends had a gesture", played >= 22)
         }
     }
 
     @Test
     fun `a saved fact nods, a ready answer swells the orb - not while waiting on you`() {
         for (a in sleepers) {
-            val glow = u(a, FaceState.IDLE, 20f, 30f, opts().copy(ackGlow = 0.9f)).getValue("uOrbGlow")[0] -
-                u(a, FaceState.IDLE, 20f, 30f, opts()).getValue("uOrbGlow")[0]
+            val glow = glowOf(u(a, FaceState.IDLE, 20f, 30f, opts().copy(ackGlow = 0.9f))) -
+                glowOf(u(a, FaceState.IDLE, 20f, 30f, opts()))
             assertTrue("${a.id}: the orb did not swell ($glow)", glow > 0.2f)
             val nod = gap(u(a, FaceState.IDLE, 20f, 30f, opts()), u(a, FaceState.IDLE, 20f, 30f, opts().copy(ackNod = 0.4f)))
             assertTrue("${a.id}: no nod ($nod)", nod > 0.01f)
@@ -1135,9 +1169,9 @@ class CritterPoseTest {
             val right = u(a, FaceState.IDLE, 20f, 30f, opts().copy(pet = 1f, petX = 1f))
             assertTrue("${a.id}: leans the same way whichever side the hand is", gap(left, right) > 0.02f)
             // (At a moment its eyes are open - not mid-blink.)
-            val t = (0 until 200).map { 30f + it * 0.05f }.first { u(a, FaceState.IDLE, 20f, it, opts()).getValue("uFace")[0] > 0.9f }
-            val eyes = u(a, FaceState.IDLE, 20f, t, opts().copy(pet = 1f)).getValue("uFace")[0]
-            val open = u(a, FaceState.IDLE, 20f, t, opts()).getValue("uFace")[0]
+            val t = (0 until 200).map { 30f + it * 0.05f }.first { eyesOf(u(a, FaceState.IDLE, 20f, it, opts()))[0] > 0.9f }
+            val eyes = eyesOf(u(a, FaceState.IDLE, 20f, t, opts().copy(pet = 1f)))[0]
+            val open = eyesOf(u(a, FaceState.IDLE, 20f, t, opts()))[0]
             assertTrue("${a.id}: eyes $eyes against $open", eyes < open - 0.2f)
             val sw = gap(u(a, FaceState.IDLE, 20f, 30f, opts()), u(a, FaceState.IDLE, 20f, 30f, opts().copy(pet = 1f, petX = 1f, petting = 0f)))
             assertTrue("${a.id}: petted with the switch off", sw < 1e-5f)
@@ -1147,7 +1181,8 @@ class CritterPoseTest {
     @Test
     fun `the cute moments take turns, only after it has rested, and the switch stops them`() {
         val salts = mapOf("redpanda" to (76 to floatArrayOf(7f, 5f)), "pygmyowl" to (156 to floatArrayOf(8.2f, 3f)),
-            "seaotter" to (236 to floatArrayOf(6.8f, 6.5f)), "monkey" to (121 to floatArrayOf(5.5f, 4.4f)))
+            "seaotter" to (236 to floatArrayOf(6.8f, 6.5f)), "monkey" to (121 to floatArrayOf(5.5f, 4.4f)),
+            "robot" to (251 to floatArrayOf(3.3f, 3.2f)))
         for ((id, sl) in salts) {
             val kinds = ArrayList<Int>()
             var was = false
@@ -1160,7 +1195,8 @@ class CritterPoseTest {
             for (i in 1 until kinds.size) assertTrue("$id: the same cute moment twice running", kinds[i] != kinds[i - 1])
         }
         for (a in sleepers) {
-            val start = mapOf("redpanda" to 102.082f, "pygmyowl" to 173.461f, "seaotter" to 101.685f, "monkey" to 87.92f).getValue(a.id)
+            val start = mapOf("redpanda" to 102.082f, "pygmyowl" to 173.461f, "seaotter" to 101.685f, "monkey" to 87.92f,
+                "robot" to 130.566f).getValue(a.id)
             val t = start + 2.6f
             val on = gap(u(a, FaceState.IDLE, 1e6f, t, opts()), u(a, FaceState.IDLE, 1e6f, t, opts().copy(cute = 0f)))
             assertTrue("${a.id}: the cute moment did nothing ($on)", on > 0.02f)
@@ -1265,7 +1301,8 @@ class CritterPoseTest {
         }
         // The cute moments, from end to end.
         val starts = mapOf("redpanda" to listOf(102.082f, 408.591f), "pygmyowl" to listOf(173.461f, 313.491f),
-            "seaotter" to listOf(101.685f, 403.501f), "monkey" to listOf(87.92f, 426.323f))
+            "seaotter" to listOf(101.685f, 403.501f), "monkey" to listOf(87.92f, 426.323f),
+            "robot" to listOf(130.566f, 452.031f))
         for (a in sleepers) for (st in starts.getValue(a.id)) {
             val w = worstRun(a, 9f, st - 0.5f, 1e6f) { FaceState.IDLE to opts() }
             assertTrue("${a.id} cute at $st: speed changed by $w a second in one frame", w < 0.25f)

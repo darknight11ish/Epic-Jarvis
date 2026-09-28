@@ -14,6 +14,7 @@ import com.jarvis.client.face.FlashGovernor
 import com.jarvis.client.face.MonkeyPose
 import com.jarvis.client.face.OtterPose
 import com.jarvis.client.face.OwlPose
+import com.jarvis.client.face.RobotPose
 import com.jarvis.client.face.Spec
 import com.jarvis.client.face.Swatch
 import com.jarvis.client.face.ZsRule
@@ -249,7 +250,7 @@ class FaceShellRulesTest {
         assertEquals(c0.toList(), fresh.clocksForTest().toList())
     }
 
-    /** Each animal's shader uniforms for a frame, the way CritterFaces works them out. */
+    /** Each animal's (and the robot's) shader uniforms for a frame, the way CritterFaces works them out. */
     private fun animals(f: FaceFrame): Map<String, Map<String, FloatArray>> {
         val hist = CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp, prevAmp2 = f.prevAmp2)
         return mapOf(
@@ -257,6 +258,7 @@ class FaceShellRulesTest {
             "pygmyowl" to OwlPose.uniforms(OwlPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist), f.mouth),
             "seaotter" to OtterPose.uniforms(OtterPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist), f.mouth),
             "monkey" to MonkeyPose.uniforms(MonkeyPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist), f.mouth),
+            "robot" to RobotPose.uniforms(RobotPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist), f.mouth),
         )
     }
 

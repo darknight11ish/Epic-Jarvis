@@ -6949,7 +6949,7 @@ with those two - see `jarvis_voices.KOKORO_VOICES`'s own comment for the
 full reasoning and the caveat.
 
 **Also new (2026-09-27, the owner's choice): "Voice follows the face"** -
-with the red panda, pygmy owl, sea otter or monkey face showing, the built-in voice
+with the red panda, pygmy owl, sea otter, monkey or robot face showing, the built-in voice
 becomes that animal's: one of the Kokoro voices already installed, its own
 pace, and a small pitch rise (`jarvis_voices.FACE_VOICES`; the face is read
 from `appearance.json`). An on/off switch, **on by default**, right under
@@ -13946,7 +13946,7 @@ on the internet if you choose it and approve its card.
 
 Nothing new to install: `apply-patches.ps1` copies the two modules and
 applies `sky.patch`, like every other feature. Then, in the desktop's
-Settings, "Animal options": switch on "Show the sun and moon behind the animal",
+Settings, "Animal options": switch on "Show the sun and moon behind the face",
 type your town and press Set. For the weather from Home Assistant, it must
 already be set up for Jarvis (the same device the morning briefing reads).
 
@@ -13966,7 +13966,7 @@ already be set up for Jarvis (the same device the morning briefing reads).
 - Open-Meteo: one fixed address, the rounded position and four value names,
   no proxy, no redirect, 10 s, 64 KB; ON is a `change_own_config` card that
   names the exact numbers, good for that position only.
-- `jarvis_reach.py`: a row, "Weather for the animal's scene".
+- `jarvis_reach.py`: a row, "Weather behind the face".
 - Never: the town or position in a log line, the audit log or anything the
   AI model sees.
 

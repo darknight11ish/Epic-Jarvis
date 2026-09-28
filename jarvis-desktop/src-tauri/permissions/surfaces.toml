@@ -815,7 +815,7 @@ permissions = ["allow-get-appearance"]
 # change anything: that is Settings.
 [[set]]
 identifier = "sky-read"
-description = "Read whether the sun and moon show behind the animal, the rough position and the weather now. Cosmetic and read-only."
+description = "Read whether the sun and moon show behind the face, the rough position and the weather now. Cosmetic and read-only."
 permissions = ["allow-get-sky"]
 
 # Settings' "Open Faces" button. Opens a window; changes nothing by itself.

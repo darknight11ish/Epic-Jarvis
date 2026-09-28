@@ -333,15 +333,16 @@ await check("an older PC: Settings offers Keep the animal still on this computer
   assert.equal(sent, 0, "nothing was sent to a PC that cannot take it");
 });
 
-await check("the monkey does what every animal does: sleeps with Zs, none offline, wakes, Still and serious ease in", async () => {
+for (const face of ["monkey", "robot"]) await check(`the ${face} does what every animal does: sleeps with Zs, none offline, wakes, Still and serious ease in`, async () => {
   // The owner (2026-09-28): the fourth animal must do everything the other
-  // three can. Its own face page, its own pose: nodding off and waking,
+  // three can, and so must the robot (the fifth face, counted as an animal
+  // for every option). Its own face page, its own pose: nodding off and waking,
   // the Zs (and none while not connected), Still and a serious moment eased
   // into its pose, and no errors along the way.
   const page = await editor();
-  const got = await page.evaluate(() => {
-    const s = __surface("monkey");
-    const m = () => THEME.monkey.mem.get(s.view);
+  const got = await page.evaluate((face) => {
+    const s = __surface(face);
+    const m = () => THEME[face].mem.get(s.view);
     __run(s, "idle", 2);
     const awake = window.__faceZs ? window.__faceZs.shown : 0;
     const early = __run(s, "standby", 1.5, () => window.__faceZs.shown);
@@ -363,7 +364,7 @@ await check("the monkey does what every animal does: sleeps with Zs, none offlin
     setSerious(false);
     return { awake, early: Math.max(...early), asleep, offline, back, woke,
              still: [still[0], still[still.length - 1]], serious: [serious[0], serious[serious.length - 1]] };
-  });
+  }, face);
   const errors = page.__errors;
   await page.close();
   assert.equal(got.early, 0, `Zs before it was asleep: ${JSON.stringify(got)}`);

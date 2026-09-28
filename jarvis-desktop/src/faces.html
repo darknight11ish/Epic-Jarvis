@@ -192,7 +192,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
   <pre id="exout">—</pre>
 </div>
 
-<footer>Most faces are hand-written Canvas 2D; Nucleus, Membrane, Tokamak and the four animals are drawn by the graphics card through WebGL 2, and fall back to Canvas 2D when WebGL is missing or the card cannot keep up. No three.js, nothing fetched at runtime. Speed ranges differ per face because nine of these integrate their state every frame and cannot simply be handed a faster clock; those are sub-stepped instead.</footer>
+<footer>Most faces are hand-written Canvas 2D; Nucleus, Membrane, Tokamak, the four animals and the robot are drawn by the graphics card through WebGL 2, and fall back to Canvas 2D when WebGL is missing or the card cannot keep up. No three.js, nothing fetched at runtime. Speed ranges differ per face because nine of these integrate their state every frame and cannot simply be handed a faster clock; those are sub-stepped instead.</footer>
 </div>
 
 <script src="faces-spec.js"></script>
@@ -201,6 +201,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 <script src="critter-owl.js"></script>
 <script src="critter-otter.js"></script>
 <script src="critter-monkey.js"></script>
+<script src="critter-robot.js"></script>
 <script src="critters-gen.js"></script>
 <script src="lipsync.js"></script>
 <script src="sky.js"></script>
@@ -1283,12 +1284,13 @@ void main(){
 
    And the pose is worked out outside the shader, once a frame, by the
    animal's pose code (critter-pose.js, critter-owl.js, critter-otter.js,
-   critter-monkey.js) -
+   critter-monkey.js, critter-robot.js) -
    the same maths the phone runs, checked against it by a fixture. The
    shader (critters/, one source for both apps) only draws the animal in
    whatever pose it is given.
 
-   critterFace() is everything the four share; each passes its own name,
+   critterFace() is everything the five share (the four animals and the
+   robot); each passes its own name,
    words and flat fallback. */
 const CRITTER_TIME_WRAP = (2 * Math.PI / 1.3) * 1000;
 // Seconds an animal's option weight (calm, serious, still) takes to ease
@@ -1498,7 +1500,10 @@ function critterFace(o){
       // FACE_MOUTH: the mouth track of the voice being heard, or null (shut)
       // - see LIP-SYNC. The pose scales it by how much it is speaking.
       const U = this.species.uniforms(P, FACE_MOUTH);
+      // The robot has no mouth: the same mouth track makes its eyes pulse
+      // (its uniforms' uEyes2.w), so what it was handed is recorded the same.
       if(U.uMouth) window.__faceVoice.lastMouth = Array.from(U.uMouth);
+      else if(this.species.mouth) window.__faceVoice.lastMouth = Array.from(this.species.mouth(P, FACE_MOUTH));
       const p = this.st[st];
       const bg = parseCol(this.swatch[0]), hot = parseCol(p.hot), cool = parseCol(p.glow);
       if(!JARVIS_CRITTERS[this.id]) return false;
@@ -3671,6 +3676,110 @@ critterFace({
     g.beginPath(); g.moveTo(-R(.06), R(.005)); g.quadraticCurveTo(0, R(.03), R(.06), R(.005)); g.stroke();
     g.restore();
     ell(U.uHandB[0], U.uHandB[1], .066, .066, PEACH);
+  }
+}),
+critterFace({
+  id:"robot", name:"Robot", tagline:"A little helper that floats",
+  // At rest (critter-robot.js idle, happy eyes) - used only if that script
+  // did not load.
+  rest:{ eyeL:1, eyeR:1, happy:.85, size:1, glow:1, lookX:0, lookY:0 },
+  // Where its parts are at rest, for the same case: critter-robot.js's
+  // uniforms() for that pose, rounded.
+  restU:{ uBodyPos:[0,-.37,0], uNeck:[0,-.085,0], uHeadR0:[1,0,0], uHeadR1:[0,1,0], uHeadR2:[0,0,1],
+          uBodyR0:[1,0,0], uBodyR1:[0,1,0], uBodyR2:[0,0,1],
+          uEyes:[1,1,.85,1], uEyes2:[0,0,1,0], uLook:[0,0], uFins:[.12,.12,.5,-1],
+          uShL:[-.29,-.2,0], uHandL:[-.47,-.54,-.06], uShR:[.29,-.2,0], uHandR:[.47,-.54,-.06] },
+  swatch:["#04060b","#7fe3ff","#1f4fd8","#e8ecf2"],
+  spec:"A small cute robot from the owner's own picture, made of maths rather than a model file and ray-traced with soft shadows: a big rounded white helmet with a ridge on top, a glossy dark-blue visor with a glowing rim, round ear pods with teal fins, an egg of a body with a teal shield on its chest and a thin blue line round its waist, and two mitten arms. No legs - it floats, with a soft shadow on the ground below. No mouth and no orb: its glowing eyes are its face, in the state's colour - happy arcs at rest, wide round eyes listening, narrowed eyes looking up to think, bright eyes that pulse with Jarvis's real voice as it talks, steady eyes waiting on you (no wave), a small concerned slant at an error, heavy lids dozing, a dim line asleep. Now and then at rest it zips round inside its own space and settles back, waves, or polishes its visor.",
+  // Without a GPU: a flat robot in the same pose, from its own pose code (its
+  // uniforms), so it floats, turns its head, zips and sleeps as the 3D one
+  // does; the eyes keep the state's colour and their expression.
+  flat(g, w, h, st, P, M){
+    if(!P) return;
+    M = M || [0, 0, 0];
+    const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1) * 3.1 / 3.25;
+    const sp = this.species;
+    const U = sp ? sp.uniforms(P, null) : this.restU;
+    const X = x => w / 2 + x * S, Y = y => h / 2 - (y + 0.05) * S, R = r => r * S;
+    const WHITE = "#e8ecf2", SHADE = "#b9c1cd", TEAL = "#23b0b8", VISOR = "#1a3fc8", DEEP = "#0b1a6e";
+    const ell = (x, y, rx, ry, col, rot) => {
+      g.fillStyle = col; g.beginPath(); g.ellipse(X(x), Y(y), R(rx), R(ry), rot || 0, 0, TAU); g.fill();
+    };
+    const line = (a, b, width, col) => {
+      g.strokeStyle = col; g.lineWidth = R(width); g.lineCap = "round";
+      g.beginPath(); g.moveTo(X(a[0]), Y(a[1])); g.lineTo(X(b[0]), Y(b[1])); g.stroke();
+    };
+    const B = U.uBodyPos;
+    // Its soft shadow on the ground, fainter and wider the higher it floats.
+    const up = B[1] + 0.93;
+    g.save(); g.globalAlpha = Math.max(0, 0.35 * (1 - up / 1.9));
+    ell(B[0], -0.93, 0.30 + 0.12 * up, 0.06 + 0.02 * up, "#000000");
+    g.restore();
+    // The arms, then the body with a soft halo in the state's second colour
+    // for the rim light.
+    for(const s of ["L", "R"]){ line(U["uSh" + s], U["uHand" + s], .14, SHADE); }
+    g.save(); g.shadowColor = rgba(p.glow, .9); g.shadowBlur = S * .08;
+    const bodyGrad = g.createRadialGradient(X(B[0] - .1), Y(B[1] + .12), R(.05), X(B[0]), Y(B[1]), R(.36));
+    bodyGrad.addColorStop(0, "#ffffff"); bodyGrad.addColorStop(1, SHADE);
+    ell(B[0], B[1], .32, .30, bodyGrad);
+    g.restore();
+    // The waist line and the teal shield.
+    g.strokeStyle = "#2a40a0"; g.lineWidth = Math.max(1, R(.012));
+    g.beginPath(); g.ellipse(X(B[0]), Y(B[1] - .005), R(.315), R(.06), 0, 0, Math.PI); g.stroke();
+    g.fillStyle = TEAL; g.beginPath();
+    g.moveTo(X(B[0] - .18), Y(B[1] + .10));
+    g.lineTo(X(B[0] + .18), Y(B[1] + .10));
+    g.ellipse(X(B[0]), Y(B[1] - .02), R(.18), R(.22), 0, 0, Math.PI);
+    g.closePath(); g.fill();
+    // The mittens.
+    for(const s of ["L", "R"]){ const q = U["uHand" + s]; ell(q[0], q[1], .10, .10, WHITE); }
+    // The head: it tips with its roll (its up vector, from uHeadR*).
+    const upv = [U.uHeadR0[1], U.uHeadR1[1]];
+    const hc = [U.uNeck[0] + upv[0] * .335, U.uNeck[1] + upv[1] * .335];
+    g.save();
+    g.translate(X(hc[0]), Y(hc[1])); g.rotate(Math.atan2(upv[0], upv[1])); g.translate(-X(hc[0]), -Y(hc[1]));
+    const [hx, hy] = hc;
+    // Pods and fins each side (the fins lean out by their tilt).
+    for(const side of [-1, 1]){
+      const tilt = side < 0 ? U.uFins[0] : U.uFins[1];
+      g.save(); g.translate(X(hx + side * .56), Y(hy + .07)); g.rotate(side * tilt);
+      g.fillStyle = TEAL; g.beginPath(); g.roundRect(-R(.065), -R(.26), R(.13), R(.25), R(.03)); g.fill();
+      g.restore();
+      ell(hx + side * .57, hy - .035, .075, .135, SHADE);
+      if(side < 0) ell(hx - .64, hy - .035, .02, .045, "#0d1420");
+    }
+    const headGrad = g.createRadialGradient(X(hx - .15), Y(hy + .2), R(.05), X(hx), Y(hy), R(.55));
+    headGrad.addColorStop(0, "#ffffff"); headGrad.addColorStop(1, SHADE);
+    ell(hx, hy + .33, .18, .12, headGrad);
+    ell(hx, hy, .515, .355, headGrad);
+    // The visor, its glowing rim in the state's colour.
+    const vy = hy - .05;
+    const vg = g.createLinearGradient(0, Y(vy + .24), 0, Y(vy - .24));
+    vg.addColorStop(0, VISOR); vg.addColorStop(1, DEEP);
+    g.fillStyle = vg; g.beginPath(); g.roundRect(X(hx - .395), Y(vy + .245), R(.79), R(.49), R(.17)); g.fill();
+    g.strokeStyle = rgba(p.hot, .9); g.lineWidth = Math.max(1, R(.012)); g.stroke();
+    // The eyes: happy arcs or round, in the state's colour, glowing - they
+    // pulse with the voice as the 3D one's do.
+    const pulse = Math.max(0, Math.min(1, M[0] + .3 * M[1]));
+    const E = U.uEyes, E2 = U.uEyes2, L = U.uLook;
+    g.save();
+    g.shadowColor = p.hot; g.shadowBlur = S * .06;
+    g.fillStyle = lift(p.hot, .55); g.strokeStyle = lift(p.hot, .55); g.lineCap = "round";
+    for(const side of [-1, 1]){
+      const open = Math.max(0, Math.min(1.3, side < 0 ? E[0] : E[1]));
+      const r = .058 * E[3] * (1 + .1 * pulse);
+      const ex = hx + side * .17 + .05 * L[0], ey = hy - .08 + .04 * L[1] + .012 * pulse;
+      g.save(); g.translate(X(ex), Y(ey)); g.rotate(-side * E2[1]);
+      if(E[2] > .5 && open > .3){
+        g.lineWidth = R(.042 * E[3]);
+        g.beginPath(); g.arc(0, R(.045), R(.08 * E[3]), Math.PI * 1.2, Math.PI * 1.8); g.stroke();
+      } else {
+        g.beginPath(); g.ellipse(0, 0, R(r * (open < .05 ? .7 : 1)), Math.max(1, R(r * Math.max(open, .15) * (1 - .6 * E2[0]))), 0, 0, TAU); g.fill();
+      }
+      g.restore();
+    }
+    g.restore();
+    g.restore();
   }
 }),
 ];

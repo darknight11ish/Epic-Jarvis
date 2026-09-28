@@ -338,3 +338,9 @@ float3 sparkle(float id, float3 pos) {
 float2 stuckRay(float3 ro, float3 rd) {
     return float2(-1.0, 0.0);
 }
+
+// Its shadow on the ground below (common_tail.sksl draws it where a ray
+// misses): none - it has its own seat, perch, vine or water.
+float ground(float3 ro, float3 rd) {
+    return 0.0;
+}

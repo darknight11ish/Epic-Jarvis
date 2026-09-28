@@ -1748,7 +1748,7 @@ def _settings_adjust(s: str) -> Optional[Intent]:
 #   list - anything else about the animal gets a plain question back.
 # --------------------------------------------------------------------------
 
-#: What "the animal" may be called: the word itself, or one of the four.
+#: What "the animal" may be called: the word itself, one of the four, or the robot.
 _BEAST = (r"(?:the\s+|my\s+)?(?:animal|animals|animal\s+face|red\s+panda|panda|owl|sea\s+otter"
           r"|otter|monkey|robot)")
 _BEASTS = _BEAST + r"(?:'s|s')?"
@@ -1771,8 +1771,11 @@ _ONOFF = re.compile(
     r"|(stop|no\s+more)\s+(.+)")
 _SHOWHIDE = re.compile(r"(show|hide)\s+(?:me\s+)?(.+)")
 
-#: A tail's "for the animal" / "behind the animal" / "the animal's" parts.
-_TAIL_FOR = re.compile(r"\s+(?:for|on|behind|around|in)\s+" + _BEAST + r"(?:'s\s+scene)?$")
+#: A tail's "for the animal" / "behind the animal" / "the animal's" parts -
+#: and "behind the face", the words the sky's own switches use (so they read
+#: right for the robot too).
+_TAIL_FOR = re.compile(r"\s+(?:for|on|behind|around|in)\s+(?:" + _BEAST
+                       + r"|(?:the\s+|my\s+)?face)(?:'s\s+scene)?$")
 _HEAD_OF = re.compile(r"^" + _BEASTS + r"\s+")
 
 _SKY_NAMES = ("sun and moon", "sun and the moon", "the sun and moon", "the sun and the moon",

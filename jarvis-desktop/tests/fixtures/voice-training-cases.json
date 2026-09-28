@@ -8987,6 +8987,21 @@
               "semitones": 1.0,
               "speaker": "6",
               "voice": "Michael"
+            },
+            {
+              "changed": false,
+              "face": "robot",
+              "line": "Emma, 2 steps higher, a little faster.",
+              "name": "Robot",
+              "own": {
+                "pace": "faster",
+                "semitones": 2.0,
+                "speaker": "7"
+              },
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7",
+              "voice": "Emma"
             }
           ],
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -9135,6 +9150,21 @@
               "semitones": 1.0,
               "speaker": "6",
               "voice": "Michael"
+            },
+            {
+              "changed": false,
+              "face": "robot",
+              "line": "Emma, 2 steps higher, a little faster.",
+              "name": "Robot",
+              "own": {
+                "pace": "faster",
+                "semitones": 2.0,
+                "speaker": "7"
+              },
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7",
+              "voice": "Emma"
             }
           ],
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -9155,7 +9185,7 @@
     },
     "animal_try_bad": {
       "body": {
-        "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey",
+        "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot",
         "ok": false
       },
       "code": 400
@@ -9401,6 +9431,21 @@
               "semitones": 1.0,
               "speaker": "6",
               "voice": "Michael"
+            },
+            {
+              "changed": false,
+              "face": "robot",
+              "line": "Emma, 2 steps higher, a little faster.",
+              "name": "Robot",
+              "own": {
+                "pace": "faster",
+                "semitones": 2.0,
+                "speaker": "7"
+              },
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7",
+              "voice": "Emma"
             }
           ],
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -9549,6 +9594,21 @@
               "semitones": 1.0,
               "speaker": "6",
               "voice": "Michael"
+            },
+            {
+              "changed": false,
+              "face": "robot",
+              "line": "Emma, 2 steps higher, a little faster.",
+              "name": "Robot",
+              "own": {
+                "pace": "faster",
+                "semitones": 2.0,
+                "speaker": "7"
+              },
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7",
+              "voice": "Emma"
             }
           ],
           "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -9854,6 +9914,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -10168,6 +10243,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -10482,6 +10572,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -10769,6 +10874,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -11052,6 +11172,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -11335,6 +11470,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -11618,6 +11768,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -11907,6 +12072,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -12221,6 +12401,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -12535,6 +12730,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -12847,6 +13057,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -13161,6 +13386,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -13485,6 +13725,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -13799,6 +14054,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -14103,6 +14373,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
@@ -14402,6 +14687,21 @@
             "semitones": 1.0,
             "speaker": "6",
             "voice": "Michael"
+          },
+          {
+            "changed": false,
+            "face": "robot",
+            "line": "Emma, 2 steps higher, a little faster.",
+            "name": "Robot",
+            "own": {
+              "pace": "faster",
+              "semitones": 2.0,
+              "speaker": "7"
+            },
+            "pace": "faster",
+            "semitones": 2.0,
+            "speaker": "7",
+            "voice": "Emma"
           }
         ],
         "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",

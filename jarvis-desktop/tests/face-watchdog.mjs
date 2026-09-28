@@ -279,7 +279,7 @@ await check("standby and banked dim the whole animal, as much as they dim other 
   const got = await page.evaluate((SRC) => {
     const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
     const out = {};
-    for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey", "arc"]) {
+    for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey", "robot", "arc"]) {
       out[id] = {};
       for (const st of ["idle", "standby", "banked"]) {
         const s = (0, eval)(SRC)(id);
@@ -303,7 +303,7 @@ await check("standby and banked dim the whole animal, as much as they dim other 
   }, SURFACE.toString());
   await page.close();
   console.log("      standby/idle, banked/idle:", JSON.stringify(got));
-  for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey"]) {
+  for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]) {
     assert.ok(got[id].standby < 0.6, `${id} standby is ${got[id].standby} of idle`);
     assert.ok(got[id].banked < got[id].standby, `${id} banked is not dimmer than standby`);
   }
@@ -335,10 +335,10 @@ await check("the animal's orb is not dimmed twice", async () => {
 });
 
 await check("an animal whose pose script failed still draws, still and neutral", async () => {
-  const page = await editor((p) => p.route(/critter-(pose|owl|otter|monkey)\.js$/, (r) => r.abort()));
+  const page = await editor((p) => p.route(/critter-(pose|owl|otter|monkey|robot)\.js$/, (r) => r.abort()));
   const got = await page.evaluate((SRC) => {
     const out = {};
-    for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey"]) {
+    for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]) {
       const s = (0, eval)(SRC)(id);
       drawSurface(s, 1 / 30, "idle");
       const d = s.ctx.getImageData(0, 0, s.w, s.h).data;

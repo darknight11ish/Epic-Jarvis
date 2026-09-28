@@ -257,6 +257,11 @@ def t_asking_changes_the_pc():
           SK.load()["show"] is True and one_sentence(r.reply), r and r.reply)
     r = go("hide the sun and moon")
     check("'hide the sun and moon': off", SK.load()["show"] is False, r and r.reply)
+    r = go("show the sun and moon behind the face")
+    check("'... behind the face' (the switch's own words): on",
+          SK.load()["show"] is True and one_sentence(r.reply), r and r.reply)
+    r = go("hide the sun and moon behind the robot")
+    check("'... behind the robot': off", SK.load()["show"] is False, r and r.reply)
     SK.handle_post({"place": "Denver"}, here=True)
     SK.handle_post({"weather": "home_assistant"}, here=True)
     r = go("turn off the weather")

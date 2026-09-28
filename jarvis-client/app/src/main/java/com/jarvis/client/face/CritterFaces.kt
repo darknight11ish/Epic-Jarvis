@@ -7,9 +7,10 @@ import com.jarvis.client.FaceState
 
 /**
  * An animal face - a CHARACTER, where the other twenty faces are
- * instruments (rings, orbits, a drum skin). Four of them: [RedPanda],
- * [PygmyOwl], [SeaOtter] and [Monkey], each only its shader and its pose; everything
- * about how an animal is drawn on the phone lives here, once.
+ * instruments (rings, orbits, a drum skin). Five of them: [RedPanda],
+ * [PygmyOwl], [SeaOtter], [Monkey] and the [Robot], each only its shader and
+ * its pose; everything about how an animal is drawn on the phone lives here,
+ * once (the robot is drawn exactly as an animal is).
  *
  * A character needs its own pose for every state, so an animal reads the
  * real state ([FaceFrame.state]) rather than the borrowed movement
@@ -392,7 +393,24 @@ object Monkey : CritterFace("monkey", "Monkey", CritterShaders.MONKEY) {
 }
 
 /**
- * Compiles all four animals' shaders on the calling thread - meant for a
+ * The robot (the owner's fifth face, 2026-09-28): a small cute robot that
+ * floats, a soft shadow on the ground below it. No mouth and no orb - its
+ * glowing eyes on its visor are its face, in the state's colour (`hot`, the
+ * colour the animals' orbs glow in), and while Jarvis speaks they pulse with
+ * the real voice ([FaceFrame.mouth]) instead of a mouth moving. Now and then
+ * at rest it zips round inside its own space, and it waves or polishes its
+ * visor. Everything else is an animal's: this class draws it the same way.
+ */
+object Robot : CritterFace("robot", "Robot", CritterShaders.ROBOT) {
+    override fun pose(f: FaceFrame) =
+        RobotPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f), opts = opts(f))
+    override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = RobotPose.uniforms(p, mouth)
+    override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = RobotPose.overlay(p, yaw, pitch, 1f)
+    override fun busyAt(state: FaceState, t: Float) = RobotPose.busy(state, t)
+}
+
+/**
+ * Compiles all five character faces' shaders (the four animals and the robot) on the calling thread - meant for a
  * background one ([kotlinx.coroutines.Dispatchers.Default]). Appearance
  * calls it when it opens: its picker draws a still of every face, and
  * compiling four large animal shaders on the main thread the first time
@@ -404,4 +422,5 @@ fun warmCritterShaders() {
     PygmyOwl.warm()
     SeaOtter.warm()
     Monkey.warm()
+    Robot.warm()
 }

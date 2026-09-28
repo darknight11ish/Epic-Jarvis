@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate both apps' copies of the animal faces from one source.
 
-Each animal (red panda, pygmy owl, sea otter) is drawn by one shader, built
+Each face (red panda, pygmy owl, sea otter, monkey, robot) is drawn by one shader, built
 from three parts in `jarvis-desktop/critters/`: `common_head.sksl` (shared
 uniforms and helpers) + `<animal>.sksl` (its shapes and colours) +
 `common_tail.sksl` (the shared march, lighting, orb and soft outline). The
@@ -38,11 +38,12 @@ ROOT = Path(__file__).resolve().parent.parent
 CRITTERS = ROOT / "jarvis-desktop" / "critters"
 # Each animal: its face id (also its .sksl file name), and the name of its
 # shader constant on the phone. The desktop's copy is keyed by the face id.
-ANIMALS = [("redpanda", "RED_PANDA"), ("pygmyowl", "PYGMY_OWL"), ("seaotter", "SEA_OTTER"), ("monkey", "MONKEY")]
+ANIMALS = [("redpanda", "RED_PANDA"), ("pygmyowl", "PYGMY_OWL"), ("seaotter", "SEA_OTTER"), ("monkey", "MONKEY"),
+           ("robot", "ROBOT")]
 # The pose code, in load order: critter-pose.js holds the shared helpers and
 # the panda; each other animal's file registers itself with it.
 POSE_JS = [ROOT / "jarvis-desktop" / "src" / f
-           for f in ("critter-pose.js", "critter-owl.js", "critter-otter.js", "critter-monkey.js")]
+           for f in ("critter-pose.js", "critter-owl.js", "critter-otter.js", "critter-monkey.js", "critter-robot.js")]
 OUT_JS = ROOT / "jarvis-desktop" / "src" / "critters-gen.js"
 OUT_KT = (ROOT / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
           / "client" / "face" / "CritterShaders.kt")
@@ -106,18 +107,21 @@ STATES = ["idle", "listening", "thinking", "speaking", "approval", "standby", "e
 MOMENTS = {
     # A blink starting (each animal blinks on its own clock), and one of the
     # double blinks.
-    "blink": {"redpanda": 4.0, "pygmyowl": 7.285, "seaotter": 5.45, "monkey": 3.465},
-    "double": {"redpanda": 54.9, "pygmyowl": 18.32, "seaotter": 24.26, "monkey": 6.71},
+    "blink": {"redpanda": 4.0, "pygmyowl": 7.285, "seaotter": 5.45, "monkey": 3.465, "robot": 2.595},
+    "double": {"redpanda": 54.9, "pygmyowl": 18.32, "seaotter": 24.26, "monkey": 6.71, "robot": 15.72},
     # The middle of each idle happening, in the order of its kinds.
     "happen": {
         "redpanda": [117.15, 81.4, 70.3, 150.1, 132.51],              # stretch, tail flick, scratch, hears L, R
         "pygmyowl": [85.13, 342.55, 306.45, 101.58, 133.49, 65.74],  # ruffle, wing L, R, tilt L, R, slow blink
         "seaotter": [101.83, 56.48, 23.65, 39.48, 163.71],           # face wash, roll L, R, kick, pebble rub
         "monkey": [5.26, 83.68, 101.51, 70.01, 17.96, 214.61],      # scratch, banana, kick, swing, look round, tail
+        "robot": [20.94, 69.74, 244.65, 52.35, 162.97, 101.947],     # fin flick, curious look, dip, mitten, squint, zip
     },
     # Half a second into each speaking gesture: a nod, a paw (wing) lifted, a tilt.
     "gesture": {"redpanda": [44.78, 52.85, 12.84], "pygmyowl": [64.77, 12.88, 16.7],
-                "seaotter": [18.64, 55.01, 65.06], "monkey": [3.09, 32.78, 127.06]},
+                "seaotter": [18.64, 55.01, 65.06], "monkey": [3.09, 32.78, 127.06],
+                # (the robot's five: a nod, the right mitten, the left, both, a tilt)
+                "robot": [2.97, 6.81, 8.53, 104.89, 102.9]},
 }
 # Clock values exactly representable as 32-bit floats (the phone's clock is
 # one): a day, and three. (Much past a week the phone's own clock only
@@ -263,6 +267,8 @@ def golden_cases(species):
     # the options that switch it off or make it smaller.
     for sp in species:
         cases.extend(behaviour_cases(sp))
+    if "robot" in species:
+        cases.extend(robot_cases())
     # The owl's orb kept clear of its head while the pointer turns the head
     # toward it (the push in critter-owl.js's clearOfHead is working here),
     # and coming up its side into the thinking circle.
@@ -280,7 +286,7 @@ def golden_cases(species):
 # scanning the pose code, like MOMENTS - if the timings change these stop
 # landing on a moment, so find new ones the same way (cuteAt, since 1e6).
 CUTE = {"redpanda": (102.082, 408.591), "pygmyowl": (173.461, 313.491),
-        "seaotter": (101.685, 403.501), "monkey": (87.92, 426.323)}
+        "seaotter": (101.685, 403.501), "monkey": (87.92, 426.323), "robot": (130.566, 452.031)}
 
 
 def behaviour_cases(sp):
@@ -356,6 +362,46 @@ def behaviour_cases(sp):
     add("idle", CUTE[sp][1] + 2.6, {"cute_moments": 0.5}, since=1e6, amp=0.0)
     add("idle", CUTE[sp][0] + 2.6, {"calm": 1}, since=1e6, amp=0.0)
     add("idle", CUTE[sp][0] + 2.6, {}, since=100.0, amp=0.0)
+    return cases
+
+
+def robot_cases():
+    """The robot's own moments (critter-robot.js): its zip part way (it
+    needs 10 s of rest, and none under calm), the gleam across its visor as
+    a polish ends, its hello and goodbye at their ends (out of view), the
+    eyes' pulse with a voice and none without, woken straight into waiting on
+    you (no reaction, only the eyes), and its phrase-end gestures mapped onto
+    its five kinds."""
+    cases = []
+    base = {"species": "robot", "amp": 0.3, "look": {}}
+
+    def add(state, t, opts, since=999.0, prev=None, hist=None, mouth=None):
+        c = dict(base, state=state, prev=prev or state, since=since, t=t, opts=opts)
+        if hist is not None:
+            c["hist"] = hist
+        if mouth is not None:
+            c["mouth"] = mouth
+        cases.append(c)
+
+    zip0 = MOMENTS["happen"]["robot"][5] - 1.2
+    for x in (0.2, 0.7, 1.2, 1.9, 2.5):
+        add("idle", zip0 + x, {})
+    add("idle", zip0 + 1.2, {}, since=5.0)
+    add("idle", zip0 + 1.2, {"calm": 1})
+    add("idle", zip0 + 1.2, {"calm": 0.4})
+    for x in (2.5, 2.8, 3.1):
+        add("idle", CUTE["robot"][1] + x, {}, since=1e6)
+    for o in ({"goodbye": 1}, {"hello": 0}, {"goodbye": 0.9, "still": 1}, {"hello": 0.1, "serious": 1}):
+        add("idle", 30.0, o)
+    voice = {"open": 0.9, "wide": 0.4, "round": 0.1}
+    add("speaking", 12.0, {}, mouth=voice)
+    add("speaking", 12.0, {})
+    add("idle", 12.0, {}, mouth=voice)
+    for x in (0.3, 0.9):
+        add("approval", 160.0 + x, {"variety": 1}, since=x, prev="standby",
+            hist={"past": [{"state": "standby", "gap": 9.0, "amp": 0.0}, {"state": "idle", "gap": 20.0, "amp": 0.0}]})
+    for n in range(6):
+        add("speaking", 20.0 + 3 * n, {"phraseEnd": 0.5, "phraseN": n})
     return cases
 
 

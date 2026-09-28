@@ -3,16 +3,20 @@
 Jarvis had twenty faces: animated pictures that show what it is doing, all
 of them instruments - rings, orbits, a drum skin. Now it also has **four
 animals**, small cartoon characters that sleep, listen, think and talk: a
-**red panda**, a **pygmy owl**, a **sea otter** and a **monkey**.
+**red panda**, a **pygmy owl**, a **sea otter** and a **monkey** - and a
+**robot**, a small floating helper made the same way.
 
 The owner's choice, 2026-09-27: all three animals Gemini suggested, panda
 first; the owl and the otter once the panda worked (go-ahead given the same
-day). The monkey followed on 2026-09-28, from the owner's own picture.
+day). The monkey followed on 2026-09-28, from the owner's own picture, and
+the robot the same day, from another of the owner's pictures. **The robot
+counts as an animal everywhere**: every animal option, rule and switch in
+this file covers it too, unless its own section says otherwise.
 
 ## How to switch to one
 
 - **Desktop:** open the Faces window, click the Red Panda, Pygmy Owl, Sea
-  Otter or Monkey card, then choose it as Jarvis's face - the same as picking any
+  Otter, Monkey or Robot card, then choose it as Jarvis's face - the same as picking any
   other face. The widget, the floating face and the HUD all show whatever
   face is chosen there.
 - **Phone:** Appearance, then pick the animal from the faces.
@@ -20,7 +24,7 @@ day). The monkey followed on 2026-09-28, from the owner's own picture.
   your PC has the updated `jarvis-visual-spec.json`** (see "One thing to
   check on the PC" below).
 
-## The four animals
+## The four animals and the robot
 
 In each picture, top row: idle, listening, thinking, speaking. Bottom row:
 waiting on you (approval), asleep (standby), confused (error), dozing
@@ -158,7 +162,130 @@ move is not an extra: it is the difference between its two poses, so it
 happens under calm, still and serious too (plainly, without the extras
 below).
 
-### What all four share
+### Robot
+
+![The robot in all eight states](critters/robot-states.png)
+
+The owner's fifth face (2026-09-28), from their own picture of a cute robot,
+in the same soft 3D style as the animals: a big rounded white helmet of a
+head with a raised ridge along the top, a large glossy dark-blue visor with
+a glowing rim, a round ear pod each side with a teal fin on top (the left
+pod has a dark round port), a small egg of a body with a teal shield on its
+chest and a thin blue line round its waist, and two rounded mitten arms. No
+legs: it floats, and a soft shadow on the ground below follows it, fainter
+and wider the higher it goes.
+
+**No mouth and no orb.** Its eyes, glowing on the visor, are its face. They
+glow in the colour bound to the state - the colour the animals' orbs glow
+in - with a white-hot middle, and so does the visor's rim. The common
+shader's orb is kept only as a light, a point just behind the glass: it
+throws no glint and no halo, but lights the robot's chest, mittens and fins
+in the eyes' colour, as the animals' orbs light their fur. **While Jarvis
+speaks, the eyes pulse with the real voice** - a touch brighter, a touch
+bigger and a small hop on each opening - taken from the same mouth track the
+animals' mouths follow (docs/LIPSYNC.md), scaled by how much it is
+speaking. No real voice (a typed answer, Quiet, an answer kept on screen):
+no pulse, exactly as a mouth stays shut.
+
+| Jarvis is... | The robot... |
+|---|---|
+| Idle | Hovers, bobbing gently (once every 3.4 seconds, about 2 percent of its height), happy arcs for eyes, looking about - the eyes first, the head after - its fins swaying a little. About every 20 seconds one small thing: a fin flicks, then the other; a curious look to one side with round eyes; a small dip and rise with a blink; it lifts its left mitten, looks at it and wiggles it; a happy squint. Now and then it zips round its space, and its two cute moments take turns (below). |
+| Listening | Wide, round eyes on you, its fins leaning in, its mittens up and open ("go on"), its head tilted; your voice makes its eyes and fins glow brighter. |
+| Thinking | Narrowed eyes looking up, scanning slowly from side to side, their glow swelling and ebbing; a mitten to its "chin". |
+| Speaking | Bright, slightly happy eyes that pulse with the voice; it talks with its head and its mittens in phrases - a nod, one mitten opening out palm up, the other, both, a tilt with a fin flick - never the same twice running. |
+| Waiting on you | Steady round eyes, a touch wide, straight at you, fins up, mittens a little forward, leaning in; it hovers almost still. No wave. |
+| Asleep | Powered down: its eyes a dim line, head bowed, fins drooping, mittens slack; it floats a little lower and slower; now and then a sigh. |
+| Something went wrong | A still, concerned look: eyes a little smaller and slanted (inner ends up), looking down, head tipped, fins drooping, mittens lowered. |
+| Keeping things for later | Dozing where it floats, lids heavy, blinking slowly; now and then its head sinks and it catches itself. |
+
+**Its zip.** About once every two minutes at rest (in three of the sixteen
+16-second slots of every 256 seconds, each with a chance of 0.75; measured
+over an hour at rest, 27 zips) it zips round inside its own space: a quick dash out to a spot a
+little to one side and back into the picture (so it gets smaller as it
+goes), a little loop there, and back to its resting place - about 2.6
+seconds, banking into each turn, its eyes looking where it goes. Every part
+eases in and out, so it never changes speed in a frame (measured at 240
+frames a second), and it never leaves its frame (measured over half an
+hour: the nearest it comes to the edge is 0.99 of the way there, counting
+its mitten and pod edges generously; at most about 3.4 of its own units a
+second). Never across the screen; never under "Keep the animal still", calm
+motion or a serious moment, in a focus session, while it is being petted
+(it comes back to the hand), or in any state but idle; only once it has
+rested 10 seconds, and never while one of its cute moments plays.
+
+**Its two cute moments** (the owner's "two cute idle moments", the shared
+timing every face uses): a **friendly wave** - its right mitten up as in the
+owner's picture, waving side to side, eyes smiling, head tipped - and
+**polishing its visor** - a mitten comes up and rubs two small circles on
+the glass, eyes squeezed happily shut, then a gleam crosses the visor and
+its fins flick.
+
+**Powering down and booting up** (its own nodding off and waking). Nodding
+off (3 s): its eyes keep their shape as they narrow to a line and their
+glow dims; it sinks a little as its hover slows; its fins, mittens and head
+hold a moment and then droop. Waking (2.2 s): the dim line of its eyes
+brightens first, then they open, blink once, and its fins flick up; a small
+lift as it powers up. Waking into waiting on you, an error or a doze, or
+under calm, Still or a serious moment: only the eyes.
+
+**Hello and goodbye** (switching faces): goodbye is a quick wave with happy
+eyes, then it zips up and out of the top of the picture; hello, it drops in
+from above, settles with a small bounce, its eyes boot up, blink and look
+at you. Under Still, calm or a serious moment it plays none of it, like the
+animals, and the host cross-fades (`CritterPose.switchAlpha`). Same inputs
+as every animal (`goodbye`, `hello`, 0..1, over `GOODBYE_S` / `HELLO_S`, 1 s
+each - see "What a host passes" below).
+
+**Everything the animals have, it has.** All eight states; the calm,
+serious and Still weights; every new behaviour below (listening nods,
+gestures on sentence ends, the focus buddy, the fact-saved nod, the
+long-answer glow, petting, the two cute moments, hello and goodbye, and
+variety in every kind of move), with the same inputs and the same rules;
+the Zs (rising from beside its head); the hollow ring and no Zs when Jarvis
+is not connected; the dimming on standby and banked; the sky behind it; the
+sharpness and frame-rate settings; the GPU watchdog and a flat drawing when
+the graphics card cannot keep up (a flat robot in the same pose, its eyes
+in the state's colour); and its own voice under "Voice follows the face"
+(below). What is its own:
+
+- **No mouth, so its eyes pulse** with the voice (above). The long answer's
+  glow, which lights an animal's orb, **brightens its eyes and fins once**
+  instead.
+- **Its soft shadow.** The only face that floats clear of anything, so it
+  is the only one with a shadow on the ground: common_tail.sksl asks every
+  face's `ground(ro, rd)` how dark the ground is where a ray misses; the
+  robot's answers, the animals' say 0 (five bytes of shader each).
+- **Its resting moments** are the zip and five small happenings (a fin
+  flick, a curious look, a dip and rise, a look at its mitten, a happy
+  squint) - its idle variety, as the animals' happenings are theirs.
+- **Variety** (the owner's "variety, never over the top"): listening
+  (the other tilt, leaning closer with both fins forward, one fin turned to
+  you), thinking (its mittens tapping together at its chest, a tilt with a
+  fin twitching, a look down), talking (five gestures, three of them its
+  mittens), and a small reaction as "waiting on you" arrives (a small lift
+  with its fins up, its eyes widening a touch with a blink, a lean in) or
+  "something went wrong" does (a small start back with a blink, its fins
+  drooping with a blink, a glance down) - then still.
+- **Its voice:** Emma (Kokoro's British voice, which no animal uses), two
+  steps higher and "Faster" - energetic and bright. Chosen by measuring
+  six candidates made with the real Kokoro model, not by ear: the same two
+  sentences take 6.6 s instead of her plain 7.6 s, her middle pitch goes
+  from about 185 to 205 Hz and moves over a slightly wider range. The
+  owner can change it like any animal's, in "Each animal's voice".
+
+Measured on the desktop's pose code (the same harness as the table in "New
+behaviours"; a still robot at the same moment as the reference): listening
+nods, head at most 4 deg, 13 deg/s; listening variety 24 deg, 30 deg/s;
+talking on phrase ends 7 deg, 18 deg/s; a focus session, head speed at most
+3 deg/s; petting, body tip 2.3 deg, top travel 1.4 %; its cute moments,
+head 16 deg, 58 deg/s at the fastest (the visor polish). A zip moves it
+much further - up to 63 % of its height and 11 deg of bank - on purpose,
+eased, and inside its frame.
+
+Rendered: `docs/critters/robot-states.png` (eight states, the default
+colours).
+
+### What all five share
 
 In the desktop's Faces window each animal also turns to follow the mouse
 pointer for a few seconds after it moves over the face (the widget, HUD and
@@ -439,6 +566,13 @@ What each animal does:
 | **Arriving in "waiting on you"** | a small perk (ears up), a double blink with a lean in, or a small tilt of interest - then still | | | |
 | **Arriving in "something went wrong"** | a small start back with a blink, the head dipping (ears back), or one slow blink - then still | | | |
 
+(The robot has every row too, in its own way - see its section above: its
+nods flick its fins, its gestures are its mittens, its focus buddy tinkers
+with its mittens, a saved fact is a nod with its fins, the long answer
+brightens its eyes and fins, it tips into a petting hand with happy eyes,
+its cute moments are a wave and a visor polish, and its goodbye and hello
+are a zip up out of the picture and a drop back in.)
+
 (The two arrival rows are the same for every animal, told apart by its own
 ears or feathers. The existing idle happenings - five or six per animal -
 are already the "resting moments" variety.)
@@ -675,7 +809,7 @@ The files, and each app gets its copy from the same place:
 
 | File | What it does |
 |---|---|
-| `jarvis-desktop/critters/common_head.sksl`, `common_tail.sksl` | **What all four share**: the camera, the lighting, the orb and its glow, the soft outline, and the size-safe march. |
+| `jarvis-desktop/critters/common_head.sksl`, `common_tail.sksl` | **What all five share**: the camera, the lighting, the orb and its glow, the soft outline, and the size-safe march. |
 | `jarvis-desktop/critters/redpanda.sksl`, `pygmyowl.sksl`, `seaotter.sksl`, `monkey.sksl` | **Each animal's own part**: its shapes and its colours. |
 | `jarvis-desktop/src/critter-pose.js` (+ `critter-owl.js`, `critter-otter.js`, `critter-monkey.js`) | **The poses** on the desktop: where the head, ears, eyes, paws, wings, tail and orb are on each frame. |
 | `jarvis-client/.../face/CritterPose.kt` (+ `OwlPose.kt`, `OtterPose.kt`, `MonkeyPose.kt`) | The same pose maths on the phone, line for line. |
@@ -873,10 +1007,12 @@ the speed is not.
 
 ### Adding another animal
 
-The monkey (2026-09-28) was the fourth, added by this list:
+The monkey (2026-09-28) was the fourth, and the robot (the same day) the
+fifth, added by this list:
 
 - **Shader:** a new `.sksl` beside the others. It must supply `map`,
-  `mapLite`, `partAt`, `material`, `sparkle`, `stuckRay`, the camera
+  `mapLite`, `partAt`, `material`, `sparkle`, `stuckRay`, `ground` (0 for
+  no shadow on the ground, as every animal), the camera
   constants and `MARCH_STEPS` (see `common_tail.sksl`; give it as many as
   the size limit allows). The orb's glow and light come from `uOrb`; the
   orb can be another shape (the monkey's banana is its own part, glowing
@@ -889,15 +1025,19 @@ The monkey (2026-09-28) was the fourth, added by this list:
   file in `POSE_JS`, and its moments in `MOMENTS` (a blink, a double blink,
   each happening, each speaking gesture - found by scanning its pose code).
 - **Tests:** the animal in every list in `CritterPoseTest`,
-  `FaceShellRulesTest` and the desktop's `faces.mjs` / `face-watchdog.mjs`.
+  `FaceShellRulesTest` and the desktop's `faces.mjs` / `face-watchdog.mjs` /
+  `face-pace.mjs` / `voice-mouth.mjs` / `animal-options.mjs`, and a test
+  file of its own for what only it does (the robot's `RobotPoseTest`).
 - **Both apps:** a face entry in `jarvis-visual-spec.json` (both copies,
   then `python3 jarvis-desktop/scripts/build-faces-spec.py`), one
   `critterFace({...})` with its flat drawing and a `<script>` tag in
   `faces.html`, one `object ... : CritterFace` in `CritterFaces.kt`, listed
   in `Faces.all` and `warmCritterShaders()`.
 - **Voice:** a row in `backend/jarvis_voices.py` `FACE_VOICES` and
-  `voice_training.rs` `ANIMALS`, then `gen_voice_training_cases.py` and
-  `gen_phone_voice_cases.py`.
+  `voice_training.rs` `ANIMALS`, its name in the two "choose the ..." lines
+  there, then `gen_voice_training_cases.py` and `gen_phone_voice_cases.py`
+  (and the lists in `test_voice_upgrades.py`, `test_mouth.py`,
+  `custom-voices.mjs`, `CustomVoicesTest.kt`).
 - **Measure:** `python3 tools/shader_size.py`, and render it.
 
 ### On a PC without a working graphics card
@@ -939,13 +1079,18 @@ animal, still and neutral, rather than an empty square.
 Two options, both **off** until the owner switches them on (the owner's
 decisions of 2026-09-28). In plain words:
 
-- **"Show the sun and moon behind the animal"** draws the real sun and moon
+(The switches were renamed on 2026-09-28, when the robot came, so they read
+right for it too: "Show the sun and moon behind the face" and "Weather
+behind the face", with "For the animal and robot faces" in the words
+under them, as in the other animal options. They work behind the robot exactly as behind an animal.)
+
+- **"Show the sun and moon behind the face"** draws the real sun and moon
   for the owner's town behind whichever animal is showing: the sun comes up
   on the east side of the picture at sunrise, arcs over the animal and goes
   down at sunset, with a warm glow near the ground at dawn and dusk; at night
   the moon does the same at its own times, drawn in its real shape (a thin
   crescent, a half, a full moon) with its lit side turned the right way.
-- **"Weather in the animal's scene"** adds soft rain, slow snow, or a few
+- **"Weather behind the face"** adds soft rain, slow snow, or a few
   faint lines of wind and drifting clouds.
 
 Where to switch them on: the desktop's Settings, "Animal options" (the town
@@ -980,7 +1125,9 @@ minutes, the moon within 6.
   of the day, not a camera view: at its top the sun or moon sits ABOVE every
   animal's head and above the monkey's vine, so a noon sun or a midnight
   moon is seen rather than hidden; the vine passes in front of it twice a
-  day, like a real branch. The season shows in when it rises and sets.
+  day, like a real branch. (The robot's head is lower still at rest - its
+  crest at 0.68 of the way up; only a zip takes it briefly up to 0.87,
+  passing in front of a noon sun, which is drawn behind it.) The season shows in when it rises and sets.
 - The sky tint is dark by design - at most about a fifth over the app's own
   ground (tested) - so the animal and the dark themes stay readable: a
   quiet blue by day, a warm low band at dawn and dusk, deep blue at twilight,
@@ -1124,10 +1271,19 @@ Sketchfab). Four reasons:
   views: 55 see-through, 1,767 wrongly opaque - the opaque ones along its
   outline, mostly seen side-on). CI runs that check on every push, so none
   of them can quietly grow over.
+  The **robot** is at **44,595 with 64 steps**: smooth, rounded parts
+  (a helmet, a visor painted on it, two pods and fins, an egg, two mittens)
+  and no fur, so it is the cheapest to find and affords the most steps. Its
+  eyes, visor and shield are painted once a pixel, not marched. Its ground
+  shadow came with a `ground()` hook every face now supplies; the four
+  animals' say "no shadow" and each grew by 5 for it (panda 58,745, owl
+  48,173, otter 54,139, monkey 58,278).
 - **Cost.** Measured through Skia (the engine Android draws with), per
   pixel: the **panda about 4 to 5 times Nucleus's work**, the **owl about
   2.3 times**, the **otter about 2.8 times** and the **monkey about 4
-  times** (measured against the panda: about nine tenths of its work). (The panda was 10 to 12
+  times** (measured against the panda: about nine tenths of its work), and
+the **robot about six tenths of the panda's work** (204 against 352 ms in
+the same run). (The panda was 10 to 12
   times before its rebuild; an even earlier version of this page said "a
   little more than Nucleus", which was a guess, and wrong.) Most of it is
   finding the animal's surface for each pixel; the shadows are the rest.

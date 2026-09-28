@@ -1,0 +1,299 @@
+// THE ROBOT - its shell, its visor and eyes, its fins and its colours.
+//
+// One part of three: tools/gen_critters.py builds the full shader as
+// common_head.sksl + this file + common_tail.sksl. Read common_head.sksl
+// first: it explains the scheme and the size rule every face must keep to
+// (tools/shader_size.py measures it).
+//
+// The owner's fifth face (2026-09-28), from their own picture: a small cute
+// robot that floats. A big rounded white helmet of a head with a raised
+// ridge on top, a large glossy dark-blue visor with a glowing rim, and on
+// the visor its glowing eyes; a round ear pod each side with a teal fin on
+// top (the left pod has a dark round port); a small egg of a body with a
+// teal shield on its chest and a thin blue line round its waist; two
+// rounded mitten arms; no legs - it hovers, with a soft shadow on the
+// ground below it.
+//
+// NO MOUTH AND NO ORB. The eyes are its face: they carry the state's colour
+// (uHot, the colour every other face's orb glows in) and the expression -
+// happy arcs, wide round eyes, narrowed eyes, a concerned slant, lids half
+// down, a sleeping line - and while Jarvis speaks they pulse with the real
+// voice (uEyes2.w) instead of a mouth moving. The common part's orb (uOrb)
+// is kept only as a LIGHT: it sits just behind the visor's glass (so it
+// throws no glint on it), as small as a point (so it throws no halo), and
+// its glow lights the robot's chest, arms and fins in the state's colour,
+// as the eyes would.
+//
+// Frames: the body's own frame (toBody) has its origin in the middle of the
+// egg, y up, face toward -z. The head's frame (toHead) has its origin at
+// the neck, where the head turns. The arms arrive in world coordinates;
+// the pose code (critter-robot.js, RobotPose.kt on the phone) works out
+// where everything is, so the shader only draws.
+
+uniform float3 uBodyPos;
+uniform float3 uBodyR0;
+uniform float3 uBodyR1;
+uniform float3 uBodyR2;
+uniform float3 uNeck;
+uniform float3 uHeadR0;
+uniform float3 uHeadR1;
+uniform float3 uHeadR2;
+// The eyes: open left, open right (0 a line, 1 open), how much of a happy
+// arc they are (0 round, 1 an arc), and their size.
+uniform float4 uEyes;
+// And: how far the upper lids are down (narrowed), the concerned slant,
+// how brightly they glow, and the voice's pulse (0 with no real voice).
+uniform float4 uEyes2;
+uniform float2 uLook;      // where the eyes look, -1..1
+// The fins: each one's tilt (radians, + leans it out), their glow, and
+// where a gleam crossing the visor is (-1 none; 0..1 across it).
+uniform float4 uFins;
+// The arms (world): each shoulder, and each mitten's middle.
+uniform float3 uShL;
+uniform float3 uHandL;
+uniform float3 uShR;
+uniform float3 uHandR;
+
+const float ID_SHELL = 1.0;
+const float ID_HEAD = 3.0;
+const float ID_FIN = 6.0;
+const float ID_POD = 7.0;
+const float ID_ARM = 8.0;
+// (9 is ID_ORB, which this face does not draw: its "orb" is only a light.)
+
+// The head's middle, in the head's frame (above the neck).
+const float3 HC = float3(0.0, 0.335, 0.0);
+
+// Linear-light colours (sRGB to the power 2.2), from the owner's picture.
+const float3 SHELL = float3(0.600, 0.625, 0.680);
+const float3 TEAL = float3(0.012, 0.330, 0.380);
+const float3 VISOR = float3(0.006, 0.040, 0.520);
+const float3 VISOR_DEEP = float3(0.002, 0.008, 0.110);
+const float3 PORT = float3(0.006, 0.009, 0.020);
+const float3 WAIST = float3(0.018, 0.050, 0.420);
+
+const float3 CAM_TARGET = float3(0.0, -0.05, 0.0);
+const float CAM_DIST = 3.25;
+const float CAM_PITCH = 0.10;
+// Big enough for its goodbye: it flies up out of the picture.
+const float BOUND_R = 2.9;
+const int MARCH_STEPS = 64;
+
+float3 toBody(float3 p) {
+    float3 v = p - uBodyPos;
+    return float3(dot(uBodyR0, v), dot(uBodyR1, v), dot(uBodyR2, v));
+}
+float3 toHead(float3 p) {
+    float3 v = p - uNeck;
+    return float3(dot(uHeadR0, v), dot(uHeadR1, v), dot(uHeadR2, v));
+}
+
+// A box with rounded edges (half-size b, rounding r).
+float sdRoundBox(float3 p, float3 b, float r) {
+    float3 q = abs(p) - b;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}
+
+// --- the parts ----------------------------------------------------------
+
+// The body: an egg, widest near the top, narrowing to a rounded bottom.
+// (Bending the space costs a little truth in the distance, so it is held
+// short by a tenth.)
+float partBody(float3 b) {
+    float k = 1.0 / (1.0 + 0.30 * b.y);
+    return 0.9 * sdEllipsoid(float3(b.x * k, b.y, b.z * k), float3(0.315, 0.295, 0.275));
+}
+// The helmet: a wide round dome, and the raised ridge along its top.
+float partHead(float3 h) {
+    float3 c = h - HC;
+    float d = sdEllipsoid(c, float3(0.515, 0.355, 0.430));
+    return smin(d, sdEllipsoid(c - float3(0.0, 0.295, 0.03), float3(0.175, 0.115, 0.235)), 0.07);
+}
+// The ear pods: a short rounded drum each side, its axis across.
+float partPods(float3 h) {
+    float3 e = float3(abs(h.x) - 0.570, h.y - HC.y + 0.035, h.z - 0.02);
+    float2 w = float2(length(e.yz) - 0.100, abs(e.x) - 0.062);
+    return min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - 0.036;
+}
+// The fins on top of the pods, each tilting on its own (+ leans it out).
+// Only the fin on the point's own side is worked out (the panda's eyes'
+// trick): they never reach across the middle.
+float partFins(float3 h) {
+    float s = h.x < 0.0 ? -1.0 : 1.0;
+    float a = s * (h.x < 0.0 ? uFins.x : uFins.y);
+    float3 f = float3(h.x - s * 0.555, h.y - HC.y - 0.07, h.z - 0.02);
+    float ca = cos(a);
+    float sa = sin(a);
+    f.xy = float2(ca * f.x + sa * f.y, -sa * f.x + ca * f.y);
+    return sdRoundBox(f - float3(0.0, 0.13, 0.0), float3(0.036, 0.105, 0.058), 0.032);
+}
+// The arms: a rounded tube out of each shoulder, swelling into a mitten.
+float partArms(float3 p) {
+    float l = smin(sdCapsule(p, uShL, uHandL, 0.072), length(p - uHandL) - 0.100, 0.10);
+    float r = smin(sdCapsule(p, uShR, uHandR, 0.072), length(p - uHandR) - 0.100, 0.10);
+    return min(l, r);
+}
+
+// The whole robot: distance to the nearest surface. The march calls this
+// over and over, so it returns the distance only; which part was hit is
+// asked once, afterwards, by partAt().
+float map(float3 p) {
+    float d = partBody(toBody(p));
+    // The head is only worked out near it.
+    float3 h = toHead(p);
+    float hd = length(h - HC) - 0.80;
+    if (hd < 0.2) {
+        hd = min(min(partHead(h), partPods(h)), partFins(h));
+    }
+    // Head and body only just touch, as in the picture: a crease, not a neck.
+    d = smin(d, hd, 0.02);
+    return min(d, partArms(p));
+}
+
+float partAt(float3 p) {
+    float3 h = toHead(p);
+    float best = partBody(toBody(p));
+    float id = ID_SHELL;
+    float d = partHead(h);
+    if (d < best) { best = d; id = ID_HEAD; }
+    d = partPods(h);
+    if (d < best) { best = d; id = ID_POD; }
+    d = partFins(h);
+    if (d < best) { best = d; id = ID_FIN; }
+    if (partArms(p) < best) { id = ID_ARM; }
+    return id;
+}
+
+// A rough robot for shadows, inside the real one: body, dome and arms.
+float mapLite(float3 p) {
+    float d = partBody(toBody(p));
+    d = min(d, sdEllipsoid(toHead(p) - HC, float3(0.50, 0.34, 0.41)));
+    return min(d, partArms(p));
+}
+
+// --- colours ------------------------------------------------------------
+
+// The visor's outline on the front of the head, in the head's own x, y
+// (from its middle): a wide rounded oblong, its lower edge rising a little
+// in the middle, as in the picture. Negative inside.
+float visorAt(float2 q) {
+    q.y -= -0.05;
+    q.y += 0.030 * (1.0 - smoothstep(0.0, 0.16, abs(q.x))) * smoothstep(-0.05, -0.2, q.y);
+    float2 w = abs(q) - float2(0.395 - 0.17, 0.245 - 0.17);
+    return length(max(w, 0.0)) + min(max(w.x, w.y), 0.0) - 0.17;
+}
+
+// One eye: its distance field, in the visor's x, y from the eye's middle.
+// A round eye (open is how tall it is), bent toward a happy arc (a curve
+// like an upside-down U) by uEyes.z, its top cut flat by the lids
+// (uEyes2.x), slanted by uEyes2.y. `side` is -1 left, 1 right.
+float eyeAt(float2 q, float open, float side) {
+    float r = 0.058 * uEyes.w;
+    // The concerned slant: the inner end up.
+    float a = side * uEyes2.y;
+    q = float2(cos(a) * q.x - sin(a) * q.y, sin(a) * q.x + cos(a) * q.y);
+    float hy = max(r * open, 0.009);
+    // (Shut, it is a short dash, not the eye's whole width.)
+    float rx = r * (0.7 + 0.3 * smoothstep(0.0, 0.5, open));
+    float disc = (length(q / float2(rx, hy)) - 1.0) * min(rx, hy);
+    // The happy arc: a band round a circle below, its ends turned down.
+    float2 c = float2(abs(q.x), q.y + 0.045);
+    float ra = 0.080 * uEyes.w;
+    float arc = (0.55 * c.x > 0.83 * c.y ? length(c - float2(0.55, 0.83) * ra) : abs(length(c) - ra)) -
+                0.021 * uEyes.w * clamp(open * 1.3, 0.35, 1.0);
+    // (Closing, an arc flattens into the same line a round eye does.)
+    float d = mix(disc, arc, uEyes.z * smoothstep(0.0, 0.45, open));
+    return max(d, q.y - mix(r, 0.3 * r, uEyes2.x) * max(open, 0.2));
+}
+
+float4 material(float id, float3 pos, float3 n) {
+    float3 h = toHead(pos);
+    if (id == ID_FIN) return float4(TEAL, 0.35);
+    if (id == ID_POD) {
+        // White, and the left pod's dark round port on its outer face.
+        float3 e = float3(abs(h.x) - 0.570, h.y - HC.y + 0.035, h.z - 0.02);
+        float port = (1.0 - smoothstep(0.040, 0.048, length(e.yz))) * step(0.03, e.x) * step(h.x, 0.0);
+        return float4(mix(SHELL, PORT, port), mix(0.3, 0.9, port));
+    }
+    if (id == ID_HEAD) {
+        // The visor on the front: deep glossy blue, darker toward its edge,
+        // with a dark seam round it where it meets the white helmet.
+        float2 q = h.xy - HC.xy;
+        float v = visorAt(q) + 0.30 * smoothstep(-0.12, 0.05, h.z - HC.z);
+        float glass = 1.0 - smoothstep(-0.004, 0.004, v);
+        float seam = 1.0 - smoothstep(0.004, 0.014, abs(v - 0.006));
+        float3 c = mix(VISOR, VISOR_DEEP, smoothstep(-0.14, 0.0, v) * 0.8);
+        return float4(mix(SHELL * (1.0 - 0.55 * seam), c, glass), mix(0.3, 1.0, glass));
+    }
+    // The body's teal shield on the chest, and the thin blue line round the
+    // waist; the rest white. (The arms are plain white.)
+    float3 b = toBody(pos);
+    float3 c = SHELL;
+    if (id == ID_SHELL) {
+        float2 s = b.xy - float2(0.0, -0.02);
+        // A shield: flat across the top, its sides curving round below.
+        float shield = max((length(float2(s.x / 0.180, min(s.y, 0.0) / 0.220)) - 1.0) * 0.18, s.y - 0.12);
+        float front = 1.0 - smoothstep(-0.14, -0.05, b.z);
+        c = mix(c, WAIST, (1.0 - smoothstep(0.004, 0.009, abs(b.y + 0.005))) * front);
+        c = mix(c, TEAL, (1.0 - smoothstep(-0.004, 0.004, shield)) * front);
+    }
+    return float4(c, 0.3);
+}
+
+// Painted on top of the lighting: what glows. The eyes, in the state's
+// colour (uHot) with a white-hot middle; the visor's rim; a soft
+// reflection on the glass; the gleam of a polish; the fins' edges.
+float3 sparkle(float id, float3 pos) {
+    float3 hot = toLinear(uHot);
+    float3 h = toHead(pos);
+    if (id == ID_FIN) {
+        return hot * uFins.z * 0.35 * smoothstep(0.0, 0.1, h.y - HC.y - 0.12);
+    }
+    if (id != ID_HEAD) return float3(0.0);
+    float2 q = h.xy - HC.xy;
+    float v = visorAt(q) + 0.30 * smoothstep(-0.12, 0.05, h.z - HC.z);
+    if (v > 0.03) return float3(0.0);
+    float px = max(uPx / max(uZoom, 0.1) * 1.1, 0.004);
+    // The rim: a thin glowing line just inside the visor's edge.
+    float3 c = hot * uEyes2.z * 0.55 * (1.0 - smoothstep(0.0, 0.012 + px, abs(v + 0.008)));
+    if (v > 0.0) return c;
+    // The soft reflection of a window, top right, and a gleam that crosses
+    // the glass when it is polished (uFins.w, -1 when there is none).
+    float2 g = q - float2(0.19, 0.11);
+    c += float3(0.10, 0.12, 0.16) * (1.0 - smoothstep(0.0, 0.1, length(g / float2(1.3, 0.55)) - 0.06));
+    // (It fades in and out at the visor's two sides, so it never pops.)
+    // A soft broad band with a thin one beside it, the way a shine crosses
+    // glass.
+    float gd = q.x + 0.5 * q.y - mix(-0.6, 0.6, uFins.w);
+    c += float3(0.55) * sin(3.14159 * clamp(uFins.w, 0.0, 1.0)) *
+         ((1.0 - smoothstep(0.0, 0.07, abs(gd))) + 0.6 * (1.0 - smoothstep(0.0, 0.018, abs(gd - 0.11))));
+    // The eyes. Each drifts toward where it looks, and hops a little with
+    // the voice; they grow a touch with it too.
+    float pulse = uEyes2.w;
+    float2 e = q - float2(0.0, -0.08 + 0.018 * pulse) - float2(0.05, 0.04) * uLook;
+    float side = e.x < 0.0 ? -1.0 : 1.0;
+    float d = eyeAt(float2(e.x - side * 0.170, e.y) / (1.0 + 0.16 * pulse), e.x < 0.0 ? uEyes.x : uEyes.y, side);
+    float core = 1.0 - smoothstep(-px, px, d);
+    float bloom = exp(-max(d, 0.0) * 55.0) * 0.45;
+    float bright = uEyes2.z * (1.0 + 0.45 * pulse);
+    c += (mix(hot, float3(1.0), 0.55) * 2.2 * core + hot * bloom) * bright;
+    // A faint glow of the eyes' colour inside the glass.
+    return c + hot * 0.035 * uEyes2.z * smoothstep(0.0, -0.2, v);
+}
+
+// What a ray that ran out of march steps without reaching anything sees
+// (common_tail.sksl): nothing behind this face to fill it in.
+float2 stuckRay(float3 ro, float3 rd) {
+    return float2(-1.0, 0.0);
+}
+
+// Its soft shadow on the ground below (common_tail.sksl draws it where a
+// ray misses): how dark, 0..1. It follows the robot, and grows softer,
+// wider and fainter the higher it floats.
+float ground(float3 ro, float3 rd) {
+    if (rd.y > -0.02) return 0.0;
+    float3 q = ro + rd * ((-0.93 - ro.y) / rd.y);
+    float up = uBodyPos.y + 0.93;
+    float2 d = (q.xz - uBodyPos.xz) / float2(0.30 + 0.12 * up, 0.14 + 0.06 * up);
+    return 0.42 * (1.0 - smoothstep(0.3, 1.9, up)) * (1.0 - smoothstep(0.15, 1.0, length(d)));
+}

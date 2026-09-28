@@ -35,7 +35,7 @@ import java.util.Date
  * [SkySettings]) - the desktop's Settings -> Appearance -> "Sun, moon and
  * weather", in the same words (the PC's own).
  *
- * "Show the sun and moon behind the animal": one switch, at once either way
+ * "Show the sun and moon behind the face": one switch, at once either way
  * (showing waits for a live link). The town is typed on the PC only - this
  * shows which one, today's rise and set times worked out on this phone, and
  * "Forget my town" (at once). The weather: three choices; "Open-Meteo
