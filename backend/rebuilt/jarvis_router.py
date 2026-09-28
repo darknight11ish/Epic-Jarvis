@@ -127,6 +127,51 @@ _PRIVATE_TERMS = [
     # which is the safe direction to err in.
     r"\bdepress\w*\b", r"\banxiet\w*\b", r"\bpanic attack\w*\b", r"\btherap\w*\b",
     r"\bself[- ]harm\w*\b", r"\bsuicid\w*\b",
+    # Health conditions, pregnancy, medicines and more mental-health words
+    # (security audit 2026-09-28 #4: "I have diabetes", "my blood pressure
+    # is high", "I am pregnant", "my HIV test", "I take sertraline 50mg"
+    # all matched nothing). The chatbot driver's last check and "Try the
+    # cloud model" both lean on this list. Broad in the same safe direction
+    # as the rest, but each word is one that means health in everyday
+    # English: no bare "disease", "symptom", "dose", "aids", "period", "std",
+    # "prep", "lithium" or "addicted" (plant diseases, "a dose of reality",
+    # hearing aids, std::vector, meal prep, batteries, "addicted to this
+    # song"), and "bipolar" only as the condition, not the transistor.
+    r"\bdiabet\w*\b", r"\binsulin\b", r"\bcholesterol\b",
+    r"\bblood (?:pressure|sugar|tests?|results?|work)\b", r"\bhypertension\b",
+    r"\bhiv\b", r"\bstds\b", r"\bstis\b", r"\bsexually transmitted\b", r"\bherpes\b",
+    r"\bhepatitis\b", r"\bcancer\w*\b", r"\btumou?rs?\b", r"\bchemo\w*\b",
+    r"\basthma\w*\b", r"\bepilep\w*\b", r"\bdementia\b", r"\balzheimer\w*\b",
+    r"\bparkinson'?s\b", r"\bmigraines?\b", r"\bheart (?:attack|condition|disease|failure)\b",
+    r"\bpregnan\w*\b", r"\bmiscarr\w*\b", r"\babortion\w*\b", r"\bivf\b",
+    r"\bfertility\b", r"\binfertil\w*\b", r"\bcontracepti\w*\b", r"\bbirth control\b",
+    r"\bmenopaus\w*\b", r"\bmenstrua\w*\b",
+    r"\bmedications?\b", r"\bmedicines?\b", r"\bpills\b", r"\bantidepressants?\b",
+    r"\b\d+(?:\.\d+)?\s?mg\b", r"\bhospitals?\b",
+    r"\b(?:my|our)\s+(?:[\w'-]+\s+)?(?:doctor|gp|dentist|psychiatrist|psychologist|"
+    r"nurse|surgeon)\b",
+    # Common medicines by name (antidepressants and anxiety medicines, ADHD,
+    # diabetes and weight, heart, thyroid, pain and opioids, HIV).
+    r"\b(?:sertraline|zoloft|fluoxetine|prozac|citalopram|escitalopram|lexapro|paroxetine|"
+    r"venlafaxine|effexor|duloxetine|cymbalta|mirtazapine|bupropion|wellbutrin|"
+    r"amitriptyline|quetiapine|seroquel|aripiprazole|abilify|olanzapine|"
+    r"alprazolam|xanax|diazepam|valium|lorazepam|ativan|clonazepam|klonopin|"
+    r"adderall|ritalin|methylphenidate|vyvanse|lisdexamfetamine|"
+    r"metformin|ozempic|wegovy|semaglutide|mounjaro|tirzepatide|"
+    r"statins?|atorvastatin|lipitor|simvastatin|lisinopril|amlodipine|"
+    r"levothyroxine|warfarin|gabapentin|pregabalin|oxycodone|oxycontin|hydrocodone|"
+    r"codeine|tramadol|morphine|fentanyl|opioids?|methadone|buprenorphine|suboxone|"
+    r"truvada|antiretroviral\w*)\b",
+    # Mental health beyond mood (the words above cover depression, anxiety,
+    # therapy, self-harm and suicide).
+    r"\bmental (?:health|illness)\b", r"\bpsychiatr\w*\b",
+    r"\bcounsell?ing\b", r"\badhd\b", r"\badd\b(?=\s+(?:diagnosis|medication|meds))",
+    r"\bautis\w*\b", r"\bocd\b", r"\bptsd\b", r"\btrauma\b",
+    r"\bbipolar (?:disorder|depression)\b", r"\b(?:am|i'm|is|was|being)\s+bipolar\b",
+    r"\bschizo\w*\b", r"\beating disorder\w*\b", r"\banorexi\w*\b", r"\bbulimi\w*\b",
+    r"\baddictions?\b", r"\brehab\b", r"\balcoholi\w*\b",
+    # A family matter the audit also found missing.
+    r"\bdivorc\w*\b", r"\bcustody\b",
 ] + list(_crisis_terms())
 
 
