@@ -44,6 +44,7 @@
             "privacy": "voice_is_enough",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           }
         },
@@ -541,6 +542,7 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           }
         },
@@ -624,6 +626,7 @@
             "privacy": "voice_is_enough",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           }
         },
@@ -668,6 +671,7 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           }
         },
@@ -685,6 +689,7 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           }
         },
@@ -1116,6 +1121,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -1123,7 +1132,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -1131,10 +1141,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "balanced",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": false
           },
           "speaker_model": true,
           "strictness": "balanced",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -1289,6 +1301,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -1296,7 +1312,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -1304,6 +1321,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "balanced",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": false
         },
         "speaker_model": true,
@@ -1317,6 +1335,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -1626,6 +1645,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -1633,7 +1656,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -1641,10 +1665,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -1784,6 +1810,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -1791,7 +1821,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -1799,6 +1830,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -1812,6 +1844,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -2322,6 +2355,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -2329,7 +2366,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -2337,10 +2375,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -2507,6 +2547,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -2514,7 +2558,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -2522,6 +2567,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -2535,6 +2581,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -3050,6 +3097,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -3057,7 +3108,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -3065,10 +3117,12 @@
             "privacy": "voice_is_enough",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -3215,6 +3269,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -3222,7 +3280,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -3230,6 +3289,7 @@
           "privacy": "voice_is_enough",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -3243,6 +3303,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -3758,6 +3819,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -3765,7 +3830,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "button_only",
             "memory": "memory_aloud",
@@ -3773,10 +3839,12 @@
             "privacy": "voice_is_enough",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -3923,6 +3991,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -3930,7 +4002,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "button_only",
           "memory": "memory_aloud",
@@ -3938,6 +4011,7 @@
           "privacy": "voice_is_enough",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -3951,6 +4025,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -4446,6 +4521,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -4453,7 +4532,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "button_only",
             "memory": "memory_aloud",
@@ -4461,10 +4541,12 @@
             "privacy": "voice_is_enough",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -4611,6 +4693,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -4618,7 +4704,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "button_only",
           "memory": "memory_aloud",
@@ -4626,6 +4713,7 @@
           "privacy": "voice_is_enough",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -4639,6 +4727,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -4961,6 +5050,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -4968,7 +5061,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -4976,10 +5070,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -5134,6 +5230,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -5141,7 +5241,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -5149,6 +5250,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -5162,6 +5264,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -5484,6 +5587,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -5491,7 +5598,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -5499,10 +5607,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -5681,6 +5791,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -5688,7 +5802,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -5696,6 +5811,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -5709,6 +5825,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -5998,6 +6115,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -6005,7 +6126,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -6013,10 +6135,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": false,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -6152,6 +6276,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -6159,7 +6287,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -6167,6 +6296,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": false,
@@ -6180,6 +6310,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -6489,6 +6620,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -6496,7 +6631,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -6504,10 +6640,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -6657,6 +6795,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -6664,7 +6806,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -6672,6 +6815,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -6685,6 +6829,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -7140,6 +7285,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -7147,7 +7296,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -7155,10 +7305,12 @@
             "privacy": "voice_is_enough",
             "sensitive_memory": "sensitive_aloud",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -7305,6 +7457,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -7312,7 +7468,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -7320,6 +7477,7 @@
           "privacy": "voice_is_enough",
           "sensitive_memory": "sensitive_aloud",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -7333,6 +7491,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -7655,6 +7814,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -7662,7 +7825,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -7670,10 +7834,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -7859,6 +8025,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -7866,7 +8036,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -7874,6 +8045,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -7887,6 +8059,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -8191,6 +8364,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -8198,7 +8375,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -8206,10 +8384,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -8361,6 +8541,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -8368,7 +8552,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -8376,6 +8561,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -8389,6 +8575,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -8698,6 +8885,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -8705,7 +8896,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -8713,10 +8905,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -8852,6 +9046,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -8859,7 +9057,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -8867,6 +9066,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -8880,6 +9080,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -9202,6 +9403,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -9209,7 +9414,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -9217,10 +9423,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -9382,6 +9590,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -9389,7 +9601,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -9397,6 +9610,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -9410,6 +9624,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -9732,6 +9947,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -9739,7 +9958,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -9747,10 +9967,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -9917,6 +10139,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -9924,7 +10150,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -9932,6 +10159,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -9945,6 +10173,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -10455,6 +10684,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -10462,7 +10695,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -10470,10 +10704,12 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -10612,6 +10848,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -10619,7 +10859,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -10627,6 +10868,7 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -10640,6 +10882,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,
@@ -10962,6 +11205,10 @@
               "strictness": [
                 "very_strict",
                 "balanced"
+              ],
+              "talk_to_type": [
+                "off",
+                "on"
               ]
             },
             "defaults": {
@@ -10969,7 +11216,8 @@
               "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "sensitive_memory": "sensitive_on_screen",
-              "strictness": "very_strict"
+              "strictness": "very_strict",
+              "talk_to_type": "off"
             },
             "hands_free": "same_as_button",
             "memory": "memory_aloud",
@@ -10977,10 +11225,12 @@
             "privacy": "voice_is_enough",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
+            "talk_to_type": "off",
             "voice_is_enough_allowed": true
           },
           "speaker_model": true,
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "threshold": 0.35,
           "training": {
             "available": true,
@@ -11135,6 +11385,10 @@
             "strictness": [
               "very_strict",
               "balanced"
+            ],
+            "talk_to_type": [
+              "off",
+              "on"
             ]
           },
           "defaults": {
@@ -11142,7 +11396,8 @@
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
-            "strictness": "very_strict"
+            "strictness": "very_strict",
+            "talk_to_type": "off"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -11150,6 +11405,7 @@
           "privacy": "voice_is_enough",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
+          "talk_to_type": "off",
           "voice_is_enough_allowed": true
         },
         "speaker_model": true,
@@ -11163,6 +11419,7 @@
         },
         "stt_available": false,
         "stt_engine": "sherpa-onnx",
+        "talk_to_type": "off",
         "threshold": 0.35,
         "tts": {
           "available": false,

@@ -86,10 +86,13 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
     {"mode": "memory", "value": "memory_aloud"|"memory_on_screen"}
     {"mode": "sensitive_memory", "value": "sensitive_on_screen"|"sensitive_aloud"}
     {"mode": "hands_free", "value": "same_as_button"|"button_only"}
+    {"mode": "talk_to_type", "value": "off"|"on"}   (since 2026-09-28)
         Tightening applies at once. Loosening raises ONE card
         (change_own_config), and changes nothing until it is approved.
         `voice_is_enough` is refused unless the check is very strict;
         choosing `balanced` puts private answers back on screen.
+        Talk-to-type (the owner's decision, 2026-09-27) is the same shape:
+        "on" is the card, "off" is at once (docs/JARVIS-API.md section 72).
     {"mode": "measure", "mic", "clips": [up to 20]}
         The guided "how often would I have to repeat myself?" test: the
         owner's own sentences, each judged at both settings. Scored and
@@ -625,7 +628,8 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
     if mode == "measure":
         # The same: scores, no card.
         return measure(doc, measure_fn=measure_fn)
-    if mode in ("strictness", "privacy", "memory", "sensitive_memory", "hands_free"):
+    if mode in ("strictness", "privacy", "memory", "sensitive_memory", "hands_free",
+                "talk_to_type"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
     if mode not in ("enroll", "threshold", "train"):
@@ -942,7 +946,25 @@ _SETTING_WORDS = {
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - \"Hey Jarvis\" questions stay on the "
         "stricter setting."),
+    # The owner's decision, 2026-09-27: "Talk-to-type on the PC: one approval
+    # card to switch it on, then no card each time". Off is at once.
+    ("talk_to_type", "on"): (
+        "Turn on talk-to-type on this PC?\n\n"
+        "Then you can hold the talk-to-type key on this PC (Settings, Shortcuts - "
+        "Alt+Shift+T unless you changed it), speak, and Jarvis types what you said "
+        "into the program in front: an email, a document, a chat box. There is no "
+        "card each time.\n\n"
+        "Your voice is checked first, then turned into words on this PC only - "
+        "nothing is sent anywhere, and the words are not kept in chat history. "
+        "Jarvis will not type into a password box, and does not type while it is "
+        "locked.\n\n"
+        "You can turn it off again at any time, and that is instant.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - talk-to-type stays off."),
 }
+
+#: What each loosening card is about, for the card's `what` line.
+_SETTING_WHAT = {"talk_to_type": "turn on talk-to-type on this PC"}
 
 
 def _voice():
@@ -963,6 +985,8 @@ def settings_view() -> dict:
             # "" from a jarvis_voice.py older than this setting.
             "sensitive_memory": s.get("sensitive_memory", ""),
             "hands_free": s.get("hands_free", ""),
+            # "" from a jarvis_voice.py older than talk-to-type (2026-09-28).
+            "talk_to_type": s.get("talk_to_type", ""),
             "voice_is_enough_allowed": s["strictness"] == v.VERY_STRICT}
 
 
@@ -1068,7 +1092,7 @@ def _decide_setting(pid: str, *, gate: Callable) -> dict:
         key, value = p["key"], p["value"]
     text = _SETTING_WORDS[(key, value)]
     detail = {"text": text, "setting": key, "to": value,
-              "what": "make the owner voice check looser"}
+              "what": _SETTING_WHAT.get(key, "make the owner voice check looser")}
     try:
         v = gate(ACTION, detail, text)
     except Exception as exc:

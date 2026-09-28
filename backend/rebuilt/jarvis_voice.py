@@ -604,6 +604,17 @@ BUTTON_ONLY = "button_only"
 HANDS_FREE = (SAME_AS_BUTTON, BUTTON_ONLY)
 #: The one source the talk button sends (jarvis_speech.hear's `source`).
 PUSH_TO_TALK = "push_to_talk"
+#: Talk-to-type on the PC (the owner's decision, 2026-09-27: "one approval
+#: card to switch it on, then no card each time"): hold a key on the PC,
+#: speak, and the desktop app types the words into the program in front.
+#: OFF by default; ON is the looser value, so choosing it raises the voice
+#: approval card (jarvis_voice_enroll, change_own_config) and turning it off
+#: is immediate - the same shape as every other voice setting here. While it
+#: is off, jarvis_speech.hear() refuses a `source=talk_to_type` clip before
+#: anything else runs (docs/JARVIS-API.md section 72).
+TALK_TYPE_OFF = "off"
+TALK_TYPE_ON = "on"
+TALK_TO_TYPE = (TALK_TYPE_OFF, TALK_TYPE_ON)
 #: The default of each setting. For strictness, privacy and sensitive_memory
 #: it is the strict value, also used for a missing, unreadable or unknown
 #: one. For memory and hands_free the default is the owner's looser choice;
@@ -611,12 +622,14 @@ PUSH_TO_TALK = "push_to_talk"
 #: see settings().
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
             "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN,
-            "hands_free": SAME_AS_BUTTON}
+            "hands_free": SAME_AS_BUTTON, "talk_to_type": TALK_TYPE_OFF}
 _CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
-            "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE}
+            "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE,
+            "talk_to_type": TALK_TO_TYPE}
 #: The LOOSER value of each: choosing it needs an approval card.
 LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
-          "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON}
+          "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON,
+          "talk_to_type": TALK_TYPE_ON}
 #: The settings whose DEFAULT is the looser value, and the strict value each
 #: falls back to when the file is unreadable or holds a value that is not
 #: one of its choices. Only a file that never had the key gets the default.
@@ -640,7 +653,7 @@ def settings_path() -> Path:
 
 def settings() -> dict:
     """{"strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-    "changed"}. The strict value for anything missing, unreadable or
+    "talk_to_type", "changed"}. The strict value for anything missing, unreadable or
     unknown - except that a file with no "memory" or no "hands_free" in it
     (every file written before 2026-09-24, and no file at all) gets the
     owner's default for it: MEMORY_ALOUD, SAME_AS_BUTTON. The one rule
@@ -699,7 +712,8 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
                              "check is very strict")
         new = {"strictness": cur["strictness"], "privacy": cur["privacy"],
                "memory": cur["memory"], "sensitive_memory": cur["sensitive_memory"],
-               "hands_free": cur["hands_free"], key: value}
+               "hands_free": cur["hands_free"], "talk_to_type": cur["talk_to_type"],
+               key: value}
         if new["strictness"] != VERY_STRICT:
             new["privacy"] = PRIVATE_ON_SCREEN
         new["changed"] = time.time()
@@ -1900,6 +1914,16 @@ def hands_free_trusted(source) -> bool:
     return settings()["hands_free"] == SAME_AS_BUTTON
 
 
+def talk_to_type_on() -> bool:
+    """Talk-to-type is switched on (the owner approved its card). Anything
+    missing, unreadable or unknown reads as off: settings() already falls
+    back to the strict value, and this only names that value."""
+    try:
+        return settings()["talk_to_type"] == TALK_TYPE_ON
+    except Exception:
+        return False
+
+
 def may_speak(private: bool, origin: str = "voice") -> dict:
     """{"speak": bool, "why": str} - may an answer be read aloud?
 
@@ -2032,17 +2056,20 @@ def status() -> dict:
         "memory": s["memory"],
         "sensitive_memory": s["sensitive_memory"],
         "hands_free": s["hands_free"],
+        # Talk-to-type on the PC (2026-09-28): "off" (the default) or "on".
+        "talk_to_type": s["talk_to_type"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
             "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
-            "hands_free": s["hands_free"],
+            "hands_free": s["hands_free"], "talk_to_type": s["talk_to_type"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],
             "choices": {"strictness": list(STRICTNESS), "privacy": list(PRIVACY),
                         "memory": list(MEMORY),
                         "sensitive_memory": list(SENSITIVE_MEMORY),
-                        "hands_free": list(HANDS_FREE)},
+                        "hands_free": list(HANDS_FREE),
+                        "talk_to_type": list(TALK_TO_TYPE)},
             "defaults": dict(DEFAULTS),
         },
         "models": {
