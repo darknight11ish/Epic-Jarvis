@@ -43,6 +43,9 @@ import { mountCardLink } from "./card-link.js";
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
 import { validToFromText } from "./valid-to.js";
+// Whether a model can chat, and the words when it cannot (shared with the
+// phone through tests/fixtures/model-chat-cases.json).
+import { CANNOT_CHAT, canChat } from "./model-chat.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -856,27 +859,6 @@ function renderCounts() {
 /* ==========================================================================
    Faculties
    ========================================================================== */
-
-/** Why a model has no "Use" button. */
-const CANNOT_CHAT = "for memory search only - it cannot chat";
-
-/**
- * Can this installed model hold a conversation? An embedding model such as
- * nomic-embed-text only turns text into numbers for memory search; switching
- * to it would leave Jarvis unable to answer anything (play tester,
- * 2026-09-27: Brain › Model offered "Use" on it).
- *
- * The real `/api/models` sends `installed` as bare names (gpu-offload.patch),
- * so the name is usually all there is. When a row does carry Ollama's own
- * `capabilities` list, that wins: no "completion" means no chat. Otherwise
- * a BERT-family model or "embed" / "minilm" / "bge" in the name is an
- * embedding model - the ones Ollama's library offers are named that way.
- */
-function canChat(m, ref) {
-  if (Array.isArray(m.capabilities)) return m.capabilities.includes("completion");
-  if (/bert/i.test(String(m.family || ""))) return false;
-  return !/embed|minilm|(^|[^a-z])bge/i.test(ref);
-}
 
 function renderModels() {
   const body = state.data.models || {};

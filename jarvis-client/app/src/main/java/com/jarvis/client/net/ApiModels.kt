@@ -143,6 +143,10 @@ data class ModelsInfo(
                                 ref = it,
                                 sizeBytes = el.str("size")?.toLongOrNull(),
                                 family = el.str("family"),
+                                // Ollama's own list, when the row carries one:
+                                // ModelChat.canChat reads it before the name.
+                                capabilities = (el["capabilities"] as? JsonArray)
+                                    ?.mapNotNull { c -> (c as? JsonPrimitive)?.content },
                             )
                         }
                     }
@@ -175,7 +179,12 @@ data class ModelEntry(
     val ref: String,
     val sizeBytes: Long? = null,
     val family: String? = null,
-)
+    /** Ollama's `capabilities` list, or null when the row carries none (bare names never do). */
+    val capabilities: List<String>? = null,
+) {
+    /** False for a model that only serves memory search: Brain › Model offers it no "Use". */
+    val canChat: Boolean get() = ModelChat.canChat(ref, family, capabilities)
+}
 
 /** Whether the model is on the GPU. `status` is `gpu` | `partial` | `cpu` | `unknown`. */
 data class ModelOffload(
