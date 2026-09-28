@@ -402,6 +402,15 @@ object JarvisRuntime {
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
 
+    /**
+     * Lockdown is on (backend jarvis_asks_first.py, 2026-09-28): every way out
+     * of the PC asks first, or has stopped. From `/api/version`'s
+     * `capabilities.lockdown` at every handshake, then the `lockdown` event.
+     * False from a PC without it. Home says so while it is true.
+     */
+    private val _lockdown = MutableStateFlow(false)
+    val lockdown: StateFlow<Boolean> = _lockdown.asStateFlow()
+
     private val _pending = MutableStateFlow<List<PendingItem>>(emptyList())
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
 
@@ -693,6 +702,9 @@ object JarvisRuntime {
         when (result) {
             is ApiResult.Ok -> {
                 _version.value = result.value
+                _lockdown.value = com.jarvis.client.net.AsksFirst.lockdownFrom(
+                    result.value.detail("lockdown"),
+                ) ?: false
                 _notice.value = null
                 // A new handshake may be a different (or upgraded) server:
                 // ask it about the appearance route afresh.
@@ -1141,6 +1153,14 @@ object JarvisRuntime {
             // words). The list on Mind reads itself again; a job that went
             // off is read by id and shown as a notification.
             com.jarvis.client.net.Schedule.EVENT -> onScheduleEvent(event.data, event.id)
+            // "Ring my phone" (2026-09-28): `{"id", "state", "at", "until",
+            // "seconds"}` and no words. Rings on the alarm channel, never for
+            // a stale or replayed event (net/FindPhone.kt).
+            com.jarvis.client.net.FindPhone.EVENT -> onRingPhone(event.data)
+            // Lockdown turned on or off (`{"on": bool}`, 2026-09-28): Home's
+            // line follows it; "What asks first" reads itself again when shown.
+            "lockdown" -> com.jarvis.client.net.AsksFirst.lockdownFrom(event.data as? JsonObject)
+                ?.let { _lockdown.value = it }
             // A focus session started, changed (locked on, a drift began or
             // ended, paused...) or ended (`{"state"}` only, or a callout's
             // number - a doorbell, never what was in front). Mind's "Focus
@@ -1575,6 +1595,55 @@ object JarvisRuntime {
                 } else {
                     "Not changed. " + describe(r.error)
                 }
+        }
+    }
+
+    /**
+     * Lockdown ON (2026-09-28) - the desktop's `set_asks_first` with the
+     * action "lockdown" and `ask: true`. Never held on a stale link: it only
+     * makes Jarvis ask more. The phone never turns it off.
+     * @return the sentence to show.
+     */
+    suspend fun turnOnLockdown(): String {
+        val r = api.lockdownOn()
+        return when (r) {
+            is ApiResult.Ok -> {
+                if (r.value is com.jarvis.client.net.DesktopWrite.Outcome.Done) _lockdown.value = true
+                com.jarvis.client.net.AsksFirst.said(r.value)
+            }
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.AsksFirst.missing(r.error)) {
+                    com.jarvis.client.net.AsksFirst.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * "Playing on your PC" (2026-09-28): `GET /api/media`, the PC's own
+     * sentence ("Paused: ..."), or null when it could not be read. A read:
+     * never held. What is playing is only shown - never saved or sent on.
+     */
+    suspend fun pcMedia(): String? = when (val r = api.pcMedia()) {
+        is ApiResult.Ok -> com.jarvis.client.net.PcMedia.said(r.value)
+        is ApiResult.Failed ->
+            if (com.jarvis.client.net.PcMedia.missing(r.error)) com.jarvis.client.net.PcMedia.MISSING
+            else null
+    }
+
+    /**
+     * ONE media button: play, pause, next or previous on the PC. No card (the
+     * owner's decision of 2026-09-27), but held on a stale link (rule 4), like
+     * every change. @return the PC's own sentence, or why not.
+     */
+    suspend fun pcMediaControl(action: String): String {
+        actionBlocker()?.let { return it }
+        return when (val r = api.pcMediaControl(action)) {
+            is ApiResult.Ok -> com.jarvis.client.net.PcMedia.said(r.value) ?: "Done."
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.PcMedia.missing(r.error)) com.jarvis.client.net.PcMedia.MISSING
+                else noticeFor(r.error)
         }
     }
 
@@ -3329,6 +3398,46 @@ object JarvisRuntime {
 
     /** The jobs already shown as notifications, by id and when they went off. */
     private val scheduleShown = LinkedHashSet<String>()
+
+    /** The "ring my phone" ids already rung here - a replayed event never rings twice. */
+    private val ringsHeard = LinkedHashSet<String>()
+
+    /**
+     * "Ring my phone" (backend jarvis_find_phone.py, 2026-09-28): ring on the
+     * alarm channel, even on silent, with Stop, for at most
+     * [com.jarvis.client.net.FindPhone.MAX_SECONDS] - only for a fresh event
+     * this phone has not rung for before ([com.jarvis.client.net.FindPhone]).
+     * A stop from the PC takes that one ringing notification away. Nothing is
+     * sent back: it only rings.
+     */
+    private fun onRingPhone(data: kotlinx.serialization.json.JsonElement?) {
+        val ring = com.jarvis.client.net.FindPhone.parse(data as? JsonObject) ?: return
+        val context = appContext ?: return
+        val tag = com.jarvis.client.net.FindPhone.tag(ring.id)
+        if (ring.stop) {
+            runCatching { com.jarvis.client.service.ScheduleNotifier.stopRinging(context, tag) }
+            return
+        }
+        // Written at once: a restart must not replay this event and ring again.
+        flushResumePoint()
+        val fresh = synchronized(ringsHeard) {
+            if (ringsHeard.size > 100) ringsHeard.clear()
+            ringsHeard.add(ring.id)
+        }
+        if (!fresh) return
+        if (!com.jarvis.client.net.FindPhone.shouldRing(ring, System.currentTimeMillis() / 1000.0)) {
+            Log.i(TAG, "a ring_phone event arrived late, so the phone did not ring")
+            return
+        }
+        com.jarvis.client.service.ScheduleNotifier.post(
+            context, ring.id, com.jarvis.client.net.FindPhone.EVENT,
+            com.jarvis.client.net.FindPhone.TITLE, com.jarvis.client.net.FindPhone.TEXT,
+            com.jarvis.client.net.FindPhone.LOCK_SCREEN,
+            ring = true,
+            key = tag,
+            timeoutMs = com.jarvis.client.net.FindPhone.ringMillis(ring),
+        )
+    }
 
     /** `GET /api/schedule`. A read: never held. */
     suspend fun schedule(): ApiResult<JsonObject> = api.schedule()

@@ -673,6 +673,7 @@ class MainActivity : FragmentActivity() {
         val activity by JarvisRuntime.activity.collectAsState()
         val faceState by JarvisRuntime.face.collectAsState()
         val power by JarvisRuntime.power.collectAsState()
+        val lockdown by JarvisRuntime.lockdown.collectAsState()
         val status by JarvisRuntime.status.collectAsState()
         val version by JarvisRuntime.version.collectAsState()
         val pending by JarvisRuntime.pending.collectAsState()
@@ -1981,6 +1982,7 @@ class MainActivity : FragmentActivity() {
                             memoryHidden = privateHidden,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
+                            lockdown = lockdown,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -2149,6 +2151,8 @@ class MainActivity : FragmentActivity() {
                                 // The desktop's Alt+Shift+X, as a button:
                                 // this phone's speech, then POST /api/stop_all.
                                 onStopEverything = { JarvisRuntime.stopEverything() },
+                                onPcMedia = { JarvisRuntime.pcMedia() },
+                                onPcMediaControl = { action -> JarvisRuntime.pcMediaControl(action) },
                                 onInjectTaskNote = { note -> JarvisRuntime.injectTaskNote(note) },
                                 // Saved only when the owner's own drag (or a
                                 // screen reader's Bigger/Smaller) finishes - never

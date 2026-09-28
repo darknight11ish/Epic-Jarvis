@@ -292,6 +292,29 @@ class ScheduleTest {
     }
 
     @Test
+    fun aReminderForNextTimeIsDeleteOnlyAndItsSubjectHidesWithTheWords() {
+        val j = Schedule.job(
+            obj(
+                """{"id":"s00000000cc","kind":"nexttime","text":"ask about the bill",
+                  "about":"the dentist","state":"active","when":"until Sunday 27 December",
+                  "note":"Waits for you to talk about it.","fires":0,"max_fires":3}""",
+            ),
+        )!!
+        assertEquals("ask about the bill", Schedule.titleOf(j))
+        assertEquals("next time", Schedule.tagOf(j))
+        assertEquals(
+            listOf(Schedule.nextTimeAbout("the dentist"), "until Sunday 27 December", "Waits for you to talk about it."),
+            Schedule.metaOf(j),
+        )
+        assertEquals("When you talk about “the dentist”", Schedule.nextTimeAbout("the dentist"))
+        assertEquals(listOf("delete"), Schedule.actionsOf(j))
+        val hidden = Schedule.hide(Schedule.View(listOf(j), emptyList(), false)).jobs.single()
+        assertEquals(Schedule.NEXT_TIME_TITLE, Schedule.titleOf(hidden))
+        assertEquals("", hidden.about)
+        assertFalse(Schedule.metaOf(hidden).joinToString(" ").contains("dentist"))
+    }
+
+    @Test
     fun aMatchNotifiesTheAlertAndOnlyTheGenericWordsWhenLocked() {
         val j = Schedule.job(tellme)!!
         assertEquals("Tell me when" to "An email from Alex arrived.", Schedule.notification("tellme", j, false))
