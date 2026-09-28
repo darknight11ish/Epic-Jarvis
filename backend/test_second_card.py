@@ -230,6 +230,12 @@ def t_capable_and_not():
 
 #: A third capable card (a second 2080 Ti, distinct id) for the tests below.
 U_2080TI_2 = "GPU-51c0e8aa-6d2f-4b19-8e37-2a4c9f0b6d59"
+#: Three capable cards: the primary, the second (the 2060, more memory) and
+#: a third (the second 2080 Ti) - shared by t_third_card_reshape and the
+#: third-card-lane tests below.
+SMI_THREE = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
+            f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
+            f"2, {U_2080TI_2}, NVIDIA GeForce RTX 2080 Ti, 11264, 11010, 7.5, Disabled\n")
 
 
 def t_third_card_reshape():
@@ -327,6 +333,176 @@ def t_third_card_under_a_preset():
         det_main = SC._detect_preset(plan_main, fresh=True)
         check("a preset with no separate lane card (main=True): _lanes is []",
               det_main["_lanes"] == [] and det_main["_main"] is True)
+
+
+# ------------------------------------------------ a third card's own lane --
+#
+# The follow-up pass the reshape above deliberately left for later
+# (jarvis_second_card.py's module docstring, "A THIRD CARD'S OWN LANE"):
+# assigning one of the five features to a genuinely capable third card,
+# its own approval card (THIRD_ACTION), and its own lane process
+# (_THIRD_LANE), running alongside the second card's own lane - never
+# instead of it, and never a default winner.
+
+def t_third_card_no_default_winner():
+    with G.World(SMI_THREE) as w:
+        w.switches(master=True, long_context=True)
+        st = SC.status()
+        check("a capable third card sits there, unassigned, and does nothing",
+              st["third"]["capable"] is True and st["third"]["assigned"] is None
+              and st["third"]["lane"]["state"] == "off"
+              and "Assign one of the switches above" in st["third"]["why"], st["third"])
+        check("only ONE process was started (the second lane, for long_context)",
+              len(w.started) == 1)
+        check("assignable lists only the switches that are actually on",
+              st["third"]["assignable"] == ["long_context"])
+        card = st["third"]["card"]
+        check("the third card is the 2080 Ti, not the 2060 (still 'second')",
+              card is not None and card["uuid"] == U_2080TI_2
+              and st["detected"]["second"]["uuid"] == G.U_2060)
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, long_context=True)
+        st = SC.status()
+        check("only two cards: no capable third card, in words",
+              st["third"]["capable"] is False and st["third"]["card"] is None
+              and "No capable third graphics card" in st["third"]["why"])
+
+
+def t_third_card_assign_needs_feature_on_first():
+    with G.World(SMI_THREE) as w:
+        code, out = SC.request_change("third", assign="vision")
+        check("assigning a feature that is not on yet: 400, in words, no card",
+              code == 400 and "Turn" in out["error"] and "Pictures" in out["error"], out)
+        code, out = SC.request_change("third", assign="nope")
+        check("an unknown feature id: 400", code == 400 and "second-card feature" in out["error"])
+        code, out = SC.request_change("third", assign=123)
+        check("assign must be a string or null", code == 400 and "assign" in out["error"])
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, long_context=True)
+        code, out = SC.request_change("third", assign="long_context")
+        check("no capable third card: 503, in words",
+              code == 503 and "no capable third graphics card" in out["error"], out)
+
+
+def t_third_card_approval_card():
+    with G.World(SMI_THREE) as w:
+        w.switches(master=True, long_context=True)
+        seen = []
+        gate = lambda a, d, p: seen.append((a, d, p)) or Verdict(True, "ask", "approved")
+        code, out = SC.request_change("third", assign="long_context", gate=gate,
+                                      spawn=lambda fn: None)
+        check("assigning: a card is raised, nothing moved yet",
+              code == 200 and out["pending"] is True and out["assigned"] is None
+              and SC._read_switches()["third_feature"] is None, out)
+        check("status lists 'third' as pending",
+              "third" in SC.status()["pending"])
+        code2, out2 = SC.request_change("third", assign="long_context", gate=gate,
+                                        spawn=lambda fn: None)
+        check("a second ask while the card waits: 409",
+              code2 == 409 and "already waiting" in out2["error"])
+        code, out = SC.request_change("third", assign=None)
+        check("unassigning while waiting withdrew the card, at once, no card",
+              code == 200 and out["assigned"] is None and not seen)
+        check("status no longer lists it as pending", "third" not in SC.status()["pending"])
+        # The real thing: the card is answered yes.
+        code, out = SC.request_change("third", assign="long_context", gate=gate)
+        check("approved: exactly one card, action second_card_third_assign",
+              len(seen) == 1 and seen[0][0] == SC.THIRD_ACTION, seen)
+        action, detail, text = seen[0]
+        check("the card names BOTH cards, says instead-of, says at the same time, "
+              "says 127.0.0.1 only, and that nothing leaves",
+              "Longer conversations" in text and "2080 Ti" in text and "2060" in text
+              and "instead of" in text and "AT THE SAME TIME" in text
+              and "127.0.0.1:11436" in text and "Nothing leaves this PC" in text
+              and "If you say no" in text and detail["leaves_this_pc"] is False, text)
+        check("and the assignment is set", SC._read_switches()["third_feature"] == "long_context")
+        code, out = SC.request_change("third", assign="long_context")
+        check("asking again for the SAME assignment: already on, no card",
+              code == 200 and out["pending"] is False and out["assigned"] == "long_context", out)
+        seen.clear()
+        # Denied: stays unassigned.
+        SC.request_change("third", assign=None)
+        code, out = SC.request_change("third", assign="vision", gate=gate)
+        check("vision is not on yet: refused before any card",
+              code == 400 and not seen, out)
+        w.switches(master=True, long_context=True, vision=True)
+        deny = lambda a, dd, p: Verdict(False, "ask", "denied")
+        SC.request_change("third", assign="vision", gate=deny)
+        check("denied: stays unassigned", SC._read_switches()["third_feature"] is None)
+        # Withdrawn mid-flight: answered yes, but changed while it waited.
+        held = []
+        SC.request_change("third", assign="vision",
+                          gate=lambda a, dd, p: Verdict(True, "ask", "approved"),
+                          spawn=held.append)
+        SC.request_change("third", assign=None)
+        held[0]()
+        check("approved after being changed while it waited: stays unassigned",
+              SC._read_switches()["third_feature"] is None
+              and SC._LAST["third"]["outcome"] == "withdrawn")
+        # The feature is turned off while its own third-card card waits.
+        held2 = []
+        SC.request_change("third", assign="vision",
+                          gate=lambda a, dd, p: Verdict(True, "ask", "approved"),
+                          spawn=held2.append)
+        SC.request_change("vision", False)
+        held2[0]()
+        check("the feature went off while the card waited: refused, stays unassigned",
+              SC._read_switches()["third_feature"] is None
+              and SC._LAST["third"]["outcome"] == "refused"
+              and "Pictures" in SC._LAST["third"]["reason"], SC._LAST.get("third"))
+        code, out = SC.request_change("third", assign="long_context", gate=gate,
+                                      tier_of=lambda a: "auto")
+        check("tier not 'ask': refused before any card",
+              code == 503 and "must be 'ask'" in out["error"])
+
+
+def t_third_card_lane_independent():
+    with G.World(SMI_THREE, installed=("qwen3:8b", "qwen3:14b", "qwen2.5vl:7b")) as w:
+        w.switches(master=True, long_context=True, vision=True, third_feature="vision")
+        st = SC.status()
+        check("both lanes are running: the second (long_context) and the third (vision)",
+              st["lane"]["state"] == "running" and st["third"]["lane"]["state"] == "running",
+              (st["lane"], st["third"]))
+        check("two SEPARATE processes were started, on two different ports",
+              len(w.started) == 2)
+        ports = sorted(p.kwargs["env"]["OLLAMA_HOST"] for p in w.started)
+        check("11435 (the second lane) and 11436 (the third lane), never the same port",
+              ports == ["127.0.0.1:11435", "127.0.0.1:11436"], ports)
+        third_env = next(p.kwargs["env"] for p in w.started
+                         if p.kwargs["env"]["OLLAMA_HOST"] == "127.0.0.1:11436")
+        check("the third lane is pinned to the THIRD card's id, not the second's",
+              third_env["CUDA_VISIBLE_DEVICES"] == U_2080TI_2
+              and G.U_2060 not in third_env["CUDA_VISIBLE_DEVICES"])
+        lc = SC.lane_for("long_context")
+        vi = SC.lane_for("vision")
+        check("long_context still answers from the second card's own lane",
+              lc is not None and lc.url == "http://127.0.0.1:11435")
+        check("vision answers from the THIRD card's lane, at the same time",
+              vi is not None and vi.url == "http://127.0.0.1:11436"
+              and "third graphics card" in vi.why, vi)
+        # Turning vision off stops ONLY the third lane; long_context (still on
+        # the second) keeps running - the two lanes are independent.
+        SC.request_change("vision", False)
+        st = SC.status()
+        check("vision off: only the third lane stops; the second keeps running",
+              st["third"]["lane"]["state"] == "off" and st["lane"]["state"] == "running")
+        check("the assignment itself is kept (vision could be turned back on)",
+              SC._read_switches()["third_feature"] == "vision")
+        check("status says the assignment is kept but the feature is off",
+              "is off" in st["third"]["why"], st["third"]["why"])
+    # Everything on the second card moved to the third: the second lane does
+    # not start at all - starting it would hold the second card open for
+    # nothing (2026-09-28's fix to _wanted()).
+    with G.World(SMI_THREE) as w:
+        w.switches(master=True, long_context=True, third_feature="long_context")
+        st = SC.status()
+        check("moved entirely to the third card: the second lane stays off, in words",
+              st["lane"]["state"] == "off" and "moved to the third card" in st["lane"]["why"],
+              st["lane"])
+        check("only ONE process was started (the third lane)", len(w.started) == 1)
+        check("the third lane is running, and lane_for('long_context') uses it",
+              st["third"]["lane"]["state"] == "running"
+              and SC.lane_for("long_context").url == "http://127.0.0.1:11436")
 
 
 def t_switches():
@@ -965,7 +1141,7 @@ def t_status_shape_and_no_secrets():
     check("status() has exactly the contract's keys",
           set(st) == {"detected", "enabled", "active", "pending", "lane", "main_ollama_pinned",
                       "pin_note", "pin_command", "features", "last", "picture_text",
-                      "combined", "suggest"}, sorted(st))
+                      "combined", "third", "suggest"}, sorted(st))
     check("suggest has exactly its keys, both signals on by default",
           set(st["suggest"]) == {"available", "title", "detail", "signals"}
           and all(s["enabled"] is True for s in st["suggest"]["signals"])

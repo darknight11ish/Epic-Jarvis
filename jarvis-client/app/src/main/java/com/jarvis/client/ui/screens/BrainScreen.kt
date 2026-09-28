@@ -211,6 +211,12 @@ fun BrainScreen(
      * [com.jarvis.client.JarvisRuntime.setSecondCardSuggest].
      */
     onSetSecondCardSuggest: (signal: String, enabled: Boolean) -> Unit = { _, _ -> },
+    /**
+     * Moving a switch onto a third graphics card, or moving it back off
+     * (2026-09-28) - [com.jarvis.client.JarvisRuntime.setThirdCard]. A
+     * feature id raises an approval card; null unassigns at once.
+     */
+    onSetThirdCard: (assign: String?) -> Unit = {},
     onRecheckSecondCard: () -> Unit = {},
     /**
      * Re-read the board every this many milliseconds while the screen is
@@ -655,6 +661,7 @@ fun BrainScreen(
                         canAct = canAct,
                         onSet = onSetSecondCard,
                         onSetSuggest = onSetSecondCardSuggest,
+                        onSetThird = onSetThirdCard,
                         onRecheck = onRecheckSecondCard,
                         onOpenApprovals = onOpenApprovals,
                     )

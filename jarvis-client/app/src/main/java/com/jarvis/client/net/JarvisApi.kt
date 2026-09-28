@@ -996,6 +996,31 @@ class JarvisApi(
         }
 
     /**
+     * Moving one of the second card's own switches onto a third, capable
+     * graphics card, or moving it back off (2026-09-28). Assigning a
+     * feature id raises one approval card and changes nothing until it is
+     * approved; `assign = null` unassigns at once. See
+     * [SecondCard.classifyPost] for which answers come back as sentences.
+     */
+    suspend fun setThirdCard(assign: String?): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(SecondCard.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = SecondCard.postThirdBody(assign)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    SecondCard.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * "When to suggest the bigger model" - one signal on or off. NO approval
      * card either way (see [SecondCard.Suggest]'s own doc): re-read
      * [secondCard] to show the new state, the same as [setSecondCard].

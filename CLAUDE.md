@@ -649,6 +649,83 @@ recommended (its "L, do the S-sized reshape first" advice).
   third capable NVIDIA card in the PC is detected and correctly explained
   ("capable, but the [other] card has more memory") but does nothing.
 
+Built 2026-09-28, closing the queued gap the entry right above this one
+left on purpose - **a third graphics card can now actually be used.** A
+quick reminder of the two things in a graphics card that matter here:
+memory (how much a model can fit) and compute capability (how new its
+design is - old cards cannot use the compact conversation format Jarvis
+needs). A third card that has enough of both can now be given one of the
+five second-card features (Longer conversations, Pictures, Learning in the
+background, Browser control, Wiki builder), running there at the same time
+as the second card's own feature - never instead of it, and never chosen
+by Jarvis on its own.
+
+- **Never a default, always a named choice** - the one rule
+  `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md` §1.3 was most insistent about.
+  A capable third card sitting in the PC does nothing on its own, exactly
+  like the second card did nothing until the owner turned a switch on.
+  Moving a switch there raises its own approval card
+  (`second_card_third_assign`, tier "ask"), naming the exact card, its
+  model and how much memory it uses - never reusing `second_card_enable`'s
+  own card, because that one never says WHICH card, and this decision is
+  entirely about that. Moving a switch back to "Not used" is immediate,
+  like turning any switch off.
+- **Built in both apps**: Settings → "Second graphics card" (desktop) and
+  Brain (phone) each show a new "Third graphics card" section, the exact
+  same visual and wording pattern the five switches and "One bigger model
+  on both cards" already use - a list of the switches that are currently
+  on, pick one to move it there. `tools/check_parity.py` is clean; no new
+  route was needed (`POST /api/second-card` already carried the shape,
+  now with `{"feature": "third", "assign": "<switch>" | null}` alongside
+  its existing bodies).
+- **How it runs, underneath:** a third, separate copy of Ollama
+  (`_THIRD_LANE` in `jarvis_second_card.py`), its own port and its own log
+  file, because - unlike "One bigger model on both cards", which never
+  runs at the same time as a feature switch - the third card's copy runs
+  AT THE SAME TIME as the second card's own copy, one feature on each.
+  Considered, and decided against on purpose: turning the two existing
+  lane-process singletons (`_LANE`, `_COMBINED_LANE`) into a more general
+  "however many lanes exist" structure, the more obviously "correct" shape
+  for a future fourth card. Chosen instead: a third, plainly-named
+  singleton, matching the existing two - explained in
+  `jarvis_second_card.py`'s own module docstring, because touching the
+  two existing, already-carefully-tested lane singletons in the same pass
+  that adds a third was judged the riskier move for a module this
+  safety-critical (it decides which physical card the model's own tool
+  calls run on), with no real fourth card on the horizon to justify it yet.
+  If a fourth card ever becomes a real prospect, that is the moment for
+  the more general shape - informed by how the third one's own design
+  actually held up, not guessed now.
+- **"One bigger model on both cards" stays two-card-only**, on purpose,
+  for the same reason the entry above already gives: real speed splitting
+  one model across even two cards is still unmeasured, since the second
+  card is not installed. A third untested unknown on top of a first is not
+  a decision to make silently, so that switch still only ever reads the
+  everyday and second cards - a third capable card is automatically left
+  out of it, without any code change.
+- **Verified**: `backend/test_second_card.py` (new tests: a capable third
+  card doing nothing until named; the approval flow's assign/unassign/
+  pending/denied/withdrawn/refused paths; the second and third lanes
+  running independently, on different ports, at the same time),
+  `backend/test_phone_second_card_contract.py`, `backend/test_hardware.py`,
+  `backend/test_asks_first.py`, `backend/test_card_words.py`,
+  `backend/test_gate_denial_rule.py`, `backend/test_wiki.py` (a knock-on
+  patch-context shift), `backend/test_patch_history.py` (after running
+  `tools/build_patch_history.py`, which every patch edit needs) - all
+  passing. The desktop's Rust (`cargo fmt`/`check`/`clippy` against the
+  Windows target, per this file's own "Checking the Rust" section) is
+  clean; `cargo test` itself still needs a Windows host, so the new Rust
+  unit tests are written and known to compile, not run here.
+  `jarvis-desktop/tests/second-card.mjs` gained real checks for the new
+  section, but this container cannot download the Chromium build
+  Playwright needs (blocked by network policy) - they are unexecuted, and
+  need a run on a machine that can reach it before they are trusted.
+  The phone's Kotlin (`net/SecondCard.kt`, `ui/screens/SecondCardPlate.kt`,
+  `JarvisRuntime.kt`, `net/JarvisApi.kt`, `MainActivity.kt`,
+  `SecondCardContractTest.kt`) is read carefully by eye, following this
+  file's own "How the Android apps get built" section (no local Android
+  build here); it is confirmed only once CI compiles it.
+
 Built 2026-09-28, the owner's "view the models... without having Jarvis up
 and running" request - **Brain → Model remembers its last list on both
 apps** (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`), a client-side cache

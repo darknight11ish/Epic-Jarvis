@@ -332,6 +332,11 @@ permissions = [
   "allow-get-backend-capabilities",
   "allow-get-second-card",
   "allow-set-second-card",
+  # Moving one of the second card's own features onto a third, capable
+  # graphics card (2026-09-28) - its own command, since the wire shape
+  # differs ("assign", not "enabled"); the GET side rides along in
+  # allow-get-second-card's own poll (status()'s new "third" key).
+  "allow-set-third-card",
   # "When to suggest the bigger model": the two settings that decide
   # whether Jarvis may OFFER "One bigger model on both cards" on its own
   # (2026-09-27). No card either way - it only changes whether Jarvis

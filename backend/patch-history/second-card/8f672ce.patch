@@ -112,7 +112,7 @@
                          # jarvis_ui_control.py/jarvis_android_control.py's
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -315,6 +315,31 @@
+@@ -315,6 +315,23 @@
      "append_logseq_journal": ("yes", "local", "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"),
      "create_joplin_note":    ("yes", "local", "creates one new note in Joplin on this PC; no existing note is changed"),
      "append_obsidian_daily": ("yes", "local", "adds one entry to the end of today's Obsidian daily note on this PC; nothing already there is changed"),
@@ -133,14 +133,6 @@
 +    # stops when the last is off. Without this line the action would be read as
 +    # "unknown", and the notice would say it might leave the machine.
 +    "second_card_enable": ("yes", "local", "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); it keeps running while any second-card switch that uses it is on, and stops when the last one is turned off"),
-+    # second-card.patch (jarvis_second_card.py): moving one of the second
-+    # card's own features onto a THIRD graphics card, alongside the second
-+    # card's own lane - never instead of it. A fourth copy of Ollama on THIS
-+    # PC, on 127.0.0.1 only, pinned to that one card. Its own action (not
-+    # second_card_enable) because it names a SPECIFIC physical card, which
-+    # docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 says must always be
-+    # a real, named choice - never a default.
-+    "second_card_third_assign": ("yes", "local", "starts a fourth copy of Ollama on this PC that only this PC can reach (127.0.0.1), pinned to a third graphics card; it runs alongside the second card's own copy, and stops when the assignment is changed or the feature is turned off"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",

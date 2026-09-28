@@ -3509,6 +3509,56 @@ pub async fn set_second_card(
     second_card_change_answer(status, &body)
 }
 
+/// A feature id `assign` may name for the third card - never "master" or
+/// "combined" (those have no third-card lane): reuses [`second_card_feature`]'s
+/// shape check (lower-case letters and underscores) - the backend refuses
+/// anything that is not one of its five feature ids with its own sentence.
+pub(crate) fn second_card_third_feature(assign: &str) -> Result<&str, String> {
+    second_card_feature(assign)
+}
+
+/// Moving one of the second card's own features onto a third, capable
+/// graphics card - or moving it back off: `POST /api/second-card` with
+/// `{"feature": "third", "assign": "<feature id>" | null}` (2026-09-28).
+///
+/// `assign: None` unassigns at once, no card - the same OFF direction as
+/// every other switch here. `assign: Some(id)` raises one approval card
+/// naming the physical third card (action `second_card_third_assign`,
+/// tier `ask`); the answer says `pending: true` until the owner decides
+/// it there. Settings window only, like [`get_second_card`]/[`set_second_card`].
+///
+/// Assigning is held while the event stream is stale (rule 4, the same
+/// hold [`set_second_card`]'s own ON already has); unassigning always
+/// goes through.
+#[tauri::command]
+pub async fn set_third_card(
+    app: AppHandle,
+    assign: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let assign = match assign.as_deref() {
+        Some(id) => Some(second_card_third_feature(id)?.to_string()),
+        None => None,
+    };
+    if assign.is_some() && app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be moved until it \
+             does. Moving it back off still works."
+                .to_string(),
+        );
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{SECOND_CARD_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "feature": "third", "assign": assign }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    second_card_change_answer(status, &body)
+}
+
 /// "When to suggest the bigger model"'s one write - spelled out as its own
 /// literal constant, not built from [`SECOND_CARD_PATH`] by concatenation,
 /// so `tools/check_parity.py` (which finds a route by its literal `/api/...`
@@ -3916,7 +3966,8 @@ mod capabilities_tests {
 #[cfg(test)]
 mod second_card_tests {
     use super::{
-        second_card_answer, second_card_change_answer, second_card_feature, SECOND_CARD_UPDATE,
+        second_card_answer, second_card_change_answer, second_card_feature,
+        second_card_third_feature, SECOND_CARD_UPDATE,
     };
 
     /// The real `status()` output, one per case, made by
@@ -4011,6 +4062,32 @@ mod second_card_tests {
         let long = "a".repeat(41);
         for bad in ["", "Vision", "vision; rm", "../x", long.as_str()] {
             assert!(second_card_feature(bad).is_err(), "{bad:?} was accepted");
+        }
+    }
+
+    #[test]
+    fn third_card_status_rides_along_and_assign_takes_one_of_the_five_features() {
+        // 2026-09-28: status()'s "third" key is purely additive, so the
+        // whole-file passthrough test above already covers it. What is new
+        // here: the `assign` value sent for feature "third" is checked the
+        // same shape-only way `second_card_feature` already checks
+        // `feature` - the backend refuses anything else with its own
+        // sentence; this only keeps anything else from being sent at all.
+        let doc = cases();
+        for f in doc["cases"]["capable_off"]["features"].as_array().unwrap() {
+            let id = f["id"].as_str().unwrap();
+            assert_eq!(second_card_third_feature(id), Ok(id));
+        }
+        // Unlike second_card_feature, "master"/"combined" name no third-card
+        // lane - the Rust side does not know that (the backend refuses them
+        // with its own sentence), but the shape check alone still passes
+        // them, same as any other lower-case word.
+        assert_eq!(second_card_third_feature("master"), Ok("master"));
+        for bad in ["", "Vision", "vision; rm", "../x", "a".repeat(41).as_str()] {
+            assert!(
+                second_card_third_feature(bad).is_err(),
+                "{bad:?} was accepted"
+            );
         }
     }
 }

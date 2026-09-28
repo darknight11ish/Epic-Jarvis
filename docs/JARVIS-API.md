@@ -1597,7 +1597,7 @@ deciding whether pictures can be sent. `tools/check_parity.py` records
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/second-card` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_second_card.py` is missing | Token + origin. Card names and hardware ids (`GPU-...`); never a token. Re-read it after a card is decided - there is no event for it. |
-| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first"); **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. |
+| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}`, or (2026-09-28) `{"feature": "third", "assign": "<feature id>" \| null}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first"); **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. `feature: "third"` (2026-09-28) is its own shape, its own answers and its own action (`second_card_third_assign`) - see the section below. |
 
 **`status()`** - the real output of each case is in
 `jarvis-desktop/tests/fixtures/second-card-cases.json` (`one_card`,
@@ -1686,6 +1686,76 @@ non-preset detection path (`_detect()`) got the reshape. `"combined"`
 (below) is unaffected either way: it already only ever reads the
 `"primary"` and `"second"` rows of `cards[]`, so a third capable card was
 already left out of it, without any code change.
+
+**A third graphics card's own lane (added 2026-09-28).** The follow-up
+piece the reshape above deliberately left for later: a genuinely capable
+third card can now be given ONE of the five features above, so it runs
+ALONGSIDE the second card's own lane - never instead of it, and never
+picked for the owner. `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md` §1.3 is
+explicit that which card runs which feature must always be a real, named
+choice; this is built exactly that way, as its own approval card that
+names the physical card.
+
+*The switch.* One new field, `third_feature`, in `jarvis_second_card.py`'s
+own switches file - `null` (the default, even with a capable third card
+sitting right there: "no default winner") or one of the five feature ids.
+It only ever says WHERE an already-on feature's model calls go; the
+feature's own switch (above) still says WHETHER it is on at all, unchanged.
+There is only one third lane, so only one feature at a time can be moved
+there.
+
+*The route.* Still `POST /api/second-card`, with a body shaped
+differently for this one case: `{"feature": "third", "assign": "<feature
+id>" | null}` (never `"enabled"` - `assign` replaces it for this feature
+value only). `assign: null` unassigns at once, no card, like every OFF
+here. A real feature id raises one approval card (`second_card_third_assign`,
+tier `ask`) that names the third card, its model and its memory, and says
+this runs AT THE SAME TIME as the second card's own lane - `describe_third_assign()`
+in `jarvis_second_card.py` is the whole card, word for word. **400** the
+feature is not on yet ("Turn ... on first"), an unknown feature id, or
+`assign` is neither a string nor `null`; **409** a card for it already
+waits; **503** no capable third card right now, or the action's tier is
+not `ask`. Reusing `second_card_enable`'s own action was considered and
+rejected on purpose: this decision is fundamentally about WHICH physical
+card, which `second_card_enable`'s own wording ("nothing leaves this PC")
+never says, and giving it a separate action lets the "What asks first"
+page (§ below) and the risk table describe it on its own terms - the same
+reasoning `second_card_browser_enable` and `second_card_combined_enable`
+already followed for their own, differently-shaped decisions.
+
+*`GET /api/second-card`'s new `"third"` key* (purely additive - every
+existing key is unchanged): `{"capable": bool, "card": {"uuid", "index",
+"name", "total_mb", "compute_cap"} | null, "assigned": "<feature id>" |
+null, "assignable": [feature ids currently on and eligible to be moved],
+"pending": bool, "lane": {"state", "why"}, "model", "context", "memory_gib",
+"model_installed", "why"}` - the same "row" shape and plain-English `why`
+style `"combined"` already uses, so both apps' UI code can reuse the exact
+same rendering pattern.
+
+*The lane process.* A third, literal `_LaneProcess` (`_THIRD_LANE`) -
+mirroring `_LANE` and `_COMBINED_LANE`, not a new dict-keyed structure.
+Considered and explained in `jarvis_second_card.py`'s own module docstring
+("THE LANE PROCESS" section): the class already carries no assumption
+about which lane it is, so one more literal instance costs the same as a
+dict entry would, without touching either existing singleton's own
+call sites in a module this safety-critical. It has its own port
+(`[second_card] third_port` in `jarvis-framework.toml`, default 11436)
+and its own log file (`second-card-third-ollama.log`), because - unlike
+`_LANE`/`_COMBINED_LANE`, which are mutually exclusive and safely share
+one port - the third lane runs at the SAME TIME as the second card's own
+lane. `jarvis_agent.choose_lane()` and every other existing caller of
+`lane_for()` are UNTOUCHED: `lane_for(feature)` itself now checks the new
+assignment internally and returns a `Lane` pointed at whichever process is
+actually running that feature, exactly as before from every caller's own
+point of view.
+
+*What stays exactly as it was.* Presets (`jarvis_hardware.py`) stay
+two-slot - a third card does nothing under a chosen preset, in words
+("no capable third graphics card"). `"combined"` stays two-card-only,
+unaffected by any of this. `cards[]`'s own per-row text for an unassigned
+capable third card is unchanged too (still "unused ... has more memory") -
+the fuller, current story lives in the new `"third"` key instead, so
+nothing that existed before this needed to change.
 
 **"One bigger model on both cards" (added 2026-09-27).** A third mode,
 alongside the five features above and alongside a chosen hardware preset's

@@ -1720,6 +1720,24 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             },
+                            // A third graphics card (2026-09-28): moving a
+                            // switch onto it, or off. Marked busy the same
+                            // way as onSetSecondCard, under SecondCard.THIRD
+                            // rather than a feature id - there is no single
+                            // switch this request is about.
+                            onSetThirdCard = { assign ->
+                                if (secondCardBusy == null) {
+                                    secondCardBusy = SecondCard.THIRD
+                                    secondCardNotice = null
+                                    scope.launch {
+                                        try {
+                                            secondCardNotice = JarvisRuntime.setThirdCard(assign)
+                                        } finally {
+                                            secondCardBusy = null
+                                        }
+                                    }
+                                }
+                            },
                             // "When to suggest the bigger model" (2026-09-27):
                             // no card either way, so this only ever re-reads
                             // the plate afterwards - never touches approvals.

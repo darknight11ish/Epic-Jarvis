@@ -840,6 +840,30 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const label = args.feature === "master" ? "The second graphics card" : `"${row ? row.name : args.feature}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
           }
+          // commands.rs set_third_card (2026-09-28): moving one of the
+          // second card's own features onto a third graphics card, or
+          // moving it back off. What jarvis_second_card._request_change_third
+          // does to status()'s "third" key: assigning puts "third" in
+          // `pending` (a card is up, nothing moved yet); unassigning clears
+          // it and `third.assigned` at once.
+          case "set_third_card": {
+            const sc = window.__secondCard;
+            sc.changes.push({ assign: args.assign ?? null });
+            if (sc.setFails) throw new Error(sc.setFails);
+            const st = sc.status;
+            const third = st.third || {};
+            if (args.assign) {
+              if (!st.pending.includes("third")) st.pending.push("third");
+              third.pending = true;
+              return { ok: true, assigned: third.assigned || null, pending: true,
+                       message: "Approve the card on your PC or phone to move it. Nothing changes until you do." };
+            }
+            third.assigned = null;
+            third.pending = false;
+            st.pending = st.pending.filter((p) => p !== "third");
+            return { ok: true, assigned: null, pending: false,
+                     message: "The third card is not running anything." };
+          }
           // "When to suggest the bigger model" - no card either way, so this
           // just flips the one signal in the same status object.
           case "set_second_card_suggest": {

@@ -357,4 +357,117 @@ class SecondCardContractTest {
         val down = SecondCard.replyLine(ApiResult.Failed(ApiError.Unreachable("no route")))!!
         assertTrue(down, down.startsWith("Nothing changed. "))
     }
+
+    // --------------------------------------------------- a third card (2026-09-28) --
+    //
+    // None of the eight named cases has a capable third card (nothing on the
+    // owner's own PC has one to record from), so status()["third"] there is
+    // always "no capable card" (already covered by the byte-for-byte parse
+    // in the first test above, since `third` rides along in the same real
+    // JSON). What is new here is tested directly against SecondCard's own
+    // data classes and pure functions - the same real shape, just not
+    // sourced from one of the eight recorded PCs.
+
+    private val thirdCard = SecondCard.ThirdCard(
+        capable = true,
+        cardName = "NVIDIA GeForce RTX 2080 Ti",
+        cardTotalMb = 11264,
+        assigned = null,
+        assignable = emptyList(),
+        pending = false,
+        laneState = "off",
+        laneWhy = "no feature is assigned to the third card",
+        model = null,
+        context = null,
+        memoryGib = null,
+        modelInstalled = null,
+        why = "Not running anything. Assign one of the switches above to use it.",
+    )
+
+    @Test
+    fun `no capable third card - thirdOptions still answers, nothing can be changed`() {
+        val s = status("capable_off")
+        assertNotNull(s.third)
+        assertFalse(s.third!!.capable)
+        assertFalse(SecondCard.thirdCanChange(s))
+        // "Not used" is still offered even with no card - the row itself
+        // decides whether to show at all (capable || assigned != null).
+        val options = SecondCard.thirdOptions(s)!!
+        assertEquals(listOf(null), options.map { it.value })
+        assertTrue(options.single().selected)
+    }
+
+    @Test
+    fun `a capable third card, nothing assigned - only switches that are on are offered`() {
+        val s = status("capable_off").copy(
+            third = thirdCard.copy(assignable = listOf("long_context", "vision")),
+        )
+        assertTrue(SecondCard.thirdCanChange(s))
+        val options = SecondCard.thirdOptions(s)!!
+        assertEquals(listOf(null, "long_context", "vision"), options.map { it.value })
+        assertTrue(options[0].selected)
+        assertTrue(options.drop(1).none { it.selected })
+        // "Not used" - no default winner, even with a capable card right there.
+        assertEquals("No default winner", "Not used", options[0].label)
+        assertEquals("Longer conversations", options[1].label)
+    }
+
+    @Test
+    fun `an assigned feature is offered and selected, even if it fell off 'assignable'`() {
+        val s = status("capable_off").copy(
+            third = thirdCard.copy(assigned = "vision", assignable = emptyList(), pending = false,
+                laneState = "running", model = "qwen2.5vl:7b", context = 16384, memoryGib = 7.15,
+                modelInstalled = true,
+                why = "Working: qwen2.5vl:7b on the NVIDIA GeForce RTX 2080 Ti, with room for " +
+                    "16,384 tokens - at the same time as the second card's own lane."),
+        )
+        val options = SecondCard.thirdOptions(s)!!
+        assertEquals(listOf(null, "vision"), options.map { it.value })
+        assertTrue(options.single { it.value == "vision" }.selected)
+        assertEquals("Pictures", options.single { it.value == "vision" }.label)
+        assertEquals(
+            "Model: qwen2.5vl:7b (installed). Uses about 7.2 GB of the third card.",
+            SecondCard.thirdModelLine(s.third!!),
+        )
+    }
+
+    @Test
+    fun `pending - waiting, and nothing can be changed until it is decided`() {
+        val s = status("capable_off").copy(
+            third = thirdCard.copy(assignable = listOf("long_context"), pending = true),
+        )
+        assertFalse(SecondCard.thirdCanChange(s))
+        assertEquals(SecondCard.WAITING, SecondCard.thirdLine(s))
+    }
+
+    @Test
+    fun `postThirdBody - a feature id, or null, never glued`() {
+        assertEquals(
+            """{"feature":"third","assign":"long_context"}""",
+            SecondCard.postThirdBody("long_context"),
+        )
+        assertEquals(
+            """{"feature":"third","assign":null}""",
+            SecondCard.postThirdBody(null),
+        )
+    }
+
+    @Test
+    fun `thirdLastLine - only about THIRD, only when nothing ended up assigned`() {
+        val base = status("capable_off").copy(third = thirdCard)
+        assertNull("no last card at all", SecondCard.thirdLastLine(base))
+        val denied = base.copy(last = SecondCard.LastCard("third", "denied", null))
+        assertEquals("You said no, so it stays where it was.", SecondCard.thirdLastLine(denied))
+        // A last card about a FEATURE switch, not the third card itself: not shown here.
+        val other = base.copy(last = SecondCard.LastCard("vision", "denied", null))
+        assertNull(SecondCard.thirdLastLine(other))
+        // It ended up assigned: the row now says "Working: ...", so the
+        // ended-card line would be redundant, same as SwitchView.lastLine's
+        // own on=true rule.
+        val nowOn = base.copy(
+            third = thirdCard.copy(assigned = "vision"),
+            last = SecondCard.LastCard("third", "enabled", null),
+        )
+        assertNull(SecondCard.thirdLastLine(nowOn))
+    }
 }

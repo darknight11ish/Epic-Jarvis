@@ -1446,6 +1446,21 @@ object JarvisRuntime {
     }
 
     /**
+     * Moving one of the second card's own switches onto a third, capable
+     * graphics card, or moving it back off (2026-09-28). `assign` a feature
+     * id raises one approval card (the card should appear in this phone's
+     * approvals too, the same as [setSecondCard]'s own ON); `assign = null`
+     * unassigns at once.
+     */
+    suspend fun setThirdCard(assign: String?): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setThirdCard(assign)
+        if (assign != null && result is ApiResult.Ok) refreshPending()
+        refreshSecondCard()
+        return SecondCard.replyLine(result)
+    }
+
+    /**
      * "When to suggest the bigger model" (2026-09-27): one signal on or off.
      * NO approval card either way - it only changes whether Jarvis may
      * OFFER [SecondCard.COMBINED] on its own, never what it may do without

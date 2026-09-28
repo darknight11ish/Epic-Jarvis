@@ -247,6 +247,10 @@
       "title": "Jarvis wants to start using the second graphics card"
     },
     {
+      "action": "second_card_third_assign",
+      "title": "Jarvis wants to move a second-card feature onto a third graphics card"
+    },
+    {
       "action": "send_email",
       "title": "Jarvis wants to send an email"
     },

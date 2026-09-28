@@ -65,10 +65,10 @@
                       "/api/memory/keep_both"):
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -345,6 +345,13 @@
-     # docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 says must always be
-     # a real, named choice - never a default.
-     "second_card_third_assign": ("yes", "local", "starts a fourth copy of Ollama on this PC that only this PC can reach (127.0.0.1), pinned to a third graphics card; it runs alongside the second card's own copy, and stops when the assignment is changed or the feature is turned off"),
+@@ -321,6 +321,13 @@
+     # stops when the last is off. Without this line the action would be read as
+     # "unknown", and the notice would say it might leave the machine.
+     "second_card_enable": ("yes", "local", "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); it keeps running while any second-card switch that uses it is on, and stops when the last one is turned off"),
 +    # wiki.patch (jarvis_wiki.py). Adding a document writes pages in
 +    # <vault>/Jarvis Wiki/ on this PC with a model on this PC (127.0.0.1).
 +    # A changed page's earlier copy is kept in Jarvis Wiki/.versions/;

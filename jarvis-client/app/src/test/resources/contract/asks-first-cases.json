@@ -528,6 +528,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -1310,6 +1319,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -2090,6 +2108,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run one bigger model across both graphics cards"
+      },
+      {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
       },
       {
        "action": "big_model_enable",
@@ -2881,6 +2908,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run one bigger model across both graphics cards"
+      },
+      {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
       },
       {
        "action": "big_model_enable",
