@@ -102,6 +102,18 @@ and Parakeet Realtime EOU (speech-to-text before the voice check),
 full-duplex voice models (skip the voice check and cards), GPL audio tools
 (Rubber Band, Pedalboard, Praat, SoX).
 
+## Built on other branches, not merged yet (check before building)
+
+- **Goals** (backend + phone screens) and **"one card, several steps" - the
+  plan card, built and switched off** - on `claude/jarvis-continuation-03kls1`.
+- **Three animal faces and "voice follows the face"** - on
+  `claude/jarvis-3d-animal-mascot-8dr0tb`. The owner's 2026-09-28 decision
+  (offer the voice once, switch off by default, the otter not on "Sky") was
+  not yet applied there as of 2026-09-28 01:10 UTC.
+- On this branch (`claude/jarvis-ai-assistant-research-ff37vy`): the
+  chatbot driver core (`jarvis_chatbot.py`, API §60) and Projects steps 1-2
+  (`jarvis_projects.py`, API §61).
+
 ## Decided but not built yet (don't propose these as new)
 
 QR pairing with per-device keys; talk-to-type on the PC (one card to switch
