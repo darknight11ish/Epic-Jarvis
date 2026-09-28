@@ -970,6 +970,7 @@ class SupportChat:
     stop_mark: Optional[int] = None
     task_id: str = ""
     pending_own: list = field(default_factory=list)   # texts sent, not yet seen back
+    opening_asked: bool = False     # the driver was asked for the opening message
     widget: Any = field(default=None, repr=False, compare=False)
 
 
@@ -1563,8 +1564,16 @@ def run(c: SupportChat, *, approved, announce: Optional[Callable[[str], None]] =
             _end_now(c, "stopped", "", d)
             return _result(c, ok=True, reason=c.ended_words)
         _CHATS[c.id] = c
+        if c.state == "paused":
+            # A Resume: the owner has finished typing in the window. (A Take
+            # over pressed while the first card waited is NOT cleared: the
+            # chat then pauses before Jarvis sends anything.) The quiet-agent
+            # clock starts again from now: the time spent paused was the
+            # owner's, not a silent agent's.
+            c.takeover_requested = False
+            c.nudged_at = 0.0
+            c.last_company_at = max(c.last_company_at, d.clock())
         c.state, c.paused_code, c.paused_why, c.question = "running", "", "", ""
-        c.takeover_requested = False
         if c.offer is not None:
             # A resumed chat never carries an offer card over a pause: if the
             # agent still means it, it is asked again.
@@ -1835,9 +1844,11 @@ def run(c: SupportChat, *, approved, announce: Optional[Callable[[str], None]] =
                     if k in c.pending_own:
                         c.pending_own.remove(k)
                     else:
-                        # Typed by the owner in the window (Take over).
+                        # Typed by the owner in the window (Take over). The
+                        # chat is not quiet while the owner is talking.
                         c.transcript.append({"who": "owner", "text": text, "at": d.clock(),
                                              "outside_text": False, "move": "window"})
+                        c.last_company_at = max(c.last_company_at, d.clock())
                     continue
                 # A notice, not the agent talking: the queue (before anyone
                 # has answered), someone joining, the chat ending.
@@ -1865,6 +1876,7 @@ def run(c: SupportChat, *, approved, announce: Optional[Callable[[str], None]] =
                 if ref and c.reference_asked:
                     c.reference = ref
             if said:
+                c.opening_asked = False
                 c.answered = True
                 c.in_queue = False
                 c.last_company_at = d.clock()
@@ -1908,9 +1920,15 @@ def run(c: SupportChat, *, approved, announce: Optional[Callable[[str], None]] =
                                             f"which is not on your card.")
                         pause_for("unlisted", what=DETAIL_KIND_WORDS[kind])
                     reply_now()
-            elif c.offer is None and c.sent == 0 and not c.in_queue and not c.answered:
-                # The chat is open and quiet: Jarvis writes first, from the goal.
+            elif (c.offer is None and c.sent == 0 and not c.in_queue and not c.answered
+                  and not c.opening_asked):
+                # The chat is open and quiet: Jarvis writes first, from the
+                # goal - asked ONCE (a driver that chose "wait" is not asked
+                # again every few seconds; the company speaking asks again).
+                c.opening_asked = True
                 reply_now()
+            elif c.sent == 0 and not c.answered and c.open_seconds >= OPEN_WAIT:
+                raise _End("no_chat")
             if c.offer is not None:
                 settle_offer()
             # A quiet agent: nothing from either side for QUIET_NUDGE (Jarvis
@@ -2224,12 +2242,6 @@ def stop(chat_id: str, *, deps=None) -> tuple:
         idle = c.state in ("paused", "planned")
     if idle:
         _end_now(c, "stopped", "", d)
-        tc = _task_control()
-        if tc is not None and c.task_id:
-            try:
-                tc.request(c.task_id, "stop")
-            except Exception:
-                pass
     return 200, {"ok": True, "support": c.id,
                  "message": "Stopping. Nothing more is sent; messages already sent stay sent. "
                             "The window closes."}

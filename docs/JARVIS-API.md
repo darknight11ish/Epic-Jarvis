@@ -10528,7 +10528,11 @@ frame with no address of its own belongs to the page it is in). Anything
 else: "a chat window from <host>, which Jarvis does not recognise", and a
 pause. The vendor table (Zendesk, Intercom, LivePerson, Gorgias, Freshchat,
 Salesforce, and an unbranded fallback on `role="log"`) is **NOT VERIFIED**:
-written without access to any of these widgets.
+written without access to any of these widgets. The unbranded fallback is
+held narrow: only the nearest part of the page around a `role="log"` list
+that also holds a text area (never the whole page), only a text area or a
+textbox, and only a button labelled Send - a site's search box or a form's
+submit button is never taken for a chat.
 
 The owner's commands on the PC (one line each, PowerShell, in Jarvis's
 folder):

@@ -328,6 +328,15 @@ class Fake:
                             'type="password"></form>',
                  "leave": f'<script>setTimeout(()=>location.href="http://localhost:'
                           f'{self.port}/elsewhere",800)</script>'}.get(mode, "")
+        if mode == "search_only":
+            # No chat at all: a live "updates" list in a sidebar, and the
+            # site's search box somewhere else on the page.
+            return TOP.replace("%TOPEXTRA%", "").replace(
+                "%PLACE%", '<aside><div role="log">Order updates</div></aside><main><p>'
+                           'Help articles</p><form onsubmit="fetch(\'/sent\',{method:'
+                           '\'POST\',body:\'search\'});return false"><input type="text" '
+                           'name="q" aria-label="Search"><textarea aria-label="Feedback">'
+                           '</textarea><button type="submit">Search</button></form></main>')
         return TOP.replace("%PLACE%", place).replace("%TOPEXTRA%", extra)
 
     def reset(self):
@@ -509,6 +518,21 @@ def t_pages_that_need_the_owner():
             st = a.status()
         check("the page sent elsewhere pauses, naming the host",
               st.state == "needs_owner" and "localhost" in st.reason, st)
+    finally:
+        a.close()
+    f.reset()
+    a = widget("unbranded", "search_only")
+    try:
+        a.open()
+        st = a.status()
+        check("unbranded: a page's search box and a far-off role=log list are not a chat",
+              st.state == "needs_owner" and st.reason == S.NO_CHAT, st)
+        try:
+            a.send("hello")
+            sent = True
+        except RuntimeError:
+            sent = False
+        check("...and nothing is typed or submitted there", not sent and f.state["sent"] == [])
     finally:
         a.close()
     a = widget("zendesk")

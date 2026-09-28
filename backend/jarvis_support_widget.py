@@ -51,7 +51,11 @@ VERIFIED like every selector.
 
 VENDORS (the design's list): Zendesk, Intercom, LivePerson, Gorgias,
 Freshchat, Salesforce, and an unbranded fallback on standard page roles
-(role="log", a text box, a Send button). Every selector and host is a
+(role="log", a text box, a Send button) - held narrow on purpose: only the
+nearest part of the page around a role="log" list that also holds a text
+area (never the whole page), only a text area or a textbox, and only a
+button labelled Send, so a site's search box or a form's submit button is
+never taken for a chat. Every selector and host is a
 GUESS written without access to any of these widgets (the container this
 was built in could not reach them): NOT VERIFIED. The owner checks them on
 the PC with one line that reads only and sends nothing:
@@ -107,6 +111,10 @@ class Vendor:
     container: tuple = ()
     hosts: tuple = ()
     roles: dict = field(default_factory=dict, compare=False, hash=False)
+    #: Its own message box and Send selectors only - never the shared,
+    #: broader ones (the unbranded fallback: a page's search box or a
+    #: form's submit button must never be taken for a chat's).
+    strict: bool = False
 
 
 VENDORS = (
@@ -144,8 +152,14 @@ VENDORS = (
                   "salesforceliveagent.com", "salesforce-scrt.com"),
            roles={"own": ('[class*="outbound" i]', '[class*="chasitor" i]')}),
 )
-#: No maker recognised: standard page roles on the page itself.
-UNBRANDED = Vendor("unbranded", "an unbranded chat", container=('[role="log"]',))
+#: No maker recognised: standard page roles. The chat is the nearest part
+#: of the page (at most UNBRANDED_LEVELS up from a role="log" list, never the
+#: whole page) that also holds a text area; only a text area or a textbox,
+#: and only a button labelled Send, are ever used there.
+UNBRANDED = Vendor("unbranded", "an unbranded chat", container=('[role="log"]',), strict=True,
+                   roles={"input": ('textarea', '[contenteditable="true"][role="textbox"]'),
+                          "send": ('button[aria-label*="send" i]', 'button[title*="send" i]')})
+UNBRANDED_LEVELS = 3
 
 #: Shared selectors inside any chat, tried after the vendor's own.
 SHARED_ROLES = {
@@ -180,6 +194,8 @@ TOP_SELECTORS = {
 
 
 def vendor_roles(v: Vendor, role: str) -> tuple:
+    if v.strict and role in ("input", "send"):
+        return tuple(v.roles.get(role, ()))
     return tuple(v.roles.get(role, ())) + tuple(SHARED_ROLES.get(role, ()))
 
 
@@ -316,17 +332,51 @@ class SupportWidget(W.WebAdapter):
                 self.frame_host = host
                 if self._first(frame, vendor_roles(v, "input")) is not None:
                     return frame, v, ""
+            if v is UNBRANDED:
+                scope = self._unbranded_scope()
+                if scope is not None:
+                    self.frame_host = ""
+                    return scope, v, ""
+                continue
             for csel in v.container:
                 try:
                     loc = self._page.locator(csel)
                     if loc.count() and loc.first.is_visible():
-                        scope = loc.first if v is not UNBRANDED else self._page
+                        scope = loc.first
                         if self._first(scope, vendor_roles(v, "input")) is not None:
                             self.frame_host = ""
                             return scope, v, ""
                 except Exception:
                     continue
         return None, None, S.NO_CHAT
+
+    def _unbranded_scope(self):
+        """The nearest part of the page around a visible role="log" list that
+        also holds a text area - at most UNBRANDED_LEVELS up, and never the
+        page's body: a search box elsewhere on the page is not a chat."""
+        try:
+            loc = self._page.locator('[role="log"]')
+            n = min(loc.count(), 5)
+        except Exception:
+            return None
+        for i in range(n):
+            node = loc.nth(i)
+            try:
+                if not node.is_visible():
+                    continue
+            except Exception:
+                continue
+            for _ in range(UNBRANDED_LEVELS):
+                node = node.locator("xpath=..")
+                try:
+                    tag = str(node.evaluate("e => e.tagName") or "").upper()
+                except Exception:
+                    break
+                if tag in ("BODY", "HTML", ""):
+                    break
+                if self._first(node, vendor_roles(UNBRANDED, "input")) is not None:
+                    return node
+        return None
 
     @staticmethod
     def _first(scope, selectors: tuple):

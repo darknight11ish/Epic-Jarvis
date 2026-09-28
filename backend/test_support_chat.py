@@ -770,13 +770,16 @@ def t_takeover_resume_and_stop():
     v = S.chat_view(c)
     check("both apps see 'take_over'", v["take_over"] is True)
     w.push("Actually the spa closed on 2 August, I checked.", who="own")
-    w.script[2] = ["Thanks. This chat has ended."]
+    d.clock.sleep(20 * 60)            # the owner took their time in the window
+    w.push("Thanks for checking. This chat has ended.")
     rec = TC.paused()
     text = TC.resume_card_text(rec["id"], TC._paused[rec["id"]], S)
     check("Resume is its own card, in this chat's words",
           "Groupon's customer support" in text and "kept as yours" in text)
     code, _ = TC.resume(gate_check=lambda a, dt, p: Verdict(True, "approved"), wait=True)
     owner = [t for t in c.transcript if t["who"] == "owner"]
+    check("after a long pause, Resume does not greet the agent with 'Are you still there?'",
+          S.STILL_THERE not in w.sent, w.sent)
     check("what the owner typed in the window is kept as theirs, not Jarvis's",
           code == 202 and owner and owner[0]["outside_text"] is False
           and owner[0]["move"] == "window", (code, owner))
@@ -793,6 +796,32 @@ def t_takeover_resume_and_stop():
     code, _ = S.stop(c.id, deps=d)
     check("Stop on a paused chat ends it at once and closes the window",
           code == 200 and c.state == "stopped" and w.closed == 1)
+
+
+def t_takeover_while_the_card_waits_and_a_waiting_driver():
+    fresh()
+    holder = {}
+
+    def gate(action, detail, prompt):
+        CARDS.append((action, detail, prompt))
+        if action == S.ACTION:
+            holder["take"] = S.takeover(holder["c"].id)
+        return Verdict(True, "approved")
+    w = S.FakeWidget({1: ["Hi"]})
+    d = world(w, moves=[reply(OPENING)], gate=gate)
+    c = S.plan("groupon", GOAL, details=DETAILS, deps=d)
+    holder["c"] = c
+    S.start(c, deps=d, wait=True)
+    check("Take over pressed while the card waited: paused before anything is sent",
+          holder["take"][0] == 200 and c.paused_code == "takeover" and w.sent == [],
+          (holder["take"], c.paused_code, w.sent))
+    fresh()
+    w = S.FakeWidget({})
+    c, d = go(w, moves=[{"move": "wait"}] * 50)
+    asked = [b for b in d.model.bodies if b.get("format") == S.MOVE_SCHEMA]
+    check("a driver that waits instead of writing the opening is asked once, and a chat "
+          "that stays quiet ends like one never opened", len(asked) == 1
+          and c.ended_code == "no_chat" and w.sent == [], (len(asked), c.ended_code))
 
 
 def t_one_window_at_a_time():
