@@ -751,8 +751,18 @@ def t_the_patch():
         return check("SKIP - git is not installed", True)
     import _stack
     order = _stack.order()
-    check("projects.patch is in apply-patches.ps1's list, last",
-          "projects.patch" in order and order[-1] == "projects.patch", order[-3:])
+    # Last of the patches that change jarvis_hud.py. A later patch that
+    # changes only another file (chatbot.patch: jarvis_gate.py) does not
+    # move the lines this one anchors on, so it may come after it.
+    def touches_hud(name):
+        try:
+            text = (Path(__file__).resolve().parent / name).read_text(encoding="utf-8")
+        except OSError:
+            return True
+        return "+++ b/jarvis_hud.py" in text
+    hud_order = [n for n in order if touches_hud(n)]
+    check("projects.patch is in apply-patches.ps1's list, the last to change jarvis_hud.py",
+          "projects.patch" in order and hud_order[-1] == "projects.patch", hud_order[-3:])
     if "projects.patch" not in order:
         return
     text, log = _stack.stand_in("jarvis_hud.py", order[:order.index("projects.patch")])
