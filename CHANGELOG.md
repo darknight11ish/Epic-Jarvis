@@ -190,6 +190,15 @@ number as the last part - `0.2.57` is a build of 0.2.
   used to read both sides).
 - **Fixed:** a Google Takeout with Search activity in it no longer treats
   searches as Gemini chats.
+- **DeepSeek chats can be brought in too**, and Jarvis reads imported chats
+  better: a long chat is read in pieces the model can take in whole (the
+  start of a long chat could be cut off before), with the date the chat
+  happened and the facts Jarvis already keeps, the same way live learning
+  does. Gemini's prompts are put back into conversations instead of being
+  read one line at a time, without the "Prompted" in front, and "Gave
+  feedback" lines are no longer taken as things you said. Claude's hidden
+  reasoning and tool output are never read. If the AI model stops answering
+  partway, the import pauses and nothing is lost.
 
 **New: desktop polish**
 

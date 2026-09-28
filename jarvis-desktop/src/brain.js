@@ -486,7 +486,7 @@ const state = {
 let advancedOpen = false;
 
 /* "Bring in old chats" (history-import.js; JARVIS-API.md section 85): a
-   ChatGPT, Claude or Gemini export, picked on this PC by the Windows dialog
+   ChatGPT, Claude, Gemini or DeepSeek export, picked on this PC by the Windows dialog
    in Rust, read in the background by the PC, which only PROPOSES - every
    fact waits under "Waiting for you", one card each. Mounted here, before
    the first render, so render("memory") can ask it where a run is. */

@@ -3,7 +3,7 @@
  * jarvis_history_import.py and import_history.py; Rust
  * brain/history_import.rs).
  *
- * The owner picks a ChatGPT, Claude or Gemini export on this PC (the Windows
+ * The owner picks a ChatGPT, Claude, Gemini or DeepSeek export on this PC (the Windows
  * "Open" dialog runs in Rust - this window gets no file access), and the PC
  * reads the owner's OWN messages in the background and PROPOSES facts.
  * Every one lands under "Waiting for you" as its own card: nothing is saved
@@ -28,7 +28,7 @@ export const POLL_MS = 2000;
 /** The words this page shows. ABOUT is the PC's own (jarvis_history_import.ABOUT). */
 export const HISTORY_IMPORT = {
   title: "Bring in old chats",
-  start: "Bring in chats from ChatGPT, Claude or Gemini",
+  start: "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek",
   again: "Choose a file and carry on",
   stop: "Stop",
   stopping: "Stopping…",
@@ -41,7 +41,8 @@ export const HISTORY_IMPORT = {
   how: "How to get the file: in ChatGPT, Settings, Data controls, Export data - an email " +
     "brings a link to a .zip. In Claude, Settings, Privacy, Export data. For Gemini, " +
     "Google Takeout (takeout.google.com) with only “My Activity”, Gemini Apps, " +
-    "chosen, and JSON as its format. Save the .zip on this PC, then choose it here. " +
+    "chosen, and JSON as its format. In DeepSeek, Settings, Data, Export data. " +
+    "Save the .zip on this PC, then choose it here. " +
     "Nothing is uploaded.",
   missing: "Your PC's Jarvis cannot bring in old chats yet - run apply-patches.ps1 on the PC.",
   unreadable: "Your PC answered, but not in a way this app can read.",
@@ -77,11 +78,12 @@ export function importView(answer) {
   }
   const running = answer.state === "running" || answer.state === "stopping";
   const here = answer.here !== false;
-  const paused = answer.outcome === "queue_full" || answer.outcome === "cancelled";
+  const paused = answer.outcome === "queue_full" || answer.outcome === "cancelled"
+    || answer.outcome === "no_model";
   return {
     words: here || running ? answer.words : HISTORY_IMPORT.notHere,
     tone: answer.outcome === "failed" || answer.outcome === "not_export"
-      || answer.outcome === "empty" ? "warn" : "",
+      || answer.outcome === "empty" || answer.outcome === "no_model" ? "warn" : "",
     running,
     canStart: !running && here,
     canStop: answer.state === "running",
