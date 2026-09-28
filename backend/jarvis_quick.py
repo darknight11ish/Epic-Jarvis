@@ -96,6 +96,25 @@ group): "tell me when a search for X shows something new" (", once a day"
 "tell me when CI fails / finishes on owner/repo [branch]" and "tell me when
 PR #12 on owner/repo merges" - each ONE card too (_tellme_watches).
 
+"REMIND ME NEXT TIME I TALK ABOUT ..." (jarvis_next_time.py, 2026-09-28):
+"remind me next time I talk about the dentist to ask about the bill", "next
+time I mention Sam, remind me to ask about the loan", "remind me to ask
+about the bill next time I talk about the dentist". No card, like a one-time
+reminder; "cancel that" takes it back, as for any reminder set here.
+"Delete the reminder about the dentist" deletes ONE; "what will you remind
+me of next time?" lists them. It is brought up by jarvis_agent.py, not here.
+
+"RING MY PHONE" (jarvis_find_phone.py, 2026-09-28): "ring my phone", "find
+my phone", "where's my phone" - ONE event the phone rings for, on its alarm
+channel, even on silent. No card: it only rings the owner's own phone.
+"Stop ringing my phone" stops it from the PC.
+
+LOCKDOWN (jarvis_asks_first.py, 2026-09-28): "lockdown", "turn on lockdown",
+"lock everything down" - every way out of this PC asks first, or stops, at
+once. "Turn off lockdown" goes through the same path as the apps' button:
+from the PC, ONE approval card plus Windows Hello; from anywhere else it
+says where to do it. "Is lockdown on?" says whether it is.
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
@@ -629,6 +648,8 @@ def match(text, now: Optional[float] = None) -> Optional[Intent]:
     got = _match(text, now)
     if got is not None and got.f.get("text"):
         got.f["text"] = _restore(text, got.f["text"])
+    if got is not None and got.f.get("about"):
+        got.f["about"] = _restore(text, got.f["about"])
     if got is not None and got.f.get("items"):
         got.f["items"] = [_restore(text, i) for i in got.f["items"]]
     return got
@@ -824,6 +845,16 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- music and video control on this PC (jarvis_media.py, I91) -------------------
     got = _media(s)
+    if got is not None:
+        return got
+
+    # --- "remind me next time I talk about ..." (jarvis_next_time.py) ------------------
+    got = _next_time(s)
+    if got is not None:
+        return got
+
+    # --- "ring my phone" (jarvis_find_phone.py) and Lockdown (jarvis_asks_first.py) ----
+    got = _find_phone(s) or _lockdown(s)
     if got is not None:
         return got
 
@@ -1207,6 +1238,175 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
         if when is not None:
             return Intent("reminder_set", {"text": text, "when": when})
     return None
+
+
+#: "Remind me next time I talk about X" (jarvis_next_time.py, 2026-09-28).
+#: The subject is "the dentist" in each of: "remind me next time I talk about
+#: the dentist to ask about the bill", "remind me to ask about the bill next
+#: time I talk about the dentist", "next time I mention the dentist, remind
+#: me to ask about the bill", "when I next talk about the dentist remind me
+#: to ask about the bill". Several words may fit a subject; the answer says
+#: back which were taken, and "cancel that" takes it back at once.
+_NT_TALK = (r"(?:talk|speak|chat|ask)\s+(?:to\s+you\s+|with\s+you\s+)?about|mention|bring\s+up"
+            r"|say\s+anything\s+about")
+_NT_NEXT = r"(?:the\s+)?next\s+time\s+(?:i|we)\s+(?:" + _NT_TALK + r")"
+_NT_WHEN = r"when(?:ever)?\s+(?:i|we)\s+next\s+(?:" + _NT_TALK + r")"
+_NT_WHAT = r"(?:to|that|about|of)"
+_NT_PATTERNS = (
+    # "remind me next time I talk about <about> to <text>"
+    re.compile(r"remind\s+me\s+(?:" + _NT_NEXT + r"|" + _NT_WHEN + r")\s+(?P<about>.+?),?\s+"
+               + _NT_WHAT + r"\s+(?P<text>.+)"),
+    # "remind me to <text> (the) next time I talk about <about>"
+    re.compile(r"remind\s+me\s+" + _NT_WHAT + r"\s+(?P<text>.+?),?\s+(?:" + _NT_NEXT + r"|"
+               + _NT_WHEN + r")\s+(?P<about>.+)"),
+    # "next time I talk about <about>, remind me to <text>"
+    re.compile(r"(?:" + _NT_NEXT + r"|" + _NT_WHEN + r")\s+(?P<about>.+?),?\s+remind\s+me\s+"
+               + _NT_WHAT + r"\s+(?P<text>.+)"),
+)
+_NT_CANCEL = re.compile(
+    r"(?:cancel|delete|remove|forget|drop|stop)\s+(?:the\s+|my\s+)?(?:next[\s-]time\s+)?"
+    r"reminder\s+(?:for\s+next\s+time\s+)?(?:about|for|on)\s+(?P<about>.+)")
+_NT_LIST = re.compile(
+    r"what\s+(?:will|would|are)\s+you\s+(?:going\s+to\s+)?remind\s+me\s+(?:of|about)\s+"
+    r"next\s+time|(?:what\s+are|list|show\s+me)\s+(?:my\s+)?reminders\s+for\s+next\s+time"
+    r"|what\s+(?:reminders\s+)?(?:do\s+i\s+have|have\s+i\s+got)\s+for\s+next\s+time")
+
+
+def _next_time(s: str) -> Optional[Intent]:
+    for rx in _NT_PATTERNS:
+        m = rx.fullmatch(s)
+        if not m:
+            continue
+        about = m.group("about").strip(" ,")
+        text = m.group("text").strip(" ,")
+        if about and text and len(text) <= 300 and not re.fullmatch(_VAGUE, text):
+            return Intent("next_time_set", {"about": about, "text": text})
+    if _NT_LIST.fullmatch(s):
+        return Intent("next_time_list")
+    m = _NT_CANCEL.fullmatch(s)
+    if m:
+        return Intent("next_time_cancel", {"about": m.group("about").strip()})
+    return None
+
+
+#: "Ring my phone" (jarvis_find_phone.py, 2026-09-28). A phone the owner
+#: names ("ring my work phone") is kept, so the answer can say plainly that
+#: Jarvis cannot tell phones apart yet.
+_RING = re.compile(
+    r"(?:ring|call|buzz|beep)\s+(?:my|the)\s+(?:(?P<name>[a-z][a-z' ]{0,20}?)\s+)?"
+    r"(?:phone|mobile|cell(?:\s*phone)?|android)"
+    r"|(?:find|locate)\s+(?:my|the)\s+(?:(?P<name2>[a-z][a-z' ]{0,20}?)\s+)?"
+    r"(?:phone|mobile|cell(?:\s*phone)?|android)"
+    r"|where(?:'s|\s+is)\s+my\s+(?:(?P<name3>[a-z][a-z' ]{0,20}?)\s+)?"
+    r"(?:phone|mobile|cell(?:\s*phone)?|android)"
+    r"|make\s+my\s+(?:phone|mobile)\s+ring|i\s+(?:can'?t|cannot)\s+find\s+my\s+phone")
+_RING_STOP = re.compile(r"stop\s+ringing(?:\s+(?:my|the)\s+(?:phone|mobile))?"
+                        r"|(?:stop|silence)\s+(?:my|the)\s+phone(?:\s+ringing)?")
+
+
+def _find_phone(s: str) -> Optional[Intent]:
+    if _RING_STOP.fullmatch(s):
+        return Intent("phone_stop")
+    m = _RING.fullmatch(s)
+    if not m:
+        return None
+    name = (m.group("name") or m.group("name2") or m.group("name3") or "").strip()
+    return Intent("phone_ring", {"named": bool(name) and name not in ("own", "android")})
+
+
+#: Lockdown (jarvis_asks_first.py, 2026-09-28).
+_LOCKDOWN_ON = re.compile(
+    r"lock\s*down(?:\s+(?:now|jarvis|everything|the\s+pc|mode))?"
+    r"|(?:turn|switch|put)\s+on\s+lock\s*down(?:\s+mode)?|(?:turn|switch)\s+lock\s*down\s+on"
+    r"|(?:go|get)\s+(?:into|in)\s+lock\s*down|enter\s+lock\s*down|lock\s+(?:it|everything)\s+down"
+    r"|(?:start|enable)\s+lock\s*down")
+_LOCKDOWN_OFF = re.compile(
+    r"(?:turn|switch)\s+off\s+lock\s*down(?:\s+mode)?|(?:turn|switch)\s+lock\s*down\s+off"
+    r"|(?:end|stop|undo|lift|cancel|leave|exit|disable)\s+(?:the\s+)?lock\s*down")
+_LOCKDOWN_ASK = re.compile(r"(?:is|are\s+we\s+in)\s+lock\s*down(?:\s+(?:on|mode\s+on))?"
+                           r"|is\s+jarvis\s+(?:in\s+)?lock(?:ed)?\s*down")
+
+
+def _lockdown(s: str) -> Optional[Intent]:
+    if _LOCKDOWN_ASK.fullmatch(s):
+        return Intent("lockdown_status")
+    if _LOCKDOWN_OFF.fullmatch(s):
+        return Intent("lockdown_off")
+    if _LOCKDOWN_ON.fullmatch(s):
+        return Intent("lockdown_on")
+    return None
+
+
+NEXT_TIME_MISSING = ("Your PC's Jarvis cannot do reminders for next time yet - run "
+                     "apply-patches.ps1 on the PC.")
+FIND_PHONE_MISSING = ("Your PC's Jarvis cannot ring your phone yet - run apply-patches.ps1 on "
+                      "the PC.")
+LOCKDOWN_MISSING = ("Your PC's Jarvis does not have Lockdown yet - run apply-patches.ps1 on "
+                    "the PC.")
+
+
+def _run_next_time(intent: Intent, sched) -> Optional[Result]:
+    n, f = intent.name, intent.f
+    try:
+        import jarvis_next_time as NT
+    except Exception:
+        return Result(NEXT_TIME_MISSING, n)
+    import jarvis_schedule as S
+    if n == "next_time_set":
+        try:
+            j = NT.add(f["about"], f["text"], sched=sched, source="quick")
+        except (ValueError, OverflowError) as exc:
+            return Result(S._sentence(exc), n)
+        if j.get("already"):
+            return Result(NT.ALREADY, n, [j["id"]])
+        return Result(NT.set_words(j), n, [j["id"]], made=[j["id"]],
+                      what="the reminder for next time just set", nouns=("reminder",))
+    if n == "next_time_list":
+        items = NT.waiting(sched=sched)
+        if not items:
+            return Result(NT.NONE_SET, n)
+        words = [f"when you talk about \u201c{i['about']}\u201d: \u201c{i['text']}\u201d"
+                 for i in items[:5]]
+        head = ("One reminder for next time - " if len(items) == 1
+                else f"{len(items)} reminders for next time - ")
+        more = f" And {len(items) - 5} more under Coming up." if len(items) > 5 else ""
+        return Result(head + "; ".join(words) + "." + more, n, [i["id"] for i in items[:5]],
+                      private=True)
+    if not NT.waiting(sched=sched):
+        # No reminder for next time at all: "delete the reminder about the
+        # dentist" is about something else - the model answers, as before.
+        return None
+    ok, said = NT.cancel(f["about"], sched=sched)
+    return Result(said, n)
+
+
+def _run_find_phone(intent: Intent) -> Result:
+    n = intent.name
+    try:
+        import jarvis_find_phone as FP
+    except Exception:
+        return Result(FIND_PHONE_MISSING, n)
+    out = FP.stop() if n == "phone_stop" else FP.ring(named=bool(intent.f.get("named")))
+    return Result(str(out.get("said") or ""), n)
+
+
+def _run_lockdown(intent: Intent, peer, local) -> Result:
+    n = intent.name
+    try:
+        import jarvis_asks_first as AF
+        AF.request_lockdown
+    except Exception:
+        return Result(LOCKDOWN_MISSING, n)
+    if n == "lockdown_status":
+        return Result(AF.LOCKDOWN_ON_SAYS if AF.lockdown_on() else AF.LOCKDOWN_OFF_SAYS, n)
+    # The same route both apps' Lockdown button uses: on at once; off from
+    # this PC only, with ONE card plus Windows Hello.
+    code, out = AF.request_tier({"action": AF.LOCKDOWN, "ask": n == "lockdown_on"},
+                                peer=peer, local=local)
+    said = str(out.get("message") or out.get("error") or "")
+    if said and not said.endswith("."):
+        said += "."
+    return Result(said, n)
 
 
 #: "Tell me when ..." (jarvis_tellme.py, the owner's decision of 2026-09-25):
@@ -2262,6 +2462,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return Result("Here you go.", n)
     if n.startswith("media_"):
         return _run_media(intent)
+    if n.startswith("next_time_"):
+        return _run_next_time(intent, sched)
+    if n in ("phone_ring", "phone_stop"):
+        return _run_find_phone(intent)
+    if n.startswith("lockdown_"):
+        return _run_lockdown(intent, peer, local)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
     if n.startswith("focus_"):

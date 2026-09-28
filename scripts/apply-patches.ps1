@@ -766,6 +766,9 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
+    # --- "remind me next time I talk about X" and "ring my phone" (2026-09-28) ---
+    'jarvis_next_time.py'        # a reminder with no time of its own, brought up beside the question; a kind on jarvis_schedule.py, no patch
+    'jarvis_find_phone.py'       # "ring my phone": ONE ring_phone event the phone rings for, no card, no patch
 )
 
 # The settings file. Installed only where none exists; never overwritten.

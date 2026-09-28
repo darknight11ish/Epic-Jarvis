@@ -196,6 +196,11 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # "remind me next time I talk about X": a kind on the one scheduler,
+    # brought up beside the question by jarvis_agent.py - no patch
+    "jarvis_next_time.py",
+    # "ring my phone": ONE ring_phone event the phone rings for - no patch
+    "jarvis_find_phone.py",
 )
 
 
