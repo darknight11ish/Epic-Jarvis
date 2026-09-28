@@ -60,6 +60,15 @@ word `hud`. `docs/CROSS-CLIENT-CONTRACT.md` §1 spells out the consequence —
 the server cannot tell the laptop from the phone, so no per-device permission
 scheme can be built on it.
 
+**Since 2026-09-28 the key itself can say which device it is** (section 90,
+QR-code pairing): a paired phone holds a key of its own, `jdk1.<device id>.
+<secret>`, sent in the same `X-Jarvis-Token` header. `X-Jarvis-Client` is
+still not identity; the key now is. The old shared key keeps working until
+the owner retires it, and after that works on the PC itself only. A 401 for
+a device key the PC removed, or for the retired shared key from another
+device, carries `"key": "device_removed"` or `"key": "shared_retired"`
+(section 90.5).
+
 Sent by:
 - Android: `jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisApi.kt:257`
   (`Request.Builder.authed()`); header names at `JarvisApi.kt:723-724`, and the
@@ -186,6 +195,10 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 | `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
+
+`devices` (section 90, `backend/jarvis_devices.py`): `{}` and nothing else -
+a device was paired or removed, or the old shared key was retired or
+brought back. Both apps re-read `GET /api/devices` when they show it.
 
 `attention` is the one kind that carries its own state instead of ringing a
 bell (`stream.rs:506-511`). `wellbeing` (above) carries one boolean for the
@@ -13221,3 +13234,190 @@ preview. It dims with the animal on standby, keeps showing while Jarvis is
 not connected and in a serious moment, is unchanged by "Keep the animal
 still" (it is the sky, not the animal), and under calm (reduced) motion the
 weather holds still. Weather older than 90 minutes is not drawn.
+
+---
+
+## 90. Pairing a phone by QR code, with a key per device (added 2026-09-28)
+
+The owner's decisions (`CLAUDE.md`, 2026-09-24 and 2026-09-28): "Phone
+pairing by QR code, with a short typed code as the backup, confirmed by an
+approval card on the PC before any key is handed over", built together with
+a key per device, "listed in both apps with its own Remove". The design,
+with every reason, is `docs/PAIRING-DESIGN.md` - phase 1 (this section).
+Phase 2, a fingerprint-signed yes for risky cards from the phone, is not
+built.
+
+`backend/jarvis_devices.py`, shipped whole; `devices.patch` adds one block to
+`jarvis_hud.py` BEFORE every module is handed `_token_ok` (so the device-key
+check reaches every route), and the two cards' lines to `jarvis_gate.py`.
+`GET /api/version` says `capabilities.pairing: {"version": 1}` once it is
+running (absent or `false` on an older PC); both apps show pairing and
+Devices only then. A PC without `jarvis_devices.py` answers 404 on every
+route below.
+
+Every answer is JSON. Every route passes the server's origin check as today,
+so every request sends `X-Jarvis-Client: hud`. **PC only** means the request
+comes from this PC (`jarvis_owner_check.from_this_pc`), else
+`403 {"ok": false, "pc_only": true, "error": "This can only be done on the PC itself."}`.
+**Mesh only** means it comes from Tailscale or NordVPN Meshnet
+(`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) **and not from this PC**, else
+`403 {"ok": false, "reason": "not_mesh", "error": <sentence>}`.
+Refusals carry `"ok": false` and a plain `"error"` sentence beside the
+fields below; the sentences are in `tools/gen_pairing_cases.py`'s shared
+cases file, which both apps read.
+
+### 90.1 The key
+
+`jdk1.<id>.<secret>`: `<id>` is `d` + 8 lowercase hex characters (safe to
+show and log); `<secret>` is 43 characters of base64url (32 random bytes).
+Pattern: `jdk1\.d[0-9a-f]{8}\.[A-Za-z0-9_-]{43}`. The PC keeps only its
+SHA-256 (`<settings folder>/devices/registry.json`, a subfolder, so a backup
+never holds it). The phone keeps it in `TokenStore`, like the old key. It is
+never logged: the backend's log scrubber (`jarvis_scrub.py`) knows its
+shape, and the shared cases file gives the same cases to the phone's crash
+log and the desktop's log scrubber.
+
+### 90.2 Starting and watching a pairing (PC only, key required)
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/pair/start` | `{"address": "jarvis-pc.tail1234.ts.net", "port": 4719}` (`port` optional: the server's own) | **200** `{"ok": true, "pair_id", "qr", "code", "expires_in": 600, "tries_left": 3}`. **400** `{"reason": "address"}` (the phone's own sentence: the address must be on the owner's networks AND a `.ts.net` or `.nord` name) or `{"reason": "bad_request"}` (a bad port). **503** when pairing cannot work here (the device list cannot be read; `pair_device` not "ask"; approvals not checked by this PC). Starting again cancels the previous session and withdraws its card. |
+| `GET /api/pair/session` | - | **200** `{"state", "expires_in", "tries_left", "device_name", "words", "wrong_tries_from", "message"}`, or `{"state": "none"}`. `words` from `waiting_for_card` on; `message` is the sentence for the state. **Never** the QR text, the secret or the code. |
+| `POST /api/pair/cancel` | `{}` | **200** `{"ok": true, "was": "<state>"}`. A waiting card is withdrawn: approving it afterwards makes no key. |
+
+States: `waiting_for_phone` -> `waiting_for_card` -> `approved` -> `done`,
+or it ends as `denied`, `timed_out` (the card ran out), `expired` (10
+minutes), `burnt` (3 wrong tries), `cancelled` or `refused` (the gate
+refused - wrong tier, gate failure). At most one session at a time.
+
+The QR text - in `start`'s answer **only**, never logged or sent in an
+event - is
+`jarvis-pair:1/<host>/<port>/<pair_id>/<secret>/<expires>`: exactly six
+parts; `host` lower case, `[a-z0-9.-]`, ending `.ts.net` or `.nord`;
+`port` 1-65535 with no leading zero; `pair_id` 16 lowercase hex; `secret`
+22 base64url characters (16 bytes); `expires` 10 digits (a countdown only -
+the PC decides). A version other than `1` is "newer"; anything else "not a
+Jarvis pairing code". The typed `code` is 8 characters of Crockford's
+alphabet (`0-9 A-Z` without `I L O U`), shown `K7QM-4TXD`; the phone
+normalises it (upper case, spaces and `-` removed, `O`->`0`, `I`/`L`->`1`).
+
+### 90.3 The phone's half (no key, mesh only)
+
+The only routes in Jarvis that take no key: the phone has none yet. The QR
+secret or the typed code proves it may ask - without ever being sent.
+
+**`POST /api/pair/claim`** `{"method": "qr", "pair_id", "phone_nonce", "name", "proof"}`
+(`method: "code"` leaves out `pair_id`).
+
+| Answer | Body |
+|---|---|
+| `202` | `{"state": "waiting_for_card", "pair_id", "pc_nonce", "pc_proof", "words": [4 words], "expires_in"}` - the `pair_device` card is up on the PC. The phone checks `pc_proof`, works the words out itself and refuses if they differ. |
+| `403` | `{"reason": "wrong_proof", "tries_left": n}` - counts toward the 3 tries; at 0 the session is burnt. A claim for a session already claimed counts too. |
+| `403` | `{"reason": "not_mesh"}` - not Tailscale/Meshnet, or the PC itself. |
+| `410` | `{"reason": "gone", "state": "expired" \| "burnt" \| "cancelled" \| "used" \| "none"}` |
+| `400` | `{"reason": "name" \| "bad_request"}` - the name is outside the rule, or the request cannot be read. Not a try. |
+| `503` | `{"reason": "card"}` - the card could not be raised; the code still works. |
+
+**`POST /api/pair/collect`** `{"pair_id", "proof"}` - every 2 s while the card waits.
+
+| Answer | Body |
+|---|---|
+| `202` | `{"state": "waiting_for_card", "expires_in"}` |
+| `200` | `{"state": "approved", "device_id", "token"}` - the key, **once**; the session ends (`done`). |
+| `403` | `{"state": "denied"}` |
+| `410` | `{"state": "timed_out" \| "expired" \| "cancelled" \| "refused" \| "used" \| "none"}` (a burnt session answers `cancelled` here) |
+| `403` | `{"reason": "wrong_proof", "tries_left": n}` - counts toward the 3 tries |
+| `503` | the device list could not be written; the session stays `approved`, so collecting again works |
+
+`phone_nonce` is 16 random bytes, base64url without padding (22
+characters). `name` is 1-40 characters (counted as Unicode code points):
+letters and digits of any script, space, and `- _ . ' ( )` - nothing else,
+refused rather than cleaned, since it is part of the sums and shown on the
+card.
+
+The sums (HMAC-SHA256; `b64u` = base64url without padding; `\0` = a zero
+byte; text UTF-8; the nonces as their base64url text):
+
+```
+K        = the 16 secret bytes from the QR code                (method "qr")
+         = SHA256("jarvis-pair-code-v1" \0 CODE)               (method "code", normalised)
+ref      = pair_id (method "qr") or "-" (method "code")
+T        = "jarvis-pair-v1" \0 method \0 ref \0 phone_nonce \0 name
+proof    = b64u(HMAC(K, "claim" \0 T))
+pc_proof = b64u(HMAC(K, "pc" \0 T \0 pc_nonce))
+words    = D = HMAC(K, "words" \0 T \0 pc_nonce);
+           word i (i = 0..3) = WORDS[(D[2i]*256 + D[2i+1]) mod 1296]
+collect  = b64u(HMAC(K, "collect" \0 pair_id \0 phone_nonce))
+```
+
+`WORDS` is `contract/pair-words.txt` (the EFF short word list 2, 1,296
+words). The design's test vectors (`docs/PAIRING-DESIGN.md` 6.2) are in the
+shared cases file and checked by `backend/test_pairing_cases.py`.
+
+### 90.4 The approval cards
+
+- **`pair_device`**, tier `ask`: "Jarvis wants to connect a new device" -
+  the phone's name and the four words, and "If you did not press 'Pair a
+  phone', deny this". In `jarvis_owner_check.PC_ONLY_ACTIONS`: approved on
+  this PC only, always with Windows Hello; on a PC without Windows Hello it
+  is refused (the owner's "no lock, no risky approval"), so pairing waits
+  until it is set up - the old shared key still works meanwhile. The key is
+  made only after the card is approved, never before. The card lives the
+  usual `approval_timeout_seconds`; the 10-minute session covers the
+  scanning before it.
+- **`unretire_shared_key`**, tier `ask`, also PC only with Windows Hello:
+  bringing the old shared key back for other devices.
+
+Both are in the gate's `_NO_RULE_FROM_DENIAL` (a "no" answers one card, it
+is not a standing wish) and its `_RISK` table (local, reversible).
+
+### 90.5 The device list (any key)
+
+**`GET /api/devices`**
+
+```json
+{"you": "d3f9a1c2e",
+ "devices": [
+   {"id": "pc", "name": "This PC", "kind": "pc", "removable": false, "this_device": false},
+   {"id": "d3f9a1c2e", "name": "Pixel 9", "kind": "phone",
+    "created": 1790000000, "last_seen": 1790003580,
+    "this_device": true, "removable": true, "approval_key": false}],
+ "shared": {"retired": false, "retired_at": null,
+            "last_other_seen": 1790003000, "last_other_address": "100.101.2.3",
+            "can_bring_back_here": false},
+ "pairing": {"available": true, "why_not": null}}
+```
+
+`you` is `"pc"` (this PC), `"shared"` (the old shared key from another
+device) or the caller's device id. Never a key, never a hash; removed
+devices are not listed. `last_seen` is rounded to the minute and written at
+most once a minute. `shared.retired` is also `true` when the device list
+cannot be read (it then works on this PC only). `shared.waiting: true`
+appears while a Bring back card waits. `pairing.why_not` is a sentence when
+pairing cannot work (the list cannot be read; `pair_device` not "ask";
+approvals not checked by this PC). Windows Hello being missing is found only
+when the card is approved - Windows cannot be asked without showing the
+prompt.
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/devices/remove` | `{"id": "d3f9a1c2e"}` and nothing else | **200** `{"ok": true, "id", "name", "was_this_device"}`, immediate, no card. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_removable"}` for `"pc"`, `{"reason": "bad_request"}` for anything else (a list is refused - no "remove all"). Audit line `devices.removed` with the id only; a `devices` event. The removed device's open connections stop at their next write (the event stream's keepalive: about 10 s); a phone removing itself still gets this answer. |
+| `POST /api/devices/shared` | `{"retired": true}` | **200** `{"ok": true, "retired": true, "retired_at"}`, immediate, no card, from either app. **409** `{"reason": "uses_it_yourself"}` when this very request used the shared key from another device - it would cut itself off. |
+| `POST /api/devices/shared` | `{"retired": false}` | Bring it back: **PC only** (403 otherwise), **409** `{"lockdown": true}` while Lockdown is on, else **202** `{"ok": true, "waiting": true}` and ONE `unretire_shared_key` card (Windows Hello). Retiring again while it waits withdraws it. Already not retired: **200** `{"ok": true, "retired": false}`. |
+
+A 401 for a device key the PC removed (or never had) carries `"key":
+"device_removed"`; for the old shared key from another device after Retire,
+`"key": "shared_retired"`. Both apps say the design's sentences (in the
+shared cases file); without `key`, today's words.
+
+### 90.6 Failing safe
+
+- No `jarvis_devices.py`, or its block fails: nothing is replaced - only the
+  shared key works, exactly as before - and the banner says "devices NOT ON".
+- A device list that cannot be read: every device key is refused, and the
+  shared key is treated as retired for other devices - this PC keeps
+  working, so the owner can see what is wrong. `py -3 jarvis_devices.py
+  --start-fresh` on the PC moves it aside (there is no route for this;
+  every phone then pairs again).
+- Retire never touches this PC, and cannot be pressed by the device that
+  still depends on the shared key.

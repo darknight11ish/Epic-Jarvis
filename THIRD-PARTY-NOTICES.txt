@@ -760,6 +760,20 @@ ONNX Runtime, the wake-word and Smart Turn models, with their licence
 texts - is jarvis-client/app/src/main/assets/licenses/NOTICES.txt. The app
 shows it under FAQ -> About -> Third-party notices.
 
+PAIRING WORDS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+EFF's "short word list 2" (Electronic Frontier Foundation,
+https://www.eff.org/dice), Creative Commons Attribution 3.0 United States
+(https://creativecommons.org/licenses/by/3.0/us/) as EFF publishes it.
+  The four words both apps show when a phone is paired by QR code
+  (docs/PAIRING-DESIGN.md 6.2): contract/pair-words.txt, the same 1,296
+  words in backend/jarvis_devices.py (WORDS), unchanged. Taken from two
+  copies that agree word for word - the passphraseme project's
+  eff_short_wordlist_2_0.txt on GitHub and the xkcdpass package's
+  "eff-special" list - because eff.org itself could not be reached from
+  where this was added (2026-09-28); the licence is to be re-read on EFF's
+  own page. Word list (c) Electronic Frontier Foundation.
+
 2. RUST LIBRARIES IN THE DESKTOP PROGRAM (generated)
 ====================================================
 
