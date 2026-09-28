@@ -633,6 +633,47 @@ $PATCHES = @(
     # tool loop already makes - for the local model only. Needs nothing new
     # copied in: jarvis_agent.py is already in this list.
     'rules-first-relay.patch'
+    # The Brain upgrades (the owner's choice, 2026-09-28; docs/JARVIS-API.md
+    # section 71): GET /api/history/search ("search what was said in old
+    # chats" - each kept turn opened in memory for that one search, no
+    # index, nothing written) and GET /api/memory/fact-history ("history of
+    # this fact" - an erased version never with its words). Reads for the
+    # apps only; nothing here reaches the AI model. Its jarvis_hud.py
+    # context is answer-sources.patch's own install block, so it goes after
+    # it - last, like every new patch. second-card-suggest.patch, above it
+    # in this list, touches a different part of the file (the POST route
+    # chain). Needs jarvis_brain_reads.py copied in; without it the banner
+    # says so and the two routes are simply not there (404).
+    'brain-reads.patch'
+    # Warm-up with words, after a learning pass (speed fix, 2026-09-28): one
+    # hunk in the learner thread's _loop, whose lines are extraction-
+    # wiring.patch's own (nothing after it in this list touches them), so
+    # it goes last, like every new patch. After each pass that asked a
+    # model it calls jarvis_agent.warm_after_learning(), which re-reads the
+    # start every question shares only on a one-card PC and never while a
+    # question is being answered. Needs nothing new copied in: jarvis_agent.py
+    # is already in this list; without it, nothing changes.
+    'warm-prefix.patch'
+    # "Photo to reminder" (the owner's choice, 2026-09-28; docs/JARVIS-API.md
+    # section 83): POST /api/photo/scan reads the words in a picture with
+    # Windows' own text recognition (jarvis_ocr.py), finds a date and time
+    # with jarvis_quick.py's own parser, and PROPOSES a reminder - it sets
+    # nothing up; the owner's tap adds it through /api/schedule/add. Its
+    # jarvis_hud.py context is brain-reads.patch's own install block, so it
+    # goes after it - last, like every new patch; warm-prefix.patch, above,
+    # touches the learner thread, not these lines. Needs
+    # jarvis_photo_remind.py copied in; without it the banner says so and the
+    # route is simply not there (404).
+    'photo-reminder.patch'
+    # "Bring in chats from ChatGPT, Claude or Gemini" (the owner's choice,
+    # 2026-09-28; docs/JARVIS-API.md section 85): GET /api/memory/import_chats
+    # and POST /api/memory/import_chats/start (this PC only, no card - it
+    # only PROPOSES; every fact waits for the owner's yes) and /cancel. Its
+    # jarvis_hud.py context is photo-reminder.patch's own install block, so
+    # it goes after it - last, like every new patch. Needs
+    # jarvis_history_import.py and import_history.py copied in; without them
+    # the banner says so and the routes are simply not there (404).
+    'history-import.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -766,6 +807,28 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
+    # --- the Brain upgrades (2026-09-28, brain-reads.patch) ---
+    'jarvis_brain_reads.py'      # brain-reads.patch: GET /api/history/search, /api/memory/fact-history, /api/memory/conversation-facts and /api/pc/help, reads for the apps only
+    # --- "remind me next time I talk about X" and "ring my phone" (2026-09-28) ---
+    'jarvis_next_time.py'        # a reminder with no time of its own, brought up beside the question; a kind on jarvis_schedule.py, no patch
+    'jarvis_find_phone.py'       # "ring my phone": ONE ring_phone event the phone rings for, no card, no patch
+    # --- smarter memory dates, "Where did I put ...?" (2026-09-28) ---
+    'jarvis_places.py'           # "where is my passport?" answered from the places the owner said, no model; jarvis_quick.py and jarvis_auto_learn.py call it, no patch
+    'jarvis_tidy.py'             # the overnight tidy: "Still true?" / "Which is true now?" review cards only, on the one scheduler, only while its switch is on; no patch
+    # --- "Better voice" (2026-09-28, no patch of its own) ---
+    'jarvis_microwake.py'        # the second "hey Jarvis" detector (microWakeWord), off unless the owner chooses both; jarvis_speech.py calls it
+    # --- Today cards (2026-09-28) ---
+    'jarvis_today.py'            # the owner's own words on the Today part of both apps, at a time on chosen days; a kind on jarvis_schedule.py, no card, no patch
+    'jarvis_photo_remind.py'     # "Photo to reminder": the dates in a picture, read on this PC and PROPOSED, never set by itself (photo-reminder.patch)
+    # --- "PC help" (2026-09-28, no patch of its own) ---
+    'jarvis_pc_help.py'          # "why is my PC slow?", "how full is my disk?" and three more, read-only, no model; GET /api/pc/help through jarvis_brain_reads.py
+    # --- "Smarter answers" (2026-09-28, no patch of its own) ---
+    'jarvis_claims.py'           # "I've done it" when nothing was done: one plain line at the end of the answer; jarvis_agent.py calls it
+    # --- "Bring in chats from ChatGPT, Claude or Gemini" (2026-09-28) ---
+    'import_history.py'          # the old-chats importer itself; still runs from this repository on the command line too
+    'jarvis_history_import.py'   # history-import.patch: the Brain's button runs import_history.run() in the background; every fact waits for a yes
+    # --- "Widgets you describe" (2026-09-28, no patch of its own) ---
+    'jarvis_widgets.py'          # a widget as a small checked description (never code): the model's JSON from a fixed menu; /api/widgets routes, switched on by jarvis_brain_reads.py
 )
 
 # The settings file. Installed only where none exists; never overwritten.

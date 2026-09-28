@@ -2,7 +2,7 @@
 //! setups Jarvis offers for them (backend/hardware.patch,
 //! backend/jarvis_hardware.py, docs/HARDWARE-PROFILES.md).
 //!
-//! Four commands, settings window only (permissions/surfaces.toml,
+//! Five commands, settings window only (permissions/surfaces.toml,
 //! `settings-surface`):
 //!
 //! * [`get_hardware`] - `GET /api/hardware`, passed on as it is.
@@ -15,6 +15,10 @@
 //!   `/api/hardware/create`. Each raises its own approval card; there is no
 //!   form that sends more than one step, so nothing is approved in bulk.
 //! * [`measure_hardware`] - `POST /api/hardware/measure`.
+//! * [`get_pc_help`] - `GET /api/pc/help` ("PC help", JARVIS-API section
+//!   84): five plain answers about this PC, passed on as they are. A read
+//!   only - it changes nothing, so it is not held on a stale link. Its
+//!   answer can name programs; nothing here logs or keeps it.
 //!
 //! Everything that raises a card or loads a model is held while the event
 //! stream is stale (rule 4). Forgetting the choice (`preset: null`) is not:
@@ -50,6 +54,17 @@ const STALE: &str = "The connection to Jarvis is catching up, so nothing can be 
                      until it does.";
 
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// `GET` "PC help" (backend/jarvis_pc_help.py, through jarvis_brain_reads.py).
+pub(crate) const PC_HELP_PATH: &str = "/api/pc/help";
+
+/// What a backend without `jarvis_pc_help.py` is told to do about it.
+pub(crate) const PC_HELP_UPDATE: &str = "This PC's Jarvis does not have PC help yet. \
+     Update the backend by running apply-patches.ps1, then try again.";
+
+/// PC help runs one PowerShell reading of about two seconds on the PC (its
+/// own limit is 12 seconds), so it gets longer than the other reads.
+const PC_HELP_TIMEOUT: Duration = Duration::from_secs(30);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Whether a 404/503 means "this backend has no hardware module": a 404, or
@@ -83,6 +98,25 @@ pub(crate) fn hardware_answer(status: u16, body: &str) -> Result<serde_json::Val
     }
     if missing(status, body) {
         return Ok(serde_json::json!({ "available": false, "why": HARDWARE_UPDATE }));
+    }
+    Err(backend_refusal(status, body))
+}
+
+/// [`get_pc_help`]'s reading of the answer, on its own so it can be tested
+/// against `tests/fixtures/pc-help-cases.json` (the real `read()`).
+pub(crate) fn pc_help_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| v.get("sections").is_some_and(|s| s.is_array()))
+            .ok_or_else(|| {
+                "Jarvis answered, but not in a way this app can read. \
+                 Update the backend by running apply-patches.ps1."
+                    .to_string()
+            });
+    }
+    if missing(status, body) {
+        return Ok(serde_json::json!({ "available": false, "why": PC_HELP_UPDATE }));
     }
     Err(backend_refusal(status, body))
 }
@@ -192,6 +226,21 @@ pub async fn get_hardware(app: AppHandle) -> Result<serde_json::Value, String> {
     read(&app).await
 }
 
+/// "PC help": `GET /api/pc/help`. A read; not held on a stale link.
+#[tauri::command]
+pub async fn get_pc_help(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(PC_HELP_TIMEOUT))?
+        .get(format!("{base}{PC_HELP_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    pc_help_answer(status, &body)
+}
+
 /// Choose a setup, or forget the choice (`preset` absent). Choosing changes
 /// no model and no setting; it is held on a stale link, forgetting is not.
 #[tauri::command]
@@ -238,9 +287,35 @@ pub async fn measure_hardware(app: AppHandle) -> Result<serde_json::Value, Strin
 #[cfg(test)]
 mod tests {
     use super::{
-        hardware_answer, hardware_post_answer, hardware_preset, step_request, HARDWARE_UPDATE,
-        STEP_ROUTES,
+        hardware_answer, hardware_post_answer, hardware_preset, pc_help_answer, step_request,
+        HARDWARE_UPDATE, PC_HELP_UPDATE, STEP_ROUTES,
     };
+
+    /// PC help's real answers, made by `tools/gen_pc_help_cases.py`.
+    const PC_HELP_CASES: &str = include_str!("../../tests/fixtures/pc-help-cases.json");
+
+    #[test]
+    fn every_real_pc_help_answer_is_passed_on_unchanged() {
+        let doc: serde_json::Value =
+            serde_json::from_str(PC_HELP_CASES).expect("pc-help-cases.json is JSON");
+        let all = doc["cases"].as_object().expect("cases");
+        for (name, answer) in all {
+            let got =
+                pc_help_answer(200, &answer.to_string()).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(&got, answer, "{name}");
+            assert_eq!(got["sections"].as_array().map(Vec::len), Some(5), "{name}");
+        }
+        assert!(all.len() >= 4, "fewer cases than the fixture promised");
+    }
+
+    #[test]
+    fn pc_help_on_an_older_backend_says_to_update() {
+        for (code, body) in [(404, ""), (503, r#"{"available": false, "error": "x"}"#)] {
+            assert_eq!(pc_help_answer(code, body).unwrap()["why"], PC_HELP_UPDATE);
+        }
+        assert!(pc_help_answer(200, r#"{"ok": true}"#).is_err());
+        assert!(pc_help_answer(500, r#"{"error": "OSError"}"#).is_err());
+    }
 
     /// The real answers, made by `tools/gen_hardware_cases.py`.
     const CASES: &str = include_str!("../../tests/fixtures/hardware-cases.json");

@@ -43,6 +43,10 @@ fn main() {
             "pause_task",
             "resume_task",
             "stop_task",
+            // The widget's "working on your screen" line and its Stop - the
+            // same stop as the hotkey (screen_work.rs). task-control set.
+            "screen_work",
+            "stop_everything",
             "inject_task_note",
             // The interruption budget and the daily brief. Reads and two
             // writes; the tray calls the same functions in-process, so it
@@ -105,6 +109,16 @@ fn main() {
             // one read-only, delete ONE, and the two settings. Brain only.
             "brain_history_list",
             "brain_history_open",
+            // "Search what was said" (JARVIS-API.md section 71): a read,
+            // refused while the private lists are hidden. Brain only.
+            "brain_history_search",
+            // "History of this fact" (section 71): every version of one
+            // fact, hidden like every memory list. Brain only.
+            "brain_fact_history",
+            // "Facts this chat taught" (section 79): History's Delete offers
+            // to forget them, one Forget per ticked fact. A read, hidden like
+            // every memory list. Brain only.
+            "brain_conversation_facts",
             "brain_history_delete",
             "brain_history_settings",
             // Backend supervision — settings window only
@@ -165,6 +179,9 @@ fn main() {
             "apply_hardware",
             "hardware_step",
             "measure_hardware",
+            // "PC help" (JARVIS-API section 84): five plain answers about
+            // this PC, read-only. Settings window only.
+            "get_pc_help",
             // Settings' "Web search" (backend/web-search.patch): the five
             // providers and their "why" lines, ONE change at a time (turning
             // "Ask before every web search" off raises a card on the PC), a
@@ -355,9 +372,36 @@ fn main() {
             "brain_schedule_act",
             "brain_schedule_add_todo",
             "brain_schedule_add_standby",
+            // One Today card (2026-09-28, jarvis_today.py): no card, held
+            // on a stale link. Brain only.
+            "brain_schedule_add_today",
+            // "Widgets you describe" (brain/widgets.rs, JARVIS-API.md section
+            // 87): the Brain manages them; the widget window draws one and
+            // presses ONE of the five tile actions.
+            "brain_widgets",
+            "brain_widgets_draft",
+            "brain_widgets_add",
+            "brain_widgets_discard",
+            "brain_widgets_delete",
+            "widget_board",
+            "widget_board_action",
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",
+            // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
+            // dates in a picture, read on the PC and PROPOSED (a scan sets
+            // nothing up), and the owner's tap adding ONE reminder - no
+            // card, held on a stale link. The Jarvis bar and the Brain.
+            "photo_scan",
+            "photo_add_reminder",
+            // "Bring in chats from ChatGPT, Claude or Gemini"
+            // (history-import.patch, 2026-09-28): where a run is (a read),
+            // the Windows "Open" dialog then start (held on a stale link;
+            // it only PROPOSES - every fact waits for its own yes), and
+            // cancel (never held). Brain only.
+            "history_import_status",
+            "history_import_start",
+            "history_import_cancel",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on

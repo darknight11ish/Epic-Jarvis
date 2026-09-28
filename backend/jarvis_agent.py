@@ -1596,6 +1596,9 @@ NOTE_AFTER_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before writin
 #: or key are refused outright (jarvis_search.plan, rule 1).
 WEB_SEARCH_EVERY = ("You chose \"Ask before every web search\", so Jarvis asks before "
                     "each one.")
+#: Lockdown (jarvis_asks_first.py, 2026-09-28): every way out asks first.
+WEB_SEARCH_LOCKDOWN = ("Lockdown is on, so Jarvis asks before every web search until you "
+                       "turn it off.")
 WEB_SEARCH_READ = ("Jarvis read outside text in this conversation (an email, a file, a "
                    "note, a web page or another tool's answer), so it asks before "
                    "searching - something private could be in the search words.")
@@ -1689,7 +1692,22 @@ def web_search_card_lines(watch: "_TurnWatch", ask_every_time: bool,
         lines.append(WEB_SEARCH_APP)
     if ask_every_time:
         lines.append(WEB_SEARCH_EVERY)
+    if _lockdown_on():
+        lines.append(WEB_SEARCH_LOCKDOWN)
     return lines
+
+
+def _lockdown_on() -> bool:
+    """Lockdown (jarvis_asks_first.py, 2026-09-28): False without that
+    module; True if it cannot be read - a search then asks."""
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
 
 
 #: The chat route's quoted block of recalled facts (auto-learn.patch,
@@ -2430,6 +2448,58 @@ def error_code(message: str) -> Optional[str]:
 
 _MAX_TOOL_CONTENT_CHARS = 8000
 
+#: A long text in a tool result keeps this many characters from its start
+#: and as many from its end ("Smarter answers", 2026-09-28). The number is
+#: OpenClaw's (docs/concepts/session-pruning.md, MIT); the code is written
+#: here, none copied. Tried in order: when the long texts are many, each
+#: keeps less.
+_KEEP_EACH_END = (1500, 600, 200, 80)
+
+#: What stands where the middle of a long text, or of a long list, was left out.
+_LEFT_OUT = "[... {n:,} characters left out ...]"
+_ITEMS_LEFT_OUT = "[... {n:,} more items left out ...]"
+
+
+def _shorten_strings(node, keep: int, over: int):
+    """`node` with every string longer than `over` cut to its first and last
+    `keep` characters, a plain marker between. Keys, numbers, true/false and
+    the outside-text label are never cut. A new structure."""
+    if isinstance(node, str):
+        if len(node) > over:
+            gone = len(node) - 2 * keep
+            return node[:keep] + " " + _LEFT_OUT.format(n=gone) + " " + node[-keep:]
+        return node
+    if isinstance(node, list):
+        return [_shorten_strings(v, keep, over) for v in node]
+    if isinstance(node, dict):
+        return {k: (v if k == OUTSIDE_FIELD else _shorten_strings(v, keep, over))
+                for k, v in node.items()}
+    return node
+
+
+def _shorten_lists(node, keep: int):
+    """`node` with every list longer than 2*keep+1 items cut to its first
+    `keep` and last `keep` items, a plain marker item between."""
+    if isinstance(node, list):
+        items = [_shorten_lists(v, keep) for v in node]
+        if len(items) > 2 * keep + 1:
+            items = (items[:keep] + [_ITEMS_LEFT_OUT.format(n=len(items) - 2 * keep)]
+                     + items[-keep:])
+        return items
+    if isinstance(node, dict):
+        return {k: _shorten_lists(v, keep) for k, v in node.items()}
+    return node
+
+
+def _with_note(short: dict, full_len: int) -> dict:
+    """`short` with a plain note that it was shortened, placed just after
+    OUTSIDE_FIELD and "ok" so the model reads it before the text."""
+    note = (f"the real result was {full_len:,} characters, so the middle of its "
+            f"longest parts was left out here; if the answer could be in the "
+            f"missing middle, say so rather than guess")
+    head = {k: short[k] for k in (OUTSIDE_FIELD, "ok") if k in short}
+    return {**head, "shortened": note, **{k: v for k, v in short.items() if k not in head}}
+
 
 def _tool_content(result: dict) -> str:
     """A tool's result, as the JSON string fed back to the model - always
@@ -2438,19 +2508,99 @@ def _tool_content(result: dict) -> str:
     a large result is not a hypothetical here: file_read alone can return
     up to 200,000 characters of content, far past any per-message budget.
     A model reading a hand-mangled JSON fragment as "the tool's answer" is a
-    worse failure than an honest, valid, short note that it was too big."""
+    worse failure than an honest, valid, short note that it was too big.
+
+    A result over the limit is SHORTENED, not dropped ("Smarter answers",
+    2026-09-28): the same JSON shape, each long text cut to its first and
+    last part with a plain "[... N characters left out ...]" between
+    (_KEEP_EACH_END), and - only if that is not enough - each long list cut
+    to its first and last items. Keys, numbers, true/false and the outside-
+    text label (OUTSIDE_FIELD) stay as they are; a "shortened" note says
+    what happened. Every cut is made on the decoded values and the whole is
+    encoded again, so the JSON is always whole. Only when even that does not
+    fit (a result made of thousands of tiny keys) is the old short note sent
+    instead. The full text stays in this answer's memory only; it is never
+    written anywhere."""
     full = json.dumps(result, ensure_ascii=False)
     if len(full) <= _MAX_TOOL_CONTENT_CHARS:
         return full
+    base = json.loads(full)
+    if isinstance(base, dict):
+        # Texts first, each keeping less in turn; lists only when cutting
+        # every text to its two ends is still not enough. (Only a text
+        # longer than both ends and the marker is worth cutting.)
+        tries = [(keep, None) for keep in _KEEP_EACH_END] + \
+                [(_KEEP_EACH_END[-1], items) for items in (20, 5, 2)]
+        for keep, items in tries:
+            trial = _shorten_strings(base, keep, 2 * keep + 40)
+            if items is not None:
+                trial = _shorten_lists(trial, items)
+            text = json.dumps(_with_note(trial, len(full)), ensure_ascii=False)
+            if len(text) <= _MAX_TOOL_CONTENT_CHARS:
+                return text
     short = {
-        "ok": result.get("ok"),
+        "ok": result.get("ok") if isinstance(result, dict) else None,
         "truncated": True,
         "note": f"the real result was {len(full)} characters - too large to "
-                 "show in full here",
+                "show in full here",
     }
-    if OUTSIDE_FIELD in result:
+    if isinstance(result, dict) and OUTSIDE_FIELD in result:
         short = {OUTSIDE_FIELD: result[OUTSIDE_FIELD], **short}
     return json.dumps(short, ensure_ascii=False)
+
+
+#: Once the conversation is past this share of the room, older tool results
+#: in it are cleared (clear_old_tool_results). OpenClaw's number.
+_CLEAR_OLD_RESULTS_AT = 0.5
+#: The newest assistant messages whose tool results are never cleared.
+_KEEP_LAST_ASSISTANTS = 3
+#: What an older tool result becomes.
+CLEARED_RESULT = "[an earlier tool result was cleared to make room]"
+
+
+def clear_old_tool_results(messages: list, room: int) -> list:
+    """`messages`, with the OLDER tool results replaced by a short stub once
+    the whole is past half of `room` tokens ("Smarter answers", 2026-09-28).
+
+    Runs before fit_messages, which drops whole earlier turns but never
+    touches a tool result inside the current one - so up to six rounds of
+    8,000 characters each could crowd out everything else. Here:
+
+      - only `tool` messages change - never the owner's words, never an
+        assistant message, never a system note;
+      - the results after the last _KEEP_LAST_ASSISTANTS assistant messages
+        (the newest ones, which the model is working from) are kept whole;
+      - a cleared result is still valid JSON, keeps the outside-text label
+        and its "ok", and says plainly that it was cleared.
+
+    A new list; `messages` is not changed - the full results stay in this
+    answer's own memory and are never written anywhere. Worked out from the
+    whole, untrimmed conversation every round, so a result once cleared
+    stays cleared for the rest of the answer and the start of the prompt
+    changes as little as it can (each newly cleared result makes Ollama
+    re-read the prompt from that point on)."""
+    msgs = list(messages)
+    if estimate_tokens(msgs) <= int(room * _CLEAR_OLD_RESULTS_AT):
+        return msgs
+    helpers = [i for i, m in enumerate(msgs)
+               if isinstance(m, dict) and m.get("role") == "assistant"]
+    if len(helpers) < _KEEP_LAST_ASSISTANTS:
+        return msgs
+    cutoff = helpers[-_KEEP_LAST_ASSISTANTS]
+    for i in range(cutoff):
+        m = msgs[i]
+        if not (isinstance(m, dict) and m.get("role") == "tool"):
+            continue
+        ok = None
+        try:
+            was = json.loads(m.get("content") or "")
+            if isinstance(was, dict):
+                ok = was.get("ok")
+        except Exception:
+            pass
+        stub = {OUTSIDE_FIELD: OUTSIDE_LABEL, "ok": ok, "cleared": CLEARED_RESULT}
+        msgs[i] = dict(m, content=json.dumps(stub, ensure_ascii=False))
+    return msgs
 
 
 # --------------------------------------------------------------------------
@@ -4318,6 +4468,60 @@ def with_focus_note(msgs: list) -> list:
 
 
 # --------------------------------------------------------------------------
+#   "Remind me next time I talk about X" (jarvis_next_time.py, 2026-09-28)
+# --------------------------------------------------------------------------
+#
+# The reminders the owner's own newest words bring up, as ONE system line
+# just before the newest question - never first, placed like the focus note,
+# and only ever for the model on this PC (a cloud lane is never sent any of
+# these notes). A system message, so the learner (user messages only) and
+# chat history never take it for the owner's words. jarvis_next_time.py has
+# every rule: whose words count, which turns are left alone, the limits.
+# Counted as brought up only once the model answered (run_local_turn's
+# `finally`), so a turn that failed brings it up again next time.
+
+
+def _next_time_due(watch: "_TurnWatch", messages, request) -> dict:
+    """{"note": the line or "", "ids": [...]} for this turn. Never raises;
+    a backend without jarvis_next_time.py adds nothing."""
+    none = {"note": "", "ids": []}
+    try:
+        import jarvis_next_time as NT
+    except Exception:
+        return none
+    try:
+        if not NT.should_look(watch.newest_own_words, request=request, messages=messages,
+                              crisis=watch.crisis):
+            return none
+        items = NT.due_for(watch.newest_own_words, spoken=watch.spoken)
+        return {"note": NT.note_text(items), "ids": [i["id"] for i in items]}
+    except Exception:
+        return none
+
+
+def _next_time_brought_up(ids) -> None:
+    try:
+        import jarvis_next_time as NT
+        NT.brought_up(ids)
+    except Exception:
+        pass
+
+
+def with_next_time_note(msgs: list, note: str) -> list:
+    """A new list: `msgs` with `note` as a system message just before the
+    newest user message - never first, placed exactly like with_focus_note.
+    `msgs` itself is not changed; nothing to add returns a plain copy."""
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not users or not note:
+        return list(msgs)
+    msg = {"role": "system", "content": note}
+    at = users[-1]
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
+# --------------------------------------------------------------------------
 #   The owner cut the last spoken answer off
 # --------------------------------------------------------------------------
 #
@@ -4466,6 +4670,458 @@ def keep_rules_first(msgs: list) -> list:
     return list(msgs)
 
 
+# --------------------------------------------------------------------------
+#   The start of every local turn, built in one place - and the warm-up that
+#   sends exactly that start ahead of time (speed fix, 2026-09-28)
+# --------------------------------------------------------------------------
+#
+# WHY. Ollama keeps what it has already read of the last prompt, and reuses
+# it while the next prompt starts the same way (PROMPT_USAGE counts it).
+# Every local turn starts with the same few thousand tokens: the Jarvis
+# rules and the tool list (3,000-4,000 tokens with every tool on - "about
+# 3-4 s at 8K on this card", the short-list section above). Two things
+# throw that away:
+#
+#   * loading the model. The warm-up on waking (jarvis_power_switch.warm_up)
+#     loaded it with no words at all, so the first question still read the
+#     whole start from nothing;
+#   * the background learner, on a one-card PC. It runs on the same model
+#     with a different prompt 45 s after the owner stops talking, and Ollama
+#     keeps one conversation's worth (one slot), so the next question read
+#     everything again. With the second card doing the learning
+#     (jarvis_second_card's "learning" lane) this does not happen.
+#
+# WHAT. warm_prefix() sends what a real first question sends - the same
+# model, the same address (/v1/chat/completions), the same system messages
+# (dress_messages: the manner line, the focus line, keep_rules_first), the
+# same tools in the same order (_allowed_tools, _new_offer, _fill_offer:
+# the owner's enabled tools and short-list setting) and the same other
+# fields (chat_body: stream, stream_options, reasoning_effort) - with the
+# one word WARM_WORD as the question and max_tokens 1. The one word of
+# answer is read and thrown away. run_local_turn builds its requests with
+# the SAME functions, so the two cannot drift apart (test_warm_prefix.py
+# compares the bytes sent to a fake Ollama).
+#
+# WHAT IT NEVER DOES. It carries no words from any conversation: the only
+# user text in it is WARM_WORD. It is not a chat turn: nothing is written to
+# the chat history, no speed row (jarvis_speed only records a request thread
+# that jarvis_hud.py started timing, and this runs on its own thread), no
+# step events, nothing offered to the learner. It never loads a model: it
+# runs only when Ollama says the model is ALREADY loaded (_model_waking), so
+# it cannot take the graphics card on standby, or make Ollama load another
+# model. It sends no `options`, no num_ctx and no keep_alive - neither does
+# a real turn - so Ollama has no reason to reload the model at another size.
+# Only to a model on this PC (local_model_refusal: never a cloud model or
+# another machine). Never while a question is being answered, a task is
+# running or Jarvis is on standby, and never after a temporary chat.
+#
+# A QUESTION ARRIVING MEANWHILE DOES NOT WAIT FOR IT. run_local_turn cuts
+# the warm-up's connection the moment it starts (_turn_begins), and Ollama
+# stops a request whose caller has gone. So a question waits, at worst, for
+# the step Ollama is in the middle of - not for the whole warm-up.
+#
+# WHAT IT CANNOT DO. It warms only the start every question shares. A
+# conversation's own earlier messages, recalled facts and the spoken-answer
+# note come later in the messages, and are read as before. NOT VERIFIED on a
+# real Ollama: Ollama gathers every system message into one block
+# (template.go collate()); if the model's chat template prints that block
+# before the tool list, then a question with recalled facts, or a spoken
+# one, starts differently from the warm-up before the tools, and on those
+# questions only the rules are saved. The speed record's "reused" number
+# shows which (backend/README.md, "Warm-up with words", has the one line).
+#
+# OFF SWITCH. `warm_prefix = false` under `[power]` in jarvis-framework.toml
+# turns both warm-ups off (the one on waking then only loads the model, as
+# before). On unless set to a real `false`.
+
+#: The whole question the warm-up asks. Short, and never a real question.
+WARM_WORD = "hi"
+#: One word of answer, thrown away.
+WARM_MAX_TOKENS = 1
+#: Seconds before a warm-up that has had no answer gives up.
+WARM_TIMEOUT = 120.0
+#: On unless `[power] warm_prefix = false`.
+WARM_PREFIX_DEFAULT = True
+
+
+def warm_prefix_on() -> bool:
+    """`[power] warm_prefix` in jarvis-framework.toml; WARM_PREFIX_DEFAULT
+    when it is not set or cannot be read. Only a real `false` turns it off."""
+    try:
+        import jarvis_framework
+        power = (jarvis_framework.load_framework() or {}).get("power") or {}
+        if "warm_prefix" in power:
+            return power.get("warm_prefix") is not False
+    except Exception:
+        pass
+    return WARM_PREFIX_DEFAULT
+
+
+def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
+                   next_time: str = "", spoken: bool = False, cut_off: str = "",
+                   crisis: bool = False) -> list:
+    """The notes a local turn adds to its (already trimmed) messages, in
+    their order - manner, focus, next-time, spoken, cut-off, crisis, each just before
+    the newest user message - and then keep_rules_first, last, so the rules
+    stay first. A new list; `msgs` is not changed. run_local_turn and the
+    warm-up both call this."""
+    # The owner's manner (warm or plain): wording only, never first, and
+    # before the spoken note so that one is nearer the question.
+    out = with_manner_note(msgs, manner)
+    if focus:
+        # I144: additive on top of manner, never instead of it - nearer
+        # the question than manner, further than spoken/cut-off/crisis.
+        out = with_focus_note(out)
+    if next_time:
+        # "Remind me next time" (jarvis_next_time.py): the owner's own earlier
+        # words, to mention only - nearer the question than manner and focus,
+        # further than spoken/cut-off/crisis, which say how to answer at all.
+        # Never on the warm-up, which carries no conversation.
+        out = with_next_time_note(out, next_time)
+    if spoken:
+        # After trimming, so trimming can never leave the note first.
+        out = with_spoken_note(out)
+    if cut_off:
+        # The owner cut the last spoken answer off: said, never first.
+        out = with_cut_off_note(out, cut_off)
+    if crisis:
+        # The crisis help line (jarvis_wellbeing.py): nearest the question
+        # of every note here, never first.
+        out = with_crisis_note(out, True)
+    # Last, after trimming and every note above: the rules stay first.
+    return keep_rules_first(out)
+
+
+def chat_body(model: str, messages: list, opts: dict, tools=None) -> dict:
+    """One request to Ollama's /v1/chat/completions, in the order its fields
+    have always been sent: model, messages, stream, stream_options, the
+    app's temperature/top_p and max_tokens (`opts`), reasoning_effort
+    (unless this Ollama refused it once), tools. No `options`, no num_ctx,
+    no keep_alive: the model's own settings decide those
+    (jarvis-primary.Modelfile says why)."""
+    body = {"model": model, "messages": messages, "stream": True, **PROMPT_USAGE, **opts}
+    if not _reasoning_field_refused:
+        body.update(REASONING_OFF)
+    if tools:
+        body["tools"] = tools
+    return body
+
+
+def _allowed_tools(enabled_tools, url: str, model: str, *, none: bool = False) -> tuple:
+    """(the tool names a turn may use, whether the model itself said it can
+    use none). `none`: this turn offers no tools at all (a picture on the
+    second card, a crisis turn)."""
+    names = [] if none else offered_tools(enabled_tools)
+    if names and _model_can_use_tools(url, model) is False:
+        return [], True
+    return names, False
+
+
+def _new_offer(names: list, opened=()) -> dict:
+    """What a turn SHOWS the model, before the first round (see the short
+    tool list above). Filled by _fill_offer."""
+    return {"short": bool(names) and short_list_on(),
+            "plugins": bool(names) and _plugins_configured(),
+            "opened": set(opened), "extra": {}, "shown": [], "groups": [], "schemas": []}
+
+
+def _fill_offer(offer: dict, names: list) -> None:
+    offer["groups"] = more_tools_groups(names, short=offer["short"],
+                                        plugins=offer["plugins"])
+    offer["shown"] = tool_offer(names, offer["opened"], short=offer["short"],
+                                plugins=offer["plugins"])
+    offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
+
+
+def chat_prefix(enabled_tools, *, ollama_url: str, model: str, manner="auto") -> tuple:
+    """(messages_head, tools): the system messages a new conversation's
+    first question is sent with on the main card - everything before the
+    question itself - and its tool list, for these enabled tools and the
+    owner's settings now. `manner` "auto" reads the PC's saved setting, as a
+    real turn does for a conversation that has no override of its own."""
+    if manner == "auto":
+        manner = _manner_now(None)
+    names, _ = _allowed_tools(enabled_tools, ollama_url, model)
+    offer = _new_offer(names)
+    _fill_offer(offer, names)
+    msgs = dress_messages([{"role": "user", "content": WARM_WORD}], manner=manner,
+                          focus=_focus_active_now())
+    return msgs[:-1], list(offer["schemas"])
+
+
+# -- which turns are running, and the warm-up that is --------------------------
+
+class _WarmCall:
+    """One warm-up request on the wire: its socket once connected, and
+    whether a turn has asked it to stop."""
+
+    def __init__(self) -> None:
+        self.cancelled = False
+        self.sock = None
+
+
+_LIVE_LOCK = threading.Lock()
+_LIVE: dict = {"turns": 0, "warm": None}
+#: The last local turn's own settings - never its words: the address, the
+#: model, the enabled tools, and whether it was a temporary chat.
+_LAST_TURN: dict = {}
+#: How the last warm-up went (for the tests, and for anyone asking): state
+#: "warmed" | "cancelled" | "skipped" | "failed" | "off", and why.
+WARM_LAST: dict = {}
+_WARM_LAST_LOCK = threading.Lock()
+
+
+def _looks_temporary(request) -> bool:
+    """jarvis_hud._temporary_chat's test: `temporary: true`, or a game or
+    role-play (jarvis_intake.game_or_roleplay, on the owner's own words)."""
+    if not isinstance(request, dict):
+        return False
+    if request.get("temporary") is True:
+        return True
+    try:
+        import jarvis_intake
+        return bool(jarvis_intake.game_or_roleplay(request.get("messages") or []))
+    except Exception:
+        return False
+
+
+def _turn_begins(url, model, enabled_tools, request, lane_choice=None) -> None:
+    """A local turn starts: count it, remember its settings (no words), and
+    cut off a warm-up that is on the wire so the question does not queue
+    behind it. Never raises: everything that could is worked out before the
+    count goes up, so a turn is always counted exactly once."""
+    try:
+        temporary = bool(_looks_temporary(request))
+    except Exception:
+        temporary = True           # cannot tell: treated as temporary (no warm-up)
+    try:
+        tools = None if enabled_tools is None else frozenset(enabled_tools)
+    except Exception:
+        tools = frozenset()
+    # "One bigger model on both cards" answers every question elsewhere, so
+    # the everyday model's start is not what the next question will need.
+    combined = getattr(lane_choice, "feature", None) == "combined"
+    with _LIVE_LOCK:
+        _LIVE["turns"] += 1
+        _LAST_TURN.clear()
+        _LAST_TURN.update(url=str(url or ""), model=str(model or ""), tools=tools,
+                          temporary=temporary, combined=combined)
+        call = _LIVE["warm"]
+        sock = None
+        if call is not None:
+            call.cancelled = True
+            sock = call.sock
+    if sock is not None:
+        try:
+            # Wakes the warm-up's read, and tells Ollama its caller has gone.
+            # The warm-up's own thread closes the socket.
+            sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+
+
+def _turn_ends() -> None:
+    with _LIVE_LOCK:
+        _LIVE["turns"] = max(0, _LIVE["turns"] - 1)
+
+
+def turns_running() -> int:
+    """How many local chat turns are being answered right now."""
+    with _LIVE_LOCK:
+        return _LIVE["turns"]
+
+
+def _counted_turn(fn):
+    """run_local_turn, counted while it runs (see _turn_begins)."""
+    import functools
+
+    @functools.wraps(fn)
+    def turn(*args, **kw):
+        model = args[1] if len(args) > 1 else kw.get("model")
+        _turn_begins(kw.get("ollama_url"), model, kw.get("enabled_tools"),
+                     kw.get("request"), kw.get("lane_choice"))
+        try:
+            return fn(*args, **kw)
+        finally:
+            _turn_ends()
+    return turn
+
+
+def _power_is_standby() -> bool:
+    try:
+        import jarvis_power
+        return str(jarvis_power.current()) == "standby"
+    except Exception:
+        return False
+
+
+def _tasks_running() -> bool:
+    try:
+        import jarvis_task_control
+        return bool(jarvis_task_control.running())
+    except Exception:
+        return False
+
+
+def _send_warm(url: str, body: dict, call: _WarmCall) -> None:
+    """POST `body` to `url` on this PC and read the answer to the end,
+    keeping nothing. Straight to the address - http.client uses no proxy
+    (jarvis_local_http says why that matters). The socket is handed to
+    `call` once connected, so a turn starting can cut it (_turn_begins)."""
+    import urllib.parse
+    parts = urllib.parse.urlsplit(url)
+    conn = http.client.HTTPConnection(parts.hostname, parts.port or 80, timeout=WARM_TIMEOUT)
+    try:
+        conn.connect()
+        with _LIVE_LOCK:
+            if call.cancelled:
+                return
+            call.sock = conn.sock
+        conn.request("POST", parts.path or "/", body=json.dumps(body).encode("utf-8"),
+                     headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        if resp.status != 200:
+            resp.read()
+            raise UpstreamError(f"Ollama answered HTTP {resp.status}")
+        while resp.read(65536):
+            pass
+    finally:
+        conn.close()
+
+
+def _same_model(a, b) -> bool:
+    def bare(x) -> str:
+        x = str(x or "").strip()
+        return x[:-7] if x.endswith(":latest") else x
+    return bool(bare(a)) and bare(a) == bare(b)
+
+
+def _same_place(a, b) -> bool:
+    def norm(u) -> str:
+        return str(u or "").strip().rstrip("/").replace("://localhost", "://127.0.0.1")
+    return bool(norm(a)) and norm(a) == norm(b)
+
+
+def warm_prefix(model: str, *, ollama_url: str, enabled_tools, why: str = "",
+                manner="auto", send: Optional[Callable] = None,
+                model_waking: Optional[Callable[[str, str], Optional[bool]]] = None) -> dict:
+    """Send the start of a local turn (chat_prefix) with WARM_WORD as the
+    question and max_tokens WARM_MAX_TOKENS, and throw the answer away - so
+    the next real question finds it already read. See the section above for
+    everything it never does. Returns (and keeps in WARM_LAST) how it went.
+    Never raises. `send(url, body, call)` is for the tests."""
+    def done(state: str, note: str = "") -> dict:
+        out = {"state": state, "why": note, "model": str(model or ""), "after": why,
+               "at": time.time()}
+        with _WARM_LAST_LOCK:
+            WARM_LAST.clear()
+            WARM_LAST.update(out)
+        return dict(out)
+
+    call = _WarmCall()
+    try:
+        if not warm_prefix_on():
+            return done("off", "[power] warm_prefix is false in jarvis-framework.toml")
+        if not model or local_model_refusal(ollama_url, model):
+            return done("skipped", "not a model on this PC")
+        if _power_is_standby():
+            return done("skipped", "Jarvis is on standby")
+        if _tasks_running():
+            return done("skipped", "a task is running")
+        if turns_running():
+            return done("skipped", "a question is being answered")
+        loaded = (model_waking or _model_waking)(ollama_url, model) is False
+        if not loaded:
+            return done("skipped", "the model is not loaded, and a warm-up never loads one")
+        head, tools = chat_prefix(enabled_tools, ollama_url=ollama_url, model=model,
+                                  manner=manner)
+        body = chat_body(model, head + [{"role": "user", "content": WARM_WORD}],
+                         {"max_tokens": WARM_MAX_TOKENS}, tools)
+        with _LIVE_LOCK:
+            if _LIVE["turns"]:
+                return done("skipped", "a question is being answered")
+            if _LIVE["warm"] is not None:
+                return done("skipped", "another warm-up is running")
+            _LIVE["warm"] = call
+        try:
+            (send or _send_warm)(f"{str(ollama_url).rstrip('/')}/v1/chat/completions",
+                                 body, call)
+        finally:
+            with _LIVE_LOCK:
+                if _LIVE["warm"] is call:
+                    _LIVE["warm"] = None
+        if call.cancelled:
+            return done("cancelled", "a question came in, so it stopped")
+        return done("warmed")
+    except Exception as exc:
+        if call.cancelled:
+            return done("cancelled", "a question came in, so it stopped")
+        return done("failed", type(exc).__name__)
+
+
+def _last_turn() -> dict:
+    with _LIVE_LOCK:
+        return dict(_LAST_TURN)
+
+
+def warm_after_waking(model: str, ollama_url: str, **kw) -> dict:
+    """jarvis_power_switch.warm_up, once the model is loaded again: warm the
+    start of a turn, with the settings the last local turn used (the tools
+    the chat handler really passed). Nothing to go on - no turn since the
+    backend started, or the last one used another model or address - means
+    nothing is sent. Runs on the caller's thread."""
+    last = _last_turn()
+    if not last:
+        return {"state": "skipped", "why": "no question has been answered since Jarvis started"}
+    if last.get("combined"):
+        return {"state": "skipped", "why": "questions go to the bigger model on both cards"}
+    if not (_same_model(last.get("model"), model) and _same_place(last.get("url"), ollama_url)):
+        return {"state": "skipped", "why": "the last question used another model or address"}
+    return warm_prefix(last["model"], ollama_url=last["url"], enabled_tools=last.get("tools"),
+                       why="waking", **kw)
+
+
+def _learner_place() -> tuple:
+    try:
+        import jarvis_sensitive
+        return jarvis_sensitive.learner_model()
+    except Exception:
+        return None, None
+
+
+def _spawn(fn: Callable[[], object]) -> None:
+    threading.Thread(target=fn, name="jarvis-warm-prefix", daemon=True).start()
+
+
+def warm_after_learning(*, learner: Optional[Callable[[], tuple]] = None,
+                        spawn: Optional[Callable[[Callable[[], object]], None]] = None,
+                        **kw) -> dict:
+    """The learner has just finished a pass (warm-prefix.patch calls this
+    from jarvis_hud.py's learner thread). When that pass ran on the chat's
+    own model at the chat's own address - one graphics card - it has pushed
+    the start of the chat out of Ollama's memory, so warm it again, on its
+    own thread. A learner on the second card, a temporary chat last, or no
+    local turn at all: nothing. Returns what it decided. Never raises."""
+    try:
+        last = _last_turn()
+        if not last:
+            return {"state": "skipped", "why": "no local question yet"}
+        if last.get("temporary"):
+            return {"state": "skipped", "why": "the last question was in a temporary chat"}
+        if last.get("combined"):
+            return {"state": "skipped", "why": "questions go to the bigger model on both cards"}
+        url, model = (learner or _learner_place)()
+        if not (_same_model(model, last.get("model")) and _same_place(url, last.get("url"))):
+            return {"state": "skipped", "why": "the learner uses its own model or card"}
+        (spawn or _spawn)(lambda: warm_prefix(last["model"], ollama_url=last["url"],
+                                              enabled_tools=last.get("tools"),
+                                              why="learning", **kw))
+        return {"state": "started"}
+    except Exception as exc:
+        return {"state": "failed", "why": type(exc).__name__}
+
+
+@_counted_turn
 def run_local_turn(messages: list, model: str, *, ollama_url: str,
                    stream_out: Callable[[bytes], None],
                    enabled_tools: Optional[set] = None,
@@ -4534,7 +5190,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     `turn_id` and is already sent before this function even starts
     (streaming) - so the caller records these two under that same id
     afterwards (`jarvis_sources.record`), for a later `GET
-    /api/chat/sources` to read back.
+    /api/chat/sources` to read back. `claimed_undone` is True when the
+    answer claimed an action that no tool took, and so ended with the plain
+    "Nothing was actually done" line (jarvis_claims.py).
 
     When the turn is over, `record_chain(steps)` gets the list of tools this
     turn asked for, as `{"tool", "ran", "ok", "outcome"}` dicts in order.
@@ -4603,9 +5261,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # No tools offered on a crisis turn: the owner's decision that nothing
     # act, and the report's own worry made concrete - a web search for "the
     # tallest bridges near me" is not a turn Jarvis should let itself take.
-    names = [] if (cur["feature"] == "vision" or watch.crisis) else offered_tools(enabled_tools)
-    if names and _model_can_use_tools(cur["url"], cur["model"]) is False:
-        names = []
+    names, model_said_no = _allowed_tools(enabled_tools, cur["url"], cur["model"],
+                                          none=cur["feature"] == "vision" or watch.crisis)
+    if model_said_no:
         if announce is not None:
             try:
                 announce(NO_TOOLS_NOTE)
@@ -4632,17 +5290,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     if (not watch.crisis and watch.newest_own_words
             and looks_like_correction(watch.newest_own_words)):
         note_correction(conv_id)
-    offer: dict = {"short": bool(names) and short_list_on(),
-                   "plugins": bool(names) and _plugins_configured(),
-                   "opened": set(opened_groups(conv_id)), "extra": {}, "shown": [],
-                   "groups": [], "schemas": []}
+    # "Remind me next time I talk about X" (jarvis_next_time.py): worked out
+    # once, from the owner's own newest words, before any round.
+    next_time = _next_time_due(watch, messages, req)
+    offer: dict = _new_offer(names, opened_groups(conv_id))
 
     def reoffer() -> None:
-        offer["groups"] = more_tools_groups(names, short=offer["short"],
-                                            plugins=offer["plugins"])
-        offer["shown"] = tool_offer(names, offer["opened"], short=offer["short"],
-                                    plugins=offer["plugins"])
-        offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
+        _fill_offer(offer, names)
 
     if offer["plugins"] and PLUGINS in offer["opened"]:
         # Opened earlier in this chat: the plug-in tools of programs still
@@ -4669,6 +5323,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     beat.start()
 
     answer: list = []
+    # The model's own words this answer, without the lines Jarvis itself
+    # adds (tell_owner) - what the "I've done it" check reads.
+    model_words: list = []
+    claimed_undone = False
     said = {"any": False, "gap": False}
     # The delay of a spoken turn (jarvis_voice_flow.py): when this answer's
     # first word and first complete sentence arrive, as numbers. None - and
@@ -4718,6 +5376,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             room -= estimate_tokens(manner_msg)
         if focus_brief:
             room -= estimate_tokens(_FOCUS_MSG)
+        if next_time["note"]:
+            room -= estimate_tokens({"role": "system", "content": next_time["note"]})
         if watch.cut_off:
             room -= estimate_tokens({"role": "system", "content": CUT_OFF_NOTE.format(
                 said=watch.cut_off)})
@@ -4725,32 +5385,18 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             crisis_msg = crisis_message()
             if crisis_msg is not None:
                 room -= estimate_tokens(crisis_msg)
-        body = {"model": cur["model"], "messages": fit_messages(msgs, room),
-                "stream": True, **PROMPT_USAGE, **opts}
-        if manner_msg is not None:
-            # The owner's manner (warm or plain): wording only, never first,
-            # and before the spoken note so that one is nearer the question.
-            body["messages"] = with_manner_note(body["messages"], manner)
-        if focus_brief:
-            # I144: additive on top of manner, never instead of it - nearer
-            # the question than manner, further than spoken/cut-off/crisis.
-            body["messages"] = with_focus_note(body["messages"])
-        if watch.spoken:
-            # After trimming, so trimming can never leave the note first.
-            body["messages"] = with_spoken_note(body["messages"])
-        if watch.cut_off:
-            # The owner cut the last spoken answer off: said, never first.
-            body["messages"] = with_cut_off_note(body["messages"], watch.cut_off)
-        if watch.crisis:
-            # The crisis help line (jarvis_wellbeing.py): nearest the
-            # question of every note here, never first.
-            body["messages"] = with_crisis_note(body["messages"], True)
-        # Last, after trimming and every note above: the rules stay first.
-        body["messages"] = keep_rules_first(body["messages"])
-        if not _reasoning_field_refused:
-            body.update(REASONING_OFF)
-        if offer_tools and offer["schemas"]:
-            body["tools"] = offer["schemas"]
+        # The notes and the rules, after trimming (dress_messages), and the
+        # body's shape (chat_body): the SAME two functions the warm-up uses
+        # (warm_prefix), so what it sends cannot drift from this. Older tool
+        # results in a long answer are cleared first (clear_old_tool_results),
+        # so trimming never has to drop the owner's earlier words for them.
+        body = chat_body(cur["model"],
+                         dress_messages(fit_messages(clear_old_tool_results(msgs, room), room),
+                                        manner=manner,
+                                        focus=focus_brief, next_time=next_time["note"],
+                                        spoken=watch.spoken,
+                                        cut_off=watch.cut_off, crisis=watch.crisis),
+                         opts, offer["schemas"] if offer_tools else None)
         stripper = _ThinkStripper()
         first = {"text": True}
 
@@ -4760,6 +5406,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 # Kept per round too: a round that then asks for a tool goes
                 # back to the model with the words it wrote before asking.
                 rnd.text.append(clean)
+                model_words.append(clean)
                 if first["text"]:
                     first["text"] = False
                     out.set_status(None)
@@ -4819,6 +5466,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         tail = stripper.flush()
         if tail:
             rnd.text.append(tail)
+            model_words.append(tail)
             if first["text"]:
                 first["text"] = False
                 say_step("answer")
@@ -4961,6 +5609,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                                      f"which has room for long web pages")
                         except Exception:
                             pass
+        # "I've done it" when nothing was done ("Smarter answers",
+        # 2026-09-28): the answer claims an action and no action tool
+        # returned ok in it (jarvis_claims.py). One plain line at the end, in
+        # the stream like any other - so both apps show it and a voice turn
+        # says it - and before the crisis help, which stays last.
+        line = _nothing_done_line("".join(model_words), steps, spoken=watch.spoken)
+        if line:
+            claimed_undone = True
+            tell_owner(line)
         if watch.crisis:
             # W1 (or the short repeat line), after the model's own answer -
             # never counted as a tool call, never asked for, always said.
@@ -5032,6 +5689,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # crisis answer would be its own bad moment, never mind what it
         # counts (the owner's decision, 2026-09-27, extending "never
         # counted" to this signal).
+        # A reminder for next time counts as brought up only when the model
+        # really answered this turn (jarvis_next_time.brought_up).
+        if next_time["ids"] and "".join(answer).strip() and not watch.crisis:
+            _next_time_brought_up(next_time["ids"])
         if not watch.crisis:
             broken_this_turn = sum(watch.bad.values())
             if broken_this_turn:
@@ -5058,9 +5719,23 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             "tools_ran": ran,
             "outside_flags": sorted(watch.flags),
             "crisis": watch.crisis,
+            "claimed_undone": claimed_undone,
             "tool_sources": watch.sources,
             "unverified_quotes": unverified,
             "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}
+
+
+def _nothing_done_line(text: str, steps: list, *, spoken: bool = False) -> str:
+    """The plain line for an answer that claims an action no tool took
+    (jarvis_claims.unbacked_claim), or "". A missing or broken
+    jarvis_claims.py adds nothing - it never fails an answer."""
+    try:
+        import jarvis_claims
+        if jarvis_claims.unbacked_claim(text, steps):
+            return jarvis_claims.nothing_done_line(spoken)
+    except Exception:
+        pass
+    return ""
 
 
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,

@@ -317,7 +317,8 @@ Worth knowing:
   * The WebView2 Runtime is Microsoft's and is not redistributed: the
     installer uses Microsoft's own bootstrapper.
   * The desktop's JavaScript has no third-party libraries; its only
-    third-party files are the fonts below.
+    third-party files are the fonts below. A few small pieces of code or
+    word lists copied from other projects are named in section 1.
 
 """
 

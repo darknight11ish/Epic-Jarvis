@@ -59,7 +59,14 @@ THE CHECKS (each a small function below, returning a reason in words or "")
   Grounded    every content word and number in the fact is in the owner's
               own turns (L5).
   Correction  a proposal that would replace a stored fact is always a card
-              (L6).
+              (L6) - with ONE exception, the owner's choice of 2026-09-28
+              ("Where did I put ...?", jarvis_places.py): a place for a
+              thing Jarvis already keeps a place for, somewhere else, is not
+              a correction card when every other check here passes; once it
+              is saved, the older place is ended as history (never a
+              Forget), and older news by the owner's own dates never
+              replaces newer. A person, a pet, an event, a date or where
+              the owner lives is never such a place.
   Sensitive   jarvis_sensitive.py on the fact and on the turns it came from:
               word lists in eight languages, number and token shapes, the
               other-person rule, then the learner's own local model. Unless
@@ -466,6 +473,9 @@ def _reset_for_tests() -> None:
         for s in _STATE.values():
             for v in s.values():
                 v.clear()
+    with _HUSH_LOCK:
+        _READ_UPTO.clear()
+        _HUSH.clear()
 
 
 def learning_status(learning_on: Optional[bool] = None, floor: Optional[bool] = None) -> dict:
@@ -914,6 +924,160 @@ def find_contradiction(fact: str, store) -> Optional[dict]:
 #: the card itself shows the fact it would replace).
 CHANGES_A_FACT = ("it would change a fact you already have - accepting it replaces "
                   "that one")
+
+
+# ---- forgotten stays forgotten ----------------------------------------------
+#
+# The relearning gap (research audit 2026-09-28, section 8.6 A). The learner
+# re-reads the WHOLE conversation on every pass, and the review queue's
+# duplicate check (`known`, `have`, near_duplicate) looks only at current
+# facts and at pending or rejected proposals - so a fact the owner forgot a
+# minute ago was proposed again from the very sentence that taught it, and,
+# since automatic learning (2026-09-24), saved again with no question. Erase
+# had the same hole. memory-noise.patch left accepted proposals out of `have`
+# on purpose ("the owner later retires that fact and genuinely wants it
+# back") - a sound choice when every fact waited for a yes, not after.
+#
+# Two layers, neither of which writes anything new to disk:
+#
+#   1. Same conversation, words the learner had already read before the
+#      Forget or Erase: the proposal is dropped (a Forget's is turned down,
+#      an Erase's row is deleted, so the erased words are not kept again).
+#      In memory only, like the live-turn registry it leans on: automatic
+#      saving needs that registry's entry for every turn, and the registry
+#      is empty after a restart - so the gap it closes cannot outlive it.
+#   2. A proposal that matches a FORGOTTEN (not erased) fact's words, from
+#      any conversation, later: a card, never an automatic save. The words
+#      are the ones Forget keeps as history anyway. An erased fact has no
+#      words left to compare with, by design, and gets no second layer.
+
+#: Why a proposal that matches a forgotten fact stayed a card.
+FORGOTTEN_BEFORE = "you asked me to forget this before - it waits for your yes this time"
+
+_HUSH_LOCK = threading.Lock()
+#: conversation id -> the highest live-registry `seq` a finished learner pass
+#: (or a "Remember:") had read in it.
+_READ_UPTO: dict = {}
+#: conversation id -> {"seq": int, "erased": bool}: turns up to `seq` in it
+#: taught something the owner then forgot or erased.
+_HUSH: dict = {}
+#: Both maps are bounded: the oldest conversation goes first.
+_HUSH_MAX = 500
+
+
+def _bounded_put(d: dict, key, value) -> None:
+    d.pop(key, None)
+    d[key] = value
+    while len(d) > _HUSH_MAX:
+        d.pop(next(iter(d)))
+
+
+def _seq_of(entry) -> Optional[int]:
+    seq = entry.get("seq") if isinstance(entry, dict) else None
+    return seq if isinstance(seq, int) and not isinstance(seq, bool) else None
+
+
+def note_read(conversation_id, entries) -> None:
+    """A learner pass (or a "Remember:") finished reading these registry
+    entries of this conversation."""
+    if not (isinstance(conversation_id, str) and _CID.fullmatch(conversation_id)):
+        return
+    seqs = [s for s in (_seq_of(e) for e in entries or []) if s is not None]
+    if not seqs:
+        return
+    with _HUSH_LOCK:
+        _bounded_put(_READ_UPTO, conversation_id,
+                     max(max(seqs), _READ_UPTO.get(conversation_id, 0)))
+
+
+def forgotten_in(conversation_id, *, erased: bool = False) -> None:
+    """jarvis_memory calls this when the owner forgets or erases a fact that
+    was said in `conversation_id`: every turn of it the learner had already
+    read is not learned from again (layer 1 above). Never raises."""
+    try:
+        if not (isinstance(conversation_id, str) and _CID.fullmatch(conversation_id)):
+            return
+        with _HUSH_LOCK:
+            upto = _READ_UPTO.get(conversation_id)
+            if upto is None:
+                # No pass has read this conversation since the backend
+                # started, so none of its turns can be saved automatically
+                # (they are not in the live registry): nothing to hush.
+                return
+            prev = _HUSH.get(conversation_id) or {}
+            _bounded_put(_HUSH, conversation_id,
+                         {"seq": max(upto, int(prev.get("seq") or 0)),
+                          "erased": bool(erased or prev.get("erased"))})
+    except Exception:
+        pass
+
+
+def hushed(conversation_id, source_texts) -> str:
+    """"erased", "forgotten", or "" - whether a proposal whose source turns
+    are `source_texts` comes only from turns read before a Forget or Erase
+    in this conversation."""
+    if not source_texts:
+        return ""
+    with _HUSH_LOCK:
+        h = _HUSH.get(conversation_id)
+    if not h:
+        return ""
+    for text in source_texts:
+        seq = _seq_of(_live(conversation_id, text))
+        if seq is None or seq > h["seq"]:
+            return ""               # said after the Forget: learned as usual
+    return "erased" if h["erased"] else "forgotten"
+
+
+def like_forgotten(fact: str, store) -> bool:
+    """Does this proposal say what a fact the owner FORGOT said (layer 2)?
+    The same words, or - once the real meaning model is loaded - the same
+    statement (jarvis_intake.shape) worded a little differently. Erased
+    facts have no words left and never match. Never raises."""
+    try:
+        import jarvis_intake as I
+        low = I._norm(fact)
+        if not low:
+            return False
+        with closing(store._connect()) as c:
+            rows = c.execute("SELECT text, meta FROM facts WHERE erased_at IS NULL"
+                             " AND retired_at IS NOT NULL").fetchall()
+        forgotten = []
+        for text, meta in rows:
+            try:
+                m = json.loads(meta) if isinstance(meta, str) else (meta or {})
+            except ValueError:
+                m = {}
+            if isinstance(m, dict) and m.get("forgotten_at") and isinstance(text, str):
+                forgotten.append(text)
+        if any(I._norm(t) == low for t in forgotten):
+            return True
+        if not I.semantic_ready(store):
+            return False
+        key = I.shape(fact)
+        same = [t for t in forgotten if I.shape(t) == key]
+        if not same or len(key[0]) < 2:
+            return False
+        vecs = store.embedder.embed([fact] + same[:10])
+        return any(I._cos(vecs[0], v) >= I.NEAR_DUP_MIN for v in vecs[1:])
+    except Exception:
+        return False
+
+
+def _drop(c, pid: int, how: str) -> None:
+    """Layer 1: a Forget's re-proposal is turned down (its words are the
+    forgotten fact's, which Forget keeps anyway); an Erase's is deleted, so
+    the erased words are not kept again in the review queue."""
+    if how == "erased":
+        try:
+            c.execute("PRAGMA secure_delete=ON")
+        except Exception:
+            pass
+        c.execute("DELETE FROM proposals WHERE id=? AND state='pending'", (pid,))
+    else:
+        c.execute("UPDATE proposals SET state='rejected' WHERE id=? AND state='pending'",
+                  (pid,))
+    c.commit()
 
 
 # ---- grounding ------------------------------------------------------------
@@ -1554,16 +1718,16 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
     their reason noted. Returns {"saved": [fact ids], "cards": {pid: reason}}.
     Never raises."""
     result = {"saved": [], "cards": {}}
+    texts, entries = [], []
     try:
+        texts = [t.get("content") if isinstance(t, dict) else t for t in turns or []]
+        texts = [t for t in texts if isinstance(t, str) and t.strip()]
         pids = [int(r["id"]) for r in out or []
                 if isinstance(r, dict) and isinstance(r.get("id"), int)]
         if not pids:
             return result
-        texts = [t.get("content") if isinstance(t, dict) else t for t in turns or []]
-        texts = [t for t in texts if isinstance(t, str) and t.strip()]
         off = check_settings(learning_on)
         batch = off or check_intake() or check_local_model(ollama, model)
-        entries = []
         if not batch:
             batch, entries = check_turns(texts, conversation_id)
         allowed = settings()["auto_sensitive"]
@@ -1572,6 +1736,7 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
             rows = _rows(c, pids)
             decisions = {}
             topics = {}
+            moves = {}
             for pid in pids:
                 row = rows.get(pid)
                 if row is None or row.get("state") != "pending":
@@ -1581,7 +1746,26 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 if not why and row.get("source") != "conversation":
                     why = "not from something you said"
                 src = source_turns(fact, texts) if not why else []
-                why = why or check_not_correction(row) or check_instruction(fact)
+                # Forgotten stays forgotten, layer 1 - whatever else the
+                # checks say, and also while automatic learning is off, so a
+                # just-forgotten fact is not back as a card a minute later.
+                gone = hushed(conversation_id, src or source_turns(fact, texts))
+                if gone:
+                    _drop(c, pid, gone)
+                    result.setdefault("dropped", []).append(pid)
+                    continue
+                # "Where did I put ...?" (jarvis_places.py, 2026-09-28): a
+                # thing that only MOVED ("the passport is in the desk now",
+                # when Jarvis keeps "in the top drawer") is not a correction
+                # card - the owner chose that things move without asking.
+                # Every other check below still runs; only the correction
+                # check is skipped, and the older place is ended by
+                # apply_move() once this one is saved.
+                move = None if why else _moved_from(c, row, fact, st)
+                if move is not None:
+                    moves[pid] = move
+                why = why or ("" if move is not None else check_not_correction(row)) \
+                    or check_instruction(fact)
                 sens = ""
                 if not why:
                     why = check_sensitive(fact, src, allowed)
@@ -1591,7 +1775,9 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                         # sensitive topics automatically", with the fact.
                         sens = sensitive_key(fact, src)
                 why = why or check_grounded(fact, texts)
-                if not why:
+                if not why and like_forgotten(fact, st):
+                    why = FORGOTTEN_BEFORE          # layer 2: a card, never automatic
+                if not why and pid not in moves:
                     # B5: a clash with a stored fact the model did not mark.
                     # The card then names that fact, as a correction would.
                     old = find_contradiction(fact, st)
@@ -1601,6 +1787,12 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                                   " WHERE id=? AND state='pending' AND replaces_id IS NULL",
                                   (int(old["id"]), str(old.get("text") or ""), pid))
                         c.commit()
+                if why and pid in moves:
+                    # A move that still waits for a yes (sensitive, not in
+                    # the owner's words ...): the card names the older
+                    # place, so accepting it replaces that one, as any
+                    # correction card does.
+                    _card_names(c, pid, moves.pop(pid))
                 decisions[pid] = why
                 topics[pid] = sens
                 if why and not off:
@@ -1621,15 +1813,80 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
             if fid is None:
                 result["cards"][pid] = "could not be saved automatically"
                 with closing(st._connect()) as c:
+                    if pid in moves:
+                        _card_names(c, pid, moves[pid])
                     _note_card(c, pid, result["cards"][pid])
             else:
                 result["saved"].append(fid)
+                if pid in moves:
+                    done = _apply_move(st, fid, moves[pid])
+                    if done:
+                        result.setdefault("moved", []).append({"id": fid, "how": done})
         if result["saved"]:
             publish(result["saved"])
             _entity_model_pass(result["saved"], ollama, model)
     except Exception as exc:
         result["error"] = type(exc).__name__
+    finally:
+        # Every turn this pass read - with or without proposals - so a
+        # Forget or Erase afterwards knows which turns are already learned
+        # from (layer 1 above).
+        try:
+            note_read(conversation_id, [_live(conversation_id, t) for t in texts])
+        except Exception:
+            pass
     return result
+
+
+def _moved_from(c, row: dict, fact: str, store) -> Optional[dict]:
+    """The place fact in use that this proposal only MOVES (jarvis_places:
+    the same thing, somewhere else), or None. When the learner's model
+    marked the proposal as replacing a fact, that fact must be the older
+    place itself - a proposal aimed at anything else stays a correction.
+    The proposal's own "replaces" marks are taken off (so accept_auto can
+    save it: it never saves a correction), and put back by _card_names if
+    it ends up a card after all. Never raises."""
+    try:
+        import jarvis_places
+        old = jarvis_places.older_place(store, fact)
+        if old is None:
+            return None
+        rid = row.get("replaces_id")
+        if rid and int(rid) != int(old["id"]):
+            return None
+        if row.get("replaces") and not rid and not jarvis_places.moved(fact, row["replaces"]):
+            return None
+        c.execute("UPDATE proposals SET replaces=NULL, replaces_id=NULL, replaces_text=NULL"
+                  " WHERE id=? AND state='pending'", (int(row["id"]),))
+        return {"id": int(old["id"]), "text": str(old.get("text") or "")}
+    except Exception:
+        return None
+
+
+def _card_names(c, pid: int, old: dict) -> None:
+    """A move that stays a card names the older place it would replace."""
+    try:
+        c.execute("UPDATE proposals SET replaces_id=?, replaces_text=? WHERE id=?"
+                  " AND state='pending' AND replaces_id IS NULL",
+                  (int(old["id"]), str(old.get("text") or ""), int(pid)))
+    except Exception:
+        pass
+
+
+def _apply_move(store, new_id: int, old: dict) -> str:
+    """End the older place once the new one is saved. The older place is
+    looked up AGAIN, now: two places for one thing in the same pass ("in the
+    drawer", then "in the desk") must each replace the one before, not both
+    the place that was stored when the pass began."""
+    try:
+        import jarvis_places
+        new = store.get(int(new_id))
+        prev = jarvis_places.older_place(store, str((new or {}).get("text") or ""),
+                                         exclude=(int(new_id),)) if new else None
+        target = int(prev["id"]) if prev is not None else int(old["id"])
+        return jarvis_places.apply_move(store, int(new_id), target)
+    except Exception:
+        return ""
 
 
 def _entity_model_pass(ids: list, ollama, model) -> None:
@@ -1662,6 +1919,7 @@ def after_remember(res, messages, *, conversation_id=None, learning_on: bool = T
         content = last.get("content") if isinstance(last, dict) else None
         entry = _live(conversation_id, content) if isinstance(content, str) else None
         prov = entry.get("provenance") if entry else None
+        note_read(conversation_id, [entry])
         off = check_settings(learning_on)
         why = off or check_intake()
         if not why:

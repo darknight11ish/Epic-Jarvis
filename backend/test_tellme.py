@@ -1273,6 +1273,61 @@ def t_page_a_look_matches_on_the_fingerprint_changing_only():
         S._SCHED = None
 
 
+def t_page_fingerprint_ignores_what_a_reader_never_sees():
+    """Studio play test, 2026-09-27: the fingerprint used to be over the
+    page's raw bytes, so a security token or ad id that changes on every
+    load made an unchanged page match on every look."""
+    a = (b"<html><head><title>Shop</title><meta name=csrf content=aaa111>"
+         b"<script>var t=1727460000;</script></head><body><h1>Kettle</h1>"
+         b"<p>Price: &pound;30</p><style>.x{color:red}</style>"
+         b"<iframe src=ad?id=1></iframe><noscript>enable js</noscript></body></html>")
+    b = (b"<html><head><title>Shop</title><meta name=csrf content=bbb222>"
+         b"<script>var t=1727469999;</script></head><body><h1>Kettle</h1>"
+         b"<p>Price: &pound;30</p><style>.x{color:blue}</style>"
+         b"<iframe src=ad?id=2></iframe><noscript>enable js</noscript></body></html>")
+    c = a.replace(b"&pound;30", b"&pound;25")
+    ct = "text/html; charset=utf-8"
+    check("hidden bytes changed, visible words did not: the same fingerprint",
+          TM._page_print(a, ct) == TM._page_print(b, ct))
+    check("the price a reader sees changed: a different fingerprint",
+          TM._page_print(a, ct) != TM._page_print(c, ct))
+    check("the fingerprint says what kind it is",
+          TM._page_print(a, ct).startswith(TM.PAGE_PRINT))
+    check("the visible words are what a reader sees, in order",
+          TM._visible_text(a, ct) == "Kettle Price: \u00a330")
+    check("a plain-text page is taken as it is, spaces tidied",
+          TM._visible_text(b"  price:\n 10  ", "text/plain") == "price: 10")
+    check("HTML is recognised with no Content-Type too",
+          TM._visible_text(b"<p>hi <script>x</script>there</p>", "") == "hi there")
+    check("an unknown charset falls back to UTF-8 rather than failing",
+          TM._visible_text("caf\u00e9".encode(), "text/plain; charset=nonsense-8") == "caf\u00e9")
+
+
+def t_page_an_old_fingerprint_is_re_recorded_not_matched():
+    """A watch set up before 2026-09-27 holds a fingerprint of the raw bytes.
+    Comparing it with the new kind would match once for a page nobody
+    changed; the first look after the update only records."""
+    w = World(local(2026, 9, 25, 12, 0), read_tier="auto")
+    pages = {"url": "https://example.com/news", "body": b"<p>headline one</p>"}
+    TM.DEPS.page_fetch = lambda url: TM._page_print(pages["body"], "text/html")
+    try:
+        j = TM.add({"source": "page", "url": pages["url"]}, sched=w.s)
+        job_id = j["id"]
+        TM._save(job_id, w.s, last_state=__import__("hashlib").sha256(b"old bytes").hexdigest())
+        out = TM.look(job_id, deps=TM.DEPS, sched=w.s)
+        check("old kind of fingerprint: not a match", out["matched"] == 0 and w.matched() == [])
+        check("the new kind is recorded in its place",
+              TM._state(job_id, w.s).get("last_state", "").startswith(TM.PAGE_PRINT))
+        out2 = TM.look(job_id, deps=TM.DEPS, sched=w.s)
+        check("unchanged page, new kind both times: still not a match", out2["matched"] == 0)
+        pages["body"] = b"<p>headline two</p>"
+        out3 = TM.look(job_id, deps=TM.DEPS, sched=w.s)
+        check("then a real change matches as before", out3["matched"] == 1)
+    finally:
+        TM.DEPS.page_fetch = None
+        S._SCHED = None
+
+
 def t_page_a_look_refuses_a_page_that_moved_to_a_private_address():
     w = World(local(2026, 9, 25, 12, 0), read_tier="auto")
     TM.DEPS.page_fetch = lambda url: "irrelevant - never called"

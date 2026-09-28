@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
 import com.jarvis.client.data.FloatingAvatarMode
+import com.jarvis.client.data.QuickTiles
+import com.jarvis.client.data.TileAction
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Secondary
@@ -81,7 +83,22 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "folders" to 9,
     "backup" to 10,
     "watch-notify" to 11,
+    "quick-tiles" to 12,
 )
+
+/**
+ * The Voice section's line about Android 17's assistant volume slider. Said
+ * with its one exception: while "Listen on this phone" is on together with
+ * "Interrupt Jarvis while it talks", an answer plays as a voice call
+ * (WakeWordService -> Speaker.beginVoiceCall), so the call volume sets it.
+ * The slider's name on the phone is Android's, not checked on a real
+ * Android 17 phone - so the line does not quote one.
+ */
+internal const val ASSISTANT_VOLUME_LINE =
+    "On Android 17 and later, Jarvis's spoken answers have their own volume " +
+        "slider for assistants in the phone's volume panel, apart from music. When " +
+        "this phone listens with \"Interrupt Jarvis while it talks\" on, answers play " +
+        "as a call, so the call volume sets them instead."
 
 @Composable
 fun SettingsScreen(
@@ -113,6 +130,9 @@ fun SettingsScreen(
     overlayGranted: Boolean = false,
     onRequestOverlay: () -> Unit = {},
     onOpenBubbleSettings: () -> Unit = {},
+    /** "Quick Settings tiles" - saved on this phone only, like Floating Jarvis. */
+    quickTiles: List<TileAction?> = List(QuickTiles.SLOTS) { null },
+    onQuickTileChange: (slot: Int, action: TileAction?) -> Unit = { _, _ -> },
     /**
      * "Open <a settings section>" by voice or chat
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
@@ -192,6 +212,16 @@ fun SettingsScreen(
                                 color = chrome.textLo,
                             )
                         }
+                        Gap(8)
+                        // Android 17 (docs/JARVIS-API.md section 81.3): Jarvis
+                        // already plays its answers as assistant sound
+                        // (audio/Speaker.kt, USAGE_ASSISTANT), which Android 17
+                        // gives its own volume slider. Nothing to switch on.
+                        Text(
+                            ASSISTANT_VOLUME_LINE,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
                     }
                 }
             }
@@ -254,6 +284,9 @@ fun SettingsScreen(
             item(key = "folders") { FoldersSection() }
             item(key = "backup") { BackupSection() }
             item(key = "watch-notify") { WatchNotifySection(canAct = canAct) }
+            item(key = "quick-tiles") {
+                QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
+            }
 
             item(key = "tail") { Gap(24) }
         }

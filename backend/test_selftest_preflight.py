@@ -225,7 +225,7 @@ def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
     want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
             "gate", "stop_all", "scheduler", "folders", "instant_email", "events", "voice",
-            "reach", "home", "sleep", "data_health", "credentials"]
+            "reach", "home", "sleep", "data_health", "credentials", "engine_config"]
     check("every check the owner asked for is registered, in order", keys == want, keys)
     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
     try:
@@ -722,6 +722,43 @@ def t_sleep_on_mains_power_is_a_warning():
     check("not Windows: SKIP", S.pf_sleep(S.Live(power=lambda: None))[0][0] == S.SKIP)
     check("an answer it cannot read: WARN, never a FAIL",
           S.pf_sleep(S.Live(power=lambda: "nothing here"))[0][0] == S.WARN)
+
+
+def t_a_hidden_llama_cpp_settings_file_is_a_warning():
+    """The research audit, 2026-09-28 (section 6, item 3): Ollama's engine
+    reads llama.cpp's config.ini from %PROGRAMDATA% and %APPDATA% - a hidden
+    place for a setting to come from. WARN (never FAIL), with the names of
+    the settings in it (never their values) and the one line that renames it."""
+    d = Path(tempfile.mkdtemp(prefix="jarvis-llama-ini-"))
+    try:
+        pd, ad = d / "ProgramData", d / "AppData"
+        pd.mkdir()
+        ad.mkdir()
+        env = {"PROGRAMDATA": str(pd), "APPDATA": str(ad)}
+        rows = S.pf_engine_config(S.Live(env=env))
+        check("no config.ini: PASS", rows[0][0] == S.PASS and len(rows) == 1, rows)
+        (ad / "llama.cpp").mkdir()
+        (ad / "llama.cpp" / "config.ini").write_text(
+            "; mine\n[server]\nctx-size = 2048\ncache-ram=99999\nsecret-thing = hunter2\n",
+            encoding="utf-8")
+        rows = S.pf_engine_config(S.Live(env=env))
+        check("an %APPDATA% config.ini: one WARN naming it", len(rows) == 1
+              and rows[0][0] == S.WARN and "%APPDATA%\\llama.cpp\\config.ini" in rows[0][1],
+              rows)
+        check("... listing the settings' names, never their values",
+              "ctx-size, cache-ram, secret-thing" in rows[0][2] and "hunter2" not in rows[0][2]
+              and "2048" not in rows[0][2], rows[0][2])
+        check("... with the one PowerShell line that renames it",
+              "Rename-Item -Path" in rows[0][2] and "config.ini.off" in rows[0][2]
+              and "\n" not in rows[0][2], rows[0][2])
+        (pd / "llama.cpp").mkdir()
+        (pd / "llama.cpp" / "config.ini").write_text("", encoding="utf-8")
+        rows = S.pf_engine_config(S.Live(env=env))
+        check("both places: a WARN for each, %PROGRAMDATA% first",
+              [r[0] for r in rows] == [S.WARN, S.WARN] and "PROGRAMDATA" in rows[0][1], rows)
+        check("not Windows: SKIP", S.pf_engine_config(S.Live(env={}))[0][0] == S.SKIP)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def t_a_folder_without_jarvis_hud_says_so_once():

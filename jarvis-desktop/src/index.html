@@ -205,6 +205,15 @@
           <span class="temporary-refused" id="temporary-refused" hidden></span>
         </div>
 
+        <!-- Lockdown (2026-09-28, backend jarvis_asks_first.py): shown while
+             every way out of the PC asks first, from the link (stream.rs
+             LinkState.lockdown), so every window agrees. Words: asks-first.js
+             LOCKDOWN_BAR_*. -->
+        <div class="lockdown-strip" id="lockdown-strip" role="status" hidden>
+          <strong class="lockdown-label">Lockdown is on</strong>
+          <span class="lockdown-line">Everything that would leave this PC asks you first, and anything that runs by itself has stopped. To turn it off: Settings, What asks first.</span>
+        </div>
+
         <div class="attachments" id="attachments" hidden>
           <div class="attachment" id="attachment-capture" hidden>
             <img id="capture-thumb" alt="Desktop capture attached to the next prompt" />
@@ -212,6 +221,10 @@
               <span class="attachment-title">Screen capture</span>
               <span class="attachment-meta" id="capture-meta">—</span>
             </div>
+            <!-- "Photo to reminder" (photo-reminder.js): the PC reads the
+                 dates in the capture and PROPOSES a reminder below. Nothing
+                 is set up until "Add a Jarvis reminder" is tapped. -->
+            <button class="text-button" type="button" id="capture-find-date">Find a date in it</button>
             <button class="icon-button" type="button" id="capture-remove" title="Remove capture">
               <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                 <path d="M4 4l8 8M12 4l-8 8" />
@@ -246,6 +259,10 @@
             </button>
           </div>
         </div>
+
+        <!-- "Photo to reminder": the proposal for the capture above - the
+             PC's words, shown only; closed, nothing of them is kept. -->
+        <div class="photo-box" id="photo-proposal" hidden></div>
 
         <!-- ── Attention: the interruption budget and the daily brief ─────
              `pending` is what is waiting to be *told* to you, which is not the

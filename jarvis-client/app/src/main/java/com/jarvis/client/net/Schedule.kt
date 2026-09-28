@@ -179,10 +179,46 @@ object Schedule {
     const val TELLME = "tellme"
     const val TELLME_TITLE = "Tell me when"
     const val TELLME_HINT =
-        "Say or type \"tell me when an email from Alex arrives\" or \"tell me when the washing " +
-            "machine finishes\" - add \"urgently\" to make it ring until you look. Setting one up asks " +
-            "once with an approval card; when it happens, Jarvis only tells you."
+        "Say or type \"tell me when an email from Alex arrives\", \"tell me when the washing " +
+            "machine finishes\", \"tell me when a search for Kokoro voices shows something new\", " +
+            "\"tell me when the price on https://example.com/kettle drops below 25\" or \"tell me when " +
+            "CI fails on owner/repo\" - add \"urgently\" to make it ring until you look. Setting one up " +
+            "asks once with an approval card; when it happens, Jarvis only tells you. If a watch stops " +
+            "working, Jarvis tells you once."
     const val TELLME_LOCK_SCREEN = "Jarvis: something you asked to be told about happened."
+
+    /**
+     * A "tell me when" that cannot look (2026-09-28): all a notification says
+     * while App lock or "Hide memory lists and chat history" is on, and all a
+     * locked phone shows. The desktop's `TELLME_BROKEN_LOCK_SCREEN`.
+     */
+    const val TELLME_BROKEN_LOCK_SCREEN = "Jarvis: a \"tell me when\" cannot look right now."
+
+    /**
+     * "Remind me next time I talk about ..." (backend `jarvis_next_time.py`,
+     * 2026-09-28): a reminder with no time of its own, brought up in the chat
+     * when the owner's own words mention the subject - at most 3 times, a day
+     * apart at least, gone after 90 days. Set by saying or typing it, no card;
+     * Delete only. Never a notification. Both apps' words (coming-up.js).
+     */
+    const val NEXT_TIME = "nexttime"
+    const val NEXT_TIME_TITLE = "Reminder for next time"
+    const val NEXT_TIME_HINT =
+        "Say or type \"remind me next time I talk about the dentist to ask about the bill\". " +
+            "Jarvis brings it up in the chat when your own words mention it - at most 3 times, a day " +
+            "apart at least - and it is gone after 90 days. No card; Delete stops it."
+
+    /**
+     * A Today card (backend jarvis_today.py, 2026-09-28): the owner's own
+     * words on the Today section of Brain at a time, on chosen days
+     * ([Today]). Its row here is like a repeating reminder's: Pause skips it,
+     * Delete removes it. It never notifies. Both apps' words (coming-up.js).
+     */
+    const val TODAY_CARD = "today"
+    const val TODAY_CARD_TITLE = "Today card"
+
+    /** The line naming the subject: `When you talk about "the dentist"`. */
+    fun nextTimeAbout(about: String): String = "When you talk about \u201c$about\u201d"
 
     /** A notification's title, by kind. The desktop's toast says the same. */
     fun title(kind: String): String = when (kind) {
@@ -210,6 +246,8 @@ object Schedule {
     fun tag(kind: String): String = when (kind) {
         "todo" -> "to-do"
         TELLME -> "tell me when"
+        NEXT_TIME -> "next time"
+        TODAY_CARD -> "today card"
         else -> kind
     }
 
@@ -266,6 +304,14 @@ object Schedule {
         /** When that happened (epoch seconds) - one notification per match. */
         val alertAt: Double? = null,
         /**
+         * A "tell me when" that cannot look (2026-09-28): the PC's notice, made
+         * from the owner's own words and fixed words about the problem - ""
+         * when it is working.
+         */
+        val broken: String = "",
+        /** When the PC told the owner so (epoch seconds) - one notification per telling. */
+        val brokenAt: Double? = null,
+        /**
          * A repeating job's rule, as the PC keeps it (jarvis_schedule's
          * `rule`): "day", "weekday", "week" or "hours"; its "HH:MM"; and for
          * "week" the days, 0 = Monday. For "Also on my phone" ([AlsoOnPhone]).
@@ -273,6 +319,14 @@ object Schedule {
         val ruleEvery: String = "",
         val ruleAt: String = "",
         val ruleDays: List<Int> = emptyList(),
+        /** A reminder for next time's subject ("the dentist") - the owner's words. */
+        val about: String = "",
+        /**
+         * A Today card (2026-09-28): whether it shows today - "showing",
+         * "later" or "" - and from when ("07:00"), by the PC's own clock.
+         */
+        val today: String = "",
+        val showsAt: String = "",
     )
 
     /** A named list: its name as the PC keeps it, its title, how many open items. */
@@ -314,11 +368,16 @@ object Schedule {
             urgent = o.flag("urgent") == true,
             alert = o.text("alert") ?: "",
             alertAt = o.num("alert_at"),
+            broken = o.text("broken") ?: "",
+            brokenAt = o.num("broken_at"),
             ruleEvery = rule?.text("every") ?: "",
             ruleAt = rule?.text("at") ?: "",
             ruleDays = (rule?.get("days") as? JsonArray)?.mapNotNull { d ->
                 (d as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.toInt()
             } ?: emptyList(),
+            about = o.text("about") ?: "",
+            today = o.text("today") ?: "",
+            showsAt = o.text("shows_at") ?: "",
         )
     }
 
@@ -366,10 +425,12 @@ object Schedule {
             return "hidden-${i + 1}"
         }
         return View(
-            jobs = v.jobs.map { it.copy(text = "", alert = "", hidden = true) },
-            todo = v.todo.map { it.copy(text = "", alert = "", hidden = true, list = standIn(it.list)) },
+            jobs = v.jobs.map { it.copy(text = "", alert = "", broken = "", about = "", hidden = true) },
+            todo = v.todo.map {
+                it.copy(text = "", alert = "", broken = "", about = "", hidden = true, list = standIn(it.list))
+            },
             hidden = true,
-            wentOff = v.wentOff.map { it.copy(text = "", alert = "", hidden = true) },
+            wentOff = v.wentOff.map { it.copy(text = "", alert = "", broken = "", about = "", hidden = true) },
             lists = v.lists.map { it.copy(name = standIn(it.name), title = "") },
         )
     }
@@ -450,6 +511,8 @@ object Schedule {
         if (job.kind == Briefing.KIND) return Briefing.TITLE
         // "When an email from Alex arrives" - what is watched, in the owner's words.
         if (job.kind == TELLME) return if (job.hidden || words.isEmpty()) TELLME_TITLE else "When $words"
+        if (job.kind == NEXT_TIME) return if (job.hidden || words.isEmpty()) NEXT_TIME_TITLE else words
+        if (job.kind == TODAY_CARD) return if (job.hidden || words.isEmpty()) TODAY_CARD_TITLE else words
         if (words.isNotEmpty()) return words
         return when (job.kind) {
             "alarm" -> "Alarm"
@@ -469,6 +532,13 @@ object Schedule {
         if (job.kind == "timer") {
             val left = leftNow(job, sinceMs) ?: 0.0
             out += if (job.state == "paused") "Paused - ${countdown(left)} left" else "${countdown(left)} left"
+            return out
+        }
+        if (job.kind == NEXT_TIME) {
+            // The subject (never while hidden), until when, and a count.
+            if (!job.hidden && job.about.isNotEmpty()) out += nextTimeAbout(job.about)
+            if (job.whenWords.isNotEmpty()) out += job.whenWords
+            if (job.note.isNotEmpty()) out += job.note
             return out
         }
         if (job.kind == TELLME) {
@@ -519,6 +589,8 @@ object Schedule {
     fun actionsOf(job: Job): List<String> = when {
         job.kind == "todo" -> listOf("done", "delete")
         job.state == "waiting" -> listOf("delete")
+        // A reminder for next time has no time of its own to pause.
+        job.kind == NEXT_TIME -> listOf("delete")
         job.state == "paused" -> listOf("resume", "delete")
         else -> listOf("pause", "delete")
     }
@@ -649,6 +721,25 @@ object Schedule {
         if (data == null || data.text("state") != "matched" || data.text("kind") != TELLME) return null
         val id = data.text("id")?.takeIf { validId(it) } ?: return null
         return id to (data.flag("urgent") == true)
+    }
+
+    /**
+     * From a `schedule` event: the id when a "tell me when" cannot look
+     * (2026-09-28), else null. It carries no words; the notice is read by id.
+     */
+    fun brokenFrom(data: JsonObject?): String? {
+        if (data == null || data.text("state") != "broken" || data.text("kind") != TELLME) return null
+        return data.text("id")?.takeIf { validId(it) }
+    }
+
+    /**
+     * (title, text) of the notification for a "tell me when" that cannot
+     * look: the job's `broken` notice, or only [TELLME_BROKEN_LOCK_SCREEN]
+     * while [private] or when there is none. The desktop's `broken_words`.
+     */
+    fun brokenNotification(job: Job?, private: Boolean): Pair<String, String> {
+        val words = job?.broken?.trim().orEmpty()
+        return TELLME_TITLE to (if (private || words.isEmpty()) TELLME_BROKEN_LOCK_SCREEN else words)
     }
 
     /**

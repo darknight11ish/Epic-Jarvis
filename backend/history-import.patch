@@ -1,0 +1,20 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2606,6 +2606,17 @@
+                                           token_ok=_token_ok, read_body=_read_body))
+     except Exception as exc:
+         print(f"  photo      NOT ON ({type(exc).__name__}) - Photo to reminder is off")
++    # history-import.patch ("Bring in chats from ChatGPT, Claude or Gemini",
++    # 2026-09-28; JARVIS-API.md section 85): the Brain's button runs
++    # import_history.run() in the background on this PC. It only PROPOSES:
++    # every fact waits in the review queue for the owner's yes, one at a
++    # time. The rules are all in jarvis_history_import.py.
++    try:
++        import jarvis_history_import
++        print(jarvis_history_import.install(Handler, origin_ok=_origin_ok,
++                                            token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  old chats  NOT ON ({type(exc).__name__}) - Bringing in old chats is off")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

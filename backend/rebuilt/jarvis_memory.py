@@ -378,6 +378,20 @@ def _content_words(text: str) -> list[str]:
 #   Embedders
 # --------------------------------------------------------------------------
 
+def quiet_onnxruntime() -> None:
+    """Switch off ONNX Runtime's own trace events before fastembed loads a
+    model with it. They are ON by default in Microsoft's builds (its
+    docs/Privacy.md; on Windows they go to ETW and, with the owner's Windows
+    diagnostic-data consent, may reach Microsoft). Rule 1: nothing about the
+    owner leaves the PC. Process-wide and repeatable; a missing or older
+    onnxruntime is harmless."""
+    try:
+        import onnxruntime
+        onnxruntime.disable_telemetry_events()
+    except Exception:
+        pass
+
+
 class Embedder:
     """The base every embedder subclasses, and the shape the store relies on.
 
@@ -449,6 +463,55 @@ class HashEmbedder(Embedder):
         return out
 
 
+#: The meaning model Jarvis has always used. JARVIS_MEMORY_EMBED_MODEL names
+#: another one (the "Model tryouts" group, 2026-09-28); left unset, nothing
+#: about the store changes - same model, same name, same vectors.
+EMBED_MODEL_DEFAULT = "BAAI/bge-small-en-v1.5"
+
+#: What some models need written in front of a QUESTION and of a stored FACT
+#: to work as their makers measured them. From fastembed 0.8.1's own model
+#: list, which says so in each model's description (read 2026-09-28):
+#: EmbeddingGemma wants "task: search result | query: " and "title: none |
+#: text: "; Qwen3-Embedding wants "Instruct: <the task>\nQuery:" before a
+#: question and nothing before a fact. fastembed itself adds none of them
+#: (its query_embed() is plain embed() for these models), so they are added
+#: here. The default model has none, so its vectors and name are unchanged.
+EMBED_PREFIXES = {
+    "google/embeddinggemma-300m": ("task: search result | query: ", "title: none | text: "),
+    "Qwen/Qwen3-Embedding-0.6B": (
+        "Instruct: Given a question, retrieve the saved facts that answer it\nQuery:", ""),
+    "Qwen/Qwen3-Embedding-0.6B-Q": (
+        "Instruct: Given a question, retrieve the saved facts that answer it\nQuery:", ""),
+}
+#: Bumped if the prefixes above ever change, so the store's name for the
+#: model changes with them and every fact is embedded again (see _init()).
+EMBED_PREFIX_VERSION = 1
+
+
+def embed_model_wanted() -> str:
+    """The meaning model the owner asked for (JARVIS_MEMORY_EMBED_MODEL), or
+    the default."""
+    return (os.environ.get("JARVIS_MEMORY_EMBED_MODEL") or "").strip() or EMBED_MODEL_DEFAULT
+
+
+class EmbedModelUnavailable(Exception):
+    """The model asked for is not one the installed fastembed has. str() is
+    a plain sentence for the owner."""
+
+
+def fastembed_version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("fastembed")
+    except Exception:
+        return "unknown"
+
+
+#: Why the model asked for is not the one in use, in plain words - or "".
+#: status() shows it, and it is said once in the backend's window.
+_embed_refused = ""
+
+
 class FastEmbedder(Embedder):
     """The real one, if fastembed is installed.
 
@@ -456,17 +519,35 @@ class FastEmbedder(Embedder):
     finite/zero check at all, so a model that returned NaN - which they do, on
     an empty string or a pathological input - wrote a row nothing could ever
     find again. Checked here, at the only place vectors are produced.
+
+    A model other than the default must be one the installed fastembed lists,
+    or this refuses it with EmbedModelUnavailable (a plain sentence) before
+    anything is downloaded or loaded. Its name in the store carries the
+    prefix version when it uses prefixes, so a change of prefixes counts as a
+    change of model: the store then embeds every fact again (never a mix -
+    MemoryStore._init() compares the name, not the width).
     """
 
     semantic = True
 
-    def __init__(self, model: str = "BAAI/bge-small-en-v1.5") -> None:
+    def __init__(self, model: Optional[str] = None) -> None:
+        model = (model or embed_model_wanted()).strip()
+        quiet_onnxruntime()
         from fastembed import TextEmbedding  # imported lazily and on purpose
+        if model != EMBED_MODEL_DEFAULT and model not in {
+                str(m.get("model")) for m in TextEmbedding.list_supported_models()}:
+            raise EmbedModelUnavailable(
+                f"The memory search model {model!r} is not one this PC's fastembed "
+                f"({fastembed_version()}) has, so it was not used. Check the spelling "
+                "against tools/model_tryout/README.md; the newer models need fastembed "
+                "0.8.1 or later (the same page has the one line that installs it).")
         self._m = TextEmbedding(model_name=model, cache_dir=model_cache_dir())
-        self.name = model
-        self.dim = len(next(iter(self._m.embed(["probe"]))))
+        self._q, self._d = EMBED_PREFIXES.get(model, ("", ""))
+        self.name = model if not (self._q or self._d) else \
+            f"{model}+prefixes-{EMBED_PREFIX_VERSION}"
+        self.dim = len(next(iter(self._m.embed([self._d + "probe"]))))
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    def _vectors(self, texts) -> list[list[float]]:
         out: list[list[float]] = []
         for v in self._m.embed(list(texts)):
             vec = [float(x) for x in v]
@@ -476,13 +557,50 @@ class FastEmbedder(Embedder):
             out.append(vec if _usable_vector(vec, self.dim) else [0.0] * self.dim)
         return out
 
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Facts, and anything compared with facts."""
+        return self._vectors([self._d + t for t in texts] if self._d else texts)
+
+    def embed_query(self, texts: list[str]) -> list[list[float]]:
+        """A question to search with. The same as embed() for the default."""
+        return self._vectors([self._q + t for t in texts] if self._q else texts)
+
+
+def _embed_query(embedder, query: str):
+    """One question's vector: embed_query() where the embedder has one."""
+    fn = getattr(embedder, "embed_query", None)
+    return (fn if callable(fn) else embedder.embed)([query])[0]
+
+
+def _say_refused(why: str) -> None:
+    global _embed_refused
+    _embed_refused = why
+    try:
+        print(f"  memory     {why} Using {EMBED_MODEL_DEFAULT} instead.", file=sys.stderr)
+    except Exception:
+        pass
+
 
 def _make_embedder():
-    """The best available, never an exception."""
+    """The best available, never an exception.
+
+    JARVIS_MEMORY_EMBED_MODEL naming a model this fastembed does not have (or
+    cannot load) is REFUSED in plain words - said once, and in status() - and
+    the default model is used instead, never a silent drop to words only."""
     if os.environ.get("JARVIS_NO_EMBED"):
         return HashEmbedder()
+    wanted = embed_model_wanted()
     try:
-        return FastEmbedder()
+        return FastEmbedder(wanted)
+    except EmbedModelUnavailable as exc:
+        _say_refused(str(exc))
+    except Exception as exc:
+        if wanted == EMBED_MODEL_DEFAULT:
+            return HashEmbedder()
+        _say_refused(f"The memory search model {wanted!r} could not be loaded "
+                     f"({type(exc).__name__}), so it was not used.")
+    try:
+        return FastEmbedder(EMBED_MODEL_DEFAULT)
     except Exception:
         return HashEmbedder()
 
@@ -522,7 +640,12 @@ def _make_embedder():
 # up to RERANK_BUDGET_S seconds (1.5 s); a re-rank slower than that is not
 # waited for any longer and that question gets the merged order.
 
-RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
+RERANK_MODEL_DEFAULT = "Xenova/ms-marco-MiniLM-L-6-v2"
+#: JARVIS_MEMORY_RERANK_MODEL names another of fastembed's re-rankers (the
+#: "Model tryouts" group, 2026-09-28) - for the self-test's tryout, or for
+#: real once the self-test shows it helps. Unset: the default above.
+RERANK_MODEL = (os.environ.get("JARVIS_MEMORY_RERANK_MODEL") or "").strip() \
+    or RERANK_MODEL_DEFAULT
 
 
 def _env_int(name: str, default: int, lo: int, hi: int) -> int:
@@ -567,7 +690,14 @@ class FastReranker(Reranker):
     """fastembed's cross-encoder. Imported lazily and on purpose."""
 
     def __init__(self, model: str = RERANK_MODEL) -> None:
+        quiet_onnxruntime()
         from fastembed.rerank.cross_encoder import TextCrossEncoder
+        if model != RERANK_MODEL_DEFAULT and model not in {
+                str(m.get("model")) for m in TextCrossEncoder.list_supported_models()}:
+            raise EmbedModelUnavailable(
+                f"the re-ranking model {model!r} is not one this PC's fastembed "
+                f"({fastembed_version()}) has - check the spelling against "
+                "tools/model_tryout/README.md")
         self._m = TextCrossEncoder(model_name=model, cache_dir=model_cache_dir())
         self.name = model
         list(self._m.rerank("probe", ["probe"]))      # load it now, not on a question
@@ -757,6 +887,9 @@ _BEGAN = re.compile(
     r"|adopted|took\s+up|left|quit|retired|graduated|married|engaged|divorced|sold"
     r"|finished|hired|promoted|signed|enrolled|arrived|since|stopped|gave\s+up|given\s+up"
     r"|ended|moved\s+out|broke\s+up|split\s+up"
+    # Where a thing was put ("Where did I put ...?", 2026-09-28): "put the
+    # coats in the loft in January" is where they have been since January.
+    r"|put|placed|stored|stashed|hid|parked"
     r"|has\s+been|have\s+been|has\s+had|have\s+had|has\s+lived|has\s+worked)\b", re.I)
 #: "next" only as a time ("next week", "next Friday") - never "next to the
 #: park" (B8).
@@ -855,6 +988,11 @@ def true_from(text: str, now: Optional[float] = None) -> Optional[float]:
         ref = _midnight(int(m.group(1)), int(m.group(2)), int(m.group(3))) or now
         ref = min(ref + 86399, now)
     body = _AS_OF.sub(" ", text)
+    # The END date of "until 12 October" (true_until, below) is not when
+    # the fact began: taken out first, so "started a contract in March
+    # 2026 that runs until September 2026" is still true from March
+    # (smarter memory dates, 2026-09-28; JARVIS-API section 78).
+    body = _until_spans_off(body)
     if not _BEGAN.search(body) or _NOT_YET.search(body) or _MAYBE.search(body):
         return None
     found = []
@@ -898,6 +1036,236 @@ def true_from(text: str, now: Optional[float] = None) -> Optional[float]:
     if when > now or when < -2208988800:
         return None
     return when
+
+
+# --------------------------------------------------------------------------
+#   "True until" dates from the owner's words (smarter memory dates, 2026-09-28)
+# --------------------------------------------------------------------------
+#
+# The other end of true_from (research audit 2026-09-28, section 8.6 gap B):
+# "on holiday in Lisbon until 12 October", "the lease ends in December
+# 2026", "lived in Leeds until 2024" were stored with no end at all, so they
+# stayed current for ever. true_until() reads that end date, with fixed
+# rules and no model, and add() keeps it in the fact's meta:
+#
+#   meta["true_until"]       when it stops being true, as epoch seconds -
+#                            the END of what was said: "until 12 October"
+#                            is midnight at the start of 13 October,
+#                            "ends in December 2026" is 1 January 2027,
+#                            "until 2024" is 1 January 2025;
+#   meta["true_until_said"]  that date as it was said, "2026-10-12",
+#                            "2026-12" or "2024" (a label, never words).
+#
+# IT IS A LABEL, NOT A HIDE. valid_to - the column every reader uses for
+# "still in use" - is NOT set from the words. The owner's decision for this
+# feature was "never hidden on its own": once the date passes, the fact
+# stays in use and the overnight tidy offers ONE "Still true?" card
+# (jarvis_tidy.py). Only a yes on that card ends the fact, with valid_to the
+# said date (retire(), "tidy cards"). A lease that ends in December is
+# current until then, AND after, until the owner answers - never quietly
+# gone because a rule misread a sentence. Recall shows "(until 12 Oct)"
+# while the date is still ahead (jarvis_past.label_until).
+#
+# THE RULES, STRICT like true_from:
+#   * a word that means an END - "until", "till", "through", "ends in",
+#     "ending in", "runs until" ... - followed straight away by a date;
+#   * a date this parser can read: "12 October 2026", "October 12, 2026",
+#     "12 October", "October 2026", "October", "2024", "2026-10-12", or the
+#     date jarvis_intake put in brackets after a relative one ("until next
+#     Friday (2026-10-02)"). "until 5pm", "until late", "till then": none;
+#   * exactly ONE such date - two is ambiguous, so none;
+#   * not after "not" or "wait": "I don't start until March" says when
+#     something BEGINS, and "can't wait until Friday" ends nothing;
+#   * a date with no year is the next one that has not ended yet ("until
+#     12 October", said on 28 September, is this 12 October) - unless the
+#     words are in the past tense ("lived in Leeds until March"), then the
+#     most recent one;
+#   * English only, like true_from. Anything it cannot read is no end date,
+#     never an error.
+
+#: meta keys: see above.
+TRUE_UNTIL = "true_until"
+TRUE_UNTIL_SAID = "true_until_said"
+
+_UNTIL_WORD = (r"(?:until|till|til|'til|through|thru|up\s+to\s+and\s+including"
+               r"|(?:ends?|ended|ending|finish(?:es|ed)?|runs?|ran|lasts?|lasted)"
+               r"\s+(?:in|on|at|until|till|through|thru|to|by))")
+_UNTIL_LEAD = re.compile(r"\b" + _UNTIL_WORD + r"\s+(?:the\s+)?(?:end\s+of\s+)?", re.I)
+#: The date forms an end may take, tried in this order at the very start of
+#: what follows the end word.
+_UNTIL_DATES = [
+    ("iso", re.compile(r"(\d{4})-(\d{2})-(\d{2})(?![\d-])")),
+    ("dmy", re.compile(rf"(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?({_MONTH_WORD})\.?,?\s+"
+                       r"((?:19|20)\d\d)\b", re.I)),
+    ("mdy", re.compile(rf"({_MONTH_WORD})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+"
+                       r"((?:19|20)\d\d)\b", re.I)),
+    ("my", re.compile(rf"({_MONTH_WORD})\.?,?\s+((?:19|20)\d\d)\b", re.I)),
+    ("dm", re.compile(rf"(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?({_MONTH_WORD})\b(?!\s*\d)",
+                      re.I)),
+    ("md", re.compile(rf"({_MONTH_WORD})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?\b(?!\s*,?\s*\d)",
+                      re.I)),
+    ("m", re.compile(rf"({_MONTH_WORD})\b(?!\s*\d)", re.I)),
+    ("y", re.compile(r"((?:19|20)\d\d)\b(?![-/]\d)")),
+    # "until next Friday (2026-10-02)": up to four words, then the date
+    # jarvis_intake anchored in brackets.
+    ("bracket", re.compile(r"(?:[a-z']+\s+){0,4}\((?:(?:week|weekend) of |around )?"
+                           r"(\d{4})-(\d{2})(?:-(\d{2}))?\)", re.I)),
+]
+#: "not until", "don't ... until", "wait until": the date is when something
+#: begins, or nothing ends. Read on what comes before the end word, in the
+#: same clause.
+_UNTIL_NOT = re.compile(r"(?:\bnot\b|n't\b|\bnever\b|\bwait(?:s|ed|ing)?\b)"
+                        r"[^.;,]{0,40}$", re.I)
+#: The past tense, for a date with no year ("lived in Leeds until March").
+_UNTIL_PAST = re.compile(r"\b(?:lived|worked|was|were|had|stayed|studied|rented|owned"
+                         r"|used\s+to|did|kept|ran|ended|lasted|finished|expired|went)\b", re.I)
+
+
+def _day_start(y: int, m: int, d: int) -> Optional[float]:
+    try:
+        return time.mktime((y, m, d, 0, 0, 0, 0, 0, -1))
+    except (OverflowError, ValueError):
+        return None
+
+
+def _period_end(y: int, m: Optional[int] = None, d: Optional[int] = None) -> Optional[float]:
+    """The first instant AFTER a day, a month or a year (this PC's time)."""
+    if d is not None and m is not None:
+        try:
+            import datetime as _dt
+            nxt = _dt.date(y, m, d) + _dt.timedelta(days=1)
+        except (ValueError, OverflowError):
+            return None
+        return _day_start(nxt.year, nxt.month, nxt.day)
+    if m is not None:
+        return _day_start(y + (m == 12), 1 if m == 12 else m + 1, 1)
+    return _day_start(y + 1, 1, 1)
+
+
+def _until_matches(text: str) -> list:
+    """Each end date in `text`, as (start, end, kind, groups) - the span
+    runs from the end word to the end of the date."""
+    out = []
+    for lead in _UNTIL_LEAD.finditer(text):
+        before = text[:lead.start()]
+        tail = text[lead.end():]
+        for kind, rx in _UNTIL_DATES:
+            m = rx.match(tail)
+            if m:
+                out.append((lead.start(), lead.end() + m.end(), kind, m.groups(),
+                            bool(_UNTIL_NOT.search(before))))
+                break
+    return out
+
+
+def _until_spans_off(text: str) -> str:
+    """`text` with every "until <date>" taken out, for true_from."""
+    try:
+        spans = _until_matches(text)
+    except Exception:
+        return text
+    for start, end, *_ in sorted(spans, reverse=True):
+        text = text[:start] + " " + text[end:]
+    return text
+
+
+def true_until(text: str, now: Optional[float] = None) -> Optional[dict]:
+    """When the fact's own words say it stops being true: {"end": epoch
+    seconds (the first instant after the date said), "said": "2026-10-12" |
+    "2026-10" | "2026", "grain": "day" | "month" | "year"} - or None. Past or
+    future. See the rules above."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    now = time.time() if now is None else float(now)
+    body = _AS_OF.sub(" ", text)
+    try:
+        found = _until_matches(body)
+    except Exception:
+        return None
+    if len(found) != 1:
+        return None
+    _s, _e, kind, g, negated = found[0]
+    if negated:
+        return None
+    lt = time.localtime(now)
+    past = bool(_UNTIL_PAST.search(body))
+    y = m = d = None
+    try:
+        if kind == "iso":
+            y, m, d = int(g[0]), int(g[1]), int(g[2])
+        elif kind == "dmy":
+            y, m, d = int(g[2]), _MONTH_NUM[g[1].lower()], int(g[0])
+        elif kind == "mdy":
+            y, m, d = int(g[2]), _MONTH_NUM[g[0].lower()], int(g[1])
+        elif kind == "my":
+            y, m = int(g[1]), _MONTH_NUM[g[0].lower()]
+        elif kind in ("dm", "md", "m"):
+            if kind == "dm":
+                m, d = _MONTH_NUM[g[1].lower()], int(g[0])
+            elif kind == "md":
+                m, d = _MONTH_NUM[g[0].lower()], int(g[1])
+            else:
+                m = _MONTH_NUM[g[0].lower()]
+            # No year: this year's, or the next / the last one.
+            y = lt.tm_year
+            this_end = _period_end(y, m, d)
+            if this_end is None:
+                return None
+            if past:
+                begins = _day_start(y, m, d or 1)
+                if begins is not None and begins > now:
+                    y -= 1
+            elif this_end <= now:
+                y += 1
+        elif kind == "y":
+            y = int(g[0])
+        elif kind == "bracket":
+            y, m = int(g[0]), int(g[1])
+            d = int(g[2]) if g[2] else None
+    except (KeyError, ValueError, TypeError):
+        return None
+    if y is None or not (1900 <= y <= 2200) or (m is not None and not 1 <= m <= 12):
+        return None
+    if d is not None and not 1 <= d <= 31:
+        return None
+    end = _period_end(y, m, d)
+    if end is None or end > now + 60 * 365 * 86400:
+        return None
+    if d is not None:
+        said, grain = f"{y:04d}-{m:02d}-{d:02d}", "day"
+    elif m is not None:
+        said, grain = f"{y:04d}-{m:02d}", "month"
+    else:
+        said, grain = f"{y:04d}", "year"
+    return {"end": end, "said": said, "grain": grain}
+
+
+def until_words(said, now: Optional[float] = None) -> str:
+    """ "12 Oct", "12 Oct 2027", "December", "December 2027" or "2024" - a
+    fact's true_until_said as a person reads it, the year left out when it
+    is this year. "" for anything that is not one of those shapes."""
+    if not isinstance(said, str):
+        return ""
+    now = time.time() if now is None else float(now)
+    this_year = time.localtime(now).tm_year
+    m = re.fullmatch(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", said)
+    if not m:
+        return ""
+    y = int(m.group(1))
+    months = ("January", "February", "March", "April", "May", "June", "July", "August",
+              "September", "October", "November", "December")
+    if m.group(3):
+        mo = int(m.group(2))
+        if not 1 <= mo <= 12:
+            return ""
+        out = f"{int(m.group(3))} {months[mo - 1][:3]}"
+        return out if y == this_year else f"{out} {y}"
+    if m.group(2):
+        mo = int(m.group(2))
+        if not 1 <= mo <= 12:
+            return ""
+        return months[mo - 1] if y == this_year else f"{months[mo - 1]} {y}"
+    return str(y)
 
 
 # --------------------------------------------------------------------------
@@ -1165,6 +1533,17 @@ class MemoryStore:
                     state       TEXT NOT NULL DEFAULT 'waiting',
                     created     REAL NOT NULL,
                     PRIMARY KEY (a, b))""")
+            # The overnight tidy's cards (jarvis_tidy.py, 2026-09-28): ids
+            # and dates only. See TIDY_TABLE and _tidy_ending().
+            c.execute(f"""
+                CREATE TABLE IF NOT EXISTS {TIDY_TABLE} (
+                    proposal_id INTEGER PRIMARY KEY,
+                    kind        TEXT NOT NULL,     -- 'until' | 'conflict'
+                    fact_id     INTEGER NOT NULL,  -- the fact the card would stop using
+                    other_id    INTEGER,           -- 'conflict': the newer fact
+                    ends        REAL,              -- 'until': the end its words gave
+                    asked       REAL NOT NULL,
+                    subject     TEXT NOT NULL UNIQUE)""")
             if not c.execute("SELECT 1 FROM meta WHERE k='entities'").fetchone():
                 # A store written before the entity layer: link the facts it
                 # already has, once. The same rules as a new fact.
@@ -1227,6 +1606,17 @@ class MemoryStore:
                 said = None          # an unreadable date is the old behaviour
             if said is not None:
                 meta["true_from"] = TRUE_FROM_SAID
+        if TRUE_UNTIL not in meta:
+            # "True until" (smarter memory dates, 2026-09-28): the end the
+            # words give, kept as a LABEL - valid_to is not touched, so the
+            # fact is never hidden on its own (see true_until above).
+            try:
+                until = true_until(text, now)
+            except Exception:
+                until = None         # an unreadable date is no end date
+            if until is not None:
+                meta[TRUE_UNTIL] = until["end"]
+                meta[TRUE_UNTIL_SAID] = until["said"]
         with _LOCK, closing(self._connect()) as c:
             if meta.get("proposal_id") is not None and not meta.get("sensitive"):
                 # A card held back for a sensitive topic, accepted: the fact
@@ -1366,6 +1756,17 @@ class MemoryStore:
         """
         with _LOCK, closing(self._connect()) as c:
             now = time.time()
+            # A "Still true?" or "Which is true now?" card from the overnight
+            # tidy (jarvis_tidy.py), being accepted this moment: the owner
+            # said the fact has ENDED - on the date its own words gave, or
+            # because a newer fact replaced it - which is history, not a
+            # Forget. See _tidy_ending(). Anything else is unchanged.
+            ended = False
+            if replaced_by is None and valid_to is None:
+                tidy = _tidy_ending(c, int(fact_id), now)
+                if tidy is not None:
+                    ended = True
+                    replaced_by, valid_to = tidy
             vt = now if valid_to is None else float(valid_to)
             # retired_at only once the fact has actually STOPPED being
             # recalled. A valid_to in the future has not happened yet - the
@@ -1386,10 +1787,11 @@ class MemoryStore:
             # ends later (a lease to December) could never be forgotten, and
             # a "stop using this fact?" card on it did nothing (the bug fixed
             # with memory idea 4, 2026-09-26).
+            forgot_in = None
             cur = c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
                             " WHERE id=? AND (valid_to IS NULL OR valid_to > ?)",
                             (vt, ra, replaced_by, fact_id, now))
-            if cur.rowcount and ra is not None and replaced_by is None:
+            if cur.rowcount and ra is not None and replaced_by is None and not ended:
                 # A Forget (the route, or a "stop using this fact?" card):
                 # both apps promise "Jarvis will not use it again", so a
                 # question about the past must not bring it back either
@@ -1397,6 +1799,8 @@ class MemoryStore:
                 # never deleted. A correction is not a Forget: add(supersedes=)
                 # clears this mark when it links a fact retired here first.
                 _set_meta(c, int(fact_id), forgotten_at=now)
+                got = c.execute("SELECT meta FROM facts WHERE id=?", (int(fact_id),)).fetchone()
+                forgot_in = _fact_conversation_id(got[0] if got else None)
             if cur.rowcount and ra is not None:
                 # Forget (or a correction) takes the fact's links and the
                 # aliases it taught with it: "sister" stops meaning Priya the
@@ -1405,10 +1809,16 @@ class MemoryStore:
                 # then - and every lookup checks the fact is current anyway.
                 self._unlink_safely(c, int(fact_id))
             c.commit()
-            # rowcount, not None. "Retired a fact that was already retired" and
-            # "retired the fact" have to be distinguishable, or the caller
-            # cannot tell a no-op from a change.
-            return cur.rowcount > 0
+            done = cur.rowcount > 0
+        # After the commit, outside the store's lock: the learner stops
+        # learning this again from the turns it has already read
+        # (jarvis_auto_learn.forgotten_in, research audit 2026-09-28 §8.6 A).
+        if forgot_in:
+            _tell_learner_forgotten(forgot_in, erased=False)
+        # rowcount, not None. "Retired a fact that was already retired" and
+        # "retired the fact" have to be distinguishable, or the caller
+        # cannot tell a no-op from a change.
+        return done
 
     def edit(self, fact_id: int, text: str) -> bool:
         """Correct a fact's wording in place. Used by the memory pane.
@@ -1444,6 +1854,16 @@ class MemoryStore:
                     except Exception:
                         pass
                 self._embed_rows(c, [(int(fact_id), text)])
+                # New words, new "true until": the end date is read from the
+                # words, so a reworded end date replaces the old one, and a
+                # wording with none takes it away (2026-09-28).
+                try:
+                    until = true_until(text)
+                except Exception:
+                    until = None
+                _set_meta(c, int(fact_id),
+                          **{TRUE_UNTIL: until["end"] if until else None,
+                             TRUE_UNTIL_SAID: until["said"] if until else None})
                 # New words, new links: the old wording's names and aliases
                 # go, and whatever the new wording names is linked instead
                 # (first, so a name both wordings say keeps its entry).
@@ -1615,6 +2035,8 @@ class MemoryStore:
         # Chat history is a different file with its own lock (jarvis_chat_log
         # .py) - done after this store's own transaction and scrub, so a slow
         # or failing chat-history delete can never leave a fact half-erased.
+        if conversation_id:
+            _tell_learner_forgotten(conversation_id, erased=True)
         chat_deleted = False
         if also_delete_conversation and conversation_id and _chat_log is not None:
             try:
@@ -1641,6 +2063,58 @@ class MemoryStore:
                         chain.append(i)
                         todo.append(i)
         return chain
+
+    def fact_history(self, fact_id: int, limit: Optional[int] = None) -> Optional[list]:
+        """"History of this fact" (docs/JARVIS-API.md section 71): every
+        version of one fact - the wordings it replaced and the ones that
+        replaced it - oldest first, as raw rows. None if there is no such
+        fact. At most FACT_HISTORY_MAX rows (or `limit`); a loop in the
+        links (which add() cannot make, but a hand-edited file could) is
+        walked once.
+
+        A "version" is a row joined to this one by `retired_by`, the column
+        add(supersedes=...) and the Reword route write: the old row's
+        `retired_by` is the id of the row that replaced it. Every row reached
+        that way, in either direction, is part of the history - including a
+        correction kept as older news (ARCHITECTURE section 5, "Real true
+        from dates"), which points at the newer fact it did NOT replace.
+
+        Adapted from supermemory's VersionChainIndex.getChain
+        (packages/memory-graph/src/canvas/version-chain.ts, read 2026-09-28),
+        MIT License, Copyright (c) 2025 supermemory - the full notice is in
+        THIRD-PARTY-NOTICES.txt. What changed: supermemory's link points
+        back (a memory names its parent), Jarvis's points forward (an old
+        fact names what replaced it); supermemory follows the first branch
+        only, this walks every link both ways, because a Jarvis fact can
+        have two earlier versions; and the rows are read from this store by
+        id instead of from a map built once per render.
+
+        Reads only. The words of an ERASED row are the marker, and callers
+        must never show them - fact_history_view() sends "" in their place."""
+        cap = FACT_HISTORY_MAX if limit is None else max(1, int(limit))
+        fid = int(fact_id)
+        with _LOCK, closing(self._connect()) as c:
+            first = c.execute("SELECT * FROM facts WHERE id=?", (fid,)).fetchone()
+            if first is None:
+                return None
+            rows = {fid: dict(first)}
+            todo = [fid]
+            while todo and len(rows) < cap:
+                cur = rows[todo.pop(0)]
+                # Backward: the rows this one replaced.
+                near = c.execute("SELECT * FROM facts WHERE retired_by=? ORDER BY id",
+                                 (int(cur["id"]),)).fetchall()
+                # Forward: the row that replaced this one.
+                if cur.get("retired_by") is not None:
+                    nxt = c.execute("SELECT * FROM facts WHERE id=?",
+                                    (int(cur["retired_by"]),)).fetchone()
+                    if nxt is not None:
+                        near.append(nxt)
+                for r in near:
+                    if r["id"] not in rows and len(rows) < cap:
+                        rows[r["id"]] = dict(r)
+                        todo.append(r["id"])
+        return sorted(rows.values(), key=_version_order)
 
     # Counted rather than logged: this module has no logger, and a print on a
     # background thread in a windowed app goes to a closed handle. status() is
@@ -1908,7 +2382,7 @@ class MemoryStore:
             # meaning
             if self._vec_ok and self.embedder.semantic:
                 try:
-                    qv = self.embedder.embed([query])[0]
+                    qv = _embed_query(self.embedder, query)
                     # A bad QUERY vector is worse than a bad stored one: it
                     # does not fail, it silently ranks the whole table by
                     # distance-from-nonsense, and those rows then outrank the
@@ -2223,6 +2697,10 @@ class MemoryStore:
                "vector_search": self._vec_ok, "unembedded": pending,
                "erased": erased, "entities": ents, "reranker": reranker_status(),
                "said_again": repeats}
+        if _embed_refused:
+            # Only when JARVIS_MEMORY_EMBED_MODEL asked for a model that could
+            # not be used: why, in plain words (the default is in use).
+            out["embedder_refused"] = _embed_refused
         if self._entity_errors:
             out["entity_errors"] = self._entity_errors
         if self._bad_vectors:
@@ -2904,6 +3382,65 @@ _META_LABEL = re.compile(r"^[a-z][a-z0-9_:.-]{0,31}$")
 #: `fact_id` names the fact it RETIRED, and its `text` is only the reason.
 _RETIRE_SOURCE = "feedback_retire"
 
+#: The overnight tidy's cards (jarvis_tidy.py, 2026-09-28): which "stop
+#: using this fact?" card asked about which fact, and why. IDS AND DATES
+#: ONLY - the words are the fact's own, in `facts`, and the card's in
+#: `proposals`. `subject` is what was asked ("until:<fact>:<date>" or
+#: "conflict:<older>:<newer>"), so the same question is never asked twice.
+TIDY_TABLE = "tidy_cards"
+
+
+def _tidy_ending(c, fact_id: int, now: float):
+    """(replaced_by, valid_to) when retire() is being called because the
+    owner is accepting one of the overnight tidy's cards about this fact,
+    else None.
+
+    The tidy raises ordinary "stop using this fact?" cards (source
+    feedback_retire), so both apps already label them "Stop using this
+    fact" / "Keep using it", and accepting one runs the owner's own
+    jarvis_extract._accept_retire, which calls retire(fact_id) with nothing
+    else. That would file it as a Forget - never recalled again, not even
+    for "where was I on holiday in October?". But the owner's yes on THESE
+    cards says the fact ended: on the date its own words gave ("Still
+    true?"), or because the newer fact the card named replaced it ("Which
+    is true now?"). The card is claimed ('accepting', decide-once.patch)
+    on an autocommit connection before _accept runs, so it can be seen
+    here. A Forget from a list while the card only waits is 'pending', and
+    stays a Forget. Never raises."""
+    try:
+        row = c.execute(
+            f"SELECT t.kind, t.other_id, t.ends FROM {TIDY_TABLE} t"
+            " JOIN proposals p ON p.id = t.proposal_id"
+            " WHERE t.fact_id=? AND p.state='accepting' AND p.source=?"
+            " AND p.replaces_id=? ORDER BY t.proposal_id DESC LIMIT 1",
+            (fact_id, _RETIRE_SOURCE, fact_id)).fetchone()
+    except sqlite3.Error:
+        return None
+    if row is None:
+        return None
+    kind, other, ends = row[0], row[1], row[2]
+    if kind == "until" and isinstance(ends, (int, float)):
+        # The end the fact's words give NOW - a Reword since the card was
+        # raised may have moved it - and the card's own date otherwise.
+        got = c.execute("SELECT meta FROM facts WHERE id=?", (fact_id,)).fetchone()
+        said = _meta_dict(got[0] if got else None).get(TRUE_UNTIL)
+        if isinstance(said, (int, float)) and not isinstance(said, bool):
+            ends = said
+        return None, min(float(ends), now)
+    if kind == "conflict" and isinstance(other, int):
+        mine = c.execute("SELECT valid_from FROM facts WHERE id=?", (fact_id,)).fetchone()
+        theirs = c.execute("SELECT valid_from, meta, valid_to FROM facts WHERE id=?",
+                           (other,)).fetchone()
+        if theirs is None or (theirs[2] is not None and float(theirs[2]) <= now):
+            return None      # the newer fact is gone meanwhile: a plain retire
+        end = now
+        if (mine is not None and said_from(theirs[1])
+                and float(mine[0]) < float(theirs[0]) <= now):
+            end = float(theirs[0])
+        return int(other), end
+    return None
+
+
 #: The same shape `jarvis_chat_log.py`'s `_CID` checks (docs/JARVIS-API.md
 #: 18.1: 8-64 characters of A-Z a-z 0-9 _ -). Checked again here, on the way
 #: OUT of a fact's meta, so a hand-edited or malformed value in the database
@@ -2922,6 +3459,20 @@ def _meta_dict(raw) -> dict:
     except (TypeError, ValueError):
         return {}
     return meta if isinstance(meta, dict) else {}
+
+
+def _tell_learner_forgotten(conversation_id, *, erased: bool) -> None:
+    """Forget and Erase tell the learner, if it is loaded, which conversation
+    the fact came from (jarvis_auto_learn.forgotten_in). Looked up in
+    sys.modules, never imported here: without the learner running there is
+    no automatic learning to stop. Never raises."""
+    try:
+        learner = sys.modules.get("jarvis_auto_learn")
+        fn = getattr(learner, "forgotten_in", None)
+        if fn is not None:
+            fn(conversation_id, erased=erased)
+    except Exception:
+        pass
 
 
 def _fact_conversation_id(raw) -> Optional[str]:
@@ -3049,6 +3600,16 @@ def _erase_copies(c, fid: int, old_text: str, now: float) -> int:
             for (pid,) in c.execute("SELECT id FROM proposals WHERE replaces_id=? AND source=?"
                                     " AND state='pending'", (fid, _RETIRE_SOURCE)).fetchall():
                 turn_down(pid)
+    # The overnight tidy's "Which is true now?" card quotes the NEWER fact
+    # in its own text (jarvis_tidy.py, 2026-09-28): a card about another
+    # fact that quotes this one loses the words, and is turned down.
+    if _has_table(c, TIDY_TABLE):
+        for (pid,) in c.execute(f"SELECT proposal_id FROM {TIDY_TABLE} WHERE other_id=?",
+                                (fid,)).fetchall():
+            cur = c.execute("UPDATE proposals SET text=? WHERE id=? AND text IS NOT ?",
+                            (ERASED_TEXT, pid, ERASED_TEXT))
+            n += max(cur.rowcount, 0)
+            turn_down(pid)
     want = " ".join(str(old_text or "").split()).lower()
     if want:
         pick = ["id", "text"] + [k for k in ("replaces", "state") if has(k)]
@@ -3477,6 +4038,169 @@ def handle_used_get(query: str) -> tuple:
                               "separated by commas (for example ?ids=12,15)"}
     try:
         return 200, used_view(ids)
+    except Exception as exc:
+        return 500, {"error": type(exc).__name__}
+
+
+# --------------------------------------------------------------------------
+#   "History of this fact" (docs/JARVIS-API.md section 71, 2026-09-28)
+# --------------------------------------------------------------------------
+
+#: The most versions one answer carries. A fact reworded more often than
+#: this is very unlikely; the answer says `more` when it happens.
+FACT_HISTORY_MAX = 50
+
+
+def _version_order(r) -> tuple:
+    """Oldest version first: by when it was TRUE from, then when Jarvis was
+    told, then id. Not by `created` alone - a correction kept as older news
+    is written after the fact it did not replace, but was true before it."""
+    return (float(r.get("valid_from") or r.get("created") or 0),
+            float(r.get("created") or 0), int(r["id"]))
+
+
+def fact_history_view(fact_id: int, st: Optional["MemoryStore"] = None,
+                      now: Optional[float] = None) -> Optional[dict]:
+    """GET /api/memory/fact-history's answer, or None for no such fact:
+
+        {"id", "versions": [{"id", "text", "this", "current", "forgotten",
+          "erased_at", "created", "valid_from", "valid_to", "retired_at",
+          "retired_by", "source"}], "count", "more"}
+
+    Oldest first. `this` marks the fact that was asked about. AN ERASED
+    VERSION NEVER COMES WITH WORDS: `text` is "" (never the "[erased]"
+    marker) and `erased_at` says when - "Erase the words" stays true in a
+    history view too. `forgotten` is Forget's own mark (meta.forgotten_at);
+    `current` is the rule every reader uses (valid_to empty or still ahead,
+    and not erased). No meta, no conversation id, nothing else."""
+    st = st or store()
+    now = time.time() if now is None else float(now)
+    rows = st.fact_history(fact_id, limit=FACT_HISTORY_MAX + 1)
+    if rows is None:
+        return None
+    more = len(rows) > FACT_HISTORY_MAX
+    if more:
+        # Keep the asked-about fact whatever happens; drop the oldest.
+        keep = [r for r in rows if int(r["id"]) == int(fact_id)]
+        rest = [r for r in rows if int(r["id"]) != int(fact_id)][-(FACT_HISTORY_MAX - 1):]
+        rows = sorted(keep + rest, key=_version_order)
+    out = []
+    for r in rows:
+        erased = r.get("erased_at")
+        vt = r.get("valid_to")
+        source = r.get("source")
+        out.append({
+            "id": int(r["id"]),
+            "text": "" if erased is not None else str(r.get("text") or ""),
+            "this": int(r["id"]) == int(fact_id),
+            "current": bool(erased is None and (vt is None or float(vt) > now)),
+            "forgotten": bool(_meta_dict(r.get("meta")).get("forgotten_at")),
+            "erased_at": erased,
+            "created": r.get("created"),
+            "valid_from": r.get("valid_from"),
+            "valid_to": vt,
+            "retired_at": r.get("retired_at"),
+            "retired_by": r.get("retired_by"),
+            "source": source if isinstance(source, str) and _META_LABEL.match(source) else "",
+        })
+    return {"id": int(fact_id), "versions": out, "count": len(out), "more": more}
+
+
+def handle_fact_history_get(query: str) -> tuple:
+    """GET /api/memory/fact-history?id=<fact id> -> (http status, reply).
+
+    jarvis_brain_reads.py hands the route here after the token and origin
+    checks every memory read has. 400 for anything but one whole-number id
+    above 0; 404 for no such fact. A read: nothing is written, and the
+    fact's words are never logged."""
+    try:
+        from urllib.parse import parse_qs
+        raw = (parse_qs(query or "", keep_blank_values=True).get("id") or [""])[0]
+    except Exception:
+        raw = ""
+    if not re.fullmatch(r"[0-9]{1,12}", raw or "") or int(raw) <= 0:
+        return 400, {"error": "need ?id=<one fact id>, a whole number (for example ?id=12)"}
+    try:
+        view = fact_history_view(int(raw))
+    except Exception as exc:
+        return 500, {"error": type(exc).__name__}
+    if view is None:
+        return 404, {"error": "no such fact - it may never have been saved"}
+    return 200, view
+
+
+# --------------------------------------------------------------------------
+#   "Facts this chat taught" (2026-09-28; JARVIS-API section 79)
+# --------------------------------------------------------------------------
+#
+# Deleting a chat in History offers to forget the facts it taught (the
+# owner's choice of 2026-09-28, research audit section 3 idea 9) - the other
+# direction of "Erase the words" -> "Also delete the chat it came from". This
+# is the READ the apps ask first: which facts in use say, in their own meta,
+# that they were learned in this conversation. Forgetting any of them is the
+# ordinary Forget route, one fact at a time, after the owner ticks it - there
+# is no route here that forgets anything, and no list form of Forget.
+
+CONVERSATION_FACTS_MAX = 50
+
+
+def conversation_facts_view(conversation_id: str, st: Optional["MemoryStore"] = None,
+                            now: Optional[float] = None) -> dict:
+    """GET /api/memory/conversation-facts's answer:
+
+        {"conversation_id", "facts": [{"id", "text", "created", "source"}],
+         "count", "more"}
+
+    The facts STILL IN USE (valid_to empty or ahead), not erased and not
+    forgotten, whose meta says they came from `conversation_id` - newest
+    first, at most CONVERSATION_FACTS_MAX. Only facts saved automatically
+    (and "Remember:") record where they came from; a card the owner
+    accepted by hand does not, and is not listed. The words are shown only
+    where the apps show memory lists (hidden with them). A read."""
+    st = st or store()
+    now = time.time() if now is None else float(now)
+    out = []
+    more = False
+    if isinstance(conversation_id, str) and _CONV_ID_RE.match(conversation_id):
+        with closing(st._connect()) as c:
+            rows = c.execute(
+                "SELECT id, text, created, source, meta FROM facts"
+                " WHERE erased_at IS NULL AND (valid_to IS NULL OR valid_to > ?)"
+                " AND meta LIKE ? ORDER BY created DESC, id DESC",
+                (now, f"%{conversation_id}%")).fetchall()
+        for r in rows:
+            meta = _meta_dict(r["meta"])
+            if meta.get("conversation_id") != conversation_id or meta.get("forgotten_at"):
+                continue
+            if len(out) >= CONVERSATION_FACTS_MAX:
+                more = True
+                break
+            source = r["source"]
+            out.append({"id": int(r["id"]), "text": str(r["text"] or ""),
+                        "created": r["created"],
+                        "source": source if isinstance(source, str)
+                        and _META_LABEL.match(source) else ""})
+    return {"conversation_id": conversation_id, "facts": out, "count": len(out),
+            "more": more}
+
+
+def handle_conversation_facts_get(query: str) -> tuple:
+    """GET /api/memory/conversation-facts?conversation_id=<id> -> (http
+    status, reply). jarvis_brain_reads.py hands the route here after the
+    token and origin checks every memory read has. 400 for anything but one
+    conversation id (JARVIS-API 18.1's shape). A read: nothing is written,
+    and no fact's words are logged."""
+    try:
+        from urllib.parse import parse_qs
+        raw = (parse_qs(query or "", keep_blank_values=True).get("conversation_id")
+               or [""])[0]
+    except Exception:
+        raw = ""
+    if not _CONV_ID_RE.match(raw or ""):
+        return 400, {"error": "need ?conversation_id=<one conversation id> (8-64 letters, "
+                              "digits, - or _)"}
+    try:
+        return 200, conversation_facts_view(raw)
     except Exception as exc:
         return 500, {"error": type(exc).__name__}
 
@@ -3957,11 +4681,13 @@ def store(path: Optional[Path] = None) -> MemoryStore:
         return _store
 
 
-#: The labels jarvis_past puts on a recalled fact's words (B1, and the
-#: "(no longer true since ...)" of past recall) - taken off before a fact is
+#: The labels jarvis_past puts on a recalled fact's words (B1, the
+#: "(no longer true since ...)" of past recall, and since 2026-09-28 the
+#: "(until 12 Oct)" of a fact whose words give an end) - taken off before a fact is
 #: looked up by its words.
 _RECALL_LABEL = re.compile(r"\s*\((?:no longer true(?: since [\d-]+)?|true since [\d-]+"
-                           r"|known since [\d-]+)\)\s*$")
+                           r"|known since [\d-]+|until (?:\d{1,2} [A-Z][a-z]{2}|[A-Z][a-z]+)"
+                           r"(?: \d{4})?|until \d{4})\)\s*$")
 
 
 def saved_topic(text) -> str:

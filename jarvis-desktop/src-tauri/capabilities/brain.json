@@ -27,9 +27,12 @@
     "brain-wiki",
     "brain-deep",
     "brain-schedule",
+    "photo-reminder",
+    "brain-history-import",
     "brain-briefing",
     "brain-history",
     "focus",
-    "focus-start"
+    "focus-start",
+    "brain-widgets"
   ]
 }

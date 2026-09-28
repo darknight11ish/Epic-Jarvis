@@ -340,6 +340,32 @@ private fun CheckPlates(
                         onPick = onPick,
                     )
                 }
+                // "Better voice" (2026-09-28) - only when the PC reports them.
+                // A choice the PC cannot make yet is greyed out with its own
+                // words (StrictVoice.blockedWhy); the looser one of each asks
+                // first and is held on a stale link (StrictVoice.blocker).
+                if (strict.wakeConfirm.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.WAKE_CONFIRM_TITLE,
+                        setting = VoiceStrict.WAKE_CONFIRM,
+                        choices = StrictVoice.WAKE_CONFIRM,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.WAKE_CONFIRM }?.second,
+                        onPick = onPick,
+                    )
+                }
+                if (strict.voiceIdModel.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.VOICE_ID_MODEL_TITLE,
+                        setting = VoiceStrict.VOICE_ID_MODEL,
+                        choices = StrictVoice.VOICE_ID_MODEL,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.VOICE_ID_MODEL }?.second,
+                        onPick = onPick,
+                    )
+                }
                 Text(
                     "Making it stricter applies at once. Making it looser asks first: an approval " +
                         "card on your PC or this phone's Home screen, and nothing changes until you " +
@@ -450,17 +476,23 @@ private fun SettingPlate(
         choices.forEach { c ->
             val onlyVeryStrict = setting == VoiceStrict.PRIVACY && c.value == VoiceStrict.VOICE_IS_ENOUGH &&
                 !strict.isVeryStrict
+            // "Better voice": a choice that needs something the PC does not have.
+            val notInstalled = StrictVoice.blockedWhy(setting, c.value, strict)
             Gap(8)
             OptionChip(
                 label = c.label,
                 isSelected = StrictVoice.isCurrent(setting, c.value, strict),
                 modifier = Modifier.fillMaxWidth(),
-                enabled = busy == null && !onlyVeryStrict && open,
+                enabled = busy == null && !onlyVeryStrict && open && notInstalled == null,
                 onClick = { onPick(setting, c.value) },
             )
             Gap(4)
             Text(
-                if (onlyVeryStrict) c.detail + " " + StrictVoice.PRIVACY_ONLY_VERY_STRICT else c.detail,
+                when {
+                    onlyVeryStrict -> c.detail + " " + StrictVoice.PRIVACY_ONLY_VERY_STRICT
+                    notInstalled != null -> c.detail + " " + notInstalled
+                    else -> c.detail
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = chrome.textMid,
             )

@@ -50,6 +50,18 @@ standby by the time the model has loaded, it is unloaded again. The second
 card's engines are not warmed: they start when a feature needs them, as
 before. `warm_status()` says how the last one went.
 
+WITH WORDS (added 2026-09-28). Loading alone left the first question to
+read Jarvis's rules and tool list from nothing - 3,000-4,000 tokens, a few
+seconds on the 8 GB card. Once the model is loaded (and Jarvis is not back
+on standby), jarvis_agent.warm_after_waking sends exactly the start a real
+question sends, with the one word "hi" and one word of answer, thrown away:
+no chat history, no speed row, nothing learned. It uses the settings of the
+last question answered since Jarvis started (the model, the address, the
+enabled tools), so with none yet it sends nothing; and it never loads a
+model itself. `[power] warm_prefix = false` switches it off. The result is
+the sentence in `warm_status()["why"]`; the state is "ready" either way,
+because the model is loaded either way.
+
 THE ANSWER COMES WHEN THE MODE HAS CHANGED, not when every card is freed:
 unloading can take several seconds, and waiting for it made an app that
 waited `wait_s` say "Waiting for your approval" when no card was up. The
@@ -308,9 +320,12 @@ def chat_model() -> Optional[str]:
     return env or None
 
 
-def warm_up(power=None, ollama=None, model: Optional[str] = None) -> dict:
-    """Load the chat model now, so the first answer after waking is quick.
-    Runs on its own thread (set_mode starts it). Never raises."""
+def warm_up(power=None, ollama=None, model: Optional[str] = None,
+            warmer: Optional[Callable[[str, str], dict]] = None) -> dict:
+    """Load the chat model now, so the first answer after waking is quick,
+    then have it read the start every question shares (`warmer`, for the
+    tests; jarvis_agent.warm_after_waking otherwise). Runs on its own thread
+    (set_mode starts it). Never raises."""
     name = model if model is not None else chat_model()
 
     def done(state: str, why: str = "") -> dict:
@@ -351,7 +366,33 @@ def warm_up(power=None, ollama=None, model: Optional[str] = None) -> dict:
                                    "was unloaded again.")
     except Exception:
         pass
-    return done("ready")
+    # Loaded. Now have it read the start every question shares - Jarvis's
+    # rules and tool list - so the first question does not (jarvis_agent.
+    # warm_after_waking; "Warm-up with words" in backend/README.md). Never
+    # the reason this reports anything but "ready": the model IS loaded.
+    words = (warmer or _warm_words)(name, o.url)
+    return done("ready", words_note(words))
+
+
+def _warm_words(name: str, url: str) -> dict:
+    """jarvis_agent.warm_after_waking, or a plain "skipped" without it."""
+    try:
+        import jarvis_agent
+        return jarvis_agent.warm_after_waking(name, url) or {}
+    except Exception as exc:
+        return {"state": "failed", "why": type(exc).__name__}
+
+
+def words_note(words: dict) -> str:
+    """One plain sentence for WARM's `why` after the model loaded."""
+    state = str((words or {}).get("state") or "")
+    if state == "warmed":
+        return "It has also read Jarvis's rules and tool list, so the first answer starts sooner."
+    if state == "off":
+        return "Reading the rules ahead is switched off ([power] warm_prefix = false)."
+    why = str((words or {}).get("why") or "").strip()
+    return ("It did not read Jarvis's rules ahead" + (f" ({why})" if why else "")
+            + "; the first answer reads them.")
 
 
 def _spawn_warm(fn: Callable[[], None]) -> None:

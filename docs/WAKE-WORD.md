@@ -1,5 +1,18 @@
 # The wake word — what it needs before it can be built
 
+## Since 2026-09-28: an optional second detector on the PC
+
+"Better voice" (docs/JARVIS-API.md §80): with the owner's setting "Two
+detectors must agree" (off by default), the PC takes a "hey Jarvis" clip
+only when microWakeWord's own `hey_jarvis` model (pymicro-wakeword 2.5.0,
+Apache-2.0; `backend/jarvis_microwake.py`) also hears the phrase within a
+second of openWakeWord. It runs in `hear()` after the first detector and
+before the voice check, so it can only refuse. microWakeWord has a PC
+package with Windows wheels (the research audit of 2026-09-28 corrected an
+earlier "ESP32 only" reading). The
+phone's own spotter is unchanged (ARCHITECTURE §8) - every phone clip is
+checked on the PC anyway. Measured first with `jarvis_bakeoff.py --wake2`.
+
 ## Status, 2026-09-23: built
 
 Everything below this section is the design record from before it was
@@ -35,7 +48,11 @@ built, kept because its reasoning still holds. What was decided and built:
   "hey Jarvis", which stops "...the computer was called Jarvis".
 - **§2's service**: `service/WakeWordService.kt`, its own foreground service
   of type `microphone` (the link keeps `specialUse`), with a notification and
-  a Stop action, never started at boot, `START_NOT_STICKY`.
+  a Stop action, never started at boot, `START_NOT_STICKY`. Since
+  2026-09-28 a restart (or an app update) leaves ONE quiet "tap to turn it
+  back on" notification if it was on; the tap opens the app, which starts
+  listening from there, after App lock (`data/WakeResume.kt`,
+  `docs/JARVIS-API.md` §81.1).
 - **§4's order**, all five: the separate service (1); a 2-second ring buffer
   so the clip holds the phrase (2); the spotter behind an interface
   (`WakeModels`), a model that fails to load being a named failure (3); the

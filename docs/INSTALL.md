@@ -831,6 +831,20 @@ into both apps too).
      `adb install -r jarvis-client-<commit>.apk`. (`adb` comes with Google's
      "SDK Platform Tools", one line: `winget install --id Google.PlatformTools -e`.)
 
+   **Android developer verification (2027).** Google is changing how
+   Android installs apps from outside the Play Store. From 2027, on phones
+   with Google's apps and Google's certification (most phones sold with
+   Google Play), installing an app from a developer Google has not verified
+   **by tapping the file** will need a one-time "advanced" flow with a
+   24-hour wait. **Installing with `adb` from the PC (the second way above)
+   stays allowed.** Jarvis is not verified - it is sideloaded, never on Play
+   (rule 5) - so on such a phone use `adb`, or do the 24-hour flow once. This
+   comes from a search summary of Google's announcement (developer.android.com,
+   "developer verification", and press coverage), not from trying it on a
+   phone; the exact screens are not known yet. GrapheneOS is not a
+   Google-certified system, so it is **likely** unaffected - not checked
+   (`docs/GRAPHENEOS.md`).
+
    If it says `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, the copy already on the
    phone was signed with the old key; [`keystore/README.md`](../keystore/README.md)
    has the three steps (uninstall once, install, pair again).

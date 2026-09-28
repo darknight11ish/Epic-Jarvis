@@ -1,0 +1,40 @@
+{"id": "c01", "conflict": true, "old": "Owner works at Initech", "new": "Owner started a new job at Globex"}
+{"id": "c02", "conflict": true, "old": "Owner has a cat called Biscuit", "new": "Owner's cat Biscuit died last week"}
+{"id": "c03", "conflict": true, "old": "Owner lives in Leeds", "new": "Owner signed a lease on a flat in York and moved there"}
+{"id": "c04", "conflict": true, "old": "Owner is vegetarian", "new": "Owner has started eating meat again"}
+{"id": "c05", "conflict": true, "old": "Owner drives a red Ford Fiesta", "new": "Owner sold the Fiesta and bought a Toyota Corolla"}
+{"id": "c06", "conflict": true, "old": "Owner's partner is called Jonas", "new": "Owner and Jonas broke up in the summer"}
+{"id": "c07", "conflict": true, "old": "Owner is single", "new": "Owner has been dating Sam since June"}
+{"id": "c08", "conflict": true, "old": "Owner studies history at Leeds University", "new": "Owner graduated from Leeds University in July"}
+{"id": "c09", "conflict": true, "old": "Owner's phone is an iPhone 12", "new": "Owner's new phone is a Pixel 9"}
+{"id": "c10", "conflict": true, "old": "Owner drinks coffee every morning", "new": "Owner gave up coffee completely"}
+{"id": "c11", "conflict": true, "old": "Owner's manager is Carla", "new": "Owner's new boss is Dev"}
+{"id": "c12", "conflict": true, "old": "Owner rents a flat on Park Road", "new": "Owner bought a house on Mill Lane and moved in"}
+{"id": "c13", "conflict": true, "old": "Owner is married to Alex", "new": "Owner and Alex divorced last year"}
+{"id": "c14", "conflict": true, "old": "Owner plays in a five-a-side football team on Tuesdays", "new": "Owner quit the five-a-side team"}
+{"id": "c15", "conflict": true, "old": "Owner works from home full time", "new": "Owner goes into the office every day"}
+{"id": "c16", "conflict": true, "old": "Owner is learning Spanish", "new": "Owner stopped the Spanish lessons"}
+{"id": "c17", "conflict": true, "old": "Owner's dog Rex lives with them", "new": "Owner's dog Rex went to live with their parents"}
+{"id": "c18", "conflict": true, "old": "Owner is a nurse at St Mary's hospital", "new": "Owner retrained and works as a software developer"}
+{"id": "c19", "conflict": true, "old": "Owner is saving up for a car", "new": "Owner bought a car last month"}
+{"id": "c20", "conflict": true, "old": "Owner's favourite band is Coldplay", "new": "Owner's favourite band is Radiohead"}
+{"id": "d01", "conflict": false, "old": "Owner works at Initech", "new": "Owner started learning the guitar"}
+{"id": "d02", "conflict": false, "old": "Owner has a cat called Biscuit", "new": "Owner adopted a dog called Pepper"}
+{"id": "d03", "conflict": false, "old": "Owner lives in Leeds", "new": "Owner visited York for the weekend"}
+{"id": "d04", "conflict": false, "old": "Owner likes jazz", "new": "Owner likes folk music too"}
+{"id": "d05", "conflict": false, "old": "Owner drives a red Ford Fiesta", "new": "Owner's sister drives a blue van"}
+{"id": "d06", "conflict": false, "old": "Owner's partner is called Jonas", "new": "Owner and Jonas went to Lisbon in May"}
+{"id": "d07", "conflict": false, "old": "Owner studies history at Leeds University", "new": "Owner joined the university chess club"}
+{"id": "d08", "conflict": false, "old": "Owner's phone is an iPhone 12", "new": "Owner bought a new case for the iPhone"}
+{"id": "d09", "conflict": false, "old": "Owner drinks coffee every morning", "new": "Owner drinks green tea in the afternoon"}
+{"id": "d10", "conflict": false, "old": "Owner's manager is Carla", "new": "Carla is going on holiday next week"}
+{"id": "d11", "conflict": false, "old": "Owner rents a flat on Park Road", "new": "Owner's flat on Park Road has a small balcony"}
+{"id": "d12", "conflict": false, "old": "Owner is married to Alex", "new": "Alex works as a teacher"}
+{"id": "d13", "conflict": false, "old": "Owner plays in a five-a-side football team on Tuesdays", "new": "Owner's five-a-side team won the league"}
+{"id": "d14", "conflict": false, "old": "Owner works from home full time", "new": "Owner bought a standing desk"}
+{"id": "d15", "conflict": false, "old": "Owner is learning Spanish", "new": "Owner is also learning to cook Thai food"}
+{"id": "d16", "conflict": false, "old": "Owner's dog Rex lives with them", "new": "Rex is scared of fireworks"}
+{"id": "d17", "conflict": false, "old": "Owner is a nurse at St Mary's hospital", "new": "St Mary's hospital is being refurbished"}
+{"id": "d18", "conflict": false, "old": "Owner is saving up for a holiday", "new": "Owner is saving for a new laptop too"}
+{"id": "d19", "conflict": false, "old": "Owner's favourite band is Coldplay", "new": "Owner saw Coldplay live in 2019"}
+{"id": "d20", "conflict": false, "old": "Owner goes swimming on Fridays", "new": "Owner goes running on Sundays"}

@@ -196,6 +196,50 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # The Brain upgrades (2026-09-28, brain-reads.patch): GET
+    # /api/history/search and /api/memory/fact-history, for the apps only
+    # (and, since the memory dates group, /api/memory/conversation-facts)
+    "jarvis_brain_reads.py",
+    # "remind me next time I talk about X": a kind on the one scheduler,
+    # brought up beside the question by jarvis_agent.py - no patch
+    "jarvis_next_time.py",
+    # "ring my phone": ONE ring_phone event the phone rings for - no patch
+    "jarvis_find_phone.py",
+    # "Where did I put ...?" (2026-09-28): the places the owner said,
+    # answered without the model; jarvis_quick.py and jarvis_auto_learn.py
+    # call it, no patch
+    "jarvis_places.py",
+    # The overnight tidy (2026-09-28): "Still true?" and "Which is true
+    # now?" review cards only, a kind of job on the one scheduler, no patch
+    "jarvis_tidy.py",
+    # "Better voice" (2026-09-28): the second "hey Jarvis" detector
+    # (microWakeWord); jarvis_speech.py and jarvis_voice.py call it
+    "jarvis_microwake.py",
+    # Today cards (2026-09-28): the owner's own words shown on the Today
+    # part of both apps at a time, on chosen days - a kind of job on the one
+    # scheduler, no card, no patch
+    "jarvis_today.py",
+    # "Photo to reminder" (2026-09-28, photo-reminder.patch): POST
+    # /api/photo/scan reads a picture's dates with plain code and PROPOSES a
+    # reminder; it sets nothing up itself
+    "jarvis_photo_remind.py",
+    # "PC help" (2026-09-28): why is my PC slow, how full is my disk, what is
+    # using the graphics card - read-only, answered without the model;
+    # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
+    "jarvis_pc_help.py",
+    # "Smarter answers" (2026-09-28): the "I've done it" check at the end of
+    # an answer; jarvis_agent.py calls it, and the tool test shares its
+    # pattern - no patch
+    "jarvis_claims.py",
+    # "Bring in chats from ChatGPT, Claude or Gemini" (2026-09-28,
+    # history-import.patch): the importer itself, and the Brain button's
+    # background run of it - every fact it finds waits for a yes
+    "import_history.py",
+    "jarvis_history_import.py",
+    # "Widgets you describe" (2026-09-28): a small checked description (never
+    # code) of what a home-screen / desktop widget shows; switched on by
+    # jarvis_brain_reads.install(), no patch of its own
+    "jarvis_widgets.py",
 )
 
 

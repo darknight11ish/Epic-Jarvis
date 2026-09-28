@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-stop-everything"
+description = "Enables the stop_everything command without any pre-configured scope."
+commands.allow = ["stop_everything"]
+
+[[permission]]
+identifier = "deny-stop-everything"
+description = "Denies the stop_everything command without any pre-configured scope."
+commands.deny = ["stop_everything"]

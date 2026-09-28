@@ -172,6 +172,7 @@ import { HeavyGate, isHeavy } from "./heavy-approve.js";
 import { buildSayableList } from "./sayable.js";
 // A timer said aloud while hands-free listening is on (2026-09-25).
 import { aloudFor } from "./coming-up.js";
+import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
 // What a `step` event means, in words - shared with Brain's Live tab
 // (item 10, UI-AUDIT-2026-09-26.md).
 import { stepText } from "./step-words.js";
@@ -241,6 +242,7 @@ const dom = {
   answerMarkNote: $("answer-mark-note"),
   temporary: $("temporary"),
   temporaryStrip: $("temporary-strip"),
+  lockdownStrip: $("lockdown-strip"),
   temporaryLine: $("temporary-line"),
   temporaryRefused: $("temporary-refused"),
   answerUsed: $("answer-used"),
@@ -303,6 +305,8 @@ const dom = {
   captureThumb: $("capture-thumb"),
   captureMeta: $("capture-meta"),
   captureRemove: $("capture-remove"),
+  captureFindDate: $("capture-find-date"),
+  photoProposal: $("photo-proposal"),
   clipboardChip: $("attachment-clipboard"),
   clipboardMeta: $("clipboard-meta"),
   clipboardRemove: $("clipboard-remove"),
@@ -1037,7 +1041,10 @@ async function refreshHealth() {
    ========================================================================== */
 
 function syncAttachments() {
-  if (!state.capture) hidePictureNotice();
+  if (!state.capture) {
+    hidePictureNotice();
+    closePhotoProposal();
+  }
   dom.captureChip.hidden = !state.capture;
   dom.clipboardChip.hidden = !state.clipboard;
   dom.attachments.hidden = !state.capture && !state.clipboard;
@@ -4169,6 +4176,57 @@ dom.taskNoteInput.addEventListener("keydown", (event) => {
   }
 });
 
+/* "Photo to reminder" (photo-reminder.js; JARVIS-API.md section 83): the
+   PC reads the dates in the capture and PROPOSES a reminder here. Nothing
+   is set up until "Add a Jarvis reminder" is tapped (ONE photo_add_reminder,
+   held on a stale link in Rust). The words are outside text: shown with
+   textContent only, never put in the prompt, never sent to the model from
+   here, and dropped when the proposal closes. */
+let photoView = null;
+
+function closePhotoProposal() {
+  if (photoView) photoView.close();
+  photoView = null;
+  if (dom.photoProposal) {
+    dom.photoProposal.replaceChildren();
+    dom.photoProposal.hidden = true;
+  }
+}
+
+async function findDateInCapture() {
+  const picture = state.capture;
+  if (!picture || !dom.photoProposal) return;
+  closePhotoProposal();
+  dom.photoProposal.hidden = false;
+  dom.photoProposal.textContent = PHOTO_READING;
+  dom.captureFindDate.disabled = true;
+  syncWindowHeight();
+  let out = null;
+  try {
+    out = await invokeStrict("photo_scan", { image: picture });
+  } catch (error) {
+    dom.photoProposal.textContent = String(error && error.message ? error.message : error);
+    dom.captureFindDate.disabled = false;
+    syncWindowHeight();
+    return;
+  }
+  dom.captureFindDate.disabled = false;
+  // The capture was removed or replaced while the PC was reading.
+  if (state.capture !== picture) return;
+  photoView = mountProposal(dom.photoProposal, out, {
+    invoke: invokeStrict,
+    canAct: () => !currentLink().stale,
+    buttonClass: "text-button",
+    onClose: () => {
+      photoView = null;
+      syncWindowHeight();
+    },
+  });
+  syncWindowHeight();
+}
+
+dom.captureFindDate.addEventListener("click", findDateInCapture);
+
 dom.captureRemove.addEventListener("click", () => {
   state.capture = null;
   dom.captureThumb.removeAttribute("src");
@@ -4318,6 +4376,11 @@ startVoice(dom.root);
 onLink((link) => {
   toolWatch.link(link);
   recheckSpeech();
+  // Lockdown (2026-09-28): said in the bar while it is on, from the link.
+  if (dom.lockdownStrip && dom.lockdownStrip.hidden === Boolean(link.lockdown)) {
+    dom.lockdownStrip.hidden = !link.lockdown;
+    syncWindowHeight();
+  }
   // Forget and Erase under "Used in this answer" are held on a stale link.
   answerMemory.linkChanged();
 });
