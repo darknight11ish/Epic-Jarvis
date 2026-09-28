@@ -545,6 +545,10 @@ before acting on any outside review; its disproven findings stay closed):
 - **Milestone 12, the same day:** "said again" counts become a small
   tie-breaker in recall - never hiding or fading a fact - kept only if the
   memory self-tests improve.
+- **Milestones 13-14, the same day:** LoCoMo's multi-hop questions join the
+  memory self-test (before milestone 5), and PrefEval's questions test "From
+  now on..." preferences. Test data only (CC BY-NC 4.0), never shipped,
+  credited when added.
 - **Copying the owner's own voice stays refused** (`jarvis_voices.py`): a
   Jarvis speaking in the owner's voice could pass its own voice check.
 

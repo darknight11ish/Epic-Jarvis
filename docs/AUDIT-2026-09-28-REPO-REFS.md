@@ -177,6 +177,37 @@ existing behaviour until it's switched on. Each gets the usual new-feature audit
   `eval_learner.py` get better on the PC, with the numbers on the memory
   scoreboard.
 
+### Milestones 13-14 - non-commercial test data (queued 2026-09-28)
+
+After the owner said EpicJarvis will never be sold, every licence in the
+research was checked again. Non-commercial licences were already treated as
+fine under rule 5, so very little changed. These two had been named in the
+research but never used:
+
+- **13. LoCoMo questions in the memory self-test** (snap-research/locomo,
+  data CC BY-NC 4.0). Its long made-up chats include "link two facts"
+  (multi-hop) questions, which `eval_memory.py` doesn't have today. Build
+  this BEFORE milestone 5, so multi-hop memory has something to be measured
+  against. Test data only, kept in `backend/`, never copied to the PC's
+  backend folder or into either app; credited in `THIRD-PARTY-NOTICES.txt`
+  when added.
+- **14. PrefEval questions for "From now on..." preferences**
+  (amazon-science/PrefEval, data CC BY-NC 4.0). Checks that a stated
+  preference is still followed as a chat grows (PrefEval found models drop to
+  under 10% after about 10 turns without a reminder). Test data only;
+  credited when added.
+
+**Not changed by "never commercialized", and why:** GPL and AGPL code
+(Honcho, CED, espeak-ng, WeeWX, FreshRSS and others) - those licences are
+about sharing the code, and Jarvis is shared on GitHub; isair/jarvis and
+zynkbot code (non-commercial, isair also share-alike) - held back because
+Jarvis is MIT, so copied files would carry a different licence from the
+rest; Prompt Guard 2 (Meta's licence, gated) and TEN VAD (extra conditions)
+- their limits aren't about selling; AntiDeepfake - set aside because such
+detectors are unreliable, not for its licence. The multilingual re-ranker
+(jina-reranker-v2-base-multilingual, CC BY-NC) is allowed but not queued:
+the owner talks to Jarvis in English.
+
 ## 7. Rounds three and four (later on 2026-09-28)
 
 Two more batches of suggestions from Gemini, checked the same way.
