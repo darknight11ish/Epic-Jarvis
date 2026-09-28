@@ -585,6 +585,12 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   small bounce, a look at the owner). A non-animal face just fades on its
   side. Under Still, calm motion or a serious moment it is a quick gentle
   crossfade.
+- **Variety, never over the top:** every face gets several variants of each
+  kind of move (listening, thinking, talking gestures, resting moments,
+  the reaction as an approval or an error arrives), picked so the same one
+  never plays twice running - all within the existing comfort limits
+  (small, slow, eased, never busy). Still, calm and serious quieten them
+  as before; approval and error stay attentive and still.
 
 ## Every new feature gets its own audit, without being asked
 
