@@ -96,10 +96,19 @@ fun HandoffScreen(
     var typed by remember { mutableStateOf("") }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
-    // Start once, when there is a page waiting and no hand-off yet.
-    LaunchedEffect(offer?.key, hid) {
+    // Read what is waiting now: opened from the alert after Android closed
+    // the app, nothing has been read yet. A read - never held.
+    var checked by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        JarvisRuntime.chatbotStatus(null)
+        checked = true
+    }
+
+    // Start once, when there is a page waiting and no hand-off yet - and not
+    // on a stale link (it starts when the link is back).
+    LaunchedEffect(offer?.key, hid, stale) {
         val o = offer ?: return@LaunchedEffect
-        if (hid != null || ended != null) return@LaunchedEffect
+        if (hid != null || ended != null || stale) return@LaunchedEffect
         busy = true
         val (h, why) = JarvisRuntime.handoffStart(o)
         busy = false
@@ -168,7 +177,7 @@ fun HandoffScreen(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (ended != null || (offer == null && hid == null)) {
+            if (ended != null || (checked && offer == null && hid == null)) {
                 Plate {
                     Text(
                         ended ?: "Nothing is waiting for you on a website right now.",
@@ -212,7 +221,7 @@ fun HandoffScreen(
                         )
                     } else {
                         Text(
-                            if (busy || hid != null) Handoff.WAITING else said.orEmpty(),
+                            if (busy || hid != null || !checked) Handoff.WAITING else said.orEmpty(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = chrome.textMid,
                         )
