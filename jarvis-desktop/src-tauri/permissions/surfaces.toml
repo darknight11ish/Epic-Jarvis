@@ -90,6 +90,12 @@ permissions = [
   "allow-resume-task",
   "allow-stop-task",
   "allow-inject-task-note",
+  # "Jarvis is working on your screen, 0:42 - Stop" (screen_work.rs): which
+  # screen-control plan runs (ids and times only, never its words), and the
+  # line's Stop, which is exactly the Stop everything hotkey - it stops, it
+  # never approves or starts anything.
+  "allow-screen-work",
+  "allow-stop-everything",
 ]
 
 # Real microphone capture and the spoken reply - see src-tauri/src/voice.rs's
@@ -373,6 +379,10 @@ permissions = [
   "allow-apply-hardware",
   "allow-hardware-step",
   "allow-measure-hardware",
+  # "PC help" (JARVIS-API section 84): why the PC is slow, how full the
+  # drives are, what is using the graphics card, how hot it is, when it last
+  # restarted - read-only, it changes nothing.
+  "allow-get-pc-help",
   # "Web search": the five providers with their "why" lines, and ONE change
   # at a time - the provider, the SearXNG address, "Ask before every web
   # search" (off raises an approval card on the PC). Changes and the test
@@ -645,6 +655,17 @@ permissions = [
   # Pin), held while the event stream is stale.
   "allow-brain-memory-shared",
   "allow-brain-memory-share",
+  # "History of this fact" (brain/fact_history.rs; the owner's choice,
+  # 2026-09-28): every version of ONE fact - a read, held back like the
+  # other memory lists while "Windows Hello for memory lists and chat
+  # history" hides them; an erased version never with its words.
+  "allow-brain-fact-history",
+  # "Facts this chat taught" (brain/conversation_facts.rs; the owner's
+  # choice, 2026-09-28): the facts in use ONE conversation taught, for
+  # History's Delete to offer forgetting them - a read, held back like the
+  # other memory lists. Forgetting each ticked fact is brain_memory_forget,
+  # one fact per call; nothing here forgets.
+  "allow-brain-conversation-facts",
 ]
 
 # Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).
@@ -653,12 +674,17 @@ permissions = [
 # is ONE conversation per call; there is no "delete all" anywhere. The switch
 # is ONE setting per call: ON only raises an approval card (tier `ask`) and
 # is held while the event stream is stale, OFF is immediate.
+#
+# "Search what was said" (JARVIS-API.md section 71, 2026-09-28) is a read
+# too, held back the same way: the PC opens each kept turn in memory for
+# that one search, keeps no index, and nothing reaches the AI model.
 [[set]]
 identifier = "brain-history"
-description = "List and read the chat history kept on the PC, delete one conversation, and change its two settings (turning it on only raises an approval card). No bulk delete."
+description = "List, read and search the chat history kept on the PC, delete one conversation, and change its two settings (turning it on only raises an approval card). No bulk delete."
 permissions = [
   "allow-brain-history-list",
   "allow-brain-history-open",
+  "allow-brain-history-search",
   "allow-brain-history-delete",
   "allow-brain-history-settings",
 ]
@@ -715,12 +741,13 @@ permissions = [
 # with the count it showed - never the to-do list itself.
 [[set]]
 identifier = "brain-schedule"
-description = "Read Coming up (timers, alarms, reminders, the to-do list and named lists), change ONE job at a time (pause, resume, delete, done, add time, snooze), add one to-do item, ask for a standby schedule (the PC raises one approval card), and clear ONE named list after the page's are-you-sure (never the to-do list)."
+description = "Read Coming up (timers, alarms, reminders, the to-do list and named lists), change ONE job at a time (pause, resume, delete, done, add time, snooze), add one to-do item, set up a standby schedule or one Today card (no approval card), and clear ONE named list after the page's are-you-sure (never the to-do list)."
 permissions = [
   "allow-brain-schedule",
   "allow-brain-schedule-act",
   "allow-brain-schedule-add-todo",
   "allow-brain-schedule-add-standby",
+  "allow-brain-schedule-add-today",
   "allow-brain-schedule-clear-list",
 ]
 
@@ -760,6 +787,71 @@ description = "Read what Jarvis learned and the chats from some days, ask the PC
 permissions = [
   "allow-forget-range-read",
   "allow-forget-range-write",
+]
+
+# "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
+# version; brain/widgets.rs, backend jarvis_widgets.py; JARVIS-API.md section
+# 87). The Brain lists the widgets, asks the PC for a PREVIEW from the
+# owner's typed words (the PC's model turns them into a checked description,
+# never code), keeps ONE preview on Add and deletes ONE widget at once. No
+# approval card: a widget only shows what the apps already show, and its
+# buttons are the five Quick Settings tile actions. Add and Delete are held
+# on a stale link; the words are taken out in Rust while the private lists
+# are hidden.
+[[set]]
+identifier = "brain-widgets"
+description = "List the widgets, make a preview from the owner's typed words, keep or drop ONE preview, delete ONE widget. No approval card; no bulk delete."
+permissions = [
+  "allow-brain-widgets",
+  "allow-brain-widgets-draft",
+  "allow-brain-widgets-add",
+  "allow-brain-widgets-discard",
+  "allow-brain-widgets-delete",
+]
+
+# The desktop widget window draws ONE chosen widget in place of the face -
+# the same window, no new webview. It reads the widget filled in (private
+# words taken out in Rust while App lock is on or the lists are hidden), and
+# presses ONE button from a closed list of five in Rust: a focus session, a
+# 10-minute timer, Brief me (opens the Brain, behind App lock), Stop
+# everything, play/pause on the PC. Never Approve or Deny; never a route or
+# a body from the page. Everything but Stop everything and Brief me is held
+# on a stale link.
+[[set]]
+identifier = "widget-board"
+description = "Read the owner's saved widgets and draw one; press ONE of the five safe tile actions. Approves nothing."
+permissions = [
+  "allow-widget-board",
+  "allow-widget-board-action",
+]
+
+# "Photo to reminder" (photo-reminder.patch; the owner's choice of
+# 2026-09-28): a picture - a screen capture in the Jarvis bar, a picture file
+# in the Brain's Coming up - goes to the PC, which reads its words with
+# Windows' own text recognition and PROPOSES a reminder; a scan sets nothing
+# up. The owner's tap then adds ONE one-off reminder (no card, like any
+# one-off reminder they set), held on a stale link.
+[[set]]
+identifier = "photo-reminder"
+description = "Send one picture to the PC to find a date in it (a proposal only - nothing is set up), and add ONE one-off reminder on the owner's tap."
+permissions = [
+  "allow-photo-scan",
+  "allow-photo-add-reminder",
+]
+
+# "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek" (history-import.patch; the
+# owner's choice of 2026-09-28): the owner picks an export file on this PC in
+# the Windows "Open" dialog (run in Rust - the window gets no file access),
+# and the PC reads the owner's own messages in the background and PROPOSES
+# facts. Every one waits in "Waiting for you" for its own yes; nothing here
+# decides a card. Start is held on a stale link; cancel never is.
+[[set]]
+identifier = "brain-history-import"
+description = "Read where a chat-history import is, pick ONE export file on this PC and start reading it (it only proposes - every fact waits for its own yes), and stop it."
+permissions = [
+  "allow-history-import-status",
+  "allow-history-import-start",
+  "allow-history-import-cancel",
 ]
 
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a

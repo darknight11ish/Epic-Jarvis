@@ -43,7 +43,7 @@ await check("every bindable action is listed", async () => {
   const page = await open();
   const list = await rows(page);
   await page.close();
-  assert.equal(list.length, 7, `${list.length} rows, expected 7`);
+  assert.equal(list.length, 8, `${list.length} rows, expected 8`);
   assert.equal(list[0].name, "Show or hide the Jarvis bar");
   assert.equal(list[0].key, "Alt + Space");
   // "Stop everything" (2026-09-25): listed like the others, so it can be
@@ -51,6 +51,22 @@ await check("every bindable action is listed", async () => {
   const stop = list.find((r) => r.name === "Stop everything");
   assert.ok(stop, "Stop everything is not listed");
   assert.equal(stop.key, "Alt + Shift + X");
+  // Talk-to-type (2026-09-28): listed and movable like the rest.
+  const talk = list.find((r) => r.name === "Talk-to-type");
+  assert.ok(talk, "Talk-to-type is not listed");
+  assert.equal(talk.key, "Alt + Shift + T");
+});
+
+await check("talk-to-type is the one action that reads key-up, and Stop everything ends it", async () => {
+  const lib = read("src-tauri/src/lib.rs");
+  const handler = lib.slice(lib.indexOf(".with_handler(move |app, shortcut, event|"));
+  const talk = handler.indexOf("talk_type::on_hotkey(app, event.state() == ShortcutState::Pressed)");
+  const pressedOnly = handler.indexOf("if event.state() != ShortcutState::Pressed");
+  assert.ok(talk > 0, "the handler does not hand key-up to talk-to-type");
+  assert.ok(pressedOnly > talk, "every other action must still ignore key-up, after talk-to-type is handed both");
+  const rs = read("src-tauri/src/commands.rs");
+  const stopNow = rs.slice(rs.indexOf("pub fn stop_everything_now("));
+  assert.match(stopNow.slice(0, stopNow.indexOf("\n}\n")), /crate::talk_type::stop\(app\)/);
 });
 
 await check("Stop everything is in the tray menu too, the same command, never greyed", async () => {

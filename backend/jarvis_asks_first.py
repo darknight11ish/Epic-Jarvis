@@ -99,6 +99,39 @@ tier "ask" only. Kept in `asks_first.json` in the Jarvis settings folder:
 jarvis_agent.py asks lights_without_card() before it puts a home_control
 call to the gate - see that function for every condition.
 
+LOCKDOWN (2026-09-28, the owner's choice of the research audit's idea 10;
+docs/JARVIS-API.md section 75)
+One tap makes every way out of this PC (docs/ARCHITECTURE.md section 4) ask
+first, or stop. It is not a second mechanism: it is this page's own
+"stricter", for every way out at once, and its own "looser" to undo it.
+  * ON: at once, no card, from either app (and by voice) - it only makes
+    Jarvis ask more. POST /api/asks_first/tier {"action": "lockdown",
+    "ask": true}, the route every "Ask me first" switch already uses.
+  * OFF: {"action": "lockdown", "ask": false} - the PC only, ONE card of the
+    loosening action itself (LOOSEN_ACTION, so jarvis_owner_check.
+    PC_ONLY_ACTIONS makes it need Windows Hello and refuses it from any other
+    device) - the same path as loosening one action. The phone can turn
+    Lockdown on, never off.
+  * HOW IT BITES: lockdown_tier() below - rebuilt/jarvis_framework.
+    action_tier() asks it on every lookup, so every module and the gate see
+    "ask" for a way out (LOCKDOWN_ACTIONS) whose line says "auto" or
+    "notify". A chat tool then asks with a card; anything that runs by
+    itself - a "tell me when" look, a news feed, the briefing's calendar and
+    email - accepts only "auto" and so STOPS until Lockdown is off. Nothing
+    in jarvis-framework.toml is written: turning it off puts back exactly
+    what the file says. What the tier table cannot reach is switched here
+    or beside it: a web search always asks (jarvis_agent.
+    web_search_card_lines), no cloud AI model is offered (rebuilt/
+    jarvis_router.choose, gate "lockdown"), "Lights, plugs and fans without
+    a card" is off (lights_without_card), a plug-in program asks at every
+    start (jarvis_mcp), a "tell me when" on a web search stops
+    (jarvis_tellme.readiness), and checking for tool updates asks again
+    (jarvis_tool_updates). Loosening anything, or turning the lights
+    setting on, is refused while it is on.
+  * KEPT in lockdown.json in the Jarvis settings folder: {"on": bool,
+    "changed": epoch}. No file: off. A file that cannot be read, or holds
+    anything else: ON (fails closed), and the page says why.
+
 Standard library only. Nothing here opens a socket.
 """
 from __future__ import annotations
@@ -299,8 +332,8 @@ GROUPS = (
                             "delete_calendar_event"]),
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
                       "control_browser", "post_to_external_service", "open_public_tunnel",
-                      "news_read", "page_read", "chatbot_session", "support_chat",
-                      "support_offer"]),
+                      "news_read", "page_read", "github_read", "chatbot_session",
+                      "support_chat", "support_offer"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage"]),
@@ -367,7 +400,8 @@ PLUGIN_START_EVERY_NOTE = "Asks every time a plug-in program starts."
 def _plugin_card_every_start() -> bool:
     try:
         import jarvis_mcp
-        return bool(jarvis_mcp.CARD_EVERY_START)
+        every = getattr(jarvis_mcp, "card_every_start", None)
+        return bool(every()) if callable(every) else bool(jarvis_mcp.CARD_EVERY_START)
     except Exception:
         return True
 
@@ -472,6 +506,9 @@ def _row(action: str, *, here: bool) -> dict:
     tier = _tier(action)
     row = {"id": action, "action": action, "title": _title(action), "tier": tier,
            "says": SAYS[tier], "fixed": False}
+    if locked_down(action):
+        # Lockdown (below) made this ask: said on the row, whatever else it says.
+        row["lockdown"] = True
     if action == "search_the_web" and tier == "ask":
         every = _search_asks_every_time()
         row["says"] = SAYS["ask"] if every else SAYS_SEARCH
@@ -498,16 +535,22 @@ def _row(action: str, *, here: bool) -> dict:
     if action in LOOSE:
         if tier != "never":
             row["switch"] = {"asks": tier == "ask", "loose": LOOSE[action],
-                             "can_loosen": bool(here)}
+                             "can_loosen": bool(here) and not lockdown_on()}
         row["note"] = NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE
-        if tier == "ask" and not here:
+        if tier == "ask" and not here and not row.get("lockdown"):
             row["note"] += " " + PHONE_LOOSEN
         for old, new in OLDER_NAMES.items():
             had = _file_tiers().get(old) if new == action else None
-            if had is not None and str(had) != tier:
+            # Compared with the file's own line: Lockdown changes neither.
+            own = _file_tier(action) if row.get("lockdown") else tier
+            if had is not None and str(had) != own:
                 row["note"] += " " + NOTE_OLDER.format(old=old, tier=had, new=new)
+        if row.get("lockdown"):
+            row["note"] += " " + LOCKDOWN_ROW_NOTE
         return row
     row["note"] = NOTE_FILE
+    if row.get("lockdown"):
+        row["note"] += " " + LOCKDOWN_ROW_NOTE
     return row
 
 
@@ -530,7 +573,8 @@ def view(*, here: bool = False) -> dict:
             "groups": groups, "switchable": list(SWITCHABLE), "can_loosen": bool(here),
             "waiting": ({"action": pending["action"], "title": _title(pending["action"]),
                          "said": WAITING} if pending else None),
-            "last": last, "lights": lights_status(), "tools": tools_status(here=here)}
+            "last": last, "lights": lights_status(), "tools": tools_status(here=here),
+            "lockdown": lockdown_status(here=here)}
 
 
 # ---------------------------------------------------------------------------
@@ -816,9 +860,18 @@ def request_tier(body, *, peer=None, local=None, gate: Optional[Callable] = None
             or not isinstance(body.get("action"), str):
         return 400, {"ok": False, "error": 'need {"action": "<name>", "ask": true|false}'}
     action, ask = body["action"], body["ask"]
+    if action == LOCKDOWN:
+        return request_lockdown(ask, peer=peer, local=local, gate=gate, tier_of=tier_of,
+                                spawn=spawn, armed=armed, here=here)
     if action not in LOOSE or action in HARD_LIMITS or action in MUST_ASK:
         return 403, {"ok": False, "error": NOT_ON_LIST}
+    if not ask and lockdown_on():
+        return 409, {"ok": False, "error": LOCKDOWN_NO_LOOSEN, "lockdown": True}
     now_tier = tier_of(action)
+    if ask and now_tier == "ask" and lockdown_on() and _file_tier(action) != "ask":
+        # Lockdown makes it ask for now; "Ask me first" makes it ask for good:
+        # the line is still written, so it keeps asking after Lockdown.
+        now_tier = _file_tier(action)
     if now_tier == "never":
         return 409, {"ok": False, "error": "Your settings file switches this off (\"never\"), "
                                           "so the app leaves it alone."}
@@ -1397,6 +1450,8 @@ def request_lights(enabled, *, gate: Optional[Callable] = None,
         _audit("asks_first.lights.off", {})
         return 200, dict(ok=True, lights=lights_status(), waiting=False,
                          message="Done - every change in your home asks you first again.")
+    if lockdown_on():
+        return 409, {"ok": False, "error": LOCKDOWN_NO_LOOSEN, "lockdown": True}
     with _LS_LOCK:
         waiting = bool(s["pending"])
     if lights_setting()["on"] and not waiting:
@@ -1465,6 +1520,8 @@ def lights_without_card(plan, owner_words: str, *, shaped: str) -> str:
       * every device was named in the owner's newest message (named_in)."""
     if not lights_on():
         return "the setting is off"
+    if lockdown_on():
+        return "Lockdown is on"
     if shaped:
         return "outside text shaped this turn"
     try:
@@ -1487,6 +1544,334 @@ def record_no_card(plan) -> None:
         "entities": [getattr(q, "entity_id", "") for q in getattr(plan, "queries", []) or []],
         "service": (getattr((getattr(plan, "queries", None) or [None])[0], "url", "") or "")
         .rsplit("/api/services/", 1)[-1]})
+
+
+# ---------------------------------------------------------------------------
+# Lockdown - every way out of this PC asks first, or stops (2026-09-28)
+# ---------------------------------------------------------------------------
+
+#: The pseudo-action on POST /api/asks_first/tier: {"action": "lockdown",
+#: "ask": true} turns it on, "ask": false asks to turn it off.
+LOCKDOWN = "lockdown"
+
+#: The ways out of this PC (docs/ARCHITECTURE.md section 4) that go through
+#: the tier table: while Lockdown is on, each of these whose line says
+#: "auto" or "notify" is "ask" (lockdown_tier). "never" stays "never". A
+#: plug-in program's own tool (mcp__<server>__<tool>) is covered by its
+#: prefix, though every such call already asks.
+LOCKDOWN_ACTIONS = frozenset({
+    # web search and research
+    "search_the_web", "web_research", "research_authenticated",
+    "jarvis_research_run", "jarvis_research_run_authenticated",
+    # the owner's own accounts: calendar, email, Home Assistant
+    "calendar_read", "read_calendar", "email_read", "home_read", "home_control",
+    # sending and saving email
+    "send_email", "draft_email",
+    # an address the owner typed, and GitHub watches
+    "news_read", "page_read", "github_read",
+    # the browser, a cloud AI model, models and tool updates from the internet
+    "control_browser", "cloud_model", "browse_model_catalog", "download_model",
+    "check_tool_updates",
+    # anything that would spend or post
+    "spend_money", "post_to_external_service",
+})
+_LOCKDOWN_PREFIXES = ("mcp__",)
+
+LOCKDOWN_LABEL = "Lockdown"
+LOCKDOWN_DETAIL = ("One tap makes every way out of this PC ask you first, or stop: web search "
+                   "and research, sending or saving email, reading your calendar, email and "
+                   "Home Assistant, your smart home, news feeds and \"tell me when\" watches, "
+                   "plug-in programs, cloud AI models and checking for tool updates. Turning "
+                   "it on is instant, from either app. Turning it off is on the PC only, with "
+                   "an approval card and Windows Hello.")
+LOCKDOWN_ON_SAYS = ("Lockdown is on: everything that would leave this PC asks you first, and "
+                    "anything that runs by itself (\"tell me when\", news, the briefing's "
+                    "calendar and email) has stopped.")
+LOCKDOWN_OFF_SAYS = "Lockdown is off: everything asks first as your settings say."
+LOCKDOWN_ON_LABEL = "Turn on Lockdown"
+LOCKDOWN_OFF_LABEL = "Turn off Lockdown"
+LOCKDOWN_PC_ONLY = ("Lockdown can only be turned off on the PC (Settings, What asks first), "
+                    "with an approval card and Windows Hello.")
+LOCKDOWN_WAITING = "Waiting for your yes on the approval card, and Windows Hello, on your PC."
+LOCKDOWN_ROW_NOTE = "Lockdown is on, so this asks you first - or stops, if it runs by itself."
+LOCKDOWN_NO_LOOSEN = ("Lockdown is on, so nothing can be loosened - turn Lockdown off first "
+                      "(on the PC, with an approval card and Windows Hello).")
+LOCKDOWN_DONE = ("Lockdown is on. Everything that would leave this PC asks you first, and "
+                 "anything that runs by itself has stopped. Turning it off takes the PC, an "
+                 "approval card and Windows Hello.")
+LOCKDOWN_ALREADY = "Lockdown is already on."
+LOCKDOWN_ALREADY_OFF = "Lockdown is already off."
+LOCKDOWN_NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so Lockdown "
+                           "cannot be turned off from the app - run apply-patches.ps1 on the PC.")
+_LOCKDOWN_DAMAGED = ("the Lockdown file on this PC could not be read, so Lockdown counts as ON. "
+                     "Turn it off on the PC to rewrite it")
+
+LOCKDOWN_CARD = "\n".join([
+    "Turn off Lockdown?",
+    "",
+    "Lockdown makes every way out of this PC ask you first, or stop. Turning it off puts back "
+    "what your settings file says: web search, research, your calendar, email and Home "
+    "Assistant, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models "
+    "and checking for tool updates go back to asking only when your settings say so.",
+    "",
+    "Nothing in your settings file changes - Lockdown only sits on top of it.",
+    "",
+    "Approving it needs Windows Hello on this PC. You can turn Lockdown on again at any time "
+    "from either app, and that is instant.",
+    "",
+    "If you did not just do this, say no.",
+    "",
+    "If you say no: nothing changes - Lockdown stays on.",
+])
+
+LOCKDOWN_LAST_WORDS = {
+    "off": "You approved the card, so Lockdown is off.",
+    "denied": "The card was turned down, so Lockdown is still on.",
+    "timed_out": "Nobody answered the card in time, so Lockdown is still on.",
+    "refused": "Your PC's settings do not let this be approved, so Lockdown is still on.",
+    "withdrawn": "You turned Lockdown on again while the card waited, so approving it changed "
+                 "nothing.",
+    "failed": "It was approved, but the Lockdown file could not be changed, so Lockdown is "
+              "still on.",
+}
+
+
+def lockdown_path() -> Path:
+    """lockdown.json in the Jarvis settings folder."""
+    return _config_dir() / "lockdown.json"
+
+
+_K_LOCK = threading.Lock()
+_K_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+_K_SWITCH = threading.Lock()
+#: (path, mtime_ns, size) -> the setting, so the framework's every tier
+#: lookup costs one os.stat, not a read.
+_K_CACHE_LOCK = threading.Lock()
+_K_CACHE: dict = {}
+
+
+def lockdown_setting() -> dict:
+    """{"on": bool, "why": str}. No file: off (the default). A file that
+    cannot be read, is not JSON, or does not say true/false: ON - it fails
+    closed, and `why` says so."""
+    p = lockdown_path()
+    try:
+        st = os.stat(p)
+    except FileNotFoundError:
+        return {"on": False, "why": ""}
+    except OSError:
+        return {"on": True, "why": _LOCKDOWN_DAMAGED}
+    key = (str(p), st.st_mtime_ns, st.st_size)
+    with _K_CACHE_LOCK:
+        if _K_CACHE.get("key") == key:
+            return dict(_K_CACHE["value"])
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        on = doc.get("on") if isinstance(doc, dict) else None
+        value = {"on": on, "why": ""} if isinstance(on, bool) else {"on": True,
+                                                                     "why": _LOCKDOWN_DAMAGED}
+    except FileNotFoundError:
+        return {"on": False, "why": ""}
+    except Exception:
+        value = {"on": True, "why": _LOCKDOWN_DAMAGED}
+    with _K_CACHE_LOCK:
+        _K_CACHE["key"] = key
+        _K_CACHE["value"] = dict(value)
+    return value
+
+
+def lockdown_on() -> bool:
+    """Is Lockdown on? What every other module asks. Never raises; anything
+    odd reads as ON."""
+    try:
+        return lockdown_setting()["on"] is True
+    except Exception:
+        return True
+
+
+def is_way_out(action: str) -> bool:
+    a = str(action or "")
+    return a in LOCKDOWN_ACTIONS or a.startswith(_LOCKDOWN_PREFIXES)
+
+
+def lockdown_tier(action: str, tier: str) -> str:
+    """The tier Lockdown leaves for `action` whose file line says `tier`:
+    "ask" for a way out that would otherwise go ahead ("auto"/"notify")
+    while Lockdown is on; `tier` itself otherwise. Only ever stricter.
+    rebuilt/jarvis_framework.action_tier() calls this on every lookup."""
+    if tier in ("auto", "notify") and is_way_out(action) and lockdown_on():
+        return "ask"
+    return tier
+
+
+def locked_down(action: str) -> bool:
+    """Is this action asking only because Lockdown is on?"""
+    if not is_way_out(action) or not lockdown_on():
+        return False
+    return _file_tier(action) in ("auto", "notify")
+
+
+def _file_tier(action: str) -> str:
+    """The tier the settings file itself gives, without Lockdown."""
+    try:
+        if fw is not None and hasattr(fw, "file_action_tier"):
+            t = str(fw.file_action_tier(action))
+        else:
+            t = str(_file_tiers().get(action) or _tier(action))
+    except Exception:
+        return "ask"
+    return t if t in SAYS else "ask"
+
+
+def set_lockdown(on: bool) -> dict:
+    """Write the setting. Only request_lockdown() calls this with False, and
+    only on an approved card."""
+    with _S_LOCK:
+        p = lockdown_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps({"on": bool(on), "changed": time.time()}), encoding="utf-8")
+        os.replace(tmp, p)
+    with _K_CACHE_LOCK:
+        _K_CACHE.clear()
+    return dict(lockdown_setting(), ok=True)
+
+
+def _publish_lockdown(on: bool) -> None:
+    """A doorbell for both apps: {"on": bool}, never anything else."""
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish("lockdown", {"on": bool(on)})
+    except Exception:
+        pass
+
+
+def lockdown_status(*, here: bool = False) -> dict:
+    """{"on", "waiting", "last", "why", "says", "label", "detail",
+    "can_turn_off"} - Lockdown as both apps show it. `can_turn_off` only for
+    a request from this PC."""
+    st = lockdown_setting()
+    with _K_LOCK:
+        waiting = bool(_K_STATE["pending"])
+        last = dict(_K_STATE["last"]) or None
+    return {"on": st["on"], "waiting": waiting, "last": last, "why": st["why"],
+            "says": LOCKDOWN_ON_SAYS if st["on"] else LOCKDOWN_OFF_SAYS,
+            "label": LOCKDOWN_LABEL, "detail": LOCKDOWN_DETAIL,
+            "can_turn_off": bool(here) and st["on"]}
+
+
+def _lockdown_finish(pid: str, outcome: str, why: str = "") -> None:
+    with _K_LOCK:
+        if _K_STATE["pending"].get("id") == pid:
+            _K_STATE["pending"].clear()
+        _K_STATE["withdrawn"].discard(pid)
+        if _K_STATE["latest"].get("id") not in (None, pid):
+            return
+        _K_STATE["last"].clear()
+        _K_STATE["last"].update(outcome=outcome, why=why, at=time.time(),
+                                message=LOCKDOWN_LAST_WORDS.get(outcome, ""))
+    _audit("asks_first.lockdown.card", {"outcome": outcome})
+
+
+def _lockdown_decide(pid: str, gate: Callable, tier_of: Callable, write: Callable) -> None:
+    detail = {"text": LOCKDOWN_CARD, "what": "turn off Lockdown", "setting": LOCKDOWN,
+              "to": False, "leaves_this_pc": False}
+    try:
+        v = gate(LOOSEN_ACTION, detail, LOCKDOWN_CARD)
+    except Exception as exc:
+        return _lockdown_finish(pid, "refused", f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(LOOSEN_ACTION) != "ask":
+        return _lockdown_finish(pid, "refused", f"the gate answered at tier {vtier!r}, which "
+                                                f"is not a person saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _lockdown_finish(pid, outcome)
+        return _lockdown_finish(pid, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _K_SWITCH:
+        with _K_LOCK:
+            withdrawn = pid in _K_STATE["withdrawn"]
+        if withdrawn:
+            return _lockdown_finish(pid, "withdrawn")
+        try:
+            out = write(False) or {}
+        except Exception as exc:
+            return _lockdown_finish(pid, "failed", type(exc).__name__)
+        if out.get("ok") is False or out.get("on") is not False:
+            return _lockdown_finish(pid, "failed", str(out.get("why") or ""))
+    _audit("asks_first.lockdown", {"on": False})
+    _publish_lockdown(False)
+    _lockdown_finish(pid, "off")
+
+
+def request_lockdown(on, *, peer=None, local=None, gate: Optional[Callable] = None,
+                     tier_of: Optional[Callable[[str], str]] = None,
+                     spawn: Optional[Callable] = None,
+                     write: Optional[Callable[[bool], dict]] = None,
+                     armed: Optional[Callable[[], bool]] = None,
+                     here: Optional[bool] = None) -> tuple:
+    """Lockdown ON (at once, from anywhere) or OFF (the PC only, ONE
+    loosening card plus Windows Hello). (code, body)."""
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    write = write or set_lockdown
+    armed = armed or _owner_check_armed
+    if not isinstance(on, bool):
+        return 400, {"ok": False, "error": 'need {"action": "lockdown", "ask": true|false}'}
+    if on:
+        # Stricter: at once, never a card - it only makes Jarvis ask more. A
+        # card waiting to turn it off is withdrawn.
+        with _K_SWITCH:
+            with _K_LOCK:
+                p = _K_STATE["pending"]
+                if p:
+                    _K_STATE["withdrawn"].add(p["id"])
+                    p.clear()
+            already = lockdown_setting()
+            if already["on"] and not already["why"]:
+                return 200, {"ok": True, "changed": False, "message": LOCKDOWN_ALREADY,
+                             "lockdown": lockdown_status(here=_here(here, peer, local))}
+            try:
+                write(True)
+            except Exception as exc:
+                return 500, {"ok": False,
+                             "error": f"could not turn Lockdown on ({type(exc).__name__})"}
+        _audit("asks_first.lockdown", {"on": True})
+        _publish_lockdown(True)
+        return 200, {"ok": True, "changed": True, "message": LOCKDOWN_DONE,
+                     "lockdown": lockdown_status(here=_here(here, peer, local))}
+    # Off: the PC only, one card plus Windows Hello.
+    if not _here(here, peer, local):
+        return 403, {"ok": False, "error": LOCKDOWN_PC_ONLY, "pc_only": True}
+    st = lockdown_setting()
+    if not st["on"]:
+        return 200, {"ok": True, "changed": False, "message": LOCKDOWN_ALREADY_OFF,
+                     "lockdown": lockdown_status(here=True)}
+    if not armed():
+        return 503, {"ok": False, "error": LOCKDOWN_NO_OWNER_CHECK}
+    t = tier_of(LOOSEN_ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "error": (
+            f"{LOOSEN_ACTION} is tier {t!r} in jarvis-framework.toml; turning Lockdown off "
+            f"needs a person to say yes, so it must be 'ask'")}
+    with _K_LOCK:
+        if _K_STATE["pending"]:
+            return 409, {"ok": False, "error": "A card to turn Lockdown off is already waiting "
+                                               "- answer it first."}
+        pid = uuid.uuid4().hex
+        _K_STATE["pending"].update(id=pid, since=time.time())
+        _K_STATE["latest"]["id"] = pid
+    try:
+        spawn(lambda: _lockdown_decide(pid, gate, tier_of, write))
+    except Exception:
+        with _K_LOCK:
+            _K_STATE["pending"].clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True, "lockdown": lockdown_status(here=True),
+                 "message": "Waiting for your approval. Approve the card on this PC - it asks "
+                            "Windows Hello - and Lockdown turns off."}
 
 
 # ---------------------------------------------------------------------------
@@ -1517,7 +1902,10 @@ def handle_tools(body, peer=None, local=None) -> tuple:
 
 
 def _reset_for_tests() -> None:
-    for st, lock in ((_L_STATE, _L_LOCK), (_LS_STATE, _LS_LOCK), (_T_STATE, _T_LOCK)):
+    for st, lock in ((_L_STATE, _L_LOCK), (_LS_STATE, _LS_LOCK), (_T_STATE, _T_LOCK),
+                     (_K_STATE, _K_LOCK)):
         with lock:
             for v in st.values():
                 v.clear()
+    with _K_CACHE_LOCK:
+        _K_CACHE.clear()

@@ -153,6 +153,15 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
 - **The plan card is wired into the tool list** there too (7675da4d,
   `propose_plan`, gate `run_plan`), still switched off until a passing
   `tool_eval_results.json` exists.
+- **GitHub's `main` merged into this branch (2026-09-28, `studio-merge-main`):**
+  PRs #22 and #24 - talk-to-type (API §72), watches (§70), the Brain
+  upgrades and history search (§71), remind me next time (§73), ring my
+  phone (§74), Lockdown (§75), where did I put (§77), until-dates and the
+  overnight tidy (§78), deleting a chat offers to forget its facts (§79),
+  better voice (§80), phone conveniences (§81), Today cards (§82), photo to
+  reminder (§83), PC help (§84), bring in old chats (§85), widgets you
+  describe (§86), model tryouts, desktop polish. Read those sections before
+  proposing anything near them.
 - **Built 2026-09-28:** Jarvis Live (`docs/LIVE-DESIGN.md`; voice
   conversation plus a camera kept off until the 12 GB card passes a photo
   test; four reviews and their fixes, branch `studio-live-fixes`), the money
@@ -164,9 +173,9 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
 
 ## Decided but not built yet (don't propose these as new)
 
-QR pairing with per-device keys; talk-to-type on the PC (one card to switch
-on); the Today page; the plan
+QR pairing with per-device keys; the plan
 card; Kokoro v1.0 and a voice picker with samples; animal voices; the
-12 GB card's long-context lane; the memory re-ranker bake-off and overnight
-tidy; the feasibility audit's small items. The owner's full list of
+12 GB card's long-context lane; the memory re-ranker bake-off; the
+feasibility audit's small items. (Talk-to-type, the Today page and the
+overnight tidy, review cards only, are built - merged from `main`.) The owner's full list of
 decisions is in `CLAUDE.md`.

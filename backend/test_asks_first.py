@@ -437,8 +437,7 @@ def t_a_loosening_card_is_approved_on_the_pc_only_with_windows_hello():
     finally:
         OC.set_verifier(None)
     check("the card has a title in plain words",
-          W.title_for(AF.LOOSEN_ACTION) == "Jarvis wants to let one action go ahead without "
-                                           "asking you first")
+          W.title_for(AF.LOOSEN_ACTION) == "Jarvis wants to loosen what asks first")
 
 
 # ======================================================== 6. the lights setting

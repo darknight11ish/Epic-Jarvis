@@ -24,6 +24,11 @@
 //!   owner's decision after the approvals audit) the PC sets it up at once,
 //!   with no card, and says the next night. Held on a stale link. Turning it
 //!   off is Delete on its row, like any job.
+//! * [`brain_schedule_add_today`] - `POST /api/schedule/add {"kind":
+//!   "today", "text", "repeat"}` (2026-09-28): one Today card, the owner's
+//!   own words shown on the Work tab's Today card from a time on chosen days
+//!   (backend `jarvis_today.py`). No card; held on a stale link. Its words
+//!   are blanked by [`redact_list`] like every reminder's.
 //!
 //! * [`brain_schedule_clear_list`] - `POST /api/schedule/act {"do":
 //!   "clear_list", "list", "count"}` (2026-09-25): every item on ONE named
@@ -200,6 +205,15 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
                         if o.contains_key("alert") {
                             o.insert("alert".into(), serde_json::json!(""));
                         }
+                        // ... and so does its "cannot look" notice (2026-09-28).
+                        if o.contains_key("broken") {
+                            o.insert("broken".into(), serde_json::json!(""));
+                        }
+                        // A reminder for next time's subject is the owner's
+                        // words too (jarvis_next_time.py, 2026-09-28).
+                        if o.contains_key("about") {
+                            o.insert("about".into(), serde_json::json!(""));
+                        }
                         o.insert("hidden".into(), serde_json::json!(true));
                         let named = o
                             .get("list")
@@ -324,6 +338,42 @@ pub(crate) fn standby_body(start: &str, end: &str) -> Result<serde_json::Value, 
     }
 }
 
+/// The longest a Today card's words may be (jarvis_today.MAX_TEXT).
+pub(crate) const TODAY_MAX_TEXT: usize = 80;
+
+/// The body of a new Today card (backend jarvis_today.py, 2026-09-28): the
+/// owner's words, shown from `at` ("HH:MM") on `days` (0 = Monday). All
+/// seven days is "every day", Monday to Friday is "every weekday", anything
+/// else "every week" on those days - the scheduler's own rules. The PC
+/// checks the same things and says so; this refuses early, in the words
+/// both apps use (today.js, net/Today.kt).
+pub(crate) fn today_body(text: &str, at: &str, days: &[u8]) -> Result<serde_json::Value, String> {
+    let t = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if t.is_empty() {
+        return Err("A Today card needs some words: what should it say?".to_string());
+    }
+    if t.chars().count() > TODAY_MAX_TEXT {
+        return Err(format!(
+            "A Today card is at most {TODAY_MAX_TEXT} characters - say it more briefly."
+        ));
+    }
+    let at = hhmm(at).ok_or_else(|| "Write the time as HH:MM, like 07:00.".to_string())?;
+    let mut d: Vec<u8> = days.iter().copied().filter(|x| *x <= 6).collect();
+    d.sort_unstable();
+    d.dedup();
+    if d.is_empty() {
+        return Err("Pick at least one day.".to_string());
+    }
+    let repeat = if d.len() == 7 {
+        serde_json::json!({ "every": "day", "at": at })
+    } else if d == [0, 1, 2, 3, 4] {
+        serde_json::json!({ "every": "weekday", "at": at })
+    } else {
+        serde_json::json!({ "every": "week", "at": at, "days": d })
+    };
+    Ok(serde_json::json!({ "kind": "today", "text": t, "repeat": repeat }))
+}
+
 /// Whether a `schedule` event that went off should be shown at all. The PC
 /// says `"notify": false` for a kind that tells nobody - the standby
 /// schedule at 01:00 - and then there is no toast (the phone shows no
@@ -337,6 +387,29 @@ pub(crate) fn wants_toast(data: &serde_json::Value) -> bool {
 /// phone's `Schedule.TELLME_LOCK_SCREEN`).
 pub(crate) const TELLME_LOCK_SCREEN: &str =
     "Jarvis: something you asked to be told about happened.";
+
+/// A "tell me when" that cannot look (2026-09-28) - what a toast says about
+/// it while App lock or the hidden lists are on (jarvis_tellme's
+/// BROKEN_LOCK_SCREEN; the phone's `Schedule.TELLME_BROKEN_LOCK_SCREEN`).
+pub(crate) const TELLME_BROKEN_LOCK_SCREEN: &str =
+    "Jarvis: a \"tell me when\" cannot look right now.";
+
+/// (title, body) for a "tell me when" that cannot look: the job's `broken`
+/// sentence (made on the PC from the owner's own words and fixed words
+/// about the problem), or only the generic words when `private` or when
+/// there is none.
+pub(crate) fn broken_words(job: Option<&serde_json::Value>, private: bool) -> (String, String) {
+    let title = toast_title("tellme").to_string();
+    let said = job
+        .and_then(|j| j.get("broken"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .unwrap_or("");
+    if private || said.is_empty() {
+        return (title, TELLME_BROKEN_LOCK_SCREEN.to_string());
+    }
+    (title, said.to_string())
+}
 
 /// The toast's title for a kind - both apps' words.
 pub(crate) fn toast_title(kind: &str) -> &'static str {
@@ -578,6 +651,36 @@ pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value
     show(&app, &title, &body, rings("tellme", &data), None);
 }
 
+/// A "tell me when" cannot look (`{"id", "kind": "tellme", "state":
+/// "broken"}`, 2026-09-28): read its `broken` sentence by id and show it.
+/// The PC says this once per problem (repeats held back for hours, cleared
+/// by itself at the next good look). An ordinary toast - it never rings, an
+/// urgent watch included: only a real match rings. Once per telling, even
+/// when a reconnect replays the event.
+pub async fn toast_broken(app: AppHandle, base: String, data: serde_json::Value) {
+    let Some(id) = data.get("id").and_then(|v| v.as_str()).map(str::to_string) else {
+        return;
+    };
+    if !valid_id(&id) || data.get("kind").and_then(|v| v.as_str()) != Some("tellme") {
+        return;
+    }
+    let job = read_job(&app, &base, &id).await;
+    let at = job
+        .as_ref()
+        .and_then(|j| j.get("broken_at"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as i64;
+    if let Some(key) = shown_key(at, &data) {
+        if !first_time(&format!("{id}#broken"), key) {
+            return;
+        }
+    }
+    let security = crate::lock::current(&app);
+    let private = security.app_lock || crate::lock::private_hidden(&app);
+    let (title, body) = broken_words(job.as_ref(), private);
+    show(&app, &title, &body, false, None);
+}
+
 /// One toast: a ringing one (an alarm, an urgent "tell me when") through
 /// WinRT, where its sound can loop until it is dismissed; one with Snooze
 /// through WinRT too; any other through the plugin, as before.
@@ -746,6 +849,22 @@ pub async fn brain_schedule_add_standby(
     post(&app, "/api/schedule/add", body).await
 }
 
+/// One Today card: the owner's words, from `at` on `days`. The PC sets it
+/// up at once, with no card (it only shows the owner's own words back to
+/// them). Held on a stale link. Deleting it is Delete on its row, like any
+/// job.
+#[tauri::command]
+pub async fn brain_schedule_add_today(
+    app: AppHandle,
+    text: String,
+    at: String,
+    days: Vec<u8>,
+) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    let body = today_body(&text, &at, &days)?;
+    post(&app, "/api/schedule/add", body).await
+}
+
 async fn post(
     app: &AppHandle,
     path: &str,
@@ -870,6 +989,41 @@ mod tests {
     }
 
     #[test]
+    fn a_today_card_is_the_owners_words_at_a_time_on_days() {
+        assert_eq!(
+            today_body("  Gym   bag ", "7:00", &[2, 0, 0]).unwrap(),
+            serde_json::json!({ "kind": "today", "text": "Gym bag",
+                "repeat": { "every": "week", "at": "07:00", "days": [0, 2] } })
+        );
+        assert_eq!(
+            today_body("Bins", "18:30", &[0, 1, 2, 3, 4, 5, 6]).unwrap()["repeat"],
+            serde_json::json!({ "every": "day", "at": "18:30" })
+        );
+        assert_eq!(
+            today_body("Pills", "08:00", &[4, 3, 2, 1, 0]).unwrap()["repeat"],
+            serde_json::json!({ "every": "weekday", "at": "08:00" })
+        );
+        assert!(today_body("   ", "07:00", &[0]).is_err());
+        assert!(today_body(&"x".repeat(TODAY_MAX_TEXT + 1), "07:00", &[0]).is_err());
+        assert!(today_body(&"x".repeat(TODAY_MAX_TEXT), "07:00", &[0]).is_ok());
+        assert!(today_body("Gym", "25:00", &[0]).is_err());
+        assert!(today_body("Gym", "07:00", &[]).is_err());
+        assert!(today_body("Gym", "07:00", &[7, 9]).is_err());
+    }
+
+    #[test]
+    fn hidden_lists_blank_a_today_cards_words_too() {
+        let list = serde_json::json!({ "available": true,
+            "jobs": [{ "id": "s0123456789", "kind": "today", "text": "Gym bag",
+                       "today": "showing", "shows_at": "07:00" }],
+            "todo": [] });
+        let hidden = redact_list(list);
+        assert!(!hidden.to_string().contains("Gym"));
+        assert_eq!(hidden["jobs"][0]["today"], "showing");
+        assert_eq!(hidden["jobs"][0]["shows_at"], "07:00");
+    }
+
+    #[test]
     fn a_todo_is_the_owners_words_tidied_and_capped() {
         assert_eq!(
             todo_body("  buy   milk ", None).unwrap(),
@@ -941,6 +1095,23 @@ mod tests {
         assert_eq!(hidden["todo"][0]["list"], "hidden-1");
         assert_eq!(hidden["todo"][1]["list"], "hidden-1");
         assert_eq!(hidden["todo"][2]["list"], "");
+    }
+
+    #[test]
+    fn hidden_lists_hide_a_reminder_for_next_times_subject_too() {
+        // jarvis_next_time.py (2026-09-28): the subject is the owner's words.
+        let list = serde_json::json!({
+            "jobs": [{"id": "s0123456785", "kind": "nexttime", "text": "ask about the bill",
+                      "about": "the dentist", "when": "until Sunday 27 December",
+                      "note": "Waits for you to talk about it."}],
+            "todo": []
+        });
+        let hidden = redact_list(list);
+        let s = hidden.to_string();
+        assert!(!s.contains("dentist") && !s.contains("bill"), "{s}");
+        assert_eq!(hidden["jobs"][0]["about"], "");
+        assert_eq!(hidden["jobs"][0]["when"], "until Sunday 27 December");
+        assert_eq!(hidden["jobs"][0]["hidden"], true);
     }
 
     #[test]
@@ -1023,6 +1194,23 @@ mod tests {
         assert_eq!(toast_words("tellme", None, false).1, TELLME_LOCK_SCREEN);
         let hidden = redact_list(serde_json::json!({"jobs": [job], "todo": []}));
         assert!(!hidden.to_string().contains("Alex"));
+    }
+
+    #[test]
+    fn a_tell_me_when_that_cannot_look_says_so_and_only_the_generic_words_when_locked() {
+        let job = serde_json::json!({"id": "s0123456789", "kind": "tellme",
+            "text": "CI fails on o/r",
+            "broken": "Your \"tell me when\" (CI fails on o/r) cannot look right now. GitHub did not answer.",
+            "broken_at": 1_790_000_000.0});
+        let (t, b) = broken_words(Some(&job), false);
+        assert_eq!(t, "Tell me when");
+        assert!(b.starts_with("Your \"tell me when\" (CI fails on o/r)"));
+        let (_, b) = broken_words(Some(&job), true);
+        assert_eq!(b, TELLME_BROKEN_LOCK_SCREEN);
+        assert!(!b.contains("o/r"));
+        assert_eq!(broken_words(None, false).1, TELLME_BROKEN_LOCK_SCREEN);
+        let hidden = redact_list(serde_json::json!({"jobs": [job], "todo": []}));
+        assert!(!hidden.to_string().contains("o/r"));
     }
 
     #[test]

@@ -27,6 +27,8 @@
     "brain-wiki",
     "brain-deep",
     "brain-schedule",
+    "photo-reminder",
+    "brain-history-import",
     "brain-briefing",
     "brain-history",
     "focus",
@@ -34,6 +36,7 @@
     "chatbot",
     "support",
     "brain-projects",
-    "brain-forget-range"
+    "brain-forget-range",
+    "brain-widgets"
   ]
 }

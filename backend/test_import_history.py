@@ -243,6 +243,40 @@ def t_resuming_after_a_pause_only_offers_what_was_not_already_offered():
         X._cfg = keep
 
 
+def t_a_chatgpt_export_shows_the_model_only_the_owners_words():
+    """2026-09-28: ChatGPT's export, through the REAL propose(). The model's
+    prompt holds what the owner wrote and never what the assistant said."""
+    s = fresh()
+    prompts = []
+
+    def recording_llm(prompt, model=None, timeout=60):
+        prompts.append(prompt)
+        return json.dumps({"facts": [{"text": "Mario's dog is called Biscuit",
+                                      "confidence": 0.9}]})
+    X._local_llm = recording_llm
+    mapping = {
+        "r": {"id": "r", "parent": None, "children": ["u"], "message": None},
+        "u": {"id": "u", "parent": "r", "children": ["a"], "message": {
+            "author": {"role": "user"}, "recipient": "all",
+            "content": {"content_type": "text", "parts": ["My dog is called Biscuit"]}}},
+        "a": {"id": "a", "parent": "u", "children": [], "message": {
+            "author": {"role": "assistant"}, "recipient": "all",
+            "content": {"content_type": "text", "parts": ["ASSISTANT-ONLY-WORDS"]}}},
+    }
+    p = Path(tempfile.mkdtemp()) / "chatgpt.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("conversations.json", json.dumps([
+            {"id": "g1", "create_time": 1700000000.0, "current_node": "a",
+             "mapping": mapping}]))
+    I.run([("auto", p)], say=lambda _l: None)
+    check("the model was asked once", len(prompts) >= 1, f"{len(prompts)}")
+    check("it read the owner's words", any("Biscuit" in q for q in prompts))
+    check("and never the assistant's", not any("ASSISTANT-ONLY-WORDS" in q for q in prompts))
+    check("a proposal, tagged import:chatgpt, and no fact",
+          {r.get("source") for r in X.pending()} == {"import:chatgpt"}
+          and s.status()["facts"] == 0, f"{X.pending()}")
+
+
 def t_a_bad_progress_file_degrades_to_starting_over_rather_than_crashing():
     fresh()
     I.PROGRESS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -267,6 +301,7 @@ def main():
                t_a_full_queue_stops_the_run_rather_than_dropping_silently,
                t_resuming_does_not_re_offer_an_already_seen_conversation,
                t_resuming_after_a_pause_only_offers_what_was_not_already_offered,
+               t_a_chatgpt_export_shows_the_model_only_the_owners_words,
                t_a_bad_progress_file_degrades_to_starting_over_rather_than_crashing):
         print(f"\n--- {fn.__name__} ---")
         try:

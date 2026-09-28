@@ -101,6 +101,95 @@ class ChatLogTest {
         assertTrue(ChatLog.filtered(rows, "zzz-nothing").isEmpty())
     }
 
+    // ---- "Search what was said" and "Find in this chat" (section 71) ----
+
+    @Test
+    fun `a word search is sent only with two letters or more, encoded so nothing can add a parameter`() {
+        assertEquals("/api/history/search?q=dentist&limit=20", ChatLog.searchPath("dentist"))
+        assertEquals("/api/history/search?q=mill+road&limit=20", ChatLog.searchPath("  mill   road "))
+        assertEquals(
+            "/api/history/search?q=a%26limit%3D999%23x&limit=5",
+            ChatLog.searchPath("a&limit=999#x", limit = 5),
+        )
+        assertNull(ChatLog.searchPath("a"))
+        assertNull(ChatLog.searchPath("   "))
+        assertNull(ChatLog.searchPath("x".repeat(101)))
+        assertEquals("/api/history/search?q=bread&limit=50", ChatLog.searchPath("bread", limit = 500))
+    }
+
+    @Test
+    fun `the PC's search answer is read as it is sent, snippet parts and all`() {
+        val body = obj(
+            """
+            {"enabled": true, "query_ok": true, "why": "", "more": true, "partial": false, "searched": 40,
+             "conversations": [
+               {"id": "c-1", "title": "Dentist on Tuesday", "updated": 1790000300, "turns": 4,
+                "device": "phone", "has_voice": false, "tainted": true, "hits": 2,
+                "snippet": {"role": "assistant", "at": 1790000200, "before": true, "after": false,
+                            "parts": [{"text": "at 3, on ", "hit": false}, {"text": "Mill", "hit": true},
+                                      {"text": 5, "hit": true}]}},
+               {"title": "no id"}
+             ]}
+            """.trimIndent(),
+        )
+        val s = ChatLog.search(body)
+        assertTrue(s.queryOk)
+        assertTrue(s.more)
+        assertEquals(1, s.found.size)
+        val f = s.found[0]
+        assertEquals("c-1", f.row.id)
+        assertTrue(f.row.tainted)
+        assertEquals(2, f.hits)
+        assertEquals("assistant", f.snippet.role)
+        assertTrue(f.snippet.cutBefore)
+        assertEquals(listOf(ChatLog.Part("at 3, on ", false), ChatLog.Part("Mill", true)), f.snippet.parts)
+        assertEquals("Jarvis: ", ChatLog.snippetWho(f.snippet))
+        assertEquals("found in 2 messages", ChatLog.hitsLine(2))
+        assertNull(ChatLog.hitsLine(0))
+        assertTrue(ChatLog.searchMoreLine(s)!!.contains("newest matches only"))
+        val refused = ChatLog.search(obj("""{"query_ok": false, "why": "Type at least two letters.", "conversations": []}"""))
+        assertFalse(refused.queryOk)
+        assertEquals("Type at least two letters.", refused.why)
+    }
+
+    @Test
+    fun `a PC without the search is told apart from a failure`() {
+        assertTrue(ChatLog.searchMissing(ApiError.NotFound))
+        assertTrue(ChatLog.searchMissing(ApiError.Server(501, "")))
+        assertFalse(ChatLog.searchMissing(ApiError.Server(500, "")))
+        assertFalse(ChatLog.searchMissing(ApiError.NotAvailable))
+    }
+
+    @Test
+    fun `find in this chat counts every place, in reading order, and the words are words`() {
+        val turns = listOf(
+            ChatLog.Turn("user", "Mill Road, then mill road again", null, null, false),
+            ChatLog.Turn("assistant", "no", null, null, false),
+            ChatLog.Turn("assistant", "Road!", null, null, false),
+        )
+        val m = ChatLog.findMatches(turns, "mill road")
+        assertEquals(
+            listOf(0 to "Mill", 0 to "Road", 0 to "mill", 0 to "road", 2 to "Road"),
+            m.map { it.turn to turns[it.turn].text.substring(it.start, it.end) },
+        )
+        assertTrue(ChatLog.findMatches(turns, "(.*)").isEmpty())
+        assertTrue(ChatLog.findMatches(turns, "  ").isEmpty())
+        assertEquals(ChatLog.FIND_NONE, ChatLog.findCount(0, 0))
+        assertEquals("1 match", ChatLog.findCount(0, 1))
+        assertEquals("3 of 5", ChatLog.findCount(2, 5))
+    }
+
+    @Test
+    fun `the search words are the desktop's`() {
+        assertEquals("Search what was said…", ChatLog.SEARCH_PLACEHOLDER)
+        assertEquals(
+            "Searched on your PC, in your kept chats only. Nothing is saved and nothing is sent to the AI.",
+            ChatLog.SEARCH_NOTE,
+        )
+        assertEquals("No kept conversation has all of those words.", ChatLog.SEARCH_NONE)
+        assertEquals("Not in this chat.", ChatLog.FIND_NONE)
+    }
+
     @Test
     fun `nothing being kept is said plainly, in the PC's words`() {
         val s = ChatLog.status(
@@ -315,5 +404,64 @@ class ChatLogTest {
             ChatLog.OFF_SAID,
         )
         assertEquals("Delete conversations older than", ChatLog.KEEP_TITLE)
+    }
+
+    // ------------------------------------- facts this chat taught (s. 79) ---
+
+    @Test
+    fun `only a real conversation id asks for the facts it taught`() {
+        assertEquals(
+            "/api/memory/conversation-facts?conversation_id=conv-abc_123",
+            ChatLog.factsPath("conv-abc_123"),
+        )
+        for (bad in listOf("", "short", "has space in it", "a&b=c-defgh", "x".repeat(65))) {
+            assertNull(bad, ChatLog.factsPath(bad))
+        }
+    }
+
+    @Test
+    fun `the facts a chat taught are read, and anything odd is left out`() {
+        val t = ChatLog.taught(
+            obj(
+                """
+                {"conversation_id": "conv-abc_123", "facts": [
+                  {"id": 41, "text": " Owner's passport is in the top drawer ", "created": 1790000000},
+                  {"id": 0, "text": "no id"}, {"id": "42", "text": "id is a string"},
+                  {"id": 43, "text": "   "}, {"text": "no id at all"},
+                  {"id": 44, "text": "Owner likes green tea"}],
+                 "count": 2, "more": false}
+                """.trimIndent(),
+            ),
+        )
+        assertTrue(t.available)
+        assertEquals(listOf(41L, 44L), t.facts.map { it.id })
+        assertEquals("Owner's passport is in the top drawer", t.facts[0].text)
+        assertEquals(0, t.hiddenCount)
+        val hidden = ChatLog.taught(obj("""{"facts": [], "hidden": true, "hidden_count": 2}"""))
+        assertEquals(2, hidden.hiddenCount)
+        assertTrue(hidden.facts.isEmpty())
+    }
+
+    @Test
+    fun `deleting a chat names how many facts go, and none is ticked by the words`() {
+        assertEquals("Delete the chat", ChatLog.deleteChatButton(0))
+        assertEquals("Delete the chat and forget 1 fact", ChatLog.deleteChatButton(1))
+        assertEquals("Delete the chat and forget 3 facts", ChatLog.deleteChatButton(3))
+        assertTrue(
+            ChatLog.chatFactsIntro(1)
+                .startsWith("Jarvis learned 1 fact from this chat. It is kept unless you tick it"),
+        )
+        assertTrue(
+            ChatLog.chatFactsIntro(2)
+                .startsWith("Jarvis learned 2 facts from this chat. They are kept unless you tick them"),
+        )
+        assertTrue(ChatLog.deleteAndForgetConfirm(0).endsWith("The facts it taught are kept."))
+        assertTrue(ChatLog.deleteAndForgetConfirm(2).startsWith("Delete this conversation and forget 2 facts?"))
+        assertTrue(ChatLog.chatFactsHiddenLine(2).contains("Your memory lists are hidden, so they are kept."))
+        assertEquals("Deleted from your PC.", ChatLog.deleteDoneWords("Deleted from your PC.", 0, 0))
+        assertEquals(
+            "Deleted from your PC. Forgot 2 facts. 1 fact could not be forgotten - try Forget on it in the Brain.",
+            ChatLog.deleteDoneWords("Deleted from your PC.", 2, 1),
+        )
     }
 }

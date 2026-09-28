@@ -29,6 +29,13 @@ tauri-plugin-notification = "2"
 tauri-plugin-store = "2"
 # Build order step 3: starting the app twice focuses the running window.
 tauri-plugin-single-instance = "2"
+# Brain, Settings, Faces and the HUD open where the owner last left them, at
+# the size they left them (window_memory.rs). Pinned exactly: 2.5.0 needs
+# Rust 1.90 and this crate's rust-version is 1.89. Its default also restores
+# whether a window was VISIBLE, which would put the HUD on screen before
+# Windows Hello while App lock is on - window_memory.rs restricts it to size,
+# position and maximised, and a test holds that line.
+tauri-plugin-window-state = "=2.4.1"
 # 0.6, not 0.5 and not 0.8. Tauri 2.11.5 itself depends on 0.6.0, so 0.5.3
 # compiled a second copy of the crate; 0.8 would compile a second copy again in
 # the other direction. 0.5 -> 0.6 is an objc2 bump and an MSRV raise; the
@@ -134,6 +141,20 @@ windows = { version = "0.61", features = [
   # already here - nothing new is downloaded.
   "Security_Credentials_UI",
   "Win32_System_WinRT",
+  # Talk-to-type (talk_type.rs, talk_type/paste_windows.rs - adapted from
+  # Handy, MIT): the clipboard as a delayed-render promise owned by a hidden
+  # message-only window, the owner's clipboard snapshotted and put back,
+  # Ctrl+V pressed with SendInput, which window is in front, and UI
+  # Automation's "is this a password box?". Features of a crate already
+  # here - nothing new is downloaded.
+  "Win32_System_DataExchange",
+  "Win32_System_Memory",
+  "Win32_System_Ole",
+  "Win32_System_LibraryLoader",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Accessibility",
 ] }
 # The type that Windows Hello's answer arrives in (IAsyncOperation). Not a new
 # download either: the `windows` crate above already depends on exactly this

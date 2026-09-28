@@ -69,6 +69,17 @@ try:
 except Exception:
     ort = None  # type: ignore
 
+# ONNX Runtime's own trace events are ON by default in Microsoft's builds
+# (its docs/Privacy.md; on Windows they go to ETW and, with the owner's
+# Windows diagnostic-data consent, may reach Microsoft). Rule 1: nothing about
+# the owner leaves the PC, so they are switched off before any model loads.
+# The switch is process-wide; a missing or older onnxruntime is harmless.
+if ort is not None:
+    try:
+        ort.disable_telemetry_events()
+    except Exception:
+        pass
+
 try:
     import jarvis_framework as fw
 except Exception:

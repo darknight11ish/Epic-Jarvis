@@ -88,6 +88,15 @@ def t_its_place_in_the_stack():
     # Last when it was added; a patch added after it must leave its lines alone.
     check(f"{PATCH} is in apply-patches.ps1's list, and no later patch rewrites its lines",
           PATCH in order and not _stack.later_rewriting(PATCH, "keep_rules_first"), order[-3:])
+    # brain-reads.patch (2026-09-28) and the projects -> support-chat chain
+    # follow it. They patch other parts of jarvis_hud.py, so what matters is
+    # that this comes after every patch whose lines it builds on (below),
+    # that no later one touches _open(), and that the whole list applies,
+    # which _stack proves.
+    for later in order[order.index(PATCH) + 1:] if PATCH in order else []:
+        text = (HERE / later).read_text(encoding="utf-8")
+        check(f"{later}, after it, does not touch _open()",
+              "def _open(" not in text and "_chat_client_fields_off" not in text)
     for earlier in ("ollama-direct.patch", "chat-history.patch", "cloud-one-turn.patch",
                     "memory-prefix.patch"):
         check(f"after {earlier}", earlier in order and order.index(earlier) < order.index(PATCH))

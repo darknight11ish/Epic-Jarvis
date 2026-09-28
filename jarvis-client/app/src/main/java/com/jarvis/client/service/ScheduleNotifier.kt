@@ -115,13 +115,19 @@ object ScheduleNotifier {
          * when it was missed ([com.jarvis.client.net.Schedule.missedWords]).
          */
         quiet: Boolean = false,
+        /**
+         * Goes by itself after this long, ringing or not ("ring my phone",
+         * 2026-09-28: [com.jarvis.client.net.FindPhone.ringMillis]). Null: it
+         * stays until seen, as an alarm does.
+         */
+        timeoutMs: Long? = null,
     ) {
         if (!allowed(context)) {
             Log.w(TAG, "POST_NOTIFICATIONS is not granted, so a $kind that went off is not shown")
             return
         }
         if (ring && !quiet) {
-            postRinging(context, key, jobId, kind, title, text, lockScreen, openBriefing)
+            postRinging(context, key, jobId, kind, title, text, lockScreen, openBriefing, timeoutMs)
             return
         }
         val n = NotificationCompat.Builder(context, ApprovalNotifier.CHANNEL_ID)
@@ -178,6 +184,7 @@ object ScheduleNotifier {
         text: String,
         lockScreen: String,
         openBriefing: Boolean,
+        timeoutMs: Long? = null,
     ) {
         val n = NotificationCompat.Builder(context, ALARM_CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
@@ -197,6 +204,8 @@ object ScheduleNotifier {
             .setContentIntent(open(context, key, openBriefing))
             .addAction(0, STOP, stopIntent(context, key))
             .apply {
+                // "Ring my phone": it stops by itself after its time.
+                if (timeoutMs != null && timeoutMs > 0) setTimeoutAfter(timeoutMs)
                 if (kind in SNOOZABLE && !openBriefing) {
                     addAction(
                         R.drawable.ic_notification,

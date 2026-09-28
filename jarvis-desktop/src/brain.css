@@ -1224,6 +1224,34 @@ body {
   flex-wrap: wrap;
 }
 
+/* Today cards (today.js): the words box, the time, and a day per box. */
+.today-form {
+  flex-wrap: wrap;
+}
+
+.today-days {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.today-days legend {
+  float: left;
+  padding: 0 4px 0 0;
+}
+
+.today-days label {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
 /* Focus session (focus.js): the countdown, tinted while the owner is off
    target - the same warn colour the widget's countdown uses. */
 .focus-form {
@@ -1663,8 +1691,149 @@ body {
   background: var(--surface-sunken);
 }
 
+/* Deleting a chat offers to forget the facts it taught (JARVIS-API.md
+   section 79): the list under the row, a tick box each, none ticked. */
+.history-delete-facts {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+}
+.history-delete-list {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+}
+.history-delete-fact {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 3px 0;
+  cursor: pointer;
+}
+.history-delete-fact input {
+  margin-top: 3px;
+}
+
 .history-taint-note {
   margin: 0 0 8px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* "History of this fact" (JARVIS-API.md section 71; fact-history.js). A
+   removed word is struck through and an added one underlined - never told
+   apart by colour alone. */
+.fact-history {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+}
+
+.fact-history-title {
+  margin: 0 0 4px;
+  font-size: var(--text-sm);
+}
+
+.fact-history-note {
+  margin: 0 0 6px;
+}
+
+.fact-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fact-history-item[data-this="true"] .fact-history-line {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fact-history-words {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.fact-history-erased {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+del.fact-diff {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  color: var(--text-muted);
+}
+
+ins.fact-diff {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+  background: rgb(var(--accent-rgb) / 0.16);
+  color: var(--text);
+}
+
+/* "Search what was said" and "Find in this chat" (JARVIS-API.md section 71).
+   A matched word is tinted AND underlined, so it does not rest on colour
+   alone; the current "find" match is outlined as well. */
+.search-snippet {
+  margin: 3px 0 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.search-who {
+  font-weight: 600;
+}
+
+mark.search-hit,
+mark.find-hit {
+  background: rgb(var(--accent-rgb) / 0.2);
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+mark.find-current {
+  background: rgb(var(--accent-rgb) / 0.38);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.history-search-note {
+  margin: 0 0 6px;
+}
+
+.history-search-status {
+  margin: 0 0 6px;
+}
+
+.history-find {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+
+.history-find-input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.history-find-count {
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
@@ -1742,3 +1911,91 @@ body {
 .card-link-said:empty { display: none; }
 /* In the Brain it sits under the top bar, lined up with its padding. */
 .main > .card-link { margin: 0 18px 10px; }
+
+/* "Photo to reminder" (photo-reminder.js): the PC's proposal for a capture.
+   The words came from a picture - outside text - and are shown only. */
+.photo-box {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+}
+
+.photo-box[hidden] {
+  display: none;
+}
+
+.photo-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.photo-proposal p {
+  margin: 0;
+}
+
+.photo-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photo-label {
+  min-width: 44px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.photo-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.photo-picks,
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.photo-proposal .note,
+.photo-words summary {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.photo-text {
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}
+
+/* ---- Bring in old chats (history-import.js; JARVIS-API.md section 85) --- */
+
+.history-import-words {
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.history-import-words:empty {
+  display: none;
+}
+
+.history-import-words[data-tone="warn"] {
+  padding-left: 8px;
+  border-left: 2px solid var(--warn);
+}

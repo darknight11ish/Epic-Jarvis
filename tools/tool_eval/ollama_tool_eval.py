@@ -152,12 +152,27 @@ def _post(url, body, timeout=180):
         return json.loads(r.read().decode("utf-8"))
 
 
-def ollama(base, model):
+#: What Jarvis itself sends on every chat turn (jarvis_agent, and the
+#: Modelfile's Qwen non-thinking values). A candidate model's maker may
+#: recommend others: --temperature and --top-p test those instead.
+JARVIS_TEMPERATURE = 0.7
+JARVIS_TOP_P = 0.8
+
+#: The shortest conversation length a model may load with and still be tested
+#: fairly. Jarvis's rules plus the full tool list are about 3,000-4,000
+#: tokens, and the endpoint Jarvis uses (/v1/chat/completions) has no field
+#: to set the length per request - so a model tag loaded at Ollama's own
+#: default (4,096 on a card under 24 GB) cuts the prompt and fails for that
+#: reason alone. Wrap such a model first (see the message in main()).
+MIN_CONTEXT = 8192
+
+
+def ollama(base, model, temperature=JARVIS_TEMPERATURE, top_p=JARVIS_TOP_P):
     """A model function: (messages, tools) -> Ollama's reply message, with
     `usage` beside it. Raises on an HTTP error."""
     def ask(messages, tools):
         body = {"model": model, "messages": messages, "stream": False,
-                "temperature": 0.7, "top_p": 0.8, "max_tokens": 512,
+                "temperature": temperature, "top_p": top_p, "max_tokens": 512,
                 "reasoning_effort": "none"}
         if tools:
             body["tools"] = tools
@@ -537,7 +552,8 @@ def run_behaviour_case(model, lst, case):
                              "content": outside(results[new[0]["name"]])}]
     failed = score_behaviour(case, text, calls)
     return {"id": case["id"], "pass": not failed, "failed": failed,
-            "answer": text[:300], "prompt_tokens": tokens}
+            "answer": text[:300], "prompt_tokens": tokens,
+            "nothing_done": BH.nothing_done_would_show(text, calls)}
 
 
 def run_behaviour(model, lst, cases=None):
@@ -590,6 +606,13 @@ def summary(result):
                             ordinary_cards=sum(1 for r in ben if r["card"]))
             if suite == "ask":
                 line["guessed"] = sum(1 for r in rows if r["outcome"] == "guessed")
+            if suite == "behaviour":
+                # How often Jarvis's own "Nothing was actually done" line
+                # would be added (backend/jarvis_claims.py), and how many of
+                # those on answers that passed - a false alarm to read.
+                line["nothing_done"] = sum(1 for r in rows if r.get("nothing_done"))
+                line["nothing_done_on_passes"] = sum(1 for r in rows if r.get("nothing_done")
+                                                     and r.get("pass"))
             if suite == "pick":
                 line["false_calls"] = sum(1 for r in rows if r.get("false_call"))
                 line["crashes"] = sum(1 for r in rows if r.get("crash"))
@@ -620,6 +643,11 @@ def print_summary(model_name, summ, result, out=print):
             cells = [f"{summ[lst][suite]['attacker_cards']}/{summ[lst][suite]['attacks']}"
                      for lst in lists if suite in summ[lst]]
             out(f"  {'  attacker cards':<28}" + "".join(f"{c:>16}" for c in cells))
+        if suite == "behaviour":
+            cells = [f"{summ[lst][suite].get('nothing_done', 0)}/{summ[lst][suite]['of']}"
+                     for lst in lists if suite in summ[lst]]
+            label = '  "nothing was done" added'
+            out(f"  {label:<28}" + "".join(f"{c:>16}" for c in cells))
     toks = []
     for lst in lists:
         vals = [v["prompt_tokens_avg"] for v in summ[lst].values() if v["prompt_tokens_avg"]]
@@ -634,6 +662,40 @@ def print_summary(model_name, summ, result, out=print):
                              or r.get("outcome") or ", ".join(r.get("picked") or [])
                              or "no tool")
                     out(f"   miss [{lst}/{suite}] {what!r}: {extra}")
+
+
+def context_of(base, model):
+    """The conversation length `model` loads with, from Ollama's /api/show
+    (its `num_ctx` parameter), or None when the model does not set one -
+    and then Ollama picks, which is 4,096 on a card under 24 GB."""
+    try:
+        info = _post(f"{base}/api/show", {"model": model}, timeout=30)
+    except Exception:
+        return None
+    for line in str(info.get("parameters") or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "num_ctx":
+            try:
+                return int(parts[1])
+            except ValueError:
+                return None
+    return None
+
+
+def short_context_note(model, ctx):
+    """The plain message for a model that would be tested unfairly."""
+    now = "does not set one (Ollama then picks, usually 4,096)" if ctx is None else f"is {ctx}"
+    return (f"Skipped {model}: its conversation length {now}, which is shorter than "
+            f"Jarvis's rules and tool list need ({MIN_CONTEXT} or more), so it would fail "
+            f"for that reason alone. Wrap it first - a text file named Modelfile with two "
+            f"lines, 'FROM {model}' and 'PARAMETER num_ctx 16384', then "
+            f"'ollama create jarvis-cand -f Modelfile' - and test jarvis-cand. "
+            f"Or add --allow-short-context to test it as it is.")
+
+
+def passes(summ):
+    """Every pass across every list and suite: how runs are compared."""
+    return sum(line.get("pass", 0) for suites in summ.values() for line in suites.values())
 
 
 def save(runs, path=RESULTS):
@@ -686,6 +748,16 @@ def main(argv=None):
                     help="pick: retry a broken call once, as Jarvis does")
     ap.add_argument("--every-attack", action="store_true",
                     help="injection: all 276 attack texts, not one per goal (hours)")
+    ap.add_argument("--temperature", type=float, default=JARVIS_TEMPERATURE,
+                    help=f"default {JARVIS_TEMPERATURE}, what Jarvis sends; use a model "
+                         "maker's own value to test that instead")
+    ap.add_argument("--top-p", type=float, default=JARVIS_TOP_P,
+                    help=f"default {JARVIS_TOP_P}, what Jarvis sends")
+    ap.add_argument("--repeat", type=int, default=1,
+                    help="run everything this many times; the WORST run is saved "
+                         "under the model's name (the careful choice), every run beside it")
+    ap.add_argument("--allow-short-context", action="store_true",
+                    help=f"test a model that loads with fewer than {MIN_CONTEXT} tokens anyway")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
@@ -696,13 +768,36 @@ def main(argv=None):
     suites = SUITES if "all" in a.suites else tuple(s for s in SUITES if s in a.suites)
     if AG is None:
         print("(backend/jarvis_agent.py could not be read, so only the full list is tested)")
+    if a.repeat < 1:
+        print("--repeat must be 1 or more.")
+        return 2
+    base = a.url.rstrip("/")
     runs = {}
     for name in a.models:
-        result = run_all(ollama(a.url.rstrip("/"), name), suites, a.lists,
-                         repair=a.repair, every=a.every_attack)
-        summ = summary(result)
-        print_summary(name, summ, result)
-        runs[name] = {"summary": summ, "rows": result}
+        ctx = context_of(base, name)
+        if (ctx is None or ctx < MIN_CONTEXT) and not a.allow_short_context:
+            print(short_context_note(name, ctx))
+            continue
+        tries = []
+        for i in range(a.repeat):
+            if a.repeat > 1:
+                print(f"\n{name}: run {i + 1} of {a.repeat}")
+            result = run_all(ollama(base, name, a.temperature, a.top_p), suites, a.lists,
+                             repair=a.repair, every=a.every_attack)
+            summ = summary(result)
+            print_summary(name, summ, result)
+            tries.append((summ, result))
+        worst = min(tries, key=lambda t: passes(t[0]))
+        runs[name] = {"summary": worst[0], "rows": worst[1],
+                      "settings": {"temperature": a.temperature, "top_p": a.top_p,
+                                   "context": ctx, "repeat": a.repeat}}
+        if a.repeat > 1:
+            runs[name]["every_run"] = [t[0] for t in tries]
+            print(f"\n{name}: passes per run {[passes(t[0]) for t in tries]} - "
+                  f"the worst is saved")
+    if not runs:
+        print("Nothing was tested.")
+        return 1
     path = save(runs)
     print(f"\nSaved: {path}")
     return 0

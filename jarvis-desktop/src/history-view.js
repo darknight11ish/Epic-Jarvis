@@ -102,10 +102,76 @@ export const TAINT_TITLE =
 export const NOT_KEPT_LINE =
   "Jarvis's answer to this was not kept: it came from a cloud model, or it did not finish.";
 
-/** Said with Delete, in both apps (ease-of-use audit 2026-09-27, #7). The
- *  phone's ChatLog.DELETE_KEEPS_FACTS. */
+/** Said with Delete, in both apps (ease-of-use audit 2026-09-27, #7), when
+ *  there is nothing to offer: the chat taught no fact still in use, or this
+ *  PC cannot list them. The phone's ChatLog.DELETE_KEEPS_FACTS. */
 export const DELETE_KEEPS_FACTS =
   "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain.";
+
+/* ── Deleting a chat offers to forget the facts it taught (2026-09-28) ──
+ * JARVIS-API.md section 79; the phone's ChatLog, word for word. The list
+ * comes from brain_conversation_facts (a read, hidden like every memory
+ * list). NOTHING IS TICKED to start with: deleting a chat must never widen
+ * into forgetting by itself - the owner ticks each fact to forget. Each
+ * ticked fact is then forgotten through the ordinary Forget, one at a time. */
+
+/** Above the list, with how many facts the chat taught. */
+export function chatFactsIntro(n) {
+  return n === 1
+    ? "Jarvis learned 1 fact from this chat. It is kept unless you tick it - a ticked fact is forgotten, like Forget in the Brain."
+    : `Jarvis learned ${n} facts from this chat. They are kept unless you tick them - each ticked fact is forgotten, like Forget in the Brain.`;
+}
+
+/** While the memory lists are hidden: the facts are not shown, and kept. */
+export function chatFactsHiddenLine(n) {
+  return `Jarvis learned ${n} ${n === 1 ? "fact" : "facts"} from this chat. `
+    + "Your memory lists are hidden, so they are kept. To forget any, show the memory lists first.";
+}
+
+/** The Delete button's words, with how many ticked facts go with it. */
+export function deleteChatButton(n) {
+  if (!n) return "Delete the chat";
+  return `Delete the chat and forget ${n} ${n === 1 ? "fact" : "facts"}`;
+}
+
+/** The "are you sure?" before deleting, with the ticked facts named. */
+export function deleteAndForgetQuestion(c, facts) {
+  const n = facts.length;
+  if (!n) {
+    return `Delete this conversation?\n\n${c.title || "(no title)"}\n\n`
+      + "It is removed from this PC. This cannot be undone. The facts it taught are kept.";
+  }
+  const list = facts.map((f) => `- ${f.text}`).join("\n");
+  return `Delete this conversation and forget ${n} ${n === 1 ? "fact" : "facts"}?\n\n`
+    + `${c.title || "(no title)"}\n\nForget:\n${list}\n\n`
+    + "The chat is removed from this PC and cannot be brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words.";
+}
+
+/** What happened, in one sentence. */
+export function deleteDoneWords({ gone = false, forgot = 0, failed = 0 } = {}) {
+  const chat = gone ? "That conversation was already deleted." : "Deleted from this PC.";
+  if (!forgot && !failed) return chat;
+  const done = forgot ? ` Forgot ${forgot} ${forgot === 1 ? "fact" : "facts"}.` : "";
+  const bad = failed
+    ? ` ${failed} ${failed === 1 ? "fact" : "facts"} could not be forgotten - try Forget on ${failed === 1 ? "it" : "them"} in the Brain.`
+    : "";
+  return chat + done + bad;
+}
+
+/**
+ * brain_conversation_facts's answer, read: {available, facts: [{id, text}],
+ * hiddenCount, why}. An older PC (`available: false`) or anything odd is
+ * "nothing to offer", and Delete asks exactly as it always did.
+ */
+export function readChatFacts(v) {
+  const o = v && typeof v === "object" ? v : {};
+  if (o.available === false) return { available: false, facts: [], hiddenCount: 0, why: text(o.why) };
+  const facts = (Array.isArray(o.facts) ? o.facts : [])
+    .filter((f) => f && Number.isInteger(f.id) && f.id > 0 && typeof f.text === "string" && f.text.trim())
+    .map((f) => ({ id: f.id, text: f.text.trim() }));
+  const hiddenCount = o.hidden === true ? Math.max(0, num(o.hidden_count) || 0) : 0;
+  return { available: true, facts, hiddenCount, why: "" };
+}
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const text = (v) => (typeof v === "string" ? v : "");
@@ -279,10 +345,10 @@ export function notRecordingLine(v) {
  * The confirm shown before deleting ONE conversation (brain.js asks it with
  * `window.confirm`, like Forget on a fact).
  */
-export function deleteQuestion(c) {
+export function deleteQuestion(c, note = "") {
   return (
     `Delete this conversation?\n\n${c.title || "(no title)"}\n\n` +
-    `It is removed from this PC. This cannot be undone.\n\n${DELETE_KEEPS_FACTS}`
+    `It is removed from this PC. This cannot be undone.\n\n${note || DELETE_KEEPS_FACTS}`
   );
 }
 
@@ -303,19 +369,197 @@ export function keepReply(days, out) {
     : `${rule} ${n} ${n === 1 ? "was" : "were"} deleted just now.`;
 }
 
+/* ==========================================================================
+   "Search what was said" and "Find in this chat" (JARVIS-API.md section 71;
+   the owner's choice of 2026-09-28, under their answer of 2026-09-27: "A
+   search box in History for the owner's own old chats is allowed now
+   (shown on screen only; nothing saved, nothing handed to the AI)").
+
+   The search box asks the PC (`brain_history_search`), which opens each
+   kept conversation in memory for that one search and keeps nothing. This
+   window keeps nothing either: the words typed are not stored anywhere, and
+   the results are dropped when the box is cleared. "Find in this chat" is
+   done here, over the conversation already open - it asks the PC nothing.
+   The phone says the same words (net/ChatLog.kt).
+   ========================================================================== */
+
+export const SEARCH_PLACEHOLDER = "Search what was said…";
+export const SEARCH_LABEL = "Search what was said in your chats";
+/** Under the box while a search is shown. */
+export const SEARCH_NOTE =
+  "Searched on your PC, in your kept chats only. Nothing is saved and nothing is sent to the AI.";
+export const SEARCHING = "Searching…";
+export const SEARCH_NONE = "No kept conversation has all of those words.";
+/** An older PC: the box narrows the loaded list by title, and says so. The
+ *  Rust sends this sentence (brain/history.rs SEARCH_UPDATE). */
+export const TITLES_ONLY =
+  "This PC's Jarvis can only search titles. To search what was said, update it by running " +
+  "apply-patches.ps1 on the PC.";
+/** The shortest search sent to the PC; a shorter one filters titles only. */
+export const SEARCH_MIN = 2;
+
+export const FIND_LABEL = "Find in this chat";
+export const FIND_PLACEHOLDER = "Find in this chat…";
+export const FIND_NONE = "Not in this chat.";
+
+/** "Found in 3 messages", or "" when the PC gave no count. */
+export function hitsWords(n) {
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return `found in ${n} ${n === 1 ? "message" : "messages"}`;
+}
+
+/** "3 of 7", "1 match", or the "not in this chat" line. */
+export function findCountWords(current, total) {
+  if (!total) return FIND_NONE;
+  if (total === 1) return "1 match";
+  return `${current + 1} of ${total}`;
+}
+
+/** The last line under the results: more than shown, or stopped early. */
+export function searchMoreWords(v) {
+  if (!v) return "";
+  if (v.more) return "Showing the newest matches only. Add another word to narrow it down.";
+  if (v.partial) {
+    return `Stopped after the newest ${v.searched} conversations to stay quick. ` +
+      "Add another word to narrow it down.";
+  }
+  return "";
+}
+
+function readParts(parts) {
+  return (Array.isArray(parts) ? parts : [])
+    .filter((p) => p && typeof p.text === "string")
+    .map((p) => ({ text: p.text, hit: p.hit === true }));
+}
+
+/**
+ * `GET /api/history/search`'s answer, read. `available: false` is an
+ * older PC (Rust answers `{available: false, why}` for a 404 or 501).
+ * `queryOk: false` is a search the PC would not run (too short or too
+ * long), with its sentence in `why`.
+ */
+export function readSearch(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  if (a.available === false) {
+    return { available: false, why: text(a.why).trim() || TITLES_ONLY, conversations: [] };
+  }
+  const list = Array.isArray(a.conversations) ? a.conversations : [];
+  return {
+    available: true,
+    queryOk: a.query_ok !== false,
+    why: text(a.why).trim(),
+    whyNot: text(a.why_not).trim(),
+    more: a.more === true,
+    partial: a.partial === true,
+    searched: num(a.searched) ?? 0,
+    conversations: list
+      .filter((c) => c && typeof c.id === "string" && c.id)
+      .map((c) => {
+        const s = c.snippet && typeof c.snippet === "object" ? c.snippet : {};
+        return {
+          id: c.id,
+          title: text(c.title).trim(),
+          started: num(c.started),
+          updated: num(c.updated),
+          turns: num(c.turns) ?? 0,
+          device: text(c.device),
+          hasVoice: c.has_voice === true,
+          tainted: c.tainted === true,
+          hits: num(c.hits) ?? 0,
+          snippet: {
+            role: ["user", "assistant", "title"].includes(s.role) ? s.role : "user",
+            at: num(s.at),
+            before: s.before === true,
+            after: s.after === true,
+            parts: readParts(s.parts),
+          },
+        };
+      }),
+  };
+}
+
+/**
+ * Draws a snippet's parts into `box`: plain text, and each matched word in
+ * a `<mark>`. Text only (`el` sets `textContent`), so nothing the PC sends
+ * becomes markup. "…" where the PC cut the message.
+ */
+export function renderSnippet(box, snippet, { el }) {
+  box.replaceChildren();
+  const who = snippet.role === "assistant" ? "Jarvis: " : snippet.role === "title" ? "" : "You: ";
+  if (who) box.append(el("span", "search-who", who));
+  if (snippet.before) box.append("…");
+  for (const p of snippet.parts) {
+    box.append(p.hit ? el("mark", "search-hit", p.text) : document.createTextNode(p.text));
+  }
+  if (snippet.after) box.append("…");
+}
+
+/** The words to find, as one pattern: each word of `needle`, any case. */
+function findPattern(needle) {
+  const words = String(needle || "").trim().split(/\s+/).filter((w) => w.length >= 1);
+  if (!words.length) return null;
+  const escaped = words
+    .sort((a, b) => b.length - a.length)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(escaped.join("|"), "giu");
+}
+
+/**
+ * Where `needle`'s words are in an open conversation: `[{turn, start,
+ * end}]`, in reading order. Any of the words counts (the search found the
+ * conversation because every word is SOMEWHERE in it; each place is worth
+ * stepping to). Offsets are into each turn's text as the PC sent it.
+ */
+export function findMatches(conv, needle) {
+  const rx = findPattern(needle);
+  if (!rx || !conv || !Array.isArray(conv.turns)) return [];
+  const out = [];
+  conv.turns.forEach((t, turn) => {
+    const s = text(t.text);
+    rx.lastIndex = 0;
+    let m;
+    while ((m = rx.exec(s)) !== null) {
+      if (!m[0].length) { rx.lastIndex += 1; continue; }
+      out.push({ turn, start: m.index, end: m.index + m[0].length });
+    }
+  });
+  return out;
+}
+
+/** One turn's text with its matches marked; the current one is `.find-current`. */
+function markedText(el, s, matches, current) {
+  const p = el("p", "history-text");
+  if (!matches.length) {
+    p.textContent = s;
+    return p;
+  }
+  let at = 0;
+  for (const m of matches) {
+    if (m.start > at) p.append(document.createTextNode(s.slice(at, m.start)));
+    const mark = el("mark", m === current ? "find-hit find-current" : "find-hit", s.slice(m.start, m.end));
+    p.append(mark);
+    at = m.end;
+  }
+  if (at < s.length) p.append(document.createTextNode(s.slice(at)));
+  return p;
+}
+
 /**
  * Draws one conversation, read-only, into `box`. `helpers.el` is brain.js's
- * text-only element builder.
+ * text-only element builder. `find`, when given, is `{matches, current}`
+ * from findMatches(): those places are marked, the current one apart.
  */
-export function renderTranscript(box, conv, { el }) {
+export function renderTranscript(box, conv, { el }, find = null) {
   box.replaceChildren();
   if (conv.tainted) box.append(el("p", "history-taint-note", TAINT_TITLE));
   if (!conv.turns.length) {
     box.append(el("p", "empty", "Nothing was kept from this conversation."));
     return;
   }
+  const matches = find && Array.isArray(find.matches) ? find.matches : [];
+  const current = matches.length ? matches[Math.max(0, Math.min(matches.length - 1, find.current || 0))] : null;
   const list = el("ol", "history-turns");
-  for (const t of conv.turns) {
+  conv.turns.forEach((t, index) => {
     const item = el("li", "history-turn");
     item.dataset.role = t.role;
     const head = el("div", "history-turn-head");
@@ -335,11 +579,11 @@ export function renderTranscript(box, conv, { el }) {
       head.append(mark);
     }
     item.append(head);
-    item.append(el("p", "history-text", t.text));
+    item.append(markedText(el, text(t.text), matches.filter((m) => m.turn === index), current));
     if (t.role === "user" && t.answerKept === false) {
       item.append(el("p", "history-not-kept", NOT_KEPT_LINE));
     }
     list.append(item);
-  }
+  });
   box.append(list);
 }

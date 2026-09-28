@@ -451,7 +451,7 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
             .map_err(|e| format!("unable to focus settings: {e}"));
     }
 
-    tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         app,
         SETTINGS_LABEL,
         tauri::WebviewUrl::App("settings.html".into()),
@@ -461,11 +461,18 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
     .min_inner_size(520.0, 480.0)
     .center()
     .resizable(true)
-    .focused(true)
+    // Hidden until it is back where the owner left it (window_memory.rs),
+    // so it does not flash up centred first and then jump.
+    .visible(false)
     .theme(Some(tauri::Theme::Dark))
     .build()
-    .map(|_| ())
-    .map_err(|e| format!("unable to open settings: {e}"))
+    .map_err(|e| format!("unable to open settings: {e}"))?;
+    crate::window_memory::restore(&window, true);
+    window
+        .show()
+        .map_err(|e| format!("unable to open settings: {e}"))?;
+    let _ = window.set_focus();
+    Ok(())
 }
 
 pub const BRAIN_LABEL: &str = "brain";
@@ -504,7 +511,7 @@ pub(crate) fn show_brain_unlocked(app: &AppHandle) -> Result<(), String> {
             .map_err(|e| format!("unable to focus the Brain: {e}"));
     }
 
-    tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         app,
         BRAIN_LABEL,
         tauri::WebviewUrl::App("brain.html".into()),
@@ -514,11 +521,18 @@ pub(crate) fn show_brain_unlocked(app: &AppHandle) -> Result<(), String> {
     .min_inner_size(880.0, 600.0)
     .center()
     .resizable(true)
-    .focused(true)
+    // Hidden until it is back where the owner left it (window_memory.rs),
+    // so it does not flash up centred first and then jump.
+    .visible(false)
     .theme(Some(tauri::Theme::Dark))
     .build()
-    .map(|_| ())
-    .map_err(|e| format!("unable to open the Brain: {e}"))
+    .map_err(|e| format!("unable to open the Brain: {e}"))?;
+    crate::window_memory::restore(&window, true);
+    window
+        .show()
+        .map_err(|e| format!("unable to open the Brain: {e}"))?;
+    let _ = window.set_focus();
+    Ok(())
 }
 
 /// Label of the faces window.
@@ -548,7 +562,7 @@ pub fn show_faces(app: &AppHandle) -> Result<(), String> {
             .map_err(|e| format!("unable to focus Faces: {e}"));
     }
 
-    tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         app,
         FACES_LABEL,
         tauri::WebviewUrl::App("faces.html".into()),
@@ -558,11 +572,18 @@ pub fn show_faces(app: &AppHandle) -> Result<(), String> {
     .min_inner_size(900.0, 620.0)
     .center()
     .resizable(true)
-    .focused(true)
+    // Hidden until it is back where the owner left it (window_memory.rs),
+    // so it does not flash up centred first and then jump.
+    .visible(false)
     .theme(Some(tauri::Theme::Dark))
     .build()
-    .map(|_| ())
-    .map_err(|e| format!("unable to open Faces: {e}"))
+    .map_err(|e| format!("unable to open Faces: {e}"))?;
+    crate::window_memory::restore(&window, true);
+    window
+        .show()
+        .map_err(|e| format!("unable to open Faces: {e}"))?;
+    let _ = window.set_focus();
+    Ok(())
 }
 
 /// Label of the first-run walkthrough.
@@ -623,6 +644,9 @@ pub(crate) fn show_hud_unlocked(app: &AppHandle) -> Result<(), String> {
     window
         .show()
         .map_err(|e| format!("unable to show the HUD: {e}"))?;
+    // Maximised last time but built hidden: maximised now that it is on
+    // screen, never before (window_memory.rs).
+    crate::window_memory::finish_showing(&window);
     // A window that was minimised stays minimised on `show`.
     let _ = window.unminimize();
     window

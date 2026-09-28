@@ -61,9 +61,12 @@ SHIPPED = {
 
 
 def _with(tiers: dict, *, lights=False, lights_waiting=False, loosen_waiting=None,
-          search_every=False, tools_enabled=(), tool_waiting=None):
+          search_every=False, tools_enabled=(), tool_waiting=None, lockdown=False,
+          lockdown_waiting=False):
     AF._reset_for_tests()
-    AF._tier = lambda a: tiers.get(a, "ask")
+    # The file's own tiers, and what Lockdown leaves of them (lockdown_tier).
+    AF._file_tier = lambda a: tiers.get(a, "ask")
+    AF._tier = lambda a: AF.lockdown_tier(a, tiers.get(a, "ask"))
     AF._search_asks_every_time = lambda: search_every
     AF._file_tiers = lambda: dict(tiers)
     AF._config_dir = lambda: _TMP
@@ -79,6 +82,13 @@ def _with(tiers: dict, *, lights=False, lights_waiting=False, loosen_waiting=Non
         AF._L_STATE["pending"].update(id="p1", action=loosen_waiting, since=0)
     if tool_waiting:
         AF._T_STATE["pending"].update(id="t1", tool=tool_waiting, since=0)
+    k = _TMP / "lockdown.json"
+    if lockdown:
+        k.write_text(json.dumps({"on": True, "changed": 0}), encoding="utf-8")
+    elif k.exists():
+        k.unlink()
+    if lockdown_waiting:
+        AF._K_STATE["pending"].update(id="k1", since=0)
 
 
 def cases() -> dict:
@@ -93,6 +103,14 @@ def cases() -> dict:
     _with(stricter, lights_waiting=True, loosen_waiting="calendar_read",
           tool_waiting="email_read")
     out["phone_cards_waiting"] = AF.view(here=False)
+    # Lockdown (2026-09-28): on, as the PC and the phone see it, and with
+    # the card to turn it off waiting.
+    _with(SHIPPED, lockdown=True)
+    out["pc_lockdown_on"] = AF.view(here=True)
+    out["phone_lockdown_on"] = AF.view(here=False)
+    _with(SHIPPED, lockdown=True, lockdown_waiting=True)
+    out["pc_lockdown_off_card_waiting"] = AF.view(here=True)
+    _with(SHIPPED)
     AF._reset_for_tests()
     return {
         "cases": out,
@@ -108,6 +126,12 @@ def cases() -> dict:
             "says_search": AF.SAYS_SEARCH,
             "tools_label": AF.TOOLS_LABEL, "tools_detail": AF.TOOLS_DETAIL,
             "tools_pc_only": AF.TOOLS_PC_ONLY, "tools_not_on_list": AF.TOOLS_NOT_ON_LIST,
+            "lockdown_label": AF.LOCKDOWN_LABEL, "lockdown_detail": AF.LOCKDOWN_DETAIL,
+            "lockdown_on_says": AF.LOCKDOWN_ON_SAYS, "lockdown_off_says": AF.LOCKDOWN_OFF_SAYS,
+            "lockdown_on_label": AF.LOCKDOWN_ON_LABEL,
+            "lockdown_off_label": AF.LOCKDOWN_OFF_LABEL,
+            "lockdown_pc_only": AF.LOCKDOWN_PC_ONLY, "lockdown_waiting": AF.LOCKDOWN_WAITING,
+            "lockdown_row_note": AF.LOCKDOWN_ROW_NOTE, "lockdown_action": AF.LOCKDOWN,
         },
     }
 

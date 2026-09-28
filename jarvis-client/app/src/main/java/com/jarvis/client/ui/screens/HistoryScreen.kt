@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,7 +28,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
@@ -41,6 +50,7 @@ import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalChrome
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
@@ -57,11 +67,17 @@ import java.time.ZoneId
  *   A choice that deletes something now asks first.
  * - The list, newest first, with "Load older". Open one to read it; delete
  *   one after a confirm. There is no "delete all" - not here, not on the PC.
- * - A search box over the list already loaded, by title only (ease-of-use
- *   audit row 20; the owner's answer of 2026-09-27: "shown on screen only;
- *   nothing saved, nothing handed to the AI"). Pure client-side filtering
- *   ([ChatLog.filtered]) - no new route, and the desktop's History does the
- *   same (brain.js `paintHistoryList`).
+ * - A search box (the owner's answer of 2026-09-27: "shown on screen only;
+ *   nothing saved, nothing handed to the AI"). Since 2026-09-28 (JARVIS-API
+ *   section 71) two letters or more ask the PC to search what was SAID
+ *   ([JarvisRuntime.historySearch]): each kept turn is opened in the PC's
+ *   memory for that one search, with no index and nothing kept, and each
+ *   result shows a snippet with the words marked. One letter, or a PC
+ *   without the search, narrows the loaded list by title ([ChatLog.filtered]).
+ *   The desktop's History does the same (brain.js `onHistorySearch`).
+ * - "Find in this chat" in an open conversation: a box, Previous, Next and
+ *   "2 of 7", done on the phone over what is already open. Opened from a
+ *   search result, it starts with the search words.
  *
  * Everything is read from the PC when the screen opens and dropped when it
  * is left. The phone keeps no history of its own.
@@ -96,9 +112,44 @@ fun HistoryScreen(
     // The conversation open for reading. Saveable, so a rotation keeps it open.
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     var listSaid by remember { mutableStateOf<String?>(null) }
-    // The search box: filters the list already loaded, by title only.
-    // Nothing is sent to the PC and nothing reaches the AI.
-    var search by rememberSaveable { mutableStateOf("") }
+    // The search box (docs/JARVIS-API.md section 71). Two letters or more:
+    // the PC searches what was SAID in the kept chats, opening each in its
+    // memory for this one search - no index, nothing kept, nothing handed to
+    // the AI. One letter, or a PC without the search: the loaded list, by
+    // title. `remember`, not `rememberSaveable`: the words searched for are
+    // not put in the saved screen state either.
+    var search by remember { mutableStateOf("") }
+    var found by remember { mutableStateOf<ChatLog.Search?>(null) }
+    var searching by remember { mutableStateOf(false) }
+    var searchError by remember { mutableStateOf<String?>(null) }
+    var oldPc by remember { mutableStateOf(false) }
+    // The words to find at once in the conversation opened from a result.
+    var findFirst by remember { mutableStateOf("") }
+    val wordSearch = !oldPc && search.trim().length >= ChatLog.SEARCH_MIN
+    // Each change of the words (or of the hidden state) starts one search
+    // after a short pause; a newer change cancels the older one, answer and
+    // all. Nothing is asked while the lists are hidden.
+    LaunchedEffect(search, privateHidden, oldPc) {
+        found = null
+        searchError = null
+        if (privateHidden || !wordSearch) {
+            searching = false
+            return@LaunchedEffect
+        }
+        searching = true
+        delay(350)
+        val r = JarvisRuntime.historySearch(search)
+        searching = false
+        when (r) {
+            null -> Unit
+            is ApiResult.Ok -> found = ChatLog.search(r.value)
+            is ApiResult.Failed -> if (ChatLog.searchMissing(r.error)) {
+                oldPc = true
+            } else {
+                searchError = ChatLog.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
+            }
+        }
+    }
 
     val queue by JarvisRuntime.pending.collectAsState()
     val cardInQueue = ChatLog.cardWaiting(queue.map { it.action })
@@ -147,9 +198,11 @@ fun HistoryScreen(
             } else {
                 Conversation(
                     id = open,
+                    initialFind = findFirst,
                     modifier = Modifier.weight(1f),
                     onDeleted = { id, sentence ->
                         rows = rows?.filterNot { it.id == id }
+                        found = found?.let { f -> f.copy(found = f.found.filterNot { it.row.id == id }) }
                         listSaid = sentence
                         openId = null
                     },
@@ -279,9 +332,11 @@ fun HistoryScreen(
             } else {
                 val shown = rows
                 val err = readError
-                // The search box narrows `shown` for display only - paging
-                // ("Load older") still works from the full, unfiltered list.
-                val visible = if (shown != null) ChatLog.filtered(shown, search) else null
+                // One letter, or a PC without the word search: the box
+                // narrows `shown` by title, for display only - paging ("Load
+                // older") still works from the full, unfiltered list. Two
+                // letters or more: the PC's results replace the list.
+                val visible = if (shown != null && !wordSearch) ChatLog.filtered(shown, search) else null
                 item(key = "list-head") {
                     Column(Modifier.fillMaxWidth()) {
                         Kicker("Conversations")
@@ -311,6 +366,28 @@ fun HistoryScreen(
                                 color = chrome.textMid,
                             )
                         }
+                        if (oldPc && search.isNotBlank()) {
+                            Text(ChatLog.SEARCH_OLD, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                        }
+                        if (wordSearch) {
+                            Text(ChatLog.SEARCH_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                            Gap(4)
+                            val f = found
+                            val e = searchError
+                            Text(
+                                when {
+                                    e != null -> "Couldn't search: $e"
+                                    searching || f == null -> ChatLog.SEARCHING
+                                    !f.queryOk -> f.why ?: ChatLog.SEARCH_NONE
+                                    f.found.isEmpty() -> f.whyNot ?: ChatLog.SEARCH_NONE
+                                    f.found.size == 1 -> "1 conversation matches."
+                                    else -> "${f.found.size} conversations match."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (e != null) chrome.warnInk else chrome.textMid,
+                                modifier = Modifier.liveStatus(),
+                            )
+                        }
                         if (shown != null && err != null) {
                             Text(
                                 "Couldn't read it again: $err",
@@ -328,9 +405,28 @@ fun HistoryScreen(
                         }
                     }
                 }
+                if (wordSearch && !searching) {
+                    val f = found
+                    if (f != null && f.queryOk) {
+                        items(f.found, key = { "f-" + it.row.id }) { hit ->
+                            FoundRow(hit, onOpen = {
+                                findFirst = search.trim()
+                                openId = hit.row.id
+                            })
+                        }
+                        ChatLog.searchMoreLine(f)?.let { more ->
+                            item(key = "search-more") {
+                                Text(more, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                            }
+                        }
+                    }
+                }
                 if (visible != null) {
                     items(visible, key = { "c-" + it.id }) { row ->
-                        ConversationRow(row, onOpen = { openId = row.id })
+                        ConversationRow(row, onOpen = {
+                            findFirst = ""
+                            openId = row.id
+                        })
                     }
                     if (mayHaveOlder && shown != null && shown.isNotEmpty()) {
                         item(key = "older") {
@@ -399,9 +495,58 @@ private fun ConversationRow(row: ChatLog.Summary, onOpen: () -> Unit) {
     }
 }
 
+/** A matched word: tinted AND underlined, so it never rests on colour alone. */
+@Composable
+private fun hitStyle(current: Boolean = false): SpanStyle = SpanStyle(
+    background = MaterialTheme.colorScheme.primary.copy(alpha = if (current) 0.42f else 0.2f),
+    textDecoration = TextDecoration.Underline,
+    fontWeight = if (current) FontWeight.Bold else null,
+)
+
+/** One search result: the row, then the snippet with the search words marked. */
+@Composable
+private fun FoundRow(hit: ChatLog.Found, onOpen: () -> Unit) {
+    val chrome = LocalChrome.current
+    val zone = remember { ZoneId.systemDefault() }
+    val today = LocalDate.now(zone)
+    val marked = hitStyle()
+    val snippet = remember(hit, marked) {
+        buildAnnotatedString {
+            append(ChatLog.snippetWho(hit.snippet))
+            if (hit.snippet.cutBefore) append("…")
+            for (p in hit.snippet.parts) {
+                if (p.hit) withStyle(marked) { append(p.text) } else append(p.text)
+            }
+            if (hit.snippet.cutAfter) append("…")
+        }
+    }
+    Plate(Modifier.pressable(onClick = onOpen)) {
+        Text(hit.row.title, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi, maxLines = 2)
+        Gap(2)
+        Text(
+            listOfNotNull(ChatLog.rowLine(hit.row, zone, today), ChatLog.hitsLine(hit.hits)).joinToString(" · "),
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+        )
+        Gap(4)
+        Text(snippet, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        if (hit.row.hasVoice || hit.row.tainted) {
+            Gap(4)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (hit.row.hasVoice) Pill(ChatLog.VOICE_MARK)
+                if (hit.row.tainted) Pill(ChatLog.TAINT_MARK, color = chrome.warnInk)
+            }
+        }
+    }
+}
+
 /**
  * One conversation, read-only, with Delete behind a confirm. Read from the
  * PC when opened; nothing of it is kept once it is closed.
+ *
+ * "Find in this chat" (section 71): a box, Previous, Next and "2 of 7",
+ * over the conversation already open - the PC is not asked. [initialFind]
+ * is the search words when it was opened from a search result.
  */
 // FlowRow: a turn's marks ("said aloud, but not confirmed by this PC",
 // "read outside text") wrap to a new line instead of being squeezed. The
@@ -410,6 +555,7 @@ private fun ConversationRow(row: ChatLog.Summary, onOpen: () -> Unit) {
 @Composable
 private fun Conversation(
     id: String,
+    initialFind: String,
     modifier: Modifier,
     onDeleted: (id: String, sentence: String) -> Unit,
 ) {
@@ -422,6 +568,31 @@ private fun Conversation(
     var confirm by remember(id) { mutableStateOf(false) }
     var busy by remember(id) { mutableStateOf(false) }
     var said by remember(id) { mutableStateOf<String?>(null) }
+    // Deleting a chat offers to forget the facts it taught (docs/JARVIS-API.md
+    // section 79): read when Delete is pressed; NONE ticked to start with.
+    var taught by remember(id) { mutableStateOf<ChatLog.Taught?>(null) }
+    var ticked by remember(id) { mutableStateOf(setOf<Long>()) }
+    LaunchedEffect(id, confirm) {
+        if (confirm) {
+            taught = null
+            ticked = emptySet()
+            taught = JarvisRuntime.chatFacts(id)
+        }
+    }
+    var find by remember(id) { mutableStateOf(initialFind) }
+    var current by remember(id) { mutableIntStateOf(0) }
+    val matches = remember(loaded, find) {
+        loaded?.let { ChatLog.findMatches(it.turns, find) }.orEmpty()
+    }
+    val listState = rememberLazyListState()
+    // The current match's message scrolled into view: item 0 is the head,
+    // message i is item i + 1.
+    LaunchedEffect(current, matches) {
+        val m = matches.getOrNull(current) ?: return@LaunchedEffect
+        listState.animateScrollToItem(m.turn + 1)
+    }
+    val marked = hitStyle()
+    val markedNow = hitStyle(current = true)
     LaunchedEffect(id) {
         when (val r = JarvisRuntime.historyConversation(id)) {
             is ApiResult.Ok -> {
@@ -434,6 +605,7 @@ private fun Conversation(
 
     LazyColumn(
         modifier.fillMaxWidth(),
+        state = listState,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -451,20 +623,81 @@ private fun Conversation(
                 }
                 Gap(6)
                 if (confirm) {
-                    Text(ChatLog.DELETE_CONFIRM, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Quiet("Yes, delete it", color = chrome.badInk, enabled = !busy, onClick = {
-                            confirm = false
-                            busy = true
-                            scope.launch {
-                                try {
-                                    val (gone, sentence) = JarvisRuntime.deleteHistory(id)
-                                    if (gone) onDeleted(id, sentence) else said = sentence
-                                } finally {
-                                    busy = false
+                    val t = taught
+                    val facts = t?.facts.orEmpty()
+                    when {
+                        t == null -> Text(
+                            "Checking which facts this chat taught…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid,
+                        )
+                        facts.isEmpty() -> Text(
+                            if ((t?.hiddenCount ?: 0) > 0) {
+                                "Delete this conversation from your PC? This cannot be undone. " +
+                                    ChatLog.chatFactsHiddenLine(t?.hiddenCount ?: 0)
+                            } else {
+                                ChatLog.DELETE_CONFIRM
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.warnInk,
+                        )
+                        else -> {
+                            Text(
+                                ChatLog.chatFactsIntro(facts.size),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid,
+                            )
+                            facts.forEach { fact ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = fact.id in ticked,
+                                        enabled = !busy,
+                                        onCheckedChange = { on ->
+                                            ticked = if (on) ticked + fact.id else ticked - fact.id
+                                        },
+                                    )
+                                    Text(fact.text, style = MaterialTheme.typography.bodySmall,
+                                        color = chrome.textHi)
                                 }
                             }
-                        })
+                            Text(
+                                ChatLog.deleteAndForgetConfirm(ticked.size),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.warnInk,
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Quiet(
+                            if (facts.isEmpty()) "Yes, delete it" else ChatLog.deleteChatButton(ticked.size),
+                            color = chrome.badInk,
+                            enabled = !busy && t != null,
+                            onClick = {
+                                // Read at the tap: exactly the facts ticked now.
+                                val forget = facts.filter { it.id in ticked }.map { it.id }
+                                confirm = false
+                                busy = true
+                                scope.launch {
+                                    try {
+                                        val (gone, sentence) = JarvisRuntime.deleteHistory(id)
+                                        if (gone) {
+                                            // One Forget per ticked fact - never a list form.
+                                            var forgot = 0
+                                            var failed = 0
+                                            for (factId in forget) {
+                                                val (ok, _) = JarvisRuntime.forgetAutoFact(factId)
+                                                if (ok) forgot += 1 else failed += 1
+                                            }
+                                            onDeleted(id, ChatLog.deleteDoneWords(sentence, forgot, failed))
+                                        } else {
+                                            said = sentence
+                                        }
+                                    } finally {
+                                        busy = false
+                                    }
+                                }
+                            },
+                        )
                         Quiet("Keep it", onClick = { confirm = false })
                     }
                 } else {
@@ -478,6 +711,36 @@ private fun Conversation(
                 said?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk,
                         modifier = Modifier.liveStatus())
+                }
+                if (loaded != null) {
+                    Gap(8)
+                    TextInput(
+                        value = find,
+                        onValueChange = {
+                            find = it
+                            current = 0
+                        },
+                        placeholder = ChatLog.FIND_PLACEHOLDER,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Quiet("Previous", enabled = matches.size > 1, onClick = {
+                            current = (current - 1 + matches.size) % matches.size
+                        })
+                        Quiet("Next", enabled = matches.size > 1, onClick = {
+                            current = (current + 1) % matches.size
+                        })
+                        if (find.isNotBlank()) {
+                            Text(
+                                ChatLog.findCount(current, matches.size),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textMid,
+                                modifier = Modifier.liveStatus(),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -503,8 +766,17 @@ private fun Conversation(
                     }
                 }
                 Gap(2)
+                val here = matches.filter { it.turn == i }
+                val now = matches.getOrNull(current)
                 Text(
-                    turn.text,
+                    if (here.isEmpty()) {
+                        AnnotatedString(turn.text)
+                    } else {
+                        buildAnnotatedString {
+                            append(turn.text)
+                            for (m in here) addStyle(if (m == now) markedNow else marked, m.start, m.end)
+                        }
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (mine) chrome.textHi else chrome.textMid,
                 )

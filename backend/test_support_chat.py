@@ -965,8 +965,16 @@ def t_shipped_and_documented():
     start = ps1.index("$PATCHES = @(")
     names = [ln.strip().strip("'") for ln in ps1[start:ps1.index("\n)", start)].splitlines()
              if ln.strip().startswith("'")]
-    check("support-chat.patch is last, after forget-range.patch (its context)",
-          names[-1] == "support-chat.patch" and names[-2] == "forget-range.patch", names[-3:])
+    # Right after forget-range.patch (its context in jarvis_gate.py). The
+    # patches after it since GitHub's main was merged (brain-reads ->
+    # history-import, 2026-09-28) touch jarvis_hud.py only, never the gate.
+    at = names.index("support-chat.patch") if "support-chat.patch" in names else -1
+    later_gate = [n for n in names[at + 1:]
+                  if "+++ b/jarvis_gate.py" in (HERE / n).read_text(encoding="utf-8")] if at >= 0 else []
+    check("support-chat.patch comes right after forget-range.patch (its context), "
+          "and no later patch touches jarvis_gate.py",
+          at > 0 and names[at - 1] == "forget-range.patch" and not later_gate,
+          (names[at - 1:at + 2], later_gate))
     try:
         import _stack
         text, log = _stack.stand_in("jarvis_gate.py")

@@ -25,6 +25,12 @@ import kotlinx.serialization.json.contentOrNull
  *  - the loosening card itself cannot be approved here ([APPROVE_ON_PC]);
  *  - "Lights, plugs and fans without a card": ON is one approval card on the
  *    PC, held on a stale link; OFF is at once.
+ *  - Lockdown (2026-09-28): one tap makes every way out of the PC ask first,
+ *    or stop. The phone can turn it ON - at once, never held on a stale
+ *    link, the same route as "Ask me first" ([lockdownBody]) - and never
+ *    OFF: that is the PC's alone, one card plus Windows Hello, like
+ *    loosening. Home says "Lockdown is on" from the handshake and the
+ *    `lockdown` event ([lockdownFrom]).
  *
  * Pure Kotlin, no Android types, so `AsksFirstTest` runs it on a plain JVM.
  */
@@ -59,6 +65,32 @@ object AsksFirst {
             "read outside text in the chat. Turning this on shows you an approval card first; " +
             "turning it off happens at once."
     const val LIGHTS_WAITING = "Waiting for your yes on the approval card, on your PC or phone."
+
+    /** Lockdown (2026-09-28) - the PC's words, `jarvis_asks_first.LOCKDOWN_*`. */
+    const val LOCKDOWN_ACTION = "lockdown"
+    const val LOCKDOWN_LABEL = "Lockdown"
+    const val LOCKDOWN_DETAIL =
+        "One tap makes every way out of this PC ask you first, or stop: web search and research, " +
+            "sending or saving email, reading your calendar, email and Home Assistant, your smart " +
+            "home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and " +
+            "checking for tool updates. Turning it on is instant, from either app. Turning it off is " +
+            "on the PC only, with an approval card and Windows Hello."
+    const val LOCKDOWN_ON_SAYS =
+        "Lockdown is on: everything that would leave this PC asks you first, and anything that " +
+            "runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped."
+    const val LOCKDOWN_OFF_SAYS = "Lockdown is off: everything asks first as your settings say."
+    const val LOCKDOWN_ON_LABEL = "Turn on Lockdown"
+    const val LOCKDOWN_PC_ONLY =
+        "Lockdown can only be turned off on the PC (Settings, What asks first), with an approval " +
+            "card and Windows Hello."
+    const val LOCKDOWN_WAITING =
+        "Waiting for your yes on the approval card, and Windows Hello, on your PC."
+
+    /** Home's line while Lockdown is on - the desktop bar's strip, in the phone's place. */
+    const val LOCKDOWN_BAR_LABEL = "Lockdown is on"
+    const val LOCKDOWN_HOME_LINE =
+        "Everything that would leave the PC asks you first, and anything that runs by itself " +
+            "has stopped. It can be turned off only on the PC: Settings, What asks first."
 
     /** On the approval card of [LOOSEN_ACTION], in place of Approve. */
     const val APPROVE_ON_PC =
@@ -97,6 +129,16 @@ object AsksFirst {
         val why: String,
     )
 
+    /** Lockdown's state, as the PC says it; null from a PC without it. */
+    data class Lockdown(
+        val on: Boolean,
+        val waiting: Boolean,
+        val last: String,
+        val lastOutcome: String,
+        val why: String,
+        val says: String,
+    )
+
     data class View(
         val title: String,
         val detail: String,
@@ -105,6 +147,7 @@ object AsksFirst {
         val waiting: Waiting?,
         val last: Last?,
         val lights: Lights?,
+        val lockdown: Lockdown? = null,
     )
 
     /** `GET /api/asks_first`, read - or null when it is not one (an older PC). */
@@ -128,8 +171,52 @@ object AsksFirst {
             waiting = w?.let { Waiting(it.text("action") ?: "", it.text("title") ?: "", it.text("said") ?: WAITING) },
             last = l?.let { Last(it.text("outcome") ?: "", it.text("action") ?: "", it.text("message") ?: "") },
             lights = (body["lights"] as? JsonObject)?.let(::lights),
+            lockdown = (body["lockdown"] as? JsonObject)?.let(::lockdown),
         )
     }
+
+    private fun lockdown(o: JsonObject): Lockdown? {
+        val on = o.flag("on") ?: return null
+        val last = o["last"] as? JsonObject
+        return Lockdown(
+            on = on,
+            waiting = o.flag("waiting") == true,
+            last = last?.text("message") ?: "",
+            lastOutcome = last?.text("outcome") ?: "",
+            why = o.text("why") ?: "",
+            says = o.text("says") ?: if (on) LOCKDOWN_ON_SAYS else LOCKDOWN_OFF_SAYS,
+        )
+    }
+
+    /**
+     * Lockdown's box on the phone: its lines, and whether "Turn on Lockdown"
+     * is offered - only while it is off. Never held on a stale link: it only
+     * makes Jarvis ask more. Once on, the phone cannot turn it off; the
+     * lines say where to.
+     */
+    data class LockdownView(val show: Boolean, val on: Boolean, val lines: List<String>, val canTurnOn: Boolean)
+
+    fun lockdownView(k: Lockdown?): LockdownView {
+        if (k == null) return LockdownView(false, false, emptyList(), false)
+        val lines = buildList {
+            add(k.says)
+            if (k.why.isNotEmpty()) add(k.why.replaceFirstChar { it.uppercase() } + ".")
+            if (k.waiting) add(LOCKDOWN_WAITING)
+            else if (k.last.isNotEmpty() && k.lastOutcome != "off") add(k.last)
+            if (k.on) add(LOCKDOWN_PC_ONLY)
+        }
+        return LockdownView(true, k.on, lines, canTurnOn = !k.on)
+    }
+
+    /** The one Lockdown body the phone sends: ON. Never OFF. */
+    fun lockdownBody(): String = "{\"action\":\"$LOCKDOWN_ACTION\",\"ask\":true}"
+
+    /**
+     * Whether Lockdown is on, from `/api/version`'s `capabilities.lockdown`
+     * or the `lockdown` event's data (`{"on": bool}`) - null for anything
+     * else (an older PC).
+     */
+    fun lockdownFrom(o: JsonObject?): Boolean? = o?.flag("on")
 
     private fun row(o: JsonObject): Row? {
         val id = o.text("id") ?: return null

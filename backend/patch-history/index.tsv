@@ -15,6 +15,7 @@ auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e03
 auto-learn.patch	auto-learn/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44+00:00	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
 big-model.patch	big-model/ee05ef0.patch	ee05ef0b3dcca894079a3ccda259a71560e2f8cc	2026-09-24T04:35:14+00:00	Big model: big-model.patch, the install lists, and parity
 bitemporal.patch	bitemporal/688640e.patch	688640efca47502ec38032394fa127eabb03101b	2026-09-15T03:28:09+00:00	bitemporal.patch: the second time axis, and a surface that shows it
+brain-reads.patch	brain-reads/59e753f.patch	59e753f5957b93d8050804473c93ad99612fab6c	2026-09-28T06:49:07+00:00	Backend: search what was said in old chats, and a fact's history
 briefing.patch	briefing/344c940.patch	344c94087a901ed8751c3ef580ead344fc9da9fb	2026-09-27T05:04:58+00:00	Open or adjust any setting by voice or chat
 briefing.patch	briefing/5a84390.patch	5a84390453709180a51bef119ff1d4c3e5ec6f4f	2026-09-25T05:39:03+00:00	Morning briefing: new emails' count AND senders, with a setting for the count only
 briefing.patch	briefing/a0305da.patch	a0305dabd58fb35767fc11f2cbc914701eaf2057	2026-09-25T05:06:37+00:00	Merge the morning briefing and the back-off for offers

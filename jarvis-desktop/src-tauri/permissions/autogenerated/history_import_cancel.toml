@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-history-import-cancel"
+description = "Enables the history_import_cancel command without any pre-configured scope."
+commands.allow = ["history_import_cancel"]
+
+[[permission]]
+identifier = "deny-history-import-cancel"
+description = "Denies the history_import_cancel command without any pre-configured scope."
+commands.deny = ["history_import_cancel"]

@@ -14,12 +14,17 @@ That sentence is the specification for `reminder_card()`: something that
 OFFERS, once a day, and can be switched off by a `remind` setting. The config
 section is `[memory.sleep_time]`.
 
-DELIBERATELY DOES NOT RUN ANYTHING YET. The owner's own recorded decision was
-to "park all memory-system work until Jarvis is actually running and he has
-used it for a while". A consolidation pass that reorganises memory unattended
-is exactly the thing that decision was about, so this module reports and
-offers; it does not consolidate. An INFERRED implementation of the pass itself
-would be a silent, unreviewed rewrite of the fact store.
+IT RAISES CARDS, AND DOES NOTHING ELSE (2026-09-28). Until then this module
+only reported and offered: the owner's recorded decision was to "park all
+memory-system work until Jarvis is actually running", and a pass that
+reorganises memory unattended is exactly what that decision was about. The
+owner's later decisions (2026-09-26: "then the overnight tidy - cards only,
+never changing memory by itself"; 2026-09-28: smarter memory dates) built
+the smallest pass that rule allows, in jarvis_tidy.py: one look a day, on
+the one shared scheduler, that offers "Still true?" and "Which is true
+now?" review cards - each about ONE fact, nothing changed unless the owner
+accepts it. This switch is its only on/off: set_enabled() adds or removes
+its job. Still no merging, no rewording and no retiring by itself.
 
 `set_enabled`/`set_remind`/`not_now` answer the card's own three actions
 ("enable", "not now", "stop asking") so a client can act on it - `not_now`
@@ -112,15 +117,21 @@ def _set(key: str, value: bool) -> dict:
 
 
 def set_enabled(on: bool) -> dict:
-    """The card's "enable" action. Starts nothing - turning this on only
-    records the wish and stops `reminder_card()` from offering again; the
-    consolidation pass itself remains unimplemented, see the module
-    docstring. If it is ever built, it may only PROPOSE changes as review
-    cards: nothing retires a stored fact without the owner's yes on that
-    one fact."""
+    """The card's "enable" action (and turning it off again). On: the
+    overnight tidy's one look a day is put on the scheduler (jarvis_tidy.
+    ensure_job) - it only PROPOSES, as review cards; nothing retires a
+    stored fact without the owner's yes on that one fact. Off: the job is
+    removed at once, and a look already due finds the switch off and does
+    nothing."""
     out = _set("enabled", on)
     if on and out.get("ok"):
         _backoff_do("accepted")
+    if out.get("ok"):
+        try:
+            import jarvis_tidy
+            out["tidy_job"] = jarvis_tidy.ensure_job()
+        except Exception:
+            out["tidy_job"] = ""
     return out
 
 
@@ -257,23 +268,24 @@ def reminder_card() -> Optional[dict]:
             pass
     # The words are the whole of this card, so they must be true. They used
     # to promise a pass that would "merge duplicates and retire facts that
-    # newer ones replaced" - nothing does either (status() says
-    # "implemented": false), and a pass that retired facts by itself would
-    # break the rule that no fact is retired without the owner's yes on that
-    # one fact. So: what is built (nothing runs), what switching it on does
-    # (records a wish), and what any future version may do (ask, card by
-    # card). The clients show `title` and `body` as they are.
+    # newer ones replaced" - nothing does either, and a pass that retired
+    # facts by itself would break the rule that no fact is retired without
+    # the owner's yes on that one fact. Since 2026-09-28 the pass is built
+    # (jarvis_tidy.py) and does exactly what this says: it ASKS, card by
+    # card, and changes nothing by itself. The clients show `title` and
+    # `body` as they are.
     return {
         "kind": "sleep_time_offer",
-        "title": "Overnight memory tidying - not built yet",
-        "body": ("One day, Jarvis could look over what it learned each day and "
-                 "suggest tidying it, such as merging repeats - as ordinary "
-                 "review cards you answer one at a time. None of that is built "
-                 "yet. Switching it on only records that you want it: nothing "
-                 "runs, and nothing in memory changes. Jarvis never changes or "
-                 "retires a stored fact without your yes on that one fact."),
+        "title": "Overnight memory tidying",
+        "body": ("Once a day, Jarvis can look over what it knows and ask you about "
+                 "facts that may be out of date: one it was told would end on a date "
+                 "that has passed (\"Still true?\"), or two that may not both be true "
+                 "(\"Which is true now?\"). It asks with ordinary review cards - at "
+                 "most five a night - using the AI model on this PC only. Nothing in "
+                 "memory changes by itself: Jarvis never changes or retires a stored "
+                 "fact without your yes on that one fact."),
         "actions": ["enable", "not now", "stop asking"],
-        "implemented": False,
+        "implemented": True,
         "config": "[memory.sleep_time] enabled / remind",
     }
 
@@ -283,9 +295,9 @@ _seen: dict = {}
 
 def status() -> dict:
     return {"enabled": enabled(), "remind": remind(), "hour": hour(),
-            "implemented": False,
-            "note": "reports and offers; the consolidation pass itself is "
-                    "deliberately not implemented - see the module docstring"}
+            "implemented": True,
+            "note": "cards only: once a day, \"Still true?\" and \"Which is true now?\" "
+                    "review cards (jarvis_tidy.py); nothing in memory changes by itself"}
 
 
 if __name__ == "__main__":

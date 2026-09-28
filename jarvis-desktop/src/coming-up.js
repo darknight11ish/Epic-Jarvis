@@ -112,10 +112,48 @@ export const STANDBY_DEFAULT_END = "07:00";
  */
 export const TELLME_TITLE = "Tell me when";
 export const TELLME_HINT =
-  "Say or type \"tell me when an email from Alex arrives\" or \"tell me when the washing " +
-  "machine finishes\" - add \"urgently\" to make it ring until you look. Setting one up asks " +
-  "once with an approval card; when it happens, Jarvis only tells you.";
+  "Say or type \"tell me when an email from Alex arrives\", \"tell me when the washing " +
+  "machine finishes\", \"tell me when a search for Kokoro voices shows something new\", " +
+  "\"tell me when the price on https://example.com/kettle drops below 25\" or \"tell me when " +
+  "CI fails on owner/repo\" - add \"urgently\" to make it ring until you look. Setting one up " +
+  "asks once with an approval card; when it happens, Jarvis only tells you. If a watch stops " +
+  "working, Jarvis tells you once.";
 export const TELLME_LOCK_SCREEN = "Jarvis: something you asked to be told about happened.";
+/**
+ * A "tell me when" that cannot look (2026-09-28): the PC says `"state":
+ * "broken"` once (repeats held back for hours, cleared by itself at the next
+ * good look), and the Windows toast (brain/schedule.rs toast_broken) shows
+ * the job's `broken` sentence - or only these words while App lock or "Hide
+ * memory lists and chat history" is on. Never rings. Both apps' words.
+ */
+export const TELLME_BROKEN_LOCK_SCREEN = "Jarvis: a \"tell me when\" cannot look right now.";
+
+/**
+ * "Remind me next time I talk about ..." (backend jarvis_next_time.py,
+ * 2026-09-28): a reminder with no time of its own, brought up in the chat the
+ * next time the owner's own words mention the subject - at most 3 times, at
+ * least a day apart, gone after 90 days. Set by saying or typing it, with no
+ * card; its row has Delete only (nothing to pause). Never a notification, so
+ * it has no toast title or lock-screen words. Both apps' words
+ * (net/Schedule.kt; the PC's own in jarvis_next_time.py).
+ */
+export const NEXT_TIME_TITLE = "Reminder for next time";
+export const NEXT_TIME_HINT =
+  "Say or type \"remind me next time I talk about the dentist to ask about the bill\". " +
+  "Jarvis brings it up in the chat when your own words mention it - at most 3 times, a day " +
+  "apart at least - and it is gone after 90 days. No card; Delete stops it.";
+/** The line naming the subject: `When you talk about "the dentist"`. */
+export function nextTimeAbout(about) {
+  return `When you talk about \u201c${about}\u201d`;
+}
+
+/**
+ * A Today card (backend jarvis_today.py, 2026-09-28): the owner's own words
+ * on the Today card of the Work tab at a time, on chosen days (today.js).
+ * Its row here is like a repeating reminder's: Pause skips it, Delete
+ * removes it. It never notifies. Both apps' words (net/Schedule.kt).
+ */
+export const TODAY_CARD_TITLE = "Today card";
 
 /** A notification's title, by kind (brain/schedule.rs toast_title). */
 export const TOAST_TITLES = Object.freeze({
@@ -144,6 +182,8 @@ export const KIND_TAGS = Object.freeze({
   standby: "standby",
   briefing: "briefing",
   tellme: "tell me when",
+  nexttime: "next time",
+  today: "today card",
 });
 
 /** A snoozed copy's tag ends with this ("alarm, snoozed"). */
@@ -224,6 +264,13 @@ export function readSchedule(answer) {
     alert: text(j.alert),
     hidden: j.hidden === true,
     list: text(j.list),
+    // A reminder for next time's subject - the owner's words, blanked with
+    // `text` while the private lists are hidden (brain/schedule.rs).
+    about: text(j.about),
+    // A Today card (jarvis_today.py, 2026-09-28): whether it shows today
+    // ("showing" / "later" / ""), and from when - by the PC's own clock.
+    today: text(j.today),
+    showsAt: text(j.shows_at),
     snoozed: j.snoozed === true,
     wentOffAt: text(j.went_off_at),
   });
@@ -311,6 +358,8 @@ export function titleOf(job) {
     // "When an email from Alex arrives" - the owner's words, what is watched.
     return job.hidden || !words ? TELLME_TITLE : `When ${words}`;
   }
+  if (job.kind === "nexttime") return job.hidden || !words ? NEXT_TIME_TITLE : words;
+  if (job.kind === "today") return job.hidden || !words ? TODAY_CARD_TITLE : words;
   if (words) return words;
   return job.kind === "alarm" ? "Alarm" : job.kind === "todo" ? "To-do" : "Reminder";
 }
@@ -326,6 +375,14 @@ export function metaOf(job, sinceMs = 0) {
   if (job.kind === "timer") {
     const left = leftNow(job, sinceMs);
     out.push(job.state === "paused" ? `Paused - ${countdown(left)} left` : `${countdown(left)} left`);
+    return out;
+  }
+  if (job.kind === "nexttime") {
+    // The subject (the owner's words - never while hidden), until when, and
+    // how often it has come up: a count, never words.
+    if (!job.hidden && job.about) out.push(nextTimeAbout(job.about));
+    if (job.when) out.push(job.when);
+    if (job.note) out.push(job.note);
     return out;
   }
   if (job.kind === "tellme") {
@@ -373,6 +430,8 @@ export const WENT_OFF_ACTIONS = Object.freeze(["snooze"]);
 export function actionsOf(job) {
   if (job.kind === "todo") return ["done", "delete"];
   if (job.state === "waiting") return ["delete"];
+  // A reminder for next time has no time of its own to pause.
+  if (job.kind === "nexttime") return ["delete"];
   return [job.state === "paused" ? "resume" : "pause", "delete"];
 }
 

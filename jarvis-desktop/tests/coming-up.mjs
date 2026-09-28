@@ -42,8 +42,12 @@ import {
   CLEAR_LIST_LABEL,
   clearListQuestion,
   aloudFor,
+  NEXT_TIME_HINT,
+  NEXT_TIME_TITLE,
+  nextTimeAbout,
   TELLME_HINT,
   TELLME_LOCK_SCREEN,
+  TELLME_BROKEN_LOCK_SCREEN,
   TELLME_TITLE,
   TIMER_ALOUD,
   COMING_UP_DETAIL,
@@ -267,6 +271,13 @@ await check("\"tell me when\": its words in both apps, its row, and ringing", as
   }
   assert.ok(read("src/brain.html").includes(`>${TELLME_HINT}</p>`));
   assert.ok(read("src-tauri/src/brain/schedule.rs").includes(`"${TELLME_LOCK_SCREEN}"`));
+  // A watch that cannot look (2026-09-28): the same generic words on the
+  // phone, in the Rust toast and on the PC (jarvis_tellme.BROKEN_LOCK_SCREEN).
+  const esc = `"${TELLME_BROKEN_LOCK_SCREEN.replace(/"/g, '\\"')}"`;
+  assert.ok(kt.includes(esc), "the phone's broken-watch words");
+  assert.ok(read("src-tauri/src/brain/schedule.rs").includes(esc), "the toast's broken-watch words");
+  assert.ok(readRepo("backend/jarvis_tellme.py").includes(`BROKEN_LOCK_SCREEN = ${esc}`),
+    "the PC's broken-watch words");
   const job = { id: "s00000000bb", kind: "tellme", text: "an email from Alex arrives",
     state: "active", due: NOW + 300, when: "12:05 today", repeats: true,
     repeat: "every 5 minutes", urgent: true,
@@ -366,6 +377,36 @@ await check("a \"tell me when\" is a row with Pause and Delete, and the hint say
   assert.ok(row.includes("Looks every 5 minutes"), row);
   assert.deepEqual(buttons.map((b) => b.trim()), ["Pause", "Delete"]);
   assert.equal(hint.trim(), TELLME_HINT);
+});
+
+await check("a reminder for next time is a row with Delete only, its subject hidden with the words", async () => {
+  const job = { id: "s00000000cc", kind: "nexttime", text: "ask about the bill",
+    about: "the dentist", state: "active", due: NOW + 90 * 86400, repeats: false,
+    when: "until Sunday 27 December", note: "Waits for you to talk about it." };
+  const v = readSchedule({ jobs: [job], todo: [] });
+  assert.equal(titleOf(v.jobs[0]), "ask about the bill");
+  assert.equal(tagOf(v.jobs[0]), "next time");
+  assert.deepEqual(metaOf(v.jobs[0]), [nextTimeAbout("the dentist"), "until Sunday 27 December",
+    "Waits for you to talk about it."]);
+  assert.deepEqual(actionsOf(v.jobs[0]), ["delete"]);
+  const hidden = { ...v.jobs[0], hidden: true, text: "", about: "" };
+  assert.equal(titleOf(hidden), NEXT_TIME_TITLE);
+  assert.ok(!metaOf(hidden).join(" ").includes("dentist"));
+  // The words, both apps and the PC's own (jarvis_next_time.py).
+  assert.ok(read("src/brain.html").includes(`>${NEXT_TIME_HINT}</p>`));
+  const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt")
+    .replace(/"\s*\+\s*\n?\s*"/g, "");
+  for (const words of [NEXT_TIME_TITLE, NEXT_TIME_HINT]) {
+    assert.ok(kt.includes(`"${words.replace(/"/g, '\\"')}"`), `the phone does not say: ${words}`);
+  }
+  assert.ok(readRepo("backend/jarvis_next_time.py").includes(`LIST_TITLE = "${NEXT_TIME_TITLE}"`));
+  const page = await workTab({ schedule: { jobs: [job], todo: [] } });
+  const first = page.locator("#coming-up .row-item").first();
+  const row = await first.textContent();
+  const buttons = await first.locator("button").allInnerTexts();
+  await page.close();
+  assert.ok(row.includes("ask about the bill") && row.includes("the dentist"), row);
+  assert.deepEqual(buttons.map((b) => b.trim()), ["Delete"]);
 });
 
 await check("a timer counts down on its own, once a second", async () => {

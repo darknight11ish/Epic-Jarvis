@@ -1079,4 +1079,116 @@ class VoiceStrictTest {
         assertTrue(at >= 0)
         assertTrue(src.substring(at, at + 400).contains("choices = StrictVoice.HANDS_FREE_LIVE"))
     }
+
+    // ------------------------------------------ "Better voice" (2026-09-28) --
+
+    /** A real status with one "Better voice" setting set to [value] and its
+     *  blocked words to [blocked] (null value: a PC older than it). */
+    private fun withBetter(case: String, setting: String, value: String?, blocked: String = ""): JsonObject {
+        val gate = status(case)["gate"]!!.jsonObject
+        val oldSettings = gate["settings"]?.jsonObject.orEmpty() - setting
+        val add: Map<String, JsonPrimitive> =
+            if (value == null) emptyMap() else mapOf(setting to JsonPrimitive(value))
+        val oldBlocked = oldSettings["blocked"]?.jsonObject.orEmpty()
+        val settings = oldSettings - "blocked" + add +
+            ("blocked" to JsonObject(oldBlocked + (setting to JsonPrimitive(blocked))))
+        val newGate = gate - setting - "settings" + add + ("settings" to JsonObject(settings))
+        return JsonObject(status(case) + ("gate" to JsonObject(newGate)))
+    }
+
+    @Test
+    fun `better voice - read from the PC's real status, strict when damaged, not offered by an older PC`() {
+        val v = view("trained_three_rounds")
+        assertEquals(VoiceStrict.WAKE_ONE, v.wakeConfirm)
+        assertEquals(VoiceStrict.MODEL_TITANET, v.voiceIdModel)
+        // The real PC in the fixture has neither extra installed: both are blocked, in its words.
+        assertTrue(v.blocked[VoiceStrict.WAKE_CONFIRM].orEmpty().contains("not installed"))
+        assertTrue(v.blocked[VoiceStrict.VOICE_ID_MODEL].orEmpty().contains("not installed"))
+        assertEquals("", VoiceStrict.parse(withBetter("trained_three_rounds", VoiceStrict.WAKE_CONFIRM, null)).wakeConfirm)
+        assertEquals(VoiceStrict.WAKE_BOTH,
+            VoiceStrict.parse(withBetter("trained_three_rounds", VoiceStrict.WAKE_CONFIRM, "maybe")).wakeConfirm)
+        assertEquals(VoiceStrict.MODEL_TITANET,
+            VoiceStrict.parse(withBetter("trained_three_rounds", VoiceStrict.VOICE_ID_MODEL, "other")).voiceIdModel)
+        assertTrue(VoiceStrict.read(status("trained_three_rounds")) is ApiResult.Ok)
+    }
+
+    @Test
+    fun `better voice - two detectors at once, back to one asks, the newer model asks, greyed until installed`() {
+        val real = view("trained_three_rounds")
+        assertTrue(VoiceStrict.isLoosening(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_ONE))
+        assertFalse(VoiceStrict.isLoosening(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_BOTH))
+        assertTrue(VoiceStrict.isLoosening(VoiceStrict.VOICE_ID_MODEL, VoiceStrict.MODEL_RESNET))
+        assertFalse(VoiceStrict.isLoosening(VoiceStrict.VOICE_ID_MODEL, VoiceStrict.MODEL_TITANET))
+        // Not installed on the PC: greyed out, with the PC's own words.
+        val why = StrictVoice.blocker(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_BOTH, real, null)
+        assertTrue(why.orEmpty(), why.orEmpty().contains("not installed"))
+        assertEquals(why, StrictVoice.blockedWhy(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_BOTH, real))
+        assertNull(StrictVoice.blockedWhy(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_ONE, real))
+        assertTrue(StrictVoice.blocker(VoiceStrict.VOICE_ID_MODEL, VoiceStrict.MODEL_RESNET, real, null)
+            .orEmpty().contains("not installed"))
+        // Installed: two detectors never held, even on a stale link; back to one is held.
+        val ready = VoiceStrict.parse(withBetter("trained_three_rounds", VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_ONE))
+        assertNull(StrictVoice.blocker(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_BOTH, ready, "stale"))
+        val both = VoiceStrict.parse(withBetter("trained_three_rounds", VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_BOTH))
+        assertEquals("stale", StrictVoice.blocker(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_ONE, both, "stale"))
+        assertNull(StrictVoice.blocker(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_ONE, both, null))
+        val rn = VoiceStrict.parse(withBetter("trained_three_rounds", VoiceStrict.VOICE_ID_MODEL, VoiceStrict.MODEL_TITANET))
+        assertEquals("stale", StrictVoice.blocker(VoiceStrict.VOICE_ID_MODEL, VoiceStrict.MODEL_RESNET, rn, "stale"))
+        // An older PC does not offer them.
+        assertEquals(StrictVoice.NOT_ON_THIS_PC,
+            StrictVoice.blocker(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_BOTH, real.copy(wakeConfirm = ""), null))
+        // The bodies are the PC's own modes, only with their own values.
+        assertEquals("{\"mode\":\"wake_confirm\",\"value\":\"both\"}",
+            VoiceStrict.settingBody(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_BOTH))
+        assertEquals("{\"mode\":\"voice_id_model\",\"value\":\"resnet221\"}",
+            VoiceStrict.settingBody(VoiceStrict.VOICE_ID_MODEL, VoiceStrict.MODEL_RESNET))
+        assertTrue(runCatching { VoiceStrict.settingBody(VoiceStrict.VOICE_ID_MODEL, "resnet293") }.isFailure)
+        // "Both" chosen but the PC cannot run it: said on the plate.
+        assertEquals("Both detectors are chosen.",
+            StrictVoice.plateNote(VoiceStrict.WAKE_CONFIRM, both.copy(wakeConfirmNote = "both detectors are chosen")))
+        fun last(outcome: String) =
+            VoiceStrict.Last(outcome = outcome, setting = VoiceStrict.VOICE_ID_MODEL, value = VoiceStrict.MODEL_RESNET)
+        assertEquals("You chose the measured model again while the card waited, so approving it changed nothing.",
+            StrictVoice.lastLine(last("withdrawn")))
+        assertEquals("You said no, so \"The stronger one (measured)\" stays.", StrictVoice.lastLine(last("denied")))
+    }
+
+    @Test
+    fun `better voice - the plates use the agreed words, the same as the desktop's, and the screen shows them`() {
+        assertEquals("Second \"hey Jarvis\" check", StrictVoice.WAKE_CONFIRM_TITLE)
+        assertEquals("Voice-ID model", StrictVoice.VOICE_ID_MODEL_TITLE)
+        for (c in StrictVoice.VOICE_ID_MODEL) {
+            assertTrue(c.detail, c.detail.contains("cannot tell your voice from a recording or a copy"))
+        }
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        var found: java.io.File? = null
+        var html: java.io.File? = null
+        var screen: java.io.File? = null
+        while (dir != null && (found == null || screen == null)) {
+            java.io.File(dir, "jarvis-desktop/src/voice-training.js").takeIf { it.isFile }?.let { found = it }
+            java.io.File(dir, "jarvis-desktop/src/settings.html").takeIf { it.isFile }?.let { html = it }
+            java.io.File(dir, "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/VoiceCheckScreen.kt")
+                .takeIf { it.isFile }?.let { screen = it }
+            dir = dir.parentFile
+        }
+        val js = requireNotNull(found).readText().replace("\\\"", "\"")
+        for ((name, list) in listOf("WAKE_CONFIRM" to StrictVoice.WAKE_CONFIRM, "VOICE_ID_MODEL" to StrictVoice.VOICE_ID_MODEL)) {
+            val block = requireNotNull(
+                Regex("""$name\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
+            ) { "$name not found in voice-training.js" }.groupValues[1]
+            for (c in list) {
+                assertTrue(c.detail, block.contains(c.detail))
+                assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (default)").removeSuffix(" (recommended)")}\""))
+            }
+        }
+        val page = requireNotNull(html).readText()
+        assertTrue(page.contains(">Second \"hey Jarvis\" check<") && page.contains(">Voice-ID model<"))
+        val src = requireNotNull(screen).readText()
+        for ((guard, name) in listOf("strict.wakeConfirm" to "WAKE_CONFIRM", "strict.voiceIdModel" to "VOICE_ID_MODEL")) {
+            val at = src.indexOf("if ($guard.isNotBlank()) {")
+            assertTrue(guard, at >= 0)
+            val block = src.substring(at, at + 400)
+            assertTrue(block, block.contains("setting = VoiceStrict.$name") && block.contains("choices = StrictVoice.$name"))
+        }
+    }
 }

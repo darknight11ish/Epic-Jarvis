@@ -16,6 +16,7 @@
  */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as K from "./uikit.mjs";
@@ -25,6 +26,7 @@ import { FORGOTTEN, forgetQuestion } from "../src/auto-learn.js";
 // test time, so what the pane is tested against is what the backend sends -
 // not a fixture that agrees with the pane because the same hand wrote both.
 const BACKEND_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "backend");
+const read = (p) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", p), "utf8");
 function realPython(code) {
   return JSON.parse(execFileSync("python3", ["-c", code],
     { cwd: BACKEND_DIR, encoding: "utf8", env: { ...process.env, JARVIS_NO_EMBED: "1" } }));
@@ -374,16 +376,41 @@ await check("the card survives an unrelated write refreshing the pane", async ()
     "the offer disappeared once the server stopped resending it, though the owner never dismissed it");
 });
 
-await check("Enable says plainly that nothing is built and nothing runs", async () => {
+await check("Enable says what the tidy does: it asks with cards and changes nothing by itself", async () => {
   const page = await memoryTab(withOffer());
   const card = await page.locator("#memory-learning").innerText();
   await page.getByRole("button", { name: "Enable", exact: true }).click();
   await page.waitForTimeout(300);
   const toast = await page.locator("#toast").innerText();
   await page.close();
-  assert.match(card, /not built/i, `the card said "${card}"`);
-  assert.doesNotMatch(toast, /will tidy/i, `the toast promised a pass: "${toast}"`);
-  assert.match(toast, /not built yet/i, `the toast said "${toast}"`);
+  // Built since 2026-09-28 (backend/jarvis_tidy.py) - cards only.
+  assert.doesNotMatch(card, /not built/i, `the card said "${card}"`);
+  assert.match(card, /nothing in memory changes by itself/i, `the card said "${card}"`);
+  assert.doesNotMatch(toast, /will tidy|merge|retire facts/i, `the toast promised a pass: "${toast}"`);
+  assert.match(toast, /review cards\. Nothing changes without your yes/i, `the toast said "${toast}"`);
+  const kt = read("../jarvis-client/app/src/main/java/com/jarvis/client/net/MemoryWords.kt")
+    .replace(/"\s*\+\s*\n\s*"/g, "");
+  assert.ok(kt.includes(toast.trim()), `the phone does not say: ${toast}`);
+});
+
+await check("once on, the tidy turns off in one tap, at once", async () => {
+  const memory = { ...K.BRAIN.memory, sleep_time: { enabled: true, remind: true } };
+  const page = await K.open(browser, base, "brain.html", { brain: { ...K.BRAIN, memory } }, SIZE);
+  await page.locator("#tab-faculties").click();
+  await page.waitForTimeout(300);
+  const text = await page.locator("#memory").innerText();
+  await page.getByRole("button", { name: "Turn off overnight tidying" }).click();
+  await page.waitForTimeout(300);
+  const writes = await page.evaluate(() => window.__memoryWrites);
+  const toast = await page.locator("#toast").innerText();
+  await page.close();
+  assert.match(text, /Overnight tidying\s*on - once a day Jarvis may ask/);
+  assert.deepEqual(writes.map((w) => [w.cmd, w.enabled]), [["brain_memory_sleep_time", false]]);
+  assert.match(toast, /Overnight tidying is off/);
+  const rust = read("src-tauri/src/brain.rs");
+  const fn = rust.slice(rust.indexOf("pub async fn brain_memory_sleep_time("));
+  assert.ok(fn.indexOf("enabled == Some(false)") < fn.indexOf("require_link_live"),
+    "turning it off is held on a stale link");
 });
 
 /* ── Real backend output, read by the pane ───────────────────────────────── */
@@ -410,7 +437,8 @@ await check("the Model tab's memory card shows what the real store reports", asy
   assert.match(text, /No longer used\s*1\b/, "retired facts were counted as in use");
   assert.ok(text.includes(STATUS.db), `the store's file never showed: "${text}"`);
   assert.ok(text.includes(STATUS.embedder), `the embedder never showed: "${text}"`);
-  assert.match(text, /not built yet/i);
+  assert.match(text, /Overnight tidying\s*off\b/);
+  assert.doesNotMatch(text, /not built yet/i);
 });
 
 // pending() rows: the columns memory-intake.patch SELECTs, through the real
@@ -449,8 +477,11 @@ await check("a replaced fact names what replaced it", async () => {
   const page = await memoryTab({ brain: { ...K.BRAIN,
     memory_facts: { available: true, learning: true, pending: 0, facts } } });
   const text = await page.locator("#memory-facts").innerText();
+  const history = await page.locator("#memory-facts").getByRole("button", { name: "History" }).count();
   await page.close();
-  assert.match(text, /replaced by #5/, `said "${text}"`);
+  // In words since 2026-09-28; "History" (fact-history.mjs) shows which.
+  assert.match(text, /replaced by a newer wording/, `said "${text}"`);
+  assert.equal(history, 2, "both wordings offer their history");
 });
 
 /* ── Export: to a file, never the clipboard ──────────────────────────────── */

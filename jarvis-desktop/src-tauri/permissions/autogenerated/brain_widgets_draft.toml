@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-widgets-draft"
+description = "Enables the brain_widgets_draft command without any pre-configured scope."
+commands.allow = ["brain_widgets_draft"]
+
+[[permission]]
+identifier = "deny-brain-widgets-draft"
+description = "Denies the brain_widgets_draft command without any pre-configured scope."
+commands.deny = ["brain_widgets_draft"]

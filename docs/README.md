@@ -41,6 +41,7 @@ what changed when.
 
 | Date | Document | About |
 |---|---|---|
+| 2026-09-28 | [RESEARCH-AUDIT-2026-09-28.md](RESEARCH-AUDIT-2026-09-28.md) and [research-audit-2026-09-28/](research-audit-2026-09-28/) | Every feature next to competitors and GitHub projects; the Brain; what to fix, borrow and speed up. |
 | 2026-09-26 | [BUG-AUDIT-2026-09-26-backend.md](BUG-AUDIT-2026-09-26-backend.md), [-desktop](BUG-AUDIT-2026-09-26-desktop.md), [-phone](BUG-AUDIT-2026-09-26-phone.md) | Bug hunts in each part. |
 | 2026-09-26 | [APPROVALS-AUDIT-2026-09-26.md](APPROVALS-AUDIT-2026-09-26.md) | What asks first, and what could stop asking. |
 | 2026-09-26 | [PROFESSIONALISM-AUDIT-2026-09-26.md](PROFESSIONALISM-AUDIT-2026-09-26.md) | Packaging, versions, READMEs, wording. |

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-photo-scan"
+description = "Enables the photo_scan command without any pre-configured scope."
+commands.allow = ["photo_scan"]
+
+[[permission]]
+identifier = "deny-photo-scan"
+description = "Denies the photo_scan command without any pre-configured scope."
+commands.deny = ["photo_scan"]

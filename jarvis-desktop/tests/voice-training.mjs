@@ -827,6 +827,179 @@ await check("answers about your screen: keeping them on screen is at once; Read 
   assert.match(rust, /\("hands_free_screen", "screen_on_screen"\) => \{?\s*Ok\(\("hands_free_screen", "screen_on_screen", false\)\)/);
 });
 
+/** The same status with talk-to-type at `value`, or, with `value`
+ *  undefined, from a PC older than it. */
+const withTalkType = (st, value, where = "settings") => {
+  const c = JSON.parse(JSON.stringify(st));
+  delete c.gate.settings.talk_to_type;
+  delete c.gate.talk_to_type;
+  if (value === undefined) return c;
+  if (where === "settings") c.gate.settings.talk_to_type = value;
+  else c.gate.talk_to_type = value;
+  return c;
+};
+
+await check("talk-to-type: off by default, on is ONE card held on a stale link, off at once, only when the PC has it", async () => {
+  assert.deepEqual(VT.TALK_TO_TYPE.map(VT.choiceText), ["Off (default)", "On"]);
+  assert.match(VT.TALK_TO_TYPE[1].detail, /password box/);
+  assert.match(VT.TALK_TO_TYPE[1].detail, /not kept in chat history/);
+  assert.equal(VT.loosens("talk_to_type", "on"), true);
+  assert.equal(VT.loosens("talk_to_type", "off"), false);
+  // The REAL status (the backend's own, regenerated) carries it, off.
+  assert.equal(VT.settingsView(S.strong_ready).talkToType, "off");
+  assert.equal(VT.settingsView(withTalkType(S.strong_ready, "on", "gate")).talkToType, "on");
+  assert.equal(VT.settingsView(withTalkType(S.strong_ready, "maybe")).talkToType, "");
+  assert.equal(VT.settingsView(withTalkType(S.strong_ready)).talkToType, "");
+
+  const page = await open(S.strong_ready);
+  const got = await page.evaluate(() => ({
+    shown: !document.getElementById("vt-talktype-box").hidden,
+    title: document.querySelector("#vt-talktype-box h3").textContent,
+    pressed: document.querySelector('#vt-talktype button[aria-pressed="true"]').dataset.value,
+  }));
+  assert.equal(got.shown, true);
+  assert.equal(got.title, "Talk-to-type (this PC only)");
+  assert.equal(got.pressed, "off");
+  assert.equal(await text(page, "vt-talktype-note"), VT.TALK_TO_TYPE[0].detail);
+  await page.close();
+  const old = await open(withTalkType(S.strong_ready));
+  assert.equal(await old.evaluate(() => document.getElementById("vt-talktype-box").hidden), true);
+  await old.close();
+
+  // On, on a stale link: nothing sent, and it says why.
+  const held = await open(S.strong_ready, { link: { stale: true } });
+  await held.click('#vt-talktype button[data-value="on"]');
+  await held.waitForTimeout(150);
+  assert.deepEqual(await calls(held, "set_voice_setting"), []);
+  assert.match(await text(held, "vt-setting-status"), /catching up/);
+  await held.close();
+  // On a live link: sent - the PC answers with the card.
+  const live = await open(S.strong_ready);
+  await live.click('#vt-talktype button[data-value="on"]');
+  await live.waitForTimeout(150);
+  assert.deepEqual(await calls(live, "set_voice_setting"), [{ setting: "talk_to_type", value: "on" }]);
+  await live.close();
+  // Off: at once, even on a stale link.
+  const on = withTalkType(S.strong_ready, "on");
+  const off = await open(on, { link: { stale: true } });
+  await off.click('#vt-talktype button[data-value="off"]');
+  await off.waitForTimeout(150);
+  assert.deepEqual(await calls(off, "set_voice_setting"), [{ setting: "talk_to_type", value: "off" }]);
+  await off.close();
+
+  assert.match(VT.settingWaitingLine({ setting: "talk_to_type", value: "on" }, WHERE),
+    /^Waiting for your approval to change talk-to-type to "On"\./);
+  const card = { ...S.balanced.gate.training.last, setting: "talk_to_type", value: "on" };
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "setting_changed" }, on), "Approved: \"On\" is on now.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "denied" }, S.strong_ready), "You said no, so \"Off\" stays.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "withdrawn" }, S.strong_ready),
+    "You turned talk-to-type off while the card waited, so approving it changed nothing.");
+  // CONTROL: the Rust knows the setting, and holds only turning it on.
+  const rust = read("src-tauri/src/voice_training.rs");
+  assert.match(rust, /\("talk_to_type", "on"\) => \{?\s*Ok\(\("talk_to_type", "on", true\)\)/);
+  assert.match(rust, /\("talk_to_type", "off"\) => \{?\s*Ok\(\("talk_to_type", "off", false\)\)/);
+});
+
+/** The same status with a "Better voice" setting at `value` and its
+ *  "blocked" words at `blocked` (undefined: from a PC older than it). */
+const withBetter = (st, setting, value, blocked = "") => {
+  const c = JSON.parse(JSON.stringify(st));
+  delete c.gate.settings[setting];
+  delete c.gate[setting];
+  if (value === undefined) return c;
+  c.gate.settings[setting] = value;
+  c.gate.settings.blocked = { ...(c.gate.settings.blocked || {}), [setting]: blocked };
+  return c;
+};
+
+await check("better voice: two detectors at once, back to one is a card; the newer model is a card; both greyed out with the PC's words until installed", async () => {
+  assert.deepEqual(VT.WAKE_CONFIRM.map(VT.choiceText), ["One detector (default)", "Two detectors must agree"]);
+  assert.deepEqual(VT.VOICE_ID_MODEL.map(VT.choiceText),
+    ["The stronger one (measured) (recommended)", "The newer one (not measured yet)"]);
+  for (const c of VT.VOICE_ID_MODEL) assert.match(c.detail, /cannot tell your voice from a recording or a copy/);
+  assert.equal(VT.loosens("wake_confirm", "one"), true);
+  assert.equal(VT.loosens("wake_confirm", "both"), false);
+  assert.equal(VT.loosens("voice_id_model", "resnet221"), true);
+  assert.equal(VT.loosens("voice_id_model", "titanet"), false);
+  // The REAL status (the backend's own): one detector, the measured model,
+  // and both extra choices blocked - nothing is installed in the fixture.
+  const v = VT.settingsView(S.strong_ready);
+  assert.equal(v.wakeConfirm, "one");
+  assert.equal(v.voiceIdModel, "titanet");
+  assert.match(VT.blockedWhy(S.strong_ready, "wake_confirm", "both"), /not installed/);
+  assert.match(VT.blockedWhy(S.strong_ready, "voice_id_model", "resnet221"), /not installed/);
+  assert.equal(VT.blockedWhy(S.strong_ready, "wake_confirm", "one"), "");
+  // Unknown values read as the strict one; a PC older than them: not offered.
+  assert.equal(VT.settingsView(withBetter(S.strong_ready, "wake_confirm", "maybe")).wakeConfirm, "both");
+  assert.equal(VT.settingsView(withBetter(S.strong_ready, "voice_id_model", "other")).voiceIdModel, "titanet");
+  assert.equal(VT.settingsView(withBetter(S.strong_ready, "wake_confirm")).wakeConfirm, "");
+
+  const page = await open(S.strong_ready);
+  const got = await page.evaluate(() => ({
+    shown: !document.getElementById("vt-wakeconfirm-box").hidden && !document.getElementById("vt-voiceid-box").hidden,
+    titles: [...document.querySelectorAll("#vt-wakeconfirm-box h3, #vt-voiceid-box h3")].map((h) => h.textContent),
+    bothOff: document.querySelector('#vt-wakeconfirm button[data-value="both"]').disabled,
+    resnetOff: document.querySelector('#vt-voiceid button[data-value="resnet221"]').disabled,
+    oneOn: document.querySelector('#vt-wakeconfirm button[data-value="one"]').getAttribute("aria-pressed"),
+  }));
+  assert.equal(got.shown, true);
+  assert.deepEqual(got.titles, ["Second \"hey Jarvis\" check", "Voice-ID model"]);
+  assert.equal(got.bothOff, true);
+  assert.equal(got.resnetOff, true);
+  assert.equal(got.oneOn, "true");
+  assert.match(await text(page, "vt-wakeconfirm-note"), /not installed/);
+  await page.close();
+  const old = await open(withBetter(withBetter(S.strong_ready, "wake_confirm"), "voice_id_model"));
+  assert.equal(await old.evaluate(() => document.getElementById("vt-wakeconfirm-box").hidden
+    && document.getElementById("vt-voiceid-box").hidden), true);
+  await old.close();
+
+  // Installed: two detectors goes at once, even on a stale link.
+  const ready = withBetter(S.strong_ready, "wake_confirm", "one", "");
+  const tight = await open(ready, { link: { stale: true } });
+  await tight.click('#vt-wakeconfirm button[data-value="both"]');
+  await tight.waitForTimeout(150);
+  assert.deepEqual(await calls(tight, "set_voice_setting"), [{ setting: "wake_confirm", value: "both" }]);
+  await tight.close();
+  // Back to one on a stale link: held, nothing sent.
+  const both = withBetter(S.strong_ready, "wake_confirm", "both", "");
+  const held = await open(both, { link: { stale: true } });
+  await held.click('#vt-wakeconfirm button[data-value="one"]');
+  await held.waitForTimeout(150);
+  assert.deepEqual(await calls(held, "set_voice_setting"), []);
+  assert.match(await text(held, "vt-setting-status"), /catching up/);
+  await held.close();
+  // The newer model, installed, on a live link: sent - the PC answers with the card.
+  const rn = withBetter(S.strong_ready, "voice_id_model", "titanet", "");
+  const live = await open(rn);
+  await live.click('#vt-voiceid button[data-value="resnet221"]');
+  await live.waitForTimeout(150);
+  assert.deepEqual(await calls(live, "set_voice_setting"), [{ setting: "voice_id_model", value: "resnet221" }]);
+  await live.close();
+
+  assert.match(VT.settingWaitingLine({ setting: "wake_confirm", value: "one" }, WHERE),
+    /^Waiting for your approval to change the second "hey Jarvis" check to "One detector"\./);
+  const card = { ...S.balanced.gate.training.last, setting: "voice_id_model", value: "resnet221" };
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "withdrawn" }, S.strong_ready),
+    "You chose the measured model again while the card waited, so approving it changed nothing.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "denied" }, S.strong_ready),
+    "You said no, so \"The stronger one (measured)\" stays.");
+  // The status lines: the second detector and the speech detector.
+  assert.match(W.wakeConfirmLine(S.strong_ready).text, /not installed on this PC\. One detector decides/);
+  assert.match(W.speechDetectorLine(S.strong_ready).text, /^Speech detector \(Silero VAD\): /);
+  const withVad = JSON.parse(JSON.stringify(S.strong_ready));
+  withVad.vad = { available: true, status: "ready", version: "v4", chosen: "v6",
+                  note: "the newer speech detector (v6) is chosen but not installed" };
+  assert.equal(W.speechDetectorLine(withVad).text,
+    "Speech detector (Silero VAD): v4. The newer speech detector (v6) is chosen but not installed.");
+  // CONTROL: the Rust knows both, and holds only the looser choice of each.
+  const rust = read("src-tauri/src/voice_training.rs");
+  assert.match(rust, /\("wake_confirm", "one"\) => \{?\s*Ok\(\("wake_confirm", "one", true\)\)/);
+  assert.match(rust, /\("wake_confirm", "both"\) => \{?\s*Ok\(\("wake_confirm", "both", false\)\)/);
+  assert.match(rust, /\("voice_id_model", "resnet221"\) => \{?\s*Ok\(\("voice_id_model", "resnet221", true\)\)/);
+  assert.match(rust, /\("voice_id_model", "titanet"\) => \{?\s*Ok\(\("voice_id_model", "titanet", false\)\)/);
+});
+
 await check("the guided test: 20 sentences, one request, the result in words", async () => {
   const page = await open(S.strong_ready);
   await click(page, "vt-test", "Start the test");

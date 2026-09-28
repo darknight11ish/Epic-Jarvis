@@ -493,7 +493,9 @@ testers, scouts and integration scouts; `.claude/agents/`):
   card each time. Hold a key, speak, and Jarvis types what was said into the
   program in front - speech-to-text on the PC only, as always. Switching it
   off is immediate. Not on the phone (a client must not do speech-to-text).
-  Not built yet.
+  Built on GitHub's `main` (JARVIS-API §72), merged into the research branch
+  2026-09-28; while Jarvis Live is on, talk-to-type waits, like the talk
+  button.
 - **Answers that used web search, weather or home status are read aloud**
   when read-aloud would otherwise apply. Answers that used email, calendar,
   notes, documents, memory, or any tool not on that short list stay on

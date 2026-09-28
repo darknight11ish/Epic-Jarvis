@@ -124,6 +124,24 @@ RUSH_LATCH_SECONDS = 600            # [content_risk] rush_latch_minutes = 10
 #: and again when the program or its version changes. True - the stricter
 #: answer: a card every time a server starts.
 CARD_EVERY_START = False
+
+
+def card_every_start() -> bool:
+    """CARD_EVERY_START, or Lockdown is on (jarvis_asks_first.py,
+    2026-09-28): while every way out of the PC asks first, a plug-in
+    program - which may use the network itself - asks at EVERY start, not
+    only when it is new or changed. Without jarvis_asks_first.py, just
+    CARD_EVERY_START; if Lockdown cannot be read, it asks (fails closed)."""
+    if CARD_EVERY_START:
+        return True
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
 #: A server nobody has used for this long is stopped (started again, by the
 #: same rule, the next time the model asks for plug-in tools).
 IDLE_STOP_SECONDS = 600
@@ -1204,7 +1222,7 @@ def describe_start(p: StartPlan) -> str:
               "until Jarvis stops. Jarvis cannot see or limit what it does on its own - "
               "it could read your files or use the internet. Jarvis will still ask you "
               "separately before using any of its tools, every time."]
-    if not CARD_EVERY_START:
+    if not card_every_start():
         lines += ["", "If you say yes, Jarvis starts it again later without asking - until "
                       "the program, its settings or its version change."]
     lines += ["",
@@ -1361,7 +1379,7 @@ class Bridge:
         except ConfigError as exc:
             return {"ok": False, "error": str(exc)}
         known = None
-        if self._approvals is not None and not CARD_EVERY_START:
+        if self._approvals is not None and not card_every_start():
             known = self._approvals.get(name)
         if known and known.get("fingerprint") == plan.fingerprint:
             res = self._spawn(plan, cfg)

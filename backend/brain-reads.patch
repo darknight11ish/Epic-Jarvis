@@ -1,0 +1,26 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2579,6 +2579,23 @@
+     except Exception as exc:
+         print(f"  forget     NOT ON ({type(exc).__name__}) - Forget a time frame is off")
+         print("             until jarvis_forget_range.py is back: run apply-patches.ps1 again")
++    # brain-reads.patch (the Brain upgrades, the owner's choice of
++    # 2026-09-28; docs/JARVIS-API.md section 71): two reads for the apps'
++    # Brain screens, behind the token like every memory and history read.
++    # GET /api/history/search?q= searches what was said in the kept chats,
++    # opening each one in memory for that one search - no index, nothing
++    # written. GET /api/memory/fact-history?id= lists every version of one
++    # fact; an erased one never with its words. Neither is a tool: nothing
++    # here reaches the AI model. Wrapped round Handler here, before anything
++    # listens, like sources above; the rules are all in
++    # jarvis_brain_reads.py, jarvis_chat_log.py and jarvis_memory.py.
++    try:
++        import jarvis_brain_reads
++        print(jarvis_brain_reads.install(Handler, origin_ok=_origin_ok,
++                                         token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  brain      NOT ON ({type(exc).__name__}) - Searching old chats is off")
++        print("             until jarvis_brain_reads.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

@@ -372,6 +372,8 @@ data class HomeState(
      * picture itself is never in this state - only its size, in words.
      */
     val pictureLine: String? = null,
+    /** True while the PC reads the attached picture for "Photo to reminder". */
+    val photoFinding: Boolean = false,
     /**
      * The chip for text shared from another app, waiting to go with the next
      * question as its own message ("Shared text · 1,204 characters"), or null
@@ -436,6 +438,13 @@ data class HomeState(
     val noticeProblem: com.jarvis.client.net.PlainErrors.Shown? = null,
     /** Security's "Swipe to approve or deny" (on by default). */
     val swipeDecides: Boolean = true,
+    /**
+     * Lockdown is on (backend jarvis_asks_first.py, 2026-09-28): every way
+     * out of the PC asks first, or has stopped. Home says so at the top -
+     * the desktop bar's strip, in the phone's place.
+     * [com.jarvis.client.JarvisRuntime.lockdown].
+     */
+    val lockdown: Boolean = false,
 )
 
 /**
@@ -542,6 +551,12 @@ data class HomeActions(
     val onAttachPicture: () -> Unit = {},
     /** Drop the attached picture without sending it. */
     val onRemovePicture: () -> Unit = {},
+    /**
+     * "Photo to reminder": send the attached picture to the PC, which
+     * PROPOSES a reminder ([com.jarvis.client.net.PhotoReminder]). Sets
+     * nothing up.
+     */
+    val onFindDateInPicture: () -> Unit = {},
     /** Drop the shared text without sending it. */
     val onDropShared: () -> Unit = {},
     /** Open the release page in the browser. Downloads nothing itself. */
@@ -578,6 +593,17 @@ data class HomeActions(
     val onKeepLinkAlive: () -> Unit = {},
     /** The offer's "Not now". */
     val onDismissKeepAlive: () -> Unit = {},
+    /**
+     * "Playing on your PC" (2026-09-28): what is playing, in the PC's own
+     * sentence, or null ([com.jarvis.client.JarvisRuntime.pcMedia]). A read.
+     */
+    val onPcMedia: suspend () -> String? = { null },
+    /**
+     * ONE media button on the PC - play, pause, next or previous
+     * ([com.jarvis.client.JarvisRuntime.pcMediaControl]). No card; refused on
+     * a stale link. @return the sentence to show.
+     */
+    val onPcMediaControl: suspend (String) -> String = { "" },
 )
 
 /**
@@ -1011,6 +1037,11 @@ private fun ConversationList(
         if (busy) {
             item(key = "stop-everything") { StopEverythingPlate(actions) }
         }
+        // Lockdown (2026-09-28): said at the top while it is on. Turning it
+        // off is the PC's alone, so there is no button here.
+        if (state.lockdown) {
+            item(key = "lockdown") { LockdownPlate() }
+        }
         // AUTONOMY-PROPOSALS.md §3d. Shown only while the server itself
         // reports a task running or paused - never while merely thinking
         // about a chat reply, which WORKING is also used for elsewhere;
@@ -1025,6 +1056,15 @@ private fun ConversationList(
         }
 
         item(key = "quick-note") { QuickNotePlate(open = state.quickNoteOpen, actions = actions) }
+
+        // "Playing on your PC" (2026-09-28): play, pause, next, previous -
+        // greyed while the link is stale (rule 4), no card.
+        item(key = "pc-media") {
+            PcMediaPlate(
+                canAct = state.link == LinkState.CONNECTED && !state.stale,
+                actions = actions,
+            )
+        }
 
         if (state.notice != null) {
             item(key = "notice") { HomeNotice(state, actions) }
@@ -1871,6 +1911,71 @@ private fun StopEverythingPlate(actions: HomeActions) {
     }
 }
 
+/**
+ * "Lockdown is on" (2026-09-28): the one line Home shows while every way out
+ * of the PC asks first. No button: turning it off is on the PC only, with an
+ * approval card and Windows Hello ([com.jarvis.client.net.AsksFirst]).
+ */
+@Composable
+private fun LockdownPlate() {
+    val chrome = LocalChrome.current
+    Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
+        Kicker(com.jarvis.client.net.AsksFirst.LOCKDOWN_BAR_LABEL, color = chrome.warnInk)
+        Gap(6)
+        Text(
+            com.jarvis.client.net.AsksFirst.LOCKDOWN_HOME_LINE,
+            style = MaterialTheme.typography.bodyMedium,
+            color = chrome.textMid,
+        )
+    }
+}
+
+/**
+ * "Playing on your PC" (2026-09-28; [com.jarvis.client.net.PcMedia]): what is
+ * playing, in the PC's own sentence - read when Home shows it, and again
+ * after each button - and four buttons, ONE action per tap. Greyed while the
+ * link is stale (rule 4); the runtime refuses then too. No card.
+ */
+@Composable
+private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var said by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(canAct) {
+        if (canAct) said = actions.onPcMedia()
+    }
+    Plate {
+        Kicker(com.jarvis.client.net.PcMedia.TITLE)
+        Gap(4)
+        Text(
+            said ?: com.jarvis.client.net.PcMedia.HINT,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            com.jarvis.client.net.PcMedia.ACTIONS.forEach { action ->
+                Quiet(
+                    com.jarvis.client.net.PcMedia.label(action),
+                    enabled = canAct && !busy,
+                    onClick = {
+                        if (!busy) {
+                            busy = true
+                            scope.launch {
+                                try {
+                                    said = actions.onPcMediaControl(action)
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun TaskControlsPlate(paused: Boolean, actions: HomeActions) {
     val chrome = LocalChrome.current
@@ -2477,6 +2582,16 @@ private fun Composer(
         VoiceStrip("Preparing the picture…", tone = chrome.textMid)
     } else if (state.pictureLine != null) {
         VoiceStrip(state.pictureLine, tone = chrome.textMid, onDismiss = actions.onRemovePicture)
+        // "Photo to reminder": the PC reads the dates in it and proposes.
+        Quiet(
+            if (state.photoFinding) {
+                com.jarvis.client.net.PhotoReminder.READING
+            } else {
+                com.jarvis.client.net.PhotoReminder.FIND_LABEL
+            },
+            enabled = !state.photoFinding && state.link == LinkState.CONNECTED,
+            onClick = actions.onFindDateInPicture,
+        )
     }
     // Text shared from another app: sent as its own message, before what is
     // typed, never mixed into it. Dismiss drops it.
