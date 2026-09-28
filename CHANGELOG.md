@@ -6,6 +6,25 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Jarvis Live: talk back and forth, on the PC and the phone.** Press
+  Live (the Jarvis bar, the tray, or Home -> Live on the phone) or say "Hey
+  Jarvis, let's talk", then just talk - no "Hey Jarvis" before each
+  sentence. Every sentence is still checked to be your voice on your PC
+  before any words are made of it, and cards still need a tap (Jarvis stops
+  listening while one waits). A sign shows the whole time ("Jarvis Live ·
+  24 min left"), with Mute and Stop; on the phone a notification with End
+  and Mute. It ends when you say "Okay Jarvis, that's all for now", press
+  Stop, after 90 quiet seconds, or at 30 minutes ("give me twenty more
+  minutes" adds time). After a spoken question, tap buttons ("Yes", "No")
+  answer it; you can type too. It pauses itself during a phone or video
+  call. Two new voice settings in both apps: "Jarvis Live" (how far it is
+  trusted under "Only trust the talk button"; trusted fully by default) and
+  "Interrupting Jarvis in Live" (by voice, or by tap only). Said plainly:
+  it needs your voice trained first; very short replies ("yes") are still
+  too short to check, so use the buttons; nothing has been timed on your
+  PC; and **the camera part is built but switched off** until the second
+  graphics card is in and passes the photo test.
+
 - **Chatbot driver fixes, and a correction: every chatbot is reachable from
   both apps.** The entries below that say "still not usable from either
   app" are out of date: both apps' chatbot screens can start a

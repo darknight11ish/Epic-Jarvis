@@ -176,12 +176,13 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voice` | Fanned out verbatim | Ignored (`JarvisRuntime.kt:690`) |
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
-| `step` | Rendered in Brain → Live (`brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read` or `read_screen` (§16, §62; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
+| `step` | Rendered in Brain → Live (`brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read`, `read_screen` or `read_camera` (§16, §62, §63; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
 | `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on the phone's Brain screen; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
 | `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed" \| "ready", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on) - except for a briefing, whose toast comes on `ready` (`brain/briefing.rs` `toast_ready`, always only "Jarvis: your morning briefing is ready.", section 22); the Brain reads Coming up again, and the briefing too for kind `briefing` (`brain.js`) | the Brain's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`). For kind `briefing`: the Brain's Morning briefing reads itself again, and on `ready` (not `fired`) a notification with only the fixed words, which opens the Brain (`JarvisRuntime.onBriefingReady`) |
 | `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | the Brain's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
+| `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`) | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
@@ -9728,3 +9729,132 @@ yet), this has nothing to act on.
 The question and the answer are kept like any chat (the owner's answer of
 2026-09-28); the picture and the screen's words never are - they are added
 to the one request only, as §36 does for a picture's words.
+
+## 63. Jarvis Live: talking back and forth (added 2026-09-28)
+
+The owner's decision and answers of 2026-09-28 (`CLAUDE.md`, "Jarvis
+Live"), designed in `docs/LIVE-DESIGN.md` (which also lists what was built,
+what the owner answered and what changed). A conversation the owner starts
+and ends: no "Hey Jarvis" between sentences, and every sentence is still a
+whole clip, **checked for the owner's voice before any words exist**, and
+turned into words on the PC only. The session lives on the PC
+(`backend/jarvis_live.py`, shipped whole; `backend/live.patch` installs the
+route). Desktop: `live.rs`, `live-rules.js`, the Jarvis bar and the
+always-on-top badge. Phone: `voice/LiveRules.kt`, `service/LiveService.kt`,
+`ui/screens/LiveScreen.kt`. Both apps are held to one table,
+`live-cases.json` (`tools/gen_live_cases.py`).
+
+**The camera is built switched OFF** (the owner's answer 3): hidden in both
+apps until the 12 GB card is in and `jarvis_live_photo_test.py` passes
+(`camera` in the status, below). Nothing sends a picture yet.
+
+### 63.1 `GET /api/voice/live`
+
+The session, as fixed words and numbers only - never anything said. Also
+sent as the `live` event on every change (the same object).
+
+```
+{"state": "off"|"on"|"paused"|"ended", "on": bool, "device": "phone"|"desktop"|null,
+ "session": int, "left_s": int|null, "minutes_left": int|null,
+ "quiet_left_s": int|null, "quiet_warn": bool,
+ "paused": "card"|"cards_unknown"|"other_voices"|"voice_trouble"|null, "pause_words": str|null,
+ "muted": bool, "muted_why": "owner"|"call"|"mic_in_use"|null, "muted_words": str|null,
+ "started_by": "button"|"tray"|"hotkey"|"voice"|null,
+ "hint": "other_voices"|"voice_trouble"|null, "hint_words": str|null,
+ "ending_soon": bool, "ended": str|null, "ended_words": str|null, "ended_device": str|null,
+ "resumable": bool, "turns": int, "refused_in_a_row": int,
+ "limits": {...}, "lines": {...}, "seen": {...},
+ "camera": {"ready": bool, "why": str}}
+```
+
+`lines` are the fixed lines an app SAYS ("I'm listening.", "Two minutes
+left. To keep going, say: give me twenty more minutes.", "Live ended - it
+was quiet."...); `seen` the fixed words an app SHOWS ("Heard you -
+thinking", "Didn't catch that - say a bit more", "(not for Jarvis)"...).
+
+### 63.2 `POST /api/voice/live`
+
+One action per request; only these fixed words are read.
+
+| Body | What it does | Held on a stale link? |
+|---|---|---|
+| `{"do": "start", "device", "by"?: "button"\|"tray"\|"hotkey", "minutes"?}` | Starts Live on that device (ends one on the other). **No card.** 409 with `"needs": "voice"` and "Jarvis Live needs your voice trained first - Settings -> Voice check." until the owner's voice print and the better voice model are there. On Standby it starts and says "Waking up, a few seconds"; otherwise it loads the everyday model. Returns `status` and the `say` line | Yes |
+| `{"do": "stop", "why"?: "owner"\|"app_lock"\|"locked", "device"?}` | Ends it | **Never** |
+| `{"do": "extend", "minutes"?}` | More time (20 by default), never more than 2 hours ahead | Yes |
+| `{"do": "resume"}` | "Carry on" after a voice pause | Yes |
+| `{"do": "mute"\|"unmute", "why"?: "owner"\|"call"\|"mic_in_use", "device"?}` | The microphone closes; the session and its time carry on; the quiet clock stands still. A call or another program ending never undoes the OWNER's Mute | **Never** |
+
+Voice commands do the same (only from a clip that passed the owner check):
+"Hey Jarvis, let's talk" starts it (`started_by: "voice"`); "Okay Jarvis,
+that's all for now", "thanks, that's all", "that'll be all", "goodbye
+Jarvis" and similar end it; "give me twenty more minutes" extends it. Plain
+"stop" still only stops Jarvis talking. Stop everything ends Live.
+
+### 63.3 `POST /api/voice/utterance?source=live`
+
+Only while Live is on for the clip's `mic`. The order is the same as every
+clip: speech found, too short?, **the owner check**, and only then
+speech-to-text. Extra reply fields: `live` (the session after the clip, or
+`started`/`refused` for "let's talk"), `live_pause`, `live_hint`, `live_say`
+(a FIXED line to say now), `live_ended`, `live_short` (`owner` or `other`:
+a too-short clip is checked, never turned into words, to tell "say a bit
+more" from someone else - at most one spoken line a minute, and it does not
+reset the quiet clock), `live_elsewhere` (on a "hey Jarvis" clip while Live
+is on the OTHER device: nothing answered; the app offers "Live is on your
+phone - move it here?"). Clips that are not the owner's count towards
+"Paused: other voices"; the microphone stays open then, and a clip that is
+the owner's carries on.
+
+### 63.4 What the apps must do
+
+- **The sign, the whole time**: desktop - the bar's strip and the badge;
+  phone - the Live screen and a notification that stays on the phone
+  (`setLocalOnly`), shows fixed words only and has End and Mute.
+- **Close the microphone** (release it, not just ignore it) while a card
+  raised during this session waits or the queue cannot be read, while a card
+  is on screen, on a stale link, while muted or on a call, and on the PC
+  while it cannot tell whether Windows is locked. Keep it open through a
+  voice pause. Under "Interrupt by tap only", close it while Jarvis talks.
+- **Cards are decided by tapping only** - a spoken "yes" is not even sent.
+- **Mark a Live question** `live: true` on the newest user message (with
+  `provenance: "voice"`); the PC adds its Live note to the model (short
+  answers, choices in words, never a bare yes/no question) and the side-talk
+  rule. An answer that is only `[not for me]` is **never spoken**, shown as
+  "(not for Jarvis)", and left out of the app's conversation; the PC never
+  learns from it or counts it.
+- **Tap buttons** after a spoken answer that ends with a question, sent as
+  the owner's TYPED words; never while a card is on screen. **Typed
+  questions** during Live keep typed-answer rules.
+- **Read aloud or on screen**: every §16 rule, unchanged. `read_camera`
+  joins `read_screen` on the read-aloud list (`STEP_READS`,
+  `private-aloud-cases.json`).
+- **Interrupting**: another voice LOWERS Jarvis's voice while the PC checks
+  it (`source=barge_in`); only the owner's stops it - the first 3 seconds of
+  a reply included.
+- **Calls**: the phone reads Android's audio mode (no permission); the PC
+  reads Windows' record of which program uses the microphone. Either mutes
+  Live with `why` `call`/`mic_in_use` and unmutes after.
+- **App lock**: Live ends when App lock would ask again, and cannot start
+  while it would.
+
+### 63.5 Trust: `hands_free_live`
+
+Under "Only trust the talk button" (§16): `live_trust_fully` (default:
+Live is trusted like the talk button however it started),
+`live_button_start_only` (a Live started by voice gets the "Hey Jarvis"
+caution), `live_like_hey_jarvis` (every Live turn does). `mode:
+"hands_free_live"` on `POST /api/voice/enroll`; a stricter choice is
+immediate, a looser one is the voice card. Under "Same as the talk button"
+it changes nothing.
+
+### 63.6 The camera gate and the photo test
+
+`camera.ready` is true only when the newest photo test run passed, the
+Pictures lane is running, its model is not a cloud one and passed that run,
+and the camera path is wired (`CAMERA_WIRED`, false today). The owner runs
+the test on the PC once the 12 GB card is in (one PowerShell line, in
+`jarvis_live_photo_test.py`'s docstring); results land in
+`%USERPROFILE%\.openjarvis\live\photo-test`. Pass bar: 24 of 30 photos
+right, a median answer time of 3 s or less, the slowest 6 s or less, and
+never naming a person. The photos are not in the repository (licences):
+the crowd photo must be a licensed stock photo.

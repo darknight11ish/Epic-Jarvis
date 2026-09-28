@@ -1,6 +1,13 @@
 # Jarvis Live: talking back and forth, and showing the camera (design)
 
-Status: **design only; nothing built.** For the owner's decision of
+Status: **built 2026-09-28 (branch `studio-live`) on the PC, the desktop app
+and the phone - except the camera, which is built switched OFF** until the
+12 GB card is in and passes the photo test (the owner's answer 3). What was
+built, what the owner answered, and what changed from the design below are
+in "What was built, and what changed" right after this paragraph; the
+sections after it are the design as it was written, corrected where the
+owner's answers or the reviews changed it. Nothing here has run on the
+owner's PC or phone yet. For the owner's decision of
 2026-09-28 in `CLAUDE.md` ("Jarvis Live": design voice and camera together
 now). Written by the studio's designer against
 `claude/jarvis-ai-assistant-research-ff37vy` (commit `2860995d`). Every
@@ -19,6 +26,137 @@ turn on the **camera** and ask about what it sees; a picture is taken only
 when you finish a question, goes only to your PC, and is never saved. A
 "Live" sign is on screen the whole time on both devices. Approval cards
 still need a tap. Nothing leaves your own devices.
+
+## What was built, and what changed (2026-09-28)
+
+**Built** (build plan steps 1-4, 6, 8 and 9 below; step 7 only as far as
+the gate):
+
+- **The PC** (`backend/jarvis_live.py`, `live.patch`, `jarvis_speech.py`):
+  one session at a time on one device; start, stop, "give me twenty more
+  minutes", resume, mute; 30 minutes by default, never more than 2 hours
+  ahead; the warning two minutes before; the 90-second quiet end (with a
+  "Live ends soon - it's quiet" sign 15 seconds before, and "Resume Live"
+  for 10 minutes after, continuing the same chat); `source=live` clips
+  checked for the owner's voice before any words, every clip; the phrases
+  ("Hey Jarvis, let's talk", "Okay Jarvis, that's all for now", "thanks,
+  that's all", "that'll be all" and more) answered in `jarvis_speech.hear`
+  without the model; `GET`/`POST /api/voice/live` (`docs/JARVIS-API.md`
+  section 63) and the `live` event; Stop everything ends it; the camera
+  gate (`camera_status`) and the photo test program
+  (`jarvis_live_photo_test.py`).
+- **The desktop app**: a Live button in the Jarvis bar and a sign under it,
+  an always-on-top badge ("Jarvis Live · 24 min left", Mute, Stop, Carry
+  on, Resume Live), a tray row, the microphone in Live mode (`live.rs`,
+  `voice.rs`), the rules in `live-rules.js`, and two settings in Settings ->
+  Voice. There is **no hotkey** (Alt+Shift+L was proposed; not built).
+- **The phone**: a Live screen (Home -> Live), the Live microphone service
+  with its notification (End, Mute; stays on the phone), the rules in
+  `voice/LiveRules.kt`, and the same two settings on the Voice check screen.
+- Both apps are held to one table, `live-cases.json`
+  (`tools/gen_live_cases.py`).
+
+**The owner's answers, as built:**
+
+1. Under "Only trust the talk button", Live is **trusted like the talk
+   button by default, however it was started**. A voice setting,
+   "Jarvis Live", has three choices (the same words in both apps): **Trust
+   Live fully** (default), **Only when I start it with the button** (a Live
+   started by "Hey Jarvis, let's talk" gets the "Hey Jarvis" caution), and
+   **Be as careful as with Hey Jarvis**. A stricter choice is immediate; a
+   looser one raises one approval card. How each session started is kept
+   (`started_by`).
+2. **Camera answers are read aloud like screen answers** (`read_camera` in
+   the read-aloud list of both apps and the PC's `STEP_READS`).
+3. **The camera is off and hidden** until the 12 GB card is in and the photo
+   test passes; no words-only camera on one card. The phone's switch is
+   built to appear only when the PC says the camera is ready; **taking the
+   picture on the phone (CameraX, the CAMERA permission) is not built yet** -
+   it can only be tested once the card is in.
+4. **Live keeps the 2-second check** (no Balanced option for Live); the tap
+   buttons cover quick answers.
+5. **Side talk is ignored**: the model answers with the marker "[not for
+   me]" when the owner is clearly talking to someone else; Jarvis says
+   nothing, shows at most "(not for Jarvis)", and the turn is never learned
+   from and never counted. Chat history keeps the turn, with the marker as
+   its answer (the simplest honest record; it is shown as "(not for
+   Jarvis)").
+6. **Live pauses itself during a phone or video call** and carries on after.
+   Phone: Android's audio mode (in a call or in communication) - no phone
+   permission is needed for that. PC: Windows' own record of which program
+   is using the microphone (`CapabilityAccessManager\ConsentStore\microphone`);
+   when that cannot be read, the sign says "Jarvis can't tell when you're on
+   a call - use Mute".
+
+**Also from the Gemini Live comparison:** tap buttons after a spoken
+question ("Yes"/"No", or the choices it named), sent as TYPED words, never
+on or for a card; "Heard you - thinking" at once when a sentence passes; a
+Mute button (sign "Muted"; the session and its time carry on); "Interrupt by
+voice" (default) or "Interrupt by tap only" (then the microphone is closed
+while Jarvis talks, and "Stop talking" cuts it off); a text box during Live
+(typed answers stay typed); a test that a long answer after a tool call is
+spoken to the end. "Continue in Live" from History was **not** added: History
+has no per-chat action row to put it in.
+
+**The rules review (A-M), as built:** A - no Live without a trained voice
+print and the better voice model ("Jarvis Live needs your voice trained
+first - Settings -> Voice check."); C - desktop App lock ends Live and stops
+it starting, Stop always works; D - a locked phone's "let's talk" is ended at
+once and says nothing; E - after a crisis turn the quiet timer does not end
+Live, the help panel stays, and Live never feeds "suggest the bigger model"
+or any counter; F/G - the microphone is really closed (the recorder released)
+for a card, a stale link, Mute, a call and the lock - but NOT for a voice
+pause (see "decisions" below); H - "Watch with me" pictures only for
+questions asked at the PC; I - keeping the model loaded never overrides
+Standby (on Standby Live says "Waking up, a few seconds"); J - the phone's
+notification stays on the phone, shows no words anyone said, has End and
+Mute; K - the photo test refuses cloud model names, and the crowd photo must
+be a licensed stock photo; L - `read_camera` is in both apps' read-aloud
+rules; M - the screen setting and card now say "your screen or the camera".
+
+**The voice review (C1-C15), as built:** C1 commands long enough for the
+2-second check ("Say 'give me twenty more minutes'"), and the model is told
+not to end on a yes/no question; C2 too-short clips checked (never turned
+into words) to tell "probably you" from someone else, the TV never makes
+Jarvis speak, and "say a bit more" does not reset the quiet clock; C3 "Didn't
+catch that - say a bit more" on both devices; C4 after repeated refusals the
+microphone keeps listening check-only, so the owner's voice carries on
+without a tap, with "I'm having trouble recognising your voice - move closer
+or retrain"; C5 the stop word on Live clips, the first 3 seconds of a reply
+included; C6 the ending phrases; C7 the quiet warning and "Resume Live"; C8
+only cards raised during THIS session pause Live; C9 "move it here?"; C10 a
+lock that cannot be read pauses Live; C11 the phone's screen stays on on the
+Live screen, and App lock ends Live only when it would lock the app again;
+C12 pressing Live loads the everyday model (never over Standby), and "One
+moment" when the first answer is slow; C13 the phone says "I've lost the link
+to your PC." in its own offline voice; C14 up to 3 seconds of pause inside an
+unfinished sentence, and a second thought before Jarvis's first sound joins
+the question; C15 another voice lowers Jarvis's voice, and only the owner's
+stops it.
+
+**Decisions made while building (say if you want them otherwise):**
+
+- **Voice pauses keep the microphone open (C4 over G).** Rule G said the
+  microphone closes in every pause; the voice review said the owner's own
+  voice should resume a voice pause without a tap. Both can't hold, so a
+  "Paused: other voices" pause keeps listening - every clip still checked,
+  none turned into words unless it is the owner's. Card, link, Mute, call
+  and lock pauses close it.
+- **Which cards pause Live (C8):** cards raised since this session started
+  (and any card whose time cannot be read, and an unreadable queue - fail
+  closed); plus a card on screen in the app. Cards from before Live do not
+  pause it. Memory-review cards are not approval cards and do not pause it.
+- **App lock on the PC** ends Live when App lock would ask again ("Lock again
+  after", 1 minute by default) - even if the owner is still talking but has
+  not touched a Jarvis window. Talking is not treated as being at the PC,
+  because a recording could do it.
+- **The desktop's fixed lines** ("I'm listening.") close the microphone while
+  they play, so Jarvis's own voice is not sent as a sentence.
+
+**Left for later (not built):** checking each piece of a clip so a guest's
+words overlapping the owner's are never turned into words (voice review
+finding 8); a voice on the 2060; a hotkey; the phone's camera capture;
+measuring anything on the owner's PC and phone (step 5).
 
 ## Four things to know first (some are bad news, said plainly)
 
@@ -86,14 +224,16 @@ card to start"). It needs no approval card, and it does **not** need the
 
 - **PC:** a **Live** button next to the microphone in the Jarvis bar; a tray
   row; an optional key (Alt+Shift+L, unbound by default - Alt+Shift+S, N, W,
-  X and F are taken, `hotkeys.rs:71-108`).
+  X and F are taken, `hotkeys.rs:71-108`) - **the key is not built yet**.
 - **Phone:** a **Live** button on Home; an app-icon shortcut.
-- **By voice:** "Hey Jarvis, let's talk" (or "go live"), answered by
-  `jarvis_quick.py` without the model, on the device that heard it. Only
+- **By voice:** "Hey Jarvis, let's talk" (or "go live"), answered by the
+  PC's speech route (`jarvis_speech.hear`, as built) without the model, on the device that heard it. Only
   words that passed the owner check can start it. **The model gets no tool
   that starts Live**, so nothing it reads, and no schedule, can start one.
-- Not while the event stream is stale (rule 4), and on the phone not while
-  App lock is locked.
+- Not while the event stream is stale (rule 4), not while App lock would ask
+  for the fingerprint, PIN or Windows Hello (both devices), and not until
+  the owner's voice is trained (the PC refuses it with "Jarvis Live needs
+  your voice trained first - Settings -> Voice check.").
 
 **The sign, the whole time:**
 
@@ -117,24 +257,27 @@ card to start"). It needs no approval card, and it does **not** need the
 | **Stop everything** (the desktop key Alt+Shift+X, the phone's button) | Live registers a stopper, like "Watch with me" does (`jarvis_screen.py:143`, `:1032-1033`) |
 | Saying "bye", "that's all", "stop Live" | Must pass the owner check, like any command. Plain "stop" still only stops Jarvis talking, for anyone, as today |
 | **Quiet for 90 seconds** after Jarvis last spoke (proposed) | Long enough to think or fetch something; short enough that an open microphone is not forgotten. A soft end tone, and "Live ended - it was quiet" |
-| **The time limit**: 30 minutes by default, "20 more minutes" extends, 2 hours at most | The same numbers as "Watch with me" (`jarvis_screen.py:115-117`). Jarvis says once, 2 minutes before: "Two minutes left. Say 'more time' to keep going." |
-| **PC:** Windows locks or sleeps | As for "Watch with me" |
-| **Phone:** App lock locks, or the phone restarts | Live never restarts by itself |
+| **The time limit**: 30 minutes by default; "give me twenty more minutes" extends it, never to more than 2 hours ahead | The same numbers as "Watch with me" (`jarvis_screen.py:115-117`). Jarvis says once, 2 minutes before: "Two minutes left. To keep going, say: give me twenty more minutes." (long enough for the 2-second check) |
+| **PC:** Windows locks or sleeps, or App lock would ask again | As for "Watch with me". A lock the app cannot read pauses Live instead |
+| **Phone:** App lock would lock the app again, or the phone restarts | Live never restarts by itself |
+| **Standby** begins during Live | Live ends; starting Live on Standby says "Waking up, a few seconds" |
 
 **Phone screen off, or leaving the app (proposed):** the **camera stops at
 once**; the **voice carries on**, like a phone call, with the ongoing
 notification. Answers that must stay on screen say "It's on your screen"
-and wait in the app. With **App lock** on, the phone locking **ends** Live
-instead, because App lock means "nothing of Jarvis while locked". Android
+and wait in the app. With **App lock** on, Live ends when App lock would
+lock the app again ("Lock again after"), not the moment the screen goes off
+(as built; the voice review, C11). While the Live screen shows, the screen
+stays on. Android
 allows this: the hands-free listener already keeps a microphone service
 running with the screen off (`WakeWordService.kt:824`, foreground service
 type microphone).
 
 **Only one Live session at a time.** Starting Live on the phone ends one on
 the PC, and the other way round. While Live runs on one device, "Hey Jarvis"
-clips from the **other** device are dropped with the reason "Live is on your
-phone" - the same shape as today's "answered on your other device"
-(`jarvis_speech.py:811-833`).
+on the **other** device is not answered: that device offers "Live is on your
+phone - move it here?", and one tap moves Live there (as built; the voice
+review, C9).
 
 ## 3. The conversation loop
 
@@ -200,11 +343,13 @@ at `:1905-1915`). **A new `live` source is not the talk button, so today's
 code already treats it like "Hey Jarvis" under the strict setting** - it
 fails closed for any source it does not know (`:1913-1915`).
 
-- **Proposed: keep it that way.** You pressed Start once, but then the
-  microphone is open for up to 30 minutes, and a recording of your voice
-  played near it would pass the voice check (which cannot tell a recording
-  from you - `JARVIS-API.md` §16). That is exactly what the strict setting
-  guards against.
+- **The owner chose otherwise (2026-09-28), and it is built that way:**
+  Live is trusted like the talk button by default, however it started,
+  with the three-choice "Jarvis Live" setting for more caution (see "What
+  was built, and what changed"). The risk the proposal named is real and
+  is said on the setting's card: a recording of your voice played near the
+  open microphone would pass the voice check (which cannot tell a recording
+  from you - `JARVIS-API.md` §16).
 - Under the default setting, "Same as the talk button", nothing changes
   either way: Live turns are trusted like the talk button.
 
@@ -225,7 +370,7 @@ records its reading of a picture's words as a reading tool
 (`jarvis_agent.py:4937`, `read_picture_text`) but, as far as I can see,
 sends no `step` event naming it (`STEP_READS` holds only `read_screen`,
 `:3165`), so the apps cannot tell; and the second card's picture model runs
-no tool at all. **Proposed:** treat a camera answer exactly like an answer
+no tool at all. **The owner's answer (built):** treat a camera answer exactly like an answer
 about the screen - read aloud unless a sensitive fact was used or the strict
 setting says otherwise - by adding the camera read to `STEP_READS` and to the
 shared read-aloud table (`private-aloud-cases.json`).
@@ -242,6 +387,12 @@ shared read-aloud table (`private-aloud-cases.json`).
   from it without a card (`jarvis_auto_learn.py:568`). The spoken-style
   answer still applies to it: that reads the app's own `voice` tag
   (`jarvis_agent.py:2872`), not the picture mark.
+- **Side talk** (the owner's answer, 2026-09-28): a remark to someone else
+  gets the marker "[not for me]" from the model; it is never spoken, never
+  learned from and never counted, and the chat keeps the turn with the
+  marker as its answer, shown as "(not for Jarvis)".
+- **After a crisis turn** the quiet timer does not end Live, and no Live
+  turn ever feeds "suggest the bigger model" or any other counter.
 - **Never kept:** the audio (as today), camera pictures, and the words read
   from them - only your question's words and Jarvis's answer
   (`jarvis_chat_log.py:48`: "A picture: its words only ... The picture
@@ -510,6 +661,8 @@ history"), which covers the Live screen.
 - **Any cloud service** for speech, pictures or answers.
 - **Recognising people** in camera pictures, and a camera that watches.
 - **Approving by voice.**
+- **A Balanced (1.5 s) check just for Live** - the owner kept the 2-second
+  check for Live (2026-09-28); tap buttons cover quick answers.
 
 ## 9. Build plan (small testable steps)
 
