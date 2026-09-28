@@ -213,6 +213,21 @@ key is entered on the PC only, like the web-search keys.
 8. **Second-card mode,** measured on the owner's PC.
 9. **The new-feature audit** (bugs, both apps, fit).
 
+## The owner's answers (2026-09-28)
+
+- **Gemini first, through the website, driven openly** (option b, against
+  the recommendation, with the risk understood). Jarvis types into
+  gemini.google.com in a visible browser window at human pace; it never
+  hides that it is automated, never changes its browser fingerprint, never
+  solves or skips a captcha, and stops and asks the owner if a login check,
+  captcha or "unusual activity" page appears. A request for ban-avoidance
+  tactics was declined.
+- This changes parts of the design above: the "API client" steps become a
+  browser driver (Playwright on the PC, one browser profile used only for
+  this), the cost cap becomes a turn and time cap, and the logged-in page's
+  own history and Gemini's own memory of the account become a rule 1
+  question - see the account question below.
+
 ## Questions for the owner
 
 1. **How should Jarvis reach the chatbot?**

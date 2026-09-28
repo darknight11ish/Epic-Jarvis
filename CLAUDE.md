@@ -509,6 +509,13 @@ testers, scouts and integration scouts; `.claude/agents/`):
   built (`docs/CHATBOT-DRIVER-DESIGN.md`). It may need both graphics cards.
   Rule 1 is unchanged: nothing private (email, files, credentials, memory)
   goes into those chats.
+  Owner's answers, 2026-09-28: **Gemini first, through its website
+  (gemini.google.com), driven openly** - at human pace, in a visible
+  browser window, with nothing that hides it from or dodges Google's bot
+  detection, and no captcha-solving. The owner chose this knowing Google's
+  terms forbid automated access and that the account could be closed. A
+  request to add "tactics that help avoid bans" was declined: getting round
+  a site's bot protection is not something this project builds.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
