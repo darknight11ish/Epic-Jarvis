@@ -134,7 +134,8 @@ enum class FrameRateTarget(val id: String, val label: String, val hz: Float) {
 
         /** The Frame rate row's one-line note - word for word the desktop's (face-tuning.js FRAME_RATE_NOTE). */
         const val NOTE = "How many times a second the face is drawn. Higher is smoother but uses more battery and " +
-            "graphics work. It keeps to whole steps of the screen's rate, so 90 becomes 72 on a 144 Hz screen."
+            "graphics work. It keeps to whole steps of the screen's rate and never goes below your pick, so on a " +
+            "144 Hz screen 90 draws 144 - the next rate the screen can do evenly."
 
         fun byId(id: String?): FrameRateTarget = entries.firstOrNull { it.id == id } ?: DEFAULT
     }
@@ -209,18 +210,18 @@ object FramePacing {
     }
 
     /**
-     * The spec's `frame_rate.pick_rule`: the nearest whole divisor of the
-     * panel (the kit's `Math.round(hz / want)`), plus one if that would draw
-     * more than a fifth faster than [wantFps] - so 90 is 72 on a 144 Hz
-     * panel and 60 on a 120 Hz one, never 120. The desktop's
-     * `FacePace.strideNear` is the same sum.
+     * The spec's `frame_rate.pick_rule` (owner, 2026-09-28): a whole divisor
+     * of the panel, rounded UP - never slower than [wantFps]. The stride is
+     * the largest whole number that still draws at least [wantFps]; a pick at
+     * or above the panel's rate is every frame. So 90 draws 144 on a 144 Hz
+     * panel and 120 on a 120 Hz one, 120 draws 165 on 165 Hz, 60 draws 72 on
+     * 144 Hz. The 0.01 lets a panel that reports 59.94 still draw 30 as every
+     * other frame. The desktop's `FacePace.strideNear` is the same sum.
      */
     fun strideNear(panelHz: Float, wantFps: Float): Int {
         val hz = sane(panelHz)
         val want = if (wantFps.isFinite() && wantFps > 0f) min(wantFps, hz) else hz
-        var s = max(1, jsRound(hz / want).toInt())
-        if (hz / s > want * 1.2f + 1e-3f) s++
-        return s
+        return max(1, floor(hz / want + 0.01f).toInt())
     }
 
     /** The largest divisor that still draws at least [fps] a second: a rung of the animals' ladder. */

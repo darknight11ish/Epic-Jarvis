@@ -1691,8 +1691,8 @@
   },
   "state_fps_why": "Idle, standby and banked are more than nine tenths of screen-on time and every face drew them at the full display rate. The shell accumulates time and skips vsyncs for these states, handing the accumulated dt to the draw so motion covers the same distance. The first 600ms after any state change, and any tap acknowledgement, run at full rate so no transition stutters. Banked at 2fps is just enough to catch a new notch. Active states are untouched.",
   "pick_rule": {
-   "rule": "stride = max(1, round(hz / want)); one more if hz / stride > want * 1.2",
-   "why": "A picked rate is drawn on whole shares of the screen's rate, the nearest one, but never more than a fifth faster than what was picked: 90 becomes 72 on a 144 Hz screen and 60 on a 120 Hz one; 60 is 72 on 144 Hz; 30 is 30 on 60, 90, 120 Hz."
+   "rule": "stride = max(1, floor(hz / want + 0.01)), with want capped at hz",
+   "why": "A picked rate is drawn on whole shares of the screen's rate, rounded up - never slower than what was picked (owner, 2026-09-28; it used to be the nearest share, which drew 90 as 72 on 144 Hz). The stride is the largest whole number that still draws at least the pick, and a pick at or above the screen's rate is every frame: 90 draws 144 on a 144 Hz screen and 120 on a 120 Hz one; 120 draws 165 on 165 Hz; 60 is 72 on 144 Hz; 30 is 30 on 60, 90 and 120 Hz and 36 on 144 Hz. The 0.01 lets a screen that reports 59.94 still draw 30 as every other frame."
   },
   "animals": {
    "note": "Owner, 2026-09-28: 'Sharp animals on capable hardware'. The four animal faces (red panda, pygmy owl, sea otter, monkey) are ray-traced per pixel, so how many pixels they are traced at decides how sharp their edges are and how much graphics work they cost. Both apps read these numbers: the desktop from this file (faces-spec.js), the phone from Kotlin constants that SpecDriftTest holds to it.",

@@ -663,9 +663,16 @@ warm; on a software renderer (the emulator) it stays at Lower. A level or
 frame rate picked by hand stays picked.
 
 **Frame rate** choices: Auto, 30, 60, 90, 120, Max (30 and 90 are new). A
-picked rate is drawn on whole shares of the screen's rate, the nearest one
-but never more than a fifth faster than the pick: 90 becomes 72 on a 144 Hz
-screen and 60 on a 120 Hz one.
+picked rate is drawn on whole shares of the screen's rate, rounded **up** -
+never slower than the pick (owner, 2026-09-28): the face draws every Nth
+screen refresh, N being the largest whole number that still reaches the
+pick, and a pick at or above the screen's rate is every refresh. So on a
+144 Hz screen 90 draws 144 (the next rate the screen can do evenly), 60
+draws 72 and 30 draws 36; on a 120 Hz screen 90 draws 120; on a 165 Hz
+screen 120 draws 165. (It used to take the nearest share, which drew 90 as
+72 on 144 Hz and 60 on 120 Hz - slower than asked.) A resting animal's
+rate and the calm (reduced-motion) cap use the same rule, so they too can
+land a little above their number, never below it.
 
 **Resting.** An animal at rest (idle, or waiting on an approval) with Frame
 rate on Auto is drawn 60 times a second while frames are cheap (they cost

@@ -46,19 +46,19 @@
   const NO_SHADOW_BELOW_PX = A.no_shadow_below_px || 200;
   const HOLD_FIRST_MS = 10000, HOLD_MAX_MS = 120000;
 
-  const jsRound = Math.round;
-
   /**
-   * The pick rule (spec `frame_rate.pick_rule`): the nearest whole share of
-   * the screen's rate, but never more than a fifth faster than what was
-   * picked. 90 on a 144 Hz screen is 72, on a 120 Hz one 60.
+   * The pick rule (spec `frame_rate.pick_rule`, owner 2026-09-28): a whole
+   * share of the screen's rate, rounded UP - never slower than what was
+   * picked. The stride is the largest whole number that still draws at least
+   * the pick; a pick at or above the screen's rate is every frame. 90 on a
+   * 144 Hz screen draws 144, on a 120 Hz one 120; 120 on 165 Hz draws 165;
+   * 60 on 144 Hz draws 72. The 0.01 lets a screen that reports 59.94 still
+   * draw 30 as every other frame.
    */
   function strideNear(hz, want) {
     const rate = Number(hz) > 0 ? Number(hz) : 60;
     const w = Math.min(Number(want) > 0 ? Number(want) : rate, rate);
-    let s = Math.max(1, jsRound(rate / w));
-    if (rate / s > w * 1.2) s++;
-    return s;
+    return Math.max(1, Math.floor(rate / w + 0.01));
   }
   /** The largest stride that still draws at least `fps` a second (a ladder step). */
   function strideAtLeast(hz, fps) {

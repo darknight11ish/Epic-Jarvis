@@ -403,8 +403,9 @@ fun FaceView(
                         // nothing. `last` is left alone, so the next drawn
                         // frame's dt covers the skipped time - frame skipping,
                         // not slow motion. A resting face strides further, to
-                        // its resting rate on whole vsyncs (the pick rule:
-                        // 30 on 120 Hz is every 4th, 60 on 144 Hz every 2nd).
+                        // its resting rate on whole vsyncs (the pick rule,
+                        // rounded up: 30 on 120 Hz is every 4th, 60 on
+                        // 144 Hz every 2nd, 30 on 144 Hz every 4th = 36).
                         val eff = if (rest > 0) max(b.stride, FramePacing.strideNear(b.panelHz, rest.toFloat())) else b.stride
                         if (eff > 1 && last != 0L && vsyncs % eff != 0L) return@withFrameNanos
                         val fresh = last == 0L || !onVsync

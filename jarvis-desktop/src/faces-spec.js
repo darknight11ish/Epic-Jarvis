@@ -751,8 +751,8 @@ window.JARVIS_SPEC = Object.freeze({
       "why": "If a face cannot hold the full rate, drop to a whole divisor (120 -> 60 -> 40 -> 30) rather than chasing an uneven number. Every frame then lands on a real vsync. A locked 60 on a 120Hz panel looks better than a floating 75."
     },
     "pick_rule": {
-      "rule": "stride = max(1, round(hz / want)); one more if hz / stride > want * 1.2",
-      "why": "A picked rate is drawn on whole shares of the screen's rate, the nearest one, but never more than a fifth faster than what was picked: 90 becomes 72 on a 144 Hz screen and 60 on a 120 Hz one; 60 is 72 on 144 Hz; 30 is 30 on 60, 90, 120 Hz."
+      "rule": "stride = max(1, floor(hz / want + 0.01)), with want capped at hz",
+      "why": "A picked rate is drawn on whole shares of the screen's rate, rounded up - never slower than what was picked (owner, 2026-09-28; it used to be the nearest share, which drew 90 as 72 on 144 Hz). The stride is the largest whole number that still draws at least the pick, and a pick at or above the screen's rate is every frame: 90 draws 144 on a 144 Hz screen and 120 on a 120 Hz one; 120 draws 165 on 165 Hz; 60 is 72 on 144 Hz; 30 is 30 on 60, 90 and 120 Hz and 36 on 144 Hz. The 0.01 lets a screen that reports 59.94 still draw 30 as every other frame."
     },
     "state_fps": {
       "banked": 2,

@@ -5210,9 +5210,9 @@ function applyTarget(){
   let want = t === "auto" || t === "max" ? CLOCK.hz : Math.min(+t, CLOCK.hz);
   if(GRID_ONLY && t === "auto") want = Math.min(want, GRID_HZ);
   if(CALM.matches) want = Math.min(want, SOLO_CRITTER ? CRITTER_CALM_HZ : CALM_HZ);
-  // The pick rule (spec frame_rate.pick_rule): the nearest whole share of
-  // the screen's rate, never more than a fifth faster than the pick - so 90
-  // is 72 on a 144 Hz screen. The same function display mode and the phone use.
+  // The pick rule (spec frame_rate.pick_rule): a whole share of the
+  // screen's rate, rounded up - never slower than the pick - so 90 draws
+  // 144 on a 144 Hz screen. The same function display mode and the phone use.
   CLOCK.stride = FacePace.strideNear(CLOCK.hz, want);
   CLOCK.minStride = CLOCK.stride;
   CLOCK.budget = 1000 / (CLOCK.hz / CLOCK.stride);
@@ -5320,7 +5320,8 @@ function restFpsOf(s, state, target, headroom){
   return STATE_FPS[state] || 0;
 }
 /* Seconds between resting frames: on whole vsyncs of the screen (the pick
- * rule), so 60 on a 144 Hz screen is every other vsync, not every 2.4th. */
+ * rule, rounded up), so 60 on a 144 Hz screen is every other vsync (72), not
+ * every 2.4th. */
 function restStep(fps, hz){
   if(typeof FacePace === "undefined" || !(hz > 0)) return 1 / fps;
   return FacePace.strideNear(hz, fps) / hz;
@@ -6468,7 +6469,8 @@ async function bootDisplay() {
     useTier(TUNE.autoAdjust ? "high" : TUNE.quality);
   }
   // The pick rule (FacePace.strideFor - the same one face-tuning.js, the
-  // Faces window and the phone use): 90 is 72 on a 144 Hz screen.
+  // Faces window and the phone use): rounded up, so 90 draws 144 on a
+  // 144 Hz screen.
   function strideForRate(rate) {
     return FacePace.strideFor(rate, hz);
   }
