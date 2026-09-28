@@ -839,7 +839,7 @@ permissions = [
   "allow-photo-add-reminder",
 ]
 
-# "Bring in chats from ChatGPT, Claude or Gemini" (history-import.patch; the
+# "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek" (history-import.patch; the
 # owner's choice of 2026-09-28): the owner picks an export file on this PC in
 # the Windows "Open" dialog (run in Rust - the window gets no file access),
 # and the PC reads the owner's own messages in the background and PROPOSES

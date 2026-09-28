@@ -422,7 +422,7 @@ fn main() {
             // card, held on a stale link. The Jarvis bar and the Brain.
             "photo_scan",
             "photo_add_reminder",
-            // "Bring in chats from ChatGPT, Claude or Gemini"
+            // "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek"
             // (history-import.patch, 2026-09-28): where a run is (a read),
             // the Windows "Open" dialog then start (held on a stale link;
             // it only PROPOSES - every fact waits for its own yes), and

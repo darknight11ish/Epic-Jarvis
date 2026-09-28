@@ -151,6 +151,7 @@ on a throwaway copy instead.
 | `forget-range.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Forget a time frame"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 64). Adds `GET /api/memory/forget_range` and `/preview` (what Jarvis learned and the chats from some days, as a list the owner unticks), `POST /api/memory/forget_range` (ONE approval card, `memory_forget_range`, listing every item - nothing changes before a person approves) and `/undo` (10 minutes, no card), and the gate's risk line for the new action (local, not reversible: a risky approval). Last in the list: its context is `chatbot.patch`'s gate lines and `live.patch`'s install block. Needs `jarvis_forget_range.py` - see "Forget a time frame", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
+| `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 
 ## All but two of the patches apply, and that is correct
 
@@ -3488,10 +3489,10 @@ Not patches - scripts you run once, on demand, that call the patched backend
 rather than change it. `grade-peers.py` and `jarvis_research.py` are the
 other two in this directory; this is the third.
 
-## `import_history.py` — feed an old ChatGPT, Claude or Gemini export into the review queue
+## `import_history.py` — feed an old ChatGPT, Claude, Gemini or DeepSeek export into the review queue
 
 **Easiest (2026-09-28): the button.** In Jarvis Desktop, open the Brain,
-Memory, and press **Bring in chats from ChatGPT, Claude or Gemini** (under
+Memory, and press **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (under
 Learning). Choose the `.zip` the service sent you. It runs in the
 background on this PC and shows "412 chats read, 37 possible facts waiting
 for your yes"; every fact is a card under "Waiting for you". **Stop**
@@ -3505,27 +3506,40 @@ Or the command line, as before:
 cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 "C:\Users\pcadmin\Epic-Jarvis\backend\import_history.py" --chatgpt "C:\path\to\chatgpt-export.zip"
 ```
 
-(Any of `--chatgpt`, `--claude`, `--gemini`, or `--auto` to have it
+(Any of `--chatgpt`, `--claude`, `--gemini`, `--deepseek`, or `--auto` to have it
 work out which. Run it from the backend folder, or set
 `$env:JARVIS_BACKEND` first, the same as the test suites.)
 
-**Only your own words are read for facts** (2026-09-28, all three
+**Only your own words are read for facts** (2026-09-28, all four
 services): never the other assistant's replies, a tool's output, or a
 hidden message - the same rule as live learning. A game or role-play chat,
 a crisis message and a timer command are skipped, as in live learning.
 Before this, Claude and Gemini imports showed the model both sides.
 
-**ChatGPT's export format is not verified against a real file either.** It
-is written from the export's published shape (`conversations.json`: each
-chat a tree of messages; only the branch you last saw is read, so an
-edited-away message is not). Big files are read one chat at a time.
+**ChatGPT's, DeepSeek's and Gemini's export formats are not verified
+against a real file of yours.** They are written from the shapes several
+open-source readers of real exports agree on (2026-09-28). ChatGPT's and
+DeepSeek's are each a tree of messages; only the branch you last saw is
+read, so an edited-away message is not. DeepSeek's reasoning ("DeepThink")
+and web results are never read. Gemini's Takeout has no conversations, only
+prompts - they are put back into conversations by time (a new one after 30
+minutes' silence). Big files are read one chat at a time.
 
-This does not add anything to memory by itself. It calls the exact same
+**Reading a chat well (2026-09-28).** A long chat is handed to the model in
+pieces of at most 6,000 characters, each read whole - before, the start of a
+long chat could be cut off without a word. Each piece goes through the same
+door as live learning (`jarvis_intake.propose`): the model is told the date
+the chat happened and shown the closest facts Jarvis already keeps. It runs
+on the chat's own model. Pasted-in messages (over 4,000 characters) and code
+blocks are left out. If the model does not answer, the run pauses and that
+chat is not marked read, so nothing is lost. `test_import_understanding.py`.
+
+This does not add anything to memory by itself. It calls the same
 `jarvis_extract.propose()` a live conversation triggers once it goes quiet -
-once per historical conversation found in the export - so every guarantee
-that function already has keeps holding for free: the model call is
-whatever `_local_llm` is (Ollama at `OLLAMA_URL`), and nothing becomes a
-fact without a human accepting it in the Brain window.
+once per piece of each historical conversation found in the export - so
+every guarantee that function already has keeps holding for free: the model
+is Ollama at `OLLAMA_URL`, and nothing becomes a fact without a human
+accepting it in the Brain window.
 
 **"On this machine" is checked, not assumed** (2026-09-23). `OLLAMA_URL` is
 an environment variable; pointed at another computer, it would have sent

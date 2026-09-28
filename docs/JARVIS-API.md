@@ -11972,11 +11972,12 @@ asking at once run it once), then dropped.
   whether the graphics-card memory counters exist on the owner's driver.
   Each fails to "could not read", never to a wrong number.
 
-## 85. Bring in chats from ChatGPT, Claude or Gemini (added 2026-09-28)
+## 85. Bring in chats from ChatGPT, Claude, Gemini or DeepSeek (added 2026-09-28)
 
 The owner chose idea 13 of `docs/RESEARCH-AUDIT-2026-09-28.md` section 3:
 bring in an old chat history from ChatGPT (new), Claude or Gemini, from a
-button on the PC. `backend/import_history.py` already read Claude and Gemini
+button on the PC; the same day the owner added **DeepSeek**, and asked that
+Jarvis read these chats well (§85.5). `backend/import_history.py` already read Claude and Gemini
 exports from the command line; it now reads ChatGPT's too, and
 `backend/jarvis_history_import.py` (history-import.patch) runs the same
 `run()` in the background for the button. **It only proposes.** Every
@@ -11996,7 +11997,7 @@ holds for Claude and Gemini imports too (before, both sides of those chats
 were handed to the model). Also left out, as the live learner leaves them
 out (`jarvis_intake.py`): a chat the owner turned into a game or role-play, a
 crisis message, and a timer or reminder command. Each card is tagged
-`import:chatgpt`, `import:claude` or `import:gemini`.
+`import:chatgpt`, `import:claude`, `import:gemini` or `import:deepseek`.
 
 ChatGPT's export (`conversations.json` inside the `.zip`) keeps every branch
 of a conversation - an edited message or a second answer starts a new one.
@@ -12011,11 +12012,30 @@ conversation over 64 MB of text is skipped and said so; a JSON file that is
 not a list is read whole only up to 256 MB. The imported chats are **not**
 added to the owner's chat History.
 
-Gemini (Google Takeout): only records whose `header` is Gemini's (or
-Bard's) are read, so a Takeout that also holds Search or YouTube activity
-does not turn searches into chats. Takeout's "My Activity" must be
-exported as JSON; its default, HTML, has nothing this can read (it finds 0
-chats and says so).
+Gemini (Google Takeout, "My Activity", Gemini Apps, as JSON): only records
+whose `header` or `products` name Gemini or Bard (in any language - "Gemini
+앱" too) are read, so a Takeout that also holds Search or YouTube activity
+does not turn searches into chats. The owner's words are the record's
+`title` with its verb cut off ("Prompted ", "Asked ", "Said ", ...) and any
+"Attached N files." at the end; records that are not something the owner
+said ("Gave feedback", "Used ...", "Created ...") are skipped; a record with
+no English verb is read only when Gemini answered it (`safeHtmlItem`).
+Takeout has no conversation id, so prompts are put back into conversations
+by time: a new one after 30 minutes with nothing said. Takeout's default
+format, HTML, has nothing this can read (it finds 0 chats and says so).
+
+Claude: the text of a message comes from its "text" content blocks only -
+never its "thinking" (the model's hidden reasoning), a tool call (artifacts
+are one), a tool's answer, or an attachment's `extracted_content` (the
+text of a pasted or uploaded file: outside text).
+
+DeepSeek (Settings, Data, Export data: a `.zip` with `conversations.json`
+and `user.json`): like ChatGPT's, each chat is a tree of `mapping` nodes,
+but with no `current_node` and no role - who spoke is each fragment's
+`type`. `REQUEST` is the owner's words; `RESPONSE` the answer; `THINK` (the
+reasoning), `SEARCH` and the `TOOL_*` and `FILE` fragments are never read,
+and neither is `user.json` (the account). The branch read is the one ending
+at the newest message, walked back to the root in tree order.
 
 ### 85.2 The routes (this PC's own; the phone does not call them)
 
@@ -12026,9 +12046,9 @@ GET  /api/memory/import_chats
 200 {"ok": true, "available": true,
      "state": "idle" | "running" | "stopping" | "finished",
      "outcome": null | "done" | "queue_full" | "cancelled" | "empty"
-                | "not_export" | "failed",
-     "kind": null | "chatgpt" | "claude" | "gemini",
-     "source": null | "ChatGPT" | "Claude" | "Gemini",
+                | "no_model" | "not_export" | "failed",
+     "kind": null | "chatgpt" | "claude" | "gemini" | "deepseek",
+     "source": null | "ChatGPT" | "Claude" | "Gemini" | "DeepSeek",
      "read": <chats found>, "before": <already read by an earlier run, skipped>,
      "offered": <looked at this run>, "nothing": <of those, with no words of
      the owner's left to read>, "waiting": <possible facts added this run>,
@@ -12059,7 +12079,10 @@ a word of a chat; the audit log gets `history_import` with the counts and
 the outcome. A full review queue pauses the run (`queue_full`); a chat
 already read is never read again (`import-history-progress.json` in the
 Jarvis settings folder, shared with the command line), so pressing the
-button again with the same file carries on.
+button again with the same file carries on. So does `no_model`: the AI model
+on this PC gave no answer (not running, or timed out), and the chat being
+read is **not** marked read - before, an unanswered chat looked exactly like
+"nothing to learn here" and was skipped for ever.
 
 Real answers: `jarvis-desktop/tests/fixtures/history-import-cases.json`
 (`tools/gen_history_import_cases.py`).
@@ -12083,13 +12106,46 @@ Real answers: `jarvis-desktop/tests/fixtures/history-import-cases.json`
 
 ### 85.4 Not built, said plainly
 
-- The ChatGPT reader is written from the export's published shape and has
-  **not been run on a real export of the owner's**. If a future export
-  renames its fields, it finds 0 chats and says so, rather than guessing.
+- The ChatGPT, DeepSeek and Gemini readers are written from the shapes that
+  several open-source readers of real exports agree on (named in
+  `import_history.py`), and have **not been run on a real export of the
+  owner's**. If a future export renames its fields, it finds 0 chats and
+  says so, rather than guessing. Gemini's is the least certain: Takeout
+  often cuts a long prompt short, and its answers are often missing.
 - An imported card does not say which chat or which service it came from
   on screen; the `import:*` source is on the card's record only.
 - Bringing in more than one file at a time, and projects or memories that
   the other services export beside the chats, are not read.
+- Gemini's chats are put back together by time; two separate chats started
+  within 30 minutes of each other are read as one.
+
+### 85.5 Reading a chat well (2026-09-28)
+
+What reaches the model, and how, so an imported chat is understood the way
+a live one is:
+
+- **In whole pieces.** A long chat does not fit in what the model can read
+  at once, and the start - where people usually say who they are - would be
+  lost without a word. The owner's words are handed over in pieces of at
+  most 6,000 characters (`import_history.PIECE_CHARS`), in order, each read
+  whole, each its own model call. A piece starts with the last message of
+  the one before when that is short, so "my sister is Anna" and "she loves
+  jazz" stay together.
+- **The same door as live learning.** Each piece goes through
+  `jarvis_intake.propose`: the model is told the day the chat happened (so
+  "last week" becomes a real date - the chat's week, not this one) and is
+  shown the stored facts closest to what was said (so a correction names
+  the fact it would replace).
+- **On the chat's own model** (`JARVIS_LOCAL_MODEL`, else
+  `jarvis_models.current_model()`, the order the live learner uses) - not a
+  second copy loaded beside it with a smaller window.
+- **Left out:** one message over 4,000 characters (a pasted email, page or
+  document - outside text, like pasted text in a live chat) and ```` ``` ````
+  code blocks.
+- A model that gives no answer pauses the run (`no_model`, above).
+
+`backend/test_import_understanding.py` holds all of this, on made-up exports
+of all four kinds.
 ---
 
 ## 86. Widgets you describe (added 2026-09-28)

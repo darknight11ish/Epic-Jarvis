@@ -8,7 +8,7 @@
  *
  * What must hold:
  * - the PC's own sentence is shown, with counts only;
- * - "Bring in chats from ChatGPT, Claude or Gemini" starts one run, and is
+ * - "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek" starts one run, and is
  *   greyed on a stale link (rule 4) - Rust refuses too;
  * - while a run is going the page asks the PC where it is, shows Stop, and
  *   Stop is never held (it only does less);

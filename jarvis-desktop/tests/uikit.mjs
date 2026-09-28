@@ -2187,7 +2187,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
       ok: true, available: true, state: "idle", outcome: null, kind: null, source: null,
       read: 0, before: 0, offered: 0, nothing: 0, waiting: 0, started: null, finished: null,
       here: true, about: "",
-      words: "Bring in your old chats from ChatGPT, Claude or Gemini: choose the export "
+      words: "Bring in your old chats from ChatGPT, Claude, Gemini or DeepSeek: choose the export "
         + "file on this PC.",
     }],
     ...(historyImport || {}),

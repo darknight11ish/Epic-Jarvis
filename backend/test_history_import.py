@@ -1,4 +1,4 @@
-"""Bring in chats from ChatGPT, Claude or Gemini (import_history.py's ChatGPT
+"""Bring in chats from ChatGPT, Claude, Gemini or DeepSeek (import_history.py's ChatGPT
 reader, and jarvis_history_import.py, the Brain's button). JARVIS-API.md
 section 85.
 
@@ -539,7 +539,7 @@ def t_not_an_export():
     _wait(_finished)
     v = H.view()
     check("a zip that is no export: said plainly",
-          v["outcome"] == "not_export" and "not a ChatGPT, Claude or Gemini export"
+          v["outcome"] == "not_export" and "not a ChatGPT, Claude, Gemini or DeepSeek export"
           in v["words"], v)
 
 
@@ -585,7 +585,7 @@ def t_install_answers_only_its_routes():
         pass
     line = H.install(Hd, origin_ok=lambda s: True, token_ok=lambda s: True,
                      read_body=lambda s: s.body)
-    check("a banner line", "ChatGPT, Claude or Gemini" in line, line)
+    check("a banner line", "ChatGPT, Claude, Gemini or DeepSeek" in line, line)
     check("installing twice does not wrap twice", "already on" in H.install(
         Hd, origin_ok=lambda s: True, token_ok=lambda s: True, read_body=lambda s: s.body))
     h = Hd("/api/memory/pending")

@@ -364,8 +364,14 @@ def t_every_caller_goes_through_the_check():
     ih = (HERE / "import_history.py").read_text(encoding="utf-8")
     check("import_history's X is jarvis_extract", "import jarvis_extract as X" in ih)
     run = ih[ih.index("def run("):]
+    # Since 2026-09-28 run() hands each piece of a chat to _propose(X, ...),
+    # which calls jarvis_intake.propose(X, ...) or X.propose(...) - and
+    # nothing else in import_history.py calls either.
+    helper = ih[ih.index("def _propose("):ih.index("def run(")]
     check("import_history checks the model's address before the first propose()",
-          run.index("local_model_ok(X)") < run.index("X.propose("))
+          "_propose(X, " in run and run.index("local_model_ok(X)") < run.index("_propose(X, ")
+          and "X.propose(" in helper and "X.propose(" not in ih[ih.index("def run("):]
+          and ih.count("X.propose(") == 2 and ih.count("jarvis_intake.propose(") == 1)
     intake = (HERE / "jarvis_intake.py").read_text(encoding="utf-8")
     check("jarvis_intake.propose calls the module it is handed",
           "out = extract.propose(messages, llm=wrapped, source=source)" in intake)

@@ -224,7 +224,7 @@ pub(crate) mod picker {
     pub enum What {
         Folder,
         Zip,
-        /// A ChatGPT, Claude or Gemini export (`.zip` or `.json`), for the
+        /// A ChatGPT, Claude, Gemini or DeepSeek export (`.zip` or `.json`), for the
         /// Brain's "Bring in chats" (brain/history_import.rs).
         ChatExport,
     }
@@ -313,7 +313,7 @@ pub(crate) mod picker {
     pub enum What {
         Folder,
         Zip,
-        /// A ChatGPT, Claude or Gemini export (`.zip` or `.json`), for the
+        /// A ChatGPT, Claude, Gemini or DeepSeek export (`.zip` or `.json`), for the
         /// Brain's "Bring in chats" (brain/history_import.rs).
         ChatExport,
     }
