@@ -524,6 +524,16 @@ data class Heard(
      */
     @SerialName("sensitive_aloud") val sensitiveAloud: Boolean = false,
     /**
+     * May an answer about the SCREEN (`read_screen`, "Look at this" /
+     * "Watch with me") be read aloud? True for the talk button, and for
+     * "Hey Jarvis" under "Same as the talk button"; under "Only trust the
+     * talk button", true for "Hey Jarvis" only when the owner allowed it
+     * (`hands_free_screen: screen_aloud`, the owner's decision of
+     * 2026-09-28). False - and missing, from an older PC - keeps such an
+     * answer on screen (voice/PrivateAloud.kt).
+     */
+    @SerialName("screen_aloud") val screenAloud: Boolean = false,
+    /**
      * The clip had less speech than a command needs, so the PC would not
      * act on it (since 2026-09-24; false from an older PC). [reason] is the
      * PC's own "say a little more" sentence, and it is shown as it is.

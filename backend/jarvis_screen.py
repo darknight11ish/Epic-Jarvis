@@ -20,6 +20,10 @@ the question and the answer are kept in chat history like any chat (the
 picture and the screen's words never are); screen answers are read aloud
 unless a sensitive fact was used or the strict hands-free setting says
 otherwise (`read_screen` is on the read-aloud list, JARVIS-API section 16).
+Under "Only trust the talk button" a "hey Jarvis" turn's screen answer
+stays on screen unless the owner turned on the voice setting
+`hands_free_screen` (2026-09-28; the utterance reply's `screen_aloud`,
+jarvis_voice.screen_aloud - both apps apply it).
 
 IN PLAIN WORDS, WHAT HAPPENS
   * "Look at this": ONE look, now. The pause rules are checked just before

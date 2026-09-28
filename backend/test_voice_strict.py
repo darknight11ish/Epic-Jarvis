@@ -637,6 +637,123 @@ def t_hands_free_setting():
               and gate_state["settings"]["hands_free"] == "button_only", gate_state)
 
 
+SCREEN_CARD = (
+    "Let Jarvis read answers about your screen aloud after \"Hey Jarvis\", even while "
+    "\"Only trust the talk button\" is chosen?\n\n"
+    "Anyone near the speaker will hear what Jarvis says about your screen. A recording "
+    "or a copy of your voice played near the microphone while Jarvis is watching your "
+    "screen could hear it too.\n\n"
+    "If you did not just do this, say no.\n\n"
+    "If you say no: nothing changes - those answers stay on your screen.")
+
+
+def t_hands_free_screen_setting():
+    """The owner's decision, 2026-09-28: under "only trust the talk button",
+    an answer about the screen to a "hey Jarvis" turn stays on screen; a
+    sixth setting lets it be read aloud even then. On screen is the default
+    and the strict value (also for a damaged value); "read aloud" is the
+    voice card; going back is immediate. Under "same as the talk button"
+    it changes nothing."""
+    with Temp():
+        check("no settings file: screen_on_screen",
+              V.settings()["hands_free_screen"] == "screen_on_screen")
+        check("...and under the default hands-free choice, hey Jarvis's screen answers "
+              "are read aloud anyway", V.screen_aloud("wake_word"))
+        V.settings_path().write_text(json.dumps({"strictness": "very_strict",
+                                                 "hands_free": "button_only"}))
+        check("a file from before this setting: screen_on_screen",
+              V.settings()["hands_free_screen"] == "screen_on_screen")
+        check("button_only, not allowed: hey Jarvis's screen answers stay on screen",
+              not V.screen_aloud("wake_word"))
+        check("...the talk button's are still read aloud",
+              V.screen_aloud("push_to_talk") and V.screen_aloud("PUSH_TO_TALK "))
+        check("...a missing or unknown source is treated as hands-free (on screen)",
+              not V.screen_aloud("") and not V.screen_aloud(None)
+              and not V.screen_aloud("barge_in"))
+        for bad in ("read_everything", None, 1, True):
+            V.settings_path().write_text(json.dumps({"hands_free": "button_only",
+                                                     "hands_free_screen": bad}))
+            check(f"a damaged value ({bad!r}): screen_on_screen (fail closed)",
+                  V.settings()["hands_free_screen"] == "screen_on_screen"
+                  and not V.screen_aloud("wake_word"))
+        V.settings_path().write_text("{not json", encoding="utf-8")
+        check("an unreadable file: screen_on_screen, and hands-free button_only",
+              V.settings()["hands_free_screen"] == "screen_on_screen"
+              and not V.screen_aloud("wake_word"))
+        V.settings_path().unlink()
+        st = V.status()
+        check("status: hands_free_screen at the top, in settings, choices and defaults",
+              st["hands_free_screen"] == "screen_on_screen"
+              and st["settings"]["hands_free_screen"] == "screen_on_screen"
+              and st["settings"]["choices"]["hands_free_screen"]
+              == ["screen_on_screen", "screen_aloud"]
+              and st["settings"]["defaults"]["hands_free_screen"] == "screen_on_screen", st)
+        check("is_loosening: screen_aloud loosens, screen_on_screen does not",
+              V.is_loosening("hands_free_screen", "screen_aloud")
+              and not V.is_loosening("hands_free_screen", "screen_on_screen"))
+        V.set_setting("hands_free", "button_only")
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_screen", "screen_aloud",
+                                   Verdict(False, outcome="denied"))
+        check("Read aloud raises ONE card; denied: stays on screen",
+              code == 202 and len(gate.calls) == 1
+              and V.settings()["hands_free_screen"] == "screen_on_screen"
+              and not V.screen_aloud("wake_word"), (code, out))
+        check("the card: the agreed words",
+              gate.calls and gate.calls[0][2] == SCREEN_CARD, gate.calls)
+        check("the card names the setting and the value",
+              gate.calls and gate.calls[0][1]["setting"] == "hands_free_screen"
+              and gate.calls[0][1]["to"] == "screen_aloud", gate.calls)
+        check("...and the last card says so",
+              (E._LAST or {}).get("setting") == "hands_free_screen"
+              and (E._LAST or {}).get("outcome") == "denied", E._LAST)
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_screen", "screen_aloud",
+                                   Verdict(False, outcome="timed_out"))
+        check("timed out: stays on screen",
+              V.settings()["hands_free_screen"] == "screen_on_screen")
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_screen", "screen_aloud", Verdict(True))
+        check("approved: screen_aloud, and hey Jarvis's screen answers are read aloud",
+              V.settings()["hands_free_screen"] == "screen_aloud"
+              and V.screen_aloud("wake_word"), (code, out))
+        check("...while the hands-free choice itself stays button_only",
+              V.settings()["hands_free"] == "button_only"
+              and not V.hands_free_trusted("wake_word"))
+        check("the other settings are kept when it is written",
+              V.settings()["memory"] == "memory_aloud"
+              and V.settings()["sensitive_memory"] == "sensitive_on_screen"
+              and V.settings()["strictness"] == "very_strict")
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_screen", "screen_on_screen")
+        check("Keep on screen: immediate, no card",
+              code == 200 and out["changed"] and not gate.calls
+              and V.settings()["hands_free_screen"] == "screen_on_screen"
+              and out["settings"]["hands_free_screen"] == "screen_on_screen", (code, out))
+        try:
+            V.set_setting("hands_free_screen", "screen_aloud")
+            ok = False
+        except ValueError:
+            ok = True
+        check("set_setting refuses to loosen it without approval", ok)
+        V.set_setting("hands_free", "button_only")
+        E._reset_for_tests()
+        with mock.patch.object(V, "_CHOICES", {k: c for k, c in V._CHOICES.items()
+                                               if k != "hands_free_screen"}):
+            code, out, gate = _setting("hands_free_screen", "screen_on_screen")
+        check("a voice module older than the setting: 503 in words, no card",
+              code == 503 and "too old" in out["error"] and not gate.calls, (code, out))
+        code, out, gate = _setting("hands_free_screen", "loud")
+        check("an unknown value: 400", code == 400, (code, out))
+        gate_state = S._strict_state({"strictness": "very_strict", "hands_free": "button_only"})
+        check("an older PC's status: hands_free_screen is \"\" (the apps do not offer it)",
+              gate_state["hands_free_screen"] == "", gate_state)
+        gate_state = S._strict_state(V.status())
+        check("gate.hands_free_screen is the PC's setting",
+              gate_state["hands_free_screen"] == "screen_on_screen"
+              and gate_state["settings"]["hands_free_screen"] == "screen_on_screen", gate_state)
+
+
 def t_nothing_private_aloud_without_a_real_check():
     """Broad mode lets every voice in without checking it. "Voice check is
     enough" and "read memories aloud" must then read nothing private aloud:
@@ -1297,6 +1414,83 @@ def t_hands_free_on_the_reply():
             S._close_awake()
 
 
+def t_screen_aloud_on_the_reply():
+    """`screen_aloud` on the utterance reply (the owner's decision,
+    2026-09-28): true for the talk button, and for every clip under "same as
+    the talk button"; under "only trust the talk button", false for "hey
+    Jarvis" (and a missing or unknown source) unless the owner chose to hear
+    screen answers. No voice-check condition of its own: it is read aloud
+    like a web search's answer, as before."""
+    import jarvis_wakeword as W
+    with Temp():
+        small = Table("sherpa-onnx:357a834f702b", {"loud": OWNER})
+        V.enroll(["a", "b", "c"], embedder=Table(small.name, {"a": OWNER, "b": OWNER,
+                                                               "c": OWNER}))
+        S.set_wake_enabled(True, gate=lambda *a: Verdict(True, outcome="approved"),
+                           tier_of=ask, spawn=run_sync)
+        try:
+            with mock.patch.object(V, "EcapaEmbedder", lambda: small), \
+                    mock.patch.object(V, "strong_embedder", lambda *a: None), \
+                    mock.patch.object(S, "_speech_span", return_value="skip"), \
+                    mock.patch.object(S, "_stt_engine", return_value=object()), \
+                    mock.patch.object(W, "spot",
+                                      return_value=W.Spot(True, heard=True, score=0.9)):
+
+                def hear(source, words="what is this error on my screen"):
+                    with mock.patch.object(S, "_transcribe", return_value=words):
+                        return S.hear(_clip("owner", 2.5), source=source).as_dict()
+
+                wake = "Hey Jarvis, what is this error on my screen"
+                h = hear("push_to_talk")
+                check("same_as_button, the talk button: screen answers aloud",
+                      h["ok"] and h["screen_aloud"] is True, h)
+                h = hear("wake_word", wake)
+                check("same_as_button, hey Jarvis: screen answers aloud - nothing changes",
+                      h["ok"] and h["wake_heard"] and h["screen_aloud"] is True, h)
+                V.set_setting("hands_free", "button_only")
+                h = hear("push_to_talk")
+                check("button_only, the talk button: still aloud",
+                      h["ok"] and h["screen_aloud"] is True, h)
+                h = hear("wake_word", wake)
+                check("button_only, hey Jarvis: screen answers stay on screen",
+                      h["ok"] and h["wake_heard"] and h["screen_aloud"] is False, h)
+                check("...and it is still answered (the words are there)",
+                      h["text"] == "what is this error on my screen", h)
+                h = hear("")
+                check("button_only, no source said: on screen",
+                      h["ok"] and h["screen_aloud"] is False, h)
+                V.set_setting("hands_free_screen", "screen_aloud", approved=True)
+                h = hear("wake_word", wake)
+                check("button_only with 'read screen answers aloud': hey Jarvis's are aloud",
+                      h["ok"] and h["screen_aloud"] is True, h)
+                check("...and nothing else loosens with it: private, memory and sensitive "
+                      "stay on screen",
+                      not h["private_aloud"] and not h["memory_aloud"]
+                      and not h["sensitive_aloud"], h)
+                V.set_setting("hands_free_screen", "screen_on_screen")
+                h = hear("wake_word", wake)
+                check("back to 'keep on screen': immediate", h["screen_aloud"] is False, h)
+                with mock.patch.object(V, "screen_aloud", side_effect=RuntimeError):
+                    h = hear("push_to_talk")
+                check("a voice module that cannot answer: on screen",
+                      h["ok"] and h["screen_aloud"] is False, h)
+                older = mock.Mock(wraps=V, spec=[n for n in dir(V) if n != "screen_aloud"])
+                with mock.patch.object(S, "jarvis_voice", older):
+                    check("a voice module older than the setting: the hands-free trust decides",
+                          S._screen_aloud("wake_word", False) is False
+                          and S._screen_aloud("push_to_talk", True) is True)
+                with mock.patch.object(S, "jarvis_voice", mock.Mock(wraps=V, spec=[
+                        n for n in dir(V) if n not in ("screen_aloud", "hands_free_trusted")])):
+                    h = hear("wake_word", wake)
+                    check("a voice module older than hands-free: read aloud, as before",
+                          h["screen_aloud"] is True, h)
+            check("a clip refused for being too short carries screen_aloud false",
+                  S.Heard(False, too_short=True).as_dict()["screen_aloud"] is False)
+        finally:
+            S.set_wake_enabled(False)
+            S._close_awake()
+
+
 # ------------------------------------------------ 12. nothing on the disk --
 
 def t_no_audio_is_written():
@@ -1376,14 +1570,15 @@ if __name__ == "__main__":
     for fn in (t_hole_one_the_basic_check_lets_nobody_in, t_hole_two_one_noisy_clip,
                t_settings_tighten_now_loosen_with_a_card, t_may_speak,
                t_memory_answers_aloud_by_default, t_sensitive_saved_facts_stay_on_screen_by_default,
-               t_hands_free_setting,
+               t_hands_free_setting, t_hands_free_screen_setting,
                t_nothing_private_aloud_without_a_real_check,
                t_the_stronger_model_decides, t_cohort_maths,
                t_a_bank_of_the_wrong_width_is_not_used, t_building_a_bank_on_this_pc,
                t_the_shipped_bank,
                t_training_in_rounds, t_rounds_make_subprints_and_add_adds,
                t_repeat_counters, t_measure_and_someone_else, t_minimum_command_length,
-               t_private_fields_on_the_reply, t_hands_free_on_the_reply, t_no_audio_is_written,
+               t_private_fields_on_the_reply, t_hands_free_on_the_reply,
+               t_screen_aloud_on_the_reply, t_no_audio_is_written,
                t_real_models):
         print(f"\n--- {fn.__name__} ---")
         try:

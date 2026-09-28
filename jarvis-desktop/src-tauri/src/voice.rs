@@ -363,6 +363,12 @@ struct HeardRaw {
     /// as `false`.
     #[serde(default)]
     sensitive_aloud: bool,
+    /// May an answer about the SCREEN (`read_screen`) be read aloud? False
+    /// for "Hey Jarvis" under "Only trust the talk button" unless the owner
+    /// allowed it (the owner's decision, 2026-09-28). Missing (an older PC)
+    /// is read as `false`.
+    #[serde(default)]
+    screen_aloud: bool,
 }
 
 fn default_true() -> bool {
@@ -405,6 +411,9 @@ pub struct HeardReply {
     /// Answers that use a sensitive saved fact may be read aloud too
     /// (private-speech.js). `false` when the PC did not say.
     pub sensitive_aloud: bool,
+    /// Answers about the screen may be read aloud (private-speech.js).
+    /// `false` when the PC did not say.
+    pub screen_aloud: bool,
 }
 
 impl HeardReply {
@@ -428,6 +437,7 @@ impl HeardReply {
             question_private: false,
             memory_aloud: false,
             sensitive_aloud: false,
+            screen_aloud: false,
         }
     }
 }
@@ -451,6 +461,7 @@ impl From<HeardRaw> for HeardReply {
             question_private: raw.question_private,
             memory_aloud: raw.memory_aloud,
             sensitive_aloud: raw.sensitive_aloud,
+            screen_aloud: raw.screen_aloud,
         }
     }
 }
@@ -2010,6 +2021,21 @@ mod heard_tests {
         assert_eq!(older["sensitiveAloud"], false);
         let off = serde_json::to_value(HeardReply::unavailable("no".into())).unwrap();
         assert_eq!(off["sensitiveAloud"], false);
+    }
+
+    /// The owner's decision of 2026-09-28: `screen_aloud` reaches the page
+    /// as `screenAloud`, and a PC that does not send it reads as `false` -
+    /// an answer about the screen then stays on screen.
+    #[test]
+    fn screen_aloud_is_passed_on_and_missing_is_false() {
+        let said = reply(r#"{"is_owner": true, "text": "what is this", "screen_aloud": true}"#);
+        assert_eq!(said["screenAloud"], true);
+        let strict = reply(r#"{"is_owner": true, "text": "what is this", "screen_aloud": false}"#);
+        assert_eq!(strict["screenAloud"], false);
+        let older = reply(r#"{"is_owner": true, "text": "hello"}"#);
+        assert_eq!(older["screenAloud"], false);
+        let off = serde_json::to_value(HeardReply::unavailable("no".into())).unwrap();
+        assert_eq!(off["screenAloud"], false);
     }
 }
 

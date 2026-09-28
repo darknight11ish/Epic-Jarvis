@@ -1112,7 +1112,10 @@ the owner turned on the voice setting `sensitive_memory` (X-Jarvis-Route's
 like the talk button by default; with the voice setting `hands_free:
 button_only` it is never learned from without a card, and its memory,
 sensitive and private answers stay on screen (the speech route records how
-each clip started, `source`, with the transcript).
+each clip started, `source`, with the transcript) - and so do its answers
+about the screen, unless the owner turned on the voice setting
+`hands_free_screen` (owner, 2026-09-28; one approval card to turn it on,
+off at once; JARVIS-API §16 and §62.7).
 
 **Jarvis's own words are never the owner's.** Since 2026-09-25 an app sends
 the last sentence of a spoken answer the owner cut off (`interrupted` on the
@@ -1927,7 +1930,9 @@ they landed):
   sessions) and `jarvis_screen.py` (session states, the pause rules, the
   caps, the Never look at list, Stop everything), plus the router keeping a
   screen turn on this PC (`has_screen`) and `read_screen` on the read-aloud
-  list (JARVIS-API §62). Missing: the Windows readers (password boxes,
+  list (JARVIS-API §62), with the voice setting "Answers about your screen
+  after "Hey Jarvis"" in both apps (under "Only trust the talk button" they
+  stay on screen unless it is on). Missing: the Windows readers (password boxes,
   capture protection, a window's own text), the chat route reading
   `screen_text`, and everything in both apps. The preflight's `screen` check
   says "not built on this PC yet".

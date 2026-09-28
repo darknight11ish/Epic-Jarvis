@@ -955,7 +955,7 @@ def _prints(voice: dict) -> dict:
 
 def _strict_state(voice: dict) -> dict:
     """gate.strictness / privacy / memory / sensitive_memory / hands_free /
-    settings / models / cohort / repeat, from
+    hands_free_screen / settings / models / cohort / repeat, from
     jarvis_voice.status(); the strict defaults, and `models` saying nothing
     is known, for a jarvis_voice.py older than them. Never raises."""
     st = voice.get("settings") if isinstance(voice.get("settings"), dict) else {}
@@ -973,6 +973,10 @@ def _strict_state(voice: dict) -> dict:
         # The fifth (how far "hey Jarvis" is trusted, the owner's decision of
         # 2026-09-24): "" from an older jarvis_voice.py - not offered.
         "hands_free": str(voice.get("hands_free") or ""),
+        # The sixth (answers about the screen after "hey Jarvis", under
+        # "only trust the talk button" - the owner's decision of
+        # 2026-09-28): "" from an older jarvis_voice.py - not offered.
+        "hands_free_screen": str(voice.get("hands_free_screen") or ""),
         "settings": st or {"strictness": strict, "privacy": "private_on_screen",
                            "voice_is_enough_allowed": strict == "very_strict",
                            "min_command_seconds": 0.0},
@@ -1413,6 +1417,16 @@ class Heard:
     #: talk button" (jarvis_voice `hands_free: button_only`) and this clip's
     #: source is not `push_to_talk` - "hey Jarvis", or no source said.
     sensitive_aloud: bool = False
+    #: May an answer about the SCREEN (the `read_screen` read, "Look at
+    #: this" / "Watch with me") be read aloud for this request, as far as
+    #: the hands-free settings go? jarvis_voice.screen_aloud(source): true
+    #: for the talk button, and for every clip under "same as the talk
+    #: button" (the default); under "only trust the talk button", true for
+    #: any other clip only when the owner chose `screen_aloud` (the owner's
+    #: decision, 2026-09-28). Every earlier rule (a sensitive fact, a private
+    #: question or tool) still comes first in the apps. An app that finds no
+    #: such field (an older PC) treats it as false.
+    screen_aloud: bool = False
     #: The words asked about something private (the router's private-topic
     #: backstop). A hint for the app, not a guarantee - see JARVIS-API.md.
     question_private: bool = False
@@ -1557,6 +1571,21 @@ def _source_trusted(source: str) -> bool:
     fn = getattr(jarvis_voice, "hands_free_trusted", None)
     if fn is None:
         return True
+    try:
+        return bool(fn(source))
+    except Exception:
+        return False
+
+
+def _screen_aloud(source: str, trusted: bool) -> bool:
+    """May an answer about the screen be read aloud for a clip from
+    `source`? (jarvis_voice.screen_aloud, the owner's decision of
+    2026-09-28.) A jarvis_voice.py older than that setting: the same as the
+    hands-free trust (`trusted`) - the setting is not there, so it is off.
+    One that cannot answer: no - the answer stays on screen."""
+    fn = getattr(jarvis_voice, "screen_aloud", None)
+    if fn is None:
+        return bool(trusted)
     try:
         return bool(fn(source))
     except Exception:
@@ -1748,7 +1777,13 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                                  and trusted),
                   memory_aloud=_memory_aloud() and _really_checked(verdict) and trusted,
                   sensitive_aloud=(_sensitive_aloud() and _really_checked(verdict)
-                                   and trusted))
+                                   and trusted),
+                  # An answer about the screen is read aloud like a web
+                  # search's - no voice check asked of it, as before - but
+                  # under "only trust the talk button" a clip from anywhere
+                  # else keeps it on screen unless the owner allowed it (the
+                  # owner's decision, 2026-09-28).
+                  screen_aloud=_screen_aloud(source, trusted))
 
     if not verdict.is_owner:
         return Heard(False, reason=verdict.reason, **common)

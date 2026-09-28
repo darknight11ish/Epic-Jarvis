@@ -40,6 +40,12 @@ import kotlinx.serialization.json.doubleOrNull
  *     notes, files, memory, "unknown", a step with no name and any tool
  *     added later stay private. Both apps are held to one table,
  *     `contract/private-aloud-cases.json` (tools/gen_private_aloud_cases.py).
+ *  2c. and, right after 2b and before anything can say "read aloud", an
+ *     answer about the SCREEN (`read_screen` ran) is kept on screen unless
+ *     the reply's `screen_aloud` is true: the owner's decision of
+ *     2026-09-28, "under 'Only trust the talk button', screen answers stay
+ *     on screen", with a voice setting to allow it (`hands_free_screen` on
+ *     the Voice check screen). Missing counts as false.
  *
  * Otherwise it says one fixed line, [ON_SCREEN], and the answer stays on
  * the screen as always. The phone's voice answers are spoken sentence by
@@ -107,15 +113,26 @@ object PrivateAloud {
      * What the phone knows about tools at one moment: how many `step`
      * events said a tool ran ([runs]), how many of those were PRIVATE tools
      * - not on [READ_ALOUD_TOOLS] ([privateRuns]; left out, every run counts
-     * as private), how many times the event stream has dropped ([drops]),
+     * as private), how many of those were the screen being read, `read_screen`
+     * ([screenRuns]; left out, every run counts as possibly the screen), how
+     * many times the event stream has dropped ([drops]),
      * and whether it is live now ([live]). Two of these - one when the
      * question was asked, one now - say whether a private tool ran in
      * between, and whether the phone could have heard of it.
      */
-    data class Watch(val runs: Long, val drops: Long, val live: Boolean, val privateRuns: Long = runs)
+    data class Watch(
+        val runs: Long,
+        val drops: Long,
+        val live: Boolean,
+        val privateRuns: Long = runs,
+        val screenRuns: Long = runs,
+    )
 
     /** A PRIVATE tool ran between [start] and [now]. */
     fun toolRan(start: Watch, now: Watch): Boolean = now.privateRuns != start.privateRuns
+
+    /** The screen was read between [start] and [now]. The desktop's `screenReadBetween`. */
+    fun screenRead(start: Watch, now: Watch): Boolean = now.screenRuns != start.screenRuns
 
     /** The stream was live at both moments and did not drop in between. */
     fun toolsKnown(start: Watch, now: Watch): Boolean = start.live && now.live && start.drops == now.drops
@@ -133,6 +150,16 @@ object PrivateAloud {
         return tool == null || tool !in READ_ALOUD_TOOLS
     }
 
+    /** The read an answer about the screen records (jarvis_screen.SCREEN_TOOL). */
+    const val SCREEN_READ = "read_screen"
+
+    /** A `step` event says the screen was read: a tool run named exactly [SCREEN_READ]. The desktop's `isScreenRead`. */
+    fun isScreenRead(data: JsonElement?): Boolean {
+        if (!isToolRun(data)) return false
+        val tool = ((data as? JsonObject)?.get("tool") as? JsonPrimitive)?.takeIf { it.isString }?.content
+        return tool == SCREEN_READ
+    }
+
     /**
      * May the answer to a VOICE question be read aloud, sentence by sentence?
      *
@@ -147,12 +174,18 @@ object PrivateAloud {
      * @param sensitiveAloud the utterance reply's `sensitive_aloud` (false when
      *   missing): the owner chose "Read aloud" for answers that use sensitive
      *   saved facts, and this voice passed a real check
+     * @param screenRead the screen was read (`read_screen`) since the question was asked
+     * @param screenAloud the utterance reply's `screen_aloud` (false when
+     *   missing): false for "Hey Jarvis" under "Only trust the talk button"
+     *   unless the owner allowed answers about the screen aloud
      */
     fun mayRead(heard: com.jarvis.client.net.Heard, route: Route?, start: Watch, now: Watch): Boolean =
         mayRead(
             heard.privateAloud, heard.questionPrivate, route, toolRan(start, now), toolsKnown(start, now),
             memoryAloud = heard.memoryAloud,
             sensitiveAloud = heard.sensitiveAloud,
+            screenRead = screenRead(start, now),
+            screenAloud = heard.screenAloud,
         )
 
     /** Whether saved facts about a sensitive topic went into this answer ([route]'s fail-closed count). */
@@ -166,6 +199,8 @@ object PrivateAloud {
         toolsKnown: Boolean,
         memoryAloud: Boolean = false,
         sensitiveAloud: Boolean = false,
+        screenRead: Boolean = false,
+        screenAloud: Boolean = false,
     ): Boolean = when {
         // Before the header, nothing is known - and nothing has arrived to read.
         route == null -> false
@@ -173,6 +208,12 @@ object PrivateAloud {
         // 2026-09-24) unless the owner chose to hear them - even under
         // "voice check is enough" or "read aloud" for memories.
         usesSensitive(route) && !sensitiveAloud -> false
+        // An answer about the screen stays on screen unless the PC said
+        // `screen_aloud` for this clip - false for "Hey Jarvis" under "Only
+        // trust the talk button" unless the owner allowed it (the owner's
+        // decision, 2026-09-28). Before "voice check is enough", so nothing
+        // below lets it through.
+        screenRead && !screenAloud -> false
         // The owner chose "voice check is enough", and this voice passed it.
         privateAloud -> true
         questionPrivate -> false

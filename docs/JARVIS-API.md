@@ -2203,7 +2203,7 @@ mode only when `gate.training` says the PC understands it:
 |---|---|
 | `calibrate: true` | `calibrate`, `threshold` (since 2026-09-24, earlier) |
 | `rounds: true` | `train` (rounds, `add`, `finish`, `cancel`) |
-| `settings: true` | `strictness`, `privacy`; and `memory`, `sensitive_memory` or `hands_free` when `gate.settings` has it (an older PC answers that mode with 503) |
+| `settings: true` | `strictness`, `privacy`; and `memory`, `sensitive_memory`, `hands_free` or `hands_free_screen` when `gate.settings` has it (an older PC answers that mode with 503) |
 | `measure: true` | `measure` |
 
 ### What changed for every app, even one that changes nothing
@@ -2232,7 +2232,7 @@ mode only when `gate.training` says the PC understands it:
 - **The one-shot training still works** (`{"clips": [...]}`, as today): it
   becomes round 1 ("close"), replacing the print, with one card.
 
-### The utterance reply: six new fields
+### The utterance reply: the new fields
 
 ```
 "too_short": bool, "min_seconds": float,     see above
@@ -2251,14 +2251,23 @@ mode only when `gate.training` says the PC understands it:
                             owner chose `sensitive_aloud` AND this voice passed a real check (not
                             broad mode). Not implied by `memory_aloud` or `private_aloud`. On every
                             reply, refusals included. Missing (an older PC) = false.
+"screen_aloud": bool        (2026-09-28) may an answer about the SCREEN (`read_screen` ran, §62)
+                            be read aloud? jarvis_voice.screen_aloud(source): true for the talk
+                            button, and for every clip under `hands_free: same_as_button`; under
+                            `button_only`, true for any other clip only when the owner chose
+                            `hands_free_screen: screen_aloud`. No voice-check condition of its own
+                            (a screen answer is read aloud like a web search's). Missing (an older
+                            PC) = false.
 ```
 
 **Hands-free (2026-09-24).** With `hands_free: button_only`, a clip whose
 `?source=` is not `push_to_talk` - `wake_word`, or anything the PC does not
 know - gets `private_aloud`, `memory_aloud` and `sensitive_aloud` all
 **false**, whatever the other settings say; the answer is still given, and
-the apps' rule below keeps it on screen. Under the default,
-`same_as_button`, nothing changes. The utterance route itself still reads a
+the apps' rule below keeps it on screen. It also gets `screen_aloud`
+**false** (the owner's decision of 2026-09-28: an answer about the screen
+stays on screen), unless the owner chose `hands_free_screen: screen_aloud`.
+Under the default, `same_as_button`, nothing changes. The utterance route itself still reads a
 request with no `?source=` as `push_to_talk` (that line is in the owner's
 `jarvis_hud.py`), so **send `source` on every clip**: `push_to_talk` for
 the talk button, `wake_word` for everything the "hey Jarvis" listener
@@ -2272,17 +2281,20 @@ sends (both apps do).
 "memory": "memory_aloud" | "memory_on_screen",
 "sensitive_memory": "sensitive_on_screen" | "sensitive_aloud",   "" from an older PC: do not offer it
 "hands_free": "same_as_button" | "button_only",                   "" from an older PC: do not offer it
-"settings": {"strictness", "privacy", "memory", "sensitive_memory", "hands_free", "changed": epoch,
+"hands_free_screen": "screen_on_screen" | "screen_aloud",         "" from an older PC: do not offer it
+"settings": {"strictness", "privacy", "memory", "sensitive_memory", "hands_free", "hands_free_screen",
+             "changed": epoch,
              "voice_is_enough_allowed": bool,        true only while very strict
              "min_command_seconds": 2.0 | 1.5,
              "choices": {"strictness": ["very_strict", "balanced"],
                          "privacy": ["private_on_screen", "voice_is_enough"],
                          "memory": ["memory_aloud", "memory_on_screen"],
                          "sensitive_memory": ["sensitive_on_screen", "sensitive_aloud"],
-                         "hands_free": ["same_as_button", "button_only"]},
+                         "hands_free": ["same_as_button", "button_only"],
+                         "hands_free_screen": ["screen_on_screen", "screen_aloud"]},
              "defaults": {"strictness": "very_strict", "privacy": "private_on_screen",
                           "memory": "memory_aloud", "sensitive_memory": "sensitive_on_screen",
-                          "hands_free": "same_as_button"}},
+                          "hands_free": "same_as_button", "hands_free_screen": "screen_on_screen"}},
 "models": {"small":  {"installed", "name", "label": "the small voice-ID model", "bars_measured", "path"},
            "strong": {"installed", "name", "label": "the stronger voice-ID model", "bars_measured",
                       "path", "why"},
@@ -2368,7 +2380,34 @@ as it is.
 {"mode": "memory",     "value": "memory_aloud" | "memory_on_screen"}
 {"mode": "sensitive_memory", "value": "sensitive_on_screen" | "sensitive_aloud"}
 {"mode": "hands_free", "value": "same_as_button" | "button_only"}
+{"mode": "hands_free_screen", "value": "screen_on_screen" | "screen_aloud"}
 ```
+
+`hands_free_screen` (added 2026-09-28, the owner's decision: "under 'Only
+trust the talk button', screen answers stay on screen", with a voice
+setting to allow them aloud): whether an answer about the screen (§62) to
+a clip that did not come from the talk button may be read aloud while
+`hands_free` is `button_only`. `screen_on_screen` is the default and the
+strict value, and applies at once. `screen_aloud` is the looser one and
+raises the voice card, which reads: "Let Jarvis read answers about your
+screen aloud after "Hey Jarvis", even while "Only trust the talk button"
+is chosen? / Anyone near the speaker will hear what Jarvis says about your
+screen. A recording or a copy of your voice played near the microphone
+while Jarvis is watching your screen could hear it too. / If you did not
+just do this, say no. / If you say no: nothing changes - those answers stay
+on your screen." Under `same_as_button` the setting changes nothing (screen
+answers are read aloud already), and both apps say so under its choices -
+which stay usable, so it is ready for the day the owner picks the stricter
+choice. It loosens nothing else: private, memory and sensitive answers
+keep their own settings. A missing, damaged or unreadable value reads as
+`screen_on_screen`. An older PC answers `mode: "hands_free_screen"` with
+**503**, and its `/api/voice/status` has `gate.hands_free_screen: ""` - the
+apps then do not offer it. Both apps show it as "Answers about your screen
+after "Hey Jarvis"", with "Keep on screen (recommended)" and "Read aloud",
+and name it "answers about your screen after "Hey Jarvis"" in the waiting
+and last-card lines. **Said plainly: nothing reads the screen yet** (§62:
+no route, no app key or gesture), so today this setting is stored and
+shown but has nothing to act on.
 
 `hands_free` (added 2026-09-24, the owner's decision: "hands-free voice is
 as trusted as the talk button by default, with a setting to make it
@@ -2419,7 +2458,7 @@ A settings file with no `memory` in it (every file from before) reads as
 | `200 {"ok": true, "changed": true, "pending": false, "settings": {"strictness", "privacy", "voice_is_enough_allowed"}, "message": "Done - that applies now."}` | tightening (`very_strict`, `private_on_screen`): immediate, no card. It also makes a waiting card that would loosen the same setting do nothing (`last.outcome = "withdrawn"`). |
 | `200 {"ok": true, "changed": false, ...}` | it was already that |
 | `202 {"ok": true, "pending": true, "setting", "value", "message"}` | loosening: ONE card (`change_own_config`). **Nothing changes until it is approved.** `last.outcome` becomes `"setting_changed"`, `"denied"`, `"timed_out"`, `"refused"`, `"withdrawn"` or `"failed"`. |
-| `503` | this PC's voice check is too old for that setting (`memory`, `sensitive_memory` or `hands_free` on a PC from before them) |
+| `503` | this PC's voice check is too old for that setting (`memory`, `sensitive_memory`, `hands_free` or `hands_free_screen` on a PC from before them) |
 | `409` | `voice_is_enough` while balanced ("private answers can only be read aloud while the voice check is very strict"), a voice card already waiting, or the tier is not `ask` |
 
 Choosing `balanced` also puts private answers back on screen
@@ -2507,11 +2546,21 @@ for a question that came by VOICE and reply `private_aloud: false`:
    utterance reply's `sensitive_aloud` is not true, keep the answer on
    screen ("It's on your screen."). This applies **even when
    `memory_aloud` or `private_aloud` is true**.
-4. Treat a reply from an older PC (no `private_aloud`, no `memory_aloud` or
-   no `sensitive_aloud` field) as `false`.
+3b. **Answers about the screen** (the owner's decision, 2026-09-28): right
+   after step 3, and before anything can say "read aloud", when a `step`
+   event since the question says the screen was read (`read_screen`,
+   `tool_started` or `tool_finished`) and the utterance reply's
+   `screen_aloud` is not true, keep the answer on screen. This applies
+   **even when `private_aloud` is true** (a reply no PC sends: under
+   `button_only` both are false for a hands-free clip). Both apps count
+   screen reads separately (`screenReadBetween` in `private-speech.js`,
+   `PrivateAloud.screenRead` on the phone); the shared table has the cases.
+4. Treat a reply from an older PC (no `private_aloud`, no `memory_aloud`,
+   no `sensitive_aloud` or no `screen_aloud` field) as `false`.
 5. Nothing more is needed for `hands_free`: under `button_only` the PC
-   sends the three `*_aloud` as false for a hands-free clip, and steps 2-4
-   keep its answer on screen.
+   sends the four `*_aloud` as false for a hands-free clip (`screen_aloud`
+   true only when the owner allowed it), and steps 2-4 keep its answer on
+   screen.
 
 **Said plainly about `memory_aloud`:** a remembered fact can be about
 something sensitive (health, money) while the question is not ("what
@@ -9392,8 +9441,9 @@ owner's screen"), designed in `docs/SCREEN-DESIGN.md`; this section is its
 **build steps 1 and 2 only**: `backend/jarvis_front.py` (the front-window
 reader, split out of focus sessions) and `backend/jarvis_screen.py` (the
 session rules), both shipped whole, no patch. **No route reaches them and
-neither app has the key, the badge, the phone gesture or a setting yet** -
-so today nothing can start a look from either app. `tools/check_parity.py`
+neither app has the key, the badge or the phone gesture yet** - so today
+nothing can start a look from either app. (One setting is in both apps
+already: "Answers about your screen after "Hey Jarvis"", §62.7 and §16.) `tools/check_parity.py`
 has nothing to check (no route).
 
 **Not built yet, said plainly:** the Windows readers (is the focused box a
@@ -9536,10 +9586,21 @@ screen". `read_screen` is on both apps' read-aloud list
 `private-aloud-cases.json`), after every earlier rule: a sensitive saved
 fact, a question the PC marked private, remembered facts with "Read aloud"
 off for memories, or a stream that dropped all keep it on screen, and
-`read_screen` with a private tool (email) stays on screen. Under "Only trust
-the talk button", a hands-free screen answer is read aloud like a
-web-search one unless one of those rules applies - that setting's own rule
-covers memory, sensitive and private answers (§16).
+`read_screen` with a private tool (email) stays on screen.
+
+**Under "Only trust the talk button", screen answers stay on screen** (the
+owner's decision, 2026-09-28): for a clip that did not come from the talk
+button ("Hey Jarvis", or no source said), the utterance reply's
+`screen_aloud` is false, and both apps keep an answer that read the screen
+on screen, even if nothing else would. The voice setting
+`hands_free_screen: screen_aloud` ("Answers about your screen after "Hey
+Jarvis"" -> "Read aloud", in both apps' voice settings) allows reading
+them aloud even then; turning it on raises the voice card, turning it off
+is immediate (§16). With "Same as the talk button" (the default) nothing
+changes: screen answers are read aloud as above. The talk button's own
+questions are always treated like "Same as the talk button". Until
+something sends `read_screen` (the apps' key and gesture are not built
+yet), this has nothing to act on.
 
 ### 62.8 Chat history
 

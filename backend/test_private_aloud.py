@@ -18,7 +18,10 @@ checks:
      screen;
   3. both copies of the table are what the generator makes today;
   4. the table's own answers: every tool not on the list stays on screen,
-     and not knowing (a stale or dropped event stream) stays on screen.
+     and not knowing (a stale or dropped event stream) stays on screen;
+  5. under "Only trust the talk button" (owner, 2026-09-28), a screen answer
+     whose utterance reply does not say `screen_aloud: true` stays on
+     screen - and a missing field counts as false.
 
 Runs anywhere: standard library only, no owner's files.
 """
@@ -114,6 +117,42 @@ def t_the_table_says_what_the_owner_said():
     for name, read in want.items():
         check(f"screen: {name} -> {'read aloud' if read else 'on screen'}",
               screen.get(name) is read, screen.get(name))
+    # Under "Only trust the talk button" (owner, 2026-09-28): a "hey Jarvis"
+    # turn's screen answer stays on screen unless the owner allowed it
+    # (`screen_aloud`), and the setting touches only the screen.
+    rows = {c["name"]: c for c in table["cases"]}
+    strict = {
+        "hey Jarvis under 'Only trust the talk button': the screen was read, stays on screen":
+            False,
+        "hey Jarvis under 'Only trust the talk button', screen answers allowed aloud: read aloud":
+            True,
+        "hey Jarvis, screen answers allowed aloud, but a sensitive saved fact": False,
+        "hey Jarvis, screen answers allowed aloud, but the PC marked the question private": False,
+        "hey Jarvis, screen answers allowed aloud, then email_check": False,
+        "hey Jarvis, screen answers allowed aloud, stream dropped": False,
+        "hey Jarvis under 'Only trust the talk button': web_search then the screen was read":
+            False,
+        "hey Jarvis under 'Only trust the talk button': web_search only (the screen setting "
+        "does not touch it)": True,
+        "screen_aloud false comes before 'voice check is enough' (a reply no PC sends)": False,
+        "an older PC's reply with no screen_aloud field: the screen was read, on screen": False,
+        "an older PC's reply with no screen_aloud field: web_search is read aloud": True,
+    }
+    for name, read in strict.items():
+        check(f"strict hands-free: {name} -> {'read aloud' if read else 'on screen'}",
+              name in rows and rows[name]["read"] is read, rows.get(name))
+    older = [c for c in table["cases"] if "no screen_aloud field" in c["name"]]
+    check("the older-PC rows really leave the field out (so both apps' 'missing = false' "
+          "is tested)", len(older) == 2 and all("screen_aloud" not in c["heard"] for c in older),
+          older)
+    check("every other row says screen_aloud",
+          all("screen_aloud" in c["heard"] for c in table["cases"] if c not in older))
+    for c in table["cases"]:
+        steps = c["steps"]
+        if (any(G.is_screen_read(s) for s in steps)
+                and c["heard"].get("screen_aloud") is not True):
+            check(f"a screen read without screen_aloud stays on screen: {c['name']}",
+                  c["read"] is False)
     check("the fixed line", table["on_screen"] == "It's on your screen.")
 
 

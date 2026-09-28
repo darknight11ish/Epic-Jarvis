@@ -86,6 +86,7 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
     {"mode": "memory", "value": "memory_aloud"|"memory_on_screen"}
     {"mode": "sensitive_memory", "value": "sensitive_on_screen"|"sensitive_aloud"}
     {"mode": "hands_free", "value": "same_as_button"|"button_only"}
+    {"mode": "hands_free_screen", "value": "screen_on_screen"|"screen_aloud"}
         Tightening applies at once. Loosening raises ONE card
         (change_own_config), and changes nothing until it is approved.
         `voice_is_enough` is refused unless the check is very strict;
@@ -625,7 +626,8 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
     if mode == "measure":
         # The same: scores, no card.
         return measure(doc, measure_fn=measure_fn)
-    if mode in ("strictness", "privacy", "memory", "sensitive_memory", "hands_free"):
+    if mode in ("strictness", "privacy", "memory", "sensitive_memory", "hands_free",
+                "hands_free_screen"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
     if mode not in ("enroll", "threshold", "train"):
@@ -942,6 +944,17 @@ _SETTING_WORDS = {
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - \"Hey Jarvis\" questions stay on the "
         "stricter setting."),
+    # The owner's decision, 2026-09-28: under "only trust the talk button",
+    # an answer about the screen to a "Hey Jarvis" question stays on screen;
+    # this card lets those be read aloud even then.
+    ("hands_free_screen", "screen_aloud"): (
+        "Let Jarvis read answers about your screen aloud after \"Hey Jarvis\", even "
+        "while \"Only trust the talk button\" is chosen?\n\n"
+        "Anyone near the speaker will hear what Jarvis says about your screen. A "
+        "recording or a copy of your voice played near the microphone while Jarvis "
+        "is watching your screen could hear it too.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - those answers stay on your screen."),
 }
 
 
@@ -963,6 +976,7 @@ def settings_view() -> dict:
             # "" from a jarvis_voice.py older than this setting.
             "sensitive_memory": s.get("sensitive_memory", ""),
             "hands_free": s.get("hands_free", ""),
+            "hands_free_screen": s.get("hands_free_screen", ""),
             "voice_is_enough_allowed": s["strictness"] == v.VERY_STRICT}
 
 
@@ -979,8 +993,8 @@ def _withdraw(key: str) -> None:
 
 def stage_setting(doc: dict, key: str, *, gate: Callable, tier_of: Callable,
                   spawn: Callable) -> tuple:
-    """{"mode": "strictness"|"privacy"|"memory"|"sensitive_memory"|"hands_free",
-    "value": ...}.
+    """{"mode": "strictness"|"privacy"|"memory"|"sensitive_memory"|"hands_free"|
+    "hands_free_screen", "value": ...}.
     Tightening applies at once; loosening raises ONE card and changes nothing
     itself. A jarvis_voice.py older than the setting: 503, in words."""
     global _PENDING

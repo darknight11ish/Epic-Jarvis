@@ -385,6 +385,7 @@ const SETTING_NAMES = {
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
   hands_free: "how far \"Hey Jarvis\" is trusted",
+  hands_free_screen: "answers about your screen after \"Hey Jarvis\"",
 };
 
 /** The choices, in the order they are shown, with plain words for each. */
@@ -474,10 +475,45 @@ export const HANDS_FREE = Object.freeze([
   },
 ]);
 
+/**
+ * The owner's decision of 2026-09-28: under "Only trust the talk button",
+ * an answer about the screen ("Look at this", "Watch with me") to a
+ * question started with "Hey Jarvis" stays on screen, with this setting to
+ * allow reading it aloud even then. Keeping it on screen is the default and
+ * applies at once; "Read aloud" is the looser choice - the voice card, and
+ * held on a stale link. Under "Same as the talk button" it changes nothing
+ * (`SCREEN_ONLY_WHEN_STRICT_NOTE`).
+ */
+export const HANDS_FREE_SCREEN = Object.freeze([
+  {
+    id: "screen_on_screen",
+    label: "Keep on screen",
+    recommended: true,
+    detail: "With \"Only trust the talk button\" chosen, a question about your screen that starts with \"Hey Jarvis\" gets a written answer only.",
+  },
+  {
+    id: "screen_aloud",
+    label: "Read aloud",
+    detail: "Those answers are read aloud, even with \"Only trust the talk button\" chosen. Anyone near the speaker will hear them.",
+  },
+]);
+
+/** Under the screen choices while "Same as the talk button" is chosen:
+ *  then answers about the screen are read aloud already, so this setting
+ *  changes nothing. The choices stay usable - it takes over if the
+ *  hands-free choice changes. */
+export const SCREEN_ONLY_WHEN_STRICT_NOTE =
+  "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", answers about your screen are read aloud already.";
+
+/** Whether the screen setting does nothing now (see SCREEN_ONLY_WHEN_STRICT_NOTE). */
+export function screenCovered(view) {
+  return Boolean(view && view.handsFree === "same_as_button");
+}
+
 function choiceWords(setting, value) {
   const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY
     : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY
-      : setting === "hands_free" ? HANDS_FREE : [];
+      : setting === "hands_free" ? HANDS_FREE : setting === "hands_free_screen" ? HANDS_FREE_SCREEN : [];
   return list.find((c) => c.id === value) || null;
 }
 
@@ -528,7 +564,8 @@ export function currentSetting(status, setting) {
   if (!view) return "";
   return setting === "strictness" ? view.strictness : setting === "privacy" ? view.privacy
     : setting === "memory" ? view.memory : setting === "sensitive_memory" ? view.sensitiveMemory
-      : setting === "hands_free" ? view.handsFree : "";
+      : setting === "hands_free" ? view.handsFree
+        : setting === "hands_free_screen" ? view.handsFreeScreen : "";
 }
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule. */
@@ -536,7 +573,8 @@ export function loosens(setting, value) {
   return (setting === "strictness" && value === "balanced") || (setting === "privacy" && value === "voice_is_enough")
     || (setting === "memory" && value === "memory_aloud")
     || (setting === "sensitive_memory" && value === "sensitive_aloud")
-    || (setting === "hands_free" && value === "same_as_button");
+    || (setting === "hands_free" && value === "same_as_button")
+    || (setting === "hands_free_screen" && value === "screen_aloud");
 }
 
 /**
@@ -565,12 +603,19 @@ export function settingsView(status) {
   // (or `gate.hands_free`). "" from a PC that does not have it - not offered.
   const rawHandsFree = s.hands_free !== undefined ? s.hands_free : gate.hands_free;
   const handsFree = rawHandsFree === "same_as_button" || rawHandsFree === "button_only" ? rawHandsFree : "";
+  // The sixth, answers about the screen after "Hey Jarvis" (the owner's
+  // decision of 2026-09-28): `gate.settings.hands_free_screen` (or
+  // `gate.hands_free_screen`). "" from a PC that does not have it - not
+  // offered.
+  const rawScreen = s.hands_free_screen !== undefined ? s.hands_free_screen : gate.hands_free_screen;
+  const handsFreeScreen = rawScreen === "screen_on_screen" || rawScreen === "screen_aloud" ? rawScreen : "";
   return {
     strictness,
     privacy,
     memory,
     sensitiveMemory,
     handsFree,
+    handsFreeScreen,
     voiceIsEnoughAllowed: yes(s.voice_is_enough_allowed) && strictness === "very_strict",
     minSeconds: min,
     waiting: waiting && waiting.name ? { setting: String(waiting.name), value: String(waiting.value || "") } : null,

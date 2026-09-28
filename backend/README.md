@@ -7258,6 +7258,16 @@ the training fails and says to record again somewhere quieter.
   Jarvis does not know, counts as hands-free. Said plainly: the utterance
   route in your `jarvis_hud.py` still reads a request with no `?source=`
   as the talk button, as it always has; both apps always send it.
+- **Answers about your screen after "Hey Jarvis"** (2026-09-28): under
+  "Only trust the talk button", an answer about your screen ("Look at
+  this", "Watch with me") to a "Hey Jarvis" question stays on screen too.
+  The sixth setting, `hands_free_screen`, can allow reading those aloud
+  even then ("Read aloud" raises an approval card; "Keep on screen", the
+  default, applies at once). It changes nothing under "Same as the talk
+  button", and nothing else: private, memory and sensitive answers keep
+  their own settings. The utterance reply says it as `screen_aloud`.
+  Said plainly: nothing reads your screen yet (no route, no key in the
+  apps), so for now the setting is only stored and shown.
 
 Also new: training in **three rounds** (normal and close; further away or
 quieter; another time or room), all kept in memory until one card at the

@@ -157,6 +157,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -246,6 +247,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -265,12 +270,14 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -307,6 +314,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -405,6 +413,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -424,12 +436,14 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -638,6 +652,7 @@
         "enabled": true,
         "enrolled": false,
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -722,6 +737,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -741,12 +760,14 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -783,6 +804,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -876,6 +898,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -895,12 +921,14 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -1109,6 +1137,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -1198,6 +1227,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -1217,12 +1250,14 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -1259,6 +1294,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -1357,6 +1393,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -1376,12 +1416,14 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -1590,6 +1632,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -1679,6 +1722,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -1698,12 +1745,14 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -1740,6 +1789,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -1838,6 +1888,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -1857,12 +1911,14 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -2071,6 +2127,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -2165,6 +2222,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -2184,12 +2245,14 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -2226,6 +2289,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": true,
         "push_to_talk_why": "",
@@ -2329,6 +2393,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -2348,12 +2416,14 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -2562,6 +2632,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -2651,6 +2722,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -2670,12 +2745,14 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -2723,6 +2800,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -2821,6 +2899,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -2840,12 +2922,14 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -3054,6 +3138,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -3143,6 +3228,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -3162,12 +3251,14 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -3204,6 +3295,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -3302,6 +3394,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -3321,12 +3417,14 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -3535,6 +3633,7 @@
         "enabled": true,
         "enrolled": true,
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -3624,6 +3723,10 @@
               "same_as_button",
               "button_only"
             ],
+            "hands_free_screen": [
+              "screen_on_screen",
+              "screen_aloud"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -3643,12 +3746,14 @@
           },
           "defaults": {
             "hands_free": "same_as_button",
+            "hands_free_screen": "screen_on_screen",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -3685,6 +3790,7 @@
         }
       },
       "hands_free": "same_as_button",
+      "hands_free_screen": "screen_on_screen",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -3783,6 +3889,10 @@
             "same_as_button",
             "button_only"
           ],
+          "hands_free_screen": [
+            "screen_on_screen",
+            "screen_aloud"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -3802,12 +3912,14 @@
         },
         "defaults": {
           "hands_free": "same_as_button",
+          "hands_free_screen": "screen_on_screen",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "hands_free": "same_as_button",
+        "hands_free_screen": "screen_on_screen",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",

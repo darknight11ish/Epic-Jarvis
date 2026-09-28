@@ -563,6 +563,21 @@ function paintSettings() {
       say($("vt-handsfree-note"), VT.HANDS_FREE.find((c) => c.id === view.handsFree).detail);
     }
   }
+  // The sixth: answers about the screen after "Hey Jarvis" (the owner's
+  // decision, 2026-09-28). Offered only when the PC reports it. It matters
+  // only under "Only trust the talk button", and says so otherwise - the
+  // choices stay usable. "Read aloud" is the looser one, held on a stale
+  // link (changeSetting, VT.loosens).
+  const screenBox = $("vt-screen-box");
+  if (screenBox) {
+    screenBox.hidden = !view.handsFreeScreen;
+    if (view.handsFreeScreen) {
+      group($("vt-screen"), VT.HANDS_FREE_SCREEN, view.handsFreeScreen, "hands_free_screen");
+      let screenNote = VT.HANDS_FREE_SCREEN.find((c) => c.id === view.handsFreeScreen).detail;
+      if (VT.screenCovered(view)) screenNote += ` ${VT.SCREEN_ONLY_WHEN_STRICT_NOTE}`;
+      say($("vt-screen-note"), screenNote);
+    }
+  }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;

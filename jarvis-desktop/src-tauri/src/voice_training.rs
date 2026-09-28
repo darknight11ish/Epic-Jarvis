@@ -695,6 +695,14 @@ pub(crate) fn voice_setting(
         // default) raises the voice card and is held on a stale link.
         ("hands_free", "button_only") => Ok(("hands_free", "button_only", false)),
         ("hands_free", "same_as_button") => Ok(("hands_free", "same_as_button", true)),
+        // Answers about the screen after "Hey Jarvis", under "Only trust the
+        // talk button" (the owner's decision, 2026-09-28). Keeping them on
+        // screen is the default and applies at once; reading them aloud
+        // raises the voice card and is held on a stale link.
+        ("hands_free_screen", "screen_on_screen") => {
+            Ok(("hands_free_screen", "screen_on_screen", false))
+        }
+        ("hands_free_screen", "screen_aloud") => Ok(("hands_free_screen", "screen_aloud", true)),
         _ => Err("That is not one of the voice settings.".to_string()),
     }
 }
@@ -1246,6 +1254,16 @@ mod tests {
         );
         assert!(voice_setting("hands_free", "sensitive_aloud").is_err());
         assert!(voice_setting("memory", "button_only").is_err());
+        assert_eq!(
+            voice_setting("hands_free_screen", "screen_aloud"),
+            Ok(("hands_free_screen", "screen_aloud", true))
+        );
+        assert_eq!(
+            voice_setting("hands_free_screen", "screen_on_screen"),
+            Ok(("hands_free_screen", "screen_on_screen", false))
+        );
+        assert!(voice_setting("hands_free_screen", "same_as_button").is_err());
+        assert!(voice_setting("hands_free", "screen_aloud").is_err());
         assert!(voice_setting("mode", "broad").is_err());
     }
 

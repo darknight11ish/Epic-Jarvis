@@ -152,6 +152,41 @@ object StrictVoice {
 
     const val HANDS_FREE_TITLE = "Hands-free (\"Hey Jarvis\")"
 
+    /**
+     * Answers about the screen ("Look at this", "Watch with me") to a
+     * question started with "Hey Jarvis", under "Only trust the talk
+     * button" (the owner's decision, 2026-09-28): kept on screen by default;
+     * reading them aloud even then is the looser choice and raises the voice
+     * card. Under "Same as the talk button" it changes nothing
+     * ([SCREEN_ONLY_WHEN_STRICT]). Offered only when the PC reports it.
+     */
+    val HANDS_FREE_SCREEN: List<Choice> = listOf(
+        Choice(
+            VoiceStrict.SCREEN_ON_SCREEN,
+            "Keep on screen (recommended)",
+            "With \"Only trust the talk button\" chosen, a question about your screen that starts " +
+                "with \"Hey Jarvis\" gets a written answer only.",
+        ),
+        Choice(
+            VoiceStrict.SCREEN_ALOUD,
+            "Read aloud",
+            "Those answers are read aloud, even with \"Only trust the talk button\" chosen. Anyone " +
+                "near the speaker will hear them.",
+        ),
+    )
+
+    const val HANDS_FREE_SCREEN_TITLE = "Answers about your screen after \"Hey Jarvis\""
+
+    /**
+     * Under the screen choices while "Same as the talk button" is chosen:
+     * then answers about the screen are read aloud already, so this setting
+     * changes nothing. The choices stay open - it takes over if the
+     * hands-free choice changes. The desktop's `SCREEN_ONLY_WHEN_STRICT_NOTE`.
+     */
+    const val SCREEN_ONLY_WHEN_STRICT =
+        "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the " +
+            "talk button\", answers about your screen are read aloud already."
+
     const val PRIVACY_ONLY_VERY_STRICT =
         "\"Voice check is enough\" can only be chosen while the check is very strict."
 
@@ -185,6 +220,8 @@ object StrictVoice {
         !settingOpen(setting, view) -> MEMORY_WHILE_VOICE_IS_ENOUGH
         setting == VoiceStrict.SENSITIVE_MEMORY && view.memory == VoiceStrict.MEMORY_ON_SCREEN &&
             view.privacy != VoiceStrict.VOICE_IS_ENOUGH -> SENSITIVE_COVERED_BY_MEMORY
+        setting == VoiceStrict.HANDS_FREE_SCREEN && view.handsFree == VoiceStrict.SAME_AS_BUTTON ->
+            SCREEN_ONLY_WHEN_STRICT
         else -> null
     }
 
@@ -197,6 +234,7 @@ object StrictVoice {
         VoiceStrict.MEMORY -> MEMORY
         VoiceStrict.SENSITIVE_MEMORY -> SENSITIVE_MEMORY
         VoiceStrict.HANDS_FREE -> HANDS_FREE
+        VoiceStrict.HANDS_FREE_SCREEN -> HANDS_FREE_SCREEN
         else -> PRIVACY
     }
 
@@ -206,6 +244,7 @@ object StrictVoice {
         VoiceStrict.MEMORY -> view.memory
         VoiceStrict.SENSITIVE_MEMORY -> view.sensitiveMemory
         VoiceStrict.HANDS_FREE -> view.handsFree
+        VoiceStrict.HANDS_FREE_SCREEN -> view.handsFreeScreen
         else -> view.privacy
     }
 
@@ -253,6 +292,7 @@ object StrictVoice {
             setting == VoiceStrict.MEMORY && view.memory.isBlank() -> NOT_ON_THIS_PC
             setting == VoiceStrict.SENSITIVE_MEMORY && view.sensitiveMemory.isBlank() -> NOT_ON_THIS_PC
             setting == VoiceStrict.HANDS_FREE && view.handsFree.isBlank() -> NOT_ON_THIS_PC
+            setting == VoiceStrict.HANDS_FREE_SCREEN && view.handsFreeScreen.isBlank() -> NOT_ON_THIS_PC
             !settingOpen(setting, view) -> MEMORY_WHILE_VOICE_IS_ENOUGH
             loosening && linkBlocker != null -> linkBlocker
             setting == VoiceStrict.PRIVACY && value == VoiceStrict.VOICE_IS_ENOUGH && !view.isVeryStrict ->

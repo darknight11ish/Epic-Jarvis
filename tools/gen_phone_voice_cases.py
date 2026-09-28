@@ -428,6 +428,24 @@ def strict_cases():
             {"mode": "hands_free", "value": "button_only"})), w)
         status["hands_free_button_only"] = scrub(S.status(), w)
         heard["button_only_talk_button"] = hear("What time is it?")
+        # The owner's decision (2026-09-28): under "Only trust the talk
+        # button", answers about the screen after "hey Jarvis" stay on
+        # screen; reading them aloud even then is the voice card, keeping
+        # them on screen again is immediate. (The talk button's own clips
+        # carry screen_aloud true either way - backend/test_voice_strict.py
+        # has the "hey Jarvis" clips.)
+        answers["screen_aloud_waiting"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_aloud"}, spawn=never)), w)
+        E._reset_for_tests()
+        answers["screen_aloud_denied"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_aloud"}, g=gate("denied"))), w)
+        status["screen_aloud_denied"] = scrub(S.status(), w)
+        answers["screen_aloud_approved"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_aloud"})), w)
+        status["screen_aloud"] = scrub(S.status(), w)
+        answers["screen_on_screen"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_on_screen"})), w)
+        status["screen_back_on_screen"] = scrub(S.status(), w)
         answers["hands_free_back_waiting"] = scrub(answer(post(
             {"mode": "hands_free", "value": "same_as_button"}, spawn=never)), w)
         E._reset_for_tests()

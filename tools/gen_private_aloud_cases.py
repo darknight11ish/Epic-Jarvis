@@ -34,6 +34,18 @@ so the check below accepts it from jarvis_screen instead of jarvis_agent.TOOLS.
 Every earlier rule still comes first: a sensitive fact, a private question
 or the router's private gate keeps a screen answer on screen too.
 
+And the strict hands-free setting's part (the owner's decision of
+2026-09-28, "Under 'Only trust the talk button', screen answers stay on
+screen"): the utterance reply's `screen_aloud` says whether an answer about
+the screen may be read aloud for this clip (jarvis_voice.screen_aloud:
+true for the talk button and under "same as the talk button"; under "only
+trust the talk button", true for "hey Jarvis" only when the owner allowed
+it with the voice setting `hands_free_screen: screen_aloud`). When the
+screen was read and `screen_aloud` is not true - missing counts as not
+true, as for every other `*_aloud` - the answer stays on screen. It is
+asked right after the sensitive-fact step, before anything can say "read
+aloud", so nothing else lets it through.
+
 This writes the SAME table into
 
     jarvis-desktop/tests/fixtures/private-aloud-cases.json
@@ -93,6 +105,15 @@ def is_private_tool_run(step) -> bool:
     return not isinstance(tool, str) or tool not in READ_ALOUD_TOOLS
 
 
+#: The recorded read that is an answer about the screen (jarvis_screen.SCREEN_TOOL).
+SCREEN_READ = "read_screen"
+
+
+def is_screen_read(step) -> bool:
+    """The screen was read: a tool step named exactly `read_screen`."""
+    return is_tool_run(step) and step.get("tool") == SCREEN_READ
+
+
 def _count(route, key):
     v = route.get(key)
     if isinstance(v, bool) or not isinstance(v, int) or v < 0:
@@ -107,6 +128,8 @@ def may_read(heard: dict, route, steps: list, stream: str) -> bool:
     if sensitive is None:
         sensitive = facts
     if sensitive > 0 and not heard["sensitive_aloud"]:
+        return False
+    if any(is_screen_read(s) for s in steps) and heard.get("screen_aloud") is not True:
         return False
     if heard["private_aloud"]:
         return True
@@ -133,8 +156,15 @@ def may_read(heard: dict, route, steps: list, stream: str) -> bool:
 STREAMS = ("live", "dropped", "stale_at_start", "stale_now")
 
 PLAIN = {"private_aloud": False, "question_private": False,
-         "memory_aloud": True, "sensitive_aloud": False}
+         "memory_aloud": True, "sensitive_aloud": False, "screen_aloud": True}
 ROUTE = {"gate": "offer", "injected_facts": 0, "injected_sensitive": 0}
+#: A "hey Jarvis" clip under "Only trust the talk button", with the screen
+#: setting at its default: the PC sends every *_aloud false.
+STRICT_WAKE = {"memory_aloud": False, "private_aloud": False,
+               "sensitive_aloud": False, "screen_aloud": False}
+#: The same, after the owner allowed screen answers aloud (the voice setting
+#: `hands_free_screen: screen_aloud`, approved with a card).
+STRICT_WAKE_SCREEN_ALLOWED = dict(STRICT_WAKE, screen_aloud=True)
 
 
 def ran(tool) -> list:
@@ -150,8 +180,10 @@ def ran(tool) -> list:
 def build_cases() -> list:
     cases = []
 
-    def add(name, steps, heard=None, route=ROUTE, stream="live"):
+    def add(name, steps, heard=None, route=ROUTE, stream="live", drop=()):
         h = dict(PLAIN, **(heard or {}))
+        for key in drop:            # a field an older PC does not send
+            h.pop(key, None)
         cases.append({"name": name, "heard": h, "route": route, "steps": steps,
                       "stream": stream, "read": may_read(h, route, steps, stream)})
 
@@ -211,10 +243,9 @@ def build_cases() -> list:
     add("voice check is enough reads an email answer (unchanged)",
         ran("email_check"), heard={"private_aloud": True})
     add("an older PC's reply (every *_aloud false), web_search",
-        ran("web_search"), heard={"memory_aloud": False})
+        ran("web_search"), heard={"memory_aloud": False, "screen_aloud": False})
     add("hands-free under 'Only trust the talk button' (PC sends every *_aloud false), home_read",
-        ran("home_read"), heard={"memory_aloud": False, "private_aloud": False,
-                                 "sensitive_aloud": False})
+        ran("home_read"), heard=STRICT_WAKE)
 
     # Looking at the screen (owner, 2026-09-28): read aloud like web search,
     # and every earlier rule keeps its priority over it.
@@ -232,6 +263,41 @@ def build_cases() -> list:
         route={"gate": "screen", "injected_facts": 2, "injected_sensitive": 0})
     add("the screen was read, stream dropped", ran("read_screen"), stream="dropped")
     add("a name that is not exact (Read_Screen) counts as unknown", ran("Read_Screen"))
+
+    # Under "Only trust the talk button" (owner, 2026-09-28): a "hey Jarvis"
+    # turn's answer about the screen stays on screen, unless the owner
+    # allowed it (screen_aloud). Every earlier rule still comes first, and
+    # the setting touches only the screen.
+    add("hey Jarvis under 'Only trust the talk button': the screen was read, stays on screen",
+        ran("read_screen"), heard=STRICT_WAKE)
+    add("hey Jarvis under 'Only trust the talk button', screen answers allowed aloud: read aloud",
+        ran("read_screen"), heard=STRICT_WAKE_SCREEN_ALLOWED)
+    add("hey Jarvis, screen answers allowed aloud, but a sensitive saved fact",
+        ran("read_screen"), heard=STRICT_WAKE_SCREEN_ALLOWED,
+        route={"gate": "screen", "injected_facts": 1, "injected_sensitive": 1})
+    add("hey Jarvis, screen answers allowed aloud, but the PC marked the question private",
+        ran("read_screen"), heard=dict(STRICT_WAKE_SCREEN_ALLOWED, question_private=True))
+    add("hey Jarvis, screen answers allowed aloud, then email_check",
+        ran("read_screen") + ran("email_check"), heard=STRICT_WAKE_SCREEN_ALLOWED)
+    add("hey Jarvis, screen answers allowed aloud, with remembered facts (memory kept here)",
+        ran("read_screen"), heard=STRICT_WAKE_SCREEN_ALLOWED,
+        route={"gate": "screen", "injected_facts": 2, "injected_sensitive": 0})
+    add("hey Jarvis, screen answers allowed aloud, stream dropped",
+        ran("read_screen"), heard=STRICT_WAKE_SCREEN_ALLOWED, stream="dropped")
+    add("hey Jarvis under 'Only trust the talk button': web_search then the screen was read",
+        ran("web_search") + ran("read_screen"), heard=STRICT_WAKE)
+    add("hey Jarvis under 'Only trust the talk button': web_search only (the screen setting "
+        "does not touch it)", ran("web_search"), heard=STRICT_WAKE)
+    add("hey Jarvis under 'Only trust the talk button': only tool_finished was heard, for "
+        "read_screen", ran("read_screen")[1:], heard=STRICT_WAKE)
+    add("hey Jarvis under 'Only trust the talk button': a refused read_screen did not run",
+        [{"phase": "tool_refused", "tool": "read_screen"}], heard=STRICT_WAKE)
+    add("screen_aloud false comes before 'voice check is enough' (a reply no PC sends)",
+        ran("read_screen"), heard={"private_aloud": True, "screen_aloud": False})
+    add("an older PC's reply with no screen_aloud field: the screen was read, on screen",
+        ran("read_screen"), drop=("screen_aloud",))
+    add("an older PC's reply with no screen_aloud field: web_search is read aloud",
+        ran("web_search"), drop=("screen_aloud",))
     return cases
 
 
@@ -249,7 +315,10 @@ def build() -> dict:
                      "Owner, 2026-09-27: answers from web search, weather and home status "
                      "are read aloud; email, calendar, notes, memory and any unknown tool "
                      "stay on screen. Owner, 2026-09-28: answers about the screen "
-                     "(read_screen) are read aloud too, with every earlier rule first."),
+                     "(read_screen) are read aloud too, with every earlier rule first - "
+                     "and under 'Only trust the talk button' a 'Hey Jarvis' turn's screen "
+                     "answer stays on screen unless the utterance reply says "
+                     "screen_aloud: true (missing = false)."),
         "on_screen": ON_SCREEN,
         "read_aloud_tools": list(READ_ALOUD_TOOLS),
         "cases": build_cases(),

@@ -46,19 +46,24 @@ class PrivateAloudContractTest {
             val c = element.jsonObject
             val name = c["name"]!!.jsonPrimitive.content
             val heard = c["heard"]!!.jsonObject
-            fun flag(key: String): Boolean = heard[key]!!.jsonPrimitive.boolean
+            // A field the case leaves out (an older PC's reply) reads as false, as Heard's defaults do.
+            fun flag(key: String): Boolean = heard[key]?.jsonPrimitive?.boolean ?: false
             val routeJson = c["route"]
             val header: String? = if (routeJson == null || routeJson is JsonNull) null else routeJson.toString()
             val steps = c["steps"]!!.jsonArray
             val stream = c["stream"]!!.jsonPrimitive.content
             val runs = steps.count { PrivateAloud.isToolRun(it) }.toLong()
             val privateRuns = steps.count { PrivateAloud.isPrivateToolRun(it) }.toLong()
-            val start = PrivateAloud.Watch(runs = 0L, drops = 0L, live = stream != "stale_at_start", privateRuns = 0L)
+            val screenRuns = steps.count { PrivateAloud.isScreenRead(it) }.toLong()
+            val start = PrivateAloud.Watch(
+                runs = 0L, drops = 0L, live = stream != "stale_at_start", privateRuns = 0L, screenRuns = 0L,
+            )
             val now = PrivateAloud.Watch(
                 runs = runs,
                 drops = if (stream == "dropped") 1L else 0L,
                 live = stream != "stale_now",
                 privateRuns = privateRuns,
+                screenRuns = screenRuns,
             )
             val got = PrivateAloud.mayRead(
                 privateAloud = flag("private_aloud"),
@@ -68,8 +73,15 @@ class PrivateAloudContractTest {
                 toolsKnown = PrivateAloud.toolsKnown(start, now),
                 memoryAloud = flag("memory_aloud"),
                 sensitiveAloud = flag("sensitive_aloud"),
+                screenRead = PrivateAloud.screenRead(start, now),
+                screenAloud = flag("screen_aloud"),
             )
             assertEquals(name, c["read"]!!.jsonPrimitive.boolean, got)
+            // The same case through the Heard-based entry the voice loop uses:
+            // the real reply decoded, missing fields at Heard's own defaults.
+            val decoded = JarvisJson.decodeFromJsonElement(com.jarvis.client.net.Heard.serializer(), heard)
+            assertEquals("$name (Heard)", c["read"]!!.jsonPrimitive.boolean,
+                PrivateAloud.mayRead(decoded, PrivateAloud.route(header), start, now))
         }
     }
 }
