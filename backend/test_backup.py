@@ -278,6 +278,8 @@ def t_what_is_backed_up_and_what_is_excluded():
         names = zf.namelist()
     check("memory.db is in, with its real row count", "db/memory.db" in names
           and manifest["databases"].get("memory.db", {}).get("facts") == 1, manifest)
+    check("projects.db is on the list of databases backed up (Projects feature audit, "
+          "2026-09-28)", "projects.db" in B.SOURCE_DBS)
     check("the settings JSON is in", "settings/folders.json" in names)
     check("notes are in", "notes/todo.md" in names
           and zf_read(zip_bytes, "notes/todo.md") == b"buy milk")

@@ -67,7 +67,10 @@ folders and documents (PDF, Word, Excel, PowerPoint, Notion export); notes
 (Obsidian, Logseq, Joplin); screenshot text reading (Windows OCR); music
 and video control; focus sessions; Windows UI control plans
 (`jarvis_ui_control.py`, `docs/UFO-SAFETY-DESIGN.md`); backups with a
-recovery code; live preflight check; "stop everything" hotkey.
+recovery code; live preflight check; "stop everything" hotkey; Projects
+(2026-09-28: projects, notes, benchmarks with charts, in Brain on both
+apps - `jarvis_projects.py`, `docs/PROJECTS-DESIGN.md`; running tests and
+Jarvis writing code are later steps).
 
 **Safety** - one permission model and approval cards (ARCHITECTURE §3),
 named ways out of the PC (§4), Windows Hello for risky approvals, App lock,

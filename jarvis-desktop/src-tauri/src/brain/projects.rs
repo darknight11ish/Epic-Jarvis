@@ -237,6 +237,21 @@ pub(crate) fn redact(mut answer: serde_json::Value) -> serde_json::Value {
     serde_json::Value::Object(out)
 }
 
+/// A change's answer with the project or benchmark it carries taken out,
+/// for while the private lists are hidden: the page is then showing only
+/// "Show", and an answer must not carry the words round it. What the PC
+/// said (`ok`, `message`, `waiting`, `http`) stays.
+pub(crate) fn redact_change(mut answer: serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = answer.as_object_mut() {
+        for key in ["project", "benchmark"] {
+            if obj.remove(key).is_some() {
+                obj.insert("hidden".into(), serde_json::json!(true));
+            }
+        }
+    }
+    answer
+}
+
 fn stale(app: &AppHandle) -> bool {
     app.state::<crate::stream::StreamState>().link().stale
 }
@@ -305,7 +320,12 @@ pub async fn projects_write(
     if held_on_stale(&action, &body) && stale(&app) {
         return Err(STALE.to_string());
     }
-    post(&app, &path, &body).await
+    let out = post(&app, &path, &body).await?;
+    Ok(if crate::lock::private_hidden(&app) {
+        redact_change(out)
+    } else {
+        out
+    })
 }
 
 /// Choose a coding project's folder with the Windows folder picker, then
@@ -472,5 +492,10 @@ mod tests {
         assert!(!bench.to_string().contains("73.6"));
         let missing = serde_json::json!({ "available": false, "why": PROJECTS_MISSING });
         assert_eq!(redact(missing.clone()), missing);
+        let logged = write_answer(200, &doc["posts"]["log"]["body"].to_string()).unwrap();
+        let hidden = redact_change(logged);
+        assert_eq!(hidden["hidden"], true);
+        assert_eq!(hidden["http"], 200);
+        assert!(!hidden.to_string().contains("26.75"));
     }
 }
