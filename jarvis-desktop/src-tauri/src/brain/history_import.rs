@@ -1,4 +1,4 @@
-//! "Bring in chats from ChatGPT, Claude or Gemini" (the owner's choice,
+//! "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek" (the owner's choice,
 //! 2026-09-28; backend `jarvis_history_import.py` and `import_history.py`,
 //! history-import.patch; JARVIS-API.md section 85).
 //!

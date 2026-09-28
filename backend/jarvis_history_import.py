@@ -1,4 +1,4 @@
-"""jarvis_history_import.py - "Bring in chats from ChatGPT, Claude or Gemini".
+"""jarvis_history_import.py - "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek".
 
 The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section 3,
 idea 13); docs/JARVIS-API.md section 85 is the contract.
@@ -74,7 +74,8 @@ ABOUT = ("Jarvis reads only what you wrote in those chats - never the other "
 PC_ONLY = ("Old chats are brought in on the PC only: the export file is on the PC "
            "(Brain, Memory).")
 
-LABELS = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini"}
+LABELS = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini",
+          "deepseek": "DeepSeek"}
 
 _LOCK = threading.Lock()
 _CANCEL = threading.Event()
@@ -108,7 +109,7 @@ def words(st: dict) -> str:
     again = (f" {_plural(before, 'chat was', 'chats were')} read before and skipped."
              if before else "")
     if state == "idle":
-        return ("Bring in your old chats from ChatGPT, Claude or Gemini: choose the "
+        return ("Bring in your old chats from ChatGPT, Claude, Gemini or DeepSeek: choose the "
                 "export file on this PC.")
     if state == "running":
         if not st.get("kind"):
@@ -129,11 +130,15 @@ def words(st: dict) -> str:
                 f"to carry on where it stopped.")
     if outcome == "empty":
         return ("Nothing was brought in: no chats were found in that file. Choose the "
-                ".zip file ChatGPT, Claude or Google sent you (for Gemini, Google Takeout "
-                "set to JSON, not HTML).")
+                ".zip file ChatGPT, Claude, DeepSeek or Google sent you (for Gemini, "
+                "Google Takeout set to JSON, not HTML).")
     if outcome == "not_export":
-        return ("Nothing was brought in: that file is not a ChatGPT, Claude or Gemini "
+        return ("Nothing was brought in: that file is not a ChatGPT, Claude, Gemini or DeepSeek "
                 "export Jarvis can read. Choose the .zip file they sent you.")
+    if outcome == "no_model":
+        return (f"Paused, because Jarvis's AI model on this PC did not answer: {_counts(st)}. "
+                f"The chat it was reading is not marked as read. Once Jarvis answers "
+                f"again, press the button again with the same file to carry on.")
     why = st.get("why") or "something went wrong while reading the file"
     if not st.get("read"):
         return f"Nothing was brought in: {why}."
@@ -199,7 +204,7 @@ def _run(path: Path, importer) -> None:
         if code == 2 or stopped == "refused":
             outcome = "failed"
             why = "Jarvis's learning model is not on this PC, so nothing was sent to it"
-        elif stopped in ("done", "queue_full", "cancelled", "empty"):
+        elif stopped in ("done", "queue_full", "cancelled", "empty", "no_model"):
             outcome = stopped
         else:
             outcome = "failed"
@@ -314,7 +319,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     other request goes straight to the original. Returns the banner line."""
     get0, post0 = handler_cls.do_GET, handler_cls.do_POST
     if getattr(post0, "_jarvis_history_import", False):
-        return "  old chats  Bring in chats from ChatGPT, Claude or Gemini (already on)"
+        return "  old chats  Bring in chats from ChatGPT, Claude, Gemini or DeepSeek (already on)"
 
     def _allowed(self) -> bool:
         try:
@@ -364,7 +369,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     do_POST._jarvis_history_import = True
     handler_cls.do_GET = do_GET
     handler_cls.do_POST = do_POST
-    return ("  old chats  Bring in chats from ChatGPT, Claude or Gemini: every fact "
+    return ("  old chats  Bring in chats from ChatGPT, Claude, Gemini or DeepSeek: every fact "
             "waits for your yes")
 
 

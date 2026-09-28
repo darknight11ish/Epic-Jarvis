@@ -89,7 +89,7 @@
       "started": null,
       "state": "idle",
       "waiting": 0,
-      "words": "Bring in your old chats from ChatGPT, Claude or Gemini: choose the export file on this PC."
+      "words": "Bring in your old chats from ChatGPT, Claude, Gemini or DeepSeek: choose the export file on this PC."
     },
     "idle_not_here": {
       "about": "Jarvis reads only what you wrote in those chats - never the other assistant's replies - on this PC, with the AI model on this PC. Every possible fact waits under “Waiting for you” for your yes, one at a time; nothing is saved by itself. The chats are not added to your History. It can take hours for a big export, and Jarvis may answer more slowly while it runs.",
@@ -107,7 +107,7 @@
       "started": null,
       "state": "idle",
       "waiting": 0,
-      "words": "Bring in your old chats from ChatGPT, Claude or Gemini: choose the export file on this PC."
+      "words": "Bring in your old chats from ChatGPT, Claude, Gemini or DeepSeek: choose the export file on this PC."
     },
     "looking": {
       "about": "Jarvis reads only what you wrote in those chats - never the other assistant's replies - on this PC, with the AI model on this PC. Every possible fact waits under “Waiting for you” for your yes, one at a time; nothing is saved by itself. The chats are not added to your History. It can take hours for a big export, and Jarvis may answer more slowly while it runs.",
@@ -127,6 +127,24 @@
       "waiting": 0,
       "words": "Looking at the file…"
     },
+    "no_model": {
+      "about": "Jarvis reads only what you wrote in those chats - never the other assistant's replies - on this PC, with the AI model on this PC. Every possible fact waits under “Waiting for you” for your yes, one at a time; nothing is saved by itself. The chats are not added to your History. It can take hours for a big export, and Jarvis may answer more slowly while it runs.",
+      "available": true,
+      "before": 0,
+      "finished": 1790590200.0,
+      "here": true,
+      "kind": "deepseek",
+      "nothing": 0,
+      "offered": 30,
+      "ok": true,
+      "outcome": "no_model",
+      "read": 30,
+      "source": "DeepSeek",
+      "started": 1790589600.0,
+      "state": "finished",
+      "waiting": 6,
+      "words": "Paused, because Jarvis's AI model on this PC did not answer: 30 chats read, 6 possible facts waiting for your yes. The chat it was reading is not marked as read. Once Jarvis answers again, press the button again with the same file to carry on."
+    },
     "not_export": {
       "about": "Jarvis reads only what you wrote in those chats - never the other assistant's replies - on this PC, with the AI model on this PC. Every possible fact waits under “Waiting for you” for your yes, one at a time; nothing is saved by itself. The chats are not added to your History. It can take hours for a big export, and Jarvis may answer more slowly while it runs.",
       "available": true,
@@ -143,7 +161,7 @@
       "started": 1790589600.0,
       "state": "finished",
       "waiting": 0,
-      "words": "Nothing was brought in: that file is not a ChatGPT, Claude or Gemini export Jarvis can read. Choose the .zip file they sent you."
+      "words": "Nothing was brought in: that file is not a ChatGPT, Claude, Gemini or DeepSeek export Jarvis can read. Choose the .zip file they sent you."
     },
     "queue_full": {
       "about": "Jarvis reads only what you wrote in those chats - never the other assistant's replies - on this PC, with the AI model on this PC. Every possible fact waits under “Waiting for you” for your yes, one at a time; nothing is saved by itself. The chats are not added to your History. It can take hours for a big export, and Jarvis may answer more slowly while it runs.",

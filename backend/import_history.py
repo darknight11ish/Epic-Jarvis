@@ -1,13 +1,14 @@
-"""import_history.py - feed an old ChatGPT, Claude or Gemini export into the review queue.
+"""import_history.py - feed an old ChatGPT, Claude, Gemini or DeepSeek export into the review queue.
 
     python backend\\import_history.py --chatgpt path\\to\\chatgpt-export.zip
     python backend\\import_history.py --claude path\\to\\claude-export.zip
     python backend\\import_history.py --gemini path\\to\\takeout.zip
-    python backend\\import_history.py --auto path\\to\\any-of-the-three.zip
+    python backend\\import_history.py --deepseek path\\to\\deepseek_data.zip
+    python backend\\import_history.py --auto path\\to\\any-of-the-four.zip
     python backend\\import_history.py --claude a.zip --gemini b.zip
 
-Or, on the PC, the Brain's Memory page: "Bring in chats from ChatGPT, Claude
-or Gemini" (jarvis_history_import.py runs this same run() in the background;
+Or, on the PC, the Brain's Memory page: "Bring in chats from ChatGPT, Claude,
+Gemini or DeepSeek" (jarvis_history_import.py runs this same run() in the background;
 docs/JARVIS-API.md section 85). The file is shipped beside jarvis_hud.py for
 that, and still runs from this repository as before.
 
@@ -80,25 +81,28 @@ WHAT ACTUALLY LEAVES THIS MACHINE: nothing. The export files are read from
 disk. The only connection made is propose()'s own, to Ollama on this machine
 (see above: refused otherwise).
 
-THREE FORMATS, TWO CONFIDENCE LEVELS
-(ChatGPT's, added 2026-09-28, is described at `chatgpt_conversations`
-below: written from its published shape, not checked against a real file of
-the owner's either.)
-The Claude parser is checked against the export shape this project's own
-`scripts/recover_from_claude_export.py` was built and run against on a real
-export - one JSON per conversation, `chat_messages`, `sender`, `text`. The
-Gemini parser is written against Google Takeout's documented "Gemini Apps"
-activity export shape, WHICH THIS PROJECT HAS NOT VERIFIED AGAINST A REAL
-FILE. Google Takeout's activity log has historically recorded the PROMPT you
-sent more reliably than the full response you got back, so a Gemini import
-may end up mostly one-sided ("I asked about X") rather than a full back and
-forth. If your export's field names do not match what `_gemini_conversations`
-looks for, it degrades to "0 conversations found in this file" rather than
-raising - loudly enough to notice, not loudly enough to crash - and the fix
-is to open the JSON, see what the real keys are called, and adjust the
-handful of `.get(...)` calls in that one function. Said here plainly rather
-than left to be discovered as a silent gap: "I have not checked" beats a
-confident guess, and this project's own rules say so.
+FOUR FORMATS, AND HOW SURE THIS IS OF EACH (checked 2026-09-28)
+  * Claude - checked against a real export (the one
+    `scripts/recover_from_claude_export.py` was run on) and against open-
+    source readers of current ones: `chat_messages`, `sender`, and the text
+    from "text" content blocks only.
+  * ChatGPT, DeepSeek and Gemini - written from the shapes that several
+    open-source readers of REAL exports agree on (named beside each reader
+    below), not from a file of the owner's own. Gemini's is the least
+    certain: Google Takeout records what the owner typed more reliably than
+    Gemini's answers, and has no conversation id, so prompts are put back
+    into conversations by time (a new one after 30 minutes' silence).
+If an export's field names do not match, its reader finds "0 conversations"
+and says so, rather than raising or guessing. "I have not checked" beats a
+confident guess.
+
+READING A CHAT WELL (2026-09-28)
+A long chat is handed to the model in pieces it can read whole (pieces()),
+through the same door as live learning (jarvis_intake.propose: the date the
+chat happened and the closest stored facts are in the prompt), on the chat's
+own model. A model that does not answer pauses the run with that chat not
+marked read, so nothing is lost. Pasted-in messages and code blocks are left
+out. See "Reading a long chat whole", below.
 """
 from __future__ import annotations
 
@@ -106,6 +110,7 @@ import argparse
 import hashlib
 import io
 import json
+import re
 import sys
 import time
 import zipfile
@@ -225,20 +230,29 @@ def _claude_role(raw) -> Optional[str]:
 
 
 def _claude_text(node: dict) -> str:
-    val = node.get("text")
-    if isinstance(val, str) and val.strip():
-        return val
+    """The words of one Claude message. Built from its "text" content
+    blocks when it has any - never a "thinking" block (the model's hidden
+    reasoning), a "tool_use" (Claude's artifacts are one), a "tool_result"
+    or any other kind -
+    and otherwise from its plain `text` field. `attachments` (the text of
+    a pasted or uploaded file, `extracted_content`) is never read: it is
+    outside text, not the owner's words."""
     blocks = node.get("content")
-    if isinstance(blocks, str):
+    if isinstance(blocks, str) and blocks.strip():
         return blocks
     if isinstance(blocks, list):
         out = []
         for b in blocks:
-            if isinstance(b, dict) and isinstance(b.get("text"), str):
-                out.append(b["text"])
-            elif isinstance(b, str):
+            if isinstance(b, str):
                 out.append(b)
-        return "\n".join(out)
+            elif isinstance(b, dict) and b.get("type") in (None, "", "text") \
+                    and isinstance(b.get("text"), str):
+                out.append(b["text"])
+        if any(o.strip() for o in out):
+            return "\n".join(out)
+    val = node.get("text")
+    if isinstance(val, str) and val.strip():
+        return val
     return ""
 
 
@@ -315,77 +329,177 @@ def claude_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
 #   Gemini / Google Takeout export
 # --------------------------------------------------------------------------
 #
-# UNVERIFIED AGAINST A REAL FILE - see the module docstring. Written against
-# Google Takeout's documented "Gemini Apps" activity export:
-# `Takeout/My Activity/Gemini Apps/MyActivity.json`, an array of records that
-# typically carry a `title` like "Prompted with: <text>" or "Asked Gemini:
-# <text>", a `time`, and sometimes a `subtitles` or `details` array that may
-# hold the response. Each record is usually ONE turn, not a conversation, so
-# unlike the Claude side there is rarely a `replaces`-worthy back-and-forth to
-# reconstruct - this treats each record as its own single-turn "conversation"
-# for propose() to look at, which honestly reflects what Takeout tends to
-# capture rather than pretending to a fuller transcript than the export has.
+# Google Takeout, "My Activity" -> "Gemini Apps", set to JSON (its default
+# is HTML, which this cannot read): `Takeout/My Activity/Gemini Apps/
+# MyActivity.json`, one list of activity RECORDS, newest first:
+#
+#     {"header": "Gemini Apps", "title": "Prompted <what the owner typed>",
+#      "time": "2026-07-26T06:07:57.773Z", "products": ["Gemini Apps"],
+#      "safeHtmlItem": [{"html": "<p>Gemini's answer</p>"}], ...}
+#
+# Checked 2026-09-28 against open-source readers written from real exports
+# (420AI's gemini-export.ts, from a 1,452-record export; llm-aggregator's
+# geminiTakeout.ts, 875 records); still not a file of the owner's own.
+# What they found, and what this does about it:
+#
+#   * The owner's words are the `title`, after a verb: "Prompted ", and
+#     less often "Asked ", "Said ", "Branched ", "Answered " (older ones:
+#     "Prompted with: ", "Asked Gemini: ", "Asked Bard: "). The verb is cut
+#     off. A title can end "Attached 2 files." - cut off too.
+#   * Records that are not something the owner said - "Created" (Canvas),
+#     "Used", "Added", "Gave" (feedback), "Selected", "Shared", "Deleted" -
+#     are skipped, whatever follows the verb.
+#   * Gemini's answer is `safeHtmlItem[].html` (HTML; only its words are
+#     kept). It is often missing. Only the owner's words reach the model
+#     anyway (owner_words, below).
+#   * There is NO conversation id. So records are put back into
+#     conversations the way the readers above do: in time order, and a
+#     new conversation starts after 30 minutes with nothing said. That
+#     gives the model "my sister is Anna ... she loves jazz" together,
+#     instead of one line at a time with nothing around it.
+#   * A Takeout with more than Gemini in it (Search, YouTube) has records of
+#     the same shape; only those whose `header` or `products` say Gemini or
+#     Bard are read. For an account in another language those words are
+#     translated ("Gemini 앱", "App Gemini") - matched by the word "Gemini"
+#     or "Bard" anywhere in them - and so are the verbs: a record with no
+#     English verb is read only when it has an answer (so it was a prompt),
+#     its whole title kept.
 
-def _gemini_prompt_text(title: str) -> str:
+#: A conversation ends after this long with nothing said.
+GEMINI_GAP = 30 * 60
+
+_GEMINI_PROMPT = ("Prompted with: ", "Asked Gemini: ", "Asked Bard: ",
+                  "Prompted ", "Asked ", "Said ", "Branched ", "Answered ")
+_GEMINI_NOT_SAID = ("Created ", "Used ", "Added ", "Gave ", "Selected ", "Shared ",
+                    "Deleted ", "Viewed ", "Visited ", "Searched ", "Edited ",
+                    "Pinned ", "Renamed ", "Exported ", "Updated ")
+_ATTACHED = re.compile(r"\s*Attached \d+ files?\.?\s*$", re.I)
+
+
+def _gemini_is_gemini(rec: dict) -> bool:
+    labels = [rec.get("header")]
+    prods = rec.get("products")
+    if isinstance(prods, list):
+        labels += prods
+    labels = [x.strip().lower() for x in labels if isinstance(x, str) and x.strip()]
+    if not labels:
+        return True   # no label at all: this file is the Gemini Apps one
+    return any("gemini" in x or "bard" in x for x in labels)
+
+
+def _gemini_prompt_text(title: str, has_answer: bool = True) -> str:
+    """The owner's words in a record's title, or "" when the record is not
+    something the owner said."""
     t = title.strip()
-    for prefix in ("Prompted with: ", "Asked Gemini: ", "Asked Bard: "):
+    for prefix in _GEMINI_NOT_SAID:
         if t.startswith(prefix):
-            return t[len(prefix):]
-    return t
+            return ""
+    for prefix in _GEMINI_PROMPT:
+        if t.startswith(prefix):
+            return _ATTACHED.sub("", t[len(prefix):]).strip()
+    # No English verb: another language, or a shape not seen before. Kept
+    # only when Gemini answered it - so it was a prompt - and kept whole.
+    return _ATTACHED.sub("", t).strip() if has_answer else ""
+
+
+def _html_words(html: str) -> str:
+    from html.parser import HTMLParser
+
+    class _Words(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.out = []
+
+        def handle_data(self, data):
+            self.out.append(data)
+
+        def handle_starttag(self, tag, attrs):
+            if tag in ("p", "br", "li", "div", "h1", "h2", "h3", "tr"):
+                self.out.append(" ")
+
+    w = _Words()
+    try:
+        w.feed(html)
+        w.close()
+    except Exception:
+        return ""
+    return " ".join("".join(w.out).split())
 
 
 def _gemini_reply_text(record: dict) -> str:
-    for key in ("subtitles", "details"):
-        val = record.get(key)
-        if isinstance(val, list):
-            parts = [v.get("name") if isinstance(v, dict) else v for v in val]
-            parts = [p for p in parts if isinstance(p, str) and p.strip()]
-            if parts:
-                return "\n".join(parts)
-    return ""
+    parts = []
+    items = record.get("safeHtmlItem")
+    if isinstance(items, list):
+        for it in items:
+            html = it.get("html") if isinstance(it, dict) else None
+            if isinstance(html, str) and html.strip():
+                parts.append(_html_words(html))
+    if not any(parts):
+        for key in ("subtitles", "details"):
+            val = record.get(key)
+            if isinstance(val, list):
+                got = [v.get("name") if isinstance(v, dict) else v for v in val]
+                parts += [g for g in got if isinstance(g, str) and g.strip()]
+    return "\n".join(p for p in parts if p and p.strip())
 
 
-def gemini_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
+def _gemini_records(path: Path) -> list:
+    """Every Gemini prompt in this export as (time, prompt, reply), oldest
+    first. Records with no readable time go last, in file order."""
+    out = []
     for _label, doc in _walk_json_documents(path):
-        records = doc if isinstance(doc, list) else doc.get("Gemini Apps") if isinstance(doc, dict) else None
+        records = doc if isinstance(doc, list) else doc.get("Gemini Apps") \
+            if isinstance(doc, dict) else None
         if not isinstance(records, list):
             continue
-        for i, rec in enumerate(records):
-            if not isinstance(rec, dict):
-                continue
-            # A Takeout with more than Gemini in it also holds Search,
-            # YouTube and other activity in the same shape. Each record says
-            # which product it is from; only Gemini's (or Bard's) are chats.
-            # (2026-09-28, with the Brain's button: a search typed into
-            # Google is not a chat with an assistant.)
-            header = rec.get("header")
-            if isinstance(header, str) and header.strip() and \
-                    header.strip().lower() not in ("gemini apps", "gemini", "bard"):
+        for rec in records:
+            if not isinstance(rec, dict) or not _gemini_is_gemini(rec):
                 continue
             title = rec.get("title")
             if not isinstance(title, str) or not title.strip():
                 continue
-            prompt = " ".join(_gemini_prompt_text(title).split())
+            reply = " ".join(_gemini_reply_text(rec).split())
+            prompt = " ".join(_gemini_prompt_text(title, bool(reply)).split())
             if not prompt:
                 continue
-            turns = [{"role": "user", "content": prompt}]
-            reply = " ".join(_gemini_reply_text(rec).split())
+            out.append((_parse_time(rec.get("time")), prompt, reply))
+    far = float("inf")
+    out.sort(key=lambda r: far if r[0] is None else r[0])
+    return out
+
+
+def gemini_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
+    """Yields (id, turns): the Gemini prompts put back into conversations -
+    time order, a new one after GEMINI_GAP of silence. A prompt Gemini's
+    answer was not captured for is kept, one-sided: "what car does Mario
+    want" is worth reading without the answer, and no answer is invented."""
+    group: list = []
+
+    def finish(group):
+        turns = []
+        for _t, prompt, reply in group:
+            turns.append({"role": "user", "content": prompt})
             if reply:
                 turns.append({"role": "assistant", "content": reply})
-            else:
-                # A prompt with no captured reply still has something worth
-                # asking about ("what car does Mario want" is durable even
-                # without Gemini's answer to it) - but propose()'s own model
-                # reads a one-sided transcript, so this is offered honestly
-                # as a single-user-turn conversation, not padded with an
-                # invented reply.
-                pass
-            raw_id = rec.get("titleUrl") or f"{rec.get('time','')}:{title}"
-            conv_id = _conv_id("gemini", raw_id, turns)
-            when = _parse_time(rec.get("time"))
-            if when is not None:
-                WHEN[conv_id] = when
-            yield conv_id, turns
+        first, last = group[0], group[-1]
+        # First and last record in the id: a later export where this
+        # conversation grew is offered again (propose()'s own dedupe drops
+        # what it already proposed), not skipped as "read before".
+        raw = hashlib.sha256(f"{first[0]}|{first[1]}|{last[0]}|{last[1]}|{len(group)}"
+                             .encode("utf-8", "replace")).hexdigest()[:20]
+        conv_id = _conv_id("gemini", raw, turns)
+        if first[0] is not None:
+            WHEN[conv_id] = first[0]
+        return conv_id, turns
+
+    for rec in _gemini_records(path):
+        if group and (rec[0] is None or group[-1][0] is None
+                      or rec[0] - group[-1][0] > GEMINI_GAP):
+            yield finish(group)
+            group = []
+        group.append(rec)
+    if group:
+        yield finish(group)
 
 
 # --------------------------------------------------------------------------
@@ -637,7 +751,8 @@ def chatgpt_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
             if isinstance(item, dict) and isinstance(item.get("conversations"), list):
                 entries = item["conversations"]
             for entry in entries:
-                if not isinstance(entry, dict) or not isinstance(entry.get("mapping"), dict):
+                if not isinstance(entry, dict) or not isinstance(entry.get("mapping"), dict) \
+                        or _is_deepseek(entry):
                     continue
                 turns = _chatgpt_turns(entry)
                 # Same rule as the Claude side: a chat with no reply at all,
@@ -654,11 +769,132 @@ def chatgpt_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
 
 
 # --------------------------------------------------------------------------
-#   Which export is this? (the Brain's one button takes any of the three)
+#   DeepSeek export (added 2026-09-28, the owner's choice)
+# --------------------------------------------------------------------------
+#
+# DeepSeek's "Export data" (Settings, Data) gives a .zip holding
+# `conversations.json` (every chat) and `user.json` (the account - never
+# read). Each conversation:
+#
+#     id, title, inserted_at, updated_at,
+#     mapping: {node id: {"id", "parent", "children": [...],
+#                         "message": null | {"model", "inserted_at", "files",
+#                                            "fragments": [{"type", "content"}]}}}
+#
+# Like ChatGPT's, the mapping is a TREE (an edited question or a retried
+# answer starts a branch), with a synthetic "root" node. Unlike ChatGPT's
+# there is no `current_node` and no role: WHO spoke is the fragment's type.
+#   REQUEST   the owner's words                        - read
+#   RESPONSE  DeepSeek's answer                        - kept as the reply
+#   THINK     the model's reasoning ("DeepThink")      - skipped
+#   SEARCH, TOOL_SEARCH, TOOL_OPEN, TOOL_FIND, FILE    - web results, tools,
+#             files: outside text, skipped
+# The branch read is the one ending at the newest message (latest
+# `inserted_at`), walked back to the root - the conversation as the owner
+# last left it. Messages are put in TREE order, never time order: a real
+# export has an answer stamped a few milliseconds before its question.
+# Times are ISO 8601 with an offset ("2024-12-04T14:51:13.334000+08:00").
+#
+# Written 2026-09-28 from six open-source readers that agree on this shape
+# (llm-archive, Xe/x, owl-brain, pointer, AIArchive, a real sample file in
+# GPT-Rewind); not checked against a file of the owner's own. If a future
+# export renames these, this finds 0 conversations and says so.
+
+_DS_USER, _DS_REPLY = ("REQUEST",), ("RESPONSE",)
+
+
+def _deepseek_chain(mapping: dict) -> list:
+    """Node ids from the root to the newest leaf, oldest first."""
+    leaves = []
+    for k, v in mapping.items():
+        if not isinstance(v, dict):
+            continue
+        kids = v.get("children")
+        if isinstance(kids, list) and any(isinstance(c, str) and c in mapping for c in kids):
+            continue
+        msg = v.get("message") if isinstance(v.get("message"), dict) else {}
+        leaves.append((_parse_time(msg.get("inserted_at")) or 0.0, k))
+    if not leaves:
+        return []
+    # Newest leaf; on a tie, the one listed last (the later branch).
+    node_id = max(enumerate(leaves), key=lambda e: (e[1][0], e[0]))[1][1]
+    chain, seen = [], set()
+    while isinstance(node_id, str) and node_id in mapping and node_id not in seen:
+        seen.add(node_id)
+        chain.append(node_id)
+        node = mapping.get(node_id)
+        node_id = node.get("parent") if isinstance(node, dict) else None
+    chain.reverse()
+    return chain
+
+
+def _deepseek_turns(convo: dict) -> list[dict]:
+    mapping = convo.get("mapping")
+    if not isinstance(mapping, dict):
+        return []
+    turns: list[dict] = []
+    for node_id in _deepseek_chain(mapping):
+        node = mapping.get(node_id)
+        msg = node.get("message") if isinstance(node, dict) else None
+        frags = msg.get("fragments") if isinstance(msg, dict) else None
+        if not isinstance(frags, list):
+            continue
+        for f in frags:
+            if not isinstance(f, dict) or not isinstance(f.get("content"), str):
+                continue
+            kind = str(f.get("type") or "").upper()
+            role = "user" if kind in _DS_USER else "assistant" if kind in _DS_REPLY else None
+            if role is None:
+                continue          # THINK, SEARCH, tools, files
+            text = " ".join(f["content"].split())
+            if not text:
+                continue
+            if turns and turns[-1]["role"] == role:
+                turns[-1]["content"] += " " + text
+            else:
+                turns.append({"role": role, "content": text})
+    return turns
+
+
+def _is_deepseek(entry) -> bool:
+    """A DeepSeek conversation: a mapping whose messages have fragments."""
+    mapping = entry.get("mapping") if isinstance(entry, dict) else None
+    if not isinstance(mapping, dict) or "current_node" in entry:
+        return False
+    for v in mapping.values():
+        msg = v.get("message") if isinstance(v, dict) else None
+        if isinstance(msg, dict):
+            return isinstance(msg.get("fragments"), list)
+    return "inserted_at" in entry
+
+
+def deepseek_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
+    """Yields (id, turns) for every DeepSeek conversation in this export."""
+    for label, items in _json_entries(path):
+        for item in _safe_items(label, items):
+            entries = item if isinstance(item, list) else [item]
+            for entry in entries:
+                if not _is_deepseek(entry):
+                    continue
+                turns = _deepseek_turns(entry)
+                if len(turns) < 2 or not any(t["role"] == "user" for t in turns):
+                    continue
+                raw_id = entry.get("id")
+                conv_id = _conv_id("deepseek", raw_id if isinstance(raw_id, str) else None,
+                                   turns)
+                when = _parse_time(entry.get("inserted_at") or entry.get("updated_at"))
+                if when is not None:
+                    WHEN[conv_id] = when
+                yield conv_id, turns
+
+
+# --------------------------------------------------------------------------
+#   Which export is this? (the Brain's one button takes any of the four)
 # --------------------------------------------------------------------------
 
-KINDS = ("chatgpt", "claude", "gemini")
-LABELS = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini"}
+KINDS = ("chatgpt", "claude", "gemini", "deepseek")
+LABELS = {"chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini",
+          "deepseek": "DeepSeek"}
 
 
 def _kind_of_item(item) -> Optional[str]:
@@ -669,7 +905,7 @@ def _kind_of_item(item) -> Optional[str]:
     if not isinstance(first, dict):
         return None
     if isinstance(first.get("mapping"), dict):
-        return "chatgpt"
+        return "deepseek" if _is_deepseek(first) else "chatgpt"
     if isinstance(first.get("chat_messages"), list):
         return "claude"
     if "title" in first and "time" in first and ("header" in first or "products" in first):
@@ -678,11 +914,12 @@ def _kind_of_item(item) -> Optional[str]:
 
 
 def detect_kind(path: Path) -> Optional[str]:
-    """"chatgpt", "claude", "gemini", or None when this is none of them.
+    """"chatgpt", "claude", "gemini", "deepseek", or None when this is none.
 
     A Google Takeout Gemini export is known by its folder name. Otherwise
     the first item of each JSON file decides: a `mapping` tree is ChatGPT,
-    a `chat_messages` list is Claude. Only the first item of a file is read.
+    or DeepSeek when its messages are made of `fragments`; a
+    `chat_messages` list is Claude. Only the first item of a file is read.
     """
     names = []
     if path.is_dir():
@@ -822,6 +1059,128 @@ def owner_words(turns: list[dict]) -> list[dict]:
     return out
 
 
+# --------------------------------------------------------------------------
+#   Reading a long chat whole (2026-09-28)
+# --------------------------------------------------------------------------
+#
+# A chat can be hundreds of messages long. Handed to the model in one go it
+# does not fit in what the model can read at once, and the start of it is
+# lost without a word - which is where people usually say who they are. So
+# the owner's words are handed over in PIECES of at most PIECE_CHARS
+# characters, each one read whole, each one its own propose() call, all
+# dated to the chat. A piece starts with the last message of the one
+# before when that is short, so "my sister is Anna" and "she loves jazz"
+# are not split from each other. (propose()'s own dedupe drops a fact the
+# overlap makes it find twice.)
+#
+# Left out, because they are very rarely the owner's own words about
+# themselves: a single message over PASTED_CHARS characters (a pasted
+# email, document or web page), and ``` code blocks. The same reason the
+# live learner leaves pasted text out (jarvis_intake.owner_turns).
+
+#: At most this many characters of the owner's words per model call.
+PIECE_CHARS = 6000
+#: A message longer than this is treated as pasted in, and not read.
+PASTED_CHARS = 4000
+#: The last message of a piece is repeated at the start of the next one
+#: when it is at most this long.
+OVERLAP_CHARS = 600
+
+_FENCE = re.compile(r"```.*?(?:```|$)", re.S)
+
+
+def pieces(mine: list[dict]) -> list[list[dict]]:
+    """The owner's turns of one chat (owner_words' result), as the pieces
+    the model reads: code blocks and pasted-in messages left out, then
+    grouped, in order, to at most PIECE_CHARS characters each. A message
+    between OVERLAP_CHARS and PIECE_CHARS long is a piece on its own."""
+    kept = []
+    for t in mine or []:
+        text = " ".join(_FENCE.sub(" ", str(t.get("content") or "")).split())
+        if not text or len(text) > PASTED_CHARS:
+            continue
+        kept.append({"role": "user", "content": text})
+    out: list[list[dict]] = []
+    cur: list[dict] = []
+    size = 0
+    for t in kept:
+        n = len(t["content"])
+        if cur and size + n > PIECE_CHARS:
+            out.append(cur)
+            last = cur[-1]
+            cur = [last] if len(last["content"]) <= OVERLAP_CHARS and \
+                len(last["content"]) + n <= PIECE_CHARS else []
+            size = sum(len(x["content"]) for x in cur)
+        cur.append(t)
+        size += n
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _chat_model() -> Optional[str]:
+    """The model the chat uses, so an import does not load a second copy
+    of a model onto the graphics card beside it - with a smaller window -
+    or ask for one that is not there. The same order the live learner
+    uses (jarvis_hud._extract_model): JARVIS_LOCAL_MODEL, then
+    jarvis_models.current_model(). None: jarvis_extract's own default."""
+    import os
+    name = os.environ.get("JARVIS_LOCAL_MODEL", "").strip()
+    if name:
+        return name
+    try:
+        import jarvis_models
+        name = str(jarvis_models.current_model() or "").strip()
+    except Exception:
+        name = ""
+    return name or None
+
+
+class _Asker:
+    """jarvis_extract's own model call (_local_llm), on the chat's model,
+    counting the calls that got no answer at all - the model was not
+    running, or timed out. A chat whose reading got no answer is NOT
+    marked as read: propose() returns [] then, which would otherwise look
+    exactly like "nothing to learn here" and skip the chat for ever."""
+
+    def __init__(self, ask, model):
+        self.ask, self.model, self.missed = ask, model, 0
+
+    def __call__(self, prompt, *a, **kw):
+        if self.model and not a and "model" not in kw:
+            kw["model"] = self.model
+        out = self.ask(prompt, *a, **kw)
+        if out is None:
+            self.missed += 1
+        return out
+
+
+def _asker(X) -> Optional[_Asker]:
+    ask = getattr(X, "_local_llm", None)
+    return _Asker(ask, _chat_model()) if callable(ask) else None
+
+
+def _propose(X, piece: list[dict], kind: str, when, asker) -> list:
+    """One piece through the same door the live learner uses:
+    jarvis_intake.propose, which tells the model the day the chat
+    happened (so "last week" becomes a real date) and shows it the stored
+    facts closest to what was said (so a correction names the fact it
+    replaces). Without jarvis_intake.py or a model call to hand it, the
+    plain propose(), dated, as before."""
+    source = f"import:{kind}"
+    if asker is not None:
+        try:
+            import jarvis_intake
+        except ImportError:
+            jarvis_intake = None
+        if jarvis_intake is not None and callable(getattr(jarvis_intake, "propose", None)):
+            return jarvis_intake.propose(X, piece, asker, source=source, when=when)
+    with _dated(when):
+        if asker is not None:
+            return X.propose(piece, llm=asker, source=source)
+        return X.propose(piece, source=source)
+
+
 #: What the last run() did, for the Brain's button (jarvis_history_import.py)
 #: and for the tests. Counts only - never a file name, never a word of a chat.
 #:   kinds     the sources read, in order ("chatgpt", ...)
@@ -831,7 +1190,10 @@ def owner_words(turns: list[dict]) -> list[dict]:
 #:   nothing   of those, how many had no words of the owner's left to read
 #:             (a game, only a timer command, ...) - the model is not asked
 #:   waiting   possible facts propose() added to the review queue this run
-#:   stopped   "done", "queue_full", "cancelled", "refused" or "empty"
+#:   pieces    model calls made (a long chat is read in several pieces)
+#:   stopped   "done", "queue_full", "cancelled", "refused", "empty" or
+#:             "no_model" (the model gave no answer: the chat being read is
+#:             not marked read, so the next run reads it)
 SUMMARY: dict = {}
 
 
@@ -854,7 +1216,7 @@ def run(sources: list[tuple[str, Path]], *, say=print, on_step=None,
     step = on_step or _no_steps
     SUMMARY.clear()
     SUMMARY.update({"kinds": [], "read": 0, "before": 0, "offered": 0, "nothing": 0,
-                    "waiting": 0, "stopped": "done"})
+                    "waiting": 0, "pieces": 0, "stopped": "done"})
 
     # Before anything is read or marked done: a refusal inside propose()
     # would return [] for every conversation, and each one would then be
@@ -869,12 +1231,13 @@ def run(sources: list[tuple[str, Path]], *, say=print, on_step=None,
 
     progress = _load_progress()
     done = set(progress.get("done", []))
+    asker = _asker(X)
     seen_this_run = 0
     proposed_this_run = 0
     started = time.time()
 
     PARSERS = {"claude": claude_conversations, "gemini": gemini_conversations,
-               "chatgpt": chatgpt_conversations}
+               "chatgpt": chatgpt_conversations, "deepseek": deepseek_conversations}
     said_before, _say = _say, say
     try:
         for kind, path in sources:
@@ -884,7 +1247,7 @@ def run(sources: list[tuple[str, Path]], *, say=print, on_step=None,
             if kind == "auto":
                 kind = detect_kind(path) or ""
                 if not kind:
-                    say(f"  {path.name}: not a ChatGPT, Claude or Gemini export that "
+                    say(f"  {path.name}: not a ChatGPT, Claude, Gemini or DeepSeek export that "
                         f"this can read - 0 conversations found.")
                     continue
             SUMMARY["kinds"].append(kind)
@@ -906,20 +1269,32 @@ def run(sources: list[tuple[str, Path]], *, say=print, on_step=None,
                     continue
                 seen_this_run += 1
                 SUMMARY["offered"] = seen_this_run
-                mine = owner_words(turns)
-                if not mine:
+                parts = pieces(owner_words(turns))
+                if not parts:
                     # Nothing of the owner's to read: the model is not asked.
                     SUMMARY["nothing"] += 1
                     done.add(conv_id)
                     step(SUMMARY)
                     continue
-                # Dated to when the conversation happened, if the export says
-                # and jarvis_intake.py is installed. Nothing else about the
-                # call changes: same propose(), same model, same review queue.
-                with _dated(WHEN.get(conv_id)):
-                    proposed = X.propose(mine, source=f"import:{kind}")
-                proposed_this_run += len(proposed or [])
-                SUMMARY["waiting"] = proposed_this_run
+                # Dated to when the conversation happened, if the export says.
+                # Same propose(), same model, same review queue; a long chat
+                # in pieces (see pieces()).
+                missed = asker.missed if asker is not None else 0
+                for part in parts:
+                    proposed = _propose(X, part, kind, WHEN.get(conv_id), asker)
+                    SUMMARY["pieces"] += 1
+                    proposed_this_run += len(proposed or [])
+                    SUMMARY["waiting"] = proposed_this_run
+                    if asker is not None and asker.missed > missed:
+                        break
+                if asker is not None and asker.missed > missed:
+                    SUMMARY["stopped"] = "no_model"
+                    _save_progress(done)
+                    step(SUMMARY)
+                    say(f"\n  Stopped: the AI model on this PC did not answer, so this "
+                        f"chat was not read. Nothing is lost - start Jarvis's model "
+                        f"(Ollama), then run this again to carry on from here.")
+                    return 0
                 done.add(conv_id)
                 step(SUMMARY)
 
@@ -936,7 +1311,7 @@ def run(sources: list[tuple[str, Path]], *, say=print, on_step=None,
                     return 0
             if found == 0:
                 where = {"claude": "_claude_turns", "gemini": "gemini_conversations",
-                         "chatgpt": "_chatgpt_turns"}[kind]
+                         "chatgpt": "_chatgpt_turns", "deepseek": "_deepseek_turns"}[kind]
                 say(f"  0 conversations found in this file. If you are sure this is a "
                     f"real {kind} export, the field names in `{where}` probably do not "
                     f"match what this file actually contains - open it and check.")
@@ -963,7 +1338,9 @@ def main() -> int:
                     ".json, or a folder holding either")
     ap.add_argument("--chatgpt", type=Path, help="a ChatGPT data export .zip, its "
                     "conversations.json, or a folder holding either")
-    ap.add_argument("--auto", type=Path, help="any of the three: which one it is is "
+    ap.add_argument("--deepseek", type=Path, help="a DeepSeek data export .zip, its "
+                    "conversations.json, or a folder holding either")
+    ap.add_argument("--auto", type=Path, help="any of the four: which one it is is "
                     "worked out from the file")
     args = ap.parse_args()
 
@@ -974,10 +1351,12 @@ def main() -> int:
         sources.append(("gemini", args.gemini))
     if args.chatgpt:
         sources.append(("chatgpt", args.chatgpt))
+    if args.deepseek:
+        sources.append(("deepseek", args.deepseek))
     if args.auto:
         sources.append(("auto", args.auto))
     if not sources:
-        ap.error("pass at least one of --chatgpt, --claude, --gemini or --auto")
+        ap.error("pass at least one of --chatgpt, --claude, --gemini, --deepseek or --auto")
 
     try:
         import jarvis_extract  # noqa: F401  (fail fast, with a clear reason)

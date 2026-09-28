@@ -53,6 +53,8 @@ def cases() -> dict:
                             waiting=50),
         "cancelled": _case(state="finished", outcome="cancelled", kind="chatgpt",
                            started=NOW, finished=NOW + 300, read=40, offered=40, waiting=4),
+        "no_model": _case(state="finished", outcome="no_model", kind="deepseek",
+                          started=NOW, finished=NOW + 600, read=30, offered=30, waiting=6),
         "not_export": _case(state="finished", outcome="not_export", started=NOW,
                             finished=NOW + 1),
         "failed": _case(state="finished", outcome="failed", kind="chatgpt", started=NOW,
