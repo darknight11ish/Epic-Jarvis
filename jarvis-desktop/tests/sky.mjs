@@ -215,7 +215,10 @@ await check("what the face pages read: off draws nothing; a stale shower is drop
 // ---- Part 2: on the face pages (needs Playwright) -------------------------------------
 
 let K = null;
-try { K = await import("./uikit.mjs"); await import("playwright"); } catch (e) { K = null; }
+// Playwright first: uikit.mjs exits the process (code 2) as it loads when
+// Playwright is missing, which no try/catch can catch - so load it only
+// once we know Playwright is there.
+try { await import("playwright"); K = await import("./uikit.mjs"); } catch (e) { K = null; }
 if (!K) {
   console.log("skip  the face pages (Playwright is not installed - see tests/README.md)");
 } else {
