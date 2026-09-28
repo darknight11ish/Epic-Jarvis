@@ -99,6 +99,12 @@ installed and measured. `docs/MODEL-TOPOLOGY.md` has the numbers.
 4. The app never auto-approves anything, and blocks acting when the event
    stream is stale.
 5. Non-commercial build. Sideloaded via adb, never listed on Play.
+   The owner said on 2026-09-28 that EpicJarvis **will never be
+   commercialized**. So a non-commercial licence (CC BY-NC, CC BY-NC-SA) is
+   no reason to avoid or replace a part - don't raise "it blocks selling
+   Jarvis" as a concern. Everything else those licences ask still applies:
+   credit in THIRD-PARTY-NOTICES.txt, share-alike, no redistribution
+   against their terms.
 
 Also standing: do not build the model catalogue, the memory graph, or deep
 config editing on the phone. A client must not do speech-to-text. Never build a
