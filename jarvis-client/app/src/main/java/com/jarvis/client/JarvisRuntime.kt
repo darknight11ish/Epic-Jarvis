@@ -818,6 +818,15 @@ object JarvisRuntime {
                 .combine(settings.security) { _, _ -> }
                 .collect { com.jarvis.client.widget.JarvisBoardWidgets.updateAll(app) }
         }
+        // "Reading phone notifications": turning it off is immediate, so
+        // whenever the switch reads as off - pressed here, or learned from
+        // the PC - nothing captured stays on this phone (audit A3). Also
+        // runs once at start: an off switch never has rows behind it.
+        scope.launch {
+            settings.phoneNotifications.collect { on ->
+                if (!on) runCatching { com.jarvis.client.data.CapturedNotifications(app).clear() }
+            }
+        }
     }
 
     /** True once there is somewhere to talk to and something to talk with. */
@@ -1243,6 +1252,8 @@ object JarvisRuntime {
     private suspend fun onEvent(event: SseEvent) {
         when (event.kind) {
             "approval" -> {
+                val phoneCardBefore = com.jarvis.client.net.PhoneNotifications
+                    .cardWaiting(_pending.value.map { it.action })
                 refreshPending()
                 // A second-card switch waiting on a card has no event of its
                 // own (docs/JARVIS-API.md section 12: "re-read it after a
@@ -1278,6 +1289,15 @@ object JarvisRuntime {
                 // would otherwise leave "Waiting" on the Voices screen.
                 val cv = customVoiceStatus()
                 if (cv != null && (cv.pending != null || cv.better.pending)) refreshCustomVoices()
+                // "Read phone notifications" has no event of its own either:
+                // when its card leaves the queue (decided on the PC or here),
+                // the switch is read again, so the listener's cached copy
+                // follows it without the settings page being open (audit A2).
+                val phoneCardNow = com.jarvis.client.net.PhoneNotifications
+                    .cardWaiting(_pending.value.map { it.action })
+                if (phoneCardBefore && !phoneCardNow) {
+                    scope.launch { runCatching { phoneNotificationsSettings() } }
+                }
             }
             // A custom-voice card ended, a voice was deleted, the voice went
             // back to the built-in one, or the better voice went off
@@ -1428,6 +1448,11 @@ object JarvisRuntime {
         refreshSecondCard()
         // And one more, so chat can say where a `#log` line will be filed.
         noteTargets()
+        // The "read phone notifications" switch, so a change made on the PC
+        // (or a card approved there) reaches this phone on reconnect, not
+        // only when its settings page opens (audit A2). Its own failure,
+        // including a PC without the route, changes nothing.
+        runCatching { phoneNotificationsSettings() }
     }
 
     suspend fun refreshStatus() {
@@ -3548,6 +3573,29 @@ object JarvisRuntime {
     fun phoneNotificationsAllowed(): Boolean =
         if (::settings.isInitialized) settings.phoneNotifications.value else false
 
+    @Volatile private var phoneNotificationsCheckedAt = 0L
+
+    /**
+     * Called by the listener for a notification that passed every gate:
+     * asks the PC for the switch again first (at most once every
+     * [PHONE_NOTIFICATIONS_RECHECK_MS]), then runs [store] only if it is
+     * still on. So turning it off on the PC stops capture at the next
+     * notification, not only once this phone's settings page is opened
+     * (audit 06-decisions V3). With no link the last answer stands, as
+     * [phoneNotificationsSettings] already says.
+     */
+    fun storeIfPhoneNotificationsStillOn(store: () -> Unit) {
+        if (!started) return
+        scope.launch {
+            val now = System.currentTimeMillis()
+            if (isPaired() && now - phoneNotificationsCheckedAt >= PHONE_NOTIFICATIONS_RECHECK_MS) {
+                phoneNotificationsCheckedAt = now
+                runCatching { phoneNotificationsSettings() }
+            }
+            if (phoneNotificationsAllowed()) kotlinx.coroutines.withContext(Dispatchers.IO) { store() }
+        }
+    }
+
     // -------------------------------------------- reading phone notifications ----
     // docs/JARVIS-API.md §61; see [com.jarvis.client.net.PhoneNotifications]
     // and ui/screens/PhoneNotificationsPlate.kt. OFF by default, ON is one
@@ -4845,6 +4893,9 @@ object JarvisRuntime {
         "Open Jarvis, then start Live from the Live screen."
     private const val LIVE_NOT_ALLOWED_SAID = "Open Jarvis to start Live."
     private const val LIVE_WATCH_MS = 1000L
+
+    /** How often a captured notification asks the PC for its switch again, at most. */
+    private const val PHONE_NOTIFICATIONS_RECHECK_MS = 15_000L
     private const val LIVE_WATCH_SLOW_MS = 5000L
     private const val LIVE_WATCH_FAILURES = 10
     private const val LIVE_WATCH_GIVE_UP = 10 + 120 // about ten more minutes, every 5 s

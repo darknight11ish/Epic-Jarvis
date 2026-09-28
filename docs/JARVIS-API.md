@@ -9792,6 +9792,18 @@ private, per-device `SharedPreferences` file, capped at 200 rows and 7
 days, NEVER sent anywhere on its own. `android:allowBackup="false"` on
 this whole app already keeps it out of any phone backup.
 
+**When the switch goes off, the copies go too** (2026-09-28, audit A3):
+whenever the phone's cached switch reads as off - pressed on the phone,
+or learned from the PC - every captured row is deleted. Removing an app
+from the allow list deletes that app's rows, a notification updated in
+place replaces its row instead of repeating it, and the plate has
+"Delete captured notifications", which asks "are you sure?" first, like
+Forget. **How the phone hears the PC's switch** (there is no event for
+it): it reads `GET /api/notifications/phone` on every (re)connect, when a
+`phone_notifications_read` card leaves the queue, and - at most every 15
+seconds - before storing a captured notification, which is stored only if
+the PC still says on. With no link, the last answer stands.
+
 ### 61.5 Reading one into a chat - no new backend plumbing, on purpose
 
 **"Shown or summarised only when the owner asks"** is met by reusing the

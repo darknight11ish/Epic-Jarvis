@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.data.CapturedNotifications
 import com.jarvis.client.data.NotificationAllowList
 import com.jarvis.client.data.NotificationAllowListStore
 import com.jarvis.client.net.ApiError
@@ -33,7 +34,9 @@ import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * "Reading phone notifications" ([PhoneNotifications], docs/JARVIS-API.md
@@ -218,7 +221,12 @@ private fun AllowedAppsList() {
                     color = chrome.textHi,
                     modifier = Modifier.weight(1f),
                 )
-                Quiet("Remove", onClick = { store.remove(pkg); version += 1 })
+                // What was already captured from it goes too (audit A3).
+                Quiet("Remove", onClick = {
+                    store.remove(pkg)
+                    CapturedNotifications(context).removeApp(pkg)
+                    version += 1
+                })
             }
         }
     }
@@ -282,6 +290,59 @@ private fun AllowedAppsList() {
 }
 
 /**
+ * What is kept on this phone, and "Delete captured notifications" - asks
+ * "are you sure?" first, like Forget, because it cannot be undone (audit
+ * A3). Never held on a stale link: it only deletes this phone's own copies.
+ * Turning the switch off deletes them too ([JarvisRuntime] watches it).
+ */
+@Composable
+private fun CapturedRow() {
+    val chrome = LocalChrome.current
+    val context = LocalContext.current
+    val store = remember { CapturedNotifications(context) }
+    val switchOn by JarvisRuntime.settings.phoneNotifications.collectAsState()
+    var version by remember { mutableIntStateOf(0) }
+    var count by remember { mutableIntStateOf(0) }
+    var confirming by remember { mutableStateOf(false) }
+    var said by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(version, switchOn) {
+        count = withContext(Dispatchers.IO) { store.count() }
+    }
+
+    Gap(12)
+    Text(PhoneNotifications.keptLine(count), style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+    if (count > 0) {
+        Gap(8)
+        Quiet(
+            PhoneNotifications.DELETE_LABEL,
+            color = chrome.badInk,
+            onClick = { confirming = true; said = null },
+        )
+        if (confirming) {
+            Text(
+                PhoneNotifications.deleteQuestion(count),
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.warnInk,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Quiet(PhoneNotifications.DELETE_YES, color = chrome.badInk, onClick = {
+                    confirming = false
+                    store.clear()
+                    said = PhoneNotifications.DELETED
+                    version += 1
+                })
+                Quiet(PhoneNotifications.DELETE_NO, onClick = { confirming = false })
+            }
+        }
+    }
+    said?.let {
+        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+            modifier = Modifier.liveStatus())
+    }
+}
+
+/**
  * "Phone notifications" - a section of its own, beside [WatchNotifySection].
  */
 @Composable
@@ -296,6 +357,7 @@ internal fun PhoneNotificationsSection(
             PhoneNotificationsSwitch(canAct = canAct, refresh = reads)
             NotificationAccessRow(granted = notificationAccessGranted, onOpen = onOpenNotificationAccess)
             AllowedAppsList()
+            CapturedRow()
         }
     }
 }
