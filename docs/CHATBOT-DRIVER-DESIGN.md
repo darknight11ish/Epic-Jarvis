@@ -327,8 +327,7 @@ and one row per detail - its name and exact value, typed by the owner, or
 only if the owner ticks what it found). Nothing is pulled in automatically.
 
 **The card** (action `support_chat`, tier `ask`, risky: Windows Hello on the
-PC, a screen lock on the phone) shows the company and host, the disclosure
-line, the goal, **every detail word for word** under "Jarvis may give these,
+PC, a screen lock on the phone) shows the company and host, the goal, **every detail word for word** under "Jarvis may give these,
 and nothing else", the time limit, and "If you say no: no chat is started".
 No "same as last time"; not on the PC-only loosen list.
 
@@ -342,17 +341,19 @@ still blocks; card numbers, passwords and full ID numbers block even when on
 the card. The driver model gets the goal, the approved details and the
 transcript only - no memory, no tools.
 
-### 4. Saying it is an AI
+### 4. Writing in the owner's name (changed 2026-09-28)
 
-Sent first, fixed text: *"Hi, I'm Jarvis, an AI assistant writing on behalf
-of Alex, the account holder. I'm not Alex. Alex approves any offer before I
-accept it, so some replies may take a minute."* (The owner's name is a card
-detail; without it, "the account holder".) Sent again when a human takes
-over from a bot. "Am I talking to a bot / a person / Alex?" always gets a
-fixed, truthful answer ("Yes, I'm an AI assistant writing for Alex. Alex is
-following along and approves anything I agree to. If you need Alex directly,
-I can ask them to join."). If the agent will not deal with an AI, Jarvis
-stops and offers Take over.
+~~A fixed opening line saying Jarvis is an AI assistant.~~ **The owner
+removed it:** there is no opening disclosure line, and Jarvis writes in the
+owner's name, like any message an assistant drafts for someone.
+
+**What does not change:** Jarvis **never claims to be human**. If the agent
+asks directly ("am I talking to a bot / a person / to Alex?" - caught by a
+plain word match as well as the driver), Jarvis sends nothing, **pauses and
+hands the question to the owner**, who answers in the window (owner,
+2026-09-28). The driver's instructions forbid it from saying it is a person
+or the owner "in person". If the agent refuses to continue, Jarvis stops and
+offers Take over. The site's bot detection is never dodged either way.
 
 ### 5. Offers and promises
 
@@ -395,7 +396,8 @@ never clicks the widget's "email me the transcript".
 
 - **Saying it is a bot:** California's SB 1001 covers bots used to push a
   sale or sway a vote; a buyer's assistant is probably outside it
-  (**unverified**). Jarvis says it anyway - the owner's decision.
+  (**unverified**). There is no opening line (the owner's choice), but
+  Jarvis never denies being a bot: a direct question goes to the owner.
 - **Saving the transcript:** saving your own text chat is generally not
   "recording" under US law (**unverified**; state laws differ).
 - **Terms of service:** Groupon's terms reportedly forbid access "using any
@@ -429,7 +431,8 @@ widget changes its layout (the general check, then a pause with a reason).
 
 ### The owner's answers (2026-09-28)
 
-- **Jarvis sends the messages itself** (human speed, openly an AI), and each
+- **Jarvis sends the messages itself** (human speed, never dodging bot
+  detection; no opening AI line - see §4), and each
   support card names that company's terms risk before the owner approves.
 - **Identity checks are always handed to the owner** (last four digits of a
   card, security questions, codes) - never answered by Jarvis, never on a card.
@@ -441,7 +444,7 @@ widget changes its layout (the general check, then a pause with a reason).
    passwords, unlisted emails all blocked; listed values pass).
 3. Fake widget pages per vendor plus an unbranded one: queue, bot-to-human
    handover, menu, cross-host iframe, "chat ended", a quiet agent.
-4. The disclosure line, re-sent at handover; the fixed answer to "are you a bot?".
+4. "Are you a bot?" caught and handed to the owner; the driver never claims to be human.
 5. Offer detection over 100 written agent lines; the offer card, holding
    lines and time-out.
 6. The encrypted transcript and export; the learner test shows nothing learned.

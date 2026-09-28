@@ -619,11 +619,15 @@ testers, scouts and integration scouts; `.claude/agents/`):
   support chat lists exactly which personal details Jarvis may give** (order
   number, email and so on - never passwords or payment card numbers);
   **every offer (refund, cancellation, change) gets its own card**, and
-  nothing is accepted until the owner approves it; and **Jarvis says at the
-  start that it is an AI assistant writing for the owner**, never pretending
-  to be them. Designed in `docs/CHATBOT-DRIVER-DESIGN.md` before it is built.
+  nothing is accepted until the owner approves it. ~~Jarvis says at the
+  start that it is an AI assistant~~ - **changed 2026-09-28 (owner): no
+  opening disclosure line; Jarvis writes in the owner's name**, like any
+  message an assistant drafts for someone. **If the agent asks directly
+  whether they are talking to a bot, Jarvis never claims to be human: it
+  pauses and hands that question to the owner**, who answers in the window. Designed in `docs/CHATBOT-DRIVER-DESIGN.md` before it is built.
   Owner's answers to the design (2026-09-28): **Jarvis sends the messages
-  itself**, at human speed and openly as an AI, and **each card names that
+  itself**, at human speed (and never hiding from the site's bot detection),
+  and **each card names that
   company's terms risk** before the owner approves (the real account could
   be closed); **identity checks** (last digits of a card, security
   questions, codes) **are always handed to the owner** in the window, never
