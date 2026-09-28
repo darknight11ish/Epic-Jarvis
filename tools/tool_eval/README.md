@@ -39,6 +39,22 @@ Other models can be compared in the same run (each is a download first, e.g.
 pick ask` runs only some parts; `--every-attack` tries all 276 attack texts
 instead of 46 (several hours).
 
+**Comparing models fairly** (added 2026-09-28):
+
+- **A model needs room for Jarvis's rules and tools.** They are about 3,000-4,000
+  tokens, and a model you just pulled usually loads with only 4,096. Such a
+  model is skipped, with a message saying how to wrap it. The short version:
+  make a text file named `Modelfile` with the two lines
+  `FROM granite4.2:8b` and `PARAMETER num_ctx 16384`, run
+  `ollama create jarvis-cand -f Modelfile`, and test `jarvis-cand`.
+  `--allow-short-context` tests it as it is anyway.
+- **`--repeat 3`** runs everything three times. A single run can be lucky or
+  unlucky; the WORST of the three is saved under the model's name, and every
+  run is listed beside it.
+- **`--temperature` and `--top-p`** default to what Jarvis itself sends
+  (0.7 and 0.8, Qwen's own values). Give a model maker's recommended values
+  to see how that model does at its best.
+
 ## Self-test without a model
 
 `python3 tools/tool_eval/ollama_tool_eval.py --selftest` runs

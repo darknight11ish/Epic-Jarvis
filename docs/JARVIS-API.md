@@ -6745,6 +6745,15 @@ approval" while the card is in the queue - found by its action, so a card
 raised on the desktop counts too. OFF always goes. Desktop: none - see
 `docs/ARCHITECTURE.md` §8, "On the phone, kept off the desktop".
 
+**A ringing alarm may not reach the watch** (research audit 2026-09-28,
+1.6). The alarm notification is ongoing (`ScheduleNotifier.kt`,
+`setOngoing(true)`), and watch bridges commonly skip ongoing notifications
+- Gadgetbridge, the Google-free bridge, drops them outright
+(`NotificationListener.java`, read in its GitHub mirror). The line under
+the switch says so while it is on. Nothing else changes: a second,
+non-ongoing copy of the alarm just for the watch was left out, because it
+would ring twice on the phone.
+
 ---
 
 ## 40. Email drafts (added 2026-09-27)

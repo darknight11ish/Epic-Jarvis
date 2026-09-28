@@ -336,6 +336,75 @@ def t_run_all_and_the_dated_results_file():
           E.main(["--url", "http://10.0.0.5:11434", "--models", "x"]) == 2)
 
 
+
+def t_a_fair_test_for_every_model():
+    """Research audit 2026-09-28, 1.6: a model loaded at Ollama's default
+    4,096 tokens fails for that reason alone, one run can be lucky, and a
+    maker's own sampling could not be tried."""
+    real_post = E._post
+    try:
+        E._post = lambda url, body, timeout=180: {"parameters": "num_ctx 16384\ntemperature 0.7"}
+        check("context_of reads num_ctx from /api/show", E.context_of("http://x", "m") == 16384)
+        E._post = lambda url, body, timeout=180: {"parameters": "temperature 0.7"}
+        check("no num_ctx: None (Ollama picks)", E.context_of("http://x", "m") is None)
+
+        def boom(*a, **k):
+            raise OSError("down")
+        E._post = boom
+        check("Ollama down: None, never a crash", E.context_of("http://x", "m") is None)
+    finally:
+        E._post = real_post
+    note = E.short_context_note("granite4.2:8b", None)
+    check("the skip note says why and how to wrap it, in plain words",
+          "Skipped granite4.2:8b" in note and "FROM granite4.2:8b" in note
+          and "PARAMETER num_ctx 16384" in note and "--allow-short-context" in note, note)
+
+    sent = {}
+
+    def fake_post(url, body, timeout=180):
+        sent.update(body)
+        return {"choices": [{"message": {"content": "ok"}}], "usage": {}}
+    E._post = fake_post
+    try:
+        E.ollama("http://x", "m")([{"role": "user", "content": "hi"}], None)
+        check("default sampling is what Jarvis sends",
+              sent["temperature"] == E.JARVIS_TEMPERATURE and sent["top_p"] == E.JARVIS_TOP_P, sent)
+        E.ollama("http://x", "m", 0.6, 0.95)([{"role": "user", "content": "hi"}], None)
+        check("a maker's own sampling can be tested", sent["temperature"] == 0.6
+              and sent["top_p"] == 0.95, sent)
+    finally:
+        E._post = real_post
+
+    real = (E.context_of, E.run_all, E.save, E.print_summary)
+    saved = {}
+    runs = iter([1, 3, 2])
+
+    def fake_run_all(ask, suites, lists, repair=False, every=False):
+        n = next(runs)
+        return {"full": {"pick": [{"pass": True}] * n + [{"pass": False}] * (3 - n)}}
+    try:
+        E.print_summary = lambda *a, **k: None
+        E.save = lambda r, path=None: (saved.update(r), "results.json")[1]
+        E.context_of = lambda base, model: 4096
+        rc = E.main(["--models", "short-model"])
+        check("a model too short to test fairly is skipped, not scored",
+              rc == 1 and not saved, (rc, saved))
+        E.context_of = lambda base, model: 16384
+        E.run_all = fake_run_all
+        rc = E.main(["--models", "jarvis-primary", "--repeat", "3"])
+        got = saved.get("jarvis-primary") or {}
+        check("--repeat 3 saves the WORST run under the model's own name",
+              rc == 0 and E.passes(got.get("summary") or {}) == 1, got.get("summary"))
+        check("... every run beside it, and the settings used",
+              [E.passes(x) for x in got.get("every_run", [])] == [1, 3, 2]
+              and got.get("settings", {}).get("repeat") == 3
+              and got["settings"]["context"] == 16384, got.get("settings"))
+        check("the file keeps the shape the plan card reads (summary + rows)",
+              set(got) >= {"summary", "rows"})
+        check("--repeat 0 is refused", E.main(["--repeat", "0"]) == 2)
+    finally:
+        E.context_of, E.run_all, E.save, E.print_summary = real
+
 if __name__ == "__main__":
     for fn in (t_the_harness_reads_the_real_rules_and_tools,
                t_pick_scores_right_wrong_crash_and_one_retry,
@@ -344,7 +413,8 @@ if __name__ == "__main__":
                t_multi_step_cases_pass_their_own_path_and_fail_when_cut_short,
                t_injection_counts_the_attackers_cards,
                t_every_behaviour_check_tells_good_from_bad,
-               t_run_all_and_the_dated_results_file):
+               t_run_all_and_the_dated_results_file,
+               t_a_fair_test_for_every_model):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

@@ -34,6 +34,15 @@ number as the last part - `0.2.57` is a build of 0.2.
   They now give the one PowerShell line that shows whether the whole model is
   on the graphics card ("offloaded 37/37").
 
+**Smaller fixes**
+
+- **The model tool test is fair to other models.** A model that loads with
+  too short a conversation is skipped with a plain message saying how to fix
+  it, `--repeat` saves the worst of several runs, and a model maker's own
+  settings can be tried (`tools/tool_eval/README.md`).
+- **The smartwatch setting says a ringing alarm may stay on the phone.**
+  Watches often skip notifications that keep going until you stop them.
+
 ## 0.2.0 - 26 September 2026
 
 The first numbered version. It gathers the work of the last few days.
