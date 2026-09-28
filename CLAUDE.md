@@ -565,6 +565,20 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   switch every one off; calm makes them smaller. Never: humming, yawning,
   mood-guessing, reacting to email or screen content, guilt or streaks,
   roaming the screen, anything cute during an approval or error.
+- **A fifth face: a cute robot**, fully based on the owner's picture (round
+  white body, a big glowing blue visor with arc eyes, teal ear fins and a
+  teal chest patch), in the same soft 3D style. **Expressive eyes and no
+  mouth; no orb** - the eyes carry the state colour and the expression, the
+  ear fins and arms show the state, and while Jarvis speaks the eyes pulse
+  with the real voice instead of a mouth. Now and then at rest it **zips
+  around inside its own space** and settles back (never across the screen;
+  not under Still, calm motion or a serious moment). An energetic but not
+  annoying voice by default. It gets everything the animals have (sleep and
+  wake, Zs, Still, sky, options, quality). No wave at an approval.
+- **Two cute idle moments per face, alternating**, for all five: after the
+  face has been resting a while, now and then one plays, then it settles
+  back. Calm, never during an approval or error, off under Still and in
+  serious moments, with a switch in the animal options.
 
 ## Every new feature gets its own audit, without being asked
 
