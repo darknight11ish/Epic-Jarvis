@@ -650,6 +650,11 @@ testers, scouts and integration scouts; `.claude/agents/`):
   aloud** unless a sensitive fact was used or the strict hands-free setting
   says otherwise - a named exception to "a reading tool keeps the answer on
   screen".
+  **Under "Only trust the talk button", screen answers stay on screen**
+  (owner, 2026-09-28): a turn started by "Hey Jarvis" gets a written answer
+  about the screen only. **A voice setting lets the owner allow reading them
+  aloud** even then; like the other voice settings, turning it on raises an
+  approval card and turning it off is immediate.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
