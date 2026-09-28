@@ -10500,3 +10500,187 @@ asking at once run it once), then dropped.
   the first formatted-counter sample reads 0 (hence the two samples), and
   whether the graphics-card memory counters exist on the owner's driver.
   Each fails to "could not read", never to a wrong number.
+
+---
+
+## 87. Widgets you describe (added 2026-09-28)
+
+The owner's choice of 2026-09-28, **the SAFE version**. The owner says what a
+small widget should show - "make me a widget showing my next 3 reminders and
+a 10-minute timer button" - and Jarvis makes a **preview**. The owner taps
+**Add** before a widget exists. Both apps list the widgets with **Delete**
+(at once). The phone shows one on the home screen ("Jarvis widget 1", "2" or
+"3"); the PC shows one in the existing desktop widget window, in place of the
+face.
+
+One new shipped module, `backend/jarvis_widgets.py`, **no patch**: its routes
+are switched on by `jarvis_brain_reads.install()`, which brain-reads.patch
+already calls.
+
+### 87.1 A description, never code
+
+The AI model's ONLY output is a small JSON description from a fixed menu:
+
+```
+{"name": "Morning",
+ "blocks": [{"type": "title",    "text": "Good morning"},
+            {"type": "number",   "source": "todo_count", "label": "To do"},
+            {"type": "list",     "source": "reminders", "max": 3},
+            {"type": "progress", "source": "disk_free"},
+            {"type": "button",   "action": "timer"}]}
+```
+
+| Block | Keys (no others) | Notes |
+|---|---|---|
+| `title` | `text` | at most 60 characters |
+| `number` | `source`, `label`? | a count |
+| `list` | `source`, `label`?, `max`? | 1 to 5 items (default 3) |
+| `progress` | `source`, `label`? | a bar from 0 to 1 |
+| `button` | `action` | its words are fixed per action - the model cannot label a button |
+
+**Sources** - only things the apps already read, never an email's text or
+sender, a saved fact or a web page. `private` sources hold the owner's own
+words (or a program's) and are hidden under App lock and "Hide memory lists
+and chat history":
+
+| Source | Block | Private | What |
+|---|---|---|---|
+| `reminders` | list | yes | the next alarms and reminders, soonest first (Coming up) |
+| `timers` | list | yes | running timers and time left |
+| `today` | list | yes | the Today cards showing now (§82) |
+| `todo` | list | yes | the to-do list itself (not a named list) |
+| `now_playing` | list | yes | the PC's own "Playing: ..." sentence (§74.2) |
+| `reminders_count` | number | no | alarms and reminders left today |
+| `todo_count` | number | no | open to-do items |
+| `email_count` | number | no | unread emails in **today's** briefing - the count only, never who from |
+| `events_count` | number | no | calendar events in today's briefing - the count only, never titles |
+| `disk_free` | progress | no | free space on the PC's main drive |
+| `focus` | progress | no | time left in a focus session - never what it is on |
+
+**Buttons** - exactly the five Quick Settings tile actions (§81.2), the same
+wire names and words: `focus` "Focus session" (25 minutes), `timer` "10-min
+timer", `brief_me` "Brief me" (only opens the app), `stop_everything` "Stop
+everything", `pc_play_pause` "Play/pause PC". **Never** Approve or Deny,
+anything that clears a rush latch, anything that acts on several things at
+once, or a free-form action.
+
+**The check is plain code** (`jarvis_widgets.validate`, `parse_model`), and
+refuses the whole description - nothing is made - for: a key that no block
+has (`style`, `html`, `url`, `onclick` ...), an unknown block type, source
+or button, a source shown as the wrong block, a list over 5 or under 1, more
+than 8 blocks or 4 different buttons, a repeated key, NaN or Infinity, an
+answer over 6,000 characters, nesting too deep to read, words around the
+JSON, and a text with a web address in it (`https://`, `www.`, `javascript:`,
+`host.tld/path`). Text is cleaned: control, invisible and direction-changing
+characters and `< > { } `` ` `` \` are removed, spaces collapsed, and each
+text capped. A key from the menu that belongs to another block type (a
+`label` on a button) is dropped, never used. The same button twice is kept
+once. A widget read back from `widgets.json` is checked again, so a hand
+edit smuggles nothing in.
+
+**The model** is this PC's own (`jarvis_sensitive.learner_model()`, refused
+unless it is on this PC and not a cloud model, `check_local_model`), asked
+through Ollama's structured output with a schema whose every choice is a
+fixed list. It is given the owner's words and the menu - nothing else: no
+memory, no email, no earlier chat.
+
+### 87.2 Only the owner's own words; no approval card
+
+- `POST /api/widgets/draft` takes `provenance`: only `"typed"` or `"voice"`
+  are used; anything else is **400** "Widgets are made only from your own
+  typed or spoken words - not from pasted or shared text." The desktop's box
+  sends words pasted into it as `"pasted"`. The phone cannot tell a paste
+  from typing in a Compose text box, so it always says `"typed"` (§8's
+  one-sided note).
+- In chat, "make me a widget showing ..." (`jarvis_quick.py`, only on the
+  owner's own newest typed or spoken message, like every fast-path command)
+  is refused when the conversation has read outside text - an email, a web
+  page, a file, a pasted or shared message (`jarvis_chat_log.conversation_tainted`,
+  failing closed). The sentence is never learned (`is_command`). It makes a
+  PREVIEW only; the answer says to see it under Brain, Widgets and tap Add.
+- **No approval card**, and the answers say why (`no_card`): a widget only
+  shows what the apps already show, its buttons are the small one-tap actions
+  that never ask (a plain timer, a focus session, Brief me, Stop everything,
+  play/pause), and nothing is added until the owner has seen the preview and
+  tapped Add. A card would ask the same question Add already asks, about
+  something that cannot make Jarvis do more.
+
+### 87.3 Routes
+
+Behind the pairing token and the origin check, like every route. None is a
+tool: the model cannot call any of them, and nothing they return reaches it.
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/widgets` | - | 200 `{"ok", "widgets": [row], "drafts": [row + "expires"], "no_card", "private_hidden", "sources", "actions", "limits"}`; a row is `{"id": "w…"/"d…", "name", "blocks", "created"?, "said", "parts": ["Heading: …", "List: …", "Button: …"]}` |
+| `GET /api/widgets/show?id=w…` | - | 200 `{"ok": true, "id", "name", "at", "blocks": [...]}` - each block filled in NOW: a list adds `items: [{"text", "when"}]`, `more`, `empty`; a number `value`; a bar `fraction`, `value`; a button its fixed `label`; data blocks carry `private`, and `note` when a source could not be read ("No briefing yet today."). 404 unknown id |
+| `POST /api/widgets/draft` | `{"words", "provenance"}` | 200 `{"ok": true, "draft", "said", "card": false, "no_card"}`; 400 not own words / no words / over 300 characters; 409 tainted (chat only); 422 `{"error", "why"}` off the menu; 503 no model |
+| `POST /api/widgets/add` | `{"draft": "d…"}` | 200 `{"ok", "widget", "said"}` - the draft EXACTLY as previewed; 404 expired or used; 409 twelve widgets already |
+| `POST /api/widgets/discard` | `{"draft"}` | 200 |
+| `POST /api/widgets/delete` | `{"id": "w…"}` | 200 at once; 404 not there |
+
+A body over 16 KB is 413. Drafts live in the backend's memory only (at most
+5, 30 minutes each) and hold the checked description, never the owner's
+words. Widgets are kept in `widgets.json` in the settings folder (at most
+12) - not in the scheduler's database: a widget has no time and never goes
+off, and the scheduler's rows are timers and reminders with their own limits
+and events.
+
+### 87.4 The apps
+
+- **Desktop, Brain -> Work -> Widgets** (`brain.js paintWidgets`,
+  `src/widget-board.js`, `src-tauri/src/brain/widgets.rs`): the list with
+  Delete, the previews with Discard and Add, and "Describe a widget". Add and
+  Delete are held on a stale link (in Rust too); making a preview is not.
+  Names and parts are taken out in Rust while "Windows Hello for memory lists
+  and chat history" hides the lists.
+- **Desktop widget window** ("Your widget", `widget.js`): a picker, shown
+  only when a widget is saved; the chosen one is drawn **in place of the
+  face** - the same window, no new webview, only two more commands
+  (`widget_board`, `widget_board_action`). It is drawn with DOM calls and
+  `textContent` only, never HTML. `widget_board_action` matches the five
+  actions on a closed list in Rust; everything but Stop everything and Brief
+  me is held on a stale link; Brief me opens the Brain (behind App lock).
+  While App lock is on or the lists are hidden, Rust takes every private
+  block's words out. Read when the window opens, on a schedule or focus
+  event, and once a minute while shown.
+- **Phone, Brain -> Widgets** (`WidgetsPlate.kt`, `net/JarvisWidgets.kt`):
+  the same list, previews and box, and **On your home screen**: which saved
+  widget each of the three slots shows (kept on the phone, ids only).
+- **Phone home screen, "Jarvis widget" 1-3** (`widget/JarvisBoardWidget.kt`,
+  Glance 1.1.1 - no version change was needed): draws the blocks natively;
+  read from the PC only on a live link, otherwise "Not up to date - tap to
+  open Jarvis and connect", like the approvals widget. **The home screen is
+  public**: while App lock or "Hide memory lists and chat history" is on,
+  every private block shows its label and "Hidden - open Jarvis to see it."
+  Buttons follow the tiles exactly (`QuickTiles.decide`,
+  `QuickTileService.perform`): held on a stale link except Stop everything;
+  Brief me only opens the app. Nothing of the widget is kept on the phone.
+
+Both apps draw a filled-in widget by one rule, held with the PC's by
+`tools/gen_widget_cases.py` (`tests/fixtures/widget-cases.json` and the
+phone's byte-identical `contract/widget-cases.json`, with hostile answers):
+an unknown block or button is left out, a source the app does not know is
+private, and sizes are capped - so even a wrong PC answer cannot put a
+button on screen that the app does not already know is safe.
+
+### 87.5 Not done, and why
+
+- **Widgets written as code by the model** (React components in new desktop
+  windows), suggested by an outside review: rejected. A model-written
+  program would run with a window's powers; outside text in a turn could
+  steer it; and no check can prove arbitrary code safe. The SAFE version's
+  menu is the whole point.
+- **The Windows 11 widget board**: needs a packaged (MSIX) app with a widget
+  provider; this app is not packaged that way, so it cannot be done now.
+- **A dashboard server** (homepage, glance and the like): another program in
+  Docker and a second dashboard to keep up, for things both apps already
+  show - a duplicate, not a feature.
+- **Live updates by event**: there is no `widgets` event on the bus (it
+  would need the event allow-list changed); both apps read again on open,
+  after a change they make, and on schedule and focus events.
+
+**Not checked:** no real model has made a widget yet (the tests use a
+stand-in); the phone half is not compiled here; the desktop's Rust tests
+compile but run only on Windows; the home-screen widget has not been seen
+on a real launcher.
