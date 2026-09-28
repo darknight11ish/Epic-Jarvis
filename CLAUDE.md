@@ -682,6 +682,11 @@ testers, scouts and integration scouts; `.claude/agents/`):
   phone gets the same "End Live when" setting as the PC** (default strict;
   the looser choice asks for the fingerprint or PIN). These extras are
   built alongside the queue where they fit, the phone ones with item 2.
+  **History marks Live sessions** (owner, 2026-09-28): each Live session
+  is already its own chat (words and times kept, encrypted; never the
+  audio, pictures or side remarks); History shows it with a "Live" label
+  and its length ("Live · 12 min · 28 Sep, 14:05") in both apps, and can
+  be filtered to Live sessions only. Built with item 2.
 - **Jarvis may look at the owner's screen, on the PC and the phone**
   (owner, 2026-09-28), two ways: **"Look at this"** - one look when the
   owner asks (a key on the PC; the assistant gesture on the phone), nothing
