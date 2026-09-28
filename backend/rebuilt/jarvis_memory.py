@@ -378,6 +378,20 @@ def _content_words(text: str) -> list[str]:
 #   Embedders
 # --------------------------------------------------------------------------
 
+def quiet_onnxruntime() -> None:
+    """Switch off ONNX Runtime's own trace events before fastembed loads a
+    model with it. They are ON by default in Microsoft's builds (its
+    docs/Privacy.md; on Windows they go to ETW and, with the owner's Windows
+    diagnostic-data consent, may reach Microsoft). Rule 1: nothing about the
+    owner leaves the PC. Process-wide and repeatable; a missing or older
+    onnxruntime is harmless."""
+    try:
+        import onnxruntime
+        onnxruntime.disable_telemetry_events()
+    except Exception:
+        pass
+
+
 class Embedder:
     """The base every embedder subclasses, and the shape the store relies on.
 
@@ -461,6 +475,7 @@ class FastEmbedder(Embedder):
     semantic = True
 
     def __init__(self, model: str = "BAAI/bge-small-en-v1.5") -> None:
+        quiet_onnxruntime()
         from fastembed import TextEmbedding  # imported lazily and on purpose
         self._m = TextEmbedding(model_name=model, cache_dir=model_cache_dir())
         self.name = model
@@ -567,6 +582,7 @@ class FastReranker(Reranker):
     """fastembed's cross-encoder. Imported lazily and on purpose."""
 
     def __init__(self, model: str = RERANK_MODEL) -> None:
+        quiet_onnxruntime()
         from fastembed.rerank.cross_encoder import TextCrossEncoder
         self._m = TextCrossEncoder(model_name=model, cache_dir=model_cache_dir())
         self.name = model

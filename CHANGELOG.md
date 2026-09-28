@@ -12,6 +12,11 @@ number as the last part - `0.2.57` is a build of 0.2.
   2.11.5 to 2.11.6, which closes a published hole (GHSA-w28w-mhc8-qvjv) where
   one window of an app could read data queued for another window. Jarvis has
   several windows and streams chat answers that way, so it was affected.
+- **Speech and memory-search models no longer report to Microsoft.** The
+  library that runs them (ONNX Runtime) has its own usage reports switched on
+  by default. Jarvis now switches them off before any model loads. One copy
+  inside the speech engine can't be reached this way; Windows' own "Send
+  optional diagnostic data" switch covers that one (docs/ARCHITECTURE.md §4).
 
 ## 0.2.0 - 26 September 2026
 
