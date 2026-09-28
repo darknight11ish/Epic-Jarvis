@@ -43,10 +43,13 @@ does not know which app is asking (`/api/chat`'s body carries no client
 kind). Saying "open backups" on the phone opens its one Settings screen
 AND scrolls to the real backup row it has there - Voice, Security,
 Appearance and Backups are ordinary `item(key = ...)` rows on the phone,
-same as on the desktop. Saying "open hardware" on the phone (a genuinely
-desktop-only section) is the harmless fallback case: the Settings screen
-still opens, but there is no row there to scroll to, the same "Show me
-where" already has for an unmatched place. Said plainly here rather than
+same as on the desktop. Where a section is NOT a Settings row on the phone,
+the phone decides for itself (jarvis-client's ui/OpenPlace.kt, 2026-09-27):
+Help, Checks, Brain or "Jarvis's voice" for the ones it has elsewhere -
+including hardware, second-card, big-model and backend-supports, marked
+"desktop" here but shown on the phone's Brain - and a plain "only on your
+PC" line for the ones it has nowhere. Its OpenPlaceTest reads SECTIONS
+from this file, so a new section needs a phone decision too. Said plainly here rather than
 claimed as a feature: a per-app wording would need the backend to read
 `X-Jarvis-Client` for this, which it does not do today.
 

@@ -72,6 +72,22 @@ object VoiceStrict {
      */
     const val MODEL_TITANET = "titanet"
     const val MODEL_RESNET = "resnet221"
+    /**
+     * Answers about the screen after "Hey Jarvis", under "only trust the
+     * talk button" (the owner's decision, 2026-09-28): kept on screen by
+     * default; "read aloud" is the looser choice and asks first.
+     */
+    const val SCREEN_ON_SCREEN = "screen_on_screen"
+    const val SCREEN_ALOUD = "screen_aloud"
+    /**
+     * Jarvis Live under "only trust the talk button" (the owner's answers,
+     * 2026-09-28): three choices, loosest first. "Trust Live fully" is the
+     * default; a stricter choice applies at once, a looser one asks first.
+     */
+    const val LIVE_TRUST_FULLY = "live_trust_fully"
+    const val LIVE_BUTTON_START_ONLY = "live_button_start_only"
+    const val LIVE_LIKE_WAKE = "live_like_hey_jarvis"
+    val LIVE_ORDER: List<String> = listOf(LIVE_TRUST_FULLY, LIVE_BUTTON_START_ONLY, LIVE_LIKE_WAKE)
 
     /** The `mode`s that change a setting, and what each value is called on the wire. */
     const val STRICTNESS = "strictness"
@@ -81,6 +97,8 @@ object VoiceStrict {
     const val HANDS_FREE = "hands_free"
     const val WAKE_CONFIRM = "wake_confirm"
     const val VOICE_ID_MODEL = "voice_id_model"
+    const val HANDS_FREE_SCREEN = "hands_free_screen"
+    const val HANDS_FREE_LIVE = "hands_free_live"
 
     /** `repeat.very_strict` / `repeat.balanced` - since the PC's voice module started. */
     data class Counts(
@@ -173,6 +191,18 @@ object VoiceStrict {
         val blocked: Map<String, String> = emptyMap(),
         /** `wake.confirm.note`: "both" is chosen but the PC cannot run the second detector. */
         val wakeConfirmNote: String = "",
+        /**
+         * "screen_on_screen", "screen_aloud", or "" from a PC older than that
+         * setting (the screen then does not offer it). Any other value the PC
+         * sends is read as the strict one, "screen_on_screen".
+         */
+        val handsFreeScreen: String = "",
+        /**
+         * Jarvis Live's trust: one of [LIVE_ORDER], or "" from a PC older than
+         * that setting (the screen then does not offer it). Any other value
+         * the PC sends is read as the strictest, "live_like_hey_jarvis".
+         */
+        val handsFreeLive: String = "",
         val voiceIsEnoughAllowed: Boolean = false,
         /** A spoken command needs at least this many seconds of speech (0 = not said). */
         val minCommandSeconds: Double = 0.0,
@@ -296,6 +326,26 @@ object VoiceStrict {
         else -> MODEL_TITANET
     }
 
+    /**
+     * `gate.hands_free_screen` as the screen reads it: "" (an older PC - not
+     * offered) stays "", the two known values stay, and anything else is the
+     * strict one - never read as "read aloud" by accident.
+     */
+    fun handsFreeScreen(raw: String): String = when (raw) {
+        "" -> ""
+        SCREEN_ALOUD -> SCREEN_ALOUD
+        else -> SCREEN_ON_SCREEN
+    }
+
+    /**
+     * `gate.hands_free_live` as the screen reads it: known values stay;
+     * "" (an older PC) and anything unknown (a newer PC's choice this phone
+     * does not know) are "" - not offered, as on the desktop (the Live
+     * review, M3: the phone used to show an unknown value as the strictest
+     * choice, which was not what the PC had).
+     */
+    fun handsFreeLive(raw: String): String = if (raw in LIVE_ORDER) raw else ""
+
     /** Reads the stricter check out of a whole `/api/voice/status` body. Never throws. */
     fun parse(status: JsonObject?): View {
         val gate = status?.obj("gate") ?: return View()
@@ -330,6 +380,12 @@ object VoiceStrict {
                 listOf(WAKE_CONFIRM, VOICE_ID_MODEL).associateWith { b.str(it) }.filterValues { it.isNotEmpty() }
             }.orEmpty(),
             wakeConfirmNote = status?.obj("wake")?.obj("confirm")?.str("note").orEmpty(),
+            handsFreeScreen = handsFreeScreen(gate.str("hands_free_screen").ifEmpty {
+                settings?.str("hands_free_screen").orEmpty()
+            }),
+            handsFreeLive = handsFreeLive(gate.str("hands_free_live").ifEmpty {
+                settings?.str("hands_free_live").orEmpty()
+            }),
             voiceIsEnoughAllowed = settings?.flag("voice_is_enough_allowed") ?: false,
             minCommandSeconds = settings?.num("min_command_seconds") ?: 0.0,
             rounds = training?.flag("rounds") ?: false,
@@ -417,12 +473,15 @@ object VoiceStrict {
         HANDS_FREE to setOf(BUTTON_ONLY, SAME_AS_BUTTON),
         WAKE_CONFIRM to setOf(WAKE_BOTH, WAKE_ONE),
         VOICE_ID_MODEL to setOf(MODEL_TITANET, MODEL_RESNET),
+        HANDS_FREE_SCREEN to setOf(SCREEN_ON_SCREEN, SCREEN_ALOUD),
+        HANDS_FREE_LIVE to LIVE_ORDER.toSet(),
     )
 
     /**
      * `{"mode": "strictness" | "privacy" | "memory" | "sensitive_memory" |
-     * "hands_free" | "wake_confirm" | "voice_id_model", "value": ...}`. Only
-     * this app's fixed words go in, and only a value of that setting's own.
+     * "hands_free" | "wake_confirm" | "voice_id_model" | "hands_free_screen" |
+     * "hands_free_live", "value": ...}`. Only this app's fixed words go in, and only
+     * a value of that setting's own.
      */
     fun settingBody(setting: String, value: String): String {
         val values = requireNotNull(VALUES[setting]) { "not a voice setting: $setting" }
@@ -430,14 +489,29 @@ object VoiceStrict {
         return "{\"mode\":\"$setting\",\"value\":\"$value\"}"
     }
 
-    /** Whether choosing [value] for [setting] LOOSENS it - which is the one that asks first. */
-    fun isLoosening(setting: String, value: String): Boolean =
+    /**
+     * Whether choosing [value] for [setting] LOOSENS it - which is the one
+     * that asks first. [current] matters for Jarvis Live's three choices
+     * only: a move towards "Trust Live fully" loosens, and an unknown
+     * current one counts as the strictest.
+     */
+    fun isLoosening(setting: String, value: String, current: String = ""): Boolean {
+        if (setting == HANDS_FREE_LIVE) {
+            val v = LIVE_ORDER.indexOf(value)
+            val c = LIVE_ORDER.indexOf(current).takeIf { it >= 0 } ?: LIVE_ORDER.lastIndex
+            return v < 0 || v < c
+        }
+        return isTwoWayLoosening(setting, value)
+    }
+
+    private fun isTwoWayLoosening(setting: String, value: String): Boolean =
         (setting == STRICTNESS && value == BALANCED) || (setting == PRIVACY && value == VOICE_IS_ENOUGH) ||
             (setting == MEMORY && value == MEMORY_ALOUD) ||
             (setting == SENSITIVE_MEMORY && value == SENSITIVE_ALOUD) ||
             (setting == HANDS_FREE && value == SAME_AS_BUTTON) ||
             (setting == WAKE_CONFIRM && value == WAKE_ONE) ||
-            (setting == VOICE_ID_MODEL && value == MODEL_RESNET)
+            (setting == VOICE_ID_MODEL && value == MODEL_RESNET) ||
+            (setting == HANDS_FREE_SCREEN && value == SCREEN_ALOUD)
 
     // ------------------------------------------------------------ answers --
 

@@ -571,7 +571,7 @@ body {
    ========================================================================== */
 
 .view-panes,
-.view-live {
+.view-now {
   overflow-y: auto;
 }
 
@@ -1378,6 +1378,146 @@ body {
 
 .focus-report-title[data-state="ok"] {
   color: var(--ok);
+}
+
+/* "Talk to a chatbot for me" (chatbot.js). The chatbot's words and the
+   summary are outside text: a warn-coloured edge and the same "outside text"
+   chip History uses for a turn that read outside text. */
+.chatbot-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.chatbot-form .row,
+.chatbot-limits .row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.chatbot-form input[type="number"],
+.chatbot-limits input[type="number"] {
+  width: 6em;
+}
+
+.chatbot-goal {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+
+.chatbot-sent-note {
+  color: var(--warn);
+}
+
+.chatbot-now {
+  padding: 8px 10px;
+  border-left: 2px solid var(--ok);
+  border-radius: 4px;
+}
+
+.chatbot-now[data-state="paused"],
+.chatbot-now[data-state="asking"] {
+  border-left-color: var(--warn);
+}
+
+.chatbot-now[data-state="done"],
+.chatbot-now[data-state="stopped"],
+.chatbot-now[data-state="refused"] {
+  border-left-color: var(--border);
+}
+
+.chatbot-head {
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.chatbot-limits {
+  margin-top: 10px;
+}
+
+.chatbot-limits > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.chatbot-turn {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--border);
+  border-radius: 4px;
+}
+
+.chatbot-outside {
+  border-left: 2px solid var(--warn);
+  background: var(--warn-faint);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-top: 8px;
+}
+
+.chatbot-turn-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatbot-who {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.chatbot-text {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* "Ask several and compare": the tick boxes, each chatbot's line, and each
+   conversation under its own heading. */
+.chatbot-compare-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatbot-several {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chatbot-several label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The chooser's group headings ("Websites ...", "With a key ...", "On this
+   PC") and the reason under a chatbot that cannot be used yet. */
+.chatbot-kind {
+  margin: 6px 0 0;
+  font-weight: 600;
+}
+
+.chatbot-not-ready {
+  margin: 0 0 0 26px;
+}
+
+.chatbot-members {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.chatbot-member-log {
+  margin-top: 10px;
 }
 
 .standby-time {

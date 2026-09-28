@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -31,6 +32,7 @@ import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceRounds
 import com.jarvis.client.voice.VoiceTraining
@@ -366,6 +368,42 @@ private fun CheckPlates(
                         onPick = onPick,
                     )
                 }
+                // Answers about your screen after "Hey Jarvis" (the owner's
+                // decision, 2026-09-28) - only when the PC reports the setting.
+                // It matters only under "Only trust the talk button", and its
+                // note says so otherwise (StrictVoice.plateNote); "Read aloud"
+                // asks, and is held on a stale link (StrictVoice.blocker).
+                if (strict.handsFreeScreen.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.HANDS_FREE_SCREEN_TITLE,
+                        setting = VoiceStrict.HANDS_FREE_SCREEN,
+                        choices = StrictVoice.HANDS_FREE_SCREEN,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.HANDS_FREE_SCREEN }?.second,
+                        onPick = onPick,
+                    )
+                }
+                // Jarvis Live under "Only trust the talk button" (the owner's
+                // answers, 2026-09-28) - only when the PC reports it. Three
+                // choices; a stricter one applies at once, a looser one asks,
+                // and is held on a stale link (StrictVoice.blocker).
+                if (strict.handsFreeLive.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.HANDS_FREE_LIVE_TITLE,
+                        setting = VoiceStrict.HANDS_FREE_LIVE,
+                        choices = StrictVoice.HANDS_FREE_LIVE,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.HANDS_FREE_LIVE }?.second,
+                        onPick = onPick,
+                    )
+                }
+                // "Interrupting Jarvis" is this phone's own, ONE setting for
+                // Live and ordinary replies (the owner's answer of 2026-09-28):
+                // on Platform checks, beside the other listening switches -
+                // not here, above a footnote about cards that does not apply
+                // to it (the review of 2026-09-28).
                 Text(
                     "Making it stricter applies at once. Making it looser asks first: an approval " +
                         "card on your PC or this phone's Home screen, and nothing changes until you " +
@@ -521,3 +559,4 @@ private fun SettingPlate(
         }
     }
 }
+

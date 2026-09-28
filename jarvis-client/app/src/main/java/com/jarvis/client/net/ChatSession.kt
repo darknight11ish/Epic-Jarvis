@@ -317,6 +317,13 @@ class ChatSession(
          * "no", same as [temporary]'s absence means "not temporary".
          */
         cloudYes: Boolean = false,
+        /**
+         * Jarvis Live: this spoken question was said in a Live conversation
+         * (`live: true` on it - ChatHistory.messages). An answer that is only
+         * the side-talk marker ("[not for me]") is then shown as "(not for
+         * Jarvis)" and not kept in the conversation.
+         */
+        live: Boolean = false,
     ): String? {
         cancel()
         _reply.value = ""
@@ -360,7 +367,7 @@ class ChatSession(
         val interrupted = cutOff.take(SystemClock.elapsedRealtime())
         val c = api.chatCall(
             asking, earlier, picture, conversationId,
-            interrupted = interrupted, temporary = asTemporary, cloudYes = cloudYes,
+            interrupted = interrupted, temporary = asTemporary, cloudYes = cloudYes, live = live,
         )
         if (c == null) {
             // No address to send to: none saved, or a saved one off the
@@ -500,7 +507,12 @@ class ChatSession(
                         // "Open <a settings section>" (jarvis_settings_
                         // registry.py, docs/JARVIS-API.md section 58.1):
                         // pure navigation, read the same way.
+                        // "Forget what you learned last week" (2026-09-28):
+                        // `open_brain` names Brain's "Forget a time frame",
+                        // the list already filled in - the same navigation,
+                        // through OpenPlace. Nothing is removed by it.
                         _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
+                            ?: ForgetRange.openFromRoute(routeHeader)
                         // "A cloud model could give this one a second
                         // look." (jarvis_router.choose(), gate "offer"):
                         // read the same way as [crisis] and [usedIds]
@@ -677,7 +689,7 @@ class ChatSession(
                             },
                             if (cloud && !failed) "Answered by a cloud model, not on your PC." else null,
                             if (secondCard != null && !cloud && !failed) SecondCard.routeNote(secondCard) else null,
-                            if (quick && !failed) Schedule.DONE_LINE else null,
+                            if (quick && !failed) Schedule.DONE_LINE_HERE else null,
                         ).plus(temporaryNotes).joinToString(" ").ifEmpty { null }
                     }
                 }
@@ -721,6 +733,14 @@ class ChatSession(
         // on `earlier`: a call that finished in the meantime has already
         // added its own pair, and this one goes after it.
         val answer = mine
+        // Jarvis Live's side talk: shown as "(not for Jarvis)", never kept.
+        if (live && com.jarvis.client.voice.LiveRules.isSideTalk(answer)) {
+            // Only while no newer question has started.
+            if (call == null) {
+                _reply.value = com.jarvis.client.voice.LiveRules.SEEN.getValue("not_for_me")
+            }
+            return mine
+        }
         if (answer != null && answer.isNotBlank() && !cutShort && conversation == askedIn) {
             _history.update { ChatHistory.commit(it, asking, answer) }
         }

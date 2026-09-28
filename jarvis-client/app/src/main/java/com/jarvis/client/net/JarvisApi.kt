@@ -939,6 +939,84 @@ class JarvisApi(
         }
 
     /**
+     * "Forget a time frame" (docs/JARVIS-API.md section 64): a read (`json`
+     * null, a GET - the status or the list for some days) or ONE change (a
+     * POST of `json` - "Forget these", which makes the PC raise ONE card, or
+     * Undo). The path comes from [ForgetRange] and nothing outside
+     * `/api/memory/forget_range` is sent. The status and body come back
+     * whole ([ForgetRange.Reply]): a 404 the PC sent itself and a 404 from a
+     * PC without the routes read differently.
+     */
+    suspend fun forgetRangeCall(path: String, json: String?): ApiResult<ForgetRange.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != ForgetRange.PATH && !path.startsWith(ForgetRange.PATH + "/")) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a forget-range route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(ForgetRange.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * Projects (docs/JARVIS-API.md section 88): a read (`json` null, a GET)
+     * or ONE change (a POST of `json`). The path comes from [Projects] -
+     * [Projects.PATH], [Projects.projectPath], [Projects.benchPath] or
+     * [Projects.writePath] - and nothing outside `/api/projects` is sent.
+     * The status and body come back whole ([Projects.Reply]): a 404 that
+     * says "no such project" and a 404 from a PC without Projects read
+     * differently, and a 403 that carries `pc_only` is the PC saying "on the
+     * PC only", not a bad token.
+     */
+    suspend fun projectsCall(path: String, json: String?): ApiResult<Projects.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != Projects.PATH && !path.startsWith(Projects.PATH + "/")) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a projects route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    val pcOnly = (obj?.get("pc_only") as? JsonPrimitive)?.booleanOrNull == true
+                    if (resp.code == 401 || (resp.code == 403 && !pcOnly)) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Projects.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `POST /api/memory/shared`: tag or untag ONE fact "Between us" (the
      * owner's decision, 2026-09-27). The status and body come back whole
      * ([MemoryShared.Reply]), like [pinFact]: a 404 that says "no such
@@ -1296,6 +1374,88 @@ class JarvisApi(
                         ApiResult.Failed(ApiError.BadToken)
                     } else {
                         ApiResult.Ok(Focus.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/voice/live`: the Jarvis Live session - fixed words and
+     * numbers only, never anything said ([com.jarvis.client.voice.LiveRules]).
+     * A read: never held.
+     */
+    suspend fun liveStatus(): ApiResult<JsonObject> = probe(LIVE_PATH)
+
+    /**
+     * `POST /api/voice/live` with a body made by
+     * [com.jarvis.client.voice.LiveRules] (`startBody`, `stopBody`...). The
+     * code and body come back whole: a 409 carries the PC's own sentence
+     * ("Jarvis Live needs your voice trained first...").
+     */
+    suspend fun liveWrite(json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url(LIVE_PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when (resp.code) {
+                        401, 403 -> ApiResult.Failed(ApiError.BadToken)
+                        404 -> ApiResult.Failed(ApiError.NotFound)
+                        else -> ApiResult.Ok(resp.code to obj)
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/chatbot/status`, for the conversation [id] names or, with
+     * none, the latest one still going ([Chatbot.parse]) - and likewise the
+     * comparison [compare] names ("Ask several and compare"). A read.
+     */
+    suspend fun chatbotStatus(id: String?, compare: String? = null): ApiResult<JsonObject> =
+        probe(
+            when {
+                compare != null && Chatbot.validCompareId(compare) ->
+                    "${Chatbot.STATUS_PATH}?compare=$compare"
+                id != null && Chatbot.validId(id) -> "${Chatbot.STATUS_PATH}?id=$id"
+                else -> Chatbot.STATUS_PATH
+            },
+        )
+
+    /**
+     * `POST /api/chatbot/start`, `/stop`, `/limits`, `/compare/start` or
+     * `/compare/stop`, with a body made by [Chatbot.startBody],
+     * [Chatbot.stopBody], [Chatbot.limitsBody], [Chatbot.compareBody] or
+     * [Chatbot.compareStopBody]. Any
+     * other path is refused here, before anything is sent. The status and
+     * body come back whole ([Chatbot.Reply]): a 400 or 409 carries the PC's
+     * own sentence (why a goal cannot be sent, another conversation going).
+     */
+    suspend fun chatbotWrite(path: String, json: String): ApiResult<Chatbot.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path !in Chatbot.WRITE_PATHS) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a chatbot route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Chatbot.Reply(resp.code, obj))
                     }
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
@@ -2034,11 +2194,12 @@ class JarvisApi(
         temporary: Boolean = false,
         /** See [ChatHistory.requestBody]'s own doc on this same parameter. */
         cloudYes: Boolean = false,
+        live: Boolean = false,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
-            interrupted = interrupted, temporary = temporary, cloudYes = cloudYes,
+            interrupted = interrupted, temporary = temporary, cloudYes = cloudYes, live = live,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
@@ -2099,6 +2260,12 @@ class JarvisApi(
 
         const val SOURCE_PUSH_TO_TALK = "push_to_talk"
         const val SOURCE_WAKE_WORD = "wake_word"
+
+        /** A Jarvis Live clip (docs/LIVE-DESIGN.md): no wake word, the voice checked first as ever. */
+        const val SOURCE_LIVE = "live"
+
+        /** Jarvis Live's one route: GET the session, POST start/stop/extend/resume/mute/unmute. */
+        const val LIVE_PATH = "/api/voice/live"
 
         /** Interrupting by talking: "should Jarvis stop?", never transcribed (section 17). */
         const val SOURCE_BARGE_IN = "barge_in"

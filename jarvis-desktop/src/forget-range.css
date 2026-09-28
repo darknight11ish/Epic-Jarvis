@@ -1,0 +1,104 @@
+/* Brain -> History -> "Forget a time frame" (forget-range-panel.js). Its own
+   file, so the History tab's other cards and this one never edit the same
+   lines. Every colour is a theme token (theme.css). */
+
+#forget-range-card h2:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.fr-form {
+  margin: 0 0 10px;
+}
+
+.fr-row,
+.fr-dates {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.fr-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.fr-kinds legend {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.fr-asked,
+.fr-frame {
+  margin: 6px 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.fr-head {
+  margin: 14px 0 4px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.fr-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.fr-item input {
+  margin-top: 3px;
+}
+
+.fr-item .row-title {
+  overflow-wrap: anywhere;
+}
+
+.fr-spills {
+  display: block;
+  color: var(--warn);
+  font-size: var(--text-xs);
+}
+
+.fr-undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.fr-undo-text {
+  flex: 1 1 auto;
+}
+
+.fr-waiting,
+.fr-last {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.fr-said {
+  min-height: 1.2em;
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.fr-said[data-tone="bad"] {
+  color: var(--bad-text);
+}

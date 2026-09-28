@@ -593,6 +593,46 @@ function paintSettings() {
     const detail = list.find((c) => c.id === chosen).detail;
     say($(`${id}-note`), blocked ? `${detail} ${blocked}` : detail);
   }
+  // The sixth: answers about the screen after "Hey Jarvis" (the owner's
+  // decision, 2026-09-28). Offered only when the PC reports it. It matters
+  // only under "Only trust the talk button", and says so otherwise - the
+  // choices stay usable. "Read aloud" is the looser one, held on a stale
+  // link (changeSetting, VT.loosens).
+  const screenBox = $("vt-screen-box");
+  if (screenBox) {
+    screenBox.hidden = !view.handsFreeScreen;
+    if (view.handsFreeScreen) {
+      group($("vt-screen"), VT.HANDS_FREE_SCREEN, view.handsFreeScreen, "hands_free_screen");
+      let screenNote = VT.HANDS_FREE_SCREEN.find((c) => c.id === view.handsFreeScreen).detail;
+      if (VT.screenCovered(view)) screenNote += ` ${VT.SCREEN_ONLY_WHEN_STRICT_NOTE}`;
+      say($("vt-screen-note"), screenNote);
+    }
+  }
+  // The seventh: Jarvis Live under "Only trust the talk button" (the
+  // owner's answers, 2026-09-28). Three choices; a stricter one applies at
+  // once, a looser one is the card, held on a stale link.
+  const liveBox = $("vt-live-box");
+  if (liveBox) {
+    liveBox.hidden = !view.handsFreeLive;
+    if (view.handsFreeLive) {
+      group($("vt-live"), VT.HANDS_FREE_LIVE, view.handsFreeLive, "hands_free_live");
+      let liveNote = VT.HANDS_FREE_LIVE.find((c) => c.id === view.handsFreeLive).detail;
+      if (VT.liveCovered(view)) liveNote += ` ${VT.LIVE_ONLY_WHEN_STRICT_NOTE}`;
+      say($("vt-live-note"), liveNote);
+    }
+  }
+  // The eighth: when App lock ends Jarvis Live on this PC (the owner's
+  // decision, 2026-09-28). "Only when Windows locks" is the looser one, the
+  // card, held on a stale link.
+  const endBox = $("vt-live-end-box");
+  if (endBox) {
+    endBox.hidden = !view.liveEnd;
+    if (view.liveEnd) {
+      group($("vt-live-end"), VT.LIVE_END, view.liveEnd, "live_end");
+      say($("vt-live-end-note"),
+        `${VT.LIVE_END.find((c) => c.id === view.liveEnd).detail} ${VT.LIVE_END_NOTE}`);
+    }
+  }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;
@@ -602,16 +642,20 @@ function paintSettings() {
 async function changeSetting(setting, value, current) {
   if (settingBusy || value === current) return;
   const out = $("vt-setting-status");
-  if (VT.loosens(setting, value) && linkStale) {
+  const loosening = VT.loosens(setting, value, current);
+  if (loosening && linkStale) {
     say(out, HELD, "bad");
     announce(HELD, "assertive");
     return;
   }
   settingBusy = true;
   paintSettings();
-  say(out, VT.loosens(setting, value) ? "Asking…" : "Changing it…");
+  say(out, loosening ? "Asking…" : "Changing it…");
   try {
-    const answer = await invoke("set_voice_setting", { setting, value });
+    // Jarvis Live's three choices: the Rust side needs the choice now to
+    // tell a stricter move from a looser one.
+    const args = setting === "hands_free_live" ? { setting, value, current } : { setting, value };
+    const answer = await invoke("set_voice_setting", args);
     const reply = VT.settingReply(answer, APPROVE_WHERE);
     say(out, reply.text, reply.tone);
     announce(reply.text, reply.tone === "bad" ? "assertive" : "polite");

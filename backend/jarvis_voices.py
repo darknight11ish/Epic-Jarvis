@@ -401,7 +401,7 @@ SPEAKER_LABEL = dict(KOKORO_VOICES)
 SPEAKER_DEFAULT = "0"
 SPEAKER_TITLE = "Jarvis's built-in voice"
 SPEAKER_DETAIL = ("Which of Kokoro's voices Jarvis's built-in voice uses - never a voice "
-                  "you recorded, which stays under \"Voices\" above.")
+                  "you recorded, which stays under \"Voices\" below.")
 
 
 def speaker() -> int:

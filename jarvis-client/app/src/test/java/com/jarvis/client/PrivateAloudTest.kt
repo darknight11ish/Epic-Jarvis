@@ -112,12 +112,22 @@ class PrivateAloudTest {
     fun `memory aloud never opens email, notes or a tool`() {
         assertFalse(may(heard("private_question"), header("no_cloud_lane")))
         assertFalse(may(heard("plain_question"), header("private", injected = 1)))
-        assertFalse(may(heard("plain_question"), header("plain", injected = 1), live.copy(runs = 5)))
+        assertFalse(may(heard("plain_question"), header("plain", injected = 1), live.copy(runs = 5, privateRuns = 5)))
     }
 
     @Test
     fun `a tool that ran while it was written stops the reading`() {
-        assertFalse(may(heard("plain_question"), header("plain"), live.copy(runs = 5)))
+        assertFalse(may(heard("plain_question"), header("plain"), live.copy(runs = 5, privateRuns = 5)))
+    }
+
+    @Test
+    fun `web search or home status that ran is read aloud - the owner's decision of 2026-09-27`() {
+        // Four tools ran, none private: privateRuns did not move.
+        assertTrue(may(heard("plain_question"), header("plain"), live.copy(runs = 8)))
+        // One of them was private.
+        assertFalse(may(heard("plain_question"), header("plain"), live.copy(runs = 8, privateRuns = 5)))
+        // Not knowing still keeps it on screen.
+        assertFalse(may(heard("plain_question"), header("plain"), live.copy(runs = 8, drops = 2)))
     }
 
     @Test
@@ -135,7 +145,7 @@ class PrivateAloudTest {
     @Test
     fun `voice check is enough reads it all`() {
         val h = heard("voice_is_enough")
-        assertTrue(may(h, header("private", injected = 5, sensitive = 0), live.copy(runs = 9)))
+        assertTrue(may(h, header("private", injected = 5, sensitive = 0), live.copy(runs = 9, privateRuns = 9)))
     }
 
     @Test
@@ -201,7 +211,7 @@ class PrivateAloudTest {
         // Email, notes, the router's private gate and tools still stay on screen.
         assertFalse(may(heardWith("private_question", sensitiveAloud = true), header("no_cloud_lane")))
         assertFalse(may(h, header("private", injected = 2, sensitive = 2)))
-        assertFalse(may(h, header("plain", injected = 2, sensitive = 2), live.copy(runs = 5)))
+        assertFalse(may(h, header("plain", injected = 2, sensitive = 2), live.copy(runs = 5, privateRuns = 5)))
         // With memories kept on screen, facts in the answer still keep it there.
         assertFalse(may(heardWith("memory_on_screen", sensitiveAloud = true), header("plain", injected = 2, sensitive = 2)))
     }
@@ -219,6 +229,16 @@ class PrivateAloudTest {
         assertFalse(PrivateAloud.isToolRun(step("tool_refused")))
         assertFalse(PrivateAloud.isToolRun(step("model")))
         assertFalse(PrivateAloud.isToolRun(null))
+        // Private: every name but web search and home status, and no name.
+        assertTrue(PrivateAloud.isPrivateToolRun(step("tool_started")))
+        fun ran(tool: String) = JsonObject(mapOf("phase" to JsonPrimitive("tool_finished"), "tool" to JsonPrimitive(tool)))
+        assertFalse(PrivateAloud.isPrivateToolRun(ran("web_search")))
+        assertFalse(PrivateAloud.isPrivateToolRun(ran("home_read")))
+        assertTrue(PrivateAloud.isPrivateToolRun(ran("calendar_read")))
+        assertTrue(PrivateAloud.isPrivateToolRun(ran("unknown")))
+        assertTrue(PrivateAloud.isPrivateToolRun(JsonObject(mapOf("phase" to JsonPrimitive("tool_started")))))
+        val refused = JsonObject(mapOf("phase" to JsonPrimitive("tool_refused"), "tool" to JsonPrimitive("email_check")))
+        assertFalse(PrivateAloud.isPrivateToolRun(refused))
     }
 
     @Test

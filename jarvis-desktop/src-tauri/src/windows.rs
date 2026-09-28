@@ -329,6 +329,33 @@ pub(crate) fn show_quickbar_unlocked(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Jarvis Live: puts the quickbar on screen, if it is hidden, WITHOUT taking
+/// the keyboard from the program in front - a Live answer arrives in it
+/// (the Live review of 2026-09-28, #10: answers streamed into a hidden bar).
+/// Never while App lock would ask (Live has ended then anyway), and never
+/// moves a bar already on screen. Whether Windows keeps the focus where it
+/// was when a window is shown is Windows' call: `show` without `set_focus`
+/// is the gentlest this API offers - checked on the owner's PC, not here.
+pub(crate) fn show_quickbar_quietly(app: &AppHandle) -> Result<(), String> {
+    if crate::lock::app_locked(app) {
+        return Ok(());
+    }
+    let window = app
+        .get_webview_window(QUICKBAR_LABEL)
+        .ok_or_else(|| format!("window `{QUICKBAR_LABEL}` was not found"))?;
+    if window.is_visible().unwrap_or(false) {
+        return Ok(());
+    }
+    let _ = window.set_size(LogicalSize::new(QUICKBAR_WIDTH, QUICKBAR_BASE_HEIGHT));
+    center_quickbar(&window)?;
+    window
+        .show()
+        .map_err(|e| format!("unable to show the quickbar: {e}"))?;
+    window
+        .set_always_on_top(true)
+        .map_err(|e| format!("unable to raise the quickbar: {e}"))
+}
+
 /// Hides the quickbar and drops any pin, so the next summon starts clean.
 pub fn hide_quickbar(app: &AppHandle) -> Result<(), String> {
     QUICKBAR_PINNED.store(false, Ordering::Relaxed);

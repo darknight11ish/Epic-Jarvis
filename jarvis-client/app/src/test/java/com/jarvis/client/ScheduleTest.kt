@@ -124,7 +124,11 @@ class ScheduleTest {
         assertFalse(Schedule.quickFromRouteHeader("""{"where":"local","lane":"qwen3:8b"}"""))
         assertFalse(Schedule.quickFromRouteHeader(null))
         assertFalse(Schedule.quickFromRouteHeader("not json"))
+        // The PC's words stay the shared contract (the desktop's own tests
+        // read this file for them)...
         assertEquals("Done - answered on this PC without the AI model.", Schedule.DONE_LINE)
+        // ...and the phone shows "your PC": it is not a PC itself.
+        assertEquals("Done - answered on your PC without the AI model.", Schedule.DONE_LINE_HERE)
     }
 
     // "Open <a settings section>" by voice or chat (jarvis_settings_

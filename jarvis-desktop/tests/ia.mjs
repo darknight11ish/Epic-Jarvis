@@ -225,10 +225,12 @@ await check("the menu is sentence case and grouped", async () => {
   for (const gone of ['"Show HUD Window"', '"Toggle Spotlight"', '"Toggle Widget"', '"Status Check"']) {
     assert.ok(!tray.includes(gone), `${gone} is still Title Case`);
   }
-  // Five groups: status / waiting / windows / machinery / quit.
+  // Six groups: status / waiting / Jarvis Live / windows / machinery / quit.
+  // Live got its own group in the Live review of 2026-09-28: it sat right
+  // under "Stop everything", and a click one row off started or ended it.
   const menu = tray.slice(tray.indexOf("let menu = Menu::with_items"), tray.indexOf("app.state::<TrayHandles>"));
   const seps = (menu.match(/PredefinedMenuItem::separator/g) || []).length;
-  assert.equal(seps, 4, `the menu has ${seps} separators; five groups need four`);
+  assert.equal(seps, 5, `the menu has ${seps} separators; six groups need five`);
 });
 
 /* ── The widget can be used without a mouse ──────────────────────────────── */

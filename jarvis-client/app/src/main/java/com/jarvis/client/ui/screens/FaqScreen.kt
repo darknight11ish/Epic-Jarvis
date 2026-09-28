@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.BuildConfig
 import com.jarvis.client.net.Sayable
 import com.jarvis.client.ui.Chevron
+import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
@@ -291,8 +293,17 @@ private val FAQS = listOf(
 fun FaqScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * "Open about" by voice or chat ([com.jarvis.client.ui.OpenPlace]): the
+     * item key to bring into view once ("about"), or null for the top.
+     */
+    initialSection: String? = null,
+    /** Called once [initialSection] has been acted on, so it is not acted on again. */
+    onSectionConsumed: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
+    val listState = rememberLazyListState()
+    ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
         // Titled with the word on the button that opened it. Home's nav says
         // "Help", and a beginner who taps "Help" and lands on "Frequently
@@ -305,6 +316,7 @@ fun FaqScreen(
         )
 
         LazyColumn(
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp),
         ) {

@@ -159,6 +159,9 @@ SHIPPED = (
     # "tell me when ..." - a kind of job on the one scheduler (not a tool)
     "jarvis_tellme.py",
     # focus sessions (focus.patch): a kind of job on the one scheduler
+    # what is in front on this PC: the one reader focus sessions and
+    # "Watch with me" share (split out of jarvis_focus.py, no patch)
+    "jarvis_front.py",
     "jarvis_focus.py",
     # "What asks first" and "Lights, plugs and fans without a card" (asks-first.patch)
     "jarvis_asks_first.py",
@@ -255,6 +258,55 @@ SHIPPED = (
     # code) of what a home-screen / desktop widget shows; switched on by
     # jarvis_brain_reads.install(), no patch of its own
     "jarvis_widgets.py",
+    # A conversation with an AI chatbot for the owner: the driver, the last
+    # check, one card per conversation
+    "jarvis_chatbot.py",
+    # Projects, build steps 1 and 2: projects, life benchmarks and their
+    # numbers in projects.db; GET/POST /api/projects (projects.patch)
+    "jarvis_projects.py",
+    # ... and its Gemini website adapter: a visible browser window, driven
+    # openly, stopping at any captcha or sign-in page (chatbot.patch gives
+    # the gate its _RISK line)
+    "jarvis_chatbot_gemini.py",
+    # ...and its routes, /api/chatbot/* (chatbot-routes.patch)
+    "jarvis_chatbot_routes.py",
+    # ... what every chatbot website adapter shares (the visible window, the
+    # typing, the host lock, every "needs the owner" page, sign-in and
+    # self-check), and the other chatbot websites, each a thin site file
+    # driven the same open way (2026-09-28, "the chatbot driver becomes
+    # versatile")
+    "jarvis_chatbot_web.py",
+    "jarvis_chatbot_chatgpt.py",
+    "jarvis_chatbot_claude.py",
+    "jarvis_chatbot_copilot.py",
+    "jarvis_chatbot_perplexity.py",
+    "jarvis_chatbot_deepseek.py",
+    "jarvis_chatbot_grok.py",
+    "jarvis_chatbot_lechat.py",
+    "jarvis_chatbot_metaai.py",
+    # ... its API adapters (OpenAI-style Chat Completions: OpenAI, DeepSeek,
+    # Mistral, xAI, OpenRouter, Groq; keys in Credential Manager) and "a
+    # second AI on this PC" (another Ollama model, loopback only). No patch
+    # of their own: jarvis_chatbot.py loads both.
+    "jarvis_chatbot_api.py",
+    "jarvis_chatbot_local.py",
+    # "Look at this" and "Watch with me", build steps 1 and 2: the session
+    # rules, pause rules, caps and the Never look at list (no route yet, no
+    # patch; the Windows readers are step 3)
+    "jarvis_screen.py",
+    # "Ask several and compare": several of the conversations above, ONE
+    # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
+    # chatbot-routes.patch already installs the routes that reach it.
+    "jarvis_chatbot_compare.py",
+    # Jarvis Live (2026-09-28): the session and the rules jarvis_speech
+    # follows for `source=live`; GET/POST /api/voice/live (live.patch)
+    "jarvis_live.py",
+    # ... and the camera's photo test, run once when the second card is in
+    # (no patch: the owner runs it by hand)
+    "jarvis_live_photo_test.py",
+    # "Forget a time frame" (2026-09-28): a checked list, ONE card, 10
+    # minutes to undo; GET/POST /api/memory/forget_range (forget-range.patch)
+    "jarvis_forget_range.py",
 )
 
 

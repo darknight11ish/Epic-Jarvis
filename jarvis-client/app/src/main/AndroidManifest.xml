@@ -340,6 +340,18 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <!-- Jarvis Live on this phone (service/LiveService.kt;
+             docs/LIVE-DESIGN.md): the microphone while a Live conversation
+             the owner started is on, and only then. Started from the app's
+             own Live screen (or its "let's talk" reply), never at boot;
+             START_NOT_STICKY; its notification stays on this phone and has
+             End and Mute. Calls are noticed from the audio mode - no phone
+             permission is asked for. -->
+        <service
+            android:name=".service.LiveService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <!-- The Overlay path of "Floating Jarvis" (data/FloatingAvatar.kt).
              specialUse, not any of the other types: it holds a window, not
              the microphone (WakeWordService already has that, separately,

@@ -59,8 +59,10 @@ def t_missing_databases_are_ok_not_warn():
         rows = DH.check(config_dir=d, disk_usage=lambda p: shutil.disk_usage(tmp))
         chat = next(r for r in rows if "chat history" in r[1])
         mem = next(r for r in rows if "memory store" in r[1])
+        proj = next(r for r in rows if "projects" in r[1])
         check("no chat-history.db: ok, not warn", chat[0] == DH.OK, chat)
         check("no memory.db: ok, not warn", mem[0] == DH.OK, mem)
+        check("no projects.db: ok, not warn", proj[0] == DH.OK, proj)
         check("every row is ok or warn, nothing else",
               all(r[0] in (DH.OK, DH.WARN) for r in rows), rows)
 
@@ -83,11 +85,14 @@ def t_a_corrupt_database_is_warn_not_a_failure():
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         (d / "memory.db").write_bytes(b"this is not a sqlite file at all, just text")
+        (d / "projects.db").write_bytes(b"not a database either")
         before = _snapshot(d)
         rows = DH.check(config_dir=d, disk_usage=lambda p: shutil.disk_usage(tmp))
         after = _snapshot(d)
         mem = next(r for r in rows if "memory store" in r[1])
+        proj = next(r for r in rows if "projects" in r[1])
         check("a file that is not a database: WARN (not silently ok)", mem[0] == DH.WARN, mem)
+        check("a damaged projects.db: WARN too", proj[0] == DH.WARN, proj)
         check("nothing was written, moved or deleted while checking it", before == after,
               (before, after))
         check("no row status is anything but ok/warn (never a fix, never a fail)",

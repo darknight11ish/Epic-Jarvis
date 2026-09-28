@@ -302,6 +302,30 @@ ddgs (deedy5), MIT - https://github.com/deedy5/ddgs
   a dependency - its 2.22.2 source was only read, to confirm the request's
   address, header and field names, and none of it is copied.
 
+BROWSER WINDOWS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Playwright for Python (Microsoft), Apache-2.0 -
+https://github.com/microsoft/playwright-python
+  Used by backend/jarvis_browser_control.py (the "browser_control" tool)
+  and backend/jarvis_chatbot_web.py (Jarvis's chatbot website windows -
+  Gemini, ChatGPT and the others - for the chatbot driver). OPTIONAL: installed on the PC by the owner with pip
+  (`py -3 -m pip install playwright`), not by apply-patches.ps1, not
+  shipped here, and none of its code is copied. Version 1.56.0's wheel was
+  read on 2026-09-28: "License-Expression: Apache-2.0", "Portions Copyright
+  (c) Microsoft Corporation. Portions Copyright 2017 Google Inc."; the full
+  Apache-2.0 text is in section 4. Its bundled driver carries this NOTICE:
+
+    Playwright
+    Copyright (c) Microsoft Corporation
+
+    This software contains code derived from the Puppeteer project
+    (https://github.com/puppeteer/puppeteer), available under the Apache
+    2.0 license (https://github.com/puppeteer/puppeteer/blob/master/LICENSE).
+
+  The browser it drives (Chromium, downloaded by `py -3 -m playwright
+  install chromium`, or Microsoft Edge already on the PC) is a separate
+  program under its own licences; nothing of it is distributed with Jarvis.
+
 SPOKEN ANSWERS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 unmute (kyutai-labs), MIT - https://github.com/kyutai-labs/unmute

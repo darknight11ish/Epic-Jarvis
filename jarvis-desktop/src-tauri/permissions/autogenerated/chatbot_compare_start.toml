@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chatbot-compare-start"
+description = "Enables the chatbot_compare_start command without any pre-configured scope."
+commands.allow = ["chatbot_compare_start"]
+
+[[permission]]
+identifier = "deny-chatbot-compare-start"
+description = "Denies the chatbot_compare_start command without any pre-configured scope."
+commands.deny = ["chatbot_compare_start"]

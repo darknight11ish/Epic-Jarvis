@@ -58,3 +58,39 @@
              return self._send(code, out)
  
          if route in ("/api/hardware/apply", "/api/hardware/create",
+@@ -3660,6 +3704,20 @@
+                     route_header.get("injected_ids") or [])
+             except Exception:
+                 pass
++            # second-card-suggest.patch: remember a crisis turn's id (in
++            # memory only, ids never words), so a "wrong" mark on its answer
++            # later is never counted toward suggesting the bigger model -
++            # "Crisis messages are never learned from and never counted"
++            # (the owner, 2026-09-28). Here, the one place both the id above
++            # and wellbeing.patch's flag are known, and before the answer
++            # is sent, so no mark can arrive first. Covers both branches
++            # below. Off a try: never the reason an answer fails.
++            if route_header.get("wellbeing") == "crisis":
++                try:
++                    import jarvis_agent
++                    jarvis_agent.note_crisis_turn(route_header.get("turn_id"))
++                except Exception:
++                    pass
+             # auto-learn.patch (the owner's decision, 2026-09-24): how many of
+             # the recalled facts this answer REALLY used are sensitive - here,
+             # after the degrade loop, which empties injected_ids when a turn
+@@ -3777,6 +3835,14 @@
+                             _turn.get("unverified_quotes") or [])
+                     except Exception:
+                         pass
++                    # second-card-suggest.patch: jarvis_agent's own crisis
++                    # check (on the owner's newest words) counts too, in
++                    # case it caught one the flag above did not.
++                    if _turn.get("crisis"):
++                        try:
++                            jarvis_agent.note_crisis_turn(route_header.get("turn_id"))
++                        except Exception:
++                            pass
+                     if (_speed is not None and _turn.get("finish_reason")
+                             and not _turn.get("client_gone")):
+                         _speed.finish(lane, tools=int(_turn.get("rounds") or 1) > 1)

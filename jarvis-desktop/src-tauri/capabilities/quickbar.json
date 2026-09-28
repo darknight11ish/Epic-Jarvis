@@ -23,6 +23,7 @@
     "chat-sources",
     "photo-reminder",
     "attention-surface",
-    "voice"
+    "voice",
+    "live"
   ]
 }

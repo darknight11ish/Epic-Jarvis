@@ -1,0 +1,205 @@
+/* Brain -> Projects (projects-panel.js). Its own file, so the Brain's other
+   tabs and this one never edit the same lines. Every colour is a theme token
+   (theme.css): the chart reads in Reactor, Daylight and High Contrast alike,
+   and tests/projects.mjs measures it in all three. */
+
+.pj-card .pj-top {
+  display: flex;
+  margin: 0 0 8px;
+}
+
+.pj-card h2:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.pj-field {
+  margin: 0 0 10px;
+}
+
+.pj-under {
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+}
+
+.pj-text {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.pj-line {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.pj-warn {
+  margin: 0 0 8px;
+  color: var(--warn);
+  font-size: var(--text-xs);
+}
+
+.pj-said {
+  min-height: 1.2em;
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.pj-said[data-tone="bad"] {
+  color: var(--bad-text);
+}
+
+.pj-switch {
+  margin: 0 0 4px;
+}
+
+.pj-bench {
+  padding: 10px 0 12px;
+  border-top: var(--stroke-hair) solid var(--border);
+}
+
+.pj-bench-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pj-bench-name {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* "private - not read aloud": a word first, a colour second. */
+.pj-private {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.pj-latest {
+  margin: 2px 0 6px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.pj-latest strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pj-command {
+  display: block;
+  margin: 4px 0 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-control);
+  background: var(--code-bg);
+  color: var(--code-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.pj-chart-wrap {
+  margin: 4px 0 6px;
+}
+
+.pj-chart {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  aspect-ratio: 320 / 120;
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+}
+
+.pj-axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.pj-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.pj-dot {
+  fill: var(--accent);
+  stroke: var(--surface-sunken);
+  stroke-width: 1;
+}
+
+/* The target: dashed AND its own colour, so it is not told apart by colour
+   alone; the legend under the chart names it in words. */
+.pj-target {
+  stroke: var(--warn);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.pj-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.pj-legend-target::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  margin: 0 6px 3px 0;
+  border-top: 2px dashed var(--warn);
+  vertical-align: middle;
+}
+
+.pj-numbers summary,
+.pj-add summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  margin: 4px 0;
+}
+
+.pj-numbers summary:focus-visible,
+.pj-add summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.pj-add {
+  margin: 10px 0;
+}
+
+.pj-add-form .row {
+  margin-bottom: 8px;
+}
+
+.pj-marks {
+  margin-top: 8px;
+}
+
+.pj-end {
+  margin-top: 14px;
+  justify-content: flex-end;
+}
+
+/* The number box stays a sensible size beside its Log button. */
+.pj-log .todo-text {
+  max-width: 260px;
+}

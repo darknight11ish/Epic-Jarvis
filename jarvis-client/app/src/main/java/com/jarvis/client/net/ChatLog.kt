@@ -215,7 +215,16 @@ object ChatLog {
             val role = o.str("role") ?: return@mapNotNull null
             Turn(
                 role = role,
-                text = (o["text"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                text = (o["text"] as? JsonPrimitive)?.contentOrNull.orEmpty().let { t ->
+                    // Jarvis Live's side-talk marker in a chat kept before side
+                    // remarks stopped being kept at all (the owner's answer of
+                    // 2026-09-28): "(not for Jarvis)", never the raw marker.
+                    if (role == "assistant" && com.jarvis.client.voice.LiveRules.isSideTalk(t)) {
+                        com.jarvis.client.voice.LiveRules.SEEN.getValue("not_for_me")
+                    } else {
+                        t
+                    }
+                },
                 at = o.whole("at"),
                 provenance = o.str("provenance"),
                 readOutside = o.flag("read_outside") == true,

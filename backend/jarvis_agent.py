@@ -2148,7 +2148,8 @@ def _open_stream(url: str, payload: dict, timeout: float = 300.0):
 
 def _get_json(url: str, payload: Optional[dict] = None, timeout: float = 4.0) -> dict:
     """A small JSON call to Ollama's own API - GET, or POST when there is a
-    body. Only used to look up the context length; see _context_length."""
+    body. Used to look up the context length (see _context_length) and to
+    warm the everyday model for Jarvis Live (warm_everyday)."""
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"},
@@ -3280,6 +3281,9 @@ class _TurnWatch:
         users = [m for m in raw if m.get("role") == "user"]
         self.provenance = None
         self.spoken = False          # the newest question was said out loud
+        # ...in Jarvis Live (the app's `live: true` on a spoken message):
+        # the Live note, and side talk (jarvis_live.MODEL_NOTE).
+        self.live = False
         # A system message the APP sent (security audit M1). Read only off the
         # request as it arrived: `messages` without it may already hold the
         # server's own system turns (the rules, recalled facts).
@@ -3290,10 +3294,13 @@ class _TurnWatch:
         # owner - what "the devices you named" is checked against
         # (LIGHTS_WITHOUT_CARD). "" otherwise.
         self.newest_own_words = ""
+        self.newest_raw = ""         # the newest question's words as sent (side talk)
         if users:
             i = max(j for j, m in enumerate(raw) if m.get("role") == "user")
             self.spoken = raw[i].get("provenance") == "voice"   # with_spoken_note
+            self.live = self.spoken and raw[i].get("live") is True      # with_live_note
             self.cut_off = cut_off_words(raw[i].get("interrupted"))
+            self.newest_raw = _text_of(raw[i].get("content"))
             newest = [raw[i]]
             j = i - 1
             while (j >= 0 and raw[j].get("role") == "user"
@@ -3579,12 +3586,27 @@ def _record_chain(steps: list) -> None:
 _STEP_PHASES = ("model", "tool_started", "tool_finished", "tool_refused", "answer")
 
 
+#: Names a `step` event may carry that are not model tools: reads a turn
+#: records itself. "read_screen" is a "Look at this" / "Watch with me" turn
+#: (jarvis_screen.SCREEN_TOOL, docs/SCREEN-DESIGN.md) - on the apps' read-aloud
+#: list by the owner's answer of 2026-09-28, so it must reach them by name,
+#: not as "unknown". Nothing sends it yet: the chat route's screen wiring is
+#: the next build step.
+#: "read_camera" is a Jarvis Live question sent with a camera picture
+#: (jarvis_live.CAMERA_TOOL, docs/LIVE-DESIGN.md section 5) - read aloud like
+#: a screen answer by the owner's answer of 2026-09-28, under the same
+#: `screen_aloud`. The camera is switched off until the second card passes
+#: the photo test (jarvis_live.camera_status), so nothing sends it yet.
+STEP_READS = frozenset({"read_screen", "read_camera"})
+
+
 def _step_event(phase: str, tool: Optional[str] = None, *,
                 ok: Optional[bool] = None, round_no: Optional[int] = None) -> dict:
     """One step, reduced to what the event bus may carry."""
     out: dict = {"phase": phase if phase in _STEP_PHASES else "unknown"}
     if tool is not None:
-        out["tool"] = tool if isinstance(tool, str) and tool in TOOLS else "unknown"
+        out["tool"] = (tool if isinstance(tool, str)
+                       and (tool in TOOLS or tool in STEP_READS) else "unknown")
     if ok is not None:
         out["ok"] = bool(ok)
     if round_no is not None:
@@ -3871,9 +3893,60 @@ def note_struggle(conversation_id, n: int = 1) -> int:
         return 0
 
 
+# Crisis turns, by turn id, so a "wrong" mark on a crisis answer is never
+# counted (the owner, 2026-09-28: "Crisis messages are never learned from and
+# never counted" covers the thumbs-down too). The mark only ever names a
+# turn id; whether that turn was a crisis turn is known only where the chat
+# route gives the turn its id - so jarvis_hud.py tells this module then
+# (second-card-suggest.patch), and note_correction checks here. In memory
+# only, like the counters above: ids, never words, bounded, gone on restart
+# (a mark on a turn from before a restart is then counted - the counters it
+# would add to are gone too, so it starts from zero either way).
+_CRISIS_TURNS_MAX = 500
+_CRISIS_TURNS: "dict[str, None]" = {}          # turn_id -> None, oldest first
+_TURN_ID_OK = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def note_crisis_turn(turn_id) -> bool:
+    """Remember that `turn_id` was a crisis turn, so a later "wrong" mark on
+    it is not counted (note_correction). True if it was remembered; never
+    raises, and ignores anything that is not a plausible id."""
+    if not isinstance(turn_id, str) or not _TURN_ID_OK.match(turn_id):
+        return False
+    # Jarvis Live (jarvis_live.py): after a crisis turn, a Live conversation
+    # never ends on its own for being quiet - only End, its time limit or
+    # Stop everything end it (the rules review, 2026-09-28).
+    try:
+        import jarvis_live
+        jarvis_live.ENGINE.note_crisis()
+    except Exception:
+        pass
+    try:
+        with _SUGGEST_LOCK:
+            _CRISIS_TURNS.pop(turn_id, None)
+            _CRISIS_TURNS[turn_id] = None
+            while len(_CRISIS_TURNS) > _CRISIS_TURNS_MAX:
+                _CRISIS_TURNS.pop(next(iter(_CRISIS_TURNS)))
+        return True
+    except Exception:
+        return False
+
+
+def is_crisis_turn(turn_id) -> bool:
+    """True if note_crisis_turn was told about this turn id. Read-only."""
+    if not isinstance(turn_id, str):
+        return False
+    with _SUGGEST_LOCK:
+        return turn_id in _CRISIS_TURNS
+
+
 def note_correction(conversation_id, n: int = 1, turn_id=None) -> int:
     """One more sign the owner corrected an answer in this conversation.
     Returns the new count; never raises.
+
+    A `turn_id` that note_crisis_turn was told about is never counted: the
+    count is returned unchanged (a crisis answer marked "wrong" must not
+    lead to a "try the bigger model?" card - the owner, 2026-09-28).
 
     `turn_id`, when given, dedupes: the SAME turn only ever adds one
     correction, no matter how many times it is marked. Without this, the
@@ -3894,6 +3967,10 @@ def note_correction(conversation_id, n: int = 1, turn_id=None) -> int:
         return 0
     try:
         with _SUGGEST_LOCK:
+            if turn_id is not None and turn_id in _CRISIS_TURNS:
+                # A crisis answer marked wrong: never counted, and no row is
+                # made for it (which could push another conversation out).
+                return int((_SUGGEST.get(conversation_id) or {}).get("correction", 0))
             row = _SUGGEST.get(conversation_id)
             if row is None:
                 _SUGGEST.pop(conversation_id, None)
@@ -4623,6 +4700,61 @@ SPOKEN_NOTE = (
 _SPOKEN_MSG = {"role": "system", "content": SPOKEN_NOTE}
 
 
+def _live_note() -> Optional[str]:
+    try:
+        import jarvis_live
+        return jarvis_live.MODEL_NOTE
+    except Exception:
+        return None
+
+
+def with_live_note(msgs: list) -> list:
+    """A new list: `msgs` with Jarvis Live's note (jarvis_live.MODEL_NOTE) as
+    a system message just before the newest user message - placed exactly
+    like SPOKEN_NOTE, never first. Unchanged without jarvis_live.py."""
+    note = _live_note()
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if note is None or not users:
+        return list(msgs)
+    at = users[-1]
+    msg = {"role": "system", "content": note}
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
+def _is_side_talk(answer: str) -> bool:
+    try:
+        import jarvis_live
+        return jarvis_live.is_side_talk(answer)
+    except Exception:
+        return False
+
+
+def _note_side_talk(text: str) -> None:
+    try:
+        import jarvis_live
+        jarvis_live.note_side_talk(text)
+    except Exception:
+        pass
+
+
+def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None) -> bool:
+    """Loads the everyday model into the graphics card now (Ollama's own
+    "load with an empty prompt"), so Jarvis Live's first answer does not wait
+    for it. THIS PC's Ollama only; never a cloud model. Best effort: False
+    when it could not. jarvis_live.py calls it - never on Standby."""
+    url = (ollama_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
+    name = model or os.environ.get("JARVIS_MODEL") or "jarvis-primary"
+    try:
+        if not _is_this_machine(url) or local_model_refusal(url, name):
+            return False
+        _get_json(f"{url}/api/generate", {"model": name, "keep_alive": "30m"}, timeout=120.0)
+        return True
+    except Exception:
+        return False
+
+
 def with_spoken_note(msgs: list) -> list:
     """A new list: `msgs` with SPOKEN_NOTE as a system message just before
     the newest user message. `msgs` itself is not changed.
@@ -5041,8 +5173,8 @@ def warm_prefix_on() -> bool:
 
 
 def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
-                   next_time: str = "", spoken: bool = False, cut_off: str = "",
-                   crisis: bool = False) -> list:
+                   next_time: str = "", spoken: bool = False, live: bool = False,
+                   cut_off: str = "", crisis: bool = False) -> list:
     """The notes a local turn adds to its (already trimmed) messages, in
     their order - manner, focus, next-time, spoken, cut-off, crisis, each just before
     the newest user message - and then keep_rules_first, last, so the rules
@@ -5064,6 +5196,11 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     if spoken:
         # After trimming, so trimming can never leave the note first.
         out = with_spoken_note(out)
+    if live:
+        # Jarvis Live: no yes/no question to end on, and side talk
+        # answered with the marker alone. Never first; the relay never
+        # sees it (the same placing as the spoken note).
+        out = with_live_note(out)
     if cut_off:
         # The owner cut the last spoken answer off: said, never first.
         out = with_cut_off_note(out, cut_off)
@@ -5677,7 +5814,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                          dress_messages(fit_messages(clear_old_tool_results(msgs, room), room),
                                         manner=manner,
                                         focus=focus_brief, next_time=next_time["note"],
-                                        spoken=watch.spoken,
+                                        spoken=watch.spoken, live=watch.live,
                                         cut_off=watch.cut_off, crisis=watch.crisis),
                          opts, offer["schemas"] if offer_tools else None)
         stripper = _ThinkStripper()
@@ -5976,7 +6113,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # really answered this turn (jarvis_next_time.brought_up).
         if next_time["ids"] and "".join(answer).strip() and not watch.crisis:
             _next_time_brought_up(next_time["ids"])
-        if not watch.crisis:
+        # Side talk in Jarvis Live (the owner's answer of 2026-09-28): the
+        # model said the words were not for it. Never counted, never learned
+        # from (jarvis_live.note_side_talk keeps a hash for the learner to
+        # skip), and both apps say nothing.
+        side_talk = watch.live and _is_side_talk("".join(answer))
+        if side_talk:
+            _note_side_talk(watch.newest_raw)
+        if not watch.crisis and not side_talk:
             broken_this_turn = sum(watch.bad.values())
             if broken_this_turn:
                 note_struggle(conv_id, broken_this_turn)
@@ -6003,6 +6147,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             "outside_flags": sorted(watch.flags),
             "crisis": watch.crisis,
             "claimed_undone": claimed_undone,
+            "side_talk": bool(watch.live and _is_side_talk(final_answer)),
             "tool_sources": watch.sources,
             "unverified_quotes": unverified,
             "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}

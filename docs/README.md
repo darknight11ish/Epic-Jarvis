@@ -30,6 +30,7 @@ Also current, for one area each:
 | [SHARED-LOOK.md](SHARED-LOOK.md) | What the phone and the desktop must agree on so they look the same. |
 | [APPEARANCE-API.md](APPEARANCE-API.md) | The one address the face and colour picker uses. |
 | [UFO-SAFETY-DESIGN.md](UFO-SAFETY-DESIGN.md) | Why controlling Windows apps is done the careful way it is. |
+| [LIVE-DESIGN.md](LIVE-DESIGN.md) | "Jarvis Live": a back-and-forth voice conversation, plus the phone's camera (design only, not built). |
 | [PEERS.md](PEERS.md), [COMPARISON.md](COMPARISON.md) | What other assistant projects built, and what Jarvis took from them. |
 | [MEMORY-SCOREBOARD.md](MEMORY-SCOREBOARD.md) | The memory/learning self-test numbers, updated after every change - not a one-day snapshot. |
 | [GRAPHENEOS.md](GRAPHENEOS.md) | What to check before moving the phone to GrapheneOS. Nothing needed building yet. |

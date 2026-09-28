@@ -418,8 +418,8 @@ Decided 2026-09-27, the owner's answers to `docs/OWNER-QUESTIONS-2026-09-27.md`
 - **The plan card is allowed later**, only after the multi-step safety tests
   pass; risky steps still get their own card.
 - **"From now on, ..." style requests apply at once, with Undo, no card.**
-- **Phone: allow home-network addresses** (private addresses and `.local`)
-  as the 2026-09-26 own-networks decision says; never the open internet.
+- ~~Phone: allow home-network addresses~~ - **replaced 2026-09-28** (see
+  the studio review block below): the phone stays on Tailscale/Meshnet.
 - **Focus report card: drop the streak line.**
 - **12 GB card:** longer conversations with picture understanding first, and
   making pictures too (swapped in when asked, since both cannot sit on the
@@ -493,6 +493,273 @@ here rather than patched blind:
   without the owner's go-ahead given how carefully this project already
   treats crisis handling. **Go-ahead given 2026-09-28: queued as milestone 8**
   (`docs/AUDIT-2026-09-28-REPO-REFS.md`).
+- **Fixed 2026-09-28 (the owner said fix it; commit 248227a2):** marking a
+  crisis answer "wrong" (the thumbs-down button) used to count toward
+  "suggest the bigger model" - the crisis exclusion above only covered the
+  live phrase-based signal and the struggle count. Now the chat route hands
+  a crisis turn's id to `jarvis_agent.note_crisis_turn` when it makes the
+  id (`second-card-suggest.patch`, on `wellbeing.patch`'s flag and again on
+  `run_local_turn`'s own check), and `note_correction` does not count a
+  mark on that id. `test_wellbeing.py` runs the join end to end.
+
+Decided 2026-09-27, the owner's answers after the studio review (play
+testers, scouts and integration scouts; `.claude/agents/`):
+- **Talk-to-type on the PC: one approval card to switch it on**, then no
+  card each time. Hold a key, speak, and Jarvis types what was said into the
+  program in front - speech-to-text on the PC only, as always. Switching it
+  off is immediate. Not on the phone (a client must not do speech-to-text).
+  Not built yet.
+- **Answers that used web search, weather or home status are read aloud**
+  when read-aloud would otherwise apply. Answers that used email, calendar,
+  notes, documents, memory, or any tool not on that short list stay on
+  screen, and every earlier rule (sensitive facts, the stricter hands-free
+  choice) still comes first. This replaces "any tool keeps the answer on
+  screen".
+- **Jarvis may hold a conversation with an AI chatbot (such as ChatGPT or
+  Gemini) for the owner**, asking it things and following up on its answers
+  **on its own, within limits the owner sets**. This loosens rule 4 and the
+  "ask each time" cloud rule (ARCHITECTURE §11) for this feature only. How
+  the limits work, and whether it uses the chatbot's official API or its
+  website, is being designed and comes back to the owner before anything is
+  built (`docs/CHATBOT-DRIVER-DESIGN.md`). It may need both graphics cards.
+  Rule 1 is unchanged: nothing private (email, files, credentials, memory)
+  goes into those chats.
+  Owner's answers, 2026-09-28: **Gemini first, through its website
+  (gemini.google.com), driven openly** - at human pace, in a visible
+  browser window, with nothing that hides it from or dodges Google's bot
+  detection, and no captcha-solving. The owner chose this knowing Google's
+  terms forbid automated access and that the account could be closed. A
+  request to add "tactics that help avoid bans" was declined: getting round
+  a site's bot protection is not something this project builds.
+  **A spare Google account used only by Jarvis**, not the owner's main
+  one (owner, 2026-09-28): a ban cannot touch the owner's Gmail, and the
+  owner's email and Gemini's memory of them stay out of these chats.
+- **Inbox tidy by voice: yes** (owner, 2026-09-28) - archive, star, mark
+  read, or move to Trash. One approval card lists every email it will
+  touch, approved on screen (never by voice), then Undo. "Delete" only ever
+  moves to Trash. The card says when the choice came from reading email
+  (outside text). A new named way out of the PC (ARCHITECTURE §4) and its
+  own gate action, like sending email. Not built yet.
+- **The phone connects through Tailscale or NordVPN Meshnet only** (owner,
+  2026-09-28), replacing "Phone: allow home-network addresses" of
+  2026-09-27. Allowing a home address would mean the PC also answering on
+  home Wi-Fi, where the pairing key travels unscrambled; the mesh networks
+  work at home too and scramble it.
+- **A "listening" sound after a bare "Hey Jarvis"** (owner, 2026-09-28):
+  only as part of the existing "I heard you" switch, which stays off by
+  default.
+- **Animal faces offer their own voice once** (owner, 2026-09-28): the
+  first time the owner picks an animal face, one line asks "The panda has
+  its own voice. Use it?" (Use it / Keep my voice), remembered per face. A
+  face never changes the voice by itself. **Confirmed 2026-09-28 over the
+  mascot branch's "Voice follows the face" switch, which was built on by
+  default:** that switch stays, but starts off, and the one-time question
+  turns it on. **The sea otter must not use Kokoro's "Sky" voice** (its name
+  matches the voice OpenAI withdrew in 2024 over a likeness complaint);
+  give it another Kokoro voice with the same playful pitch. Animal voices are Kokoro voices,
+  blends and pitch from Jarvis's own sources only - never a real person's
+  voice - and must pass the "not the owner's voice" check.
+- **Upgrade the voice pack to Kokoro v1.0** (owner, 2026-09-28): the best
+  rated voices, real British pronunciation, and a "Hear it" sample button
+  for every voice in both apps. The saved choice moves from a number to the
+  voice's name, and the owner's current choice carries over. A 350 MB
+  download on the PC, checksum-pinned. Not built yet.
+- **A "sneaky instruction" (prompt-injection) detector: test two, keep the
+  winner** (owner, 2026-09-28) - Meta's Prompt Guard 2 (Llama 4 Community
+  Licence: credit "Built with Llama", licence file, the owner downloads it
+  after accepting Meta's terms) and an Apache-licensed one (Horizon Labs
+  guard-small). Both run on Jarvis's own attack tests on the owner's PC;
+  whichever wins is kept, and it only ever adds a warning - it never removes
+  or replaces an approval card.
+- **A thumbs-down on a crisis answer stops counting toward "suggest the
+  bigger model"** (owner, 2026-09-28) - closes the gap written down in the
+  Opus 5.5 re-check above. Done (commit 248227a2).
+- **Build the chatbot driver first** (owner, 2026-09-28), ahead of easier
+  setup, voice upgrades and the other new abilities. It is **versatile**:
+  one driver with a separate "adapter" per chatbot website, Gemini first,
+  others added one at a time (each new chatbot is a new named way out of
+  the PC and gets the owner's OK first, since each company's terms differ).
+  **Two versions by hardware:** with both graphics cards, the full version
+  (long, flexible sessions, the driver model on the 12 GB card); with one
+  card, a limited version (shorter sessions, sharing the main card, waiting
+  while the owner chats). The two-card version is switched on only once
+  the second card is installed and measured.
+- **Phone: tap to talk, stopping at a pause** (owner, 2026-09-28), instead
+  of only hold-to-talk. The phone detects the pause (Smart Turn); the words
+  are still worked out on the PC after the voice check. A Stop button and a
+  time limit stay.
+- **Projects, like Claude's Projects and more** (owner, 2026-09-28): a
+  project has a name, its own instructions, files and chats, its goals
+  (built on the Goals feature, `jarvis_goals.py` on the continuation
+  branch - not a second goals system), benchmarks to measure progress, and
+  the work being built. **Both kinds**: coding projects (benchmarks are
+  tests, speed and scores) and life projects (benchmarks are numbers the
+  owner tracks). **Jarvis does real work**: it writes files and runs code
+  and benchmarks on the PC, and **every change asks first with a card**,
+  like everything else. Designed in `docs/PROJECTS-DESIGN.md` before
+  anything is built; queued after the chatbot driver unless the owner says
+  otherwise.
+  Owner's answers to the design's questions (2026-09-28):
+  **a "Shareable" switch per project, off by default** - when on, a short
+  piece of the project's files may go to a web search or the chatbot
+  driver, shown word for word on its card first; never health or money
+  numbers, and never memory, email or credentials. This bends rule 1 for
+  that shown piece only, the way the locked backup bends it for one file.
+  **Build order inside Projects:** projects, goals, benchmarks, charts and
+  running tests first; Jarvis writing code comes once the 12 GB card is
+  installed and measured.
+  **A private mark Jarvis added by itself to a benchmark** (a tracked
+  number, e.g. "5k time" mistaken for money) **can be removed by the owner,
+  with a card first** (owner, 2026-09-28), because afterwards those numbers
+  may be read aloud. A mark the owner added comes off with no card, as
+  built.
+- **Swiping on approval cards is a setting that can be turned off**
+  (owner, 2026-09-28): "Swipe to approve or deny" on the phone's Security
+  screen, on by default. Off, every card is decided with its buttons only.
+  Turning it off is instant; turning it back on asks for the fingerprint or
+  PIN, like every other loosening there. The desktop has no swipe.
+- **The chatbot driver becomes versatile** (owner, 2026-09-28): (1) **an
+  API adapter** - one adapter speaking the common OpenAI-style API, so a key
+  reaches ChatGPT, DeepSeek, Mistral, Grok, OpenRouter and similar (keys
+  under rule 3; each host a named way out); (2) **more websites, driven
+  openly like Gemini**, each with its own spare account - **ChatGPT, Claude,
+  Microsoft Copilot, Perplexity, and other commonly used chatbot websites**;
+  (3) **a second AI on the owner's own PC** (another local model, best on
+  the 12 GB card; nothing leaves the PC); and (4) **compare**: ask several
+  AIs the same question, one card listing every AI it will ask, one summary
+  of agreements, disagreements and sources.
+  **The chatbots the studio picked are confirmed** (owner, 2026-09-28,
+  after the feature audit noted they had gone in without a per-company OK):
+  DeepSeek, Grok, Le Chat and Meta AI websites and the Groq API stay, next
+  to the ChatGPT, Claude, Copilot and Perplexity the owner named. Any
+  further chatbot still gets the owner's OK first.
+  **A money limit comes before API chatbots are used for real** (owner,
+  2026-09-28): a monthly amount per service, set on the PC; Jarvis stops
+  that service when it is reached, and the approval card shows how much is
+  left. Prices change, so the amount is an estimate from a price list the
+  owner can see and correct, and the card says "about".
+  **Built 2026-09-28; the owner then chose to make it a hard stop too:**
+  Jarvis also asks each service to cap how long an answer can be, so one
+  long answer cannot carry a month past the limit. Each service names that
+  setting differently, so each one's own documentation is checked before
+  it is used. Built 2026-09-28 (field names confirmed from each company's
+  own code on GitHub, their documentation sites being blocked); **the owner
+  chose (2026-09-28): DeepSeek, whose field could not be confirmed, stays
+  usable with the estimate check only, and OpenAI keeps gpt-5-mini** even
+  though its hidden thinking can shorten answers near the limit.
+  **Compare, as built, is confirmed** (owner, 2026-09-28): up to 3 chatbots
+  per comparison on one graphics card and 4 on two, asked one after
+  another; a chatbot that shows a captcha or sign-in page is left out and
+  the others carry on (the summary says who and why), rather than pausing
+  the whole comparison.
+- **Customer-support chats** (Groupon's and similar, owner 2026-09-28) are a
+  separate mode of the driver, because the other side is a company acting
+  on the owner's real account, often a real person: **one card before each
+  support chat lists exactly which personal details Jarvis may give** (order
+  number, email and so on - never passwords or payment card numbers);
+  **every offer (refund, cancellation, change) gets its own card**, and
+  nothing is accepted until the owner approves it. ~~Jarvis says at the
+  start that it is an AI assistant~~ - **changed 2026-09-28 (owner): no
+  opening disclosure line; Jarvis writes in the owner's name**, like any
+  message an assistant drafts for someone. **If the agent asks directly
+  whether they are talking to a bot, Jarvis never claims to be human: it
+  pauses and hands that question to the owner**, who answers in the window. Designed in `docs/CHATBOT-DRIVER-DESIGN.md` before it is built.
+  Owner's answers to the design (2026-09-28): **Jarvis sends the messages
+  itself**, at human speed (and never hiding from the site's bot detection),
+  and **each card names that
+  company's terms risk** before the owner approves (the real account could
+  be closed); **identity checks** (last digits of a card, security
+  questions, codes) **are always handed to the owner** in the window, never
+  answered by Jarvis.
+- **Jarvis may look at the owner's screen, on the PC and the phone**
+  (owner, 2026-09-28), two ways: **"Look at this"** - one look when the
+  owner asks (a key on the PC; the assistant gesture on the phone), nothing
+  saved; and **"Watch with me"** - a live session the owner starts and
+  stops, with a visible "Jarvis is watching" sign the whole time, pausing
+  on password fields and on apps the owner excludes (banking), nothing
+  saved. What Jarvis sees is outside text. Screen images stay on the owner's
+  own devices (the phone sends them only to the PC, over Tailscale/Meshnet).
+  Full picture understanding needs the 12 GB card; with one card, Jarvis
+  reads the screen's text only. **Not** always-on watching with a history
+  (Recall-style) - the owner declined it. Designed in
+  `docs/SCREEN-DESIGN.md` before it is built.
+  Owner's answers to the design (2026-09-28): **the question and Jarvis's
+  answer about the screen are kept in chat history like any chat** (the
+  picture and the screen's words never are); **screen answers are read
+  aloud** unless a sensitive fact was used or the strict hands-free setting
+  says otherwise - a named exception to "a reading tool keeps the answer on
+  screen".
+  **Under "Only trust the talk button", screen answers stay on screen**
+  (owner, 2026-09-28): a turn started by "Hey Jarvis" gets a written answer
+  about the screen only. **A voice setting lets the owner allow reading them
+  aloud** even then; like the other voice settings, turning it on raises an
+  approval card and turning it off is immediate.
+- **"Jarvis Live": design voice and camera together now** (owner,
+  2026-09-28), like Gemini Live: a back-and-forth voice conversation the
+  owner starts and stops, with no wake word between turns and interrupting
+  at any time, plus showing Jarvis the phone's camera. The voice check still
+  runs on every clip, cards are still decided by tapping (never by voice),
+  and everything stays on the owner's own devices. Not full-duplex (that
+  skips the voice check), so a turn takes about 2-4 seconds (estimated; corrected by the design). The camera
+  understands pictures only with the 12 GB card (Qwen 3.5 9B or Qwen3-VL
+  8B, unmeasured); with one card there is no camera (see the owner's answers below). The camera part stays
+  off until the card is in and a photo test passes. Designed in
+  `docs/LIVE-DESIGN.md` and brought back to the owner before anything is
+  built.
+  Owner's answers to the design (2026-09-28): **under "Only trust the talk
+  button", a Live session is trusted like the talk button by default**
+  (the owner pressed Start), **with a voice setting to give Live the extra
+  "Hey Jarvis" caution instead**; choosing the extra caution is immediate,
+  going back raises an approval card, like the other voice settings.
+  **Answers about what the camera sees are read aloud, like screen
+  answers**, unless a sensitive fact was used or the strict setting says
+  otherwise. **The camera stays off until the 12 GB card is in and passes
+  the photo test** - no words-only camera on one card.
+  After the rules check (owner, 2026-09-28): **a Live session started by
+  voice ("Hey Jarvis, let's talk") is trusted the same as one started with
+  the button** by default, and **the Live voice setting can change it** -
+  its choices are full trust (default), "only when started with the
+  button", and the "Hey Jarvis" caution for all of Live; a stricter choice
+  is immediate, a looser one raises an approval card. **Live pauses itself
+  during a phone or video call** and picks up afterwards (whether Windows
+  and Android can always tell a call is happening is to be checked; where
+  they cannot, the app says so and the Mute button covers it).
+  After the voice play-test (owner, 2026-09-28): **Live keeps the 2-second
+  voice check** - no "Balanced" option for Live; tap buttons cover quick
+  answers. **Side remarks to someone else are ignored**: when a Live clip is
+  clearly not meant for Jarvis, Jarvis stays silent and nothing from it is
+  learned.
+  After the build (owner, 2026-09-28): **with App lock on, the PC ends Live
+  when App lock would ask again** (1 minute after the owner last touched a
+  Jarvis window, talking does not count) by default, **with a setting to
+  end it only when Windows itself locks**; the looser choice raises an
+  approval card, the stricter one is immediate. **The desktop Brain's
+  existing "Live" tab is renamed "Now"** (and, after the review track,
+  2026-09-28: **after a crisis turn, Live quietly gets more time and skips
+  the "minutes left" warning**; **the two interrupt settings become one** -
+  interrupt by voice, by tap only, or not at all - for Live and normal use
+  alike; **side remarks are not kept in chat history at all**) so it is
+  not confused with
+  Jarvis Live.
+- **"Forget a time frame"** (owner, 2026-09-28): the owner may ask, by
+  voice or typing, to forget what Jarvis learned or said in a time frame
+  ("forget what you learned last week", "delete my chats from 1 to 15
+  September"). Nothing is removed at once: both apps show the exact facts
+  and chats from that time, each ticked, the owner can untick any, and ONE
+  approval card listing every item is decided by tapping only - never by
+  voice. Approved, the facts are **forgotten (retired, as Forget does) and
+  the chats deleted, with 10 minutes to Undo**; erasing a fact's words for
+  good stays the separate per-fact "Erase the words". This is the one
+  exception to "irreversible bulk actions stay off the API" (JARVIS-API
+  §18), made safe by the list, the card and the Undo window.
+  Built 2026-09-28 (JARVIS-API §64); **the owner kept its card a risky
+  approval** (Windows Hello on the PC, the screen lock on the phone),
+  because after the 10 minutes the chats are gone for good; Undo stays one
+  tap.
+- **Jarvis is built for one or two graphics cards.** Research and new
+  features say which they need; a feature may need two if a one-card PC
+  still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
+  first so they do not re-research what Jarvis already has.
 
 Decided 2026-09-27, when the owner asked for a 3D animal face (with
 Gemini's notes as input, not instructions):
@@ -1105,8 +1372,10 @@ Linux dependency graph pulls `gdk-sys`, and GTK is not installed. For a long
 time that meant every Rust change was pushed unverified and checked by CI five
 minutes later.
 
-**It does not have to be.** The `x86_64-pc-windows-msvc` target is installed,
-and checking against it selects the *Windows* dependency graph, which has no
+**It does not have to be.** Check against the `x86_64-pc-windows-msvc`
+target. It is not always installed in a fresh container (it was missing on
+2026-09-27): if `rustup target list --installed` does not list it, run
+`rustup target add x86_64-pc-windows-msvc` first. Checking against it selects the *Windows* dependency graph, which has no
 GTK in it. Nothing is linked, so no MSVC toolchain is needed:
 
 ```

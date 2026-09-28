@@ -73,6 +73,8 @@ TITLES = {
     "web_research": "search GitHub",
     "research_authenticated": "search GitHub signed in as you",
     "search_the_web": "search the web",
+    # jarvis_chatbot.py: ONE card per conversation with an AI chatbot (not routed yet)
+    "chatbot_session": "hold a conversation with an AI chatbot for you",
     "stop_asking_before_every_web_search": "stop asking before every web search",
     # --- notes
     "read_joplin_note": "read a note in Joplin",
@@ -123,6 +125,8 @@ TITLES = {
     "learning_sensitive_enable": "also learn sensitive topics automatically",
     "history_enable": "keep your chat history",
     "memory_manage": "change what it remembers",
+    # jarvis_forget_range.py (2026-09-28): ONE card for a whole time frame
+    "memory_forget_range": "forget what it learned and delete chats from the days you chose",
     "user_profile_manage": "change your profile",
     # --- voices
     "custom_voice": "keep or use a custom voice",

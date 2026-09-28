@@ -44,6 +44,7 @@ import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.MemoryCardKind
 import com.jarvis.client.net.MemoryCardView
 import com.jarvis.client.net.MemoryCards
+import com.jarvis.client.net.ModelChat
 import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.ModelsView
 import com.jarvis.client.net.SecondCard
@@ -63,6 +64,7 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Refuse
 import com.jarvis.client.ui.parts.Rule
+import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
@@ -249,6 +251,14 @@ fun BrainScreen(
      * plate points at should not be assumed.
      */
     onOpenSettings: (() -> Unit)? = null,
+    /**
+     * "Open <a place>" by voice or chat ([com.jarvis.client.ui.OpenPlace]):
+     * the item key to bring into view once - "briefing", "hardware",
+     * "second-card", "big-model" or "capabilities" - or null for the top.
+     */
+    initialSection: String? = null,
+    /** Called once [initialSection] has been acted on, so it is not acted on again. */
+    onSectionConsumed: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     // The same test ModelsPlate always had, now shared by every control on this
@@ -292,6 +302,7 @@ fun BrainScreen(
         // that line is on, and that plate is on screen when it is tapped.
         val listState = rememberLazyListState()
         val listScope = rememberCoroutineScope()
+        ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             state = listState,
@@ -481,11 +492,33 @@ fun BrainScreen(
                 FocusSection(canAct = canAct, privateHidden = privateHidden)
             }
 
+            // "Talk to a chatbot for me" (the owner's decisions of 2026-09-27
+            // and 2026-09-28): start one (ONE approval card on the PC), the
+            // conversation with the chatbot's words marked outside text,
+            // Pause/Resume/Stop, new limits, the summary (ChatbotPlate.kt) -
+            // the desktop's Brain -> Work, the same card.
+            item(key = "chatbot") {
+                ChatbotSection(canAct = canAct, privateHidden = privateHidden)
+            }
+
             // "Morning briefing" (the owner's decisions of 2026-09-25): the
             // latest one, "Brief me now", and when it arrives
             // (BriefingPlate.kt) - the desktop's Brain -> Work and Settings.
             item(key = "briefing") {
                 BriefingSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
+            // "Projects" (the owner's decision of 2026-09-28): projects,
+            // their notes and benchmarks with a chart (ProjectsPlate.kt) -
+            // the desktop's Brain -> Projects. It reads and acts through
+            // JarvisRuntime directly.
+            item(key = "projects") {
+                ProjectsSection(
                     canAct = canAct,
                     privateHidden = privateHidden,
                     showPrivateBusy = showPrivateBusy,
@@ -589,6 +622,20 @@ fun BrainScreen(
                         onShowPrivate = onShowPrivate,
                     )
                 }
+            }
+            // "Forget a time frame" (the owner's decision of 2026-09-28;
+            // ForgetRangePlate.kt): the days, the ticked list of facts and
+            // chats, "Forget these" (ONE approval card), then 10 minutes of
+            // Undo - next to History, as the desktop puts it on its History
+            // tab. "forget what you learned last week" opens this item
+            // (OpenPlace, "forget-range").
+            item(key = "forget-range") {
+                ForgetRangeSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
             }
             if (privateHidden) {
                 item(key = "memory-hidden") {
@@ -1057,6 +1104,11 @@ private fun LiveModelsBody(
         entries.forEachIndexed { i, entry ->
             if (i > 0) Rule()
             val isCurrent = entry.ref == current
+            // An embedding model (nomic-embed-text) cannot answer anything,
+            // so it gets no "Use" - and the row says why rather than
+            // showing a greyed-out button (the desktop's rule and words,
+            // net/ModelChat.kt).
+            val chats = entry.canChat
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1071,6 +1123,7 @@ private fun LiveModelsBody(
                         entry.family,
                         entry.sizeBytes?.let { bytes(it) },
                         if (entry.ref == models.previous && !isCurrent) "the previous model" else null,
+                        if (chats) null else ModelChat.CANNOT_CHAT,
                     )
                     if (meta.isNotEmpty()) {
                         Gap(2)
@@ -1084,7 +1137,7 @@ private fun LiveModelsBody(
                 Spacer(Modifier.width(8.dp))
                 if (isCurrent) {
                     Pill("Active", color = chrome.okInk)
-                } else {
+                } else if (chats) {
                     Quiet(
                         if (busy) "…" else "Use",
                         enabled = !busy && canAct,
@@ -1175,6 +1228,7 @@ private fun StaleModelsBody(
                         entry.sizeBytes?.let { bytes(it) },
                         if (isCurrent) "as of the last connection, this was the one in use" else null,
                         if (entry.ref == cached.previous && !isCurrent) "the previous model" else null,
+                        if (entry.canChat) null else ModelChat.CANNOT_CHAT,
                     )
                     if (meta.isNotEmpty()) {
                         Gap(2)
@@ -1190,7 +1244,7 @@ private fun StaleModelsBody(
                 // right now, which nothing offline can promise. Use stays on
                 // screen but dimmed by canAct, the same as every other write
                 // on this screen while the link is down (rule 4).
-                if (!isCurrent) {
+                if (!isCurrent && entry.canChat) {
                     Quiet(
                         if (busy) "…" else "Use",
                         enabled = !busy && canAct,

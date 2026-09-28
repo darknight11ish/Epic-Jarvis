@@ -138,8 +138,22 @@ object Schedule {
     /** Stands in for words the private lists hide. */
     const val HIDDEN_TEXT = "(hidden)"
 
-    /** Under an answer made without the model (X-Jarvis-Route `quick`). */
+    /**
+     * Under an answer made without the model (X-Jarvis-Route `quick`) - the
+     * PC's own words, word for word (jarvis_quick.DONE_LINE, coming-up.js).
+     * Kept here unchanged because the desktop's tests/coming-up.mjs holds
+     * this file to it. The phone shows [DONE_LINE_HERE] instead.
+     */
     const val DONE_LINE = "Done - answered on this PC without the AI model."
+
+    /**
+     * [DONE_LINE] as the phone shows it. "This PC" is right on the desktop
+     * and wrong on a phone, where the owner is holding something that is not
+     * a PC at all (phone walk-through, 2026-09-27). Made FROM the shared
+     * sentence rather than typed out again, so a change to the PC's words
+     * still reaches the phone; ScheduleTest checks the swap really happened.
+     */
+    val DONE_LINE_HERE: String = DONE_LINE.replace("on this PC", "on your PC")
 
     /** The phone's line about where reminders go off. */
     const val PC_IS_THE_CLOCK =

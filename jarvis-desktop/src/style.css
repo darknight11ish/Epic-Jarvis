@@ -205,7 +205,9 @@ html[data-state="streaming"] .shell::before {
 
 .field {
   flex: 1 1 auto;
-  min-width: 0;
+  /* Never squeezed to nothing: at 200% text the buttons beside it used to
+     leave the typing box 7 px wide (the Live review, 2026-09-28). */
+  min-width: min(9rem, 45%);
   display: flex;
   align-items: center;
 }
@@ -458,10 +460,13 @@ html[data-state="error"] .reactor-ring-mid {
    -------------------------------------------------------------------------- */
 
 .bar-meta {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .route {
@@ -2394,4 +2399,78 @@ html[data-state="approval"] .pulse {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   color: var(--text-faint);
+}
+
+/* -- Jarvis Live (live-rules.js): the sign in the bar ------------------- */
+.jarvis-live {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+.jarvis-live[hidden] {
+  display: none;
+}
+.jarvis-live-sign {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text);
+}
+#jarvis-live-detail {
+  color: var(--text-muted);
+}
+.jarvis-live-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.jarvis-live-hint[hidden] {
+  display: none;
+}
+.jarvis-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bad);
+  align-self: center;
+}
+.jarvis-live[data-muted="true"] .jarvis-live-dot,
+.jarvis-live[data-ended="true"] .jarvis-live-dot {
+  background: var(--text-faint);
+}
+.jarvis-live-actions,
+.jarvis-live-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* The tap buttons sit under the answer they answer, not in the sign. */
+.jarvis-live-chips {
+  margin: 8px 0 0;
+}
+.jarvis-live-chips[hidden],
+.jarvis-live-actions button[hidden] {
+  display: none;
+}
+#jarvis-live-toggle[aria-pressed="true"] {
+  color: var(--bad);
+}
+/* The Live button says "Live" beside its icon (the review: an unlabelled
+   icon that only turned red). */
+.icon-button.live-toggle {
+  display: inline-flex;
+  gap: 4px;
+  width: auto;
+  padding: 0 6px;
+}
+.live-toggle-label {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }

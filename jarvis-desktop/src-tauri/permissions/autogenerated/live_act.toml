@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-live-act"
+description = "Enables the live_act command without any pre-configured scope."
+commands.allow = ["live_act"]
+
+[[permission]]
+identifier = "deny-live-act"
+description = "Denies the live_act command without any pre-configured scope."
+commands.deny = ["live_act"]

@@ -429,6 +429,45 @@ def strict_cases():
             {"mode": "hands_free", "value": "button_only"})), w)
         status["hands_free_button_only"] = scrub(S.status(), w)
         heard["button_only_talk_button"] = hear("What time is it?")
+        # The owner's decision (2026-09-28): under "Only trust the talk
+        # button", answers about the screen after "hey Jarvis" stay on
+        # screen; reading them aloud even then is the voice card, keeping
+        # them on screen again is immediate. (The talk button's own clips
+        # carry screen_aloud true either way - backend/test_voice_strict.py
+        # has the "hey Jarvis" clips.)
+        answers["screen_aloud_waiting"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_aloud"}, spawn=never)), w)
+        E._reset_for_tests()
+        answers["screen_aloud_denied"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_aloud"}, g=gate("denied"))), w)
+        status["screen_aloud_denied"] = scrub(S.status(), w)
+        answers["screen_aloud_approved"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_aloud"})), w)
+        status["screen_aloud"] = scrub(S.status(), w)
+        answers["screen_on_screen"] = scrub(answer(post(
+            {"mode": "hands_free_screen", "value": "screen_on_screen"})), w)
+        status["screen_back_on_screen"] = scrub(S.status(), w)
+        # The owner's answers of 2026-09-28 (docs/LIVE-DESIGN.md): under "Only
+        # trust the talk button", Jarvis Live is trusted like the talk button
+        # by default however it started; "Only when I start it with the
+        # button" and "Be as careful as with Hey Jarvis" are stricter and
+        # immediate; each looser choice is the voice card.
+        status["live_default"] = scrub(S.status(), w)
+        answers["live_button_start_only"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_button_start_only"})), w)
+        status["live_button_start_only"] = scrub(S.status(), w)
+        answers["live_caution"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_like_hey_jarvis"})), w)
+        status["live_caution"] = scrub(S.status(), w)
+        answers["live_trusted_waiting"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_trust_fully"}, spawn=never)), w)
+        E._reset_for_tests()
+        answers["live_trusted_denied"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_trust_fully"}, g=gate("denied"))), w)
+        status["live_trusted_denied"] = scrub(S.status(), w)
+        answers["live_trusted_approved"] = scrub(answer(post(
+            {"mode": "hands_free_live", "value": "live_trust_fully"})), w)
+        status["live_trusted"] = scrub(S.status(), w)
         answers["hands_free_back_waiting"] = scrub(answer(post(
             {"mode": "hands_free", "value": "same_as_button"}, spawn=never)), w)
         E._reset_for_tests()

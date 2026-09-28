@@ -28,6 +28,15 @@ data class Security(
     val approvals: ApprovalCheck = ApprovalCheck.RISKY,
     val privateLists: Boolean = false,
     val method: CheckMethod = CheckMethod.FINGERPRINT_OR_PIN,
+    /**
+     * "Swipe to approve or deny" on the phone's approval cards (the owner,
+     * 2026-09-28: a setting that can be turned off). On by default - the
+     * behaviour before the setting existed. Off, every card is decided with
+     * its buttons only, even one the PC marks `risk.swipe_ok`. Turning it off
+     * is stricter, so instant; turning it back on loosens, so it needs the
+     * check ([SecurityRules.loosens]).
+     */
+    val swipeDecides: Boolean = true,
 ) {
     /**
      * True when the owner has asked for anything stricter than the defaults.
@@ -255,8 +264,15 @@ object SecurityRules {
      * screens: memory, history and answers are on most of them. Off with
      * both off, so nothing changes for an owner who asked for neither. The
      * recent-apps picture is blank under the same rule.
+     *
+     * [keyShown]: the pairing token is shown in plain letters on the pairing
+     * screen ("Show token", phone walk-through C8, 2026-09-27). While it is,
+     * the screen cannot be captured whatever the settings say - the token is
+     * the one secret that opens Jarvis - and the rule falls back to the
+     * settings the moment it is hidden again.
      */
-    fun blockScreenCapture(s: Security): Boolean = s.appLock || s.privateLists
+    fun blockScreenCapture(s: Security, keyShown: Boolean = false): Boolean =
+        s.appLock || s.privateLists || keyShown
 
     /**
      * True when going from [from] to [to] weakens anything. Any one field is
@@ -268,7 +284,8 @@ object SecurityRules {
             to.relockAfter.ms > from.relockAfter.ms ||
             (from.approvals == ApprovalCheck.EVERY && to.approvals == ApprovalCheck.RISKY) ||
             (from.privateLists && !to.privateLists) ||
-            (from.method == CheckMethod.FINGERPRINT_ONLY && to.method == CheckMethod.FINGERPRINT_OR_PIN)
+            (from.method == CheckMethod.FINGERPRINT_ONLY && to.method == CheckMethod.FINGERPRINT_OR_PIN) ||
+            (!from.swipeDecides && to.swipeDecides)
 
     /**
      * Why a tightening cannot be taken, or null when it can. [availability]
@@ -313,15 +330,26 @@ object SecurityRules {
 
     /** One line for the Security card on Checks. */
     fun summary(s: Security): String {
-        if (!s.anyLockOn) return "Off. Your fingerprint or PIN is asked for risky approvals only."
+        val swipeOff = if (s.swipeDecides) "" else " $SWIPE_OFF_SUMMARY"
+        if (!s.anyLockOn) return "Off. Your fingerprint or PIN is asked for risky approvals only.$swipeOff"
         val parts = buildList {
             add(if (s.appLock) "App lock on (${s.relockAfter.label.lowercase()})" else "App lock off")
             add(if (s.approvals == ApprovalCheck.EVERY) "every approval asks" else "risky approvals ask")
             if (s.privateLists) add("memory lists hidden")
             if (s.method == CheckMethod.FINGERPRINT_ONLY) add("fingerprint only")
         }
-        return parts.joinToString(", ").replaceFirstChar { it.uppercase() } + "."
+        return parts.joinToString(", ").replaceFirstChar { it.uppercase() } + "." + swipeOff
     }
+
+    /** Said on Checks' Security line when swiping is off. */
+    const val SWIPE_OFF_SUMMARY = "Swiping to decide is off."
+
+    /** The Security screen's switch, and what it does. */
+    const val SWIPE_TITLE = "Swipe to approve or deny"
+    const val SWIPE_DETAIL =
+        "On cards your PC marks as safe for a quick gesture, swipe right to approve " +
+            "and left to deny. Off, every card is decided with its buttons only. " +
+            "Turning it back on asks for your fingerprint or PIN."
 
     const val CHECK_NOT_SHOWN =
         "The fingerprint or PIN check could not be shown just now, so nothing was sent. " +
@@ -336,6 +364,7 @@ object SecurityRules {
         KEY_APPROVALS to s.approvals.wire,
         KEY_PRIVATE to s.privateLists.toString(),
         KEY_METHOD to s.method.wire,
+        KEY_SWIPE to s.swipeDecides.toString(),
     )
 
     /**
@@ -349,6 +378,9 @@ object SecurityRules {
         approvals = ApprovalCheck.fromWire(get(KEY_APPROVALS)),
         privateLists = get(KEY_PRIVATE) == "true",
         method = CheckMethod.fromWire(get(KEY_METHOD)),
+        // Missing or unreadable reads as on: the behaviour before the
+        // setting existed, never something looser than it.
+        swipeDecides = get(KEY_SWIPE) != "false",
     )
 
     const val KEY_APP_LOCK = "security_app_lock"
@@ -356,6 +388,7 @@ object SecurityRules {
     const val KEY_APPROVALS = "security_approvals"
     const val KEY_PRIVATE = "security_private_lists"
     const val KEY_METHOD = "security_method"
+    const val KEY_SWIPE = "security_swipe_decides"
 }
 
 /**
@@ -390,6 +423,21 @@ class LockSession {
 
     /** Whether Mind's private lists should be hidden now. */
     fun privateHidden(s: Security): Boolean = s.privateLists && !privateShown
+
+    /**
+     * Whether App lock WOULD lock Jarvis now, were it brought back in sight:
+     * locked already, or out of sight for "Lock again after" or longer (a
+     * fingerprint or PIN check under way does not count). Asks nothing and
+     * changes nothing. Jarvis Live on this phone ends then.
+     */
+    fun wouldLock(nowMs: Long, s: Security): Boolean {
+        if (!s.appLock) return false
+        if (!unlocked) return true
+        if (checking) return false
+        val from = awayFrom ?: return false
+        val away = nowMs - from
+        return away < 0 || away >= s.relockAfter.ms
+    }
 
     /** Jarvis went out of sight (not a rotation - the activity checks that). */
     fun left(nowMs: Long) {

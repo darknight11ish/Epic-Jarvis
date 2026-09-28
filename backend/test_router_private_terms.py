@@ -222,6 +222,44 @@ def t_an_ollama_cloud_model_is_never_local():
               RT.is_local_lane(name, name) and d.inject_memory is True, d)
 
 
+def t_a_turn_carrying_the_screen_stays_local():
+    """"Look at this" and "Watch with me" (docs/SCREEN-DESIGN.md section 5,
+    2026-09-28): a turn carrying words read off the owner's screen stays on
+    this PC like a picture does - even when it is long, complex, not a
+    private-topic question, a cloud lane is offered, the budget allows it,
+    and the owner said yes for this question. The words on screen can be an
+    email or a bank page; the private-topic check reads only the question."""
+    q = "what does this say about the plan" + PAD
+    base = dict(local_model="jarvis-primary", lanes=list(LANES), owner_said_yes=True,
+                budget=RT.Budget(path=None))
+    control = RT.choose(q, **base)
+    check("CONTROL: the same question without the screen escalates (the owner said yes)",
+          control.gate == "escalate" and control.lane == LANES[0], control.as_dict())
+    d = RT.choose(q, has_screen=True, **base)
+    check("with the screen's words: stays on this PC, gate 'screen'",
+          d.gate == "screen" and d.lane == "jarvis-primary", d.as_dict())
+    check("... no cloud lane is offered for it either", not d.offer, d.as_dict())
+    check("... the reason says why, in plain words",
+          "screen" in d.reason and "stays on this machine" in d.reason, d.reason)
+    d = RT.choose(q, has_screen=True, has_image=True, **base)
+    check("with a picture too: still local", d.lane == "jarvis-primary"
+          and d.gate in ("image", "screen"), d.as_dict())
+    d = RT.choose(q, local_model="glm-4.6:cloud", lanes=list(LANES), has_screen=True,
+                  owner_said_yes=True, budget=RT.Budget(path=None))
+    check("an Ollama cloud model as the 'local' lane is still refused first",
+          d.gate == "cloud_model" and d.inject_memory is False, d.as_dict())
+    seen = []
+    real = getattr(FW, "audit_log", None)
+    FW.audit_log = lambda event, detail=None, **k: seen.append(event)
+    try:
+        RT.choose(q, has_screen=True, **base)
+    finally:
+        if real is not None:
+            FW.audit_log = real
+    check("has_screen is a real argument, not one **_extra swallows",
+          "router.unknown_argument" not in seen, seen)
+
+
 if __name__ == "__main__":
     for fn in (t_every_config_topic_keeps_a_turn_local,
                t_the_built_in_list_covers_the_topics_on_its_own,
@@ -229,7 +267,8 @@ if __name__ == "__main__":
                t_a_word_added_to_the_config_takes_effect,
                t_the_hud_call_shape_still_works,
                t_distress_and_crisis_words_stay_local,
-               t_an_ollama_cloud_model_is_never_local):
+               t_an_ollama_cloud_model_is_never_local,
+               t_a_turn_carrying_the_screen_stays_local):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

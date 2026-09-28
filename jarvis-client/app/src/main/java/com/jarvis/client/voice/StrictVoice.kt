@@ -219,6 +219,77 @@ object StrictVoice {
         return view.blocked[setting]?.takeIf { it.isNotBlank() }?.let { VoiceRounds.sentence(it) }
     }
 
+    /**
+     * Answers about the screen ("Look at this", "Watch with me") to a
+     * question started with "Hey Jarvis", under "Only trust the talk
+     * button" (the owner's decision, 2026-09-28): kept on screen by default;
+     * reading them aloud even then is the looser choice and raises the voice
+     * card. Under "Same as the talk button" it changes nothing
+     * ([SCREEN_ONLY_WHEN_STRICT]). Offered only when the PC reports it.
+     */
+    val HANDS_FREE_SCREEN: List<Choice> = listOf(
+        Choice(
+            VoiceStrict.SCREEN_ON_SCREEN,
+            "Keep on screen (recommended)",
+            "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts " +
+                "with \"Hey Jarvis\" gets a written answer only.",
+        ),
+        Choice(
+            VoiceStrict.SCREEN_ALOUD,
+            "Read aloud",
+            "Those answers are read aloud, even with \"Only trust the talk button\" chosen. Anyone " +
+                "near the speaker will hear them.",
+        ),
+    )
+
+    const val HANDS_FREE_SCREEN_TITLE = "Answers about your screen or the camera after \"Hey Jarvis\""
+
+    /**
+     * Jarvis Live under "Only trust the talk button" (the owner's answers,
+     * 2026-09-28): trusted like the talk button by default however it was
+     * started. Two stricter choices apply at once; each looser one raises
+     * the voice card. The desktop's `HANDS_FREE_LIVE` (voice-training.js),
+     * the same words. Under "Same as the talk button" it changes nothing
+     * ([LIVE_ONLY_WHEN_STRICT]).
+     */
+    val HANDS_FREE_LIVE: List<Choice> = listOf(
+        Choice(
+            VoiceStrict.LIVE_TRUST_FULLY,
+            "Trust Live fully (default)",
+            "What you say in Jarvis Live is trusted like the talk button, however you started Live.",
+        ),
+        Choice(
+            VoiceStrict.LIVE_BUTTON_START_ONLY,
+            "Only when I start it with the button",
+            "A Live you start with the button is trusted like the talk button. One started by saying " +
+                "\"Hey Jarvis, let's talk\" gets the \"Hey Jarvis\" caution.",
+        ),
+        Choice(
+            VoiceStrict.LIVE_LIKE_WAKE,
+            "Be as careful as with \"Hey Jarvis\"",
+            "Everything said in Jarvis Live gets the \"Hey Jarvis\" caution: no facts learned without a " +
+                "card, and memory or private answers stay on screen.",
+        ),
+    )
+
+    /** The review of 2026-09-28: say what the setting is, not just "Jarvis Live". */
+    const val HANDS_FREE_LIVE_TITLE = "How far Jarvis Live is trusted"
+
+    /** Under the Live choices while "Same as the talk button" is chosen. The desktop's `LIVE_ONLY_WHEN_STRICT_NOTE`. */
+    const val LIVE_ONLY_WHEN_STRICT =
+        "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the " +
+            "talk button\", Jarvis Live is trusted like the talk button already."
+
+    /**
+     * Under the screen choices while "Same as the talk button" is chosen:
+     * then answers about the screen are read aloud already, so this setting
+     * changes nothing. The choices stay open - it takes over if the
+     * hands-free choice changes. The desktop's `SCREEN_ONLY_WHEN_STRICT_NOTE`.
+     */
+    const val SCREEN_ONLY_WHEN_STRICT =
+        "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the " +
+            "talk button\", answers about your screen or the camera are read aloud already."
+
     const val PRIVACY_ONLY_VERY_STRICT =
         "\"Voice check is enough\" can only be chosen while the check is very strict."
 
@@ -255,6 +326,10 @@ object StrictVoice {
             VoiceRounds.sentence(view.wakeConfirmNote)
         setting == VoiceStrict.SENSITIVE_MEMORY && view.memory == VoiceStrict.MEMORY_ON_SCREEN &&
             view.privacy != VoiceStrict.VOICE_IS_ENOUGH -> SENSITIVE_COVERED_BY_MEMORY
+        setting == VoiceStrict.HANDS_FREE_SCREEN && view.handsFree == VoiceStrict.SAME_AS_BUTTON ->
+            SCREEN_ONLY_WHEN_STRICT
+        setting == VoiceStrict.HANDS_FREE_LIVE && view.handsFree == VoiceStrict.SAME_AS_BUTTON ->
+            LIVE_ONLY_WHEN_STRICT
         else -> null
     }
 
@@ -269,6 +344,8 @@ object StrictVoice {
         VoiceStrict.HANDS_FREE -> HANDS_FREE
         VoiceStrict.WAKE_CONFIRM -> WAKE_CONFIRM
         VoiceStrict.VOICE_ID_MODEL -> VOICE_ID_MODEL
+        VoiceStrict.HANDS_FREE_SCREEN -> HANDS_FREE_SCREEN
+        VoiceStrict.HANDS_FREE_LIVE -> HANDS_FREE_LIVE
         else -> PRIVACY
     }
 
@@ -280,6 +357,8 @@ object StrictVoice {
         VoiceStrict.HANDS_FREE -> view.handsFree
         VoiceStrict.WAKE_CONFIRM -> view.wakeConfirm
         VoiceStrict.VOICE_ID_MODEL -> view.voiceIdModel
+        VoiceStrict.HANDS_FREE_SCREEN -> view.handsFreeScreen
+        VoiceStrict.HANDS_FREE_LIVE -> view.handsFreeLive
         else -> view.privacy
     }
 
@@ -321,7 +400,7 @@ object StrictVoice {
      * rule 4 is about. Tightening always goes - like the wake word's OFF.
      */
     fun blocker(setting: String, value: String, view: VoiceStrict.View, linkBlocker: String?): String? {
-        val loosening = VoiceStrict.isLoosening(setting, value)
+        val loosening = VoiceStrict.isLoosening(setting, value, current(setting, view))
         return when {
             !view.settings -> NOT_ON_THIS_PC
             setting == VoiceStrict.MEMORY && view.memory.isBlank() -> NOT_ON_THIS_PC
@@ -329,6 +408,8 @@ object StrictVoice {
             setting == VoiceStrict.HANDS_FREE && view.handsFree.isBlank() -> NOT_ON_THIS_PC
             setting == VoiceStrict.WAKE_CONFIRM && view.wakeConfirm.isBlank() -> NOT_ON_THIS_PC
             setting == VoiceStrict.VOICE_ID_MODEL && view.voiceIdModel.isBlank() -> NOT_ON_THIS_PC
+            setting == VoiceStrict.HANDS_FREE_SCREEN && view.handsFreeScreen.isBlank() -> NOT_ON_THIS_PC
+            setting == VoiceStrict.HANDS_FREE_LIVE && view.handsFreeLive.isBlank() -> NOT_ON_THIS_PC
             blockedWhy(setting, value, view) != null -> blockedWhy(setting, value, view)
             !settingOpen(setting, view) -> MEMORY_WHILE_VOICE_IS_ENOUGH
             loosening && linkBlocker != null -> linkBlocker

@@ -112,6 +112,14 @@ page_read                 = "auto"
 # page_read above, or a look every 10 minutes would mean a card every 10
 # minutes. Without this line GitHub watches are refused, with the reason.
 github_read               = "auto"
+# A conversation with an AI chatbot (jarvis_chatbot.py; the owner's
+# decisions of 2026-09-27 and 2026-09-28): ONE approval card per
+# conversation, showing the chatbot, the goal word for word, the most
+# messages, the longest time and the never-send words; a changed limit is a
+# new card. Must stay "ask": anything else and no conversation starts;
+# "never" switches the feature off. Built but not reachable from the apps
+# yet, and no real chatbot is built yet.
+chatbot_session           = "ask"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval
@@ -314,6 +322,13 @@ history_enable            = "ask"
 # line here become your yes.
 learning_auto_enable      = "ask"
 learning_sensitive_enable = "ask"
+# "Forget a time frame" (docs/JARVIS-API.md section 64, the owner's decision
+# of 2026-09-28): forgetting what Jarvis learned, and deleting your chats,
+# from the days you chose - ONE card listing every fact and chat, with 10
+# minutes to Undo afterwards. Must stay "ask": jarvis_forget_range.py
+# refuses any other tier rather than let this line become your yes. A file
+# without this line asks too (unknown_action_tier).
+memory_forget_range       = "ask"
 
 # --- Custom voices (docs/JARVIS-API.md section 15) -----------------------
 # Adding a voice (a recording of someone reading a sentence, kept on this
@@ -675,6 +690,37 @@ flash_attention = "auto"
 # those two are never running at the same time). Not 11434 (the everyday
 # Ollama) or the `port` above.
 third_port = 11436
+
+# ------------------------------------------------------------------------
+# 9b2. TALKING TO AN AI CHATBOT FOR YOU (jarvis_chatbot.py)
+# ------------------------------------------------------------------------
+# Gemini is reached through its website (jarvis_chatbot_gemini.py), in a
+# browser window you can see, with its own browser profile - signed in once,
+# by hand, to the spare Google account used only by Jarvis:
+#     py -3 jarvis_chatbot_gemini.py sign-in
+# Nothing about that is set in this file.
+[chatbot]
+# The full version (both graphics cards: longer conversations, the driver
+# model on the second card's "Longer conversations" lane). Leave false until
+# the second card is installed AND measured with this feature; even when
+# true, the full version runs only while that lane is running, and the
+# limited one-card version runs otherwise.
+full_version = false
+# The API adapters (jarvis_chatbot_api.py) each use a cheap model by
+# default; one line changes it (read when Jarvis starts). The key itself
+# is never here - it goes into Windows Credential Manager with:
+#     py -3 jarvis_chatbot_api.py key openai    (or deepseek, mistral, xai,
+#                                                 openrouter, groq)
+# openai_api_model     = "gpt-5-mini"
+# deepseek_api_model   = "deepseek-chat"
+# mistral_api_model    = "mistral-small-latest"
+# xai_api_model        = "grok-4.6"
+# openrouter_api_model = "openai/gpt-5-mini"
+# groq_api_model       = "openai/gpt-oss-20b"
+# "A second AI on this PC" (jarvis_chatbot_local.py): which model it is -
+# a name `ollama list` shows, never a cloud one. On one graphics card only
+# the everyday model itself is allowed; any model on the second card.
+# local_model = "qwen3:8b"
 
 # ------------------------------------------------------------------------
 # 9c. THE BIG MODEL, SLOW (docs/BIG-MODEL.md)

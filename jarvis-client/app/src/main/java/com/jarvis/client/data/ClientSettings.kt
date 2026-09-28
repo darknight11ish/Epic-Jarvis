@@ -1,7 +1,9 @@
 package com.jarvis.client.data
 
 import android.content.Context
+import android.media.audiofx.AcousticEchoCanceler
 import androidx.core.content.edit
+import com.jarvis.client.voice.LiveRules
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,20 +42,37 @@ class ClientSettings(context: Context) {
     /** Forgotten deliberately on a stale resume, so a replay cannot be attempted. */
     fun clearResumePoint() = prefs.edit { remove(KEY_LAST_EVENT) }
 
-    private val _bargeIn = MutableStateFlow(
-        if (prefs.contains(KEY_BARGE_IN)) prefs.getBoolean(KEY_BARGE_IN, false) else null,
+    /** Whether this phone has an echo canceller: the interrupt default follows it. */
+    val echoCanceller: Boolean by lazy {
+        runCatching { AcousticEchoCanceler.isAvailable() }.getOrDefault(false)
+    }
+
+    private val _interrupt = MutableStateFlow(
+        LiveRules.interruptChoice(
+            saved = prefs.getString(KEY_INTERRUPT, null),
+            oldBargeIn = if (prefs.contains(KEY_BARGE_IN)) prefs.getBoolean(KEY_BARGE_IN, false) else null,
+            oldLive = prefs.getString(KEY_LIVE_INTERRUPT, null),
+            echo = runCatching { AcousticEchoCanceler.isAvailable() }.getOrDefault(false),
+        ),
     )
 
     /**
-     * "Interrupt Jarvis while it talks" on this phone. Null until the owner
-     * chooses: then the default applies - on only where the phone has an
-     * echo canceller (`voice.BargeIn.enabled`).
+     * "Interrupting Jarvis" on this phone (voice.LiveRules.INTERRUPT):
+     * "voice" (talking over Jarvis stops it for the owner's voice), "tap" (by
+     * button only; the microphone is closed while Jarvis talks) or "off"
+     * (don't interrupt). ONE setting since 2026-09-28 (the owner's answer):
+     * it replaced "Interrupt Jarvis while it talks" and "Interrupting Jarvis
+     * in Live", and an older choice carries over (the old switch turned off
+     * becomes "off", Live's "tap only" becomes "tap"). Never chosen: by voice
+     * only where the phone has an echo canceller, as before. This phone's
+     * own; it changes only how this phone listens, never what is trusted.
      */
-    val bargeIn: StateFlow<Boolean?> = _bargeIn.asStateFlow()
+    val interrupt: StateFlow<String> = _interrupt.asStateFlow()
 
-    fun setBargeIn(value: Boolean) {
-        prefs.edit { putBoolean(KEY_BARGE_IN, value) }
-        _bargeIn.value = value
+    fun setInterrupt(value: String) {
+        val v = LiveRules.interruptChoice(value, null, null, echoCanceller)
+        prefs.edit { putString(KEY_INTERRUPT, v) }
+        _interrupt.value = v
     }
 
     private val _oneMoment = MutableStateFlow(prefs.getBoolean(KEY_ONE_MOMENT, true))
@@ -84,6 +103,34 @@ class ClientSettings(context: Context) {
     fun setHeardSound(value: Boolean) {
         prefs.edit { putBoolean(KEY_HEARD_SOUND, value) }
         _heardSound.value = value
+    }
+
+
+    private val _keepAliveOfferPending = MutableStateFlow(prefs.getBoolean(KEY_KEEP_ALIVE_PENDING, false))
+
+    /**
+     * True while the one-time "Background restart" offer waits on Home
+     * (phone walk-through C9, 2026-09-27): queued by the first successful
+     * pairing ([queueKeepAliveOffer]), gone once the owner taps either of
+     * its buttons ([answerKeepAliveOffer]). Two plain yes/no values on this
+     * phone, nothing secret.
+     */
+    val keepAliveOfferPending: StateFlow<Boolean> = _keepAliveOfferPending.asStateFlow()
+
+    /** Queues the offer - once ever, on this phone. A later pairing never queues it again. */
+    fun queueKeepAliveOffer() {
+        if (prefs.getBoolean(KEY_KEEP_ALIVE_OFFERED, false)) return
+        prefs.edit {
+            putBoolean(KEY_KEEP_ALIVE_OFFERED, true)
+            putBoolean(KEY_KEEP_ALIVE_PENDING, true)
+        }
+        _keepAliveOfferPending.value = true
+    }
+
+    /** The owner answered the offer (either button): it does not come back. */
+    fun answerKeepAliveOffer() {
+        prefs.edit { putBoolean(KEY_KEEP_ALIVE_PENDING, false) }
+        _keepAliveOfferPending.value = false
     }
 
     private val _watchNotifications = MutableStateFlow(prefs.getBoolean(KEY_WATCH_NOTIFICATIONS, false))
@@ -275,8 +322,12 @@ class ClientSettings(context: Context) {
         const val KEY_BARGE_IN = "barge_in"
         const val KEY_ONE_MOMENT = "one_moment"
         const val KEY_HEARD_SOUND = "heard_sound"
+        const val KEY_LIVE_INTERRUPT = "live_interrupt"
+        const val KEY_INTERRUPT = "interrupt"
         const val KEY_WATCH_NOTIFICATIONS = "watch_notifications"
         const val KEY_PHONE_NOTIFICATIONS = "phone_notifications"
+        const val KEY_KEEP_ALIVE_OFFERED = "keep_alive_offered"
+        const val KEY_KEEP_ALIVE_PENDING = "keep_alive_pending"
         const val KEY_FLOATING_AVATAR = "floating_avatar"
         const val KEY_UPDATE_CHECKS = "update_checks"
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"

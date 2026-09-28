@@ -34,6 +34,7 @@ pub mod folders;
 pub mod hardware;
 pub mod hotkeys;
 pub mod hud_proxy;
+pub mod live;
 pub mod lock;
 pub mod logfile;
 pub mod plain_errors;
@@ -862,6 +863,14 @@ pub fn run() {
             brain::focus::focus_status,
             brain::focus::focus_start,
             brain::focus::focus_act,
+            brain::chatbot::chatbot_status,
+            brain::chatbot::chatbot_start,
+            brain::chatbot::chatbot_limits,
+            brain::chatbot::chatbot_stop,
+            brain::chatbot::chatbot_pause,
+            brain::chatbot::chatbot_resume,
+            brain::chatbot::chatbot_compare_start,
+            brain::chatbot::chatbot_compare_stop,
             brain::briefing::brain_briefing,
             brain::briefing::brain_briefing_now,
             brain::briefing::get_briefing_setup,
@@ -877,6 +886,11 @@ pub fn run() {
             brain::conversation_facts::brain_conversation_facts,
             brain::history::brain_history_delete,
             brain::history::brain_history_settings,
+            brain::projects::projects_read,
+            brain::projects::projects_write,
+            brain::projects::projects_choose_folder,
+            brain::forget_range::forget_range_read,
+            brain::forget_range::forget_range_write,
             brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,
@@ -984,6 +998,13 @@ pub fn run() {
             voice::start_automatic_listening,
             voice::stop_automatic_listening,
             voice::speak_reply,
+            // Jarvis Live: a back-and-forth voice conversation (live.rs).
+            live::live_status,
+            live::live_start,
+            live::live_stop,
+            live::live_act,
+            live::live_mute,
+            live::live_hold,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
             voice_flow::get_voice_flow,

@@ -29,6 +29,8 @@
     <link rel="stylesheet" href="fonts/fonts.css" />
     <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="brain.css" />
+    <link rel="stylesheet" href="projects.css" />
+    <link rel="stylesheet" href="forget-range.css" />
   </head>
   <body>
     <div class="brain">
@@ -79,6 +81,13 @@
               <span class="rail-count" id="count-work" hidden></span>
             </button>
           </li>
+          <li>
+            <button class="rail-item" role="tab" id="tab-projects" data-goto="projects"
+                    aria-selected="false" aria-controls="view-projects" tabindex="-1">
+              <span class="rail-glyph" aria-hidden="true">◇</span>
+              <span class="rail-label">Projects</span>
+            </button>
+          </li>
           <!-- The other four views are unchanged and still fully wired — see
                the module note in brain.js — just hidden until "Advanced" is
                opened, so the window's everyday surface is the three things
@@ -91,11 +100,11 @@
             </button>
           </li>
           <li hidden>
-            <button class="rail-item" role="tab" id="tab-live" data-goto="live"
-                    aria-selected="false" aria-controls="view-live" tabindex="-1">
+            <button class="rail-item" role="tab" id="tab-now" data-goto="now"
+                    aria-selected="false" aria-controls="view-now" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">≋</span>
-              <span class="rail-label">Live</span>
-              <span class="rail-count" id="count-live" hidden></span>
+              <span class="rail-label">Now</span>
+              <span class="rail-count" id="count-now" hidden></span>
             </button>
           </li>
           <li hidden>
@@ -227,9 +236,9 @@
           </div>
         </section>
 
-        <!-- ── Live ───────────────────────────────────────────────────── -->
-        <section class="view view-live" id="view-live" role="tabpanel"
-                 aria-labelledby="tab-live" hidden>
+        <!-- ── Now (was "Live": renamed so it is not confused with Jarvis Live, owner 2026-09-28) ───────────────────────────────────────────────────── -->
+        <section class="view view-now" id="view-now" role="tabpanel"
+                 aria-labelledby="tab-now" hidden>
           <div class="live-grid">
             <div class="card card-state">
               <h2>Right now</h2>
@@ -451,8 +460,9 @@
               <p class="note">
                 Newest first. Opening one only reads it. Deleting one removes
                 it from this PC and cannot be undone. There is no "delete
-                everything": delete them one at a time, or choose above how
-                long they are kept.
+                everything": delete them one at a time, choose above how
+                long they are kept, or use "Forget a time frame" below - a
+                list you check, one approval card, and 10 minutes to undo.
               </p>
               <!-- "Search what was said" (JARVIS-API.md section 71; the
                    owner's answer of 2026-09-27: "shown on screen only;
@@ -464,6 +474,16 @@
                      placeholder="Search what was said…" spellcheck="false" autocomplete="off"
                      aria-label="Search what was said in your chats" />
               <div id="history-list"></div>
+            </div>
+            <!-- "Forget a time frame" (forget-range-panel.js; the owner's
+                 decision of 2026-09-28): the days, the ticked list of facts
+                 and chats, "Forget these" (ONE approval card), then 10
+                 minutes of Undo. Here, next to the chats it deletes; the
+                 facts it forgets are the Memory tab's. -->
+            <div class="card card-wide" id="forget-range-card">
+              <h2>Forget a time frame</h2>
+              <p class="note" id="forget-range-note">Choose some days. Jarvis lists what it learned and your chats from then - untick anything you want to keep, then tap Forget these. Nothing is removed until you approve the card, and for 10 minutes one tap on Undo puts it all back.</p>
+              <div id="forget-range"></div>
             </div>
           </div>
         </section>
@@ -524,6 +544,56 @@
                 <button id="widgets-make" class="btn small" type="submit">Make a preview</button>
               </form>
               <p class="note" id="widgets-hint">For example: "my next 3 reminders, my to-do count and a 10-minute timer button". You can also say "make me a widget showing ..." to Jarvis. Show one on your desktop from the widget window's "Your widget" list, or on your phone's home screen as a Jarvis widget.</p>
+            </div>
+            <div class="card card-wide" id="chatbot-card">
+              <h2>Talk to a chatbot for me</h2>
+              <p class="note">Jarvis asks an AI chatbot about something for you, and writes its own follow-up questions on this PC, within limits you set. One approval card covers the whole conversation. While it does this, Jarvis knows only your goal - not your memory, email, calendar, notes or files.</p>
+              <p class="note" id="chatbot-version"></p>
+              <div id="chatbot"></div>
+              <!-- Painted only when the conversation or its limits change, so
+                   numbers being typed are not wiped by the 4-second re-read. -->
+              <div id="chatbot-limits" class="chatbot-limits" hidden></div>
+              <div id="chatbot-log"></div>
+              <form id="chatbot-form" class="chatbot-form" autocomplete="off" novalidate hidden>
+                <label class="lbl chatbot-compare-toggle" id="chatbot-compare-toggle">
+                  <input id="chatbot-compare" type="checkbox">
+                  Ask several and compare
+                </label>
+                <p class="note" id="chatbot-compare-detail" hidden>Jarvis asks two or more chatbots the same goal, one after another, each in its own conversation under the same limits. One approval card lists every chatbot it will ask. At the end, one summary shows where they agree, where they disagree, and the sources each gave.</p>
+                <label class="lbl" id="chatbot-which-label">Chatbot
+                  <select id="chatbot-which" class="field"></select>
+                </label>
+                <!-- A service with a key: how much of its monthly money limit is
+                     left (the PC's own amounts; brain.js paintChatbotMoney). -->
+                <p class="note chatbot-money" id="chatbot-money" hidden></p>
+                <!-- "Ask several and compare": one tick box per chatbot, painted
+                     by brain.js (paintChatbotSeveral). -->
+                <fieldset id="chatbot-several" class="chatbot-several" hidden>
+                  <legend class="lbl" id="chatbot-several-legend"></legend>
+                  <div id="chatbot-several-list"></div>
+                </fieldset>
+                <label class="lbl">What should Jarvis find out?
+                  <textarea id="chatbot-goal" class="field chatbot-goal" rows="3" maxlength="1000" spellcheck="true"></textarea>
+                </label>
+                <p class="note chatbot-sent-note">These words will be sent to the chatbot exactly as you type them.</p>
+                <div class="row">
+                  <label class="lbl">Most messages
+                    <input id="chatbot-messages" class="field" type="number" min="1" max="20" required>
+                  </label>
+                  <label class="lbl">Most minutes
+                    <input id="chatbot-minutes" class="field" type="number" min="1" max="30" required>
+                  </label>
+                </div>
+                <p class="note" id="chatbot-compare-note" hidden>Most messages and most minutes apply to each chatbot on its own.</p>
+                <label class="lbl">Words it must never send (optional, separated by commas)
+                  <input id="chatbot-never" class="field" type="text" maxlength="600" spellcheck="false">
+                </label>
+                <div class="row">
+                  <button id="chatbot-start" class="btn small" type="submit">Start</button>
+                </div>
+                <p class="note">Nothing is sent until you approve the card.</p>
+                <p class="note">Signing in to the chatbot's account happens on the PC only, in the browser window Jarvis uses.</p>
+              </form>
             </div>
             <div class="card card-wide" id="coming-up-card">
               <h2>Coming up</h2>
@@ -617,6 +687,12 @@
               <div id="activity"></div>
             </div>
           </div>
+        </section>
+
+        <!-- ── Projects (projects-panel.js draws it) ──────────────────── -->
+        <section class="view view-panes" id="view-projects" role="tabpanel"
+                 aria-labelledby="tab-projects" hidden>
+          <div class="panes" id="projects-root"></div>
         </section>
 
         <!-- ── Trust ──────────────────────────────────────────────────── -->

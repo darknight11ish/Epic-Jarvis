@@ -96,7 +96,7 @@ HOSTS = [
     # Tailscale and NordVPN Meshnet
     "100.64.0.0", "100.101.102.103", "100.127.255.255", "fd7a:115c:a1e0::1",
     "desktop.tail1234.ts.net", "DESKTOP.TAIL1234.TS.NET", "desktop.tail1234.ts.net.",
-    "marioirelan11-alps.nord",
+    "my-pc.nord",
     # numbers written the old way, judged as the address the OS would dial
     "3232235777", "0xc0a80101", "10.1", "0x7f.1", "::ffff:192.168.1.1",
     # just outside a range
@@ -119,7 +119,7 @@ ORIGINS = [
     "http://jarvis-pc:4719", "http://100.64.12.3:4719", "http://100.127.255.255:4719",
     "http://[fd7a:115c:a1e0::1]:4719", "http://[FD7A:115C:A1E0::1]:4719",
     "https://desktop.tail1234.ts.net", "http://desktop.tail1234.ts.net.:4719",
-    "http://marioirelan11-alps.nord:4719", "http://3232235777:4719", "http://0x7f.1:4719",
+    "http://my-pc.nord:4719", "http://3232235777:4719", "http://0x7f.1:4719",
     # refused
     "http://0.0.0.0:4719", "http://0:4719", "http://100.63.255.255:4719",
     "http://100.128.0.0:4719", "http://172.15.0.1:4719", "http://172.32.0.1:4719",

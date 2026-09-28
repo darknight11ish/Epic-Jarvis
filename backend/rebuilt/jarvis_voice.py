@@ -738,6 +738,48 @@ SENSITIVE_MEMORY = (SENSITIVE_ON_SCREEN, SENSITIVE_ALOUD)
 SAME_AS_BUTTON = "same_as_button"
 BUTTON_ONLY = "button_only"
 HANDS_FREE = (SAME_AS_BUTTON, BUTTON_ONLY)
+#: Answers about the SCREEN ("Look at this", "Watch with me": the
+#: `read_screen` read, docs/SCREEN-DESIGN.md) to a turn that did not come
+#: from the talk button, while the owner chose `button_only` above. The
+#: owner's decision, 2026-09-28: under "Only trust the talk button" they
+#: stay on screen - a turn started by "Hey Jarvis" gets a written answer
+#: about the screen only - and `screen_aloud` lets them be read aloud even
+#: then; choosing it raises the voice approval card, going back is
+#: immediate. Under `same_as_button` this setting changes nothing: screen
+#: answers are read aloud as for the talk button, every earlier rule first.
+SCREEN_ON_SCREEN = "screen_on_screen"
+SCREEN_ALOUD = "screen_aloud"
+HANDS_FREE_SCREEN = (SCREEN_ON_SCREEN, SCREEN_ALOUD)
+#: Jarvis LIVE (docs/LIVE-DESIGN.md: a conversation the owner starts and
+#: stops, `source=live`) while the owner chose `button_only` above. The
+#: owner's answers of 2026-09-28: "under 'Only trust the talk button', a
+#: Live session is trusted like the talk button by default", "a Live session
+#: started by voice is trusted the same as one started with the button, by
+#: default", and this setting has THREE choices:
+#:   live_trust_fully        "Trust Live fully" - the default
+#:   live_button_start_only  "Only when I start it with the button" - a
+#:                           session started by voice ("Hey Jarvis, let's
+#:                           talk") gets the "Hey Jarvis" caution
+#:   live_like_hey_jarvis    "Be as careful as with Hey Jarvis" - always
+#: A STRICTER choice is immediate; a LOOSER one raises one approval card.
+#: The default is the loosest (like `memory` and `hands_free`), and a damaged
+#: value falls back to the strictest. Under `same_as_button` this setting
+#: changes nothing: every voice turn is trusted like the talk button already.
+LIVE_TRUST_FULLY = "live_trust_fully"
+LIVE_BUTTON_START_ONLY = "live_button_start_only"
+LIVE_LIKE_WAKE = "live_like_hey_jarvis"
+HANDS_FREE_LIVE = (LIVE_TRUST_FULLY, LIVE_BUTTON_START_ONLY, LIVE_LIKE_WAKE)
+#: When App lock ends a Jarvis Live session on the PC (the owner's decision of
+#: 2026-09-28): `live_end_app_lock` - when App lock would ask again ("Lock
+#: again after", 1 minute after the owner last touched a Jarvis window;
+#: talking does not count) - is the default and the stricter; and
+#: `live_end_windows_lock` - only when Windows itself locks - is the looser,
+#: an approval card. The desktop app reads it from GET /api/voice/live's
+#: `end_on` (jarvis_live.py). It does nothing without App lock on, and
+#: nothing on the phone (App lock's own rule there).
+LIVE_END_APP_LOCK = "live_end_app_lock"
+LIVE_END_WINDOWS_LOCK = "live_end_windows_lock"
+LIVE_END = (LIVE_END_APP_LOCK, LIVE_END_WINDOWS_LOCK)
 #: The one source the talk button sends (jarvis_speech.hear's `source`).
 PUSH_TO_TALK = "push_to_talk"
 #: Talk-to-type on the PC (the owner's decision, 2026-09-27: "one approval
@@ -777,31 +819,46 @@ WAKE_CONFIRM = (WAKE_ONE, WAKE_BOTH)
 MODEL_TITANET = "titanet"
 MODEL_RESNET = "resnet221"
 VOICE_ID_MODEL = (MODEL_TITANET, MODEL_RESNET)
-#: The default of each setting. For strictness, privacy and sensitive_memory
-#: it is the strict value, also used for a missing, unreadable or unknown
-#: one. For memory and hands_free the default is the owner's looser choice;
-#: an unknown VALUE (a damaged file) still falls back to the strict one -
-#: see settings(). wake_confirm's default is today's behaviour (one
-#: detector), which is the looser value; voice_id_model's is the measured
-#: model, which is the stricter one.
+#: The source a Jarvis Live clip is sent with (jarvis_speech.SOURCE_LIVE),
+#: and what it is trusted as when the session was started with a button;
+#: LIVE_VOICE_STARTED when it was started by voice (jarvis_live.trust_source).
+LIVE = "live"
+LIVE_VOICE_STARTED = "live_voice"
+#: The default of each setting. For strictness, privacy, sensitive_memory
+#: and hands_free_screen it is the strict value, also used for a missing,
+#: unreadable or unknown one. For memory, hands_free and hands_free_live the
+#: default is the owner's looser choice; an unknown VALUE (a damaged file)
+#: still falls back to the strict one - see settings(). wake_confirm's
+#: default is today's behaviour (one detector), which is the looser value;
+#: voice_id_model's is the measured model, which is the stricter one.
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
             "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN,
             "hands_free": SAME_AS_BUTTON, "talk_to_type": TALK_TYPE_OFF,
-            "wake_confirm": WAKE_ONE, "voice_id_model": MODEL_TITANET}
+            "wake_confirm": WAKE_ONE, "voice_id_model": MODEL_TITANET,
+            "hands_free_screen": SCREEN_ON_SCREEN,
+            "hands_free_live": LIVE_TRUST_FULLY, "live_end": LIVE_END_APP_LOCK}
 _CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
             "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE,
             "talk_to_type": TALK_TO_TYPE, "wake_confirm": WAKE_CONFIRM,
-            "voice_id_model": VOICE_ID_MODEL}
+            "voice_id_model": VOICE_ID_MODEL,
+            "hands_free_screen": HANDS_FREE_SCREEN, "hands_free_live": HANDS_FREE_LIVE,
+            "live_end": LIVE_END}
 #: The LOOSER value of each: choosing it needs an approval card.
 LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
           "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON,
           "talk_to_type": TALK_TYPE_ON, "wake_confirm": WAKE_ONE,
-          "voice_id_model": MODEL_RESNET}
+          "voice_id_model": MODEL_RESNET,
+          "hands_free_screen": SCREEN_ALOUD, "hands_free_live": LIVE_TRUST_FULLY,
+          "live_end": LIVE_END_WINDOWS_LOCK}
+#: Settings with MORE than two choices, strictest first: choosing a value
+#: further along than the current one loosens it (a card); nearer the
+#: start tightens it (at once). LOOSER above names the loosest.
+_ORDER = {"hands_free_live": (LIVE_LIKE_WAKE, LIVE_BUTTON_START_ONLY, LIVE_TRUST_FULLY)}
 #: The settings whose DEFAULT is the looser value, and the strict value each
 #: falls back to when the file is unreadable or holds a value that is not
 #: one of its choices. Only a file that never had the key gets the default.
 _STRICT_WHEN_DAMAGED = {"memory": MEMORY_ON_SCREEN, "hands_free": BUTTON_ONLY,
-                        "wake_confirm": WAKE_BOTH}
+                        "wake_confirm": WAKE_BOTH, "hands_free_live": LIVE_LIKE_WAKE}
 _SETTINGS_LOCK = threading.Lock()
 
 #: The least speech a COMMAND must have, in seconds (the VAD's span, which
@@ -821,11 +878,13 @@ def settings_path() -> Path:
 
 def settings() -> dict:
     """{"strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-    "talk_to_type", "wake_confirm", "voice_id_model", "changed"}. The strict
-    value for anything missing, unreadable or unknown - except that a file
-    with no "memory", "hands_free" or "wake_confirm" in it (every file
+    "talk_to_type", "wake_confirm", "voice_id_model", "hands_free_screen",
+    "hands_free_live", "live_end", "changed"}. The strict value for anything
+    missing, unreadable or unknown - except that a file with no "memory",
+    "hands_free", "wake_confirm" or "hands_free_live" in it (every file
     written before those settings, and no file at all) gets the owner's
-    default for it: MEMORY_ALOUD, SAME_AS_BUTTON, WAKE_ONE. The one rule
+    default for it: MEMORY_ALOUD, SAME_AS_BUTTON, WAKE_ONE, LIVE_TRUST_FULLY.
+    The one rule
     applied on every read as well as every write: private answers may be
     read aloud only while the check is very strict."""
     out = {**DEFAULTS, "changed": 0.0}
@@ -897,7 +956,20 @@ def setting_blocker(key: str, value: str) -> str:
 
 def is_loosening(key: str, value: str) -> bool:
     """Whether setting `key` to `value` would loosen what is set now."""
-    return key in LOOSER and value == LOOSER[key] and settings().get(key) != value
+    return _loosens(key, value, settings().get(key))
+
+
+def _loosens(key: str, value: str, current) -> bool:
+    """Would `value` loosen `key` from `current`? For a two-choice setting:
+    it is the looser value and not already set. For one with an order
+    (_ORDER): it is further along than the current one."""
+    order = _ORDER.get(key)
+    if order:
+        if value not in order:
+            return False
+        at = order.index(current) if current in order else 0
+        return order.index(value) > at
+    return key in LOOSER and value == LOOSER[key] and current != value
 
 
 def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
@@ -918,7 +990,7 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
         raise ValueError(why)
     with _SETTINGS_LOCK:
         cur = settings()
-        if value == LOOSER[key] and cur[key] != value and not approved:
+        if _loosens(key, value, cur[key]) and not approved:
             raise ValueError("making the voice check looser needs an approval card")
         if key == "privacy" and value == VOICE_IS_ENOUGH and cur["strictness"] != VERY_STRICT:
             raise ValueError("private answers can only be read aloud while the voice "
@@ -2141,10 +2213,43 @@ def hands_free_trusted(source) -> bool:
 
     The talk button (`push_to_talk`): always. Anything else - `wake_word`,
     and a source that is missing or not known (fail closed) - only while
-    the owner keeps the default, `same_as_button`."""
-    if str(source or "").strip().lower() == PUSH_TO_TALK:
+    the owner keeps the default, `same_as_button`.
+
+    Jarvis LIVE (the owner's answers of 2026-09-28): under `button_only`, a
+    Live turn is trusted like the talk button by the default
+    `live_trust_fully`, however Live was started. `live_button_start_only`
+    trusts it only when Live was started with a button (`live`); a session
+    started by voice (`live_voice`, jarvis_live.trust_source) then gets the
+    "hey Jarvis" caution. `live_like_hey_jarvis` gives every Live turn that
+    caution. Under `same_as_button`, trusted as every turn is."""
+    src = str(source or "").strip().lower()
+    if src == PUSH_TO_TALK:
         return True
-    return settings()["hands_free"] == SAME_AS_BUTTON
+    s = settings()
+    if s["hands_free"] == SAME_AS_BUTTON:
+        return True
+    live = s["hands_free_live"]
+    if src == LIVE:
+        return live in (LIVE_TRUST_FULLY, LIVE_BUTTON_START_ONLY)
+    if src == LIVE_VOICE_STARTED:
+        return live == LIVE_TRUST_FULLY
+    return False
+
+
+def screen_aloud(source) -> bool:
+    """May an answer about the SCREEN (the `read_screen` read) be read aloud
+    for a voice turn that came from `source`, as far as the hands-free
+    settings go? Every earlier rule (a sensitive saved fact, a private
+    question, a private tool) is the apps' and still comes first.
+
+    Yes for every turn `hands_free_trusted` trusts: the talk button always,
+    and any turn under the default `same_as_button`. Under `button_only`, a
+    turn from anywhere else ("hey Jarvis", or a source missing or not known)
+    only while the owner chose `screen_aloud` (the owner's decision,
+    2026-09-28)."""
+    if hands_free_trusted(source):
+        return True
+    return settings()["hands_free_screen"] == SCREEN_ALOUD
 
 
 def talk_to_type_on() -> bool:
@@ -2310,11 +2415,22 @@ def status() -> dict:
         # "resnet221"). docs/JARVIS-API.md section 80.
         "wake_confirm": s["wake_confirm"],
         "voice_id_model": s["voice_id_model"],
+        # Since 2026-09-28: answers about the screen after "hey Jarvis",
+        # under "only trust the talk button".
+        "hands_free_screen": s["hands_free_screen"],
+        # Since 2026-09-28: how far a Jarvis Live turn is trusted under
+        # "only trust the talk button".
+        "hands_free_live": s["hands_free_live"],
+        # Since 2026-09-28: when App lock ends Jarvis Live on the PC.
+        "live_end": s["live_end"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
             "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
             "hands_free": s["hands_free"], "talk_to_type": s["talk_to_type"],
             "wake_confirm": s["wake_confirm"], "voice_id_model": s["voice_id_model"],
+            "hands_free_screen": s["hands_free_screen"],
+            "hands_free_live": s["hands_free_live"],
+            "live_end": s["live_end"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],

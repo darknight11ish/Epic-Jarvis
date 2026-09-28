@@ -1,0 +1,60 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2174,6 +2174,23 @@
+             code = int(out.pop("status", 200))
+             if not out.get("ok"):
+                 return self._send(code, {"error": out.get("reason", "refused")})
++            # second-card-suggest.patch: an optional conversation id, used
++            # only to bump jarvis_second_card's per-conversation, in-memory
++            # "correction" count (jarvis_agent.note_correction) - never
++            # written to feedback.db, which deliberately keeps no
++            # conversation id at all (jarvis_feedback.py's own docstring).
++            # Only a mark that actually CHANGED to "wrong" counts (clicking
++            # an already-wrong mark again must not inflate the count). An
++            # older client that omits conversation_id works exactly as
++            # before.
++            cid = body.get("conversation_id")
++            if out.get("mark") == "wrong" and out.get("changed") \
++                    and isinstance(cid, str) and cid:
++                try:
++                    import jarvis_agent
++                    jarvis_agent.note_correction(cid, turn_id=out.get("turn_id"))
++                except Exception:
++                    pass
+             return self._send(code, out)
+ 
+         if route in ("/api/task/pause", "/api/task/resume", "/api/task/stop",
+@@ -2361,6 +2378,33 @@
+                 return self._send(503, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
+             code, out = jarvis_second_card.handle_post(body)
++            return self._send(code, out)
++
++        if route == "/api/second-card/suggest":
++            # second-card-suggest.patch - one "when to suggest the bigger
++            # model" switch on or off (jarvis_second_card.SUGGEST_SIGNALS).
++            # NO CARD EITHER WAY: this only changes whether Jarvis OFFERS,
++            # never what it may do without a person's yes - the same
++            # reasoning jarvis_manner.py's humour switch already uses. The
++            # answer is {"ok": true, ...suggest_settings()} or 400 with
++            # {"ok": false, "error": "<a plain sentence>"}. Bug audit
++            # 2026-09-27, finding #2: this route was never wired to
++            # anything, so both apps' switches for it could not work at
++            # all - found before the owner could see it fail.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_second_card
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            code, out = jarvis_second_card.handle_suggest_post(body)
+             return self._send(code, out)
+ 
+         if route in ("/api/hardware/apply", "/api/hardware/create",

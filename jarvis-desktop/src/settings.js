@@ -44,7 +44,16 @@ import {
   THEME_INFO,
   THEMES,
 } from "./jarvis-link.js";
-import { BARGE_IN_KEY, describeBargeIn, loadBargeIn, saveBargeIn } from "./barge-in.js";
+import { INTERRUPT_CHOICES_NOTE } from "./barge-in.js";
+import {
+  INTERRUPT,
+  INTERRUPT_KEY,
+  INTERRUPT_TITLE,
+  loadInterrupt,
+  OLD_BARGE_IN_KEY,
+  OLD_LIVE_INTERRUPT_KEY,
+  saveInterrupt,
+} from "./live-rules.js";
 import { mountCardLink } from "./card-link.js";
 import {
   describeHeard,
@@ -2847,33 +2856,43 @@ startVoicePanel({ reload: loadVoice });
 if (vc.wakeOff) vc.wakeOff.addEventListener("click", () => vcSetWake(false));
 if (vc.wakeOn) vc.wakeOn.addEventListener("click", () => vcSetWake(true));
 
-/* "Interrupt Jarvis while it talks" - this PC's own setting (barge-in.js),
-   read by the Jarvis bar each time the listener hears something while
-   Jarvis is talking. Not the server's, so it works whatever Jarvis answered
-   above. */
-const bargeIn = $("voice-barge-in");
-const bargeInDetail = $("voice-barge-in-detail");
+/* "Interrupting Jarvis" - this PC's own setting (live-rules.js), read by the
+   Jarvis bar each time the listener hears something while Jarvis is
+   talking, in Jarvis Live and out of it. ONE setting since 2026-09-28 (the
+   owner's answer): it replaced "Interrupt Jarvis while it talks" and
+   "Interrupting Jarvis in Live", and an older choice carries over. Not the
+   server's, so it works whatever Jarvis answered above; no card either way,
+   since it only changes when this PC listens. */
+const interruptBox = $("voice-interrupt");
+const interruptNote = $("voice-interrupt-note");
 
-function paintBargeIn() {
-  if (!bargeIn) return;
-  const on = loadBargeIn();
-  bargeIn.checked = on;
-  bargeInDetail.textContent = describeBargeIn(on);
+function paintInterrupt() {
+  if (!interruptBox) return;
+  const chosen = loadInterrupt();
+  interruptBox.replaceChildren(...INTERRUPT.map((c) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "choice";
+    b.textContent = c.recommended ? `${c.label} (recommended)` : c.label;
+    b.dataset.value = c.id;
+    b.setAttribute("aria-pressed", String(c.id === chosen));
+    b.addEventListener("click", () => {
+      if (!saveInterrupt(c.id)) announce("That could not be saved on this PC.", "assertive");
+      paintInterrupt();
+      announce(`${INTERRUPT_TITLE}: ${c.label}.`);
+    });
+    return b;
+  }));
+  const picked = INTERRUPT.find((c) => c.id === chosen) || INTERRUPT[0];
+  interruptNote.textContent = `${picked.detail} ${INTERRUPT_CHOICES_NOTE}`;
 }
 
-if (bargeIn) {
-  bargeIn.addEventListener("change", () => {
-    if (!saveBargeIn(bargeIn.checked)) {
-      announce("That could not be saved on this PC.", "assertive");
-    }
-    paintBargeIn();
-    announce(bargeInDetail.textContent);
-  });
+if (interruptBox) {
   // Kept right if the value is changed from another window.
   window.addEventListener("storage", (event) => {
-    if (event.key === BARGE_IN_KEY) paintBargeIn();
+    if ([INTERRUPT_KEY, OLD_BARGE_IN_KEY, OLD_LIVE_INTERRUPT_KEY].includes(event.key)) paintInterrupt();
   });
-  paintBargeIn();
+  paintInterrupt();
 }
 
 /* "Say 'One moment' if I'm kept waiting" - this PC's own too (voice-flow.js),

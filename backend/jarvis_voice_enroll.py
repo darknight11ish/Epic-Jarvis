@@ -94,6 +94,10 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
         "resnet221", the unmeasured newer model, is the card; "titanet" at once)
         Either choice that needs something installed is refused (409, in
         words) before any card while it is not - jarvis_voice.setting_blocker.
+    {"mode": "hands_free_screen", "value": "screen_on_screen"|"screen_aloud"}
+    {"mode": "hands_free_live", "value": "live_trust_fully"|"live_button_start_only"|
+                                         "live_like_hey_jarvis"}
+    {"mode": "live_end", "value": "live_end_app_lock"|"live_end_windows_lock"}
         Tightening applies at once. Loosening raises ONE card
         (change_own_config), and changes nothing until it is approved.
         `voice_is_enough` is refused unless the check is very strict;
@@ -640,7 +644,8 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
         # The same: scores, no card.
         return measure(doc, measure_fn=measure_fn)
     if mode in ("strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-                "talk_to_type", "wake_confirm", "voice_id_model"):
+                "talk_to_type", "wake_confirm", "voice_id_model",
+                "hands_free_screen", "hands_free_live", "live_end"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
     if mode not in ("enroll", "threshold", "train"):
@@ -998,6 +1003,52 @@ _SETTING_WORDS = {
         "You can go back to the measured one at any time, and that is instant.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - the measured stronger model stays."),
+    # The owner's decision, 2026-09-28: under "only trust the talk button",
+    # an answer about the screen - or, since Jarvis Live, about what the
+    # camera sees (read_camera follows the same screen_aloud) - to a "Hey
+    # Jarvis" question stays on screen; this card lets those be read aloud
+    # even then.
+    ("hands_free_screen", "screen_aloud"): (
+        "Let Jarvis read answers about your screen or the camera aloud after \"Hey "
+        "Jarvis\", even while \"Only trust the talk button\" is chosen?\n\n"
+        "Anyone near the speaker will hear what Jarvis says about your screen or what "
+        "the camera sees. A recording or a copy of your voice played near the "
+        "microphone while Jarvis is looking could hear it too.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - those answers stay on your screen."),
+    # The owner's answers of 2026-09-28 (docs/LIVE-DESIGN.md): under "only
+    # trust the talk button", Jarvis Live is trusted like the talk button by
+    # default however it was started, with two stricter choices. A stricter
+    # one is immediate; each looser one is this card.
+    ("hands_free_live", "live_trust_fully"): (
+        "Trust what you say in Jarvis Live like the talk button, however Live was "
+        "started, even while \"Only trust the talk button\" is chosen?\n\n"
+        "During Jarvis Live the microphone stays open. A recording or a copy of your "
+        "voice played near it could pass the voice check, and would then be trusted "
+        "like you pressing the talk button: Jarvis could remember things from it, or "
+        "read memory and private answers aloud.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes."),
+    ("hands_free_live", "live_button_start_only"): (
+        "Trust what you say in Jarvis Live like the talk button when you start Live "
+        "with the button, even while \"Only trust the talk button\" is chosen?\n\n"
+        "During Jarvis Live the microphone stays open. A recording or a copy of your "
+        "voice played near it could pass the voice check, and would then be trusted "
+        "like you pressing the talk button. A Live started by \"Hey Jarvis, let's "
+        "talk\" keeps the extra caution.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes."),
+    # The owner's decision of 2026-09-28: with App lock on, the PC ends Jarvis
+    # Live when App lock would ask again, by default; this card lets it end
+    # only when Windows itself locks. Going back is immediate.
+    ("live_end", "live_end_windows_lock"): (
+        "Keep Jarvis Live going on this PC until Windows itself locks, even after App "
+        "lock would ask for Windows Hello again?\n\n"
+        "Then someone else who sits down at this PC before Windows locks could talk to "
+        "Jarvis through the open microphone. Every sentence is still checked for your "
+        "voice, but that check cannot tell a recording of you from you.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - Live ends when App lock would ask again."),
 }
 
 #: What each loosening card is about, for the card's `what` line.
@@ -1029,6 +1080,9 @@ def settings_view() -> dict:
             # "" from a jarvis_voice.py older than "Better voice" (2026-09-28).
             "wake_confirm": s.get("wake_confirm", ""),
             "voice_id_model": s.get("voice_id_model", ""),
+            "hands_free_screen": s.get("hands_free_screen", ""),
+            "hands_free_live": s.get("hands_free_live", ""),
+            "live_end": s.get("live_end", ""),
             "voice_is_enough_allowed": s["strictness"] == v.VERY_STRICT}
 
 
@@ -1045,8 +1099,8 @@ def _withdraw(key: str) -> None:
 
 def stage_setting(doc: dict, key: str, *, gate: Callable, tier_of: Callable,
                   spawn: Callable) -> tuple:
-    """{"mode": "strictness"|"privacy"|"memory"|"sensitive_memory"|"hands_free",
-    "value": ...}.
+    """{"mode": "strictness"|"privacy"|"memory"|"sensitive_memory"|"hands_free"|
+    "hands_free_screen"|"hands_free_live", "value": ...}.
     Tightening applies at once; loosening raises ONE card and changes nothing
     itself. A jarvis_voice.py older than the setting: 503, in words."""
     global _PENDING

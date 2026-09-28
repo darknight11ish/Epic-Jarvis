@@ -711,7 +711,53 @@ pub(crate) fn voice_setting(
         ("wake_confirm", "one") => Ok(("wake_confirm", "one", true)),
         ("voice_id_model", "titanet") => Ok(("voice_id_model", "titanet", false)),
         ("voice_id_model", "resnet221") => Ok(("voice_id_model", "resnet221", true)),
+        // Answers about the screen after "Hey Jarvis", under "Only trust the
+        // talk button" (the owner's decision, 2026-09-28). Keeping them on
+        // screen is the default and applies at once; reading them aloud
+        // raises the voice card and is held on a stale link.
+        ("hands_free_screen", "screen_on_screen") => {
+            Ok(("hands_free_screen", "screen_on_screen", false))
+        }
+        ("hands_free_screen", "screen_aloud") => Ok(("hands_free_screen", "screen_aloud", true)),
+        // Jarvis Live under "Only trust the talk button" (the owner's
+        // answers, 2026-09-28): three choices, strictest last. The strictest
+        // is never a loosening; the other two MAY be (from a stricter one) -
+        // `live_trust_loosens` decides when the choice now is known.
+        ("hands_free_live", "live_like_hey_jarvis") => {
+            Ok(("hands_free_live", "live_like_hey_jarvis", false))
+        }
+        ("hands_free_live", "live_button_start_only") => {
+            Ok(("hands_free_live", "live_button_start_only", true))
+        }
+        ("hands_free_live", "live_trust_fully") => {
+            Ok(("hands_free_live", "live_trust_fully", true))
+        }
+        // When App lock ends Jarvis Live on this PC (the owner's decision,
+        // 2026-09-28): when App lock would ask again (the default, applies
+        // at once), or only when Windows itself locks (the voice card, held
+        // on a stale link).
+        ("live_end", "live_end_app_lock") => Ok(("live_end", "live_end_app_lock", false)),
+        ("live_end", "live_end_windows_lock") => Ok(("live_end", "live_end_windows_lock", true)),
         _ => Err("That is not one of the voice settings.".to_string()),
+    }
+}
+
+/// The Live trust choices, loosest first (backend jarvis_voice `_ORDER`).
+const LIVE_TRUST_ORDER: [&str; 3] = [
+    "live_trust_fully",
+    "live_button_start_only",
+    "live_like_hey_jarvis",
+];
+
+/// Whether moving Live's trust from `current` to `value` loosens it. An
+/// unknown `current` counts as the strictest, so a looser-looking choice is
+/// held on a stale link rather than let through.
+pub(crate) fn live_trust_loosens(value: &str, current: Option<&str>) -> bool {
+    let rank = |v: &str| LIVE_TRUST_ORDER.iter().position(|c| *c == v);
+    match (rank(value), current.and_then(rank)) {
+        (Some(v), Some(c)) => v < c,
+        (Some(v), None) => v < LIVE_TRUST_ORDER.len() - 1,
+        _ => true,
     }
 }
 
@@ -723,8 +769,12 @@ pub async fn set_voice_setting(
     app: AppHandle,
     setting: String,
     value: String,
+    current: Option<String>,
 ) -> Result<Value, String> {
-    let (setting, value, loosening) = voice_setting(setting.trim(), value.trim())?;
+    let (setting, value, mut loosening) = voice_setting(setting.trim(), value.trim())?;
+    if setting == "hands_free_live" {
+        loosening = live_trust_loosens(value, current.as_deref().map(str::trim));
+    }
     if loosening && stale(&app) {
         return Err(HELD_STALE.to_string());
     }
@@ -1286,6 +1336,16 @@ mod tests {
         );
         assert!(voice_setting("hands_free", "sensitive_aloud").is_err());
         assert!(voice_setting("memory", "button_only").is_err());
+        assert_eq!(
+            voice_setting("hands_free_screen", "screen_aloud"),
+            Ok(("hands_free_screen", "screen_aloud", true))
+        );
+        assert_eq!(
+            voice_setting("hands_free_screen", "screen_on_screen"),
+            Ok(("hands_free_screen", "screen_on_screen", false))
+        );
+        assert!(voice_setting("hands_free_screen", "same_as_button").is_err());
+        assert!(voice_setting("hands_free", "screen_aloud").is_err());
         assert!(voice_setting("mode", "broad").is_err());
         // Talk-to-type (2026-09-28): on is the card, off is at once.
         assert_eq!(
@@ -1317,6 +1377,49 @@ mod tests {
         );
         assert!(voice_setting("voice_id_model", "resnet293").is_err());
         assert!(voice_setting("wake_confirm", "on").is_err());
+        // Jarvis Live's three choices: the strictest never loosens.
+        assert_eq!(
+            voice_setting("hands_free_live", "live_like_hey_jarvis"),
+            Ok(("hands_free_live", "live_like_hey_jarvis", false))
+        );
+        assert!(voice_setting("hands_free_live", "screen_aloud").is_err());
+        // When App lock ends Jarvis Live on this PC: only when Windows locks
+        // is the looser choice (a card).
+        assert_eq!(
+            voice_setting("live_end", "live_end_windows_lock"),
+            Ok(("live_end", "live_end_windows_lock", true))
+        );
+        assert_eq!(
+            voice_setting("live_end", "live_end_app_lock"),
+            Ok(("live_end", "live_end_app_lock", false))
+        );
+        assert!(voice_setting("live_end", "live_trust_fully").is_err());
+        assert!(voice_setting("hands_free_screen", "live_trust_fully").is_err());
+        assert!(live_trust_loosens(
+            "live_trust_fully",
+            Some("live_button_start_only")
+        ));
+        assert!(live_trust_loosens(
+            "live_button_start_only",
+            Some("live_like_hey_jarvis")
+        ));
+        assert!(!live_trust_loosens(
+            "live_button_start_only",
+            Some("live_trust_fully")
+        ));
+        assert!(!live_trust_loosens(
+            "live_like_hey_jarvis",
+            Some("live_trust_fully")
+        ));
+        assert!(!live_trust_loosens(
+            "live_trust_fully",
+            Some("live_trust_fully")
+        ));
+        assert!(
+            live_trust_loosens("live_button_start_only", None),
+            "unknown: held"
+        );
+        assert!(!live_trust_loosens("live_like_hey_jarvis", None));
     }
 
     #[test]

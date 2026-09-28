@@ -120,6 +120,36 @@ await check("Show it brings a parked gate back", async () => {
   await page.close();
 });
 
+await check("with two cards waiting, Esc on the first shows the second, and decides nothing", async () => {
+  // Play tester, 2026-09-27: parking the first of two cards hid BOTH, and
+  // the line said "1 approval is still waiting" while two were.
+  const page = await open({ pending: [K.APPROVAL_RAISED, K.APPROVAL_PLAIN] });
+  await page.waitForTimeout(400);
+  const first = await page.locator("#approval-action").innerText();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  assert.ok(await page.locator("#approval").isVisible(), "the second card did not show");
+  const second = await page.locator("#approval-action").innerText();
+  assert.notEqual(second, first, "the parked card is still the one shown");
+  assert.equal(second, K.APPROVAL_PLAIN.notice.title);
+  // Rule 4: showing the next card is display only.
+  let decided = await page.evaluate(() =>
+    window.__calls.filter((c) => c[0] === "decide_approval"));
+  assert.equal(decided.length, 0, "parking sent a decision");
+  // Park the second too: both are counted, and Show it brings back the first.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  assert.ok(!(await page.locator("#approval").isVisible()));
+  assert.equal(await page.locator("#parked-text").innerText(), "2 approvals are still waiting.");
+  await page.click("#parked-show");
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator("#approval-action").innerText(), first);
+  decided = await page.evaluate(() =>
+    window.__calls.filter((c) => c[0] === "decide_approval"));
+  assert.equal(decided.length, 0, "a decision was sent without a button press");
+  await page.close();
+});
+
 // ---- 3. The attention panel closes and stays closed ----------------------
 await check("Close on the attention panel survives a burst of events", async () => {
   const page = await open({ pending: [], attention: K.ATTENTION_BANKED });

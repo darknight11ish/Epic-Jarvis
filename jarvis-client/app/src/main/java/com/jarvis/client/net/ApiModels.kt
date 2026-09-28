@@ -143,6 +143,10 @@ data class ModelsInfo(
                                 ref = it,
                                 sizeBytes = el.str("size")?.toLongOrNull(),
                                 family = el.str("family"),
+                                // Ollama's own list, when the row carries one:
+                                // ModelChat.canChat reads it before the name.
+                                capabilities = (el["capabilities"] as? JsonArray)
+                                    ?.mapNotNull { c -> (c as? JsonPrimitive)?.content },
                             )
                         }
                     }
@@ -175,7 +179,12 @@ data class ModelEntry(
     val ref: String,
     val sizeBytes: Long? = null,
     val family: String? = null,
-)
+    /** Ollama's `capabilities` list, or null when the row carries none (bare names never do). */
+    val capabilities: List<String>? = null,
+) {
+    /** False for a model that only serves memory search: Brain › Model offers it no "Use". */
+    val canChat: Boolean get() = ModelChat.canChat(ref, family, capabilities)
+}
 
 /** Whether the model is on the GPU. `status` is `gpu` | `partial` | `cpu` | `unknown`. */
 data class ModelOffload(
@@ -374,6 +383,15 @@ data class PendingItem(
     val notice: Notice? = null,
     @SerialName("expires_at_ms") val expiresAtMs: Long? = null,
     /**
+     * When the PC raised the card, in seconds by the PC's clock (the gate's
+     * `created`); null from a PC that does not say. Jarvis Live reads it:
+     * only a card raised in THIS Live session holds Live
+     * (voice.LiveRules.cardInSession; unknown counts - fail closed). Kept
+     * as the raw JSON so a PC that sends it in another shape can never make
+     * the whole card fail to read (see [createdAt]).
+     */
+    val created: kotlinx.serialization.json.JsonElement? = null,
+    /**
      * Additive: absent or a single entry means the card behaves exactly as it
      * always has. Two or more mean the desktop is asking WHICH plan, and a
      * bare approve no longer names one - see [needsChoice].
@@ -389,6 +407,12 @@ data class PendingItem(
      * and stays available: refusing is always the safe direction.
      */
     val needsChoice: Boolean get() = options.size > 1
+
+    /** [created] as seconds, or null when it is missing or not a number. */
+    val createdAt: Double?
+        get() = (created as? kotlinx.serialization.json.JsonPrimitive)
+            ?.takeIf { !it.isString }
+            ?.content?.toDoubleOrNull()
 
     /**
      * Whether this card may only be approved on the PC: loosening "What asks

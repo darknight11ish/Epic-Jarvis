@@ -203,6 +203,11 @@ SAYS_ONCE = "Asks the first time only, then never again"
 NOTE_TOOL_UPDATES = ("Checking is read-only - it only reports, never installs anything. It "
                      "asks once, the first time you ever press the button; after that one "
                      "yes it never asks again, and this cannot be changed from an app.")
+#: "Forget a time frame" (jarvis_forget_range.py, the owner's decision of
+#: 2026-09-28): one card for the whole list, then 10 minutes to undo.
+NOTE_FORGET_RANGE = ("Always asks, with ONE card listing every fact and chat - approved by "
+                     "tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. "
+                     "This cannot be changed from an app.")
 NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell me when\", "
              "which cannot stop to ask.")
 NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
@@ -287,6 +292,7 @@ HARD_LIMITS = frozenset({
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
     "app_merge_change",
     "run_plan", "phone_notifications_read",
+    "chatbot_session", "memory_forget_range",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -302,6 +308,7 @@ MUST_ASK = frozenset({
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
+    "chatbot_session", "memory_forget_range",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -316,11 +323,15 @@ GROUPS = (
                             "write_notes_after_outside_text", "wiki_update"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "schedule_repeat"]),
     ("Your smart home", ["fixed:lights", "home_control"]),
+    # Projects (the owner's decision of 2026-09-28; jarvis_projects.py). Its
+    # two cards are change_own_config cards, decided in the code; these rows
+    # say so in plain words (the Projects feature audit, 2026-09-28).
+    ("Projects", ["fixed:projects", "fixed:project_share", "fixed:project_unmark"]),
     ("Email and calendar", ["draft_email", "send_email", "edit_calendar_event",
                             "delete_calendar_event"]),
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
                       "control_browser", "post_to_external_service", "open_public_tunnel",
-                      "news_read", "page_read", "github_read"]),
+                      "news_read", "page_read", "github_read", "chatbot_session"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage",
@@ -330,17 +341,34 @@ GROUPS = (
                                       "second_card_enable", "second_card_browser_enable",
                                       "second_card_combined_enable", "second_card_third_assign",
                                       "big_model_enable"]),
+    # Jarvis Live (the owner's decision of 2026-09-28; jarvis_live.py): the
+    # page promises every action, and starting Live is one (the review of
+    # 2026-09-28). Decided in the code: no card, ever.
+    ("Talking with Jarvis", ["fixed:live"]),
     ("Jarvis's own settings, memory and voice", [
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
-        "memory_manage", "user_profile_manage", "custom_voice", "better_voice_enable",
-        "watch_notifications_enable", "phone_notifications_read", "modify_own_code",
-        LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates"]),
+        "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
+        "better_voice_enable", "watch_notifications_enable", "phone_notifications_read",
+        "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
+        "check_tool_updates"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
 )
 
 #: The fixed rows: (title, says, note).
 FIXED = {
+    "fixed:projects": ("Make, change or delete a project, and log your own numbers",
+                       SAYS_NO_CARD,
+                       "Your own taps or words. Deleting asks \"are you sure?\" in the app. A "
+                       "coding project's folder and a benchmark's command are set on the PC "
+                       "only."),
+    "fixed:project_share": ("Make a project Shareable", "Asks you first, every time",
+                            "Turning it off is instant. Nothing from a project is sent "
+                            "anywhere yet."),
+    "fixed:project_unmark": ("Take a private mark off a benchmark",
+                             "Asks when Jarvis made the mark",
+                             "A mark you added yourself comes off at once. Afterwards its "
+                             "numbers may be read aloud."),
     "fixed:timers": ("Set a timer, or a reminder or alarm that goes off once", SAYS_NO_CARD,
                      "Your own words only; deleting is immediate."),
     "fixed:repeats": ("Set up a repeating reminder or alarm, or the standby schedule",
@@ -350,6 +378,10 @@ FIXED = {
                       "still ask (below)."),
     # The plug-in programs (jarvis_mcp.py): a program someone else wrote,
     # running as the owner - every use asks, in code, whatever the file says.
+    "fixed:live": ("Start Jarvis Live (a back-and-forth voice conversation)", SAYS_NO_CARD,
+                   "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still "
+                   "checked for your voice, and a card that comes up during Live still waits "
+                   "for your tap. How far Live is trusted is a Voice setting."),
     "fixed:plugin_use": ("Use a tool from a plug-in program on this PC (MCP)",
                          "Asks you first, every time",
                          "Always asks, whatever your settings file says: it is someone "
@@ -491,6 +523,8 @@ def _row(action: str, *, here: bool) -> dict:
             row["note"] = NOTE_WIKI
         elif action == "check_tool_updates":
             row["note"] = NOTE_TOOL_UPDATES
+        elif action == "memory_forget_range":
+            row["note"] = NOTE_FORGET_RANGE
         else:
             row["note"] = NOTE_ALWAYS
         return row

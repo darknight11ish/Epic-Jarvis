@@ -140,6 +140,26 @@
     },
     {
      "asks": "-",
+     "id": "chatbot",
+     "line": "Not set up (Gemini): Jarvis's Gemini window has never been signed in. Sign in once, by hand, to the spare Google account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_gemini.py sign-in",
+     "name": "Chatbot conversations",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "chatbot_api",
+     "line": "Not set up: no key is saved on this PC for ChatGPT (OpenAI API), DeepSeek (API), Mistral (API), Grok (xAI API), OpenRouter (API) and Groq (API). Keys are added on the PC only.",
+     "name": "Chatbot conversations with a key (API)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_control",
      "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
@@ -344,6 +364,26 @@
     },
     {
      "asks": "-",
+     "id": "chatbot",
+     "line": "Not set up (Gemini): Jarvis's Gemini window has never been signed in. Sign in once, by hand, to the spare Google account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_gemini.py sign-in",
+     "name": "Chatbot conversations",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "chatbot_api",
+     "line": "Not set up: no key is saved on this PC for ChatGPT (OpenAI API), DeepSeek (API), Mistral (API), Grok (xAI API), OpenRouter (API) and Groq (API). Keys are added on the PC only.",
+     "name": "Chatbot conversations with a key (API)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_control",
      "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
@@ -544,6 +584,26 @@
     },
     {
      "asks": "-",
+     "id": "chatbot",
+     "line": "Not set up (Gemini): Jarvis's Gemini window has never been signed in. Sign in once, by hand, to the spare Google account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_gemini.py sign-in",
+     "name": "Chatbot conversations",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "chatbot_api",
+     "line": "Not set up: no key is saved on this PC for ChatGPT (OpenAI API), DeepSeek (API), Mistral (API), Grok (xAI API), OpenRouter (API) and Groq (API). Keys are added on the PC only.",
+     "name": "Chatbot conversations with a key (API)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_control",
      "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
@@ -634,7 +694,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 18,
+   "on": 20,
    "rows": [
     {
      "asks": "Yes, every question",
@@ -765,6 +825,26 @@
      "state": "on",
      "state_words": "On",
      "where": "the websites on each approved plan"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "chatbot",
+     "line": "Holds a conversation with an AI chatbot website for you: one approval card per conversation shows the goal word for word and the most messages and minutes. Nothing private is sent, and it stops and asks you at any captcha or sign-in page. What the chatbot says is outside text.",
+     "name": "Chatbot conversations",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "gemini.google.com (a browser window you can see)"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "chatbot_api",
+     "line": "Holds a conversation with an AI chatbot through its official API, with the key saved on this PC, sent only to that service: one approval card per conversation shows the service, the model, the goal word for word and the most messages and minutes, and about how much of the monthly money limit is left. Each message costs a little on that account; Jarvis stops using a service when the monthly limit you set on the PC is reached (an estimate from a price list you can correct there), and asks each service it can to keep every answer short enough to stay within it. Nothing private is sent, and what the chatbot says is outside text.",
+     "name": "Chatbot conversations with a key (API)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "api.openai.com"
     },
     {
      "asks": "Yes, every time",
@@ -1064,6 +1144,26 @@
     },
     {
      "asks": "-",
+     "id": "chatbot",
+     "line": "Not set up (Gemini): Jarvis's Gemini window has never been signed in. Sign in once, by hand, to the spare Google account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_gemini.py sign-in",
+     "name": "Chatbot conversations",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "chatbot_api",
+     "line": "Not set up: no key is saved on this PC for ChatGPT (OpenAI API), DeepSeek (API), Mistral (API), Grok (xAI API), OpenRouter (API) and Groq (API). Keys are added on the PC only.",
+     "name": "Chatbot conversations with a key (API)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_control",
      "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
@@ -1137,6 +1237,8 @@
   "phone_push",
   "computer",
   "browser",
+  "chatbot",
+  "chatbot_api",
   "phone_control",
   "shell",
   "plugins",

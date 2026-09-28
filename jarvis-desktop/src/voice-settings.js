@@ -133,7 +133,7 @@ export function checkLine(status) {
   };
 }
 
-/** The five settings a card can loosen, as a sentence names them. */
+/** The eight settings a card can loosen, as a sentence names them. */
 const SETTING_NAMES = {
   strictness: "how strict the voice check is",
   privacy: "private answers",
@@ -143,6 +143,9 @@ const SETTING_NAMES = {
   talk_to_type: "talk-to-type",
   wake_confirm: "the second \"hey Jarvis\" check",
   voice_id_model: "the voice-ID model",
+  hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
+  hands_free_live: "how far Jarvis Live is trusted",
+  live_end: "when Jarvis Live ends on this PC",
 };
 
 /**

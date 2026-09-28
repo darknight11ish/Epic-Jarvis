@@ -31,6 +31,7 @@ import com.jarvis.client.audio.Wav
 import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.net.Heard
 import com.jarvis.client.voice.BargeIn
+import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.SpeechRun
 import com.jarvis.client.voice.VoiceFlow
 import com.jarvis.client.voice.OrtTurnModel
@@ -195,8 +196,9 @@ class WakeWordService : Service() {
             val ring = WakeClip.Ring((WakeClip.PREROLL_SECONDS * RATE).toInt())
             var lastCheck = SystemClock.elapsedRealtime()
             while (running) {
-                // The talk button owns the microphone while it records.
-                if (voice.phase.value == VoiceSession.Phase.CAPTURING) {
+                // The talk button owns the microphone while it records, and
+                // Jarvis Live while it is on on this phone (LiveService).
+                if (voice.phase.value == VoiceSession.Phase.CAPTURING || JarvisRuntime.liveOnHere()) {
                     _state.value = WakeListen.Paused
                     delay(200)
                     continue
@@ -209,7 +211,7 @@ class WakeWordService : Service() {
                     _state.value = WakeListen.Listening
                     goForeground(getString(R.string.wake_listening_text))
                     val buf = ShortArray(WakeSpotter.CHUNK)
-                    while (running && voice.phase.value == VoiceSession.Phase.OFF) {
+                    while (running && voice.phase.value == VoiceSession.Phase.OFF && !JarvisRuntime.liveOnHere()) {
                         if (!readFully(rec, buf)) return fail("The microphone stopped.")
                         ring.push(buf)
                         val threshold = WakeRules.threshold(voice.status.value)
@@ -392,11 +394,13 @@ class WakeWordService : Service() {
         return out.copyOf(count)
     }
 
-    /** The owner's switch, or the default: on only with an echo canceller. */
-    private fun bargeInOn(): Boolean = BargeIn.enabled(
-        JarvisRuntime.settings.bargeIn.value,
-        runCatching { AcousticEchoCanceler.isAvailable() }.getOrDefault(false),
-    )
+    /**
+     * "Interrupting Jarvis" is "Interrupt by voice" (LiveRules.INTERRUPT;
+     * the default only with an echo canceller). "By button only" and
+     * "Don't interrupt" both keep this listener off while Jarvis talks, as
+     * the old switch's "off" did.
+     */
+    private fun bargeInOn(): Boolean = JarvisRuntime.settings.interrupt.value == LiveRules.INTERRUPT_VOICE
 
     /**
      * Sends [clip] as a wake-word clip and waits for the answer. With

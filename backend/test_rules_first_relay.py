@@ -96,6 +96,8 @@ def t_its_place_in_the_stack():
         text = (HERE / later).read_text(encoding="utf-8")
         check(f"{later}, after it, does not touch _open()",
               "def _open(" not in text and "_chat_client_fields_off" not in text)
+    check(f"{PATCH} is in apply-patches.ps1's list, and no later patch rewrites its lines",
+          PATCH in order and not _stack.later_rewriting(PATCH, "keep_rules_first"), order[-3:])
     for earlier in ("ollama-direct.patch", "chat-history.patch", "cloud-one-turn.patch",
                     "memory-prefix.patch"):
         check(f"after {earlier}", earlier in order and order.index(earlier) < order.index(PATCH))

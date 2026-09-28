@@ -146,6 +146,140 @@ def t_rows_and_order():
           and v["title"] == R.TITLE and v["detail"] == R.DETAIL)
 
 
+def t_chatbot_row():
+    """Chatbot conversations (jarvis_chatbot.py + jarvis_chatbot_gemini.py):
+    never "on" while no route exists; says plainly why when not set up."""
+    note = "Jarvis's Gemini window has never been signed in."
+
+    def bot(ready, routed=False):
+        return {"routed": routed, "chatbots": [{"id": "gemini_web", "name": "Gemini",
+                                                "host": "gemini.google.com", "built": True,
+                                                "ready": ready,
+                                                "note": "" if ready else note}]}
+    r = row(R.view(ctx(chatbot=bot(False))), "chatbot")
+    check("chatbot: not signed in reads 'not set up', with the reason",
+          r["state"] == "not_set_up" and note in r["line"] and not r["on"], r)
+    r = row(R.view(ctx(chatbot=bot(True))), "chatbot")
+    check("chatbot: ready but no route yet is 'off' and says neither app can start one",
+          r["state"] == "off" and "neither app" in r["line"] and r["where"] == "", r)
+    r = row(R.view(ctx(chatbot=bot(True, routed=True))), "chatbot")
+    check("chatbot: once routed it is on, goes to gemini.google.com, asks every time",
+          r["on"] and r["where"].startswith("gemini.google.com")
+          and r["asks"] == R.ASK_EVERY, r)
+    r = row(R.view(ctx(chatbot=bot(True, routed=True), tiers={"chatbot_session": "never"})),
+            "chatbot")
+    check("chatbot: tier never is blocked", r["state"] == "blocked", r)
+    r = row(R.view(ctx()), "chatbot")
+    check("chatbot: the real reading (this machine) is never 'on' - there is no route",
+          r["state"] in ("off", "not_set_up"), r)
+    two = {"routed": False, "chatbots": [
+        {"id": "gemini_web", "name": "Gemini", "host": "gemini.google.com", "built": True,
+         "ready": False, "note": note},
+        {"id": "chatgpt_web", "name": "ChatGPT", "host": "chatgpt.com", "built": True,
+         "ready": False, "note": "Jarvis's ChatGPT window has never been signed in."}]}
+    r = row(R.view(ctx(chatbot=two)), "chatbot")
+    check("chatbot: several websites, none signed in: each is signed in on its own, and "
+          "one site's words do not speak for all", r["state"] == "not_set_up"
+          and "Gemini, ChatGPT" in r["line"].replace(" and ", ", ")
+          and "each is signed in on its own" in r["line"] and "Gemini: " + note in r["line"],
+          r)
+    two["chatbots"][1]["ready"] = True
+    two["routed"] = True
+    r = row(R.view(ctx(chatbot=two)), "chatbot")
+    check("chatbot: once routed, 'where' names only the websites that are set up",
+          r["on"] and r["where"].startswith("chatgpt.com")
+          and "gemini.google.com" not in r["where"], r)
+
+
+def t_chatbot_api_row():
+    """Chatbot conversations through an API key (jarvis_chatbot_api.py): its
+    own row, one host per service with a saved key; "a second AI on this PC"
+    (jarvis_chatbot_local.py) adds no row and never shows in either chatbot
+    row; the website row lists websites only."""
+    note = "No OpenAI API key is saved on this PC."
+
+    def bots(openai_ready, routed=False, local_ready=True):
+        return {"routed": routed, "chatbots": [
+            {"id": "gemini_web", "name": "Gemini", "host": "gemini.google.com",
+             "built": True, "ready": False, "note": "never signed in", "kind": "website"},
+            {"id": "openai_api", "name": "ChatGPT (OpenAI API)", "host": "api.openai.com",
+             "built": True, "ready": openai_ready, "note": "" if openai_ready else note,
+             "kind": "api"},
+            {"id": "groq_api", "name": "Groq (API)", "host": "api.groq.com", "built": True,
+             "ready": False, "note": "No Groq API key", "kind": "api"},
+            {"id": "local_ai", "name": "A second AI on this PC", "host": "this PC",
+             "built": True, "ready": local_ready, "note": "", "kind": "local"}]}
+    r = row(R.view(ctx(chatbot=bots(False))), "chatbot_api")
+    check("chatbot_api: no key saved reads 'not set up' and names the services",
+          r["state"] == "not_set_up" and "ChatGPT (OpenAI API)" in r["line"]
+          and "Groq" in r["line"] and "PC only" in r["line"], r)
+    check("chatbot_api: ... and when every service lacks a key, only that is said",
+          r["line"] == "Not set up: no key is saved on this PC for ChatGPT (OpenAI API) and "
+                       "Groq (API). Keys are added on the PC only.", r["line"])
+    # The TRUE reason when it is not a missing key (audit, 2026-09-28): a bad
+    # model line, or Credential Manager that cannot be read, is never
+    # reported as "no key is saved".
+    import jarvis_chatbot_api as A
+    bad_model = bots(False)
+    bad_model["chatbots"][1]["note"] = A.PRESETS["openai_api"].name \
+        + " cannot be used: the openai_api_model line under [chatbot] in " \
+          "jarvis-framework.toml is not a model name."
+    r = row(R.view(ctx(chatbot=bad_model)), "chatbot_api")
+    check("chatbot_api: a bad model line is said as such, not as 'no key is saved'",
+          r["state"] == "not_set_up" and "is not a model name" in r["line"]
+          and "no key is saved on this PC for ChatGPT" not in r["line"].replace("No key", "no key")
+          and "No key is saved on this PC for Groq (API)" in r["line"], r["line"])
+    no_store = bots(False)
+    for b in no_store["chatbots"][1:3]:
+        b["note"] = A.CANNOT_READ.format(name="OpenAI" if b["id"] == "openai_api" else "Groq")
+    r = row(R.view(ctx(chatbot=no_store)), "chatbot_api")
+    check("chatbot_api: Credential Manager that cannot be read is said in plain words, "
+          "once, not as 'no key is saved'",
+          r["state"] == "not_set_up" and "no key" not in r["line"].lower()
+          and r["line"].count("Credential Manager") == 1 and "password store" in r["line"]
+          and "ChatGPT (OpenAI API) and Groq (API)" in r["line"], r["line"])
+    # A key but no monthly money limit (the owner's decision of 2026-09-28:
+    # a limit comes first): said as such, once, with every such service.
+    no_limit = bots(False)
+    no_limit["chatbots"][1]["note"] = A.no_limit_words(A.PRESETS["openai_api"])
+    r = row(R.view(ctx(chatbot=no_limit)), "chatbot_api")
+    check("chatbot_api: no monthly money limit is said as such, not as 'no key is saved'",
+          r["state"] == "not_set_up"
+          and r["line"].startswith("Not set up: no monthly money limit is set on this PC for "
+                                   "ChatGPT (OpenAI API)")
+          and "A limit comes first, and is set on the PC only." in r["line"]
+          and "No key is saved on this PC for Groq (API)" in r["line"]
+          and "py -3" not in r["line"], r["line"])
+    reached = bots(False)
+    reached["chatbots"][1]["note"] = A.reached_words(A.PRESETS["openai_api"], 5.0, 5.02)
+    r = row(R.view(ctx(chatbot=reached)), "chatbot_api")
+    check("chatbot_api: a limit reached is said in the service's own words",
+          "You set $5.00 a month for OpenAI; about $5.02 is used this month" in r["line"],
+          r["line"])
+    r = row(R.view(ctx(chatbot=bots(True))), "chatbot_api")
+    check("chatbot_api: a key saved but no route yet is 'off'",
+          r["state"] == "off" and "neither app" in r["line"] and r["where"] == "", r)
+    r = row(R.view(ctx(chatbot=bots(True, routed=True))), "chatbot_api")
+    check("chatbot_api: once routed it is on, goes to api.openai.com only (the service with "
+          "a key), asks every time",
+          r["on"] and r["where"] == "api.openai.com" and r["asks"] == R.ASK_EVERY, r)
+    check("chatbot_api: ... and says it stops at the monthly money limit set on the PC",
+          "monthly limit you set on the PC is reached" in r["line"], r["line"])
+    r = row(R.view(ctx(chatbot=bots(True, routed=True),
+                       tiers={"chatbot_session": "never"})), "chatbot_api")
+    check("chatbot_api: tier never is blocked", r["state"] == "blocked", r)
+    web = row(R.view(ctx(chatbot=bots(True, routed=True))), "chatbot")
+    check("the website row lists websites only - not the API services or the local AI",
+          web["state"] == "not_set_up" and "this PC" not in web["where"]
+          and "OpenAI" not in web["line"] and "second AI" not in web["line"], web)
+    v = R.view(ctx(chatbot=bots(True, routed=True)))
+    check("'a second AI on this PC' adds no row and is named in no row",
+          not any("second AI" in r["line"] or r["id"] == "local_ai" for r in v["rows"]))
+    r = row(R.view(ctx()), "chatbot_api")
+    check("chatbot_api: the real reading (this machine) is never 'on' - there is no route",
+          r["state"] in ("off", "not_set_up"), r)
+
+
 def t_no_secret_anywhere():
     with Env(ENV):
         c = ctx(ALL, lanes=["jarvis-escalate"], providers=["openrouter"],
@@ -527,7 +661,8 @@ def t_both_apps_read_the_current_contract():
 
 
 if __name__ == "__main__":
-    for fn in (t_rows_and_order, t_no_secret_anywhere, t_asks_follows_the_rules,
+    for fn in (t_rows_and_order, t_chatbot_row, t_chatbot_api_row, t_no_secret_anywhere,
+               t_asks_follows_the_rules,
                t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
                t_never_raises, t_cloud_lanes_are_the_servers_own, t_the_quick_answer,
                t_the_patch, t_account_secrets_from_credential_manager_show_too,

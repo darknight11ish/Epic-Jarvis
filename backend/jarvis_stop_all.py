@@ -157,6 +157,15 @@ def generation() -> int:
         return _generation
 
 
+def answers_running() -> int:
+    """How many chat answers are being written right now (begin_turn minus
+    end_turn). Read only. jarvis_chatbot.py's limited, one-card version
+    waits while this is above 0, so a chatbot conversation never slows the
+    owner's own chat on the one graphics card."""
+    with _lock:
+        return _turns
+
+
 # ---------------------------------------------------------------- stopping
 
 def _say(text) -> Optional[str]:

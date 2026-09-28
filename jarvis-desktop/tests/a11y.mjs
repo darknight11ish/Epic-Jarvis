@@ -204,8 +204,8 @@ await check("the rail is one tab stop, and the arrows move inside it", async () 
     selected: document.querySelector('[aria-selected="true"]').id,
     tab0: [...document.querySelectorAll('[role="tab"]')].filter((t) => t.tabIndex === 0).length,
   }));
-  assert.equal(after.focused, "tab-live", "ArrowDown did not move to the next tab");
-  assert.equal(after.selected, "tab-live", "selection did not follow focus");
+  assert.equal(after.focused, "tab-now", "ArrowDown did not move to the next tab");
+  assert.equal(after.selected, "tab-now", "selection did not follow focus");
   assert.equal(after.tab0, 1, "the roving tabindex did not rove");
 
   await page.keyboard.press("End");

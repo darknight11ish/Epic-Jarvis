@@ -13,7 +13,7 @@ class BaseUrlTest {
 
     @Test
     fun a_bare_meshnet_name_gets_jarvis_s_port() {
-        assertEquals("http://marioirelan11-alps.nord:4719", BaseUrl.normalise("marioirelan11-alps.nord"))
+        assertEquals("http://my-pc.nord:4719", BaseUrl.normalise("my-pc.nord"))
         assertEquals("http://desktop.tail1234.ts.net:4719", BaseUrl.normalise("desktop.tail1234.ts.net/"))
     }
 
@@ -25,7 +25,7 @@ class BaseUrlTest {
     /** CONTROL: a port the owner typed is never changed. */
     @Test
     fun a_typed_port_is_kept() {
-        assertEquals("http://marioirelan11-alps.nord:4719", BaseUrl.normalise("marioirelan11-alps.nord:4719"))
+        assertEquals("http://my-pc.nord:4719", BaseUrl.normalise("my-pc.nord:4719"))
         assertEquals("http://desktop.ts.net:8080", BaseUrl.normalise("desktop.ts.net:8080"))
         assertEquals("http://desktop.ts.net:80", BaseUrl.normalise("http://desktop.ts.net:80"))
         assertEquals("http://[fd7a:115c::1]:4719", BaseUrl.normalise("[fd7a:115c::1]:4719"))

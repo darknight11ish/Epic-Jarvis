@@ -198,6 +198,12 @@ def t_status_today():
           today["command"]["line"] and today["command"]["undo"] and today["command"]["check"])
     check("Spark-X2.5 and Qwen 3.5 are listed to test later, not offered",
           len(today["test_later"]) == 2)
+    hows = [c.get("desktop_share_how") for case in data.values() if isinstance(case, dict)
+            for c in case.get("cards") or []]
+    check("the desktop's share says how it was measured once, not "
+          "\"measured (measured when Ollama started)\" (play tester, 2026-09-27)",
+          "measured when Ollama started" in hows
+          and not any(h and h.count("measured") > 1 for h in hows), sorted(set(map(str, hows))))
     blob = json.dumps(data)
     check("no token anywhere in any answer", "X-Jarvis-Token" not in blob
           and not re.search(r'"token"\s*:', blob))

@@ -335,7 +335,7 @@ await check("the deep event reads the list again, so a finished answer shows wit
 await check("the Live trace shows the deep event as an id and how it ended - never the question", async () => {
   const page = await brain({ status: BM.deep_done });
   await page.locator("#rail-advanced-toggle").click();
-  await page.locator("#tab-live").click();
+  await page.locator("#tab-now").click();
   await page.waitForTimeout(150);
   await page.evaluate(() => window.__emit("jarvis-event",
     { kind: "deep", id: 42, data: { id: "deep_000002", state: "failed" } }));
