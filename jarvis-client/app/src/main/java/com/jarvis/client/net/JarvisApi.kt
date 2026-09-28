@@ -894,6 +894,14 @@ class JarvisApi(
     suspend fun historyConversation(id: String): ApiResult<JsonObject> = probe(ChatLog.conversationPath(id))
 
     /**
+     * `GET /api/history/search` (section 71): the kept conversations whose
+     * words hold every search word, with a snippet each. The PC opens each
+     * kept turn in memory for this one search and keeps nothing; neither
+     * does this. [path] is [ChatLog.searchPath]'s.
+     */
+    suspend fun historySearch(path: String): ApiResult<JsonObject> = probe(path)
+
+    /**
      * `POST /api/history/delete`: ONE conversation. No route deletes them
      * all, on purpose. A 404 - already gone - comes back as
      * [ApiError.NotFound] whatever its body says ([ChatLog.deleteSaid]).

@@ -3789,6 +3789,17 @@ object JarvisRuntime {
     suspend fun historyConversation(id: String): ApiResult<JsonObject> = api.historyConversation(id)
 
     /**
+     * "Search what was said" (docs/JARVIS-API.md section 71): a read, never
+     * held. The words go to the PC for this one search and are not kept -
+     * not here, not there. Null when there is nothing worth sending (fewer
+     * than two letters, or too long): the screen then filters titles.
+     */
+    suspend fun historySearch(query: String): ApiResult<JsonObject>? {
+        val path = com.jarvis.client.net.ChatLog.searchPath(query) ?: return null
+        return api.historySearch(path)
+    }
+
+    /**
      * The chat history switch - the same shape as [setLearning]. ON is held
      * on a stale link (rule 4) and raises an approval card on the PC; OFF is
      * never held - it only stops something. @return the sentence to show.
