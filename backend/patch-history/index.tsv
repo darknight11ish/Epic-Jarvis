@@ -23,6 +23,7 @@ briefing.patch	briefing/5350f7f.patch	5350f7f719f299875b3529c2304821dbf9176bce	2
 chat-history.patch	chat-history/92cbd90.patch	92cbd906388bfa9a2b6b9c7f7377e621ae5bcd30	2026-09-24T17:50:35+00:00	Merge branch 'worktree-agent-a6ef7f4f8bec69b97' into claude/admiring-ritchie-5urg5h
 chat-history.patch	chat-history/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53+00:00	Backend: keep chat history on the PC, encrypted (chat-history.patch)
 chatbot-routes.patch	chatbot-routes/59b73f8.patch	59b73f84de12bc9c9661fa7ef1620052d2437275	2026-09-28T02:09:55+00:00	Merge branch 'studio-chatbot-screens' into claude/jarvis-ai-assistant-research-ff37vy
+chatbot.patch	chatbot/8b95a55.patch	8b95a5550048e1a6ae397787b2f1ac8eef2e6ee5	2026-09-28T01:31:34+00:00	Chatbot driver, step 2: the Gemini website adapter (not usable from the apps yet)
 email-send.patch	email-send/ab2eb89.patch	ab2eb8925786245dca22da666433ce25f1b22678	2026-09-25T22:40:42+00:00	Email sending: one approval card per email, the whole text on it (backend)
 extraction-wiring.patch	extraction-wiring/2641f6d.patch	2641f6d676ed75ad47d45e453c350baf9b163eab	2026-09-15T02:33:18+00:00	Routes to read, edit, forget and export what Jarvis has learned
 extraction-wiring.patch	extraction-wiring/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30+00:00	I invented a NameError, then reported it twice as a finding
@@ -32,6 +33,7 @@ extraction-wiring.patch	extraction-wiring/a50cbf1.patch	a50cbf1ee96d71ac66e3d7a9
 feedback.patch	feedback/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
 feedback.patch	feedback/5d1cfa3.patch	5d1cfa36b3fc94807dae3597d00ffe0d54df5c77	2026-09-23T08:19:29+00:00	Backend: right/wrong mark per answer, helpful/harmful counts, retire card
 focus.patch	focus/3f467d9.patch	3f467d91283363030b92b0399a8f46354fb61406	2026-09-25T23:45:52+00:00	Focus sessions, backend: jarvis_focus.py, focus.patch, the fast-path commands
+forget-range.patch	forget-range/53863a2.patch	53863a253a7034e31809a4ff4e5bec677da8049f	2026-09-28T08:28:43+00:00	Forget a time frame, backend: a checked list, ONE card, 10 minutes to undo
 gate-outcome.patch	gate-outcome/8f672ce.patch	8f672cef4d26b1b88abd13cf156202706c5b0fac	2026-09-27T00:39:10+00:00	Add "One bigger model on both cards": a third, off-by-default second-card mode
 gate-outcome.patch	gate-outcome/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23+00:00	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
 gate-outcome.patch	gate-outcome/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44+00:00	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
