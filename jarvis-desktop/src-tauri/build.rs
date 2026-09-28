@@ -260,6 +260,19 @@ fn main() {
             "backup_now",
             "preview_restore",
             "restore_backup",
+            // Settings' "Devices" (docs/PAIRING-DESIGN.md, phase 1): the
+            // address for the QR code, start / watch / cancel a pairing
+            // (the QR code drawn in Rust; the window hidden from screen
+            // capture while a code shows), the device list, Remove ONE
+            // device, and retire / bring back the old shared key. Settings
+            // window only.
+            "pair_phone_address",
+            "pair_start",
+            "pair_session",
+            "pair_cancel",
+            "devices_list",
+            "devices_remove",
+            "devices_shared",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
             // way (it changes wording only). Settings window only.
@@ -311,6 +324,8 @@ fn main() {
             "set_voice_animal",
             "reset_voice_animal",
             "try_voice_animal",
+            "get_face_voice_offer",
+            "answer_face_voice_offer",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

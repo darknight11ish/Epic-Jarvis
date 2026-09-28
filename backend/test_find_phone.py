@@ -107,6 +107,11 @@ def t_the_fast_path():
         i = Q.match(said)
         check(f"ours: {said!r}", i is not None and i.name == name
               and (named is None or i.f.get("named") is named), str(i and (i.name, i.f)))
+    for said in ("call my mum's phone", "ring my sister's mobile", "call my mum phone",
+                 "find my dad's phone"):
+        i = Q.match(said)
+        check(f"someone else's phone is not the owner's: {said!r}",
+              i is None or i.name != "phone_ring", str(i and (i.name, i.f)))
     for said in ("find my phone charger", "call my mum", "ring the doctor"):
         i = Q.match(said)
         check(f"not ours: {said!r}", i is None or not i.name.startswith("phone_"))

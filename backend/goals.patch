@@ -8,9 +8,9 @@
 +    # Jarvis evaluation): "Goals with one card per step",
 +    # docs/creativity-2026-09-25/future.md idea 3. GET/POST /api/goals,
 +    # POST /api/goals/<id>/accept|step|stop. Every route is content or
-+    # data - creating, editing and stopping a goal raise no card; only
-+    # accepting one does, through the SAME schedule_repeat card a
-+    # repeating reminder already uses (jarvis_schedule.py), never a
++    # data - creating, editing, accepting and stopping a goal raise no
++    # card (the weekly check-in is set up at once, like a plain repeating
++    # reminder - the owner, 2026-09-28; jarvis_schedule.py), never a
 +    # mechanism of its own. Wrapped round Handler here, before anything
 +    # listens, like sources above; the rules are all in jarvis_goals.py.
 +    try:

@@ -1116,6 +1116,20 @@ function paintFace() {
   // Every change sent to the PC is held on a stale link (rule 4).
   sw.disabled = cv.busy || linkStale;
   sw.title = linkStale ? HELD : "";
+  // The one-time "has its own voice. Use it?" question, in the PC's words.
+  const offer = CV.faceOfferView(cv.status);
+  $("cv-face-offer").hidden = !offer.show;
+  if (!offer.show) return;
+  $("cv-face-offer-question").textContent = offer.question;
+  for (const [id, word, answer] of [["cv-face-offer-use", offer.use, "use"],
+    ["cv-face-offer-keep", offer.keep, "keep"]]) {
+    const b = $(id);
+    b.textContent = word;
+    b.dataset.face = offer.face;
+    b.dataset.answer = answer;
+    b.disabled = cv.busy || linkStale;
+    b.title = linkStale ? HELD : "";
+  }
 }
 
 /* Each animal's voice: one row per animal, built once and then updated in
@@ -1416,6 +1430,13 @@ async function setFaceVoice(enabled) {
   await sendChoice("cv-face-status", "set_voice_face", { enabled }, [paintFace]);
 }
 
+/** The owner's answer to the one-time animal voice question. */
+async function answerFaceOffer(button) {
+  const { face, answer } = button.dataset;
+  if (!face || !answer) return;
+  await sendChoice("cv-face-status", "answer_face_voice_offer", { face, answer }, [paintFace]);
+}
+
 async function sendChoice(statusId, command, args, repaint) {
   const out = $(statusId);
   if (linkStale) {
@@ -1661,6 +1682,8 @@ export function startVoicePanel(opts = {}) {
   });
   $("cv-better-switch").addEventListener("change", (e) => setBetter(e.target.checked));
   $("cv-face-switch").addEventListener("change", (e) => setFaceVoice(e.target.checked));
+  $("cv-face-offer-use").addEventListener("click", (e) => answerFaceOffer(e.currentTarget));
+  $("cv-face-offer-keep").addEventListener("click", (e) => answerFaceOffer(e.currentTarget));
 
   followJarvisVoice();
 

@@ -113,13 +113,24 @@ pre{margin:0;padding:14px;overflow:auto;max-height:340px;font-family:var(--mono)
 .solo-stage canvas{max-width:100%;max-height:100%;display:block;touch-action:none;cursor:grab}
 footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
        color:var(--dimmer);font-size:12px}
+/* ---------- picking a face, for a beginner (play test F1, 2026-09-28) ---------- */
+.skip{display:inline-block;margin-bottom:12px;padding:6px 11px;border:1px solid var(--line-hot);
+      color:var(--pick);font-family:var(--mono);font-size:11px;text-decoration:none}
+.solo-line{flex-basis:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+           font-family:var(--mono);font-size:11px;color:var(--dim)}
+.solo-line[hidden]{display:none}
+details.dev{margin-top:26px;color:var(--dimmer);font-size:12px}
+details.dev summary{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)}
 </style>
 
 <div class="wrap">
 <header>
-  <div class="lbl">20 faces · 50 colours · 12 patterns · one spec, two renderers</div>
+  <!-- A keyboard reaches the faces in two presses, not 85 (play test F1):
+       this is the first thing Tab lands on. -->
+  <a class="skip" href="#grid" id="skip-to-faces">Skip to the faces</a>
+  <div class="lbl"><span id="face-n">24</span> faces · 50 colours · 12 patterns</div>
   <h1>Choose Jarvis's face</h1>
-  <p class="lede">Every face below is driven by <b>one shared palette and one pattern vocabulary</b>, bound to what Jarvis is doing. Android is Compose and the desktop is a webview, so they cannot share drawing code — what they share is the <b>data</b> at the bottom of this page. Pick a state, pick how it should look, and every face follows.</p>
+  <p class="lede">Click a face to see it large, then press <b>Use this face</b>. It is saved at once — the phone wears it too — and <b>Undo</b> puts the old one back. The controls just below change the colour and pattern Jarvis shows for each thing it is doing; press <b>Save</b> after changing those.</p>
 </header>
 
 <div class="deck">
@@ -174,10 +185,27 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
     <button class="chip" id="solo-cycle" aria-pressed="false">Cycle states</button>
     <button class="chip" id="solo-use">Use this face</button>
     <button class="chip" id="solo-close">Close</button>
+    <!-- What "Use this face" did, with Undo (the phone's Appearance does the
+         same in one tap, with an Undo bar). -->
+    <div class="solo-line">
+      <span id="solo-state" role="status"></span>
+      <button class="chip" id="solo-undo" hidden>Undo</button>
+    </div>
+    <!-- The PC's one-time question after an animal face is picked (the
+         owner, 2026-09-28), in its own words: "The Red Panda has its own
+         voice. Use it?" - Use it / Keep my voice. Greyed on a stale link. -->
+    <div class="solo-line" id="solo-offer" hidden>
+      <span id="solo-offer-question"></span>
+      <button class="chip" id="solo-offer-use"></button>
+      <button class="chip" id="solo-offer-keep"></button>
+    </div>
   </div>
   <div class="solo-stage"><canvas id="solo-canvas"></canvas></div>
 </div>
 
+<details class="dev" id="for-developers">
+<summary>For developers</summary>
+<p>Every face is driven by one shared palette and one pattern vocabulary, bound to what Jarvis is doing. Android is Compose and the desktop is a webview, so they cannot share drawing code — what they share is the data below: one spec, two renderers.</p>
 <div class="export">
   <div class="hd">
     <span class="lbl">Portable output</span>
@@ -193,6 +221,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 </div>
 
 <footer>Most faces are hand-written Canvas 2D; Nucleus, Membrane, Tokamak and the four animals are drawn by the graphics card through WebGL 2, and fall back to Canvas 2D when WebGL is missing or the card cannot keep up. No three.js, nothing fetched at runtime. Speed ranges differ per face because nine of these integrate their state every frame and cannot simply be handed a faster clock; those are sub-stepped instead.</footer>
+</details>
 </div>
 
 <script src="faces-spec.js"></script>
@@ -5822,6 +5851,7 @@ function openSolo(theme){
   SOLO.detail = Math.max(1.9, Q.detail);        // the full detail budget
   box.hidden = false;
   SOLO_ON_SCREEN = theme.id;
+  resetSoloChoice();
   $("solo-name").textContent = theme.name;
   syncFaceChoice();
   const f = FACE[theme.id];
@@ -6058,6 +6088,17 @@ export const budgetMs = (hz: number, stride = 1) => 1000 / (hz / stride);
 function boot(){
   buildStates(); buildPatterns(); buildPalette(); buildQuality(); buildFps(); buildGrid();
   applyQuality(); syncUI();
+  // The real count, not a number written by hand (it said 20 with 24 cards).
+  const faceN = $("face-n");
+  if(faceN) faceN.textContent = String(document.querySelectorAll("#grid .card canvas").length);
+  // "Skip to the faces": the face in use, or the first one, gets the focus.
+  const skip = $("skip-to-faces");
+  if(skip) skip.onclick = e => {
+    e.preventDefault();
+    const cv = document.querySelector('#grid canvas[aria-current="true"]')
+            || document.querySelector("#grid .card canvas");
+    if(cv){ cv.focus(); cv.scrollIntoView({ block: "center" }); }
+  };
 
   $("allspeed").oninput = e => {
     const u = +e.target.value;
@@ -6706,10 +6747,13 @@ const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 
 function saveState(text, tone) {
-  const el = $("save-state");
-  if (!el) return;
-  el.textContent = text;
-  el.style.color = tone === "bad" ? "#ff8a95" : tone === "ok" ? "#5cff9d" : "var(--dim)";
+  // The deck's line, and the open face's own (the deck is behind it).
+  for (const id of ["save-state", "solo-state"]) {
+    const el = $(id);
+    if (!el) continue;
+    el.textContent = text;
+    el.style.color = tone === "bad" ? "#ff8a95" : tone === "ok" ? "#5cff9d" : "var(--dim)";
+  }
 }
 
 /** BIND, minus anything that is the spec's default, as the stored document. */
@@ -6811,6 +6855,8 @@ async function loadAppearance() {
   try {
     const loaded = await TAURI.core.invoke("get_appearance");
     LOAD_FAILED = false;
+    SAVED_BINDINGS = loaded && loaded.bindings && typeof loaded.bindings === "object"
+      ? JSON.parse(JSON.stringify(loaded.bindings)) : {};
     applyDocument(loaded);
     if (loaded.source === "default") saveState("nothing saved yet");
     else if (loaded.shared) saveState("loaded from Jarvis — the phone sees this too", "ok");
@@ -6821,35 +6867,141 @@ async function loadAppearance() {
   }
 }
 
-let SAVING = false;
+/** The bindings as last loaded or saved. "Use this face" saves the face
+ *  with THESE, so colours still being tried out in the editor are not
+ *  published by picking a face - only Save publishes those. */
+let SAVED_BINDINGS = {};
+
+/** One write at a time, in order. Repeated presses used to issue
+ *  overlapping saves whose status line was set by whichever returned last;
+ *  a second press while one was in flight was dropped - which would lose a
+ *  quick "Use this face" then "Undo". Now each waits its turn. */
+let SAVE_CHAIN = Promise.resolve();
+
+/** Writes `doc`. `words(loaded)` is what to say when it worked. Resolves
+ *  true when it was saved (or this is the browser preview), false when not. */
+function saveDocument(doc, words) {
+  const run = async () => {
+    if (!IS_TAURI) { saveState("browser preview — nothing is saved"); return true; }
+    // Refuse to publish over a document we never managed to read. The grid
+    // is showing the spec's defaults in that case, so saving would replace
+    // the owner's real face — on the phone too — with whatever shipped.
+    if (LOAD_FAILED) {
+      saveState("cannot save: the saved face has not loaded, so this would overwrite it", "bad");
+      return false;
+    }
+    saveState("saving…");
+    try {
+      const loaded = await TAURI.core.invoke("set_appearance", { appearance: doc });
+      // Shared and saved are different facts and the window says which. A
+      // picker that claimed to have changed the phone when it had not would
+      // be worse than one that admits it could not.
+      saveState(words(loaded), loaded.shared ? "ok" : undefined);
+      return true;
+    } catch (error) {
+      saveState(String((error && error.message) || error), "bad");
+      return false;
+    }
+  };
+  const next = SAVE_CHAIN.then(run, run);
+  SAVE_CHAIN = next.catch(() => false);
+  return next;
+}
 
 async function saveAppearance() {
-  if (!IS_TAURI) { saveState("browser preview — nothing is saved"); return; }
-  // Refuse to publish over a document we never managed to read. The grid is
-  // showing the spec's defaults in that case, so saving would replace the
-  // owner's real face — on the phone too — with whatever shipped.
-  if (LOAD_FAILED) {
-    saveState("cannot save: the saved face has not loaded, so this would overwrite it", "bad");
-    return;
+  const doc = currentDocument();
+  const ok = await saveDocument(doc, loaded => loaded.shared
+    ? "saved to Jarvis — the phone sees this too"
+    : (loaded.note || "saved on this machine only"));
+  if (ok && IS_TAURI) SAVED_BINDINGS = JSON.parse(JSON.stringify(doc.bindings));
+}
+
+function faceName(id) {
+  const f = SPEC.faces.find(x => x.id === id);
+  return f ? f.name : id;
+}
+
+/** Saves the chosen face (SOLO_FACE) at once, with the saved colours. */
+function saveFace(undone) {
+  const face = SOLO_FACE || null;
+  return saveDocument({ face, bindings: SAVED_BINDINGS }, loaded => {
+    const what = face ? `${faceName(face)} is Jarvis's face now` : "No face chosen — each device uses its own";
+    const where = loaded.shared ? " — the phone wears it too" : ` — ${loaded.note || "saved on this machine only"}`;
+    return `${undone ? "Undone. " : ""}${what}${where}`;
+  });
+}
+
+/* ---- "Use this face": applied and saved at once, with Undo ---- */
+
+/** The face before the last "Use this face", for Undo; null when there is
+ *  nothing to undo. */
+let UNDO_FACE = null;
+
+function showUndo(on) {
+  const b = $("solo-undo");
+  if (b) b.hidden = !on;
+}
+
+/** A fresh face opened: no Undo or question left over from another one. */
+function resetSoloChoice() {
+  UNDO_FACE = null;
+  showUndo(false);
+  hideOffer();
+  const st = $("solo-state");
+  if (st) st.textContent = "";
+}
+
+/* ---- The one-time animal voice question (the owner, 2026-09-28) ----
+   The PC decides whether to ask and says every word; this page shows them
+   as they are and sends the answer. It can read only the question, never
+   the voices list (voice_training.rs get_face_voice_offer). */
+const ANIMAL_FACES = ["redpanda", "pygmyowl", "seaotter", "monkey"];
+const OFFER_HELD = "The connection to Jarvis is catching up, so this waits until it does.";
+
+function hideOffer() {
+  const box = $("solo-offer");
+  if (box) box.hidden = true;
+}
+
+async function askOffer(face) {
+  if (!IS_TAURI || !ANIMAL_FACES.includes(face)) return;
+  let got = null;
+  try { got = await TAURI.core.invoke("get_face_voice_offer"); } catch (error) { return; }
+  const o = got && got.offer;
+  // Only the question for the face that is chosen and still on screen.
+  if (!o || o.face !== face || SOLO_FACE !== face || SOLO_ON_SCREEN !== face) return;
+  $("solo-offer-question").textContent = o.question;
+  const stale = got.stale === true;
+  for (const [id, word] of [["solo-offer-use", o.use], ["solo-offer-keep", o.keep]]) {
+    const b = $(id);
+    b.textContent = word;
+    b.disabled = stale;
+    b.title = stale ? OFFER_HELD : "";
   }
-  // No concurrent writes. Repeated presses issued overlapping saves whose
-  // status line was set by whichever returned last.
-  if (SAVING) return;
-  SAVING = true;
-  saveState("saving…");
+  const box = $("solo-offer");
+  box.dataset.face = face;
+  box.hidden = false;
+}
+
+async function answerOffer(answer) {
+  const box = $("solo-offer");
+  const face = box.dataset.face;
+  if (!face || !IS_TAURI) return;
+  const buttons = [$("solo-offer-use"), $("solo-offer-keep")];
+  buttons.forEach(b => { b.disabled = true; });
   try {
-    const loaded = await TAURI.core.invoke("set_appearance", {
-      appearance: currentDocument(),
-    });
-    // Shared and saved are different facts and the window says which. A picker
-    // that claimed to have changed the phone when it had not would be worse
-    // than one that admits it could not.
-    if (loaded.shared) saveState("saved to Jarvis — the phone sees this too", "ok");
-    else saveState(loaded.note || "saved on this machine only");
+    const r = await TAURI.core.invoke("answer_face_voice_offer", { face, answer });
+    if (!r || r.ok !== true) {
+      saveState(String((r && r.error) || "Jarvis did not say whether it changed."), "bad");
+      buttons.forEach(b => { b.disabled = false; });
+      return;
+    }
+    box.hidden = true;
+    const said = String(r.message || "Done").trim().replace(/[.\s]+$/, "");
+    saveState(`${said.charAt(0).toUpperCase()}${said.slice(1)}.`, "ok");
   } catch (error) {
     saveState(String((error && error.message) || error), "bad");
-  } finally {
-    SAVING = false;
+    buttons.forEach(b => { b.disabled = false; });
   }
 }
 
@@ -6861,20 +7013,40 @@ async function saveAppearance() {
 if (!DISPLAY_MODE) {
   $("save").onclick = saveAppearance;
 
-  $("solo-use").onclick = () => {
+  $("solo-use").onclick = async () => {
     if (!SOLO_ON_SCREEN) return;
     // Toggle, so the owner can go back to "no choice" — which is not the same
     // as choosing the default face. An absent `face` leaves each client on
     // its own, and a phone whose default differs should keep it.
+    const before = SOLO_FACE;
     SOLO_FACE = SOLO_FACE === SOLO_ON_SCREEN ? null : SOLO_ON_SCREEN;
     syncFaceChoice();
-    // "close and press save", not "press save": the solo view is a full
-    // overlay and the save button is behind it, so the shorter instruction
-    // cannot be followed from where the person reading it is standing.
-    saveState(SOLO_FACE
-      ? `${SOLO_FACE} chosen — close, then press save`
-      : "no face chosen — close, then press save");
+    hideOffer();
+    // Saved at once (play test F1: it used to save nothing until a small
+    // Save chip behind this overlay was found), like the phone's one tap.
+    const chosen = SOLO_FACE;
+    const ok = await saveFace(false);
+    if (!ok) {
+      // Not saved: the screen must not claim it is in use.
+      if (SOLO_FACE === chosen) { SOLO_FACE = before; syncFaceChoice(); }
+      return;
+    }
+    UNDO_FACE = { face: before };
+    showUndo(IS_TAURI);
+    if (chosen) askOffer(chosen);
   };
+  $("solo-undo").onclick = async () => {
+    if (!UNDO_FACE) return;
+    const back = UNDO_FACE.face;
+    UNDO_FACE = null;
+    showUndo(false);
+    hideOffer();
+    SOLO_FACE = back;
+    syncFaceChoice();
+    await saveFace(true);
+  };
+  $("solo-offer-use").onclick = () => answerOffer("use");
+  $("solo-offer-keep").onclick = () => answerOffer("keep");
 
   loadAppearance();
 }

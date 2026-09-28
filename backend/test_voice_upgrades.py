@@ -120,10 +120,14 @@ class FakePocket:
         return types.SimpleNamespace(samples=x, sample_rate=24000)
 
 
-def reset(face_voice=True):
+def reset(face_voice=True, answer="use"):
     """A fresh config folder. `face_voice`: the "Voice follows the face"
     switch starts ON here, as most of these tests are about it working; it
-    ships OFF (FACE_VOICE_DEFAULT, checked on its own with face_voice=None)."""
+    ships OFF (FACE_VOICE_DEFAULT, checked on its own with face_voice=None).
+    `answer`: with the switch set here, every animal's answer to the
+    one-time question starts as this ("use" - the owner said "Use it" for
+    each - so an animal speaks); None leaves every animal unanswered, as it
+    ships (t_each_animal_keeps_its_own_answer checks that on its own)."""
     V._reset_for_tests()
     d = Path(tempfile.mkdtemp(prefix="cfg-", dir=TMP))
     CFG.clear()
@@ -147,6 +151,8 @@ def reset(face_voice=True):
     S._cfg = lambda k, default=None: CFG.get(k, default)
     if face_voice is not None:
         V._write_state(face_voice=face_voice)
+        if answer is not None:
+            V._write_state(face_answers={f: answer for f in V.FACE_VOICES})
         AUDIT.clear()
         EVENTS.clear()
     return d
@@ -504,6 +510,152 @@ def t_the_face_switch_asks_nothing_and_says_so():
     V._state_path().write_text(json.dumps({"active": "builtin", "face_voice": "no"}))
     check("a damaged switch in state.json is no choice (the default, off)",
           V._read_state()["face_voice"] is None and not V.face_voice_on())
+
+
+def t_the_one_time_animal_voice_question():
+    """The owner, 2026-09-28: the first time an animal face is picked, one
+    line asks "The <Animal> has its own voice. Use it?" (Use it / Keep my
+    voice), each animal keeping its OWN answer; "Use it" turns the switch
+    on; a face never changes the voice by itself; no card either way."""
+    d = reset(face_voice=None)
+    check("no face saved: no question", V.face_voice_view()["offer"] is None)
+    _show_face(d, "nucleus")
+    check("a face that is not an animal: no question", V.face_voice_view()["offer"] is None)
+    _show_face(d, "redpanda")
+    offer = V.face_voice_view()["offer"]
+    check("an animal face, the switch off, never asked: the question, word for word",
+          offer == {"face": "redpanda", "question": "The Red Panda has its own voice. Use it?",
+                    "use": "Use it", "keep": "Keep my voice"}, offer)
+    check("... and picking the face alone changed nothing (the owner's voice)",
+          V.face_voice() is None and V.builtin_voice() == (0, 1.0, 0.0, ""))
+    code, out = V.handle_post("/api/voice/voices/face_offer",
+                              {"face": "redpanda", "answer": "keep"})
+    check("Keep my voice: 200, at once, no card", code == 200 and out["ok"] is True
+          and not CARDS, (code, out))
+    check("... the switch stays off and the question is gone for the panda",
+          V.face_voice_on() is False and out["face_voice"]["offer"] is None
+          and V._read_state()["face_answers"] == {"redpanda": "keep"}, out["face_voice"])
+    check("... and the message names the panda, without pointing at the switch "
+          "(turning it on would not bring the panda's voice now)",
+          "Red Panda" in out["message"] and V.FACE_VOICE_TITLE not in out["message"],
+          out["message"])
+    check("... the voices event says so, with no words",
+          EVENTS[-1] == {"what": "face_offer", "outcome": "keep"}, EVENTS)
+    check("... and the audit line has the face and the answer only",
+          AUDIT[-1] == ("voices.face_offer", {"face": "redpanda", "answer": "keep"}), AUDIT)
+    _show_face(d, "pygmyowl")
+    offer = V.face_voice_view()["offer"]
+    check("another animal not asked yet: its own question",
+          offer and offer["face"] == "pygmyowl"
+          and offer["question"] == "The Pygmy Owl has its own voice. Use it?", offer)
+    code, out = V.handle_post("/api/voice/voices/face_offer",
+                              {"face": "pygmyowl", "answer": "use"})
+    check("Use it: 200, no card, and the switch is on - the owl speaks",
+          code == 200 and not CARDS and V.face_voice_on() is True
+          and V.face_voice()["face"] == "pygmyowl", (code, out))
+    check("... the answer carries the view, with no question left",
+          out["face_voice"]["enabled"] is True and out["face_voice"]["offer"] is None
+          and "Pygmy Owl" in out["message"], out)
+    check("... remembered per face",
+          V._read_state()["face_answers"] == {"redpanda": "keep", "pygmyowl": "use"})
+    V._write_state(face_voice=False)
+    _show_face(d, "redpanda")
+    check("a face already asked is never asked again, even with the switch off later",
+          V.face_voice_view()["offer"] is None)
+    _show_face(d, "seaotter")
+    V._write_state(face_voice=True)
+    offer = V.face_voice_view()["offer"]
+    check("with the switch already on, an animal never answered for is still asked",
+          offer and offer["face"] == "seaotter"
+          and offer["question"] == "The Sea Otter has its own voice. Use it?", offer)
+    for bad in ({"face": "redpanda"}, {"face": "nucleus", "answer": "use"},
+                {"face": "redpanda", "answer": "yes"}, {"face": "redpanda", "answer": True},
+                {"face": "redpanda", "answer": "use", "x": 1}, None, "use"):
+        code, out = V.handle_post("/api/voice/voices/face_offer", bad)
+        check(f"refused, in words: {bad!r}", code == 400 and out["ok"] is False
+              and isinstance(out.get("error"), str) and out["error"], (code, out))
+    V._state_path().write_text(json.dumps({"active": "builtin", "face_voice": True,
+                                           "face_answers": "all"}))
+    check("a damaged face_answers in state.json is no answer (the safe reading)",
+          V._read_state()["face_answers"] == {} and V.face_voice() is None
+          and V.face_voice_view()["offer"]["face"] == "seaotter")
+    V._state_path().write_text(json.dumps({"active": "builtin", "face_voice": True,
+                                           "face_answers": {"redpanda": "use",
+                                                            "seaotter": "yes",
+                                                            "pygmyowl": True,
+                                                            "monkey": ["use"],
+                                                            "ghost": "use"}}))
+    check("... and only a real animal with \"use\" or \"keep\" is kept from it",
+          V._read_state()["face_answers"] == {"redpanda": "use"})
+    check("... an odd answer reads as no answer: the otter asks, and does not speak",
+          V.face_voice() is None and V.face_voice_view()["offer"]["face"] == "seaotter"
+          and V.face_voice_view()["speaking"] is False)
+    V._state_path().write_text(json.dumps({"active": "builtin", "face_voice": True,
+                                           "face_offered": ["seaotter"]}))
+    check("a leftover face_offered (from before each animal kept its own answer) "
+          "is ignored: no answer, so the otter asks and does not speak",
+          V._read_state()["face_answers"] == {} and V.face_voice() is None
+          and V.face_voice_view()["offer"]["face"] == "seaotter")
+    V._write_state(face_voice=False)
+    check("... and the next save drops it", "face_offered" not in json.loads(
+        V._state_path().read_text()))
+
+
+def t_each_animal_keeps_its_own_answer():
+    """The owner, 2026-09-28: each animal keeps its OWN answer. An animal
+    speaks in its own voice only with the switch on AND its answer "use"."""
+    d = reset(face_voice=None)
+    _show_face(d, "redpanda")
+    V.handle_post("/api/voice/voices/face_offer", {"face": "redpanda", "answer": "keep"})
+    _show_face(d, "pygmyowl")
+    code, out = V.handle_post("/api/voice/voices/face_offer",
+                              {"face": "pygmyowl", "answer": "use"})
+    check("the owner's scenario: panda Keep, then owl Use - the switch is on",
+          code == 200 and V.face_voice_on() is True, (code, out))
+    check("... the owl speaks as the owl",
+          V.builtin_voice() == (2, 0.85, 1.0, "pygmyowl"), V.builtin_voice())
+    rows = {r["face"]: r["answer"] for r in out["face_voice"]["animals"]}
+    check("... each animal's row carries its answer (null when never asked)",
+          rows == {"redpanda": "keep", "pygmyowl": "use", "seaotter": None,
+                   "monkey": None}, rows)
+    _show_face(d, "redpanda")
+    check("... and the panda keeps the normal built-in voice, switch on or not",
+          V.face_voice() is None and V.builtin_voice() == (0, 1.0, 0.0, ""),
+          V.builtin_voice())
+    view = V.face_voice_view()
+    check("... the line says so, true to what happens, and nothing is asked",
+          view["line"] == "You chose to keep your voice for the Red Panda."
+          and view["speaking"] is False and view["offer"] is None, view)
+    check("... and the built-in voice's row does not claim the panda speaks",
+          "Red Panda" not in V.speaker_view()["note"], V.speaker_view()["note"])
+    _show_face(d, "monkey")
+    view = V.face_voice_view()
+    check("an animal never answered for, switch on: it asks, and does not speak as itself",
+          view["offer"] and view["offer"]["face"] == "monkey" and view["speaking"] is False
+          and V.face_voice() is None and V.builtin_voice() == (0, 1.0, 0.0, ""), view)
+    check("... and the line says it will ask",
+          view["line"] == "The Monkey will ask once whether to use its own voice.", view)
+    code, out = V.handle_post("/api/voice/voices/face_offer",
+                              {"face": "monkey", "answer": "keep"})
+    check("Keep my voice with the switch on leaves the switch on",
+          code == 200 and V.face_voice_on() is True and V.face_voice() is None, (code, out))
+    _show_face(d, "pygmyowl")
+    check("... and the owl, who said yes, still speaks as the owl",
+          V.face_voice()["face"] == "pygmyowl")
+    V.set_face_voice({"enabled": False})
+    check("the switch off silences every animal, the owl too",
+          V.face_voice() is None and V.builtin_voice() == (0, 1.0, 0.0, "")
+          and V.face_voice_view()["speaking"] is False)
+    check("... and the answers are kept",
+          V._read_state()["face_answers"] == {"redpanda": "keep", "pygmyowl": "use",
+                                              "monkey": "keep"})
+    V.set_face_voice({"enabled": True})
+    check("switched back on, the owl speaks again without asking",
+          V.face_voice()["face"] == "pygmyowl" and V.face_voice_view()["offer"] is None)
+    code, out = V.set_face_animal({"face": "redpanda", "speaker": "3", "semitones": 1.0,
+                                   "pace": "normal"})
+    check("changing a kept animal's voice says plainly that it is not used",
+          code == 200 and "keep your voice for the Red Panda" in out["message"], out)
 
 
 def t_the_one_moment_clip_and_the_echo_check_follow_the_face():
@@ -1127,6 +1279,8 @@ def t_shipped_and_pinned():
           re.search(r"^sherpa-onnx>=1\.12\.26\b", req, re.M) is not None)
     routes = (HERE / "voices.patch").read_text(encoding="utf-8")
     check("voices.patch routes the speed POST", '"/api/voice/voices/speed"' in routes)
+    check("voices.patch routes the one-time animal voice question's answer",
+          '"/api/voice/voices/face_offer"' in routes)
     check("voices.patch routes each animal's voice and its Try it (a WAV)",
           '"/api/voice/voices/face_animal"' in routes
           and 'route == "/api/voice/voices/face_animal/try"' in routes

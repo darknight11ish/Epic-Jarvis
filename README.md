@@ -149,7 +149,7 @@ The documents to read first: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
 - **Phone app:** GitHub builds it. A build is published to `client-latest`
   only after an Android emulator has installed and started that exact file,
-  and only from `main` or the working branch - the release notes say which.
+  and only from `main`.
 - **Desktop app:** built on Windows with `npm install` and `npm run tauri build`
   in `jarvis-desktop/`; GitHub also builds the installer.
 - **Every change** runs the tests on GitHub: the backend suites, every

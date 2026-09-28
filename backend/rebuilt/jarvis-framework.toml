@@ -356,6 +356,16 @@ watch_notifications_enable = "ask"
 # owner already approved the folder it writes into (change_own_config).
 restore_backup            = "ask"
 
+# --- Devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28) -----
+# Connecting a new phone gives it a key of its own; bringing the old shared
+# key back lets other devices use it again. Both are ONE card, always with
+# Windows Hello and always from this PC (jarvis_owner_check.PC_ONLY_ACTIONS),
+# whatever these lines say. Must stay "ask": anything else and pairing (or
+# bringing the key back) refuses to go ahead. Removing a device and retiring
+# the old shared key never ask - they only take access away.
+pair_device               = "ask"
+unretire_shared_key       = "ask"
+
 
 # ------------------------------------------------------------------------
 # 3. SELF-MODIFICATION RULES

@@ -205,6 +205,42 @@ def t_distress_and_crisis_words_stay_local():
           "own broad word, not a crisis phrase)", RT.is_private("have you watched Suicide Squad"))
 
 
+def t_health_medicine_and_pregnancy_words():
+    """Security audit 2026-09-28 #4: common health words matched nothing, so
+    the chatbot driver's last check and "Try the cloud model" let them by.
+    Each of the audit's own phrases, plus conditions, pregnancy, medicines
+    and mental health - and the everyday phrases that share a word with
+    them stay NOT private (a false match costs quality, but a list that
+    blocks every plant question would make the chatbot driver useless)."""
+    for q in ("my cholesterol is 240", "I have diabetes", "my blood pressure is high",
+              "I am pregnant", "my HIV test came back", "I take sertraline 50mg",
+              "my divorce lawyer called", "My sister Anna is pregnant, what gifts?",
+              "is metformin safe with alcohol", "my GP changed my medication",
+              "should I take 20 mg of it at night", "how long does IVF take",
+              "I was diagnosed with ADHD last year", "my son is autistic",
+              "living with bipolar disorder", "my blood sugar keeps dropping",
+              "the chemo starts Monday", "my asthma inhaler ran out",
+              "what helps with PTSD nightmares", "my mum has dementia",
+              "is Ozempic worth it", "I'm on antidepressants", "my psychiatrist said",
+              "recovering from an eating disorder", "my migraines are worse"):
+        check(f"{q!r} is private", RT.is_private(q), repr(RT._PRIVATE.search(q)))
+    d = RT.choose("I have diabetes" + PAD, local_model="local", lanes=LANES,
+                  budget=RT.Budget(path=None), owner_said_yes=True)
+    check("... and a long diabetes question stays local even after 'Try the cloud model'",
+          d.lane == "local" and d.gate == "private", repr(d))
+    for q in ("how do bipolar transistors work", "std::vector resize is slow",
+              "a blood orange sorbet recipe", "which pressure washer for the patio",
+              "my plant has yellow leaves, is it a disease", "hospitality jobs near me",
+              "meal prep ideas for the week", "lithium battery life in the cold",
+              "I am addicted to this song", "make the pill-shaped button bigger",
+              "Which plants cope best with a north-facing window?",
+              "add a new row to the table", "my consultant sent the slides",
+              "a dose of reality", "hearing aids for my grandad",
+              "how much does the period drama cost to stream"):
+        check(f"CONTROL: {q!r} is not private", not RT.is_private(q),
+              repr(RT._PRIVATE.search(q)))
+
+
 def t_an_ollama_cloud_model_is_never_local():
     """Ollama runs "-cloud" models through 127.0.0.1 but answers on
     ollama.com. Set as the "local" model, memory used to be injected into
@@ -267,6 +303,7 @@ if __name__ == "__main__":
                t_a_word_added_to_the_config_takes_effect,
                t_the_hud_call_shape_still_works,
                t_distress_and_crisis_words_stay_local,
+               t_health_medicine_and_pregnancy_words,
                t_an_ollama_cloud_model_is_never_local,
                t_a_turn_carrying_the_screen_stays_local):
         print(f"\n--- {fn.__name__} ---")

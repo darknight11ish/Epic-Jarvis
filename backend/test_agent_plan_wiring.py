@@ -264,8 +264,139 @@ def t_a_risky_step_gets_its_own_card():
     _risky_or_from_step_case({"risky": True}, "risky")
 
 
+class _FakeTools:
+    """Swaps named tools in AG.TOOLS for stand-ins with a plain prepare()
+    and a recording execute() (no vault, no memory database), and pins
+    AG._tier_of to `tiers` - restored on exit."""
+
+    def __init__(self, results: dict, tiers: dict):
+        self.results, self.tiers, self.ran = results, tiers, []
+
+    def __enter__(self):
+        self.saved = {n: AG.TOOLS[n] for n in self.results}
+        self.real_tier = AG._tier_of
+        for n, res in self.results.items():
+            old = AG.TOOLS[n]
+
+            def execute(args, state, n=n, res=res, **_):
+                self.ran.append((n, dict(args)))
+                return dict(res)
+            AG.TOOLS[n] = AG.Tool(n, old.description, old.parameters,
+                                  lambda args, n=n: (None, f"{n}: {json.dumps(args)}"),
+                                  execute)
+        AG._tier_of = lambda action: self.tiers.get(action, "ask")
+        return self
+
+    def __exit__(self, *exc):
+        AG.TOOLS.update(self.saved)
+        AG._tier_of = self.real_tier
+        return False
+
+
 def t_a_from_step_step_gets_its_own_card():
-    _risky_or_from_step_case({"from_step": 0}, "from_step")
+    """Bug audit 2026-09-28, F2 + F3: a result-filled step is asked about on
+    its own card, for a PERSON's yes, even when its tool is auto-tier - and
+    both that card and the step that runs hold the earlier step's real
+    result, not the model's guess."""
+    def body():
+        with _FakeTools({"append_obsidian_daily": {"ok": True, "written": True}},
+                        {"append_obsidian_daily": "auto", "calculator": "auto",
+                         "run_plan": "ask"}) as fk:
+            checker, calls = _fake_checker({
+                **_APPROVE_RUN_PLAN,
+                "calculator": _Verdict(True, tier="auto", outcome="auto")})
+            result, _ = _plan_turn(
+                [{"tool": "calculator", "args": {"expression": "2+2"}, "why": "add it up"},
+                 {"tool": "append_obsidian_daily", "args": {"text": "The sum: {{step 1}}"},
+                  "why": "log it", "from_step": 0}],
+                checker=checker)
+            step_cards = [c for c in calls if c[0] == AG.PLAN_STEP_ASK_ACTION
+                          and "Plan step" in c[1]["text"]]
+            check("an auto-tier result-filled step still got its own card (run_plan)",
+                  len(step_cards) == 1, repr(calls))
+            check("... and that card shows the REAL result, not {{step 1}}",
+                  step_cards and "{{step 1}}" not in step_cards[0][1]["text"]
+                  and '\\"value\\": 4' in step_cards[0][1]["text"], repr(step_cards))
+            check("the step ran with the real result",
+                  fk.ran and fk.ran[-1][0] == "append_obsidian_daily"
+                  and '"value": 4' in fk.ran[-1][1]["text"]
+                  and "{{step" not in fk.ran[-1][1]["text"], repr(fk.ran))
+            check("the plan finished", result.get("ok") is True, repr(result))
+    _with_real_enabled(body)
+
+
+def t_a_risky_auto_step_needs_a_person():
+    """F2: a step marked risky whose tool is auto-tier must really be asked
+    (the card promised it). A gate that lets it through without a person -
+    run_plan misconfigured to auto - refuses it; nothing runs."""
+    def body():
+        with _FakeTools({"append_obsidian_daily": {"ok": True}},
+                        {"append_obsidian_daily": "auto", "run_plan": "ask"}) as fk:
+            checker, calls = _fake_checker({**_APPROVE_RUN_PLAN})
+            result, _ = _plan_turn(
+                [{"tool": "append_obsidian_daily", "args": {"text": "hello"},
+                  "why": "log it", "risky": True}], checker=checker)
+            step_cards = [c for c in calls if c[0] == AG.PLAN_STEP_ASK_ACTION
+                          and "Plan step" in c[1]["text"]]
+            check("risky + auto tool: asked on its own card", len(step_cards) == 1,
+                  repr(calls))
+            check("... and ran once a person said yes",
+                  result.get("ok") is True and fk.ran, repr(result))
+        with _FakeTools({"append_obsidian_daily": {"ok": True}},
+                        {"append_obsidian_daily": "auto", "run_plan": "ask"}) as fk:
+            seen = {"n": 0}
+
+            def checker(action, detail, prompt):
+                if action == "run_plan" and "Plan step" not in detail["text"]:
+                    return _Verdict(True, tier="ask", outcome="approved")
+                seen["n"] += 1
+                return _Verdict(True, tier="auto", outcome="auto")
+            result, _ = _plan_turn(
+                [{"tool": "append_obsidian_daily", "args": {"text": "hello"},
+                  "why": "log it", "risky": True}], checker=checker)
+            check("a yes nobody gave (tier auto) is refused: nothing ran",
+                  result.get("ok") is False and not fk.ran and seen["n"] == 1
+                  and "not approved on its own card" in (result.get("reason") or ""),
+                  repr(result))
+    _with_real_enabled(body)
+
+
+def t_a_note_write_after_a_reading_step_in_the_plan_waits_for_a_yes():
+    """F2 (the 2026-09-24 note rule) + F4: a reading step in the plan makes
+    a later note write in the same plan ask, as a direct call would."""
+    def body():
+        with _FakeTools({"memory_search": {"ok": True, "facts": ["The roofer is Sam"]},
+                         "append_obsidian_daily": {"ok": True}},
+                        {"memory_search": "auto", "append_obsidian_daily": "auto",
+                         AG.NOTE_AFTER_OUTSIDE_ACTION: "ask", "run_plan": "ask"}) as fk:
+            checker, calls = _fake_checker({
+                **_APPROVE_RUN_PLAN,
+                "memory_search": _Verdict(True, tier="auto", outcome="auto"),
+                AG.NOTE_AFTER_OUTSIDE_ACTION: _Verdict(True, tier="ask", outcome="approved")})
+            result, _ = _plan_turn(
+                [{"tool": "memory_search", "args": {"query": "roofer"}, "why": "look it up"},
+                 {"tool": "append_obsidian_daily", "args": {"text": "call the roofer"},
+                  "why": "log it"}], checker=checker)
+            check("the note write was put to the 'after outside text' card",
+                  any(c[0] == AG.NOTE_AFTER_OUTSIDE_ACTION for c in calls), repr(calls))
+            check("both steps ran once approved", result.get("ok") is True
+                  and [r[0] for r in fk.ran] == ["memory_search", "append_obsidian_daily"],
+                  repr((result, fk.ran)))
+        with _FakeTools({"append_obsidian_daily": {"ok": True}},
+                        {"append_obsidian_daily": "auto", "calculator": "auto"}) as fk:
+            checker, calls = _fake_checker({
+                **_APPROVE_RUN_PLAN,
+                "calculator": _Verdict(True, tier="auto", outcome="auto"),
+                "append_obsidian_daily": _Verdict(True, tier="auto", outcome="auto")})
+            result, _ = _plan_turn(
+                [{"tool": "calculator", "args": {"expression": "1+1"}, "why": "sum"},
+                 {"tool": "append_obsidian_daily", "args": {"text": "hi"}, "why": "log"}],
+                checker=checker)
+            check("CONTROL: after a step that reads nothing, a note saves straight away",
+                  result.get("ok") is True
+                  and not any(c[0] == AG.NOTE_AFTER_OUTSIDE_ACTION for c in calls),
+                  repr(calls))
+    _with_real_enabled(body)
 
 
 def t_a_risky_step_denied_stops_the_run_there():
@@ -398,6 +529,8 @@ if __name__ == "__main__":
                t_a_safe_step_runs_with_no_card_of_its_own,
                t_a_risky_step_gets_its_own_card,
                t_a_from_step_step_gets_its_own_card,
+               t_a_risky_auto_step_needs_a_person,
+               t_a_note_write_after_a_reading_step_in_the_plan_waits_for_a_yes,
                t_a_risky_step_denied_stops_the_run_there,
                t_a_step_the_model_did_not_flag_but_whose_real_tier_needs_a_person_is_refused,
                t_a_denial_stops_later_safe_steps_too,

@@ -256,6 +256,9 @@ const SHAPES = [
   [/([?&](?:access_|refresh_|id_|auth_)?(?:token|api[_-]?key|key|secret|password|passwd|sig|signature)=)[^&\s#"']+/gi, `$1${HIDDEN}`],
   // Labelled: password = x, token: x, api key = x, secret=x
   [/\b((?:api[ _-]?key|token|secret|password|passwd|pwd|passphrase)\s*[:=]\s*["']?)[^\s"',;&]+/gi, `$1${HIDDEN}`],
+  // A per-device key (docs/PAIRING-DESIGN.md 5.1, 8.6). Its secret follows
+  // a dot, so the "long run" rule below would not catch it on its own.
+  [/\bjdk1\.d[0-9a-f]{8}\.[A-Za-z0-9_-]{43}/g, HIDDEN],
   // Key shapes (jarvis_router's table, and the search keys').
   [/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g, HIDDEN],
   [/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, HIDDEN],

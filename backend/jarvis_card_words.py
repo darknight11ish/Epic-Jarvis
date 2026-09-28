@@ -136,6 +136,9 @@ TITLES = {
     "phone_notifications_read": "start reading notifications from apps you choose on your phone",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
+    # --- devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28)
+    "pair_device": "connect a new device",
+    "unretire_shared_key": "let the old shared key work from other devices again",
     # --- the app builder (docs/APP-BUILDER-DESIGN.md)
     "app_merge_change": "add its change to one of your apps",
     # --- helpers and anything else a tool asks for

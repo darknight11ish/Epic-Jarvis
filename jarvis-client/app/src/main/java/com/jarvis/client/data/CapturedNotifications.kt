@@ -59,17 +59,29 @@ class CapturedNotifications(context: Context) {
 
     /** Adds one, already-redacted notification, then trims to the caps. */
     fun add(n: CapturedNotification) {
-        val kept = (load() + n)
-            .filter { it.postedAtMs >= System.currentTimeMillis() - MAX_AGE_MS }
-            .sortedByDescending { it.postedAtMs }
-            .take(MAX_KEPT)
-        save(kept)
+        save(CapturedRows.added(load(), n, System.currentTimeMillis(), MAX_AGE_MS, MAX_KEPT))
     }
 
     /** Newest first, already capped by [add]. */
     fun recent(limit: Int = MAX_KEPT): List<CapturedNotification> = load().take(limit)
 
+    /** How many are kept on this phone right now. */
+    fun count(): Int = load().size
+
+    /**
+     * Deletes every captured notification on this phone, for good. Called
+     * when the "read notifications" switch reads as off (turning it off is
+     * immediate - nothing captured stays behind), and by the plate's own
+     * "Delete captured notifications" after "are you sure?".
+     */
     fun clear() = prefs.edit { remove(KEY_ITEMS) }
+
+    /** Deletes what was captured from one app - when it leaves the allow list. */
+    fun removeApp(packageName: String) {
+        val all = load()
+        val kept = CapturedRows.withoutApp(all, packageName)
+        if (kept.size != all.size) save(kept)
+    }
 
     /**
      * The text to attach to ONE chat question, or null when there is
@@ -160,4 +172,30 @@ class CapturedNotifications(context: Context) {
          * crowd out the rest of the attached list. */
         const val SNIPPET_MAX = 200
     }
+}
+
+/**
+ * The store's list rules, without Android, so the JVM tests run them.
+ */
+internal object CapturedRows {
+    /**
+     * [existing] plus [n], newest first, capped by age and count. A row
+     * with the same id is replaced, not repeated: a notification updated in
+     * place usually keeps its post time, so its id repeats (audit A8).
+     */
+    fun added(
+        existing: List<CapturedNotification>,
+        n: CapturedNotification,
+        nowMs: Long,
+        maxAgeMs: Long,
+        maxKept: Int,
+    ): List<CapturedNotification> =
+        (existing.filter { it.id != n.id } + n)
+            .filter { it.postedAtMs >= nowMs - maxAgeMs }
+            .sortedByDescending { it.postedAtMs }
+            .take(maxKept)
+
+    /** Every row except [packageName]'s. */
+    fun withoutApp(existing: List<CapturedNotification>, packageName: String): List<CapturedNotification> =
+        existing.filter { it.packageName != packageName }
 }

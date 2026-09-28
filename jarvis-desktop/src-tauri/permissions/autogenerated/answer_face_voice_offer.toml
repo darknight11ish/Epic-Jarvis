@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-answer-face-voice-offer"
+description = "Enables the answer_face_voice_offer command without any pre-configured scope."
+commands.allow = ["answer_face_voice_offer"]
+
+[[permission]]
+identifier = "deny-answer-face-voice-offer"
+description = "Denies the answer_face_voice_offer command without any pre-configured scope."
+commands.deny = ["answer_face_voice_offer"]

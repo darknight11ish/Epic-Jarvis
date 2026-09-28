@@ -481,12 +481,16 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
-  folders, historyImport, widgets, chatbot }) {
+  folders, historyImport, widgets, chatbot, devices }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
   // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
   window.__folders = folders || null;
+  // devices.rs (docs/PAIRING-DESIGN.md): { list, address, start, startFails,
+  // sessions, removeFails, sharedFails } (devices.mjs). Unset, a PC whose
+  // backend has no pairing yet - the Devices card says so and nothing else.
+  window.__devices = devices || null;
   // App lock on or off, for get_app_lock (apps security audit M3).
   window.__appLock = Boolean(appLock);
   const state = {
@@ -779,6 +783,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__taskNotes.push(args.note);
             if (window.__taskNoteFails) throw new Error(window.__taskNoteFails);
             return { ok: true };
+          // voice_training.rs get_face_voice_offer: the Faces window's one
+          // read - the PC's waiting animal voice question, or null, and
+          // whether the link is stale. A scenario sets window.__faceOffer.
+          case "get_face_voice_offer":
+            window.__calls.push(["__offerRead"]);
+            return JSON.parse(JSON.stringify(window.__faceOffer || { offer: null, stale: false }));
           case "get_appearance":
             if (window.__appearanceFails) throw new Error(window.__appearanceFails);
             return window.__appearance;
@@ -952,7 +962,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_voice_face":
           case "set_voice_animal":
           case "reset_voice_animal":
-          case "try_voice_animal": {
+          case "try_voice_animal":
+          case "answer_face_voice_offer": {
             const v = window.__vt;
             if (cmd !== "voice_sample_level") v.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
             if (v.fails[cmd]) throw new Error(v.fails[cmd]);
@@ -1015,6 +1026,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(v.animalReset));
               case "try_voice_animal":
                 return JSON.parse(JSON.stringify(v.animalTry));
+              // The one-time animal voice question (voice_training.rs
+              // answer_face_voice_offer). The test builds its own answer
+              // in `faceOfferAnswer` - the fixtures may not have it yet.
+              case "answer_face_voice_offer":
+                return JSON.parse(JSON.stringify(v.faceOfferAnswer
+                  || { ok: true, http: 200, message: "Done", face_voice: {} }));
               default:
                 return null;
             }
@@ -1667,6 +1684,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "widget_board_action": {
             window.__widgetCalls.push({ cmd, ...args });
+            // brain/widgets.rs: under App lock a tile that acts only opens
+            // the Jarvis bar (the owner, 2026-09-28).
+            if (window.__appLock && !["stop_everything", "brief_me"].includes(args.action)) {
+              window.__barOpened = (window.__barOpened || 0) + 1;
+              return "App lock is on, so this opens the Jarvis bar instead. Unlock it, then ask Jarvis there.";
+            }
             if (state.stale && !["stop_everything", "brief_me"].includes(args.action)) {
               throw new Error("the event stream is stale");
             }
@@ -2104,6 +2127,53 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return window.__folders && window.__folders.removeAnswer || { ok: true };
           case "import_notion":
             return window.__folders && window.__folders.importAnswer || { cancelled: true };
+          // devices.rs: Settings -> Devices. The QR picture is Rust's; here a
+          // scenario's `start.qr_svg` stands in for it. `sessions` answers
+          // pair_session in turn (the last one repeats).
+          case "devices_list": {
+            const d = window.__devices;
+            if (!d || !d.list) {
+              return { available: false,
+                       why: "Your PC's Jarvis cannot pair phones by QR code yet - run apply-patches.ps1 on this PC. Until then, your phone keeps using the old shared key (Settings, Connection)." };
+            }
+            return JSON.parse(JSON.stringify({ available: true, ...d.list }));
+          }
+          case "pair_phone_address":
+            return (window.__devices && window.__devices.address) || { address: null, source: null };
+          case "pair_start": {
+            const d = window.__devices || {};
+            if (d.startFails) throw new Error(d.startFails);
+            d.sessionIndex = 0;
+            d.started = (d.started || 0) + 1;
+            return JSON.parse(JSON.stringify(d.start));
+          }
+          case "pair_session": {
+            const d = window.__devices || {};
+            const all = d.sessions || [{ state: "none" }];
+            if (!d.started && !d.openAtLoad) return { state: "none" };
+            const i = Math.min(d.sessionIndex || 0, all.length - 1);
+            d.sessionIndex = i + 1;
+            return JSON.parse(JSON.stringify(all[i]));
+          }
+          case "pair_cancel":
+            window.__devices.cancelled = (window.__devices.cancelled || 0) + 1;
+            return { ok: true, was: "waiting_for_phone", http: 200 };
+          case "devices_remove": {
+            const d = window.__devices;
+            if (d.removeFails) throw new Error(d.removeFails);
+            const row = d.list.devices.find((x) => x.id === args.id);
+            d.list.devices = d.list.devices.filter((x) => x.id !== args.id);
+            return { ok: true, id: args.id, name: row && row.name, was_this_device: false, http: 200 };
+          }
+          case "devices_shared": {
+            const d = window.__devices;
+            if (d.sharedFails) throw new Error(d.sharedFails);
+            if (args.retired === true) {
+              d.list.shared = { ...d.list.shared, retired: true, retired_at: 1790000000 };
+              return { ok: true, retired: true, http: 200 };
+            }
+            return { ok: true, waiting: true, http: 202 };
+          }
           default: return null;
         }
       },

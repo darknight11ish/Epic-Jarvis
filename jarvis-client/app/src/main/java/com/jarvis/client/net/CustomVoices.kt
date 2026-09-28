@@ -63,6 +63,15 @@ object CustomVoices {
     const val ANIMAL_PATH = "/api/voice/voices/face_animal"
     const val ANIMAL_TRY_PATH = "/api/voice/voices/face_animal/try"
 
+    /** The one-time "The panda has its own voice. Use it?" answer (owner, 2026-09-28). */
+    const val FACE_OFFER_PATH = "/api/voice/voices/face_offer"
+
+    /** The two answers the PC takes, and the buttons' words when it sends none. */
+    const val OFFER_USE = "use"
+    const val OFFER_KEEP = "keep"
+    const val OFFER_USE_LABEL = "Use it"
+    const val OFFER_KEEP_LABEL = "Keep my voice"
+
     /** The speed plate's heading when the PC sends none - the desktop's words. */
     const val SPEED_TITLE = "How fast Jarvis speaks"
 
@@ -149,6 +158,21 @@ object CustomVoices {
         val animalsTitle: String = ANIMALS_TITLE,
         val animalsDetail: String = "",
         val choices: AnimalChoices = AnimalChoices(),
+        /** The one-time question, or null: none waiting, or a PC too old to ask. */
+        val offer: FaceOffer? = null,
+    )
+
+    /**
+     * The first time the owner picks an animal face, one line asks whether
+     * to use its own voice (owner, 2026-09-28) - remembered per face on the
+     * PC. [question], [use] and [keep] are the PC's own words, shown as they
+     * are. A face never changes the voice by itself: only "Use it" does.
+     */
+    data class FaceOffer(
+        val face: String,
+        val question: String,
+        val use: String = OFFER_USE_LABEL,
+        val keep: String = OFFER_KEEP_LABEL,
     )
 
     /**
@@ -412,6 +436,19 @@ object CustomVoices {
             animalsTitle = fv.str("animals_title").ifBlank { ANIMALS_TITLE },
             animalsDetail = fv.str("animals_detail"),
             choices = choices,
+            offer = fv.obj("offer")?.let { parseFaceOffer(it) },
+        )
+    }
+
+    /** `face_voice.offer`, or null when it is null, absent, or has no face or question. */
+    fun parseFaceOffer(o: JsonObject): FaceOffer? {
+        val face = o.str("face").ifBlank { return null }
+        val question = o.str("question").ifBlank { return null }
+        return FaceOffer(
+            face = face,
+            question = question,
+            use = o.str("use").ifBlank { OFFER_USE_LABEL },
+            keep = o.str("keep").ifBlank { OFFER_KEEP_LABEL },
         )
     }
 
@@ -468,6 +505,11 @@ object CustomVoices {
 
     /** `{"enabled": true|false}` - "Voice follows the face" on or off. */
     fun faceBody(on: Boolean): String = "{\"enabled\":$on}"
+
+    /** `{"face": "<id>", "answer": "use"|"keep"}` - the one-time question's answer. */
+    fun faceOfferBody(face: String, use: Boolean): String =
+        "{\"face\":" + JarvisApi.quote(face) +
+            ",\"answer\":\"" + (if (use) OFFER_USE else OFFER_KEEP) + "\"}"
 
     /**
      * `{"face", "speaker", "semitones", "pace"}` - one animal's whole voice.

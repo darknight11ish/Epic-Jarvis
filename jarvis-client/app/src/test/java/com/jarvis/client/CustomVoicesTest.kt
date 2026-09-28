@@ -387,6 +387,31 @@ class CustomVoicesTest {
     }
 
     @Test
+    fun `each animal keeps its own answer - the PC's lines, shown as sent`() {
+        // The owner's scenario (2026-09-28): the panda "Keep my voice", then
+        // the owl "Use it" - the switch is on and the owl speaks as the owl.
+        val owl = requireNotNull(status("face_offer_used").faceVoice)
+        assertTrue(owl.enabled)
+        assertTrue(owl.speaking)
+        assertEquals("Speaking as the Pygmy Owl: Nicole, a little higher.", owl.line)
+        assertNull(owl.offer)
+        // The panda showing again: the switch is on, but it keeps the normal voice.
+        val panda = requireNotNull(status("face_kept_on").faceVoice)
+        assertTrue(panda.enabled)
+        assertFalse("a kept animal never speaks as itself", panda.speaking)
+        assertEquals("You chose to keep your voice for the Red Panda.", panda.line)
+        assertNull("the panda was answered for: no question", panda.offer)
+        // The monkey, never answered for: asked with the switch on, and silent as itself.
+        val monkey = requireNotNull(status("face_unanswered_on").faceVoice)
+        assertTrue(monkey.enabled)
+        assertFalse(monkey.speaking)
+        assertEquals("The Monkey will ask once whether to use its own voice.", monkey.line)
+        val offer = requireNotNull(monkey.offer) { "the monkey was not asked" }
+        assertEquals("monkey", offer.face)
+        assertEquals("The Monkey has its own voice. Use it?", offer.question)
+    }
+
+    @Test
     fun `each animal's voice - the PC's rows, choices and words, no card`() {
         for (case in voices["status"]!!.jsonObject.keys) {
             val fv = requireNotNull(status(case).faceVoice) { "$case: no face_voice" }

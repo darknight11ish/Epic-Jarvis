@@ -60,6 +60,15 @@ word `hud`. `docs/CROSS-CLIENT-CONTRACT.md` §1 spells out the consequence —
 the server cannot tell the laptop from the phone, so no per-device permission
 scheme can be built on it.
 
+**Since 2026-09-28 the key itself can say which device it is** (section 90,
+QR-code pairing): a paired phone holds a key of its own, `jdk1.<device id>.
+<secret>`, sent in the same `X-Jarvis-Token` header. `X-Jarvis-Client` is
+still not identity; the key now is. The old shared key keeps working until
+the owner retires it, and after that works on the PC itself only. A 401 for
+a device key the PC removed, or for the retired shared key from another
+device, carries `"key": "device_removed"` or `"key": "shared_retired"`
+(section 90.5).
+
 Sent by:
 - Android: `jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisApi.kt:257`
   (`Request.Builder.authed()`); header names at `JarvisApi.kt:723-724`, and the
@@ -186,6 +195,10 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 | `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
+
+`devices` (section 90, `backend/jarvis_devices.py`): `{}` and nothing else -
+a device was paired or removed, or the old shared key was retired or
+brought back. Both apps re-read `GET /api/devices` when they show it.
 
 `attention` is the one kind that carries its own state instead of ringing a
 bell (`stream.rs:506-511`). `wellbeing` (above) carries one boolean for the
@@ -2281,6 +2294,26 @@ animal's voice stands in, `speaker.note` says so, so choosing a built-in
 voice and hearing no change does not look broken. The animals' voices were
 picked from Kokoro's published descriptions, not listened to.
 
+**The one-time question** (added 2026-09-28, the owner's decision): the
+first time the owner picks an animal face, one line asks "The Red Panda has
+its own voice. Use it?" with two buttons, **Use it** and **Keep my voice**.
+`face_voice.offer` carries it, word for word (`{"face", "question", "use",
+"keep"}`), and is `null` unless the face showing is an animal the owner has
+not answered for yet - **whether "Voice follows the face" is on or off**.
+Both apps show it where the face is picked (and may show it wherever
+`face_voice` is shown), and post the answer to `POST
+/api/voice/voices/face_offer`. **Each animal keeps its own answer** (the
+owner, 2026-09-28): the PC keeps it per face (`<config
+dir>/voices/state.json`, `face_answers`: `{face: "use" | "keep"}`), so the
+question never comes back for that face. An animal speaks in its own voice
+only while the switch is on **and** its answer is "use"; with no answer, or
+"keep", the built-in voice stays as it is. "Use it" records "use" and turns
+the switch on; "Keep my voice" records "keep" and leaves the switch as it
+is. The switch stays the master: off, no animal voice at all (the answers
+are kept). A damaged answer reads as no answer. A face never changes the
+voice by itself. **No card either way** - the switch it turns on has none -
+but held on a stale link like every change.
+
 **Each animal's voice** (added 2026-09-28, the owner's choice "per animal,
 built-in voices"): the `FACE_VOICES` rows are only where each animal
 starts. For each of the three the owner may pick **any of the eleven
@@ -2365,7 +2398,8 @@ owner.
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
 | `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
-| `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
+| `POST /api/voice/voices/face_offer` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "answer": "use" \| "keep"}` (both, nothing else) | **200** `{"ok": true, "message": "The Red Panda speaks in its own voice now. \"Voice follows the face\" is on; turn it off in the voice settings to go back." \| "Jarvis keeps your voice for the Red Panda. Each animal asks once for itself.", "face_voice": {...as in status(), with "offer": null}}` at once, no card either way; **400** `{"ok": false, "error"}` in words - "send the face and the answer, \"use\" or \"keep\"", "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "the answer must be \"use\" or \"keep\""; 500 `{"ok": false, "error"}` if it could not be saved | The answer is kept for that face alone (`face_answers` in `<config dir>/voices/state.json`); an animal speaks as itself only with the switch on and its answer "use". "use" also turns "Voice follows the face" on; "keep" leaves the switch as it is. Rings the `voices` event (`{"what": "face_offer", "outcome": "use" \| "keep"}`). The audit line has the face and the answer only. |
+| `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on; with it on, and that animal not answered for or answered "keep", the message says so); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
 | `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey"}`; **429** `{"ok": false, "error": "the PC is still making the sound for the last Try it. Try it again in a moment"}` - one at a time; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window - the faces in its other windows do not move; the phone through its answer speaker), never while Jarvis is talking or listening, and stop it when a question or answer starts (above). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
@@ -2416,10 +2450,10 @@ request.
              "default": "0",
              "title": "Jarvis's built-in voice", "detail": str, "note": str,
              "choices": [{"id": "0", "label": "American (female)"}, ... 11 in all]},   absent on an older PC: show nothing
- "face_voice": {"enabled": bool,          the switch (on unless the owner turned it off)
-                "default": true,
+ "face_voice": {"enabled": bool,          the switch, the master (off unless turned on; off = no animal voice)
+                "default": false,
                 "face": "" | "<face id>",  the face saved in appearance.json ("" if none)
-                "speaking": bool,         an animal's voice is the one speaking now
+                "speaking": bool,         an animal's voice is the one speaking now (the switch on AND its answer "use")
                 "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter" | "Monkey",
                 "line": str,              what is happening now, one sentence: show it under the switch
                 "title": "Voice follows the face", "detail": str,   absent on an older PC: show nothing
@@ -2427,12 +2461,17 @@ request.
                              "speaker": "1", "voice": "Bella", "semitones": 2.0, "pace": "normal",
                              "changed": bool,     the owner's choice differs from its own (Reset does something)
                              "own": {"speaker", "semitones", "pace"},   where it starts
+                             "answer": "use" | "keep" | null,   its one-time question's answer (null: not asked yet)
                              "line": "Bella, 2 steps higher, at normal pace."}, ...],
                 "animals_title": "Each animal's voice", "animals_detail": str,
                 "animal_choices": {"voices": [{"id", "label"}, ... the 11 of speaker.choices],
                                    "paces": [{"id": "slower", "label": "Slower"}, ...],
-                                   "pitch": {"min": -3.0, "max": 4.0, "step": 0.5}}},
-                                  animals absent on an older PC: show the switch only
+                                   "pitch": {"min": -3.0, "max": 4.0, "step": 0.5}},
+                "offer": null | {"face": "redpanda",   the one-time question (added 2026-09-28)
+                                 "question": "The Red Panda has its own voice. Use it?",
+                                 "use": "Use it", "keep": "Keep my voice"}},
+                                  animals absent on an older PC: show the switch only;
+                                  offer absent on an older PC: ask nothing
  "pending": {"kind": "create" | "switch", "voice": "<id>", "name": str, "expires_in": <seconds>} | null,
  "last": {"kind": "create" | "switch", "voice": "<id>",
           "outcome": "created"|"switched"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",
@@ -9439,7 +9478,7 @@ does not touch that gate and was never waiting on it.
 | `/api/goals` | GET | - | `{"ok", "goals": [<goal>, ...], "limits": {"text", "steps", "goals", "by"}}` |
 | `/api/goals` | POST | `{"text", "plan"?}` | `{"ok", "goal"}` - a new DRAFT. `plan`, if given, is the owner's own steps (or something they asked Jarvis to suggest first, in ordinary chat, and pasted in); omitted, the draft's one step is the goal's own words. **No approval card**: a draft is content, not action, exactly like an email draft (§40). |
 | `/api/goals/<id>` | GET | - | `{"ok", "goal"}`; 404 `{"ok": false, "error": "no such goal"}` |
-| `/api/goals/<id>/accept` | POST | `{"plan"?}` | The owner's edited plan (or the draft as it stood) is kept, and the goal becomes `active`. Sets up a weekly check-in through `jarvis_schedule.py`'s existing `schedule_repeat` mechanism (§21) - **the SAME one card a repeating reminder or the morning briefing already raises**, approving nothing that acts. `{"ok", "goal"}` with `goal.checkin` (the scheduler's own job view, `"state": "waiting"` until the card is answered). |
+| `/api/goals/<id>/accept` | POST | `{"plan"?}` | The owner's edited plan (or the draft as it stood) is kept, and the goal becomes `active`. Sets up a weekly check-in on `jarvis_schedule.py`'s repeating jobs (§21) **at once, with no approval card** (the owner, 2026-09-28: like a plain repeating reminder, decided 2026-09-26 - only the owner's own tap sets one, it reads nothing new and acts on nothing, and Stop tracking deletes it at once). `{"ok", "goal"}` with `goal.checkin` (the scheduler's own job view, `"state": "active"` straight away; it is never `"waiting"` any more). Before 2026-09-28 this raised one `schedule_repeat` card. |
 | `/api/goals/<id>/step` | POST | `{"index", "done"}` | Marks one step done or not. **No card** - the same shape as ticking off a to-do item. |
 | `/api/goals/<id>/stop` | POST | - | Stops tracking the goal and deletes its check-in job. **No card, immediate** - the same rule every "stop tracking this" control in this project follows. |
 
@@ -9487,8 +9526,9 @@ up (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
 goals.rs`) - it reads its own limits back from `GET /api/goals` rather
 than hard-coding them, and redacts a goal's and a step's own words under
 the same "Windows Hello for memory lists and chat history" gate Coming up
-already uses. Both apps find the weekly check-in's live state (waiting for
-the card, paused, its next-run note) by reading the SAME Coming up list
+already uses. Both apps find the weekly check-in's live state (paused, its
+next-run note; "waiting for the card" can no longer happen since the
+check-in needs no card, 2026-09-28) by reading the SAME Coming up list
 the job already appears on (kind `goal_checkin`, `owner_listed=True`,
 unchanged from the backend's own default) - the ONLY place that state can
 still be read once a screen's own copy of one `accept` answer is gone,
@@ -9620,6 +9660,30 @@ order:
   `watch.stopped()` check every tool already has, threaded to
   `jarvis_plan.run()`'s own `checkpoint` and to a step's own `checkpoint`
   when that step's tool is one of the three that take one.
+- **Fixed 2026-09-28, after the bug audit (F1-F4)** - the plan card is
+  still switched off; these make it keep its own promises once it is on:
+  - **The one card shows every step's arguments in full** (a "With:" line
+    under each step - the note's exact text, the search words), not only
+    the tool's name and the model's reason.
+  - **"Asks again on its own card" is now true for every tool.** A step
+    marked `risky` or `from_step` whose own tool is `auto`/`notify` goes to
+    the gate as `run_plan` (tier `ask`), so a real card is raised, and it
+    runs only on a person's yes; a yes nobody gave (a gate answering
+    `auto`) is refused. `never` stays `never`.
+  - **A result-filled step really receives the earlier result.** The step
+    writes `{{step N}}` in the argument that uses step N's result (N counted
+    from 1, as the card counts); `propose()` refuses a `from_step` step with
+    no such placeholder, one naming a different step, or a placeholder with
+    no `from_step`. At run time the placeholder is replaced with step N's
+    real result (as JSON, at most 2,000 characters, "[cut short]" when
+    longer), and THAT step - with the real value - is what its own card
+    shows and what runs. The plan itself is not changed.
+  - **Each step's result counts as outside text for the rest of the turn**
+    (`_TurnWatch.took_in`, as a direct call's does), so a note write later
+    in the same plan, after a step that read something (email, memory, a
+    web page), waits for a yes on the "after outside text" card
+    (`write_notes_after_outside_text`), the 2026-09-24 rule the direct path
+    already followed; "Where this came from" also gets its sources.
 - Card-count (`CARDS_PER_TURN`) and card-length (`_GATE_DETAIL_LIMIT`)
   limits apply per step, exactly as they do for a direct call - a plan
   cannot use its own steps to get around either. A step naming a plug-in
@@ -9791,6 +9855,18 @@ Redacted notifications are kept in `data/CapturedNotifications.kt` - a
 private, per-device `SharedPreferences` file, capped at 200 rows and 7
 days, NEVER sent anywhere on its own. `android:allowBackup="false"` on
 this whole app already keeps it out of any phone backup.
+
+**When the switch goes off, the copies go too** (2026-09-28, audit A3):
+whenever the phone's cached switch reads as off - pressed on the phone,
+or learned from the PC - every captured row is deleted. Removing an app
+from the allow list deletes that app's rows, a notification updated in
+place replaces its row instead of repeating it, and the plate has
+"Delete captured notifications", which asks "are you sure?" first, like
+Forget. **How the phone hears the PC's switch** (there is no event for
+it): it reads `GET /api/notifications/phone` on every (re)connect, when a
+`phone_notifications_read` card leaves the queue, and - at most every 15
+seconds - before storing a captured notification, which is stored only if
+the PC still says on. With no link, the last answer stands.
 
 ### 61.5 Reading one into a chat - no new backend plumbing, on purpose
 
@@ -11066,6 +11142,21 @@ loosen what asks first", which covers both uses of that card.
   (`jarvis_mcp.card_every_start`); a "tell me when" does not look, and says
   why under the watch (`jarvis_tellme.readiness`); checking for tool updates
   raises its card again.
+- **Chatbot conversations and the online weather** (added 2026-09-28, after
+  the security audit's finding #2): turning Lockdown on ends a chatbot
+  conversation or comparison that is already talking to a chatbot outside
+  this PC (`jarvis_chatbot.stop_for_lockdown`,
+  `jarvis_chatbot_compare.stop_for_lockdown`, called by
+  `request_lockdown`); `run()` also reads Lockdown before the window opens,
+  before every message and while a reply is awaited, so nothing more is
+  sent. It ends with code `"lockdown"` and the words "Lockdown was turned
+  on, so Jarvis stopped. Nothing more is sent to <chatbot>." A new one is
+  refused before any card ("Lockdown is on, so Jarvis does not talk to
+  chatbots until you turn Lockdown off ..."). A chatbot on this PC only
+  (kind `local`) is not a way out and is left alone. The animal scene's
+  weather (`jarvis_sky`) reads neither Open-Meteo nor Home Assistant while
+  Lockdown is on, drops the weather already drawn, and says why under the
+  setting; it reads again as soon as Lockdown is off.
 - **Refused while on**: loosening any action (409), and turning the lights
   setting on (409).
 
@@ -12286,6 +12377,11 @@ and events.
   `textContent` only, never HTML. `widget_board_action` matches the five
   actions on a closed list in Rust; everything but Stop everything and Brief
   me is held on a stale link; Brief me opens the Brain (behind App lock).
+  **While App lock is on, Focus session, 10-min timer and Play/pause PC do
+  not act** (the owner, 2026-09-28): they open the Jarvis bar, which asks
+  Windows Hello, and say "App lock is on, so this opens the Jarvis bar
+  instead. Unlock it, then ask Jarvis there." - checked in `widget.js` and
+  again in Rust before anything is sent. Stop everything still works.
   While App lock is on or the lists are hidden, Rust takes every private
   block's words out. Read when the window opens, on a schedule or focus
   event, and once a minute while shown.
@@ -12300,7 +12396,12 @@ and events.
   every private block shows its label and "Hidden - open Jarvis to see it."
   Buttons follow the tiles exactly (`QuickTiles.decide`,
   `QuickTileService.perform`): held on a stale link except Stop everything;
-  Brief me only opens the app. Nothing of the widget is kept on the phone.
+  Brief me only opens the app. **Under App lock** (the owner, 2026-09-28)
+  every button but Stop everything only opens Jarvis, which asks for the
+  unlock, and never acts on its own (`QuickTiles.widgetOpensApp`); the
+  widget also redraws at once when App lock or "Hide memory lists" changes.
+  The Quick Settings tiles keep their own rule (they can ask Android for
+  the phone's unlock). Nothing of the widget is kept on the phone.
 
 Both apps draw a filled-in widget by one rule, held with the PC's by
 `tools/gen_widget_cases.py` (`tests/fixtures/widget-cases.json` and the
@@ -13221,3 +13322,190 @@ preview. It dims with the animal on standby, keeps showing while Jarvis is
 not connected and in a serious moment, is unchanged by "Keep the animal
 still" (it is the sky, not the animal), and under calm (reduced) motion the
 weather holds still. Weather older than 90 minutes is not drawn.
+
+---
+
+## 90. Pairing a phone by QR code, with a key per device (added 2026-09-28)
+
+The owner's decisions (`CLAUDE.md`, 2026-09-24 and 2026-09-28): "Phone
+pairing by QR code, with a short typed code as the backup, confirmed by an
+approval card on the PC before any key is handed over", built together with
+a key per device, "listed in both apps with its own Remove". The design,
+with every reason, is `docs/PAIRING-DESIGN.md` - phase 1 (this section).
+Phase 2, a fingerprint-signed yes for risky cards from the phone, is not
+built.
+
+`backend/jarvis_devices.py`, shipped whole; `devices.patch` adds one block to
+`jarvis_hud.py` BEFORE every module is handed `_token_ok` (so the device-key
+check reaches every route), and the two cards' lines to `jarvis_gate.py`.
+`GET /api/version` says `capabilities.pairing: {"version": 1}` once it is
+running (absent or `false` on an older PC); both apps show pairing and
+Devices only then. A PC without `jarvis_devices.py` answers 404 on every
+route below.
+
+Every answer is JSON. Every route passes the server's origin check as today,
+so every request sends `X-Jarvis-Client: hud`. **PC only** means the request
+comes from this PC (`jarvis_owner_check.from_this_pc`), else
+`403 {"ok": false, "pc_only": true, "error": "This can only be done on the PC itself."}`.
+**Mesh only** means it comes from Tailscale or NordVPN Meshnet
+(`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) **and not from this PC**, else
+`403 {"ok": false, "reason": "not_mesh", "error": <sentence>}`.
+Refusals carry `"ok": false` and a plain `"error"` sentence beside the
+fields below; the sentences are in `tools/gen_pairing_cases.py`'s shared
+cases file, which both apps read.
+
+### 90.1 The key
+
+`jdk1.<id>.<secret>`: `<id>` is `d` + 8 lowercase hex characters (safe to
+show and log); `<secret>` is 43 characters of base64url (32 random bytes).
+Pattern: `jdk1\.d[0-9a-f]{8}\.[A-Za-z0-9_-]{43}`. The PC keeps only its
+SHA-256 (`<settings folder>/devices/registry.json`, a subfolder, so a backup
+never holds it). The phone keeps it in `TokenStore`, like the old key. It is
+never logged: the backend's log scrubber (`jarvis_scrub.py`) knows its
+shape, and the shared cases file gives the same cases to the phone's crash
+log and the desktop's log scrubber.
+
+### 90.2 Starting and watching a pairing (PC only, key required)
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/pair/start` | `{"address": "jarvis-pc.tail1234.ts.net", "port": 4719}` (`port` optional: the server's own) | **200** `{"ok": true, "pair_id", "qr", "code", "expires_in": 600, "tries_left": 3}`. **400** `{"reason": "address"}` (the phone's own sentence: the address must be on the owner's networks AND a `.ts.net` or `.nord` name) or `{"reason": "bad_request"}` (a bad port). **503** when pairing cannot work here (the device list cannot be read; `pair_device` not "ask"; approvals not checked by this PC). Starting again cancels the previous session and withdraws its card. |
+| `GET /api/pair/session` | - | **200** `{"state", "expires_in", "tries_left", "device_name", "words", "wrong_tries_from", "message"}`, or `{"state": "none"}`. `words` from `waiting_for_card` on; `message` is the sentence for the state. **Never** the QR text, the secret or the code. |
+| `POST /api/pair/cancel` | `{}` | **200** `{"ok": true, "was": "<state>"}`. A waiting card is withdrawn: approving it afterwards makes no key. |
+
+States: `waiting_for_phone` -> `waiting_for_card` -> `approved` -> `done`,
+or it ends as `denied`, `timed_out` (the card ran out), `expired` (10
+minutes), `burnt` (3 wrong tries), `cancelled` or `refused` (the gate
+refused - wrong tier, gate failure). At most one session at a time.
+
+The QR text - in `start`'s answer **only**, never logged or sent in an
+event - is
+`jarvis-pair:1/<host>/<port>/<pair_id>/<secret>/<expires>`: exactly six
+parts; `host` lower case, `[a-z0-9.-]`, ending `.ts.net` or `.nord`;
+`port` 1-65535 with no leading zero; `pair_id` 16 lowercase hex; `secret`
+22 base64url characters (16 bytes); `expires` 10 digits (a countdown only -
+the PC decides). A version other than `1` is "newer"; anything else "not a
+Jarvis pairing code". The typed `code` is 8 characters of Crockford's
+alphabet (`0-9 A-Z` without `I L O U`), shown `K7QM-4TXD`; the phone
+normalises it (upper case, spaces and `-` removed, `O`->`0`, `I`/`L`->`1`).
+
+### 90.3 The phone's half (no key, mesh only)
+
+The only routes in Jarvis that take no key: the phone has none yet. The QR
+secret or the typed code proves it may ask - without ever being sent.
+
+**`POST /api/pair/claim`** `{"method": "qr", "pair_id", "phone_nonce", "name", "proof"}`
+(`method: "code"` leaves out `pair_id`).
+
+| Answer | Body |
+|---|---|
+| `202` | `{"state": "waiting_for_card", "pair_id", "pc_nonce", "pc_proof", "words": [4 words], "expires_in"}` - the `pair_device` card is up on the PC. The phone checks `pc_proof`, works the words out itself and refuses if they differ. |
+| `403` | `{"reason": "wrong_proof", "tries_left": n}` - counts toward the 3 tries; at 0 the session is burnt. A claim for a session already claimed counts too. |
+| `403` | `{"reason": "not_mesh"}` - not Tailscale/Meshnet, or the PC itself. |
+| `410` | `{"reason": "gone", "state": "expired" \| "burnt" \| "cancelled" \| "used" \| "none"}` |
+| `400` | `{"reason": "name" \| "bad_request"}` - the name is outside the rule, or the request cannot be read. Not a try. |
+| `503` | `{"reason": "card"}` - the card could not be raised; the code still works. |
+
+**`POST /api/pair/collect`** `{"pair_id", "proof"}` - every 2 s while the card waits.
+
+| Answer | Body |
+|---|---|
+| `202` | `{"state": "waiting_for_card", "expires_in"}` |
+| `200` | `{"state": "approved", "device_id", "token"}` - the key, **once**; the session ends (`done`). |
+| `403` | `{"state": "denied"}` |
+| `410` | `{"state": "timed_out" \| "expired" \| "cancelled" \| "refused" \| "used" \| "none"}` (a burnt session answers `cancelled` here) |
+| `403` | `{"reason": "wrong_proof", "tries_left": n}` - counts toward the 3 tries |
+| `503` | the device list could not be written; the session stays `approved`, so collecting again works |
+
+`phone_nonce` is 16 random bytes, base64url without padding (22
+characters). `name` is 1-40 characters (counted as Unicode code points):
+letters and digits of any script, space, and `- _ . ' ( )` - nothing else,
+refused rather than cleaned, since it is part of the sums and shown on the
+card.
+
+The sums (HMAC-SHA256; `b64u` = base64url without padding; `\0` = a zero
+byte; text UTF-8; the nonces as their base64url text):
+
+```
+K        = the 16 secret bytes from the QR code                (method "qr")
+         = SHA256("jarvis-pair-code-v1" \0 CODE)               (method "code", normalised)
+ref      = pair_id (method "qr") or "-" (method "code")
+T        = "jarvis-pair-v1" \0 method \0 ref \0 phone_nonce \0 name
+proof    = b64u(HMAC(K, "claim" \0 T))
+pc_proof = b64u(HMAC(K, "pc" \0 T \0 pc_nonce))
+words    = D = HMAC(K, "words" \0 T \0 pc_nonce);
+           word i (i = 0..3) = WORDS[(D[2i]*256 + D[2i+1]) mod 1296]
+collect  = b64u(HMAC(K, "collect" \0 pair_id \0 phone_nonce))
+```
+
+`WORDS` is `contract/pair-words.txt` (the EFF short word list 2, 1,296
+words). The design's test vectors (`docs/PAIRING-DESIGN.md` 6.2) are in the
+shared cases file and checked by `backend/test_pairing_cases.py`.
+
+### 90.4 The approval cards
+
+- **`pair_device`**, tier `ask`: "Jarvis wants to connect a new device" -
+  the phone's name and the four words, and "If you did not press 'Pair a
+  phone', deny this". In `jarvis_owner_check.PC_ONLY_ACTIONS`: approved on
+  this PC only, always with Windows Hello; on a PC without Windows Hello it
+  is refused (the owner's "no lock, no risky approval"), so pairing waits
+  until it is set up - the old shared key still works meanwhile. The key is
+  made only after the card is approved, never before. The card lives the
+  usual `approval_timeout_seconds`; the 10-minute session covers the
+  scanning before it.
+- **`unretire_shared_key`**, tier `ask`, also PC only with Windows Hello:
+  bringing the old shared key back for other devices.
+
+Both are in the gate's `_NO_RULE_FROM_DENIAL` (a "no" answers one card, it
+is not a standing wish) and its `_RISK` table (local, reversible).
+
+### 90.5 The device list (any key)
+
+**`GET /api/devices`**
+
+```json
+{"you": "d3f9a1c2e",
+ "devices": [
+   {"id": "pc", "name": "This PC", "kind": "pc", "removable": false, "this_device": false},
+   {"id": "d3f9a1c2e", "name": "Pixel 9", "kind": "phone",
+    "created": 1790000000, "last_seen": 1790003580,
+    "this_device": true, "removable": true, "approval_key": false}],
+ "shared": {"retired": false, "retired_at": null,
+            "last_other_seen": 1790003000, "last_other_address": "100.101.2.3",
+            "can_bring_back_here": false},
+ "pairing": {"available": true, "why_not": null}}
+```
+
+`you` is `"pc"` (this PC), `"shared"` (the old shared key from another
+device) or the caller's device id. Never a key, never a hash; removed
+devices are not listed. `last_seen` is rounded to the minute and written at
+most once a minute. `shared.retired` is also `true` when the device list
+cannot be read (it then works on this PC only). `shared.waiting: true`
+appears while a Bring back card waits. `pairing.why_not` is a sentence when
+pairing cannot work (the list cannot be read; `pair_device` not "ask";
+approvals not checked by this PC). Windows Hello being missing is found only
+when the card is approved - Windows cannot be asked without showing the
+prompt.
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/devices/remove` | `{"id": "d3f9a1c2e"}` and nothing else | **200** `{"ok": true, "id", "name", "was_this_device"}`, immediate, no card. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_removable"}` for `"pc"`, `{"reason": "bad_request"}` for anything else (a list is refused - no "remove all"). Audit line `devices.removed` with the id only; a `devices` event. The removed device's open connections stop at their next write (the event stream's keepalive: about 10 s); a phone removing itself still gets this answer. |
+| `POST /api/devices/shared` | `{"retired": true}` | **200** `{"ok": true, "retired": true, "retired_at"}`, immediate, no card, from either app. **409** `{"reason": "uses_it_yourself"}` when this very request used the shared key from another device - it would cut itself off. |
+| `POST /api/devices/shared` | `{"retired": false}` | Bring it back: **PC only** (403 otherwise), **409** `{"lockdown": true}` while Lockdown is on, else **202** `{"ok": true, "waiting": true}` and ONE `unretire_shared_key` card (Windows Hello). Retiring again while it waits withdraws it. Already not retired: **200** `{"ok": true, "retired": false}`. |
+
+A 401 for a device key the PC removed (or never had) carries `"key":
+"device_removed"`; for the old shared key from another device after Retire,
+`"key": "shared_retired"`. Both apps say the design's sentences (in the
+shared cases file); without `key`, today's words.
+
+### 90.6 Failing safe
+
+- No `jarvis_devices.py`, or its block fails: nothing is replaced - only the
+  shared key works, exactly as before - and the banner says "devices NOT ON".
+- A device list that cannot be read: every device key is refused, and the
+  shared key is treated as retired for other devices - this PC keeps
+  working, so the owner can see what is wrong. `py -3 jarvis_devices.py
+  --start-fresh` on the PC moves it aside (there is no route for this;
+  every phone then pairs again).
+- Retire never touches this PC, and cannot be pressed by the device that
+  still depends on the shared key.

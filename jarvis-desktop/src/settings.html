@@ -53,6 +53,7 @@
         <div class="settings-jump-group">
           <span class="settings-jump-label">Everyday</span>
           <a href="#connection">Connection</a>
+          <a href="#devices">Devices</a>
           <a href="#faq">FAQ</a>
           <a href="#appearance-card">Appearance</a>
           <a href="#voice">Voice</a>
@@ -194,6 +195,86 @@
             </details>
           </span>
           <button class="btn ghost small" id="reconnect" type="button">Reconnect</button>
+        </div>
+      </section>
+
+      <!-- Devices (docs/PAIRING-DESIGN.md, phase 1): pairing a phone by QR
+           code, with a key per device. devices.js fills it; the commands are
+           src-tauri/src/devices.rs. The QR picture is drawn in Rust - this
+           page never holds the text inside it. The approval itself is an
+           ordinary card (the "Open the card" line at the top of this page),
+           never approved here. -->
+      <section class="card" id="devices">
+        <h2>Devices</h2>
+        <p class="note">
+          Each phone gets its own key, and you can remove any one of them
+          without touching the others. To add a phone, press
+          <strong>Pair a phone</strong> and scan the code with the Jarvis app
+          on that phone - over Tailscale or NordVPN Meshnet only.
+        </p>
+        <p class="state" id="dv-state" role="status">Asking Jarvis…</p>
+        <div id="dv-body" hidden>
+          <!-- Pairing a phone -->
+          <div id="dv-address-row" hidden>
+            <label class="field">
+              <span class="label">Your phone reaches this PC at</span>
+              <input id="dv-address" type="text" spellcheck="false" autocomplete="off"
+                     placeholder="my-pc.tail1234.ts.net" />
+            </label>
+            <p class="note" id="dv-address-note">
+              This PC's Tailscale name (it ends in <code>.ts.net</code>) or its
+              NordVPN Meshnet name (it ends in <code>.nord</code>). The Tailscale
+              or NordVPN app shows it. You only type it once.
+            </p>
+          </div>
+          <p class="note" id="dv-address-known" hidden>
+            Your phone reaches this PC at <strong id="dv-address-shown"></strong>.
+            <button class="btn ghost small" id="dv-address-change" type="button">Change</button>
+          </p>
+          <div class="row">
+            <button class="btn" id="dv-pair" type="button">Pair a phone</button>
+            <span class="status" id="dv-pair-status" role="status"></span>
+          </div>
+          <p class="note" id="dv-pair-why" hidden></p>
+
+          <div class="dv-panel" id="dv-panel" hidden>
+            <div id="dv-code-box" hidden>
+              <img class="dv-qr" id="dv-qr" alt="The pairing code. Scan it with the Jarvis app on your phone." />
+              <p class="note">
+                Can't scan? Type this code on the phone:
+                <strong class="dv-code" id="dv-code"></strong>
+              </p>
+              <p class="note" id="dv-countdown"></p>
+            </div>
+            <p class="dv-words" id="dv-words" hidden></p>
+            <p class="note" id="dv-session" role="status" aria-live="polite"></p>
+            <p class="note" id="dv-wrong-tries" hidden></p>
+            <div class="row">
+              <button class="btn ghost" id="dv-cancel" type="button">Cancel</button>
+              <button class="btn ghost" id="dv-close" type="button" hidden>Close</button>
+            </div>
+          </div>
+
+          <!-- The device list -->
+          <h3 class="subhead">Paired devices</h3>
+          <ul class="sc-cards" id="dv-list"></ul>
+          <span class="status" id="dv-status" role="status"></span>
+
+          <!-- The old shared key -->
+          <h3 class="subhead">Old shared key</h3>
+          <p class="note">
+            Used by this PC, and by devices paired before each one had its own key.
+          </p>
+          <p class="note" id="dv-shared-line"></p>
+          <div class="row">
+            <button class="btn ghost" id="dv-retire" type="button" hidden>Retire for other devices</button>
+            <button class="btn ghost" id="dv-bring-back" type="button" hidden>Bring it back</button>
+            <span class="status" id="dv-shared-status" role="status"></span>
+          </div>
+          <!-- "Show the token for my phone" (Connection, above) moves here
+               while the old key still works for other devices, renamed; it
+               is hidden once the key is retired (design 7.1). -->
+          <div id="dv-old-key-slot"></div>
         </div>
       </section>
 
@@ -1018,6 +1099,18 @@
               </span>
             </label>
             <p class="note" id="cv-face-line" hidden></p>
+            <!-- The one-time question after an animal face is picked (the
+                 owner, 2026-09-28): the PC's own words, verbatim
+                 (custom-voices.js faceOfferView). Each animal keeps its own
+                 answer: "Use it" records yes for that animal and turns the
+                 switch above on; "Keep my voice" records no for it and
+                 leaves the switch as it is. No card either way; greyed on
+                 a stale link (rule 4). -->
+            <div class="row" id="cv-face-offer" hidden>
+              <span id="cv-face-offer-question"></span>
+              <button type="button" class="btn" id="cv-face-offer-use"></button>
+              <button type="button" class="btn ghost" id="cv-face-offer-keep"></button>
+            </div>
             <div class="row">
               <span class="status" id="cv-face-status" role="status"></span>
             </div>
@@ -1944,6 +2037,7 @@
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
     <script type="module" src="backup-settings.js"></script>
+    <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
   </body>

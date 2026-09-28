@@ -450,6 +450,41 @@ def t_k_and_floors_unchanged():
           .split("def find_one", 1)[1].split("def current_facts", 1)[0])
 
 
+def t_a_too_common_name_can_be_skipped_but_not_by_default():
+    """Effectiveness audit 2026-09-28, 3.1: someone linked to most of memory
+    floods the third list with their newest facts. The "too common to help"
+    cut skips them - OFF by default (JARVIS_MEMORY_ENTITY_COMMON_CUT), so
+    the owner can measure it on the PC first."""
+    st = fresh("common")
+    for i in range(M.ENTITY_COMMON_MIN + 5):
+        st.add(f"Priya mentioned topic number {i} during the call on day {i}")
+    st.add(MARIO)
+    now = time.time()
+    with closing(st._connect()) as c:
+        roots, _ = st._entity_hits(c, "what did Priya and Mario say?", now)
+        by_name = {}
+        for r in roots:
+            name = c.execute("SELECT name FROM entities WHERE id = ?", (r,)).fetchone()[0]
+            by_name[name] = r
+        check("both names are found", {"Priya", "Mario"} <= set(by_name), by_name)
+        check("guard: OFF by default", M._ENTITY_COMMON_CUT is False)
+        off = st._linked_facts(c, [by_name["Priya"]], 50, at=now)
+        check("off: the common name still brings its facts (behaviour unchanged)",
+              len(off) >= M.ENTITY_COMMON_MIN + 5, len(off))
+        saved = M._ENTITY_COMMON_CUT
+        M._ENTITY_COMMON_CUT = True
+        try:
+            on = st._linked_facts(c, [by_name["Priya"]], 50, at=now)
+            rare = st._linked_facts(c, [by_name["Mario"]], 50, at=now)
+            both = st._linked_facts(c, [by_name["Priya"], by_name["Mario"]], 50, at=now)
+        finally:
+            M._ENTITY_COMMON_CUT = saved
+        check("on: a name linked to more than the cut brings nothing", on == [], len(on))
+        check("on: a rarely named person still brings their facts", len(rare) == 1, rare)
+        check("on: asked together, only the rare one's facts come back",
+              both == rare, (both, rare))
+
+
 def t_an_ambiguous_alias_says_nothing():
     st = fresh("ambiguous")
     for n in ("Ava Brown", "Ben Clarke", "Chloe Davies"):

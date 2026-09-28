@@ -29,6 +29,7 @@ pub mod brain;
 pub mod clipboard_privacy;
 pub mod commands;
 pub mod crash_notes;
+pub mod devices;
 pub mod email_sending;
 pub mod folders;
 pub mod hardware;
@@ -966,6 +967,13 @@ pub fn run() {
             backup::backup_now,
             backup::preview_restore,
             backup::restore_backup,
+            devices::pair_phone_address,
+            devices::pair_start,
+            devices::pair_session,
+            devices::pair_cancel,
+            devices::devices_list,
+            devices::devices_remove,
+            devices::devices_shared,
             tool_updates::get_tool_updates,
             tool_updates::check_tool_updates,
             plain_errors::get_manner,
@@ -1060,6 +1068,8 @@ pub fn run() {
             voice_training::set_voice_animal,
             voice_training::reset_voice_animal,
             voice_training::try_voice_animal,
+            voice_training::get_face_voice_offer,
+            voice_training::answer_face_voice_offer,
             vision::local_model_vision,
             // Windows Hello (lock.rs): Settings reads and changes the four
             // Security settings; the Brain's Show button.

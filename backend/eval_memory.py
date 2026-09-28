@@ -653,6 +653,7 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
         out["semantic"] = bool(stat["semantic"])
         out["vector_search"] = bool(stat["vector_search"])
         out["memory_module"] = str(Path(M.__file__).resolve())
+        out["entity_common_cut"] = bool(getattr(M, "_ENTITY_COMMON_CUT", False))
         ids = _put_golden(M, st, facts)
         out["said_again_recorded"] = _put_said_again(st, facts, ids)
         gid = {v: k for k, v in ids.items()}
@@ -862,6 +863,16 @@ def choose_distance(sweep: list) -> dict:
 
 # ------------------------------------------------------------ the report --
 
+def _common_cut_line(res: dict) -> str:
+    """Which way the entity layer's "too common to help" cut was set."""
+    on = res.get("entity_common_cut")
+    if on is None:
+        return ""
+    return ("Entity layer's \"too common to help\" cut: **ON** for this run "
+            "(JARVIS_MEMORY_ENTITY_COMMON_CUT=1 or --common-cut)." if on else
+            "Entity layer's \"too common to help\" cut: off (the default).")
+
+
 def markdown(res: dict) -> str:
     sem = res["semantic"] and res["vector_search"]
     lines = [
@@ -874,6 +885,7 @@ def markdown(res: dict) -> str:
         f"Memory code: `{res['memory_module']}`. Word floor now: "
         f"{res['word_floor_configured']} (JARVIS_MEMORY_MIN_WORD_SHARE). "
         f"Distance floor now: {res['max_distance_configured']} (JARVIS_MEMORY_MAX_DISTANCE).",
+        _common_cut_line(res),
         "",
         "Recall@5 = the right fact is among the 5 a chat gets. \"Don't know\" = facts "
         "returned for a question memory cannot answer (every one is a wrong fact in "
@@ -1279,6 +1291,7 @@ def run_locomo(words_only: bool, scratch: Path, fixture: Path = LOCOMO,
     ent = False
     out = {"source": data["source"], "commit": data["commit"], "ks": list(LOCOMO_KS),
            "word_floor": M._MIN_WORD_SHARE, "memory_module": str(Path(M.__file__).resolve()),
+           "entity_common_cut": bool(getattr(M, "_ENTITY_COMMON_CUT", False)),
            "chats": []}
     rows = {"search": [], "entities": []}
     for chat in todo:
@@ -1329,6 +1342,7 @@ def locomo_markdown(res: dict) -> str:
         f"{res['commit'][:12]}. Each chat line is one stored item; a question counts as "
         "found when search brings back the chat lines LoCoMo says hold its answer. "
         "Not comparable with the main self-test or with LoCoMo scores published elsewhere.",
+        _common_cut_line(res),
         "",
         "| Search | Questions | Found any @5 | Found ALL @5 | nDCG@5 | Found any @10 | "
         "Found ALL @10 | nDCG@10 |",
@@ -1412,7 +1426,18 @@ def main(argv=None) -> int:
                          "locomo_multihop.json) instead of the self-test; files are "
                          "memory-eval-locomo-*.md/.json. --sizes, --learner-model, "
                          "--reranker and --against do not apply")
+    ap.add_argument("--common-cut", action="store_true",
+                    help="turn ON the entity layer's \"too common to help\" cut for this run "
+                         "(the same as JARVIS_MEMORY_ENTITY_COMMON_CUT=1; off by default), to "
+                         "compare against a run without it")
     a = ap.parse_args(argv)
+    if a.common_cut:
+        # Read by jarvis_memory when it is first loaded, which is later, in
+        # run() / run_locomo(); set on the module too in case it already is.
+        os.environ["JARVIS_MEMORY_ENTITY_COMMON_CUT"] = "1"
+        mod = sys.modules.get("jarvis_memory")
+        if mod is not None:
+            mod._ENTITY_COMMON_CUT = True
     if a.locomo:
         if a.against:
             print("--against compares the main self-test only; it cannot be used with --locomo")

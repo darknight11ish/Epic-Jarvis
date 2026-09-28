@@ -292,7 +292,7 @@ HARD_LIMITS = frozenset({
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
     "app_merge_change",
     "run_plan", "phone_notifications_read",
-    "chatbot_session", "memory_forget_range",
+    "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -308,7 +308,7 @@ MUST_ASK = frozenset({
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
-    "chatbot_session", "memory_forget_range",
+    "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -335,7 +335,7 @@ GROUPS = (
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage",
-                                "app_merge_change"]),
+                                "app_merge_change", "pair_device", "unretire_shared_key"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       "second_card_enable", "second_card_browser_enable",
@@ -1577,12 +1577,14 @@ LOCKDOWN_LABEL = "Lockdown"
 LOCKDOWN_DETAIL = ("One tap makes every way out of this PC ask you first, or stop: web search "
                    "and research, sending or saving email, reading your calendar, email and "
                    "Home Assistant, your smart home, news feeds and \"tell me when\" watches, "
-                   "plug-in programs, cloud AI models and checking for tool updates. Turning "
+                   "plug-in programs, cloud AI models, chatbot conversations, the online "
+                   "weather behind the animal and checking for tool updates. Turning "
                    "it on is instant, from either app. Turning it off is on the PC only, with "
                    "an approval card and Windows Hello.")
 LOCKDOWN_ON_SAYS = ("Lockdown is on: everything that would leave this PC asks you first, and "
                     "anything that runs by itself (\"tell me when\", news, the briefing's "
-                    "calendar and email) has stopped.")
+                    "calendar and email, chatbot conversations, the online weather) has "
+                    "stopped.")
 LOCKDOWN_OFF_SAYS = "Lockdown is off: everything asks first as your settings say."
 LOCKDOWN_ON_LABEL = "Turn on Lockdown"
 LOCKDOWN_OFF_LABEL = "Turn off Lockdown"
@@ -1607,8 +1609,9 @@ LOCKDOWN_CARD = "\n".join([
     "",
     "Lockdown makes every way out of this PC ask you first, or stop. Turning it off puts back "
     "what your settings file says: web search, research, your calendar, email and Home "
-    "Assistant, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models "
-    "and checking for tool updates go back to asking only when your settings say so.",
+    "Assistant, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, "
+    "chatbot conversations, the online weather and checking for tool updates go back to "
+    "asking only when your settings say so.",
     "",
     "Nothing in your settings file changes - Lockdown only sits on top of it.",
     "",
@@ -1801,6 +1804,34 @@ def _lockdown_decide(pid: str, gate: Callable, tier_of: Callable, write: Callabl
     _lockdown_finish(pid, "off")
 
 
+#: The modules whose already-running work Lockdown ends at once, each by its
+#: own stop_for_lockdown() (quick, never waits). Only a module already
+#: loaded can have anything running, so none is imported here.
+LOCKDOWN_STOPPERS = ("jarvis_chatbot_compare", "jarvis_chatbot")
+
+
+def _stop_running_ways_out() -> list:
+    """Lockdown just came on: end what is already talking to the outside by
+    itself (a chatbot conversation or comparison). The online weather needs
+    no stop - jarvis_sky reads Lockdown before every fetch. Returns the
+    words of what was stopped; a stopper that fails is skipped (each also
+    reads Lockdown itself before its next message)."""
+    import sys
+    said = []
+    for name in LOCKDOWN_STOPPERS:
+        mod = sys.modules.get(name)
+        fn = getattr(mod, "stop_for_lockdown", None) if mod is not None else None
+        if not callable(fn):
+            continue
+        try:
+            words = fn()
+        except Exception:
+            continue
+        if words:
+            said.append(str(words))
+    return said
+
+
 def request_lockdown(on, *, peer=None, local=None, gate: Optional[Callable] = None,
                      tier_of: Optional[Callable[[str], str]] = None,
                      spawn: Optional[Callable] = None,
@@ -1836,6 +1867,7 @@ def request_lockdown(on, *, peer=None, local=None, gate: Optional[Callable] = No
                              "error": f"could not turn Lockdown on ({type(exc).__name__})"}
         _audit("asks_first.lockdown", {"on": True})
         _publish_lockdown(True)
+        _stop_running_ways_out()
         return 200, {"ok": True, "changed": True, "message": LOCKDOWN_DONE,
                      "lockdown": lockdown_status(here=_here(here, peer, local))}
     # Off: the PC only, one card plus Windows Hello.

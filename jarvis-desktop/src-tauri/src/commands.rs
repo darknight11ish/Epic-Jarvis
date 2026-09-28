@@ -3354,6 +3354,13 @@ fn second_card_unreachable(err: &reqwest::Error, _base: &str) -> String {
 /// words unchanged - JARVIS-API.md section 12 says to show it word for word.
 /// With no sentence, a plain line with the status code, never the body.
 fn second_card_refusal(code: u16, body: &str) -> String {
+    // A key the owner removed or retired on the PC (docs/PAIRING-DESIGN.md
+    // 5.3): the reason in words, not "bad or missing X-Jarvis-Token".
+    if code == 401 {
+        if let Some(words) = crate::devices::refused_key_words(body) {
+            return words.to_string();
+        }
+    }
     let said = serde_json::from_str::<serde_json::Value>(body)
         .ok()
         .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string));

@@ -77,6 +77,26 @@ object PhoneNotifications {
     fun waitingLine(): String =
         "Waiting for your approval to let your phone read notifications. ${Approvals.WHERE}"
 
+    // "Delete captured notifications" (audit A3): asks "are you sure?"
+    // first, like Forget, because it cannot be undone. Phone-only: the
+    // captured copies live on this phone alone and the PC never sees them.
+    const val DELETE_LABEL = "Delete captured notifications"
+    const val DELETE_YES = "Yes, delete them"
+    const val DELETE_NO = "Keep them"
+    const val DELETED = "Deleted. No captured notifications are left on this phone."
+    const val NONE_KEPT = "No captured notifications are kept on this phone."
+
+    /** The "are you sure?" before deleting. */
+    fun deleteQuestion(count: Int): String =
+        "Delete the $count captured notification" + (if (count == 1) "" else "s") +
+            " kept on this phone? This cannot be undone."
+
+    /** How many are kept, under the Delete button. */
+    fun keptLine(count: Int): String =
+        if (count <= 0) NONE_KEPT
+        else "$count captured notification" + (if (count == 1) " is" else "s are") +
+            " kept on this phone, for up to 7 days. Turning the switch off deletes them."
+
     /** The line under the switch when it is neither waiting nor busy. */
     fun stateLine(on: Boolean?): String = when (on) {
         true -> "Your phone may read notifications from apps you choose (none, until you " +

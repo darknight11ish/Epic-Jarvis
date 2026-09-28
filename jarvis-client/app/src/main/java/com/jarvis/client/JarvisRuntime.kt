@@ -807,13 +807,25 @@ object JarvisRuntime {
         }
         // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
         // so read again from the PC - when the link comes or goes stale, when
-        // a timer or reminder changes, when the saved widgets change here, or
-        // when a slot is given another widget. Never on a clock of its own
-        // beyond the launcher's half-hourly update.
+        // a timer or reminder changes, when the saved widgets change here,
+        // when a slot is given another widget, or when App lock or "Hide
+        // memory lists" changes (so the words hide, and the buttons turn into
+        // "open Jarvis", at once - not up to 30 minutes later). Never on a
+        // clock of its own beyond the launcher's half-hourly update.
         boardJob?.cancel()
         boardJob = scope.launch {
             combine(_link, _stale, _scheduleTick, _widgetsTick, settings.homeWidgets) { _, _, _, _, _ -> }
+                .combine(settings.security) { _, _ -> }
                 .collect { com.jarvis.client.widget.JarvisBoardWidgets.updateAll(app) }
+        }
+        // "Reading phone notifications": turning it off is immediate, so
+        // whenever the switch reads as off - pressed here, or learned from
+        // the PC - nothing captured stays on this phone (audit A3). Also
+        // runs once at start: an off switch never has rows behind it.
+        scope.launch {
+            settings.phoneNotifications.collect { on ->
+                if (!on) runCatching { com.jarvis.client.data.CapturedNotifications(app).clear() }
+            }
         }
     }
 
@@ -854,7 +866,11 @@ object JarvisRuntime {
      */
     private fun describe(e: ApiError, handshake: Boolean = false): String {
         if (e == ApiError.AlreadyHandled) return "Already handled elsewhere."
-        val shown = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
+        val plain = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
+        // A refused key whose 401 said why (docs/PAIRING-DESIGN.md §5.3):
+        // that sentence instead of the general one. Otherwise unchanged.
+        val why = if (e == ApiError.BadToken) com.jarvis.client.net.KeyRefusal.words() else null
+        val shown = if (why != null) plain.copy(says = why, fix = "") else plain
         _problem.value = shown
         return shown.text
     }
@@ -1240,6 +1256,8 @@ object JarvisRuntime {
     private suspend fun onEvent(event: SseEvent) {
         when (event.kind) {
             "approval" -> {
+                val phoneCardBefore = com.jarvis.client.net.PhoneNotifications
+                    .cardWaiting(_pending.value.map { it.action })
                 refreshPending()
                 // A second-card switch waiting on a card has no event of its
                 // own (docs/JARVIS-API.md section 12: "re-read it after a
@@ -1275,6 +1293,15 @@ object JarvisRuntime {
                 // would otherwise leave "Waiting" on the Voices screen.
                 val cv = customVoiceStatus()
                 if (cv != null && (cv.pending != null || cv.better.pending)) refreshCustomVoices()
+                // "Read phone notifications" has no event of its own either:
+                // when its card leaves the queue (decided on the PC or here),
+                // the switch is read again, so the listener's cached copy
+                // follows it without the settings page being open (audit A2).
+                val phoneCardNow = com.jarvis.client.net.PhoneNotifications
+                    .cardWaiting(_pending.value.map { it.action })
+                if (phoneCardBefore && !phoneCardNow) {
+                    scope.launch { runCatching { phoneNotificationsSettings() } }
+                }
             }
             // A custom-voice card ended, a voice was deleted, the voice went
             // back to the built-in one, or the better voice went off
@@ -1425,6 +1452,11 @@ object JarvisRuntime {
         refreshSecondCard()
         // And one more, so chat can say where a `#log` line will be filed.
         noteTargets()
+        // The "read phone notifications" switch, so a change made on the PC
+        // (or a card approved there) reaches this phone on reconnect, not
+        // only when its settings page opens (audit A2). Its own failure,
+        // including a PC without the route, changes nothing.
+        runCatching { phoneNotificationsSettings() }
     }
 
     suspend fun refreshStatus() {
@@ -2438,6 +2470,18 @@ object JarvisRuntime {
     suspend fun setVoiceFace(on: Boolean): CustomVoices.Answer? {
         actionBlocker()?.let { _customVoiceNote.value = it; return null }
         return postCustomVoice(CustomVoices.FACE_PATH, CustomVoices.faceBody(on))
+    }
+
+    /**
+     * The one-time "The panda has its own voice. Use it?" (owner,
+     * 2026-09-28): [use] true is "Use it", false "Keep my voice"; the PC
+     * remembers the answer per face. Same shape as [setVoiceFace]: no card,
+     * held on a stale link (rule 4). Re-reads the voices afterwards, so the
+     * question goes away and the switch shows its new state.
+     */
+    suspend fun answerFaceVoiceOffer(face: String, use: Boolean): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.FACE_OFFER_PATH, CustomVoices.faceOfferBody(face, use))
     }
 
     /**
@@ -3545,12 +3589,79 @@ object JarvisRuntime {
     fun phoneNotificationsAllowed(): Boolean =
         if (::settings.isInitialized) settings.phoneNotifications.value else false
 
+    @Volatile private var phoneNotificationsCheckedAt = 0L
+
+    /**
+     * Called by the listener for a notification that passed every gate:
+     * asks the PC for the switch again first (at most once every
+     * [PHONE_NOTIFICATIONS_RECHECK_MS]), then runs [store] only if it is
+     * still on. So turning it off on the PC stops capture at the next
+     * notification, not only once this phone's settings page is opened
+     * (audit 06-decisions V3). With no link the last answer stands, as
+     * [phoneNotificationsSettings] already says.
+     */
+    fun storeIfPhoneNotificationsStillOn(store: () -> Unit) {
+        if (!started) return
+        scope.launch {
+            val now = System.currentTimeMillis()
+            if (isPaired() && now - phoneNotificationsCheckedAt >= PHONE_NOTIFICATIONS_RECHECK_MS) {
+                phoneNotificationsCheckedAt = now
+                runCatching { phoneNotificationsSettings() }
+            }
+            if (phoneNotificationsAllowed()) kotlinx.coroutines.withContext(Dispatchers.IO) { store() }
+        }
+    }
+
     // -------------------------------------------- reading phone notifications ----
     // docs/JARVIS-API.md §61; see [com.jarvis.client.net.PhoneNotifications]
     // and ui/screens/PhoneNotificationsPlate.kt. OFF by default, ON is one
     // approval card. Every successful read or write updates
     // [ClientSettings]'s cache, which the listener service reads - the only
     // reason this route is read at all off the settings screen.
+
+    // -------------------------------------------------- pairing and devices ----
+    // docs/PAIRING-DESIGN.md: QR-code pairing (net/Pairing.kt,
+    // net/PairingFlow.kt) and Settings -> Devices (net/Devices.kt,
+    // ui/screens/DevicesPlate.kt).
+
+    /**
+     * The one pairing attempt, for the whole process - so turning the phone
+     * does not drop it. Its secrets live in memory only (never saved state).
+     */
+    val pairing: com.jarvis.client.net.PairingFlow by lazy {
+        com.jarvis.client.net.PairingFlow(
+            scope = scope,
+            transport = object : com.jarvis.client.net.PairTransport {
+                override suspend fun post(base: String, path: String, json: String) = api.pairPost(base, path, json)
+            },
+            wordList = { appContext?.let { com.jarvis.client.data.PairWords.load(it) } },
+        )
+    }
+
+    /** `GET /api/devices`. A read: not held on a stale link. */
+    suspend fun devices(): ApiResult<JsonObject> = api.devices()
+
+    /**
+     * Remove ONE device (design §6.4). Immediate and never held on a stale
+     * link: it only takes access away, like Forget. @return the sentence to
+     * show, and whether the device removed was this phone itself.
+     */
+    suspend fun removeDevice(device: com.jarvis.client.net.Devices.Device): Pair<String, Boolean> =
+        when (val r = api.devicesPost(com.jarvis.client.net.Devices.REMOVE_PATH, com.jarvis.client.net.Devices.removeBody(device.id))) {
+            is ApiResult.Ok -> {
+                val (code, body) = r.value
+                val self = code == 200 && (com.jarvis.client.net.Devices.removedThisPhone(body) || device.thisDevice)
+                com.jarvis.client.net.Devices.removeSaid(code, body, device.name) to self
+            }
+            is ApiResult.Failed -> ("Not removed. " + describe(r.error)) to false
+        }
+
+    /** "Retire for other devices" - stricter, so immediate (design §6.4). @return the sentence to show. */
+    suspend fun retireSharedKey(): String =
+        when (val r = api.devicesPost(com.jarvis.client.net.Devices.SHARED_PATH, com.jarvis.client.net.Devices.RETIRE_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Devices.retireSaid(r.value.first, r.value.second)
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
 
     /**
      * `GET /api/notifications/phone`. Updates the cache on success; leaves
@@ -4842,6 +4953,9 @@ object JarvisRuntime {
         "Open Jarvis, then start Live from the Live screen."
     private const val LIVE_NOT_ALLOWED_SAID = "Open Jarvis to start Live."
     private const val LIVE_WATCH_MS = 1000L
+
+    /** How often a captured notification asks the PC for its switch again, at most. */
+    private const val PHONE_NOTIFICATIONS_RECHECK_MS = 15_000L
     private const val LIVE_WATCH_SLOW_MS = 5000L
     private const val LIVE_WATCH_FAILURES = 10
     private const val LIVE_WATCH_GIVE_UP = 10 + 120 // about ten more minutes, every 5 s

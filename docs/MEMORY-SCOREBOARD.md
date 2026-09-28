@@ -137,12 +137,21 @@ scores. "Found all" = every chat line the question relies on came back.
 |---|---|---|---|---|---|---|
 | 2026-09-28 | plain | build machine, words only | 45.0% | 9.5% | 0.238 | 18.9% |
 | 2026-09-28 | with the entity layer (how chat recall runs) | build machine, words only | 32.0% | 3.6% | 0.124 | 11.8% |
+| 2026-09-28 | entity layer + "too common to help" cut (OFF by default) | build machine, words only | 42.6% | 8.3% | 0.218 | 18.9% |
 | - | both, real models | **the PC - not run yet** | - | - | - | - |
 
 **Worth knowing:** on this data, words only, the entity layer made every
-number worse, in every one of the five chats. Nobody has looked into why yet.
-It may not hold with the real models; the PC run will tell. This is the
-baseline milestone 5 (multi-hop memory) has to beat.
+number worse, in every one of the five chats. The cause was found by the
+effectiveness audit (`docs/audit-2026-09-28/03-effectiveness.md`, 3.1): a
+person named in most of the chat lines ("Caroline", in 291 of 419) brings
+back only their newest lines as a third list, pushing the relevant ones out
+of the top 5. A cut that skips a name linked to more than max(20, 5% of all
+facts) is built, **switched off** (`JARVIS_MEMORY_ENTITY_COMMON_CUT=1`, or
+`eval_memory.py --common-cut` for one run). With it on, words only, LoCoMo
+went back up (above) and the main self-test (0/100/1,000 filler) was
+unchanged. It stays off until the PC run shows no number getting worse
+(`docs/UPDATE-AND-CHECK-2026-09-28.md` has the one-line command). This is
+the baseline milestone 5 (multi-hop memory) has to beat.
 
 ### "Said again" as a tie-breaker (milestone 12, added 2026-09-28, OFF)
 

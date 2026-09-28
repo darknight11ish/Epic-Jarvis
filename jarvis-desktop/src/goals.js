@@ -6,9 +6,10 @@
  * The owner types a goal ("insulate the garage before winter") and a short
  * plan - typed by hand, or something they asked Jarvis to suggest in an
  * ordinary chat message first and pasted in. They edit it, then Accept it.
- * Accepting raises exactly ONE approval card - the same `schedule_repeat`
- * card a repeating reminder already raises - that approves nothing that
- * acts: it only lets a weekly, model-free check-in exist. Ticking a step
+ * Accepting sets up a weekly, model-free check-in at once, with no card -
+ * like a plain repeating reminder (the owner, 2026-09-28): it only ever
+ * reminds and never acts. (Until then it raised one `schedule_repeat` card;
+ * an older PC may still say "waiting" for it.) Ticking a step
  * done, and Stop tracking, need no card and are immediate, like a to-do
  * item. When a step needs real action (search installers, draft an email),
  * the owner asks Jarvis for that in ordinary chat - unrelated to this file.
@@ -18,8 +19,7 @@
  * goals.rs): brain_goals (a read, with the words taken out while the
  * private lists are hidden, same as Coming up), brain_goals_create,
  * brain_goals_accept, brain_goals_step and brain_goals_stop - all four held
- * on a stale link, none raises anything itself (the backend's own accept
- * route is what raises the one card).
+ * on a stale link; none raises a card.
  *
  * ## Where the weekly check-in shows
  *

@@ -114,8 +114,13 @@ QUEUE_UNREADABLE = ("The approval queue could not be read, so Jarvis cannot tell
 #: table says). An approval of one from another device - the phone, or
 #: anything on the owner's network pretending to be it - is refused (403),
 #: so a stolen token used elsewhere cannot loosen, enable or restore
-#: anything.
-PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "restore_backup"})
+#: anything. Also connecting a new device and bringing the old shared key
+#: back for other devices (jarvis_devices.py, docs/PAIRING-DESIGN.md 6.3 and
+#: 6.4, 2026-09-28): a stolen key used elsewhere cannot approve a new device
+#: of its own, and on a PC without Windows Hello pairing waits until it is
+#: set up (the owner's "no lock, no risky approval").
+PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "restore_backup",
+                             "pair_device", "unretire_shared_key"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 

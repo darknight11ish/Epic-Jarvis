@@ -463,6 +463,21 @@ permissions = [
   "allow-backup-now",
   "allow-preview-restore",
   "allow-restore-backup",
+  # "Devices" (docs/PAIRING-DESIGN.md, phase 1, 2026-09-28): pairing a phone
+  # by QR code, with a key per device. Starting a pairing is PC only on the
+  # backend too; the QR code is drawn in Rust and only the picture reaches
+  # this page, never its text. Pair a phone ends in ONE approval card
+  # (Windows Hello, PC only), answered in the Jarvis bar or the widget like
+  # every other - held on a stale link in Rust. Removing a device and
+  # retiring the old shared key only take access away: at once, never held.
+  # Bringing the shared key back is one card plus Windows Hello, held.
+  "allow-pair-phone-address",
+  "allow-pair-start",
+  "allow-pair-session",
+  "allow-pair-cancel",
+  "allow-devices-list",
+  "allow-devices-remove",
+  "allow-devices-shared",
   # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain, and
   # the Humour switch beside it (the owner's decision, 2026-09-27). Wording
   # only; no card either way; held on a stale link in Rust.
@@ -520,6 +535,10 @@ permissions = [
   "allow-set-voice-animal",
   "allow-reset-voice-animal",
   "allow-try-voice-animal",
+  # The one-time "The Red Panda has its own voice. Use it?" question
+  # (the owner, 2026-09-28): the answer, under "Voice follows the face".
+  # No card either way, held on a stale link like the switch.
+  "allow-answer-face-voice-offer",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",
@@ -907,17 +926,37 @@ permissions = [
 # microphone itself is voice.rs's and only a server on this PC hears it. The
 # Jarvis bar holds the whole set; the always-on-top badge holds it too, so
 # the owner can always end Live from the sign that says it is on.
+# The one-time animal voice question, for the Faces window: read ONLY the
+# waiting question (never the voices list) and answer it - "Use it" turns
+# "Voice follows the face" on, "Keep my voice" changes nothing. No card
+# either way (the switch has none); the answer is held on a stale link.
+[[set]]
+identifier = "face-voice-offer"
+description = "Read the PC's one-time \"has its own voice - use it?\" question for an animal face (the question only, never the voices list) and send the owner's answer. No card; the answer is held on a stale link."
+permissions = [
+  "allow-get-face-voice-offer",
+  "allow-answer-face-voice-offer",
+]
+
 [[set]]
 identifier = "live"
-description = "Jarvis Live: read the session (fixed words and minutes, never what was said), start it (no card; held on a stale link and under App lock), stop it, more time, carry on, mute or unmute, and keep the microphone closed while a card is shown or an answer is spoken under \"Interrupt by tap only\"."
+description = "Jarvis Live: read the session (fixed words and minutes, never what was said), start it (no card; held on a stale link and under App lock), stop it, more time, carry on, mute or unmute."
 permissions = [
   "allow-live-status",
   "allow-live-start",
   "allow-live-stop",
   "allow-live-act",
   "allow-live-mute",
-  "allow-live-hold",
 ]
+
+# Live's microphone holds - closed while a card is shown or an answer is
+# spoken under "Interrupt by tap only" (live.rs `live_hold`). Only the Jarvis
+# bar shows cards and plays answers, so only it holds this; the badge never
+# calls it (the 2026-09-28 desktop audit, #5).
+[[set]]
+identifier = "live-hold"
+description = "Jarvis Live: keep the microphone closed while the Jarvis bar shows a card or speaks an answer under \"Interrupt by tap only\", and open it again after."
+permissions = ["allow-live-hold"]
 
 [[set]]
 identifier = "focus"

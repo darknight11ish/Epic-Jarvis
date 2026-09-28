@@ -411,6 +411,10 @@ private fun ConnectionCard(
  * reason is never hidden - only left unexplained.
  */
 private fun plainReason(detail: String): String = when {
+    // The PC said why (docs/PAIRING-DESIGN.md §5.3): removed, or the old
+    // shared key retired. Its own sentence, which names what to do.
+    detail == "Token refused" && com.jarvis.client.net.KeyRefusal.words() != null ->
+        com.jarvis.client.net.KeyRefusal.words()!!
     detail == "Token refused" ->
         "The desktop refused this phone's token. Tap Change desktop or token and " +
             "type in the one Jarvis Desktop shows under Settings, \"Show the token " +
