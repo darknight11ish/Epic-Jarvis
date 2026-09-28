@@ -281,6 +281,9 @@ class Adapter:
                                   not finished within `timeout` seconds
                                   (the driver asks again, in short slices)
         close()                   once, at the end; must not raise
+    Optional: waiting_for_owner() -> True while the message has not been
+    handed on yet because the owner's own chat comes first; that time is
+    not counted against REPLY_TIMEOUT.
     An adapter never decides anything: no retries of a send, no clicking
     through a captcha, a sign-in or a warning page, no hiding that it is a
     program. When its page is anything but the normal chat, status() says
@@ -1027,7 +1030,10 @@ def describe(s: Session) -> str:
         f"Let Jarvis hold a conversation with {name} for you? This card covers this one "
         f"conversation only.",
         "",
-        f"Chatbot: {name} ({info.host}), {info.how}." if info else "",
+        # A second AI on this PC is named "... on this PC" already: no
+        # "(this PC)" after it.
+        (f"Chatbot: {name}, {info.how}." if kind == "local" else
+         f"Chatbot: {name} ({info.host}), {info.how}.") if info else "",
     ]
     if info and info.card_note:
         lines.append(info.card_note)
@@ -1081,9 +1087,12 @@ def RESUME_HEADER(s: Session, done: int) -> str:
     about the screen, which is not where these steps happen)."""
     name = _name(s) if isinstance(s, Session) else "the chatbot"
     left = len(getattr(s, "steps", []) or [])
+    info = _info(s) if isinstance(s, Session) else None
+    # A second AI on this PC: nothing leaves the PC, so say "is sent".
+    leaves = "is sent" if info is not None and info.kind == "local" else "leaves this PC"
     return (f"Carry on the conversation with {name} that Jarvis paused? {done} message"
             f"{'s' if done != 1 else ''} already went and cannot be taken back. At most "
-            f"{left} more may be sent, each checked again just before it leaves this PC.")
+            f"{left} more may be sent, each checked again just before it {leaves}.")
 
 
 # ============================================================================
@@ -1590,6 +1599,7 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
             say(f"Talking to {name}: message {s.turns_used} of {s.limits.max_turns}.")
             reply = None
             waited = 0.0
+            held = False
             pause_after = False
             while reply is None:
                 sig = checkpoint() if checkpoint is not None else None
@@ -1601,7 +1611,15 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
                     pause_after = True
                 reply = s.adapter.read_reply(REPLY_SLICE)
                 if reply is None:
-                    waited += REPLY_SLICE
+                    if _held_for_owner(s.adapter):
+                        # Not asked yet: the owner's own chat comes first (a
+                        # second AI on one card). Not counted against the
+                        # reply limit - the minutes still count it.
+                        if not held:
+                            held = True
+                            say(f"Waiting while you chat before asking {name}.")
+                    else:
+                        waited += REPLY_SLICE
                     # A captcha, sign-in or warning page that appears while
                     # waiting pauses NOW, not after the whole reply timeout
                     # (a website adapter's reply never comes past one).
@@ -1654,6 +1672,16 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
         _end_now(s, "adapter_failed", words or ENDED["adapter_failed"].format(
             name=name, error=type(exc).__name__), d)
         return _result(s, ok=False, reason=s.ended_words)
+
+
+def _held_for_owner(adapter) -> bool:
+    """An adapter's own "I have not asked yet: the owner's chat comes first"
+    (jarvis_chatbot_local on one card), or False."""
+    fn = getattr(adapter, "waiting_for_owner", None)
+    try:
+        return bool(fn()) if callable(fn) else False
+    except Exception:
+        return False
 
 
 def _usage_of(adapter) -> dict:

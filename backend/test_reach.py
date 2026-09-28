@@ -213,6 +213,31 @@ def t_chatbot_api_row():
     check("chatbot_api: no key saved reads 'not set up' and names the services",
           r["state"] == "not_set_up" and "ChatGPT (OpenAI API)" in r["line"]
           and "Groq" in r["line"] and "PC only" in r["line"], r)
+    check("chatbot_api: ... and when every service lacks a key, only that is said",
+          r["line"] == "Not set up: no key is saved on this PC for ChatGPT (OpenAI API) and "
+                       "Groq (API). Keys are added on the PC only.", r["line"])
+    # The TRUE reason when it is not a missing key (audit, 2026-09-28): a bad
+    # model line, or Credential Manager that cannot be read, is never
+    # reported as "no key is saved".
+    import jarvis_chatbot_api as A
+    bad_model = bots(False)
+    bad_model["chatbots"][1]["note"] = A.PRESETS["openai_api"].name \
+        + " cannot be used: the openai_api_model line under [chatbot] in " \
+          "jarvis-framework.toml is not a model name."
+    r = row(R.view(ctx(chatbot=bad_model)), "chatbot_api")
+    check("chatbot_api: a bad model line is said as such, not as 'no key is saved'",
+          r["state"] == "not_set_up" and "is not a model name" in r["line"]
+          and "no key is saved on this PC for ChatGPT" not in r["line"].replace("No key", "no key")
+          and "No key is saved on this PC for Groq (API)" in r["line"], r["line"])
+    no_store = bots(False)
+    for b in no_store["chatbots"][1:3]:
+        b["note"] = A.CANNOT_READ.format(name="OpenAI" if b["id"] == "openai_api" else "Groq")
+    r = row(R.view(ctx(chatbot=no_store)), "chatbot_api")
+    check("chatbot_api: Credential Manager that cannot be read is said in plain words, "
+          "once, not as 'no key is saved'",
+          r["state"] == "not_set_up" and "no key" not in r["line"].lower()
+          and r["line"].count("Credential Manager") == 1 and "password store" in r["line"]
+          and "ChatGPT (OpenAI API) and Groq (API)" in r["line"], r["line"])
     r = row(R.view(ctx(chatbot=bots(True))), "chatbot_api")
     check("chatbot_api: a key saved but no route yet is 'off'",
           r["state"] == "off" and "neither app" in r["line"] and r["where"] == "", r)
