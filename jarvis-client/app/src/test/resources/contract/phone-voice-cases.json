@@ -11434,7 +11434,7 @@
               }
             ],
             "default": "0",
-            "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+            "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
             "note": "",
             "title": "Jarvis's built-in voice",
             "value": 9
@@ -11625,7 +11625,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -11790,7 +11790,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -11951,7 +11951,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -12112,7 +12112,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -12295,7 +12295,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -12460,7 +12460,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -12608,7 +12608,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -12779,7 +12779,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -12950,7 +12950,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -13112,7 +13112,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 9
@@ -13273,7 +13273,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
@@ -13448,7 +13448,7 @@
             }
           ],
           "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
           "note": "",
           "title": "Jarvis's built-in voice",
           "value": 0
