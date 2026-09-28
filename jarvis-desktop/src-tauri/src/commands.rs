@@ -2528,6 +2528,9 @@ pub fn stop_everything_now(app: &AppHandle) {
     // First: a focus line still being made on the PC is dropped when it
     // arrives (brain/focus.rs `play_callout`).
     crate::brain::focus::note_stop_everything();
+    // Talk-to-type: the microphone closes and nothing still on its way is
+    // typed (talk_type.rs `stop`).
+    crate::talk_type::stop(app);
     crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
     // The HUD window is the backend's own page and speaks through the
     // browser's speech engine; a fixed line, no payload.

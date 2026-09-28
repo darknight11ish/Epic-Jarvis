@@ -224,6 +224,9 @@ pub fn start_voice_sample(
     if state.recording() {
         return Err("Already recording. Press Stop first.".to_string());
     }
+    if app.state::<crate::talk_type::TalkTypeState>().mic_busy() {
+        return Err(crate::voice::TALK_TYPE_HAS_MIC.to_string());
+    }
     stop_listening_because(
         &app,
         "This PC stopped listening for \"hey Jarvis\" while you record in Settings. Turn \
@@ -695,6 +698,10 @@ pub(crate) fn voice_setting(
         // default) raises the voice card and is held on a stale link.
         ("hands_free", "button_only") => Ok(("hands_free", "button_only", false)),
         ("hands_free", "same_as_button") => Ok(("hands_free", "same_as_button", true)),
+        // Talk-to-type on the PC (the owner's decision, 2026-09-27): OFF at
+        // once; ON raises the voice card and is held on a stale link.
+        ("talk_to_type", "off") => Ok(("talk_to_type", "off", false)),
+        ("talk_to_type", "on") => Ok(("talk_to_type", "on", true)),
         _ => Err("That is not one of the voice settings.".to_string()),
     }
 }
@@ -711,6 +718,11 @@ pub async fn set_voice_setting(
     let (setting, value, loosening) = voice_setting(setting.trim(), value.trim())?;
     if loosening && stale(&app) {
         return Err(HELD_STALE.to_string());
+    }
+    if setting == "talk_to_type" {
+        // Whatever the PC answers, the next press asks it again rather than
+        // trusting an "on" it said a moment ago.
+        crate::talk_type::forget_switch(&app);
     }
     let (status, text) = post(
         &app,
@@ -1247,6 +1259,16 @@ mod tests {
         assert!(voice_setting("hands_free", "sensitive_aloud").is_err());
         assert!(voice_setting("memory", "button_only").is_err());
         assert!(voice_setting("mode", "broad").is_err());
+        // Talk-to-type (2026-09-28): on is the card, off is at once.
+        assert_eq!(
+            voice_setting("talk_to_type", "on"),
+            Ok(("talk_to_type", "on", true))
+        );
+        assert_eq!(
+            voice_setting("talk_to_type", "off"),
+            Ok(("talk_to_type", "off", false))
+        );
+        assert!(voice_setting("talk_to_type", "yes").is_err());
     }
 
     #[test]

@@ -438,8 +438,26 @@ fn spec_state(link: &LinkState) -> &'static str {
     }
 }
 
+/// The state the icon shows: [`spec_state`], except that while talk-to-type
+/// holds the microphone (talk_type.rs) it shows `listening` - the one sign,
+/// always on screen, that this PC is recording. It is a local fact the
+/// server's stream cannot know, so it wins over everything the stream says.
+fn shown_state(link: &LinkState) -> &'static str {
+    if crate::talk_type::listening() {
+        "listening"
+    } else {
+        spec_state(link)
+    }
+}
+
+/// Repaints now, from the current link (talk-to-type started or stopped).
+pub fn refresh(app: &AppHandle) {
+    let link = app.state::<crate::stream::StreamState>().link();
+    repaint(app, &link);
+}
+
 fn binding_for(app: &AppHandle, link: &LinkState) -> Binding {
-    let id = spec_state(link);
+    let id = shown_state(link);
     // The owner's choice first, the spec's default second. This used to read
     // the spec alone, which meant the Faces window edited a document the tray
     // never looked at: you could rebind `idle`, press save, be told it was
@@ -520,7 +538,7 @@ fn governed_resolve(app: &AppHandle, link: &LinkState) -> spec::Resolved {
 /// Takes `resolved` rather than resolving itself so the governor sees each
 /// repaint exactly once — see [`governed_resolve`].
 fn paint(link: &LinkState, resolved: spec::Resolved) -> Image<'static> {
-    let state = spec_state(link);
+    let state = shown_state(link);
     let dim = spec::state_dim(state);
     // `notches` is the overlay the spec puts on `banked`, and its source is
     // named there: "the number of items waiting in the digest
@@ -782,7 +800,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
-    let state = spec_state(link);
+    let state = shown_state(link);
     let resolved = governed_resolve(app, link);
     {
         let painted = app.state::<Painted>();
@@ -936,7 +954,11 @@ fn backend_row(app: &AppHandle) -> (String, bool) {
 }
 
 fn tooltip(app: &AppHandle, link: &LinkState) -> String {
-    let mut parts = vec![activity_label(link)];
+    let mut parts = vec![if crate::talk_type::listening() {
+        crate::talk_type::TRAY_LISTENING.to_string()
+    } else {
+        activity_label(link)
+    }];
     // Not while stale: power, approvals and the brief would be last-known
     // facts presented as current ones - the phone drops the same extras.
     if link.connected && !link.stale {

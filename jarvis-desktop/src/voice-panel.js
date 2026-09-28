@@ -563,6 +563,17 @@ function paintSettings() {
       say($("vt-handsfree-note"), VT.HANDS_FREE.find((c) => c.id === view.handsFree).detail);
     }
   }
+  // Talk-to-type on this PC (the owner's decision, 2026-09-27). Offered only
+  // when the PC reports it. "On" is one approval card and is held on a stale
+  // link (changeSetting, VT.loosens); "Off" is at once.
+  const talkBox = $("vt-talktype-box");
+  if (talkBox) {
+    talkBox.hidden = !view.talkToType;
+    if (view.talkToType) {
+      group($("vt-talktype"), VT.TALK_TO_TYPE, view.talkToType, "talk_to_type");
+      say($("vt-talktype-note"), VT.TALK_TO_TYPE.find((c) => c.id === view.talkToType).detail);
+    }
+  }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;

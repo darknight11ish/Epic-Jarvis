@@ -108,6 +108,16 @@ pub const ACTIONS: &[Action] = &[
         default: "Alt+Shift+F",
         hint: "The small always-on-top window with just Jarvis's face - no chat box. Off by default.",
     },
+    Action {
+        // talk_type.rs: the one action that also reads key-up (lib.rs).
+        id: "talk_to_type",
+        label: "Talk-to-type",
+        // T for "type", in the same Alt+Shift family as the rest. Word, for
+        // one, uses Alt+Shift+T to insert the time; rebind it if that
+        // matters more.
+        default: "Alt+Shift+T",
+        hint: "Hold it and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you press it again. Works once talk-to-type is on (Settings, Voice).",
+    },
 ];
 
 fn action(id: &str) -> Option<&'static Action> {
@@ -588,6 +598,21 @@ mod tests {
             if let Ok(theirs) = Shortcut::from_str(reserved) {
                 assert_ne!(ours, theirs, "Stop everything collides with {reserved}");
             }
+        }
+    }
+
+    #[test]
+    fn talk_to_type_ships_on_its_own_key() {
+        let spec = action(crate::talk_type::ACTION_ID).expect("the talk-to-type hotkey exists");
+        assert_eq!(spec.default, "Alt+Shift+T");
+        let ours = parse(spec.default).expect("parses");
+        for other in ACTIONS.iter().filter(|a| a.id != spec.id) {
+            assert_ne!(
+                ours,
+                parse(other.default).unwrap(),
+                "clashes with {}",
+                other.id
+            );
         }
     }
 

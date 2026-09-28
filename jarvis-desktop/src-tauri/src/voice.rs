@@ -156,6 +156,11 @@ const UTTERANCE_TIMEOUT: Duration = Duration::from_secs(30);
 const SAY_TIMEOUT: Duration = Duration::from_secs(30);
 /// Which microphone this app's clips come from, as the server names it.
 const MIC_DESKTOP: &str = "desktop";
+/// Talk-to-type (talk_type.rs) holds the microphone: the talk button, "hey
+/// Jarvis" listening and Settings' recorder all say so rather than open a
+/// second capture on the same device.
+pub(crate) const TALK_TYPE_HAS_MIC: &str =
+    "Talk-to-type is using the microphone. Let go of its key (or tap it again) first.";
 /// How long `start_voice_capture`/`start_automatic_listening` wait to hear
 /// back from the capture thread before giving up and reporting the
 /// microphone as unreachable, rather than returning success for a stream
@@ -567,12 +572,13 @@ pub(crate) fn encode_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8
 }
 
 /// Encodes `samples` as a WAV and posts it to `/api/voice/utterance` at
-/// `base`. Shared by push-to-talk and automatic listening; only `source`
-/// differs between them. `base` is passed in rather than read here so the
-/// wake-word listener sends to exactly the address it has just checked is
-/// loopback ([`wake_audio_refusal`]) - reading it again here would leave a
-/// gap for Settings to change it in between.
-async fn post_utterance(
+/// `base`. Shared by push-to-talk, automatic listening and talk-to-type
+/// (talk_type.rs, `source=talk_to_type`); only `source` differs between
+/// them. `base` is passed in rather than read here so the wake-word listener
+/// sends to exactly the address it has just checked is loopback
+/// ([`wake_audio_refusal`]) - reading it again here would leave a gap for
+/// Settings to change it in between.
+pub(crate) async fn post_utterance(
     app: &AppHandle,
     base: &str,
     spec: hound::WavSpec,
@@ -693,6 +699,10 @@ pub fn start_voice_capture(
     // holds its lock while asking the other, so the two cannot deadlock.
     if training.recording() {
         return Err(crate::voice_training::MIC_IN_SETTINGS.to_string());
+    }
+    // The same for talk-to-type (talk_type.rs), asked before this lock too.
+    if app.state::<crate::talk_type::TalkTypeState>().mic_busy() {
+        return Err(TALK_TYPE_HAS_MIC.to_string());
     }
     let mut guard = state.0.lock().map_err(poisoned)?;
     if guard.is_some() {
@@ -1168,6 +1178,17 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
 #[derive(Default)]
 pub struct AutoListenState(Mutex<Option<AutoListenHandle>>);
 
+impl AutoListenState {
+    /// "Hey Jarvis" listening holds the microphone right now. Read by
+    /// talk-to-type (talk_type.rs), which must not open a second capture.
+    pub(crate) fn busy(&self) -> bool {
+        self.0
+            .lock()
+            .map(|g| g.is_some())
+            .unwrap_or_else(|p| p.into_inner().is_some())
+    }
+}
+
 struct AutoListenHandle {
     stop_tx: mpsc::Sender<()>,
     #[allow(dead_code)] // kept so the thread's lifetime is visible in state, not polled
@@ -1399,6 +1420,9 @@ pub async fn start_automatic_listening(
         if training.recording() {
             return Err(crate::voice_training::MIC_IN_SETTINGS.to_string());
         }
+        if app.state::<crate::talk_type::TalkTypeState>().mic_busy() {
+            return Err(TALK_TYPE_HAS_MIC.to_string());
+        }
     }
 
     let use_turn = ensure_wake_ready(&app).await?;
@@ -1409,6 +1433,9 @@ pub async fn start_automatic_listening(
     // taking its own: neither holds its lock while asking the other.
     if training.recording() {
         return Err(crate::voice_training::MIC_IN_SETTINGS.to_string());
+    }
+    if app.state::<crate::talk_type::TalkTypeState>().mic_busy() {
+        return Err(TALK_TYPE_HAS_MIC.to_string());
     }
     let mut guard = state.0.lock().map_err(poisoned)?;
     let manual_busy = manual.0.lock().map_err(poisoned)?.is_some();

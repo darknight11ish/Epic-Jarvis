@@ -140,6 +140,7 @@ const SETTING_NAMES = {
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
   hands_free: "how far \"Hey Jarvis\" is trusted",
+  talk_to_type: "talk-to-type",
 };
 
 /**
@@ -170,7 +171,9 @@ export function lastTrainingLine(last, status) {
       case "timed_out":
         return "Nobody answered the card in time, so nothing changed.";
       case "withdrawn":
-        return "You made it stricter while the card waited, so approving it changed nothing.";
+        return l.setting === "talk_to_type"
+          ? "You turned talk-to-type off while the card waited, so approving it changed nothing."
+          : "You made it stricter while the card waited, so approving it changed nothing.";
       case "refused":
         return `Your PC refused the change to ${setting}${because}`;
       case "failed":
