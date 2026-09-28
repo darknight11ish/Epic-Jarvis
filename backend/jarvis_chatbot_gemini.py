@@ -2,8 +2,10 @@
 Jarvis types into gemini.google.com in a browser window the owner can see.
 
 NEW MODULE, shipped whole (like jarvis_chatbot.py, which it plugs into).
-STEP 2 OF THE CHATBOT DRIVER. Still not reachable from either app: the
-routes and screens are a later step (docs/JARVIS-API.md section 60).
+STEP 2 OF THE CHATBOT DRIVER. Reachable from both apps through
+/api/chatbot/* (jarvis_chatbot_routes.py, docs/JARVIS-API.md section 60)
+once Playwright is installed and the window has been signed in. NOT yet
+tried against the real gemini.google.com.
 
 A THIN SITE FILE. What every chatbot website shares - the browser thread,
 the visible window, the typing, the host lock, "is the reply finished?",
@@ -52,8 +54,8 @@ WHEN THE SITE CHANGES
 Every selector is in ONE table, SELECTORS, below, with fallbacks. They were
 written without access to gemini.google.com (the container this was built
 in cannot reach it, and must not automate it). NOT VERIFIED against the
-live site: the owner checks them on the PC with one line, which sends one
-harmless fixed question and prints PASS or FAIL per step:
+live site: the owner checks them on the PC with one line, which sends two
+harmless fixed questions in one new chat and prints PASS or FAIL per step:
     py -3 jarvis_chatbot_gemini.py check
 
 IF PLAYWRIGHT IS NOT INSTALLED
@@ -246,7 +248,7 @@ def sign_in(*, out=print, adapter: Optional[GeminiWeb] = None,
 
 def self_check(*, out=print, adapter: Optional[GeminiWeb] = None,
                report: Optional[Path] = None, reply_wait: float = 120.0) -> int:
-    """Send the one fixed question and print PASS or FAIL per step."""
+    """Send the two fixed questions and print PASS or FAIL per step."""
     return W.self_check(SITE, GeminiWeb, out=out, adapter=adapter, report=report,
                         reply_wait=reply_wait)
 

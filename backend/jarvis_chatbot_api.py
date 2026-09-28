@@ -3,8 +3,10 @@ ChatGPT, DeepSeek, Mistral, Grok, OpenRouter or Groq through each company's
 official API, with a key the owner saved on this PC.
 
 NEW MODULE, shipped whole (like jarvis_chatbot.py, which it plugs into, and
-jarvis_chatbot_gemini.py beside it). Still not reachable from either app:
-the routes and screens are a later step (docs/JARVIS-API.md section 60).
+jarvis_chatbot_gemini.py beside it). Reachable from both apps through
+/api/chatbot/* (jarvis_chatbot_routes.py, docs/JARVIS-API.md section 60)
+once that service's key is saved on the PC. NOT yet tried against any
+real service.
 
 THE OWNER'S DECISION (CLAUDE.md, "The chatbot driver becomes versatile",
 2026-09-28): "an API adapter - one adapter speaking the common OpenAI-style

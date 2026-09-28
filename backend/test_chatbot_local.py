@@ -35,6 +35,8 @@ from __future__ import annotations
 
 import http.server
 import json
+import select
+import socket
 import sys
 import tempfile
 import threading
@@ -98,6 +100,8 @@ class Ollama:
                        "gemma3:12b": 8 * GIB, "llama3.1:70b": 40 * GIB}
         self.think = False
         self.n = 0
+        self.delay = 0.0
+        self.dropped = 0
         outer = self
 
         class H(http.server.BaseHTTPRequestHandler):
@@ -120,6 +124,20 @@ class Ollama:
             def do_POST(self):
                 raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 outer.requests.append({"path": self.path, "body": raw.decode("utf-8")})
+                if outer.delay:
+                    # A slow answer. Like Ollama, notice when Jarvis closes
+                    # the connection, and stop working on it then.
+                    end = time.time() + outer.delay
+                    while time.time() < end:
+                        ready, _, _ = select.select([self.connection], [], [], 0.05)
+                        if ready:
+                            try:
+                                peek = self.connection.recv(1, socket.MSG_PEEK)
+                            except OSError:
+                                peek = b""
+                            if not peek:
+                                outer.dropped += 1
+                                return
                 outer.n += 1
                 text = REPLIES[(outer.n - 1) % len(REPLIES)]
                 if outer.think:
@@ -223,6 +241,8 @@ def clean():
     OLL.requests.clear()
     OLL.n = 0
     OLL.think = False
+    OLL.delay = 0.0
+    OLL.dropped = 0
     CARDS.clear()
     TIERS.clear()
     L._OWNER_BUSY = None
@@ -379,6 +399,15 @@ def t_the_card():
     check("the card does not claim a message leaves the PC, nor mention captchas",
           "just before it is sent" in text and "leaves this PC." not in text
           and "captcha" not in text.lower(), text)
+    check("the card names it once - not \"A second AI on this PC (this PC)\"",
+          f"Chatbot: {L.NAME}, another AI model" in text and "(this PC)" not in text,
+          [x for x in text.splitlines() if x.startswith("Chatbot:")])
+    head = CB.RESUME_HEADER(s, 1)
+    check("the resume card does not say a message 'leaves this PC' either",
+          "just before it is sent" in head and "leaves this PC" not in head, head)
+    web = CB.Session(id="x", chatbot="gemini_web", goal=GOAL, limits=s.limits, tier=s.tier)
+    check("... while a website's resume card still does",
+          "just before it leaves this PC" in CB.RESUME_HEADER(web, 1))
 
 
 def t_a_whole_conversation():
@@ -443,6 +472,96 @@ def t_one_card_waits_while_the_owner_chats():
         n = len(OLL.chats())
         a.close()
         check("close() while waiting sends nothing more", len(OLL.chats()) == n == 1)
+    finally:
+        L.BUSY_POLL = old
+
+
+def t_waiting_for_the_owner_is_not_a_timeout():
+    """Audit, 2026-09-28: on one card the other AI waits while the owner's
+    own chat is answered. That wait used to count against the driver's
+    reply limit, so a long owner answer plus a slow reply ended with a
+    wrong "did not answer within 180 seconds"."""
+    clean()
+    setup("jarvis-primary", one_card())
+    old = (L.BUSY_POLL, CB.REPLY_TIMEOUT, CB.REPLY_SLICE)
+    L.BUSY_POLL, CB.REPLY_TIMEOUT, CB.REPLY_SLICE = 0.05, 1.0, 0.2
+    said = []
+    try:
+        until = time.time() + 2.5      # the owner's chat takes longer than the reply limit
+        L._OWNER_BUSY = lambda: time.time() < until
+        d = deps()
+        d = CB.Deps(**dict(d.__dict__, activity=lambda st, words="": said.append(words)))
+        s = CB.plan(L.ID, GOAL, max_turns=1, deps=d)
+        CB.start(s, deps=d, wait=True)
+        check("a wait for the owner's own chat longer than the reply limit does not end the "
+              "conversation as 'did not answer'",
+              s.ended_code == "limit_turns" and len(OLL.chats()) == 1
+              and s.transcript[-1]["who"] == "chatbot", (s.ended_code, s.ended_words))
+        check("... and Jarvis says it is waiting for the owner's chat",
+              any("Waiting while you chat before asking" in w for w in said), said)
+        # The reply limit still holds once the other AI HAS been asked.
+        clean()
+        setup("jarvis-primary", one_card())
+        L._OWNER_BUSY = lambda: False
+        OLL.delay = 3.0
+        d = deps()
+        s = CB.plan(L.ID, GOAL, max_turns=1, deps=d)
+        CB.start(s, deps=d, wait=True)
+        check("a reply that is genuinely slow still ends 'did not answer' at the reply limit",
+              s.ended_code == "no_reply", (s.ended_code, s.ended_words))
+        time.sleep(0.5)
+        check("... and ending it closed the connection, so Ollama stopped that answer",
+              OLL.dropped == 1 and OLL.n == 0, (OLL.dropped, OLL.n))
+    finally:
+        L.BUSY_POLL, CB.REPLY_TIMEOUT, CB.REPLY_SLICE = old
+
+
+def t_close_abandons_the_request():
+    clean()
+    setup("jarvis-primary", one_card())
+    L._OWNER_BUSY = lambda: False
+    OLL.delay = 5.0
+    a = L._factory()
+    a.open()
+    a.send("Which plants like shade?")
+    end = time.time() + 3
+    while not OLL.requests[-1:] or OLL.requests[-1]["path"] != "/api/chat":
+        if time.time() > end:
+            break
+        time.sleep(0.02)
+    time.sleep(0.2)
+    t0 = time.time()
+    a.close()
+    raised = None
+    try:
+        a.read_reply(2.0)
+    except L.LocalUnavailable as exc:
+        raised = exc.code
+    took = time.time() - t0
+    check("close() during a request abandons it at once (not after the 5-second answer)",
+          raised == "closed" and took < 1.5, (raised, round(took, 2)))
+    time.sleep(0.3)
+    check("... Ollama sees the connection closed, so the graphics card is freed",
+          OLL.dropped == 1 and OLL.n == 0, (OLL.dropped, OLL.n))
+    clean()
+    setup("jarvis-primary", one_card())
+    L.BUSY_POLL, old = 0.05, L.BUSY_POLL
+    try:
+        L._OWNER_BUSY = lambda: True
+        a = L._factory()
+        a.open()
+        a.send("And ferns?")
+        time.sleep(0.2)
+        check("while the owner chats it says it is waiting for the owner",
+              a.waiting_for_owner() is True)
+        a.close()
+        raised = None
+        try:
+            a.read_reply(1.0)
+        except L.LocalUnavailable as exc:
+            raised = exc.code
+        check("close() while waiting for the owner ends the wait at once, and asks nothing",
+              raised == "closed" and not a.waiting_for_owner() and not OLL.chats(), raised)
     finally:
         L.BUSY_POLL = old
 

@@ -93,6 +93,7 @@ sys.modules["jarvis_framework"] = fw
 
 import jarvis_chatbot as CB  # noqa: E402
 import jarvis_chatbot_gemini as G  # noqa: E402
+import jarvis_chatbot_web as W  # noqa: E402
 
 PASSED, FAILED = [], []
 
@@ -238,6 +239,21 @@ def t_registry_and_ready():
             sys.modules.pop("playwright.sync_api", None)
         else:
             sys.modules["playwright.sync_api"] = saved
+    if G.playwright_installed():
+        folder = G.profile_dir()
+        check("never signed in: ready() says so, with the one line",
+              not folder.exists() and G.ready() == G.NOT_SIGNED_IN)
+        folder.mkdir(parents=True)
+        try:
+            why = G.ready()
+            check("a profile folder with no finished sign-in (the window was closed early, or "
+                  "it was made before this check existed) is NOT ready, and says to run "
+                  "sign-in again", why == G.SITE.sign_in_unfinished and G.SIGN_IN_LINE in why
+                  and "never finished" in why, why)
+            W.mark_signed_in(folder)
+            check("... once a finished sign-in is noted, it is ready", G.ready() == "")
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
     check("the install line and the how-to name the same commands as requirements.txt",
           G.INSTALL_LINE in (HERE / "README.md").read_text(encoding="utf-8")
           and "playwright install chromium" in (HERE / "requirements.txt").read_text("utf-8"))
@@ -295,6 +311,15 @@ function doSend() {
   post('/sent', text);
   n += 1;
   const q = document.createElement('user-query'); q.textContent = text; chat.appendChild(q);
+  // A site that names the chat only when the NEXT message is sent, with an
+  // address of a shape the site file does not expect.
+  if (MODE === 'odd_address_late' && n === 2) history.pushState({}, '', '/chat/c_abc');
+  if (MODE === 'switch_during_first' && n === 1) {
+    // The site names the new chat as the reply starts, then the owner
+    // clicks an OLD chat in the window while the reply is still coming.
+    setTimeout(() => history.pushState({}, '', '/app/c_abc'), 100);
+    setTimeout(() => history.pushState({}, '', '/app/c_old'), 700);
+  }
   if (MODE === 'captcha_after_send') { document.getElementById('cap').style.display = 'block'; return; }
   if (MODE === 'leave_after_send') { location.href = 'http://localhost:' + PORT + '/elsewhere'; return; }
   const r = document.createElement('model-response');
@@ -304,6 +329,7 @@ function doSend() {
   const stop = document.getElementById('stop'); stop.style.display = 'inline-block';
   let words;
   if (/2 plus 2/.test(text)) words = ['2', 'plus', '2', 'is', '4.'];
+  else if (/3 plus 3/.test(text)) words = ['3', 'plus', '3', 'is', '6.'];
   else words = ('Reply ' + n + ': here is a streamed answer that grows word by word.').split(' ');
   let i = 0;
   function tick() {
@@ -317,9 +343,14 @@ function doSend() {
         '<h2>Unusual activity? Verify it\\'s you</h2>');
     stop.style.display = 'none';
     // Like the real page: a new chat gets its own address a little later.
-    if (MODE === 'new_address' && n === 1) setTimeout(() => history.pushState({}, '', '/app/c_abc'), 500);
-    // ... and the owner switching to another chat in the window.
-    if (MODE === 'new_address' && n === 2) setTimeout(() => history.pushState({}, '', '/app/c_other'), 500);
+    if ((MODE === 'new_address' || MODE === 'renames') && n === 1)
+      setTimeout(() => history.pushState({}, '', '/app/c_abc'), 500);
+    // ... and the owner switching to another chat in the window, once the
+    // reply has been read.
+    if (MODE === 'new_address' && n === 2) setTimeout(() => history.pushState({}, '', '/app/c_other'), 2500);
+    // A site naming the new chat with an address the site file does not
+    // expect (not under /app/).
+    if (MODE === 'odd_address' && n === 1) setTimeout(() => history.pushState({}, '', '/chat/c_abc'), 300);
   }
   setTimeout(tick, 400);
 }
@@ -503,10 +534,43 @@ def t_a_new_chat_gets_its_own_address():
         r = wait_reply(a)
         check("... and the conversation carries on there", r is not None
               and r.startswith("Reply 2"), r)
-        time.sleep(1.0)
+        # The fake opens the other chat 2.5 seconds after the reply ends.
+        end = time.monotonic() + 8
         st = a.status()
+        while st.state == "ok" and time.monotonic() < end:
+            time.sleep(0.25)
+            st = a.status()
         check("a DIFFERENT chat opened in the window: needs_owner, never read",
               st.state == "needs_owner" and st.reason == "a different chat is showing", st)
+    finally:
+        a.close()
+
+
+def t_another_chat_during_the_first_reply():
+    """Audit, 2026-09-28: the chat used to be locked only when the first
+    reply was read, so an old chat the owner clicked while that reply was
+    coming was read, and followed up in."""
+    reset("switch_during_first")
+    a = adapter()
+    try:
+        a.open()
+        a.send("Tell me something")
+        got = None
+        end = time.monotonic() + 6
+        while time.monotonic() < end and got is None:
+            got = a.read_reply(0.5)
+        st = a.status()
+        check("an old chat opened in the window during the FIRST reply is never read",
+              got is None, got)
+        check("... status says a different chat is showing",
+              st.state == "needs_owner" and st.reason == "a different chat is showing", st)
+        refused = False
+        try:
+            a.send("And another thing")
+        except RuntimeError:
+            refused = True
+        check("... and nothing is typed into that chat", refused
+              and STATE["sent"] == ["Tell me something"], STATE["sent"])
     finally:
         a.close()
 
@@ -706,12 +770,18 @@ def t_sign_in_helper():
     check("... it tells the owner to use the SPARE account, and typed and clicked nothing",
           any("SPARE Google account" in l for l in lines) and STATE["sent"] == []
           and STATE["clicked"] == [])
+    marker = W.signed_in_marker(a.profile)
+    body = marker.read_text(encoding="utf-8") if marker.is_file() else ""
+    check("... and a finished sign-in is noted in the profile folder: the date, nothing else",
+          marker.is_file() and len(body) < 80 and time.strftime("%Y-%m-%d") in body, body)
     reset("signed_out")
     a = adapter()
     lines = []
     code = G.sign_in(out=lines.append, adapter=a, wait=2)
     check("never signed in within the wait: it says so plainly and how to finish",
           code == 1 and any(G.SIGN_IN_LINE in l for l in lines) and a._ctx is None, lines)
+    check("... and no finished sign-in is noted, though the window made the profile folder",
+          a.profile.is_dir() and not W.signed_in_marker(a.profile).exists())
 
 
 def t_self_check():
@@ -723,11 +793,28 @@ def t_self_check():
     fails = [l for l in lines if l.startswith("FAIL")]
     check("the owner's self-check passes every step against the fake page",
           code == 0 and not fails and any("it says 4" in l for l in lines), lines)
-    check("it sent only the fixed harmless question",
-          STATE["sent"] == [G.CHECK_QUESTION], STATE["sent"])
+    check("it sent only the two fixed harmless questions, the second in the same chat",
+          STATE["sent"] == [G.CHECK_QUESTION, W.CHECK_QUESTION_2]
+          and any("it says 6" in l and l.startswith("PASS") for l in lines), STATE["sent"])
     check("it says which selector matched, and saves the results where it says",
           any("selector 1 of" in l for l in lines) and report.is_file()
           and any(str(report) in l for l in lines))
+    reset("renames")
+    lines = []
+    code = G.self_check(out=lines.append, adapter=adapter(), report=report, reply_wait=30)
+    check("a site that gives the new chat its own address passes, both questions going "
+          "to that one chat", code == 0 and len(STATE["sent"]) == 2, lines)
+    for mode, where in (("odd_address", "A complete reply came back"),
+                        ("odd_address_late", "A complete second reply came back")):
+        reset(mode)
+        lines = []
+        code = G.self_check(out=lines.append, adapter=adapter(), report=report,
+                            reply_wait=8)
+        fail = [l for l in lines if l.startswith("FAIL")]
+        check(f"{mode}: an address the site file does not expect FAILs the self-check "
+              f"(at \"{where}\"), and says which line to update",
+              code == 1 and len(fail) == 1 and where in fail[0]
+              and "chat_address line in jarvis_chatbot_gemini.py" in fail[0], lines)
     reset("captcha")
     lines = []
     code = G.self_check(out=lines.append, adapter=adapter(), report=report, reply_wait=5)
@@ -801,7 +888,7 @@ def _screen():
 def main():
     code_only = [t_openly_no_stealth_code, t_registry_and_ready, t_shipped_and_listed]
     browser = [t_full_turn, t_waits_for_the_message_box, t_a_new_chat_gets_its_own_address,
-               t_waits_for_stop_button, t_needs_owner_pages,
+               t_another_chat_during_the_first_reply, t_waits_for_stop_button, t_needs_owner_pages,
                t_captcha_after_send, t_never_goes_elsewhere, t_close, t_through_the_driver,
                t_sign_in_helper, t_self_check]
     xvfb = None

@@ -2,8 +2,9 @@
 talks to another Ollama model on THIS PC. Nothing leaves the PC.
 
 NEW MODULE, shipped whole (like jarvis_chatbot.py, which it plugs into).
-Still not reachable from either app: the routes and screens are a later
-step (docs/JARVIS-API.md section 60).
+Reachable from both apps through /api/chatbot/* (jarvis_chatbot_routes.py,
+docs/JARVIS-API.md section 60) once a model is chosen (local_model under
+[chatbot]). NOT yet tried against a real Ollama on the owner's PC.
 
 THE OWNER'S DECISION (CLAUDE.md, "The chatbot driver becomes versatile",
 2026-09-28): "(3) a second AI on the owner's own PC (another local model,
@@ -59,8 +60,10 @@ Standard library only. No I/O at import.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import re
+import socket
 import sys
 import threading
 import urllib.error
@@ -84,8 +87,11 @@ LOCAL_NUM_CTX = 8192
 #: leaving room for its conversation and the runtime: MODEL-TOPOLOGY's
 #: "Qwen 3 14B Q4_K_M ... 8.42 GiB" is the largest it lists as fitting).
 LANE_MAX_BYTES = 9 * 1024 ** 3
-#: The longest wait for one answer. Inside the driver's own reply timeout
-#: (jarvis_chatbot.REPLY_TIMEOUT).
+#: The longest wait for one answer, once the request is made. Inside the
+#: driver's own reply timeout (jarvis_chatbot.REPLY_TIMEOUT), which does not
+#: count the time spent first waiting for the owner's own chat
+#: (waiting_for_owner() below) - so a slow answer after a long wait ends
+#: with this module's own words, not a wrong "did not answer".
 HTTP_TIMEOUT = 170.0
 TAGS_TIMEOUT = 5.0
 MAX_BODY = 4_000_000
@@ -266,18 +272,70 @@ class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
                                "never follows.", "redirect")
 
 
+class _Line:
+    """One request's connection, so close() can abandon it from another
+    thread: Ollama stops working on a request whose connection is closed,
+    which frees the graphics card instead of finishing an answer nobody
+    will read."""
+
+    def __init__(self):
+        self.aborted = False
+        self.conn: Optional[http.client.HTTPConnection] = None
+
+    def abort(self) -> None:
+        self.aborted = True
+        conn = self.conn
+        sock = getattr(conn, "sock", None) if conn is not None else None
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+
+class _LineHandler(urllib.request.HTTPHandler):
+    """Plain http:// (loopback only, checked before) whose connection is
+    kept in a _Line."""
+
+    def __init__(self, line: _Line):
+        super().__init__()
+        self._line = line
+
+    def http_open(self, req):
+        line = self._line
+
+        class Conn(http.client.HTTPConnection):
+            def connect(self):
+                super().connect()
+                if line.aborted:
+                    # close() came first: never send the request.
+                    self.close()
+                    raise LocalUnavailable("The conversation was closed.", "closed")
+
+        def make(host, **kw):
+            conn = Conn(host, **kw)
+            line.conn = conn
+            return conn
+        return self.do_open(make, req)
+
+
 #: Tests may replace this: (Request, timeout) -> (status, body bytes).
 _HTTP = None
 
 
-def _http(req: urllib.request.Request, timeout: float) -> tuple:
+def _http(req: urllib.request.Request, timeout: float, line: Optional[_Line] = None) -> tuple:
     if not is_loopback(req.full_url):
         raise LocalUnavailable(NOT_HERE, "not_loopback")
     if _HTTP is not None:
         return _HTTP(req, timeout)
     import jarvis_local_http as LH
+    extra = (_LineHandler(line),) if line is not None else ()
     try:
-        with LH.opener(_RefuseRedirect).open(req, timeout=timeout) as r:
+        with LH.opener(_RefuseRedirect, *extra).open(req, timeout=timeout) as r:
             return r.status, r.read(MAX_BODY + 1)
     except urllib.error.HTTPError as exc:
         try:
@@ -324,6 +382,9 @@ class LocalChatbot(CB.Adapter):
         self._done = threading.Event()
         self._cancel = threading.Event()
         self._busy = False
+        #: True while the request waits for the owner's own chat (one card).
+        self._held = False
+        self._line: Optional[_Line] = None
         self._reply: Optional[str] = None
         self._error: Optional[LocalUnavailable] = None
         self._opened = self._closed = False
@@ -382,11 +443,24 @@ class LocalChatbot(CB.Adapter):
     def status(self) -> CB.Status:
         return CB.Status("gone", "closed") if self._closed else CB.OK
 
+    def waiting_for_owner(self) -> bool:
+        """True while the message has not been handed to the other AI yet
+        because the owner's own chat comes first (one card). The driver
+        does not count this time against its reply limit - the other AI
+        has not been asked yet - and says it is waiting for the owner."""
+        return self._held and not self._closed
+
     def close(self) -> None:
+        """Stop waiting and abandon any request on its way: the connection
+        to Ollama is closed, so Ollama stops that answer and the graphics
+        card is free again. Safe from any thread, twice."""
         with self._lock:
             self._closed = True
             self._history = []
+            line = self._line
         self._cancel.set()
+        if line is not None:
+            line.abort()
 
     def usage(self) -> dict:
         with self._lock:
@@ -398,16 +472,26 @@ class LocalChatbot(CB.Adapter):
         reply, err = None, None
         try:
             if self.place.tier == CB.ONE_CARD:
-                # The owner's own chat comes first on one card.
-                while _owner_busy():
-                    if self._cancel.wait(BUSY_POLL):
-                        raise LocalUnavailable("The conversation was closed.", "closed")
+                # The owner's own chat comes first on one card. No limit of
+                # its own: the driver does not count this wait against its
+                # reply limit (waiting_for_owner), the conversation's minutes
+                # still count it (the card says so), and close() ends it.
+                self._held = True
+                try:
+                    while _owner_busy():
+                        if self._cancel.wait(BUSY_POLL):
+                            raise LocalUnavailable("The conversation was closed.", "closed")
+                finally:
+                    self._held = False
             reply = self._post(messages)
         except LocalUnavailable as exc:
             err = exc
         except Exception as exc:  # pragma: no cover - must not hang the driver
             err = LocalUnavailable(f"Talking to the second AI failed ({type(exc).__name__}).",
                                    "failed")
+        if self._cancel.is_set():
+            # Closed while it worked: whatever came back is not handed on.
+            reply, err = None, LocalUnavailable("The conversation was closed.", "closed")
         with self._lock:
             self._reply, self._error = reply, err
         self._done.set()
@@ -421,17 +505,28 @@ class LocalChatbot(CB.Adapter):
         req = urllib.request.Request(self.place.url.rstrip("/") + "/api/chat", data=body,
                                      method="POST",
                                      headers={"Content-Type": "application/json"})
+        line = _Line()
+        with self._lock:
+            if self._closed:
+                raise LocalUnavailable("The conversation was closed.", "closed")
+            self._line = line
         try:
-            status, raw = _http(req, HTTP_TIMEOUT)
+            status, raw = _http(req, HTTP_TIMEOUT, line)
         except LocalUnavailable:
             raise
-        except (TimeoutError, urllib.error.URLError, OSError) as exc:
+        except (TimeoutError, urllib.error.URLError, OSError, http.client.HTTPException) as exc:
+            if line.aborted:
+                raise LocalUnavailable("The conversation was closed.", "closed") from None
             if isinstance(exc, TimeoutError) or isinstance(getattr(exc, "reason", None),
                                                           TimeoutError):
                 raise LocalUnavailable(f"The second AI did not answer within "
                                        f"{int(HTTP_TIMEOUT)} seconds.", "timeout") from None
             raise LocalUnavailable("Ollama on this PC did not answer. Check that it is "
                                    "running.", "no_ollama") from None
+        finally:
+            with self._lock:
+                if self._line is line:
+                    self._line = None
         with self._lock:
             self._usage["requests"] += 1
         if status != 200:

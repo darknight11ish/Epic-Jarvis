@@ -838,6 +838,11 @@ def _chatbot(ctx: Ctx) -> dict:
                 "or sign-in page. What the chatbot says is outside text.")
 
 
+#: jarvis_chatbot_api's own notes: no_key_words() and CANNOT_READ.
+_NO_KEY = re.compile(r"^No .+ API key\b")
+_NO_STORE = re.compile(r"^Jarvis cannot read Windows Credential Manager\b")
+
+
 def _chatbot_api(ctx: Ctx) -> dict:
     """Chatbot conversations through an official API with a key
     (jarvis_chatbot_api.py, the owner's decision of 2026-09-28): one named
@@ -861,10 +866,25 @@ def _chatbot_api(ctx: Ctx) -> dict:
                     "Your settings say never, so Jarvis never talks to a chatbot for you.")
     ready = [b for b in bots if b.get("ready")]
     if not ready:
+        # Say the TRUE reason: "no key" only for the services whose own
+        # note says so. A bad model line under [chatbot], or a Credential
+        # Manager (the Windows password store) that cannot be read, is
+        # named in that service's own words (jarvis_chatbot_api.ready_for).
+        def names(group):
+            return _join([str(b.get("name") or b.get("id")) for b in group])
+        notes = [(b, str(b.get("note") or "").strip()) for b in bots]
+        no_key = [b for b, n in notes if _NO_KEY.match(n)]
+        no_store = [b for b, n in notes if _NO_STORE.match(n)]
+        parts = [n for b, n in notes if b not in no_key and b not in no_store and n]
+        if no_store:
+            parts.append("Jarvis cannot read Windows Credential Manager (the Windows password "
+                         "store) on this computer, where the key for " + names(no_store)
+                         + " would be kept.")
+        if no_key:
+            parts.append(("no key" if not parts else "No key") + " is saved on this PC for "
+                         + names(no_key) + ". Keys are added on the PC only.")
         return _row("chatbot_api", name, "not_set_up", "", ASK_NA,
-                    "Not set up: no key is saved on this PC for "
-                    + _join([str(b.get("name") or b.get("id")) for b in bots])
-                    + ". Keys are added on the PC only.")
+                    "Not set up: " + " ".join(parts))
     ready_names = _join([str(b.get("name") or b.get("id")) for b in ready])
     if not st.get("routed"):
         return _row("chatbot_api", name, "off", "", ASK_NA,

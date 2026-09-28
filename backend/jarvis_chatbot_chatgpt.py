@@ -6,8 +6,10 @@ website shares - the browser thread, the visible window, the typing, the
 host lock, "is the reply finished?", every "needs the owner" page, the
 sign-in helper and the self-check - is jarvis_chatbot_web.py. This file
 holds only what is ChatGPT's own: the SELECTORS table, the hosts and the
-words. Registered as chatbot `chatgpt_web`. Not reachable from either app
-yet (docs/JARVIS-API.md section 60).
+words. Registered as chatbot `chatgpt_web`.
+Reachable from both apps through /api/chatbot/* (jarvis_chatbot_routes.py,
+docs/JARVIS-API.md section 60) once its window has been signed in.
+NOT yet tried against the real site.
 
 THE OWNER'S DECISION (CLAUDE.md, 2026-09-28, "The chatbot driver becomes
 versatile"): more chatbot websites, driven OPENLY like Gemini, each with its
@@ -30,8 +32,8 @@ ONE-TIME SET-UP ON THE PC (PowerShell, in Jarvis's folder)
         sign in once, by hand, to the spare OpenAI account; its own
         profile folder is <config>/chatbot/chatgpt-profile
     py -3 jarvis_chatbot_chatgpt.py check
-        one harmless fixed question; PASS/FAIL per step and which
-        selector matched
+        two harmless fixed questions in one new chat; PASS/FAIL per
+        step and which selector matched
 
 THE SELECTORS ARE BEST GUESSES, NOT VERIFIED. They were written without
 access to chatgpt.com (the container this was built in cannot reach it, and
@@ -175,7 +177,7 @@ def sign_in(*, out=print, adapter: Optional[ChatGPTWeb] = None,
 
 def self_check(*, out=print, adapter: Optional[ChatGPTWeb] = None,
                report: Optional[Path] = None, reply_wait: float = 120.0) -> int:
-    """Send the one fixed question and print PASS or FAIL per step."""
+    """Send the two fixed questions and print PASS or FAIL per step."""
     return W.self_check(SITE, ChatGPTWeb, out=out, adapter=adapter, report=report,
                         reply_wait=reply_wait)
 
