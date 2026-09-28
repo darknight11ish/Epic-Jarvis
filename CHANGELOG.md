@@ -6,6 +6,23 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **A monthly money limit for chatbots with a key.** Each service Jarvis
+  reaches with an API key (OpenAI, DeepSeek, Mistral, xAI, OpenRouter,
+  Groq) now needs a monthly limit before it is used - set on the PC with
+  one line, for example
+  `cd "<your backend folder>"; py -3 jarvis_chatbot_api.py limit openai 5`
+  for $5 a month. Jarvis estimates each message's cost from the
+  word-pieces the company reports and a price list, stops a service when
+  its month reaches the limit, and checks before every message that it
+  cannot go over. The approval card and both apps show "About $4.55 of
+  $5.00 left this month for OpenAI", and "Used so far" adds "about $0.03".
+  **The prices Jarvis starts with are not checked** (written from memory,
+  no price page could be opened): see them with
+  `py -3 jarvis_chatbot_api.py spent` and correct one with
+  `py -3 jarvis_chatbot_api.py price openai <in> <out>`. It is an estimate,
+  so a month can end slightly over. Limits and prices can only be set on
+  the PC; the apps only show them. Not yet tried against the real services.
+
 - **Chatbot driver fixes, and a correction: every chatbot is reachable from
   both apps.** The entries below that say "still not usable from either
   app" are out of date: both apps' chatbot screens can start a

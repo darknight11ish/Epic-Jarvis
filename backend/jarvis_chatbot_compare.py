@@ -333,6 +333,10 @@ def _member_line(i: int, m) -> list:
     out = [f"  {i}. {info.name} ({info.host}), {info.how}."]
     if info.card_note:
         out.append(f"     {info.card_note}")
+    # An API service's monthly money limit: how much is left, "about".
+    money = CB.money_of(info)
+    if money and money.get("line"):
+        out.append(f"     {money['line']}")
     return out
 
 
@@ -398,6 +402,7 @@ def describe(c: Compare) -> str:
         "If one chatbot cannot go on - an error, no reply, a question about you"
         + (", a captcha, a sign-in page or an \"unusual activity\" page" if "website" in kinds
            else "")
+        + (", its monthly money limit" if "api" in kinds else "")
         + " - Jarvis leaves that one out and carries on with the others; the summary says "
           "which one dropped out and why."
         + (" Jarvis never solves or skips a captcha." if "website" in kinds else ""),

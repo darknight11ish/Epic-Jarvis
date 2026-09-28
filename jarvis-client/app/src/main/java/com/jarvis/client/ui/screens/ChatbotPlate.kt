@@ -682,6 +682,15 @@ private fun FormPart(
                 Text(c.note.ifEmpty { "Not built yet." }, style = MaterialTheme.typography.labelSmall,
                     color = chrome.textLo)
             }
+            // An API service: how much of its monthly money limit is left
+            // (the PC's own amounts; read-only here).
+            val money = Chatbot.moneyLine(c)
+            if (money.isNotEmpty()) {
+                Text(money, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            }
+        }
+        if (g.kind == "api") {
+            Text(Chatbot.MONEY_PC_ONLY, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
     }
     TextInput(

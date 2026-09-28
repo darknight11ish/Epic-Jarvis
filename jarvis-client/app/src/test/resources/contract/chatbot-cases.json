@@ -1449,6 +1449,14 @@
         "host": "api.openai.com",
         "id": "openai_api",
         "kind": "api",
+        "money": {
+          "company": "OpenAI",
+          "left": "$4.55",
+          "limit": "$5.00",
+          "reached": false,
+          "spent": "$0.45",
+          "until": "October 1"
+        },
         "name": "ChatGPT (OpenAI API)",
         "note": "",
         "ready": true
@@ -1477,7 +1485,7 @@
         "id": "deepseek_api",
         "kind": "api",
         "name": "DeepSeek (API)",
-        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys.",
+        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit deepseek 5",
         "ready": false
       },
       {
@@ -1495,7 +1503,7 @@
         "id": "groq_api",
         "kind": "api",
         "name": "Groq (API)",
-        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys.",
+        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit groq 5",
         "ready": false
       }
     ],
@@ -1667,6 +1675,8 @@
           ],
           "usage": {
             "completion_tokens": 615,
+            "cost": "$0.01",
+            "dollars": 0.00213,
             "model": "gpt-5-mini",
             "prompt_tokens": 3600,
             "requests": 3,
@@ -1997,6 +2007,14 @@
         "host": "api.openai.com",
         "id": "openai_api",
         "kind": "api",
+        "money": {
+          "company": "OpenAI",
+          "left": "$4.55",
+          "limit": "$5.00",
+          "reached": false,
+          "spent": "$0.45",
+          "until": "October 1"
+        },
         "name": "ChatGPT (OpenAI API)",
         "note": "",
         "ready": true
@@ -2025,7 +2043,7 @@
         "id": "deepseek_api",
         "kind": "api",
         "name": "DeepSeek (API)",
-        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys.",
+        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit deepseek 5",
         "ready": false
       },
       {
@@ -2043,8 +2061,67 @@
         "id": "groq_api",
         "kind": "api",
         "name": "Groq (API)",
-        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys.",
+        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit groq 5",
         "ready": false
+      }
+    ],
+    "compare": null,
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": null,
+    "tier": {
+      "compare_max": 3,
+      "compare_min": 2,
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "money_reached": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "api.openai.com",
+        "id": "openai_api",
+        "kind": "api",
+        "money": {
+          "company": "OpenAI",
+          "left": "$0.00",
+          "limit": "$1.00",
+          "reached": true,
+          "spent": "$1.02",
+          "until": "October 1"
+        },
+        "name": "ChatGPT (OpenAI API)",
+        "note": "You set $1.00 a month for OpenAI; about $1.02 is used this month. Raise the limit on the PC or wait until October 1.",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "api.mistral.ai",
+        "id": "mistral_api",
+        "kind": "api",
+        "name": "Mistral (API)",
+        "note": "No monthly money limit is set for Mistral AI, so Jarvis will not use Mistral (API) yet. Set one on the PC, in PowerShell in Jarvis's folder - for example $5 a month: py -3 jarvis_chatbot_api.py limit mistral 5",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "kind": "website",
+        "name": "Gemini",
+        "note": "",
+        "ready": true
       }
     ],
     "compare": null,
@@ -2287,6 +2364,22 @@
     },
     "code": 400
   },
+  "start_money_reached": {
+    "body": {
+      "error": "You set $1.00 a month for OpenAI; about $1.02 is used this month. Raise the limit on the PC or wait until October 1.",
+      "ok": false,
+      "session": "chat_000000000010"
+    },
+    "code": 400
+  },
+  "start_no_limit": {
+    "body": {
+      "error": "No monthly money limit is set for Mistral AI, so Jarvis will not use Mistral (API) yet. Set one on the PC, in PowerShell in Jarvis's folder - for example $5 a month: py -3 jarvis_chatbot_api.py limit mistral 5.",
+      "ok": false,
+      "session": "chat_000000000011"
+    },
+    "code": 400
+  },
   "start_not_ready": {
     "body": {
       "error": "Jarvis's Gemini window has never been signed in. Sign in once, by hand, to the spare Google account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_gemini.py sign-in.",
@@ -2444,6 +2537,14 @@
         "host": "api.openai.com",
         "id": "openai_api",
         "kind": "api",
+        "money": {
+          "company": "OpenAI",
+          "left": "$4.55",
+          "limit": "$5.00",
+          "reached": false,
+          "spent": "$0.45",
+          "until": "October 1"
+        },
         "name": "ChatGPT (OpenAI API)",
         "note": "",
         "ready": true
@@ -2472,7 +2573,7 @@
         "id": "deepseek_api",
         "kind": "api",
         "name": "DeepSeek (API)",
-        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys.",
+        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit deepseek 5",
         "ready": false
       },
       {
@@ -2490,7 +2591,7 @@
         "id": "groq_api",
         "kind": "api",
         "name": "Groq (API)",
-        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys.",
+        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit groq 5",
         "ready": false
       }
     ],
@@ -2596,6 +2697,8 @@
       ],
       "usage": {
         "completion_tokens": 615,
+        "cost": "$0.01",
+        "dollars": 0.00213,
         "model": "gpt-5-mini",
         "prompt_tokens": 3600,
         "requests": 3,
@@ -2649,6 +2752,8 @@
     "messages_label": "Most messages",
     "minutes_label": "Most minutes",
     "missing": "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on the PC.",
+    "money_left": "About {left} of {limit} left this month for {company} (prices are estimates you can correct on the PC).",
+    "money_pc_only": "Each service with a key needs a monthly money limit before Jarvis uses it. Limits and prices are set on the PC only, like keys; the amounts are estimates.",
     "never_label": "Words it must never send (optional, separated by commas)",
     "none_built": "No chatbot can be reached from this PC yet. The line beside each one says what is missing. Start waits until one can.",
     "notify_compare_paused": "Paused: comparing {count} chatbots",
@@ -2673,7 +2778,7 @@
     "summary_title": "What Jarvis found",
     "title": "Talk to a chatbot for me",
     "transcript_title": "The conversation",
-    "usage_line": "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}",
+    "usage_line": "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}, about {cost}",
     "version": "Version"
   }
 }

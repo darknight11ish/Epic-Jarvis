@@ -167,8 +167,18 @@ WORDS = {
     # What an API (or local) conversation has used so far (`usage` on the
     # session); {requests} is "3 requests" / "1 request", {tokens} is
     # grouped with commas ("4,210"). ", model {model}" is left out when the
-    # PC names no model.
-    "usage_line": "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}",
+    # PC names no model, and ", about {cost}" when it sends no `cost` (the
+    # PC writes it: "$0.03", an estimate - jarvis_chatbot_api.dollars).
+    "usage_line": ("Used so far: {requests}, {tokens} word-pieces (tokens), model {model}, "
+                   "about {cost}"),
+    # An API service's monthly money limit (`money` on each chatbot in the
+    # list; jarvis_chatbot_api.MONEY_LEFT, word for word - the card says the
+    # same). {left}, {limit} are the PC's own "$4.02"; {company} "OpenAI".
+    "money_left": ("About {left} of {limit} left this month for {company} (prices are "
+                   "estimates you can correct on the PC)."),
+    "money_pc_only": ("Each service with a key needs a monthly money limit before Jarvis uses "
+                      "it. Limits and prices are set on the PC only, like keys; the amounts "
+                      "are estimates."),
 }
 
 #: The states in which a conversation is still going (jarvis_chatbot._live).

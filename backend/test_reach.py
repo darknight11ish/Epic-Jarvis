@@ -238,6 +238,24 @@ def t_chatbot_api_row():
           r["state"] == "not_set_up" and "no key" not in r["line"].lower()
           and r["line"].count("Credential Manager") == 1 and "password store" in r["line"]
           and "ChatGPT (OpenAI API) and Groq (API)" in r["line"], r["line"])
+    # A key but no monthly money limit (the owner's decision of 2026-09-28:
+    # a limit comes first): said as such, once, with every such service.
+    no_limit = bots(False)
+    no_limit["chatbots"][1]["note"] = A.no_limit_words(A.PRESETS["openai_api"])
+    r = row(R.view(ctx(chatbot=no_limit)), "chatbot_api")
+    check("chatbot_api: no monthly money limit is said as such, not as 'no key is saved'",
+          r["state"] == "not_set_up"
+          and r["line"].startswith("Not set up: no monthly money limit is set on this PC for "
+                                   "ChatGPT (OpenAI API)")
+          and "A limit comes first, and is set on the PC only." in r["line"]
+          and "No key is saved on this PC for Groq (API)" in r["line"]
+          and "py -3" not in r["line"], r["line"])
+    reached = bots(False)
+    reached["chatbots"][1]["note"] = A.reached_words(A.PRESETS["openai_api"], 5.0, 5.02)
+    r = row(R.view(ctx(chatbot=reached)), "chatbot_api")
+    check("chatbot_api: a limit reached is said in the service's own words",
+          "You set $5.00 a month for OpenAI; about $5.02 is used this month" in r["line"],
+          r["line"])
     r = row(R.view(ctx(chatbot=bots(True))), "chatbot_api")
     check("chatbot_api: a key saved but no route yet is 'off'",
           r["state"] == "off" and "neither app" in r["line"] and r["where"] == "", r)
@@ -245,6 +263,8 @@ def t_chatbot_api_row():
     check("chatbot_api: once routed it is on, goes to api.openai.com only (the service with "
           "a key), asks every time",
           r["on"] and r["where"] == "api.openai.com" and r["asks"] == R.ASK_EVERY, r)
+    check("chatbot_api: ... and says it stops at the monthly money limit set on the PC",
+          "monthly limit you set on the PC is reached" in r["line"], r["line"])
     r = row(R.view(ctx(chatbot=bots(True, routed=True),
                        tiers={"chatbot_session": "never"})), "chatbot_api")
     check("chatbot_api: tier never is blocked", r["state"] == "blocked", r)

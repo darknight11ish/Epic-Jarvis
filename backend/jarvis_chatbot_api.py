@@ -73,12 +73,45 @@ replies (the API has no memory of its own; that IS the conversation). No
 system message, no Jarvis instructions, nothing else. The history lives in
 this adapter, in memory, for this one conversation, and is dropped at close.
 
-MONEY
-The core has no money cap yet (docs/CHATBOT-DRIVER-DESIGN.md planned one;
-it is not built). So this adapter RECORDS what each answer's `usage` says -
-word-pieces (tokens) in and out, and requests - for the session view
-(usage()), and the card says plainly that the message limit on the card is
-what bounds the cost. No price is guessed.
+MONEY: A MONTHLY LIMIT PER SERVICE (the owner's decision, CLAUDE.md,
+2026-09-28, "A money limit comes before API chatbots are used for real")
+"A monthly amount per service, set on the PC; Jarvis stops that service when
+it is reached, and the approval card shows how much is left. Prices change,
+so the amount is an estimate from a price list the owner can see and
+correct, and the card says 'about'."
+  * The price list: DEFAULT_PRICES below, dollars per million word-pieces
+    (tokens) in and out, per service AND model. EVERY DEFAULT IS UNVERIFIED -
+    written from memory on PRICES_WRITTEN with no price page reachable - and
+    every place that shows one says so. The owner corrects one on the PC:
+    `py -3 jarvis_chatbot_api.py price openai 0.25 2.00`. A model with no
+    price (a model line the list does not know) cannot be used until the
+    owner sets one: without a price there is no way to keep to the limit.
+  * The limit: `py -3 jarvis_chatbot_api.py limit openai 5` ($5 a calendar
+    month). NO LIMIT, NO CONVERSATION: a service with a key but no limit is
+    not ready, and says so. Setting, raising and lowering a limit, and
+    correcting a price, are done on the PC's command line only - the same
+    place a key is added - because raising a limit is a loosening. There is
+    no route for any of it; both apps only read it.
+  * What is counted: every answer's `usage` (tokens in and out) times the
+    price, per calendar month (this PC's local time), kept in a small file
+    on the PC (money_path(): numbers only - never the key, never a word of a
+    message). OpenRouter can report a real cost (`usage.cost`, in dollars);
+    when it does, that is counted instead of the estimate. An answer with no
+    `usage` is estimated from its length. `py -3 jarvis_chatbot_api.py spent`
+    shows the month, the limits and the price list.
+  * When it stops: ready_for() refuses a conversation once the month's
+    estimate has reached the limit (so the card is never shown); and before
+    EVERY message (before_send, which jarvis_chatbot.run() asks) the
+    worst case of that message - everything resent plus WORST_REPLY_TOKENS
+    of answer - must fit in what is left, or the conversation ends there
+    with plain words. In a comparison that chatbot drops out and the others
+    carry on (jarvis_chatbot_compare's own rule).
+  * Honest limits: it is an ESTIMATE. A price may be wrong until the owner
+    corrects it, and one answer can be longer than WORST_REPLY_TOKENS (a
+    "thinking" model's hidden reasoning is counted by the service as
+    answer), so a month can end a little over the limit. Jarvis does not
+    ask the service to cut answers short (that request field differs by
+    service and was not checked).
 
 ERRORS, IN PLAIN WORDS (raised from read_reply as ApiUnavailable, whose
 `owner_words` jarvis_chatbot.run() shows): the key refused (401/403), no
@@ -95,13 +128,17 @@ Standard library only. No I/O at import.
 from __future__ import annotations
 
 import json
+import math
+import os
 import re
 import sys
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Optional
 
 import jarvis_chatbot as CB
@@ -120,6 +157,8 @@ class Preset:
     key_where: str     # where the owner makes a key
     verified: str      # where the base URL was checked, or "unverified"
     note: str = ""     # anything the card must say about this one
+    #: Where the owner checks the price (UNVERIFIED addresses, from memory).
+    price_page: str = ""
 
     @property
     def host(self) -> str:
@@ -134,29 +173,35 @@ PRESETS: dict = {p.id: p for p in (
     Preset("openai_api", "openai", "ChatGPT (OpenAI API)", "OpenAI",
            "https://api.openai.com/v1", "gpt-5-mini",
            "https://platform.openai.com/api-keys",
-           "openai/openai-python _client.py"),
+           "openai/openai-python _client.py",
+           price_page="https://openai.com/api/pricing"),
     Preset("deepseek_api", "deepseek", "DeepSeek (API)", "DeepSeek",
            "https://api.deepseek.com", "deepseek-chat",
            "https://platform.deepseek.com/api_keys",
-           "unverified"),
+           "unverified",
+           price_page="https://api-docs.deepseek.com/quick_start/pricing"),
     Preset("mistral_api", "mistral", "Mistral (API)", "Mistral AI",
            "https://api.mistral.ai/v1", "mistral-small-latest",
            "https://console.mistral.ai/api-keys",
-           "mistralai/client-python README and chat.py"),
+           "mistralai/client-python README and chat.py",
+           price_page="https://mistral.ai/pricing"),
     Preset("xai_api", "xai", "Grok (xAI API)", "xAI",
            "https://api.x.ai/v1", "grok-4.6",
            "https://console.x.ai",
-           "host from xai-org/xai-sdk-python; the /v1/chat/completions path unverified"),
+           "host from xai-org/xai-sdk-python; the /v1/chat/completions path unverified",
+           price_page="https://docs.x.ai/docs/models"),
     Preset("openrouter_api", "openrouter", "OpenRouter (API)", "OpenRouter",
            "https://openrouter.ai/api/v1", "openai/gpt-5-mini",
            "https://openrouter.ai/keys",
            "OpenRouterTeam/typescript-sdk lib/config.ts",
            note=("OpenRouter passes each message on to the company that runs the model "
-                 "you chose (for the default, OpenAI), under that company's terms too.")),
+                 "you chose (for the default, OpenAI), under that company's terms too."),
+           price_page="https://openrouter.ai/models"),
     Preset("groq_api", "groq", "Groq (API)", "Groq",
            "https://api.groq.com/openai/v1", "openai/gpt-oss-20b",
            "https://console.groq.com/keys",
-           "groq/groq-python _client.py and completions.py"),
+           "groq/groq-python _client.py and completions.py",
+           price_page="https://groq.com/pricing"),
 )}
 
 BY_SHORT = {p.short: p.id for p in PRESETS.values()}
@@ -408,6 +453,387 @@ def _retry_after(headers: dict) -> Optional[float]:
 
 
 # ============================================================================
+#   The money limit: a monthly amount per service, an estimate
+# ============================================================================
+
+#: The day the default prices below were written. NOT checked against any
+#: price page (none could be reached from where this was written).
+PRICES_WRITTEN = "2026-09-28"
+
+#: (service id, model) -> (dollars per million word-pieces IN, per million
+#: OUT). EVERY ONE IS UNVERIFIED: written from memory on PRICES_WRITTEN,
+#: with no price page reachable. Check each against the company's price page
+#: (Preset.price_page) and correct it on the PC:
+#:     py -3 jarvis_chatbot_api.py price openai <in> <out>
+#: A model this list does not know has NO price: it cannot be used until
+#: the owner sets one (without a price there is no way to keep to a limit).
+DEFAULT_PRICES = {
+    ("openai_api", "gpt-5-mini"): (0.25, 2.00),             # UNVERIFIED
+    ("deepseek_api", "deepseek-chat"): (0.28, 0.42),        # UNVERIFIED
+    ("mistral_api", "mistral-small-latest"): (0.10, 0.30),  # UNVERIFIED
+    # No price is remembered for this model name at all: Grok 4's (the
+    # highest here) is used as a cautious guess. UNVERIFIED.
+    ("xai_api", "grok-4.6"): (3.00, 15.00),
+    ("openrouter_api", "openai/gpt-5-mini"): (0.25, 2.00),  # UNVERIFIED
+    ("groq_api", "openai/gpt-oss-20b"): (0.10, 0.50),       # UNVERIFIED
+}
+
+#: The worst case of one answer, in word-pieces, for the check before each
+#: message. An ESTIMATE: Jarvis does not ask the service to cut answers
+#: short, and a "thinking" model's hidden reasoning is counted as answer,
+#: so one answer can be longer than this.
+WORST_REPLY_TOKENS = 8000
+#: For the worst case of what is sent: fewer characters per word-piece than
+#: the usual four, so the guess errs high; plus a few per message.
+WORST_CHARS_PER_TOKEN = 3
+WORST_TOKENS_PER_MESSAGE = 20
+#: For an answer that came back with no `usage`: the usual four characters
+#: per word-piece.
+CHARS_PER_TOKEN = 4
+#: The most a limit, or a price, may be set to.
+MOST_LIMIT = 10_000.0
+MOST_PRICE = 1_000.0
+#: How many months of spending the file keeps.
+KEEP_MONTHS = 13
+MONEY_FILE = "api-money.json"
+
+LIMIT_LINE = "py -3 jarvis_chatbot_api.py limit {short} {amount}"
+PRICE_LINE = "py -3 jarvis_chatbot_api.py price {short} <in> <out>"
+
+#: Tests may replace this (the month is this PC's local time).
+_now = time.time
+_MONEY_LOCK = threading.RLock()
+
+MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
+          "September", "October", "November", "December")
+
+#: The sentence both apps and both cards show (jarvis_chatbot_routes.WORDS
+#: "money_left" is this, word for word).
+MONEY_LEFT = ("About {left} of {limit} left this month for {company} (prices are estimates "
+              "you can correct on the PC).")
+#: Added on the card when what is left may not cover one more message.
+MONEY_THIN = (" That may not be enough for one more message; if so, Jarvis stops before "
+              "sending it.")
+
+
+class MoneyFileError(RuntimeError):
+    """The money file is there but cannot be read: nothing is used until
+    it is fixed (failing closed - an unreadable file must not read as
+    "nothing spent")."""
+
+
+def money_path() -> Path:
+    """<Jarvis's settings folder>/chatbot/api-money.json - numbers only."""
+    try:
+        import jarvis_framework as fw
+        base = Path(fw.CONFIG_DIR)
+    except Exception:
+        env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
+        base = Path(os.path.expanduser(env)) if env else (
+            Path(os.path.expanduser("~")) / ".openjarvis")
+    return base / "chatbot" / MONEY_FILE
+
+
+def _empty() -> dict:
+    return {"version": 1, "limits": {}, "prices": {}, "months": {}}
+
+
+def _load() -> dict:
+    p = money_path()
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return _empty()
+    except OSError as exc:
+        raise MoneyFileError(f"it could not be opened ({type(exc).__name__})") from None
+    try:
+        got = json.loads(raw)
+    except ValueError:
+        raise MoneyFileError("it is not readable JSON") from None
+    if not isinstance(got, dict):
+        raise MoneyFileError("it is not in the expected shape")
+    out = _empty()
+    for k in ("limits", "prices", "months"):
+        v = got.get(k, {})
+        if not isinstance(v, dict):
+            raise MoneyFileError("it is not in the expected shape")
+        out[k] = v
+    return out
+
+
+def _save(data: dict) -> None:
+    p = money_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    for old in sorted(data.get("months", {}))[:-KEEP_MONTHS]:
+        data["months"].pop(old, None)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def _num(v) -> Optional[float]:
+    """A finite number at or above nothing, else None."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    f = float(v)
+    return f if math.isfinite(f) and f >= 0 else None
+
+
+def month_key(t: Optional[float] = None) -> str:
+    lt = time.localtime(_now() if t is None else t)
+    return f"{lt.tm_year:04d}-{lt.tm_mon:02d}"
+
+
+def next_month_words(t: Optional[float] = None) -> str:
+    """"October 1": the day the month's count starts again."""
+    lt = time.localtime(_now() if t is None else t)
+    return f"{MONTHS[lt.tm_mon % 12]} 1"
+
+
+def dollars(x) -> str:
+    """"$0.03". An amount above nothing but under a cent shows as "$0.01":
+    an estimate is never shown as free."""
+    x = max(0.0, float(x or 0.0))
+    if 0 < x < 0.01:
+        x = 0.01
+    return f"${x:,.2f}"
+
+
+def limit_of(pid: str, data: Optional[dict] = None) -> Optional[float]:
+    d = data if data is not None else _load()
+    return _num((d.get("limits") or {}).get(pid))
+
+
+def price_of(pid: str, model: str, data: Optional[dict] = None) -> Optional[tuple]:
+    """(in, out, where): the owner's correction for this service and model
+    when there is one, else the default, else None. `where` is "yours" or
+    "default"."""
+    d = data if data is not None else _load()
+    mine = (d.get("prices") or {}).get(pid)
+    got = mine.get(model) if isinstance(mine, dict) else None
+    if isinstance(got, dict):
+        pin, pout = _num(got.get("in")), _num(got.get("out"))
+        if pin is not None and pout is not None:
+            return pin, pout, "yours"
+    dflt = DEFAULT_PRICES.get((pid, model))
+    return (dflt[0], dflt[1], "default") if dflt else None
+
+
+def spent_of(pid: str, data: Optional[dict] = None, month: Optional[str] = None) -> float:
+    """This month's count for one service, in dollars (an estimate)."""
+    d = data if data is not None else _load()
+    row = ((d.get("months") or {}).get(month or month_key()) or {}).get(pid)
+    if not isinstance(row, dict):
+        return 0.0
+    return _num(row.get("dollars")) or 0.0
+
+
+def cost_of(pid: str, model: str, prompt_tokens: int, completion_tokens: int,
+            data: Optional[dict] = None) -> Optional[float]:
+    """The estimate for these counts, in dollars, or None with no price."""
+    pr = price_of(pid, model, data)
+    if pr is None:
+        return None
+    return (max(0, prompt_tokens) * pr[0] + max(0, completion_tokens) * pr[1]) / 1_000_000
+
+
+def worst_tokens(chars: int, messages: int) -> int:
+    """The most word-pieces `chars` characters in `messages` messages could
+    be (errs high)."""
+    return int(math.ceil(max(0, chars) / WORST_CHARS_PER_TOKEN)) + (
+        WORST_TOKENS_PER_MESSAGE * max(1, messages))
+
+
+def record_spend(pid: str, model: str, prompt_tokens: int, completion_tokens: int, *,
+                 real_dollars: Optional[float] = None, guessed: bool = False) -> float:
+    """Add one answer to this month's count; returns the dollars counted.
+    `real_dollars`: what the service itself reported (OpenRouter), counted
+    in place of the estimate. Numbers only: never the key, never a word."""
+    with _MONEY_LOCK:
+        data = _load()
+        est = cost_of(pid, model, prompt_tokens, completion_tokens, data)
+        used = real_dollars if real_dollars is not None else (est or 0.0)
+        row = data["months"].setdefault(month_key(), {}).setdefault(pid, {})
+        row["dollars"] = round((_num(row.get("dollars")) or 0.0) + used, 8)
+        for k, v in (("prompt_tokens", prompt_tokens), ("completion_tokens", completion_tokens),
+                     ("requests", 1),
+                     ("reported_by_service", 1 if real_dollars is not None else 0),
+                     ("guessed_from_length", 1 if guessed else 0),
+                     ("unpriced", 1 if est is None and real_dollars is None else 0)):
+            if v or k in ("prompt_tokens", "completion_tokens", "requests"):
+                row[k] = int((_num(row.get(k)) or 0) + v)
+        _save(data)
+        return used
+
+
+def _file_words(why: str) -> str:
+    """Said in both apps too, so the folder is named, not the full path
+    (which holds the Windows user name); `spent` on the PC prints the path."""
+    return (f"Jarvis's record of API spending (chatbot\\{MONEY_FILE} in Jarvis's settings "
+            f"folder) cannot be read: {why}. No API chatbot is used until it is fixed; "
+            f"deleting the file forgets this month's spending and every limit")
+
+
+def set_limit(pid: str, amount: Optional[float]) -> dict:
+    """The owner's command line only (there is NO route): `amount` dollars a
+    month, or None to remove the limit (the service then cannot be used)."""
+    if pid not in PRESETS:
+        return {"ok": False, "error": "there is no such chatbot"}
+    if amount is not None:
+        a = _num(amount)
+        if a is None or a > MOST_LIMIT:
+            return {"ok": False, "error": f"the limit must be a number of dollars from 0 to "
+                                          f"{MOST_LIMIT:,.0f}"}
+    p = PRESETS[pid]
+    with _MONEY_LOCK:
+        try:
+            data = _load()
+        except MoneyFileError as exc:
+            return {"ok": False, "error": _file_words(str(exc))}
+        old = limit_of(pid, data)
+        if amount is None:
+            data["limits"].pop(pid, None)
+        else:
+            data["limits"][pid] = round(float(amount), 2)
+        _save(data)
+        spent = spent_of(pid, data)
+    if amount is None:
+        return {"ok": True, "said": f"Removed the monthly money limit for {p.company}. Jarvis "
+                                    f"will not use {p.name} until a limit is set again."}
+    was = f" (it was {dollars(old)})" if old is not None else ""
+    return {"ok": True, "said": f"{p.company}: at most {dollars(amount)} a month{was}. About "
+                                f"{dollars(spent)} is used so far this month (an estimate)."}
+
+
+def set_price(pid: str, model: str, pin, pout) -> dict:
+    """Correct one price, for this service and model. The command line only."""
+    if pid not in PRESETS:
+        return {"ok": False, "error": "there is no such chatbot"}
+    a, b = _num(pin), _num(pout)
+    if a is None or b is None or a > MOST_PRICE or b > MOST_PRICE:
+        return {"ok": False, "error": f"each price must be dollars per million word-pieces, "
+                                      f"from 0 to {MOST_PRICE:,.0f}"}
+    with _MONEY_LOCK:
+        try:
+            data = _load()
+        except MoneyFileError as exc:
+            return {"ok": False, "error": _file_words(str(exc))}
+        data["prices"].setdefault(pid, {})[model] = {
+            "in": a, "out": b, "set": time.strftime("%Y-%m-%d", time.localtime(_now()))}
+        _save(data)
+    return {"ok": True, "said": f"{PRESETS[pid].company}, model {model}: ${a:g} per million "
+                                f"word-pieces in, ${b:g} out. Jarvis uses this price from the "
+                                f"next answer; what is already counted stays as it was."}
+
+
+def reset_price(pid: str, model: str) -> dict:
+    """Forget the owner's correction: back to the (unverified) default."""
+    if pid not in PRESETS:
+        return {"ok": False, "error": "there is no such chatbot"}
+    with _MONEY_LOCK:
+        try:
+            data = _load()
+        except MoneyFileError as exc:
+            return {"ok": False, "error": _file_words(str(exc))}
+        mine = data["prices"].get(pid)
+        if isinstance(mine, dict):
+            mine.pop(model, None)
+            if not mine:
+                data["prices"].pop(pid, None)
+        _save(data)
+        back = price_of(pid, model, data)
+    return {"ok": True, "said": f"{PRESETS[pid].company}, model {model}: back to "
+                                + (f"the default price (${back[0]:g} in, ${back[1]:g} out, "
+                                   f"UNVERIFIED)." if back else
+                                   "no price, so it cannot be used until you set one.")}
+
+
+def no_limit_words(p: Preset) -> str:
+    return (f"No monthly money limit is set for {p.company}, so Jarvis will not use {p.name} "
+            f"yet. Set one on the PC, in PowerShell in Jarvis's folder - for example $5 a "
+            f"month: " + LIMIT_LINE.format(short=p.short, amount=5))
+
+
+def no_price_words(p: Preset, model: str) -> str:
+    return (f"Jarvis has no price for the model \"{model}\" on {p.company}, so it cannot keep "
+            f"to your money limit. Look up the price at {p.price_page or 'its price page'} and "
+            f"set it on the PC (dollars per million word-pieces in, then out): "
+            + PRICE_LINE.format(short=p.short))
+
+
+def reached_words(p: Preset, limit: float, spent: float) -> str:
+    return (f"You set {dollars(limit)} a month for {p.company}; about {dollars(spent)} is used "
+            f"this month. Raise the limit on the PC or wait until {next_month_words()}.")
+
+
+def would_pass_words(p: Preset, limit: float, spent: float, worst: float) -> str:
+    return (f"The next message to {p.name} could cost up to about {dollars(worst)}, which "
+            f"would pass the {dollars(limit)} a month you set for {p.company} (about "
+            f"{dollars(spent)} is used this month). Nothing more was sent. Raise the limit on "
+            f"the PC or wait until {next_month_words()}.")
+
+
+def money_problem(pid: str, model: str, *, next_chars: int = 0, next_messages: int = 0) -> str:
+    """"" when the limit allows; else why not, in plain words. With
+    `next_messages` (the next request: everything it resends), the worst
+    case of that request must fit in what is left too."""
+    p = PRESETS[pid]
+    try:
+        data = _load()
+    except MoneyFileError as exc:
+        return _file_words(str(exc)) + "."
+    limit = limit_of(pid, data)
+    if limit is None:
+        return no_limit_words(p)
+    if price_of(pid, model, data) is None:
+        return no_price_words(p, model)
+    spent = spent_of(pid, data)
+    if spent >= limit:
+        return reached_words(p, limit, spent)
+    if next_messages:
+        worst = cost_of(pid, model, worst_tokens(next_chars, next_messages),
+                        WORST_REPLY_TOKENS, data) or 0.0
+        if spent + worst > limit:
+            return would_pass_words(p, limit, spent, worst)
+    return ""
+
+
+def money_view(pid: str) -> Optional[dict]:
+    """What both apps and the card show for one service - the amounts as
+    the PC writes them ("$4.02") - or None when there is no limit to show."""
+    p = PRESETS.get(pid)
+    if p is None:
+        return None
+    try:
+        data = _load()
+    except MoneyFileError:
+        return None
+    limit = limit_of(pid, data)
+    if limit is None:
+        return None
+    model = model_for(pid)[0]
+    spent = spent_of(pid, data)
+    left = max(0.0, limit - spent)
+    pr = price_of(pid, model, data) if model else None
+    left_words = dollars(left) if left >= 0.005 else "$0.00"
+    line = MONEY_LEFT.format(left=left_words, limit=dollars(limit), company=p.company)
+    if pr is not None and left > 0:
+        worst = cost_of(pid, model, worst_tokens(CB.MAX_GOAL_CHARS, 1), WORST_REPLY_TOKENS,
+                        data) or 0.0
+        if left < worst:
+            line += MONEY_THIN
+    return {"company": p.company, "limit": dollars(limit), "left": left_words,
+            "spent": dollars(spent), "until": next_month_words(), "reached": spent >= limit,
+            "line": line}
+
+
+def _card_money(pid: str) -> str:
+    """The card's line (jarvis_chatbot.describe and the comparison's card)."""
+    got = money_view(pid)
+    return got["line"] if got else ""
+
+
+# ============================================================================
 #   The adapter
 # ============================================================================
 
@@ -434,7 +860,12 @@ class ApiChatbot(CB.Adapter):
         self._closed = False
         self._sleep = sleep
         self._usage = {"model": model, "requests": 0, "prompt_tokens": 0,
-                       "completion_tokens": 0, "total_tokens": 0, "retries": 0}
+                       "completion_tokens": 0, "total_tokens": 0, "retries": 0,
+                       "dollars": 0.0, "cost": dollars(0)}
+        #: Set when an answer's cost could not be written down: the next
+        #: message is refused (a count that is not kept must not read as
+        #: nothing spent).
+        self._money_broken = ""
 
     # ---- the interface ----------------------------------------------------
 
@@ -496,9 +927,23 @@ class ApiChatbot(CB.Adapter):
         self._cancel.set()
 
     def usage(self) -> dict:
-        """What the service reported, for the session view. Counts only."""
+        """What the service reported, for the session view. Counts only;
+        `cost` is this conversation's estimate as the apps show it."""
         with self._lock:
             return dict(self._usage)
+
+    def before_send(self, text: str) -> str:
+        """jarvis_chatbot.run() asks this right before every message: "" to
+        send it, else why not (the conversation then ends with these words).
+        The worst case of this request - everything it resends plus
+        WORST_REPLY_TOKENS of answer - must fit in this month's limit."""
+        if self._money_broken:
+            return self._money_broken
+        with self._lock:
+            texts = [str(m.get("content") or "") for m in self._history]
+        texts = (texts + [str(text)])[-MAX_HISTORY:]
+        return money_problem(self.preset.id, self.model,
+                             next_chars=sum(len(t) for t in texts), next_messages=len(texts))
 
     # ---- the request ------------------------------------------------------
 
@@ -584,9 +1029,9 @@ class ApiChatbot(CB.Adapter):
             if status != 200:
                 raise ApiUnavailable(status_words(status, self.preset, self.model),
                                      f"http_{status}")
-            return self._parse(body)
+            return self._parse(body, messages)
 
-    def _parse(self, body: bytes) -> str:
+    def _parse(self, body: bytes, messages: Optional[list] = None) -> str:
         if len(body) > MAX_BODY:
             raise ApiUnavailable(f"{self.name}'s answer was larger than Jarvis reads "
                                  f"({MAX_BODY // 1_000_000} MB), so it was not used.", "too_big")
@@ -597,18 +1042,54 @@ class ApiChatbot(CB.Adapter):
         if not isinstance(got, dict):
             raise ApiUnavailable(UNREADABLE.format(name=self.name), "unreadable")
         use = got.get("usage")
+        counts = {}
         if isinstance(use, dict):
             with self._lock:
                 for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
                     v = use.get(k)
                     if isinstance(v, int) and not isinstance(v, bool) and v >= 0:
                         self._usage[k] += v
+                        counts[k] = v
         text = _content(got)
+        self._count_money(use, counts, messages or [], text)
         if text is None:
             raise ApiUnavailable(UNREADABLE.format(name=self.name), "unreadable")
         if not text.strip():
             raise ApiUnavailable(f"{self.name} sent back an empty answer.", "empty")
         return text
+
+
+    def _count_money(self, use, counts: dict, messages: list, text: Optional[str]) -> None:
+        """Add this answer to the month's count (record_spend) and to this
+        conversation's `cost`. Counted even when the answer turns out
+        unreadable or empty: the service charges for it all the same."""
+        guessed = "prompt_tokens" not in counts or "completion_tokens" not in counts
+        pt = counts.get("prompt_tokens")
+        if pt is None:
+            pt = int(math.ceil(sum(len(str(m.get("content") or "")) for m in messages
+                                   if isinstance(m, dict)) / CHARS_PER_TOKEN))
+        ct = counts.get("completion_tokens")
+        if ct is None:
+            ct = int(math.ceil(len(text or "") / CHARS_PER_TOKEN))
+        real = None
+        if self.preset.id == "openrouter_api" and isinstance(use, dict):
+            # OpenRouter's own figure for this answer, in dollars, when it
+            # sends one (its "usage accounting"); else the estimate.
+            real = _num(use.get("cost"))
+        try:
+            got = record_spend(self.preset.id, self.model, pt, ct, real_dollars=real,
+                               guessed=guessed)
+        except Exception as exc:
+            try:
+                got = cost_of(self.preset.id, self.model, pt, ct) if real is None else real
+            except Exception:       # the file cannot be read either
+                got = None
+            self._money_broken = (f"Jarvis could not write down what {self.name}'s last answer "
+                                  f"cost ({type(exc).__name__}), so it cannot keep to your "
+                                  f"money limit. Nothing more was sent.")
+        with self._lock:
+            self._usage["dollars"] = round(self._usage["dollars"] + float(got or 0.0), 8)
+            self._usage["cost"] = dollars(self._usage["dollars"])
 
 
 def _content(got: dict) -> Optional[str]:
@@ -651,7 +1132,9 @@ RATE_LIMITED_LONG = ("{name} says Jarvis is asking too often (error 429) and ask
 def no_key_words(p: Preset) -> str:
     return (f"No {p.company} API key is saved on this PC. To add one, run this one line in "
             f"PowerShell in Jarvis's folder, then paste the key (it will not show): "
-            + KEY_LINE.format(short=p.short) + f" - keys are made at {p.key_where}.")
+            + KEY_LINE.format(short=p.short) + f" - keys are made at {p.key_where}. Then set "
+            f"a monthly money limit, for example $5: "
+            + LIMIT_LINE.format(short=p.short, amount=5))
 
 
 def status_words(status: int, p: Preset, model: str) -> str:
@@ -689,7 +1172,8 @@ def ready_for(pid: str) -> str:
         return CANNOT_READ.format(name=p.company)
     if not saved:
         return no_key_words(p)
-    return ""
+    # No limit, no price, or this month's limit reached: not before a card.
+    return money_problem(pid, model)
 
 
 def _how(p: Preset, model: str) -> str:
@@ -700,10 +1184,10 @@ def _how(p: Preset, model: str) -> str:
 def _card_note(p: Preset) -> str:
     out = (f"Each message goes to {p.host} only, with your {p.company} key; the key is never "
            f"sent anywhere else, and a redirect is refused. Each message costs a little on "
-           f"your {p.company} account: Jarvis counts the word-pieces (tokens) {p.company} "
-           f"reports and shows them, but there is no money limit yet - the message limit on "
-           f"this card is what limits the cost. What you send is kept under {p.company}'s own "
-           f"API terms.")
+           f"your {p.company} account: Jarvis estimates the cost from the word-pieces "
+           f"(tokens) {p.company} reports and its price list, and stops before a message "
+           f"that could pass the monthly money limit you set on the PC. What you send is kept "
+           f"under {p.company}'s own API terms.")
     if p.note:
         out += " " + p.note
     return out
@@ -724,7 +1208,7 @@ def _register(pid: str) -> None:
     CB.register_adapter(CB.AdapterInfo(
         p.id, p.name, p.host, _factory_for(pid), built=True, kind=KIND,
         how=_how(p, model), card_note=_card_note(p),
-        ready=lambda pid=pid: ready_for(pid)))
+        ready=lambda pid=pid: ready_for(pid), money=lambda pid=pid: money_view(pid)))
 
 
 for _pid in PRESETS:
@@ -742,12 +1226,62 @@ def point_at(pid: str, base_url: str) -> Preset:
 #   The owner's command line
 # ============================================================================
 
-USAGE = ("Jarvis's chatbot API keys. Run in Jarvis's folder, in PowerShell:\n"
+USAGE = ("Jarvis's chatbot API keys and money limits. Run in Jarvis's folder, in "
+         "PowerShell:\n"
          "  py -3 jarvis_chatbot_api.py key <service>          save a key (pasted at a "
          "hidden prompt)\n"
          "  py -3 jarvis_chatbot_api.py forget-key <service>   remove it\n"
-         "  py -3 jarvis_chatbot_api.py status                 which keys are saved\n"
+         "  py -3 jarvis_chatbot_api.py status                 which keys and limits are set\n"
+         "  py -3 jarvis_chatbot_api.py limit <service> <dollars>   at most this much a month "
+         "(\"none\" removes it, and the service is then not used)\n"
+         "  py -3 jarvis_chatbot_api.py price <service> <in> <out>  correct a price: dollars "
+         "per million word-pieces (tokens) in, then out (\"default\" goes back)\n"
+         "  py -3 jarvis_chatbot_api.py spent                  this month's spending, the "
+         "limits and the price list\n"
          "Services: " + ", ".join(sorted(BY_SHORT)))
+
+
+def _amount(raw: str) -> Optional[float]:
+    """"5", "5.50" or "$5" as dollars; None when it is not a number."""
+    t = str(raw or "").strip().lstrip("$").replace(",", "")
+    try:
+        v = float(t)
+    except ValueError:
+        return None
+    return v if math.isfinite(v) else None
+
+
+def spent_lines() -> list:
+    """What `spent` prints: per service, this month's estimate, the limit,
+    and the price in use - each default price marked UNVERIFIED."""
+    try:
+        data = _load()
+    except MoneyFileError as exc:
+        return [_file_words(str(exc)) + ".", f"The file: {money_path()}"]
+    lt = time.localtime(_now())
+    out = [f"API spending in {MONTHS[lt.tm_mon - 1]} {lt.tm_year} (an estimate; the count "
+           f"starts again on {next_month_words()}). Kept in {money_path()}."]
+    for pid, p in PRESETS.items():
+        model, problem = model_for(pid)
+        limit = limit_of(pid, data)
+        spent = spent_of(pid, data)
+        pr = price_of(pid, model, data) if model else None
+        if limit is None:
+            lim = f"about {dollars(spent)} used, no limit set - so it is not used"
+        else:
+            lim = (f"about {dollars(spent)} of {dollars(limit)} used, about "
+                   f"{dollars(max(0.0, limit - spent))} left")
+        if pr is None:
+            price = "none - set one before it can be used"
+        elif pr[2] == "yours":
+            price = f"${pr[0]:g} in, ${pr[1]:g} out per million word-pieces (your price)"
+        else:
+            price = (f"${pr[0]:g} in, ${pr[1]:g} out per million word-pieces (default written "
+                     f"{PRICES_WRITTEN}, UNVERIFIED - check {p.price_page})")
+        out.append(f"{p.short}: {p.name}, model {model or problem}: {lim}. Price: {price}.")
+    out.append("Prices change: check each against the company's price page and correct it "
+               "with: " + PRICE_LINE.format(short="<service>"))
+    return out
 
 
 def _main(argv, *, ask_secret=None, out=print) -> int:
@@ -775,8 +1309,58 @@ def _main(argv, *, ask_secret=None, out=print) -> int:
         for pid, p in PRESETS.items():
             k = key_saved(pid)
             model, problem = model_for(pid)
+            try:
+                limit = limit_of(pid)
+            except MoneyFileError:
+                limit = None
             out(f"{p.name} ({p.host}, model {model or problem}): "
-                + ("key saved" if k else "no key" if k is False else "cannot be checked here"))
+                + ("key saved" if k else "no key" if k is False else "cannot be checked here")
+                + (f", at most {dollars(limit)} a month" if limit is not None
+                   else ", no money limit set"))
+        return 0
+    if cmd == "limit":
+        if len(argv) != 3 or argv[1] not in BY_SHORT:
+            out("Say which service and how many dollars a month, for example: "
+                + LIMIT_LINE.format(short="openai", amount=5))
+            return 2
+        pid = BY_SHORT[argv[1]]
+        if argv[2].strip().lower() == "none":
+            r = set_limit(pid, None)
+        else:
+            amount = _amount(argv[2])
+            if amount is None:
+                out("Not set: the limit must be a number of dollars, for example 5 or 2.50.")
+                return 1
+            r = set_limit(pid, amount)
+        out(r.get("said") or f"Not set: {r.get('error')}.")
+        return 0 if r.get("ok") else 1
+    if cmd == "price":
+        if len(argv) not in (3, 4) or argv[1] not in BY_SHORT:
+            out("Say which service and the two prices, for example: "
+                "py -3 jarvis_chatbot_api.py price openai 0.25 2.00")
+            return 2
+        pid = BY_SHORT[argv[1]]
+        model, problem = model_for(pid)
+        if problem:
+            out(f"Not set: {problem}.")
+            return 1
+        if len(argv) == 3 and argv[2].strip().lower() == "default":
+            r = reset_price(pid, model)
+        elif len(argv) == 4:
+            pin, pout = _amount(argv[2]), _amount(argv[3])
+            if pin is None or pout is None:
+                out("Not set: each price must be a number of dollars per million "
+                    "word-pieces, for example 0.25 and 2.00.")
+                return 1
+            r = set_price(pid, model, pin, pout)
+        else:
+            out("Say both prices (in, then out), or \"default\".")
+            return 2
+        out(r.get("said") or f"Not set: {r.get('error')}.")
+        return 0 if r.get("ok") else 1
+    if cmd == "spent":
+        for line in spent_lines():
+            out(line)
         return 0
     out(USAGE)
     return 2

@@ -16,7 +16,8 @@ jarvis_search, jarvis_mail_mask, jarvis_task_control and jarvis_stop_all:
 
   - six presets, each its own chatbot id, kind "api", https, its own
     Credential Manager entry; the card names the service, host and model and
-    says it costs money with no money cap yet - and says nothing of captchas;
+    says it costs money, how much of the monthly limit is left ("about") -
+    and says nothing of captchas;
   - no key: ready=False with the one PowerShell line, refused before any
     card; a store that cannot be read says so; the command line saves and
     forgets a key without ever printing it;
@@ -33,7 +34,16 @@ jarvis_search, jarvis_mail_mask, jarvis_task_control and jarvis_stop_all:
   - a whole core session through the adapter: the core's last check still
     runs before every send - a planted secret, a planted saved fact and a
     goal with a secret never reach the server;
-  - close() stops a retry wait at once; the module is shipped.
+  - close() stops a retry wait at once; the module is shipped;
+  - THE MONEY LIMIT (the owner's decision of 2026-09-28): no limit means not
+    ready; spending counted per calendar month from each answer's `usage`
+    and the price list, into a file with numbers only (never the key); the
+    month rolls over; a reached limit refuses before any card; the worst
+    case of the next message is checked before it is sent; OpenRouter's own
+    reported cost is used when present; a price corrected on the command
+    line is used; a model with no price is refused; an unreadable money file
+    fails closed; the card shows "About $X of $Y left"; in a comparison the
+    API chatbot near its limit drops out and the other carries on.
 
 No pytest. The only sockets are to the two fake servers on 127.0.0.1.
 """
@@ -212,11 +222,18 @@ ELSEWHERE = Server()
 ORIGINAL = dict(API.PRESETS)
 
 
-def point_all():
-    """Every preset at the fake server; each keeps its own id and key entry."""
+def point_all(limit=100.0):
+    """Every preset at the fake server; each keeps its own id and key entry,
+    and a monthly money limit of `limit` dollars (a limit comes first)."""
     API._TEST_LOOPBACK_OK = True
     for pid in API.PRESETS:
         API.point_at(pid, SRV.url())
+        if limit is not None:
+            API.set_limit(pid, limit)
+
+
+#: 15 September 2026, midday, this machine's local time: the tests' "now".
+MID_SEPT = time.mktime((2026, 9, 15, 12, 0, 0, 0, 0, -1))
 
 
 def restore():
@@ -243,6 +260,12 @@ def clean():
     AUDIT.clear()
     use_store()
     restore()
+    API._now = lambda: MID_SEPT
+    for f in (API.money_path(), API.money_path().with_name(API.MONEY_FILE + ".tmp")):
+        try:
+            f.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def wait_reply(a, most=15.0):
@@ -372,8 +395,13 @@ def t_the_card():
     check("the card names the service, its host and its model",
           "ChatGPT (OpenAI API)" in text and "127.0.0.1" in text and "gpt-5-mini" in text,
           text[:400])
-    check("the card says it costs money and that there is no money limit yet",
-          "costs a little" in text and "no money limit yet" in text)
+    check("the card says it costs money and stops before passing the monthly limit",
+          "costs a little" in text and "monthly money limit you set on the PC" in text
+          and "no money limit yet" not in text)
+    check("the card shows how much is left this month, 'about', with prices that are "
+          "estimates",
+          "About $100.00 of $100.00 left this month for OpenAI (prices are estimates you "
+          "can correct on the PC)." in text, text)
     check("the card says the key goes to that host only and a redirect is refused",
           "key is never sent anywhere else" in text and "redirect is refused" in text)
     check("the card says nothing about captchas (that is for websites)",
@@ -758,6 +786,345 @@ def t_an_error_ends_the_conversation_plainly():
           and "did not accept the key" in s.ended_words and KEY not in s.ended_words,
           s.ended_words)
     check("... after exactly one request", len(SRV.requests) == 1)
+
+
+# ==========================================================================
+#   6. The money limit (the owner's decision of 2026-09-28)
+# ==========================================================================
+
+def money_file() -> dict:
+    return json.loads(API.money_path().read_text(encoding="utf-8"))
+
+
+def at(y, mo, d, h=12, mi=0):
+    return time.mktime((y, mo, d, h, mi, 0, 0, 0, -1))
+
+
+def big_reply(text, prompt, completion, **extra):
+    body = reply_body(text, prompt, completion)
+    body["usage"].update(extra)
+    return body
+
+
+def t_money_no_limit_no_conversation():
+    clean()
+    point_all(limit=None)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    c = next(x for x in CB.choices() if x["id"] == "openai_api")
+    check("a key but no monthly limit: not ready, with the one line that sets one",
+          c["ready"] is False and "No monthly money limit is set for OpenAI" in c["note"]
+          and "py -3 jarvis_chatbot_api.py limit openai 5" in c["note"]
+          and "money" not in c, c)
+    s = CB.plan("openai_api", GOAL, deps=deps())
+    code, _ = CB.start(s, deps=deps(), wait=True)
+    check("no limit: refused before any card, and nothing is sent",
+          s.state == "refused" and code == 400 and not CARDS and not SRV.requests, s.problem)
+    c = next(x for x in CB.choices() if x["id"] == "groq_api")
+    check("the no-key line says a monthly limit comes next",
+          "Then set a monthly money limit" in c["note"]
+          and "py -3 jarvis_chatbot_api.py limit groq 5" in c["note"], c["note"])
+
+
+def t_money_counted_per_month():
+    clean()
+    point_all(limit=5.0)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    # 1,000,000 in and 100,000 out at the default $0.25 / $2.00: $0.45 each.
+    SRV.script = [(200, {}, big_reply(REPLIES[0], 1_000_000, 100_000))]
+    d = deps()
+    s = CB.plan("openai_api", GOAL, max_turns=2, deps=d)
+    CB.start(s, deps=d, wait=True)
+    row = money_file()["months"]["2026-09"]["openai_api"]
+    check("two answers were counted into September: tokens, requests and dollars",
+          row["requests"] == 2 and row["prompt_tokens"] == 2_000_000
+          and row["completion_tokens"] == 200_000 and abs(row["dollars"] - 0.90) < 1e-9, row)
+    v = CB.session_view(s)
+    check("the session's usage carries the estimate: about $0.90",
+          v["usage"]["cost"] == "$0.90" and abs(v["usage"]["dollars"] - 0.90) < 1e-9,
+          v["usage"])
+    c = next(x for x in CB.choices() if x["id"] == "openai_api")
+    check("the chatbot list shows what is left this month, as the PC writes it",
+          c["ready"] and c["money"] == {"company": "OpenAI", "limit": "$5.00",
+                                        "left": "$4.10", "spent": "$0.90",
+                                        "until": "October 1", "reached": False},
+          c.get("money"))
+    blob = API.money_path().read_text(encoding="utf-8")
+    check("the money file never holds the key, the goal or a reply",
+          KEY not in blob and KEY[-10:] not in blob and GOAL not in blob
+          and REPLIES[0] not in blob, blob[:300])
+    check("... and the file is numbers only", all(
+        isinstance(v, (int, float)) for m in money_file()["months"].values()
+        for r in m.values() for v in r.values()))
+    # The month rolls over: October starts from nothing, September is kept.
+    API._now = lambda: at(2026, 10, 1, 0, 30)
+    check("a new month starts from nothing", API.spent_of("openai_api") == 0.0)
+    check("... and the month before is kept", abs(API.spent_of(
+        "openai_api", month="2026-09") - 0.90) < 1e-9)
+    check("... and the date to wait for moves on",
+          API.next_month_words() == "November 1")
+    API._now = lambda: at(2026, 9, 30, 23, 30)
+    check("the last half hour of September is still September",
+          abs(API.spent_of("openai_api") - 0.90) < 1e-9 and API.month_key() == "2026-09")
+    API._now = lambda: at(2026, 12, 31, 12)
+    check("December's next month is January", API.next_month_words() == "January 1")
+
+
+def t_money_refused_at_the_limit():
+    clean()
+    point_all(limit=1.0)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    API.record_spend("openai_api", "gpt-5-mini", 4_000_000, 10_000)   # $1.02
+    words = ("You set $1.00 a month for OpenAI; about $1.02 is used this month. Raise the "
+             "limit on the PC or wait until October 1.")
+    c = next(x for x in CB.choices() if x["id"] == "openai_api")
+    check("the limit reached: not ready, in the owner's words",
+          c["ready"] is False and c["note"] == words, c["note"])
+    check("... and the list says nothing is left",
+          c["money"]["left"] == "$0.00" and c["money"]["reached"] is True, c["money"])
+    s = CB.plan("openai_api", GOAL, deps=deps())
+    code, _ = CB.start(s, deps=deps(), wait=True)
+    check("the limit reached: refused before any card, nothing sent",
+          s.state == "refused" and s.problem == words and code == 400 and not CARDS
+          and not SRV.requests, s.problem)
+    lines = []
+    API._main(["limit", "openai", "2"], out=lines.append)
+    check("raising the limit on the PC's command line lets it be used again",
+          CB.plan("openai_api", GOAL, deps=deps()).problem == ""
+          and "at most $2.00 a month (it was $1.00)" in lines[-1], lines)
+    API._main(["limit", "openai", "0.50"], out=lines.append)
+    check("lowering it below what is used stops it again",
+          "You set $0.50 a month" in API.ready_for("openai_api"))
+
+
+def t_money_worst_case_before_each_message():
+    clean()
+    point_all(limit=0.02)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    # The first answer is long: 3,000 out = $0.006. The next message's worst
+    # case (8,000 out = $0.016, plus what is resent) no longer fits in $0.02.
+    SRV.script = [(200, {}, big_reply(REPLIES[0], 40, 3000))]
+    d = deps()
+    s = CB.plan("openai_api", GOAL, max_turns=4, deps=d)
+    card = CB.describe(s)
+    check("the card shows what is left: about $0.02 of $0.02",
+          "About $0.02 of $0.02 left this month for OpenAI" in card, card)
+    CB.start(s, deps=d, wait=True)
+    check("the conversation ended before the second message, keeping to the limit",
+          s.ended_code == "money_limit" and len(SRV.requests) == 1 and s.turns_used == 1,
+          (s.ended_code, len(SRV.requests), s.ended_words))
+    check("... with plain words: what it could cost, the limit, what to do",
+          "could cost up to about $0.02" in s.ended_words
+          and "would pass the $0.02 a month you set for OpenAI" in s.ended_words
+          and "Nothing more was sent" in s.ended_words
+          and "wait until October 1" in s.ended_words, s.ended_words)
+    check("a money stop is not an error (ok), and the window was closed",
+          s.state == "done" and s.adapter is None)
+    # So little left that one message may not fit: the card says so, and
+    # nothing at all is sent.
+    clean()
+    point_all(limit=0.01)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    d = deps()
+    s = CB.plan("openai_api", GOAL, deps=d)
+    card = CB.describe(s)
+    check("too little left for one message: the card warns before the yes",
+          "may not be enough for one more message" in card, card)
+    CB.start(s, deps=d, wait=True)
+    check("... and after the yes, the goal itself is not sent",
+          s.ended_code == "money_limit" and not SRV.requests and s.turns_used == 0,
+          (s.ended_code, len(SRV.requests)))
+
+
+def t_money_openrouter_real_cost():
+    clean()
+    point_all(limit=5.0)
+    STORE[API.KEY_TARGETS["openrouter_api"]] = KEY
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    # OpenRouter reports its own cost: counted instead of the estimate.
+    SRV.script = [(200, {}, big_reply(REPLIES[0], 1_000_000, 100_000, cost=0.5))]
+    a = CB.ADAPTERS["openrouter_api"].factory()
+    a.open()
+    a.send("Hello?")
+    wait_reply(a)
+    row = money_file()["months"]["2026-09"]["openrouter_api"]
+    check("OpenRouter's own reported cost ($0.50) is counted, not the estimate ($0.45)",
+          abs(row["dollars"] - 0.5) < 1e-9 and row.get("reported_by_service") == 1, row)
+    check("... and shown for the conversation", a.usage()["cost"] == "$0.50")
+    a.close()
+    # Without it, OpenRouter's answer is estimated; another service's "cost"
+    # field is never trusted.
+    SRV.reset()
+    SRV.script = [(200, {}, big_reply(REPLIES[0], 1_000_000, 100_000))]
+    a = CB.ADAPTERS["openrouter_api"].factory()
+    a.open()
+    a.send("Hello?")
+    wait_reply(a)
+    row = money_file()["months"]["2026-09"]["openrouter_api"]
+    check("OpenRouter with no reported cost: the estimate is counted",
+          abs(row["dollars"] - 0.95) < 1e-9, row)
+    a.close()
+    SRV.reset()
+    SRV.script = [(200, {}, big_reply(REPLIES[0], 1_000_000, 100_000, cost=0.0001))]
+    a = CB.ADAPTERS["openai_api"].factory()
+    a.open()
+    a.send("Hello?")
+    wait_reply(a)
+    check("OpenAI's answer is always estimated (a 'cost' field there is ignored)",
+          abs(API.spent_of("openai_api") - 0.45) < 1e-9, API.spent_of("openai_api"))
+    a.close()
+
+
+def t_money_no_usage_is_estimated_from_length():
+    clean()
+    point_all(limit=5.0)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    body = reply_body("x" * 4000)
+    body.pop("usage")
+    SRV.script = [(200, {}, body)]
+    a = CB.ADAPTERS["openai_api"].factory()
+    a.open()
+    a.send("y" * 400)
+    wait_reply(a)
+    row = money_file()["months"]["2026-09"]["openai_api"]
+    check("an answer with no counts is estimated from its length (4 characters a piece)",
+          row["prompt_tokens"] == 100 and row["completion_tokens"] == 1000
+          and row.get("guessed_from_length") == 1 and row["dollars"] > 0, row)
+    a.close()
+
+
+def t_money_prices_and_the_command_line():
+    clean()
+    point_all(limit=5.0)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    check("every preset's default model has a default price",
+          all(API.price_of(pid, p.model) for pid, p in API.PRESETS.items()))
+    check("every preset names where its price is checked",
+          all(p.price_page.startswith("https://") for p in API.PRESETS.values()))
+    lines = []
+    rc = API._main(["price", "openai", "1", "10"], out=lines.append)
+    check("`price openai 1 10` corrects the price for the model in use",
+          rc == 0 and API.price_of("openai_api", "gpt-5-mini")[:3] == (1.0, 10.0, "yours"),
+          lines)
+    API.record_spend("openai_api", "gpt-5-mini", 1_000_000, 100_000)
+    check("... and the next answer is counted at the corrected price ($1 + $1 = $2)",
+          abs(API.spent_of("openai_api") - 2.0) < 1e-9, API.spent_of("openai_api"))
+    rc = API._main(["price", "openai", "default"], out=lines.append)
+    check("`price openai default` goes back to the default, marked UNVERIFIED",
+          rc == 0 and API.price_of("openai_api", "gpt-5-mini")[2] == "default"
+          and "UNVERIFIED" in lines[-1], lines[-1])
+    for bad in (["price", "openai", "-1", "2"], ["price", "openai", "x", "2"],
+                ["price", "openai", "1", "5000"]):
+        check(f"a bad price is refused: {' '.join(bad[2:])}",
+              API._main(bad, out=lines.append) != 0 and API.price_of(
+                  "openai_api", "gpt-5-mini")[2] == "default")
+    for bad in (["limit", "openai", "abc"], ["limit", "openai", "-5"],
+                ["limit", "openai", "999999"], ["limit", "nope", "5"]):
+        check(f"a bad limit is refused: {' '.join(bad[1:])}",
+              API._main(bad, out=lines.append) != 0
+              and API.limit_of("openai_api") == 5.0)
+    rc = API._main(["limit", "openai", "$7.50"], out=lines.append)
+    check("`limit openai $7.50` sets $7.50", rc == 0 and API.limit_of("openai_api") == 7.5)
+    rc = API._main(["limit", "openai", "none"], out=lines.append)
+    check("`limit openai none` removes it, and the service is then not used",
+          rc == 0 and API.limit_of("openai_api") is None
+          and "No monthly money limit" in API.ready_for("openai_api"))
+    lines.clear()
+    API._main(["spent"], out=lines.append)
+    text = "\n".join(lines)
+    check("`spent` shows the month, every service and every price, defaults UNVERIFIED",
+          "September 2026" in text and "October 1" in text
+          and all(p.name in text for p in API.PRESETS.values())
+          and text.count("UNVERIFIED") == len(API.PRESETS), text)
+    check("... and never the key", KEY not in text and KEY[-10:] not in text)
+    # A model the list does not know: no price, not used until one is set.
+    CFG["openai_api_model"] = "gpt-4.1-nano"
+    API._reset_models_for_tests()
+    API.set_limit("openai_api", 5)
+    why = API.ready_for("openai_api")
+    check("a model with no price cannot be used, and the words say how to set one",
+          "no price for the model \"gpt-4.1-nano\"" in why
+          and "py -3 jarvis_chatbot_api.py price openai <in> <out>" in why
+          and "openai.com" in why, why)
+    API._main(["price", "openai", "0.1", "0.4"], out=lines.append)
+    check("... and once the owner sets it, it can", API.ready_for("openai_api") == "")
+    check("no route anywhere sets a limit or a price (the command line only)",
+          all(w not in (HERE / "jarvis_chatbot_routes.py").read_text(encoding="utf-8")
+              for w in ("set_limit", "set_price", "reset_price")))
+
+
+def t_money_file_unreadable_fails_closed():
+    clean()
+    point_all(limit=5.0)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    API.money_path().write_text("{not json", encoding="utf-8")
+    why = API.ready_for("openai_api")
+    check("an unreadable money file: not ready, in plain words",
+          "cannot be read" in why and "No API chatbot is used" in why, why)
+    check("... setting a limit is refused rather than starting from nothing",
+          API.set_limit("openai_api", 50)["ok"] is False)
+    check("... and the file is left as it was for the owner to look at",
+          API.money_path().read_text(encoding="utf-8") == "{not json")
+    check("... and the words name the file, not the full path (they reach the phone)",
+          str(API.money_path().parent) not in why and "api-money.json" in why, why)
+    # The file breaks in the middle of a conversation: that answer still
+    # comes back, and the next message is refused.
+    API.money_path().unlink()
+    API.set_limit("openai_api", 5)
+    a = CB.ADAPTERS["openai_api"].factory()
+    a.open()
+    check("before: the next message may be sent", a.before_send("Hello?") == "")
+    API.money_path().write_text("[1, 2", encoding="utf-8")
+    a.send("Hello?")
+    got = wait_reply(a)
+    check("an answer whose cost cannot be written down still comes back", got == REPLIES[0])
+    check("... but the next message is refused, in plain words",
+          "could not write down what" in a.before_send("And?"), a.before_send("And?"))
+    a.close()
+
+
+def t_money_compare_near_the_limit():
+    import jarvis_chatbot_compare as CMP
+    clean()
+    CMP._reset_for_tests()
+    point_all(limit=0.02)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    SRV.script = [(200, {}, big_reply(REPLIES[0], 40, 3000))]
+    fake = CB.FakeChatbot(list(REPLIES))
+    CB.register_adapter(CB.AdapterInfo("fake", CB.FakeChatbot.name, CB.FakeChatbot.host,
+                                       lambda: fake, test_only=True, how="a stand-in"))
+    d = deps()
+    d.allow_test_adapters = True
+    c = CMP.plan(["openai_api", "fake"], GOAL, max_turns=3, deps=d)
+    card = CMP.describe(c)
+    check("the comparison plans with the API chatbot near its limit",
+          not c.problem, c.problem)
+    check("the one card shows what is left for the API chatbot, and that its money limit "
+          "can make it drop out",
+          "About $0.02 of $0.02 left this month for OpenAI" in card
+          and "its monthly money limit" in card, card)
+    CMP.start(c, deps=d, wait=True)
+    api_m, fake_m = c.members
+    check("the API chatbot stopped at its limit after one message",
+          api_m.ended_code == "money_limit" and len(SRV.requests) == 1, api_m.ended_words)
+    check("... and the other carried on to its own end",
+          fake_m.turns_used == 3 and fake_m.ended_code == "limit_turns",
+          (fake_m.turns_used, fake_m.ended_code))
+    dropped = c.summary.get("dropped") or []
+    check("the summary says which one dropped out and why",
+          any(x["who"] == "ChatGPT (OpenAI API)" and "could cost up to" in x["why"]
+              for x in dropped), dropped)
+    CMP._reset_for_tests()
+    CB.register_adapter(CB.AdapterInfo(
+        "fake", CB.FakeChatbot.name, CB.FakeChatbot.host, CB.FakeChatbot, test_only=True,
+        how="a stand-in on this PC that talks to nobody"))
+
+
+def t_money_words_shared_with_both_apps():
+    import jarvis_chatbot_routes as R
+    check("both apps' money sentence is the card's, word for word",
+          R.WORDS["money_left"] == API.MONEY_LEFT)
+    check("the usage line has room for the estimate",
+          R.WORDS["usage_line"].endswith(", about {cost}"))
 
 
 def t_shipped_and_documented():
