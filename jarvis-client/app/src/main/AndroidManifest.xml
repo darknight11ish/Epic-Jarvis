@@ -58,6 +58,14 @@
          never at launch: a permission dialog on first run, before the app has
          shown what it is for, is the one most people refuse. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Reading the pairing QR code on the PC (docs/PAIRING-DESIGN.md §8.3,
+         ui/screens/QrScanScreen.kt). Asked for only when the owner taps
+         "Scan the code on your PC", after one sentence saying why; refused,
+         the owner types the code instead. Nothing is recorded or sent. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Not required: a phone without a camera still installs, and pairs by
+         typing the code. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <!-- "Hey Jarvis" on this phone (WakeWordService). Listening with the
          screen off or the app in the background needs a foreground service
          of type microphone, and on Android 14+ this permission with it.

@@ -30,6 +30,8 @@ https://developer.android.com/jetpack/androidx
   androidx.glance:glance 1.1.1, androidx.glance:glance-appwidget 1.1.1
   androidx.biometric:biometric 1.1.0
   androidx.fragment:fragment 1.3.0
+  androidx.camera:camera-camera2, camera-lifecycle and camera-view 1.4.2
+    (CameraX: the camera view that reads the pairing QR code)
   and the AndroidX libraries these bring in.
 
 Kotlin standard library, kotlinx.coroutines 1.9.0 (kotlinx-coroutines-android)
@@ -48,8 +50,25 @@ https://github.com/microsoft/onnxruntime
   third-party notices (for the parts it bundles) come with it:
   https://github.com/microsoft/onnxruntime/blob/v1.22.0/ThirdPartyNotices.txt
 
+ZXing ("Zebra Crossing") core 3.5.3 (com.google.zxing:core) - Apache License
+2.0. Copyright ZXing authors. https://github.com/zxing/zxing
+  Finds the pairing QR code in a camera picture, on the phone.
+
 The full Apache License 2.0 and MIT License texts are at the end of this
 file.
+
+
+WORD LIST
+---------
+
+EFF's short word list 2 (eff_short_wordlist_2_0.txt, 1,296 words) - by the
+  Electronic Frontier Foundation, https://www.eff.org/dice
+  assets/pair-words.txt: the words alone, one per line, in EFF's order,
+  without the dice numbers. The four words shown while pairing a phone
+  are picked from it. Licence: Creative Commons Attribution 3.0 United
+  States (CC BY 3.0 US), https://creativecommons.org/licenses/by/3.0/us/
+  (as EFF states for its word lists; eff.org could not be reached from
+  where this was built, so re-read EFF's page to confirm).
 
 
 MODELS INSIDE THE APP
@@ -155,7 +174,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
---- Apache License 2.0 (AndroidX, Kotlin, kotlinx, OkHttp, Okio, and the
+--- Apache License 2.0 (AndroidX, CameraX, ZXing, Kotlin, kotlinx, OkHttp, Okio, and the
 parts named above as Apache) ---
 
                                  Apache License

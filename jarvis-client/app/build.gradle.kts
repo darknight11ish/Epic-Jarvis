@@ -357,6 +357,22 @@ dependencies {
     // Its AAR ships no R8 rules; proguard-rules.pro keeps ai.onnxruntime.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
 
+    // Scanning the pairing QR code on the PC (docs/PAIRING-DESIGN.md §8.3,
+    // ui/screens/QrScanScreen.kt). CameraX (Apache-2.0) shows the camera
+    // and hands over frames; it does not need Google Play Services. 1.4.2,
+    // a stable release of 2025 - picked so its compileSdk floor sits under
+    // this app's 36; NOT checked here (Google's Maven is blocked in the dev
+    // container), so CI's first build is the check. camera-core comes with
+    // camera-camera2.
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
+    // ZXing's core library (Apache-2.0), plain Java, from Maven Central:
+    // finds the QR code in a camera frame, on the phone, with nothing
+    // online. Not ML Kit (closed, Google's terms) and not
+    // zxing-android-embedded (the old camera API, no longer developed).
+    implementation("com.google.zxing:core:3.5.3")
+
     testImplementation("junit:junit:4.13.2")
 
     // Deliberately just enough to launch the activity and read its lifecycle
