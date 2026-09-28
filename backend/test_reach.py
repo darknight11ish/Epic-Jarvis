@@ -146,6 +146,34 @@ def t_rows_and_order():
           and v["title"] == R.TITLE and v["detail"] == R.DETAIL)
 
 
+def t_chatbot_row():
+    """Chatbot conversations (jarvis_chatbot.py + jarvis_chatbot_gemini.py):
+    never "on" while no route exists; says plainly why when not set up."""
+    note = "Jarvis's Gemini window has never been signed in."
+
+    def bot(ready, routed=False):
+        return {"routed": routed, "chatbots": [{"id": "gemini_web", "name": "Gemini",
+                                                "host": "gemini.google.com", "built": True,
+                                                "ready": ready,
+                                                "note": "" if ready else note}]}
+    r = row(R.view(ctx(chatbot=bot(False))), "chatbot")
+    check("chatbot: not signed in reads 'not set up', with the reason",
+          r["state"] == "not_set_up" and note in r["line"] and not r["on"], r)
+    r = row(R.view(ctx(chatbot=bot(True))), "chatbot")
+    check("chatbot: ready but no route yet is 'off' and says neither app can start one",
+          r["state"] == "off" and "neither app" in r["line"] and r["where"] == "", r)
+    r = row(R.view(ctx(chatbot=bot(True, routed=True))), "chatbot")
+    check("chatbot: once routed it is on, goes to gemini.google.com, asks every time",
+          r["on"] and r["where"].startswith("gemini.google.com")
+          and r["asks"] == R.ASK_EVERY, r)
+    r = row(R.view(ctx(chatbot=bot(True, routed=True), tiers={"chatbot_session": "never"})),
+            "chatbot")
+    check("chatbot: tier never is blocked", r["state"] == "blocked", r)
+    r = row(R.view(ctx()), "chatbot")
+    check("chatbot: the real reading (this machine) is never 'on' - there is no route",
+          r["state"] in ("off", "not_set_up"), r)
+
+
 def t_no_secret_anywhere():
     with Env(ENV):
         c = ctx(ALL, lanes=["jarvis-escalate"], providers=["openrouter"],
@@ -527,7 +555,8 @@ def t_both_apps_read_the_current_contract():
 
 
 if __name__ == "__main__":
-    for fn in (t_rows_and_order, t_no_secret_anywhere, t_asks_follows_the_rules,
+    for fn in (t_rows_and_order, t_chatbot_row, t_no_secret_anywhere,
+               t_asks_follows_the_rules,
                t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
                t_never_raises, t_cloud_lanes_are_the_servers_own, t_the_quick_answer,
                t_the_patch, t_account_secrets_from_credential_manager_show_too,

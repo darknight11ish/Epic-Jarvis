@@ -201,6 +201,10 @@ SHIPPED = (
     # Projects, build steps 1 and 2: projects, life benchmarks and their
     # numbers in projects.db; GET/POST /api/projects (projects.patch)
     "jarvis_projects.py",
+    # ... and its Gemini website adapter: a visible browser window, driven
+    # openly, stopping at any captcha or sign-in page (chatbot.patch gives
+    # the gate its _RISK line)
+    "jarvis_chatbot_gemini.py",
 )
 
 

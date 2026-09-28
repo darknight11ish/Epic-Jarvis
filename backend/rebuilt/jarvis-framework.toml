@@ -667,6 +667,11 @@ flash_attention = "auto"
 # ------------------------------------------------------------------------
 # 9b2. TALKING TO AN AI CHATBOT FOR YOU (jarvis_chatbot.py)
 # ------------------------------------------------------------------------
+# Gemini is reached through its website (jarvis_chatbot_gemini.py), in a
+# browser window you can see, with its own browser profile - signed in once,
+# by hand, to the spare Google account used only by Jarvis:
+#     py -3 jarvis_chatbot_gemini.py sign-in
+# Nothing about that is set in this file.
 [chatbot]
 # The full version (both graphics cards: longer conversations, the driver
 # model on the second card's "Longer conversations" lane). Leave false until
