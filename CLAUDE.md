@@ -603,6 +603,25 @@ testers, scouts and integration scouts; `.claude/agents/`):
   screen, on by default. Off, every card is decided with its buttons only.
   Turning it off is instant; turning it back on asks for the fingerprint or
   PIN, like every other loosening there. The desktop has no swipe.
+- **The chatbot driver becomes versatile** (owner, 2026-09-28): (1) **an
+  API adapter** - one adapter speaking the common OpenAI-style API, so a key
+  reaches ChatGPT, DeepSeek, Mistral, Grok, OpenRouter and similar (keys
+  under rule 3; each host a named way out); (2) **more websites, driven
+  openly like Gemini**, each with its own spare account - **ChatGPT, Claude,
+  Microsoft Copilot, Perplexity, and other commonly used chatbot websites**;
+  (3) **a second AI on the owner's own PC** (another local model, best on
+  the 12 GB card; nothing leaves the PC); and (4) **compare**: ask several
+  AIs the same question, one card listing every AI it will ask, one summary
+  of agreements, disagreements and sources.
+- **Customer-support chats** (Groupon's and similar, owner 2026-09-28) are a
+  separate mode of the driver, because the other side is a company acting
+  on the owner's real account, often a real person: **one card before each
+  support chat lists exactly which personal details Jarvis may give** (order
+  number, email and so on - never passwords or payment card numbers);
+  **every offer (refund, cancellation, change) gets its own card**, and
+  nothing is accepted until the owner approves it; and **Jarvis says at the
+  start that it is an AI assistant writing for the owner**, never pretending
+  to be them. Designed in `docs/CHATBOT-DRIVER-DESIGN.md` before it is built.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
