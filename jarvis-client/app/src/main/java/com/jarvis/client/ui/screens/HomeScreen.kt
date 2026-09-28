@@ -615,6 +615,11 @@ fun HomeScreen(
      */
     speechLevel: State<Float?>,
     modifier: Modifier = Modifier,
+    /**
+     * Jarvis's voice at the moment being heard - `Speaker.mouthNow`, see
+     * FaceView's `speechMouth`. Read by the face's frame loop only.
+     */
+    speechMouth: (FloatArray) -> Boolean = { false },
 ) {
     val motion = LocalMotion.current
     val density = LocalDensity.current
@@ -843,6 +848,7 @@ fun HomeScreen(
         if (voiceMode) {
             FaceBlock(
                 state, actions, micLevel, speechLevel,
+                speechMouth = speechMouth,
                 showCaption = true,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
@@ -865,6 +871,7 @@ fun HomeScreen(
                     content = {
                         FaceBlock(
                             state, actions, micLevel, speechLevel,
+                            speechMouth = speechMouth,
                             // A face made small keeps what little room it has for
                             // itself and the lane, not for a caption.
                             showCaption = !shrunk,
@@ -1509,6 +1516,7 @@ private fun FaceBlock(
     actions: HomeActions,
     micLevel: State<Float>,
     speechLevel: State<Float?>,
+    speechMouth: (FloatArray) -> Boolean,
     showCaption: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -1582,6 +1590,11 @@ private fun FaceBlock(
                         // levels a second reach the face and recompose nothing at all.
                         micLevel = { micLevel.value },
                         speechLevel = { speechLevel.value },
+                        // The voice as HEARD, each frame: its level replaces
+                        // the one above while it plays, and the animals' mouths
+                        // follow it. Nothing playing - a typed answer - and
+                        // their mouths stay shut.
+                        speechMouth = speechMouth,
                         // The theme's own well, not a hardcoded near-black - see
                         // Chrome.well. A theme whose ground is not that same
                         // near-black (Graphite, Ember Dusk) used to sit the reactor

@@ -880,6 +880,26 @@
             </div>
           </div>
 
+          <!-- "Voice follows the face": with an animal face showing, the
+               built-in voice becomes that animal's. The PC's `face_voice`
+               block, words its own (custom-voices.js faceVoiceView) - an
+               on/off switch right under the built-in voice it changes. No
+               card either way; held on a stale link (voice_training.rs
+               set_voice_face). The phone's Voices screen has the same. -->
+          <div id="cv-face" hidden>
+            <label class="toggle">
+              <input id="cv-face-switch" type="checkbox" />
+              <span>
+                <span id="cv-face-title">Voice follows the face</span>
+                <span class="toggle-detail" id="cv-face-detail"></span>
+              </span>
+            </label>
+            <p class="note" id="cv-face-line" hidden></p>
+            <div class="row">
+              <span class="status" id="cv-face-status" role="status"></span>
+            </div>
+          </div>
+
           <h3 class="subhead">Voices</h3>
           <ul class="sc-cards" id="cv-list"></ul>
           <div class="row">

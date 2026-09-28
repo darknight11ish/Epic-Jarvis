@@ -1,0 +1,338 @@
+// THE RED PANDA - its body and its colours.
+//
+// One part of three: tools/gen_critters.py builds the full shader as
+// common_head.sksl + this file + common_tail.sksl. Read common_head.sksl
+// first: it explains the whole scheme and the size rule every animal must
+// keep to (tools/shader_size.py measures it).
+//
+// This file supplies what the shared parts ask for: map(), mapLite(),
+// partAt(), material(), sparkle(), and where the camera looks.
+
+uniform float3 uBodyPos;
+uniform float3 uBodyR0;
+uniform float3 uBodyR1;
+uniform float3 uBodyR2;
+uniform float uBreath;
+uniform float3 uNeck;
+uniform float3 uHeadR0;
+uniform float3 uHeadR1;
+uniform float3 uHeadR2;
+uniform float3 uEarL0;
+uniform float3 uEarL1;
+uniform float3 uEarL2;
+uniform float3 uEarR0;
+uniform float3 uEarR1;
+uniform float3 uEarR2;
+uniform float3 uFace;      // eye open L, eye open R, brow
+uniform float3 uMouth;     // open, wide, round - all 0 unless it is speaking
+uniform float2 uLook;      // where the eyes look, -1..1
+uniform float3 uShL;
+uniform float3 uShR;
+uniform float3 uPawL;
+uniform float3 uPawR;
+uniform float4 uTail0;
+uniform float4 uTail1;
+uniform float4 uTail2;
+uniform float4 uTail3;
+uniform float4 uTail4;
+uniform float4 uTail5;
+
+// The head is modelled at 1 and drawn this much bigger: a cartoon's head is
+// most of the animal.
+const float HEAD_S = 1.14;
+
+// Part ids. Returned beside the distance so the shading knows what it hit.
+const float ID_BODY = 1.0;
+const float ID_LIMB = 2.0;
+const float ID_HEAD = 3.0;
+const float ID_EYE = 4.0;
+const float ID_NOSE = 5.0;
+const float ID_MOUTH = 6.0;
+const float ID_EAR = 7.0;
+const float ID_TAIL = 8.0;
+
+// Fur colours, already in linear light (sRGB values to the power 2.2) so the
+// lighting sums behave like light. Rust back, cream mask, near-black legs:
+// the red panda's own markings, softened toward a cartoon.
+const float3 RUST = float3(0.560, 0.105, 0.022);
+const float3 RUST_DEEP = float3(0.330, 0.050, 0.010);
+const float3 CREAM = float3(0.930, 0.830, 0.680);
+const float3 DARK = float3(0.034, 0.012, 0.007);
+const float3 INK = float3(0.004, 0.004, 0.006);
+
+// Where the camera looks, how far back it sits, and the sphere the animal
+// fits inside (rays that miss it are not marched at all).
+const float3 CAM_TARGET = float3(0.0, -0.08, 0.0);
+const float CAM_DIST = 3.35;
+const float CAM_PITCH = 0.0;
+const float BOUND_R = 1.35;
+
+float3 toBody(float3 p) {
+    float3 v = p - uBodyPos;
+    return float3(dot(uBodyR0, v), dot(uBodyR1, v), dot(uBodyR2, v));
+}
+float3 toHead(float3 p) {
+    float3 v = p - uNeck;
+    return float3(dot(uHeadR0, v), dot(uHeadR1, v), dot(uHeadR2, v)) / HEAD_S;
+}
+// Where each eye sits: it drifts a little toward where it is looking.
+float2 eyeAt() { return float2(0.158 + 0.012 * uLook.x, 0.395 + 0.012 * uLook.y); }
+// Ears are placed in the HEAD's frame, so they turn with it.
+float3 toEarL(float3 h) {
+    float3 v = h - float3(-0.265, 0.60, 0.04);
+    return float3(dot(uEarL0, v), dot(uEarL1, v), dot(uEarL2, v));
+}
+float3 toEarR(float3 h) {
+    float3 v = h - float3(0.265, 0.60, 0.04);
+    return float3(dot(uEarR0, v), dot(uEarR1, v), dot(uEarR2, v));
+}
+
+// --- the parts, each in the frame it is modelled in ---------------------
+
+float partTorso(float3 b) {
+    float br = uBreath;
+    return sdEllipsoid(b - float3(0.0, 0.31, 0.02),
+                       float3(0.38 * br, 0.39 * (0.5 + 0.5 * br), 0.33 * br));
+}
+// One piece per leg: the thigh, reaching forward into the foot.
+float partLegs(float3 b) {
+    float3 bs = float3(abs(b.x), b.y, b.z);
+    return sdEllipsoid(bs - float3(0.205, 0.075, -0.22), float3(0.14, 0.11, 0.26));
+}
+// The rounded end of each arm is its paw.
+float partArms(float3 p) {
+    return min(sdCapsule(p, uShL, uPawL, 0.085), sdCapsule(p, uShR, uPawR, 0.085));
+}
+// Five segments, each as thick as the average of its two ends.
+float partTail(float3 p) {
+    float d = sdCapsule(p, uTail0.xyz, uTail1.xyz, 0.5 * (uTail0.w + uTail1.w));
+    d = smin(d, sdCapsule(p, uTail1.xyz, uTail2.xyz, 0.5 * (uTail1.w + uTail2.w)), 0.05);
+    d = smin(d, sdCapsule(p, uTail2.xyz, uTail3.xyz, 0.5 * (uTail2.w + uTail3.w)), 0.05);
+    d = smin(d, sdCapsule(p, uTail3.xyz, uTail4.xyz, 0.5 * (uTail3.w + uTail4.w)), 0.05);
+    return smin(d, sdCapsule(p, uTail4.xyz, uTail5.xyz, 0.5 * (uTail4.w + uTail5.w)), 0.05);
+}
+// The mouth is two things kept in step: the drawing of it (mouthPaint in
+// common_head.sksl, sized by mouthSize below) and a hollow carved into the
+// muzzle behind the drawing, which gives an open mouth its depth. Open drops
+// the jaw (the hollow grows down, and the chin with it - see partHead); wide
+// pulls the corners out and flattens it (ee, teeth showing); round draws it
+// in narrower and taller and a little forward (oo).
+// The drawing's size: where the stem meets the lip, how much higher the
+// corners sit, the half-width, and how far the lower lip has dropped.
+float4 mouthSize() {
+    float3 m = uMouth;
+    return float4(0.19, 0.013 + 0.008 * m.y, 0.052 + 0.036 * m.y - 0.025 * m.z + 0.024 * m.x,
+                  m.x * (0.10 - 0.040 * m.y + 0.034 * m.z));
+}
+// The hollow's half-height. It sits just inside the drawing - its top under
+// the upper lip's line, its sides in from the corners - so its edge is
+// always covered by the drawn line and never shows as a second outline.
+float mouthH() { return 0.0015 + uMouth.x * (0.035 - 0.014 * uMouth.y + 0.012 * uMouth.z); }
+// It bends up toward the corners, as the drawn smile does (a parabola,
+// near enough, and cheap: this runs in every march step). Inside so flat
+// a shape sdEllipsoid's estimate runs far too deep - it cut a slit along
+// the middle even with the hollow pulled out - so it is held to the
+// half-height, which is as deep as the inside of it can really be.
+float mouthShape(float3 h) {
+    float3 m = uMouth;
+    float a = 0.034 + 0.030 * m.y - 0.020 * m.z + 0.024 * m.x;
+    float hh = mouthH();
+    float bend = (0.0047 + 0.0029 * m.y) * h.x * h.x / (a * a);
+    return max(sdEllipsoid(h - float3(0.0, 0.186 - hh + bend, -0.395 - 0.012 * m.z), float3(a, hh, 0.075)), -hh);
+}
+// What is actually carved. Shut, the hollow is pulled back out of the
+// surface altogether (by more than the fillet), so no groove is left under
+// the drawn line; it sinks in over the first quarter of an opening, while
+// the drawing is already parting, so nothing pops.
+float mouthCarve(float3 h) { return mouthShape(h) + 0.02 * (1.0 - min(uMouth.x * 4.0, 1.0)); }
+// The head (head frame, unscaled): skull, cheek fluff, muzzle and eyebrow
+// puffs, with the mouth carved out of it.
+float partHead(float3 h) {
+    float3 hs = float3(abs(h.x), h.y, h.z);
+    float d = sdEllipsoid(h - float3(0.0, 0.34, 0.0), float3(0.45, 0.37, 0.39));
+    d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
+    // The muzzle; its lower edge - the chin - drops as the jaw opens, and
+    // it pushes forward a little for an "oo".
+    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205 - 0.045 * uMouth.x, -0.29 - 0.012 * uMouth.z),
+                            float3(0.155 - 0.012 * uMouth.z, 0.115 + 0.045 * uMouth.x, 0.13)), 0.07);
+    // (The eyebrow spots are painted on - see headColour - not modelled:
+    // two more shapes here cost more than they showed.)
+    return smax(d, -mouthCarve(h), 0.012);
+}
+// An ear: a flattened ellipsoid, pinched toward the tip.
+float earShape(float3 e) {
+    return sdEllipsoid(e - float3(0.0, 0.13, 0.0),
+                       float3(0.13 * (1.0 - 0.30 * clamp(e.y / 0.28, 0.0, 1.0)), 0.17, 0.055));
+}
+float partEars(float3 h) { return min(earShape(toEarL(h)), earShape(toEarR(h))); }
+float partNose(float3 h) {
+    return sdEllipsoid(h - float3(0.0, 0.285, -0.405), float3(0.062, 0.042, 0.045));
+}
+// Button eyes. Closing is squashing: a shut eye is a thin dark line, which
+// is also how a cartoon draws one.
+float partEyes(float3 h) {
+    float open = h.x < 0.0 ? uFace.x : uFace.y;
+    float2 ea = eyeAt();
+    float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.31);
+    return sdEllipsoid(ep, float3(0.074, max(0.008, 0.084 * open), 0.055));
+}
+
+// The whole panda: distance to the nearest surface. This is the function the
+// march calls over and over, so it returns the distance only - which part
+// was hit is asked once, afterwards, by partAt().
+float map(float3 p) {
+    float3 b = toBody(p);
+    float d = smin(partTorso(b), partLegs(b), 0.07);
+    d = smin(d, partArms(p), 0.06);
+    d = smin(d, partTail(p), 0.05);
+    // The head is only worked out near it: most of the frame is far from a
+    // face and has no business paying for one.
+    float3 h = toHead(p);
+    float hd = (length(h - float3(0.0, 0.40, 0.0)) - 0.78) * HEAD_S;
+    if (hd < 0.2) {
+        float f = smin(partHead(h), partEars(h), 0.05);
+        hd = min(min(f, partNose(h)), partEyes(h)) * HEAD_S;
+    }
+    // The neck: head and body share a thick fillet, so the head can tilt
+    // without a gap opening under the chin.
+    d = smin(hd, d, 0.12);
+    // The orb stands apart: it is held, not grown.
+    return min(d, orbDist(p));
+}
+
+// Which part a surface point belongs to: whichever is nearest.
+float partAt(float3 p) {
+    float3 b = toBody(p);
+    float3 h = toHead(p);
+    float best = partTorso(b);
+    float id = ID_BODY;
+    float d = min(partLegs(b), partArms(p));
+    if (d < best) { best = d; id = ID_LIMB; }
+    d = partTail(p);
+    if (d < best) { best = d; id = ID_TAIL; }
+    d = partHead(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_HEAD; }
+    d = partEars(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_EAR; }
+    d = partNose(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_NOSE; }
+    d = partEyes(h) * HEAD_S;
+    if (d < best) { best = d; id = ID_EYE; }
+    if (orbDist(p) < best) { id = ID_ORB; }
+    return id;
+}
+
+// A rough panda for shadows and occlusion, which are soft anyway: body,
+// skull, arms and a two-piece tail. A fraction of map()'s size. Every piece
+// sits INSIDE the real shape, never outside it: a point on the real surface
+// that found itself inside this one would shadow itself (it drew a dark band
+// across the top of the head).
+float mapLite(float3 p) {
+    float d = partTorso(toBody(p));
+    float3 h = toHead(p);
+    d = min(d, sdEllipsoid(h - float3(0.0, 0.32, -0.02), float3(0.40, 0.32, 0.34)) * HEAD_S);
+    d = min(d, min(sdCapsule(p, uShL, uPawL, 0.07), sdCapsule(p, uShR, uPawR, 0.07)));
+    d = min(d, min(sdCapsule(p, uTail0.xyz, uTail2.xyz, 0.06), sdCapsule(p, uTail2.xyz, uTail5.xyz, 0.05)));
+    return d;
+}
+
+// Where along the tail a point sits, 0 at the base and 1 at the tip - for
+// the rings.
+float tailParam(float3 p) {
+    float best = 100000.0;
+    float par = 0.0;
+    float3 a = uTail0.xyz;
+    float3 b = uTail1.xyz;
+    for (int i = 0; i < 5; i++) {
+        if (i == 1) { a = uTail1.xyz; b = uTail2.xyz; }
+        if (i == 2) { a = uTail2.xyz; b = uTail3.xyz; }
+        if (i == 3) { a = uTail3.xyz; b = uTail4.xyz; }
+        if (i == 4) { a = uTail4.xyz; b = uTail5.xyz; }
+        float3 ba = b - a;
+        float k = clamp(dot(p - a, ba) / max(dot(ba, ba), 0.00001), 0.0, 1.0);
+        float d = length(p - a - ba * k);
+        if (d < best) { best = d; par = (float(i) + k) / 5.0; }
+    }
+    return par;
+}
+
+// The fur colour at a point on the head: rust, with the red panda's cream
+// mask (muzzle, lower cheeks, eyebrow spots) and the rust "tear" lines that
+// run from each eye down toward the mouth.
+float3 headColour(float3 h) {
+    float3 hs = float3(abs(h.x), h.y, h.z);
+    float front = (1.0 - smoothstep(-0.12, 0.02, h.z));
+    // (The muzzle's cream patch drops with the jaw, as the chin does.)
+    float muzzle = (1.0 - smoothstep(0.13, 0.20, length((h.xy - float2(0.0, 0.20 - 0.03 * uMouth.x)) * float2(1.0, 1.25)))) *
+                   (1.0 - smoothstep(-0.22, -0.12, h.z));
+    float cheek = (1.0 - smoothstep(0.12, 0.17, length(hs.xy - float2(0.26, 0.17)))) * front;
+    float brow = 1.0 - smoothstep(0.045, 0.075, length(hs - float3(0.14, 0.535 + 0.025 * uFace.z, -0.28)));
+    float cream = clamp(max(max(muzzle, cheek), brow), 0.0, 1.0);
+    // Tear lines: a thin rust stroke from under each eye toward the cheek.
+    float tear = (1.0 - smoothstep(0.012, 0.022, seg2(hs.xy, float2(0.16, 0.33), float2(0.13, 0.22)))) * front;
+    cream *= 1.0 - 0.85 * tear;
+    float3 fur = mix(RUST, RUST_DEEP, smoothstep(0.1, 0.35, h.z) * 0.6);
+    return mix(fur, CREAM, cream);
+}
+
+// Body: rust back, dark front and belly.
+float3 bodyColour(float3 b) {
+    float belly = (1.0 - smoothstep(-0.22, -0.05, b.z)) * (1.0 - smoothstep(0.45, 0.62, b.y));
+    return mix(RUST, DARK * 1.6, belly);
+}
+
+float3 earColour(float3 e) {
+    // Cream rim all round, dark inside on the front face, rust behind.
+    float r = length((e.xy - float2(0.0, 0.12)) / float2(0.12, 0.16));
+    float rim = smoothstep(0.62, 0.80, r);
+    float inside = (1.0 - smoothstep(-0.02, 0.0, e.z)) * (1.0 - rim);
+    float3 c = mix(RUST, DARK, inside);
+    return mix(c, CREAM, rim);
+}
+
+// The colour and finish of each part (see common_tail.sksl for what `w`
+// means: 0 fur, above 0 glossy, -1 matte without fur, -2 inside a mouth).
+float4 material(float id, float3 pos, float3 n) {
+    float3 h = toHead(pos);
+    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_NOSE) return float4(INK * 2.0, 0.6);
+    if (id == ID_HEAD) {
+        // The painted mouth on the front of the muzzle, and the walls of
+        // the hollow behind it - darker the deeper in they are.
+        if (h.z < -0.30) {
+            float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
+            float4 c = mouthPaint(headColour(h), DARK * 2.0, h.xy, mouthSize(), 0.06, uMouth.y, carved);
+            return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.39, -0.34, h.z) * carved), c.w);
+        }
+        return float4(headColour(h), 0.0);
+    }
+    if (id == ID_EAR) return float4(earColour(h.x < 0.0 ? toEarL(h) : toEarR(h)), 0.0);
+    if (id == ID_BODY) return float4(bodyColour(toBody(pos)), 0.0);
+    if (id == ID_LIMB) return float4(DARK, 0.0);
+    // The tail: rust and deep-rust rings, darker toward the tip.
+    float k = tailParam(pos);
+    float ring = smoothstep(0.35, 0.65, 0.5 + 0.5 * sin(k * 5.0 * 2.0 * PI));
+    float3 c = mix(RUST * 1.15, RUST_DEEP * 0.8, ring);
+    return float4(mix(c, RUST_DEEP * 0.5, smoothstep(0.85, 1.0, k)), 0.0);
+}
+
+// A painted catchlight in each eye - the cartoon's sparkle - riding with
+// the gaze.
+float3 sparkle(float id, float3 pos) {
+    if (id != ID_EYE) return float3(0.0);
+    float3 h = toHead(pos);
+    float2 eyeC = eyeAt();
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float2 q = float2(h.x - side * eyeC.x, h.y - eyeC.y);
+    float2 sparkAt = float2(-0.024 + 0.014 * uLook.x, 0.028 + 0.010 * uLook.y);
+    float spark = 1.0 - smoothstep(0.012, 0.021, length(q - sparkAt));
+    float spark2 = 1.0 - smoothstep(0.005, 0.009, length(q - sparkAt - float2(0.036, -0.036)));
+    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y));
+    return float3(1.6) * max(spark, spark2 * 0.8) * lit * (h.z < -0.28 ? 1.0 : 0.0);
+}
+
+// What a ray that ran out of march steps without reaching anything sees
+// (common_tail.sksl): nothing behind this animal to fill it in.
+float stuckRay(float3 ro, float3 rd) {
+    return -1.0;
+}

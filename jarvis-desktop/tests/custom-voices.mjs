@@ -18,6 +18,8 @@
  * - the better voice only with a capable second card; ON a card, OFF at once;
  * - how fast Jarvis speaks: the PC's own three choices and words, no card
  *   either way, held on a stale link like every change;
+ * - "Voice follows the face": an on/off switch with the PC's own words and
+ *   line, no card either way, held on a stale link like every change;
  * - the last card's outcome and recent timings, in words.
  */
 import assert from "node:assert/strict";
@@ -349,6 +351,74 @@ await check("Jarvis's built-in voice: one click, at once; held on a stale link",
   assert.deepEqual(none, []);
 });
 
+await check("voice follows the face: the PC's switch, words and line, from every real status", async () => {
+  for (const [name, st] of Object.entries(V)) {
+    const fv = CV.faceVoiceView(st);
+    assert.equal(fv.show, true, `${name}: no face_voice block`);
+    assert.equal(fv.title, "Voice follows the face", name);
+    noRaw([fv.title, fv.detail, fv.line].join(" "));
+    assert.match(fv.line, /[.!?)]$/, `${name}: "${fv.line}" is not a sentence`);
+  }
+  // No face saved yet: on by default, nothing to follow, and it says so.
+  const none = CV.faceVoiceView(V.builtin_nothing_installed);
+  assert.equal(none.enabled, true, "on by default");
+  assert.equal(none.speaking, false);
+  assert.equal(none.line, "No face is saved on this PC yet, so there is no animal voice to use.");
+  const panda = CV.faceVoiceView(V.face_showing);
+  assert.equal(panda.speaking, true);
+  assert.equal(panda.line, "Speaking as the Red Panda: Bella, a little higher.");
+  // The built-in voice choice says the face's voice is standing in.
+  assert.match(CV.speakerView(V.face_showing).note, /Red Panda face is showing, its own voice speaks instead/);
+  assert.equal(CV.faceVoiceView(V.face_voice_off).enabled, false);
+  assert.equal(CV.speakerView(V.face_voice_off).note, "", "switched off: the built-in choice is used, no note");
+  assert.equal(CV.faceVoiceView({ voices: [] }).show, false, "an older PC has no face_voice block: nothing shown");
+  const off = CV.voiceReply(P("face_off"), WHERE);
+  assert.equal(off.text, "Jarvis's voice now stays the same whatever the face.");
+  assert.equal(off.waiting, false, "no card");
+  const on = CV.voiceReply(P("face_on"), WHERE);
+  assert.equal(on.text, "Jarvis's voice now follows the face.");
+  assert.equal(on.waiting, false, "no card");
+  assert.equal(CV.voiceReply(P("face_bad"), WHERE).text, "Choose on or off.");
+});
+
+await check("voice follows the face: one click, at once; held on a stale link", async () => {
+  const page = await open(V.face_showing);
+  const shown = await page.evaluate(() => ({
+    hidden: document.getElementById("cv-face").hidden,
+    checked: document.getElementById("cv-face-switch").checked,
+    title: document.getElementById("cv-face-title").textContent,
+    line: document.getElementById("cv-face-line").textContent,
+  }));
+  await page.click("#cv-face-switch");
+  await page.waitForTimeout(200);
+  const sent = await calls(page, "set_voice_face");
+  const said = await text(page, "cv-face-status");
+  await page.close();
+  assert.equal(shown.hidden, false);
+  assert.equal(shown.checked, true);
+  assert.equal(shown.title, "Voice follows the face");
+  assert.equal(shown.line, "Speaking as the Red Panda: Bella, a little higher.");
+  assert.deepEqual(sent, [{ enabled: false }]);
+  assert.equal(said, "Jarvis's voice now stays the same whatever the face.");
+  assert.doesNotMatch(said, /approv/i, "no card for the face's voice");
+
+  const back = await open(V.face_voice_off);
+  const wasOff = await back.evaluate(() => document.getElementById("cv-face-switch").checked);
+  await back.click("#cv-face-switch");
+  await back.waitForTimeout(200);
+  const sentOn = await calls(back, "set_voice_face");
+  await back.close();
+  assert.equal(wasOff, false);
+  assert.deepEqual(sentOn, [{ enabled: true }]);
+
+  const stale = await open(V.face_showing, {}, { link: { stale: true } });
+  const disabled = await stale.evaluate(() => document.getElementById("cv-face-switch").disabled);
+  const none = await calls(stale, "set_voice_face");
+  await stale.close();
+  assert.equal(disabled, true, "held on a stale link");
+  assert.deepEqual(none, []);
+});
+
 await check("the fallback, a waiting card, the last card and the timings are on the page", async () => {
   const page = await open(V.fallback);
   const all = await text(page, "voices");
@@ -395,10 +465,12 @@ await check("CONTROL (Rust): only what raises a card is held on a stale link", a
   assert.match(fnBody(RUST, "pub async fn set_better_voice("), /if enabled && stale\(&app\)/);
   assert.match(fnBody(RUST, "pub async fn set_voice_speed("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
   assert.match(fnBody(RUST, "pub async fn set_voice_speaker("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
+  assert.match(fnBody(RUST, "pub async fn set_voice_face("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
   assert.doesNotMatch(fnBody(RUST, "pub async fn delete_custom_voice("), /stale/);
   for (const [fn, route] of [["create_custom_voice", "/api/voice/voices/create"], ["set_active_voice", "/api/voice/voices/active"],
     ["delete_custom_voice", "/api/voice/voices/delete"], ["set_better_voice", "/api/voice/voices/better"],
-    ["set_voice_speed", "/api/voice/voices/speed"], ["set_voice_speaker", "/api/voice/voices/speaker"]]) {
+    ["set_voice_speed", "/api/voice/voices/speed"], ["set_voice_speaker", "/api/voice/voices/speaker"],
+    ["set_voice_face", "/api/voice/voices/face"]]) {
     assert.ok(fnBody(RUST, `pub async fn ${fn}(`).includes(`"${route}"`), `${fn} does not post to ${route}`);
   }
   assert.match(fnBody(RUST, "pub async fn get_custom_voices("), /\.headers\(jarvis_headers\(&app\)\?\)/);

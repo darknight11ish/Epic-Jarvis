@@ -5,7 +5,9 @@
 # Covers Windows and Linux, Python 3.10 and newer. Releases younger than
 # 7 days when it was made were left out on purpose (a hijacked release has
 # time to be noticed and pulled). Made on 2026-09-26 from releases up to
-# 2026-09-19. To make it again (a package changed, or once a month):
+# 2026-09-19 (made again on 2026-09-28 with the same cut-off, to add
+# espeakng-loader and onnx for jarvis_mouth.py - nothing else moved).
+# To make it again (a package changed, or once a month):
 #
 #   uv pip compile backend/requirements.txt --universal --generate-hashes --python-version 3.10 --exclude-newer <7 days ago, e.g. 2026-09-19T00:00:00Z> --exclude-newer-package markitdown=2026-09-26T00:00:00Z --no-header -o backend/requirements.lock
 #
@@ -396,6 +398,14 @@ defusedxml==0.7.1 \
     --hash=sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69 \
     --hash=sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61
     # via markitdown
+espeakng-loader==0.2.4 \
+    --hash=sha256:08721baf27d13d461f6be6eed9a65277e70d68234ff484fd8b9897b222cdcb6d \
+    --hash=sha256:41f1e08ac9deda2efd1ea9de0b81dab9f5ae3c4b24284f76533d0a7b1dd7abd7 \
+    --hash=sha256:b77477ae2ddf62a748e04e49714eabb2f3a24f344166200b00539083bd669904 \
+    --hash=sha256:d1e798141b46a050cdb75fcf3c17db969bb2c40394f3f4a48910655d547508b9 \
+    --hash=sha256:d27cdca31112226e7299d8562e889d3e38a1e48055c9ee381b45d669072ee59f \
+    --hash=sha256:d7a2928843eaeb2df82f99a370f44e8a630f59b02f9b0d1f168a03c4eeb76b89
+    # via -r backend/requirements.txt
 et-xmlfile==2.0.0 \
     --hash=sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa \
     --hash=sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54
@@ -680,7 +690,7 @@ markitdown==0.1.8 \
     --hash=sha256:17188ad827ea79fc264c7b1ca8cf5a242a16278d84cc32f2edc475dbe92812ed \
     --hash=sha256:de7375a50578a39bcbbf13b48c67d99033d988e0ae8ad25af46ed432dbe4cbab
     # via -r backend/requirements.txt
-ml-dtypes==0.6.0 ; python_full_version < '3.11' \
+ml-dtypes==0.6.0 \
     --hash=sha256:008382aeab529df5d3f00501ad9a7dcd64494d4b5b1971fc4c79019e6c1f5010 \
     --hash=sha256:03ce583adfce34ad33aa9e1fc7a8344dcf90ea776cc4ef0e5a48d4eae84e5d20 \
     --hash=sha256:084dfe51a7ad58b171f05115f8226ed4233a454a1611371947e806e76f0c638d \
@@ -1013,6 +1023,8 @@ numpy==2.4.6 ; python_full_version == '3.11.*' \
     #   -r backend/requirements.txt
     #   fastembed
     #   magika
+    #   ml-dtypes
+    #   onnx
     #   onnxruntime
     #   pandas
 numpy==2.5.3 ; python_full_version >= '3.12' \
@@ -1086,9 +1098,11 @@ numpy==2.5.3 ; python_full_version >= '3.12' \
     #   -r backend/requirements.txt
     #   fastembed
     #   magika
+    #   ml-dtypes
+    #   onnx
     #   onnxruntime
     #   pandas
-onnx==1.23.0 ; python_full_version < '3.11' \
+onnx==1.23.0 \
     --hash=sha256:01b7515c62bbbe0af18d845fbaf762ee42927e2b76a42adc85d5732006241587 \
     --hash=sha256:05ad734997f09fcc9633fc2e3715033239792fc9f12aec6ec0c48e32b214e47e \
     --hash=sha256:18c9724ae8f86b2a5f4d75904d9d714168025e677937e86d9e644008fd060d0a \
@@ -1113,7 +1127,9 @@ onnx==1.23.0 ; python_full_version < '3.11' \
     --hash=sha256:dcd4d269818a13c48444c96b7f17c7539d8cda7810ef802431393b6cf5df794b \
     --hash=sha256:f336004196a22fbdc16c62e7f26f20635af1826db6147c80ff3b4b8d428fc7ef \
     --hash=sha256:f4af61ed154442b43d72a6846e5e054ecf1474375c19058d87455317192eb7fe
-    # via fastembed
+    # via
+    #   -r backend/requirements.txt
+    #   fastembed
 onnxruntime==1.24.3 ; python_full_version < '3.11' \
     --hash=sha256:02aaf6ddfa784523b6873b4176a79d508e599efe12ab0ea1a3a6e7314408b7aa \
     --hash=sha256:0a9847b870b6cb462652b547bc98c49e0efb67553410a082fde1918a38707452 \

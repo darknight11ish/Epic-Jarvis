@@ -80,6 +80,7 @@ CFG, AUDIT, EVENTS, CARDS = {}, [], [], []
 _ORIG = {n: getattr(V, n) for n in ("_config_dir", "_cfg", "_audit", "_publish", "_gate",
                                     "PROCESSOR_ENGINE", "POCKET_FILES", "sherpa_onnx")}
 _S_CFG = S._cfg
+_S_PATHS = S._sherpa_tts_paths
 
 
 class FakeKokoro:
@@ -335,6 +336,171 @@ def t_the_one_moment_clip_follows_the_speaker_too():
     k2 = F.moment_key()[0]
     check("a new built-in voice makes a new \"One moment.\" clip (its key changes)",
           k1 != k2, (k1, k2))
+
+
+# ------------------------------------------------------ voice follows the face --
+# The owner's choice, 2026-09-27: with an animal face showing, the built-in
+# voice becomes that animal's (a Kokoro voice, a pace, a small pitch rise).
+# A switch, on by default, no card either way; a recorded voice still wins.
+
+def _show_face(d: Path, face):
+    (d / "appearance.json").write_text(json.dumps({"face": face, "bindings": {}}),
+                                       encoding="utf-8")
+
+
+def t_face_voice_needs_an_animal_face():
+    d = reset()
+    check("on by default", V.face_voice_on() is True and V.FACE_VOICE_DEFAULT is True)
+    check("no appearance.json: no face, so the owner's built-in voice as before",
+          V.face_voice() is None and V.builtin_voice() == (0, 1.0, 0.0, ""))
+    view = V.face_voice_view()
+    check("and the line says there is no face to follow",
+          view["enabled"] and not view["speaking"] and "No face" in view["line"], view)
+    _show_face(d, "nucleus")
+    check("a face that is not an animal: still the owner's own voice",
+          V.face_voice() is None and V.builtin_voice()[2] == 0.0)
+    check("... and the line names the three animals",
+          "Red Panda" in V.face_voice_view()["line"])
+    _show_face(d, ["redpanda"])
+    check("a damaged face in appearance.json is no face", V.appearance_face() == "")
+    check("GET /api/voice/voices carries it", V.status()["face_voice"] == V.face_voice_view())
+
+
+def t_each_animal_speaks_in_its_own_voice():
+    d = reset()
+    for face, sid, pace, semis in (("redpanda", 1, 1.0, 2.0), ("pygmyowl", 2, 0.85, 1.0),
+                                   ("seaotter", 4, 1.15, 3.0)):
+        _show_face(d, face)
+        check(f"{face}: its own voice, pace and pitch",
+              V.builtin_voice() == (sid, pace, semis, face), V.builtin_voice())
+        check(f"{face}: jarvis_speech reads the same, from the one source",
+              (S.tts_speaker(), S.tts_speed(), S.tts_pitch()) == (sid, pace, semis))
+    _show_face(d, "redpanda")
+    S._tts_cache = FakeKokoro()
+    S.say("Of course. I have added the dentist to Tuesday at ten.")
+    f = 2 ** (2 / 12)
+    check("Kokoro speaks the panda's voice, slower by the pitch factor (so the pace "
+          "comes out right once the pitch is raised)",
+          S._tts_cache.sids == [1] and abs(S._tts_cache.speeds[0] - 1.0 / f) < 1e-9,
+          (S._tts_cache.sids, S._tts_cache.speeds))
+    V.set_speed({"speed": "faster"})
+    _show_face(d, "pygmyowl")
+    check("the owner's speaking speed still applies on top of the animal's pace",
+          abs(V.builtin_voice()[1] - 0.85 * 1.15) < 1e-9, V.builtin_voice())
+    V.set_speaker({"speaker": "9"})
+    check("the owner's built-in choice does not override the face's voice",
+          V.builtin_voice()[0] == 2)
+    check("... and its row says why picking a voice there changes nothing now",
+          "Pygmy Owl" in V.speaker_view()["note"], V.speaker_view()["note"])
+    _show_face(d, "orbit")
+    check("with any other face the owner's choice is back",
+          V.builtin_voice()[0] == 9 and "Owl" not in V.speaker_view()["note"])
+
+
+def t_the_pitch_rise():
+    x = np.sin(2 * np.pi * 200 * np.arange(24000) / 24000).astype(np.float32)
+    check("0 semitones: the very same samples", S.pitch_up(x, 0) is x)
+    y = S.pitch_up(x, 12)
+    check("12 semitones: half as long", len(y) == 12000, len(y))
+
+    def crossings(a):
+        return int(np.sum((a[:-1] < 0) & (a[1:] >= 0)))
+    check("... and twice the pitch (200 Hz becomes 400 Hz)",
+          abs(crossings(y) / (len(y) / 24000) - 400) < 3, crossings(y))
+    k = FakeKokoro()
+    got = S.kokoro_speak(k, "hi", 1, 1.0, 2.0)
+    f = 2 ** (2 / 12)
+    check("kokoro_speak: asks for slower speech, then raises it back to pace",
+          abs(k.speeds[0] - 1 / f) < 1e-9 and len(got[0]) == int(24000 / f) and got[1] == 24000)
+    check("kokoro_speak with no rise is Kokoro unchanged",
+          len(S.kokoro_speak(FakeKokoro(), "hi", 1, 1.0, 0.0)[0]) == 24000)
+
+
+def t_a_recorded_voice_still_wins():
+    d = reset()
+    _show_face(d, "seaotter")
+    make_voice(voices_dir := V.voices_dir(), "grandpa")
+    V._write_state(active="grandpa")
+    view = V.face_voice_view()
+    check("a chosen recorded voice wins over the face's voice, and the line says so",
+          not view["speaking"] and "recorded" in view["line"], view)
+    check("(the recorded voice is the one speak() uses; it never reads the face)",
+          V._read_state()["active"] == "grandpa" and voices_dir.is_dir())
+    V._write_state(active="ghost")
+    view = V.face_voice_view()
+    check("a chosen recorded voice that cannot be used falls back to the animal - "
+          "and the line says so, rather than claiming the recorded voice speaks",
+          view["speaking"] and "cannot be used right now" in view["line"]
+          and S.tts_voice() == (4, 1.15, 3.0), (view, S.tts_voice()))
+
+
+def t_the_voice_is_read_once_per_sentence():
+    d = reset()
+    _show_face(d, "pygmyowl")
+    calls = []
+    real = V.builtin_voice
+    V.builtin_voice = lambda: calls.append(1) or real()
+    try:
+        S._tts_cache = FakeKokoro()
+        S.say("Of course. I have added the dentist to Tuesday at ten.")
+    finally:
+        V.builtin_voice = real
+    check("one sentence reads the built-in voice once, so a face change halfway "
+          "cannot mix two animals", len(calls) == 1, calls)
+    check("... and speaks the owl", S._tts_cache.sids == [2])
+    _show_face(d, None)
+    check("a saved face with no voice of its own is said plainly, not \"no face saved\"",
+          "no voice of its own" in V.face_voice_view()["line"], V.face_voice_view())
+
+
+def t_the_face_switch_asks_nothing_and_says_so():
+    d = reset()
+    _show_face(d, "redpanda")
+    code, out = V.handle_post("/api/voice/voices/face", {"enabled": False})
+    check("POST face off: 200, at once", code == 200 and out["ok"] is True, (code, out))
+    check("no card was raised", not CARDS)
+    check("it is kept, and the panda's voice stops",
+          V._read_state()["face_voice"] is False and V.face_voice() is None
+          and V.builtin_voice() == (0, 1.0, 0.0, ""))
+    check("the answer says so and carries the new view",
+          "stays the same" in out["message"] and out["face_voice"]["enabled"] is False
+          and out["face_voice"]["line"].startswith("Off"))
+    check("both apps are told to read again (a `voices` event, no words)",
+          EVENTS == [{"what": "face_voice", "outcome": "off"}], EVENTS)
+    check("the audit line has the choice only",
+          AUDIT == [("voices.face_voice", {"enabled": False})], AUDIT)
+    code, out = V.set_face_voice({"enabled": True})
+    check("back on: at once too, no card",
+          code == 200 and not CARDS and V.face_voice()["face"] == "redpanda")
+    for bad in ({"enabled": "yes"}, {"enabled": 1}, {}, {"enabled": True, "x": 1}, True,
+                None, {"enabled": None}):
+        code, out = V.set_face_voice(bad)
+        check(f"refused: {bad!r}", code == 400 and out["ok"] is False, (code, out))
+    V._state_path().write_text(json.dumps({"active": "builtin", "face_voice": "no"}))
+    check("a damaged switch in state.json is no choice (the default, on)",
+          V._read_state()["face_voice"] is None and V.face_voice_on())
+
+
+def t_the_one_moment_clip_and_the_echo_check_follow_the_face():
+    d = reset()
+    k_none = F.moment_key()[0]
+    _show_face(d, "nucleus")
+    check("a face with no voice of its own leaves the clip's key exactly as before",
+          F.moment_key()[0] == k_none)
+    _show_face(d, "redpanda")
+    k_panda = F.moment_key()[0]
+    _show_face(d, "seaotter")
+    k_otter = F.moment_key()[0]
+    check("each animal makes its own \"One moment.\" clip (the key changes)",
+          len({k_none, k_panda, k_otter}) == 3)
+    try:
+        S._sherpa_tts_paths = (lambda real: (lambda: dict(real(), model=__file__)))(
+            _S_PATHS)
+        keys = [k for k, _label, _load in F._reference_sources() if k[0] == "builtin"]
+    finally:
+        S._sherpa_tts_paths = _S_PATHS
+    check("talking over the otter is checked against the otter's pitched voice",
+          keys and keys[0][1] == "4" and keys[0][-1] == "3.0", keys)
 
 
 # ---------------------------------------------------------- Pocket TTS --

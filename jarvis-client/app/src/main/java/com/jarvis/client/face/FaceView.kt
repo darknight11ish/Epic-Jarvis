@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import com.jarvis.client.FaceState
@@ -79,6 +80,17 @@ fun FaceView(
     /** Jarvis's own voice, 0..1, per audio frame. Null when nothing is playing. */
     speechLevel: () -> Float? = { null },
     /**
+     * Jarvis's voice at the moment being HEARD, read once per frame: writes
+     * level, open, wide, round (0..1) into the array (4 long) and returns
+     * true while a real voice is playing - `Speaker.mouthNow`. While it is
+     * true its level is used instead of [speechLevel] (same voice, but timed
+     * to the sound rather than to the audio queue), and the animals' mouths
+     * follow it ([FaceFrame.mouth]). False - a typed answer, Quiet, an
+     * answer kept on screen - leaves the animals' mouths shut. Must be cheap
+     * and must not block: it runs on the UI thread every frame.
+     */
+    speechMouth: (FloatArray) -> Boolean = { false },
+    /**
      * The ground this face draws on — [Spec.BACKGROUND] unless a caller reads
      * [com.jarvis.client.ui.theme.Chrome.well] and passes it, which is the
      * theme's own answer to what the reactor should sit in. Both paths follow
@@ -127,6 +139,7 @@ fun FaceView(
     // face. rememberUpdatedState is the fix for exactly that shape.
     val mic by rememberUpdatedState(micLevel)
     val speech by rememberUpdatedState(speechLevel)
+    val mouthOf by rememberUpdatedState(speechMouth)
 
     // And `state`, which is the same shape and was the one that mattered.
     //
@@ -228,6 +241,20 @@ fun FaceView(
             // gap that belongs to neither, and it is not reported.
             var onVsync = false
 
+            // The voice right now (level, open, wide, round), refilled each
+            // frame - one array for the life of the loop, nothing per frame.
+            val voiceNow = FloatArray(4)
+
+            // One frame's worth of the host, with the voice read at this
+            // instant. The mouth's own level wins while a real voice plays.
+            fun step(dt: Float, b: ResolvedBudget): Boolean {
+                val voiced = mouthOf(voiceNow)
+                return host.advance(
+                    dt, liveState, mic(), if (voiced) voiceNow[0] else speech(), bindings, face,
+                    calm || b.calm, b.speed, if (voiced) voiceNow else null,
+                )
+            }
+
             // Before the very first frame: is this a software renderer (an
             // emulator)? Normally answered long before now - GpuProbe starts
             // with the process - but if not, wait a moment rather than draw
@@ -287,7 +314,7 @@ fun FaceView(
                     last = now
                     onVsync = false
                     val b = FaceQuality.current
-                    if (host.advance(dt, liveState, mic(), speech(), bindings, face, calm || b.calm, b.speed)) {
+                    if (step(dt, b)) {
                         frame = host.snapshot()
                         if (!fresh) report(now, interval, stepMs.toFloat(), b)
                     }
@@ -329,7 +356,7 @@ fun FaceView(
                         // Resting states draw at 30 rather than the display rate.
                         // The accumulated dt is handed to the draw, so motion covers
                         // the same distance — frame skipping, not slow motion.
-                        if (host.advance(dt, liveState, mic(), speech(), bindings, face, calm || b.calm, b.speed)) {
+                        if (step(dt, b)) {
                             frame = host.snapshot()
                             if (!fresh) report(now, interval, 0f, b)
                         }
@@ -364,6 +391,10 @@ fun FaceView(
                 contentDescription = spoken
                 liveRegion = LiveRegionMode.Polite
             }
+            // The face's real size, for the error shake and the tap flinch.
+            // It used to be learned only from a tap, so until the first tap
+            // the shake was 1.5% of one pixel - no shake at all.
+            .onSizeChanged { host.onSize(it.width.toFloat()) }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -472,7 +503,7 @@ private fun stillFrameOf(face: Face, bindings: Bindings): FaceFrame {
     repeat(STILL_FRAME_STEPS) {
         host.advance(1f / 30f, FaceState.IDLE, null, null, bindings, face)
     }
-    return host.snapshot()
+    return host.snapshot().copy(still = true)
 }
 
 private const val STILL_FRAME_STEPS = 38
@@ -790,6 +821,46 @@ data class FaceFrame(
      * function of this frame, rather than carrying last frame's value.
      */
     val prevMotion: FaceState = motion,
+    /**
+     * The STATE before the current one ([state] itself until the first
+     * change). [prevMotion] is not enough for a face that reads the real
+     * state rather than the borrowed movement: standby and idle share a
+     * movement, so waking from standby would look like no change at all and
+     * the red panda would snap awake instead of melting from its sleeping
+     * pose. With [hitchPhase] it is what `CritterPose.pose` blends from.
+     */
+    val prevState: FaceState = state,
+    /**
+     * The state before [prevState], how long [prevState] had been showing
+     * when it ended (seconds), and [amp] at the moment of the change. Without
+     * them the red panda's melt starts from where the previous state WOULD
+     * have settled, drawn at the NEW loudness - so leaving speaking shut its
+     * mouth in one frame, and a second change inside half a second jumped.
+     */
+    val prevState2: FaceState = prevState,
+    val prevGap: Float = 1e9f,
+    val prevAmp: Float = amp,
+    /**
+     * [amp] at the change BEFORE the last one - what [prevState2] was drawn
+     * with (see `CritterPose.Hist` and critter-pose.js's `prevAmp2`), so a
+     * quick A -> B -> A does not draw the oldest state at the newest
+     * loudness.
+     */
+    val prevAmp2: Float = prevAmp,
+    /**
+     * The mouth of the voice being heard right now: open, wide, round, each
+     * 0..1 (docs/LIPSYNC.md). Null when no real voice is playing - a typed
+     * answer, Quiet mode, an answer kept on screen - and then the animals
+     * keep their mouths SHUT; they never mouth words nobody can hear.
+     * Unsmoothed here: the track it comes from is already smooth.
+     */
+    val mouth: FloatArray? = null,
+    /**
+     * A still picture for a picker (stillFrameOf), not the live face. The
+     * animals keep a separate offscreen picture for stills, so a thumbnail
+     * never shows the live animal's pose (CritterFaces.layerFor).
+     */
+    val still: Boolean = false,
 )
 
 /**
@@ -804,6 +875,12 @@ const val CALM_MOTION_RATE = 2f / 3f
  * and deliberately outside the snapshot system, because running it as Compose
  * state would invalidate the tree sixty times a second to change a float.
  */
+/** The states a playing voice shows as SPEAKING (the desktop's LIP_TALKS_OVER). */
+private val TALKS_OVER = setOf(FaceState.IDLE, FaceState.THINKING, FaceState.STANDBY, FaceState.BANKED)
+
+/** How long after the voice stops that still counts (the desktop's LIP_STATE_HOLD_S). */
+private const val VOICE_STATE_HOLD_S = 0.6f
+
 class FaceHost {
 
     private val governor = FlashGovernor()
@@ -853,6 +930,25 @@ class FaceHost {
     private var state: FaceState = FaceState.IDLE
     private var prevState: FaceState = FaceState.IDLE
     private var changedAt = -999f
+    /** When Jarvis's voice was last heard playing (see [advance]). */
+    private var heardAt = -999f
+
+    // What a character face needs to carry on from what was on screen when
+    // the state changed (see FaceFrame.prevState2): the state before the
+    // previous one, how long the previous one had been showing, and the
+    // loudness at the change. `lastDrive` is the loudness of the latest frame.
+    private var prevState2: FaceState = FaceState.IDLE
+    private var prevGap = 1e9f
+    private var prevAmp = 0f
+    private var prevAmp2 = 0f
+    private var lastDrive = 0f
+
+    // The voice's mouth this frame (see FaceFrame.mouth); meaningful only
+    // while `voiced`.
+    private var voiced = false
+    private var mouthOpen = 0f
+    private var mouthWide = 0f
+    private var mouthRound = 0f
 
     private var clockStartedAt = -999f
 
@@ -869,6 +965,10 @@ class FaceHost {
 
     fun onStateChange(next: FaceState) {
         if (next == state) return
+        prevState2 = prevState
+        prevGap = t - changedAt
+        prevAmp2 = prevAmp
+        prevAmp = lastDrive
         prevState = state
         state = next
         changedAt = t
@@ -887,6 +987,11 @@ class FaceHost {
         tapAt = at
         tapStartedAt = t
         faceWidth = max(1f, width)
+    }
+
+    /** The face's box width in pixels, whenever it is laid out. */
+    fun onSize(width: Float) {
+        if (width.isFinite()) faceWidth = max(1f, width)
     }
 
     fun onDrag(delta: Offset) {
@@ -921,8 +1026,27 @@ class FaceHost {
          * cannot override the phone's own request for less motion.
          */
         speed: Float = 1f,
+        /**
+         * The voice being heard, as `Speaker.mouthNow` writes it: level,
+         * open, wide, round at [0..3]. Null when no real voice plays. Only
+         * its mouth ([1..3]) is read here - the level arrives as [voiceIn].
+         * Copied out, never kept: the caller refills the same array.
+         */
+        voiceMouth: FloatArray? = null,
     ): Boolean {
-        if (wanted != state) onStateChange(wanted)
+        // While Jarvis's voice is actually playing - and for a moment after -
+        // a resting or busy face shows SPEAKING whatever the state says: the
+        // answer's text finishes streaming (and the PC says `idle`) before its
+        // last sentences have been spoken, and the animals only move their
+        // mouths while speaking. An approval, an error and listening are left
+        // alone. The desktop's faces.html does the same (lipState).
+        if (voiceMouth != null) heardAt = t
+        val shown = if (wanted in TALKS_OVER && t - heardAt < VOICE_STATE_HOLD_S) {
+            FaceState.SPEAKING
+        } else {
+            wanted
+        }
+        if (shown != state) onStateChange(shown)
         this.calm = calm
         val speedK = if (speed.isFinite() && speed > 0f) speed else 1f
         // Exactly 1 when calm is off and speed is 1, so a default face
@@ -961,6 +1085,15 @@ class FaceHost {
             voice = smooth(voice, 0f, dt, Spec.VOICE_ATTACK_S, Spec.VOICE_RELEASE_S)
         }
         if (voice < Spec.VOICE_GATE) voice = 0f
+
+        // The mouth, as heard: no envelope of its own - the track is
+        // smoothed already, and another lag here would put it behind.
+        voiced = voiceMouth != null && voiceMouth.size >= 4
+        if (voiceMouth != null && voiced) {
+            mouthOpen = unit(voiceMouth[1])
+            mouthWide = unit(voiceMouth[2])
+            mouthRound = unit(voiceMouth[3])
+        }
 
         // What drives the pattern and the scale push.
         val drive = when (state) {
@@ -1043,6 +1176,7 @@ class FaceHost {
             FaceState.SPEAKING -> max(Spec.SPEAK_FLOOR, voice)
             else -> 0f
         }
+        lastDrive = drive
 
         // The clock overlay closes over twenty seconds, with the first 220 ms
         // sweeping to 12% so the ring is on screen before the tint.
@@ -1087,6 +1221,14 @@ class FaceHost {
             t = motionT,
             calm = calm,
             prevMotion = Spec.transformFor(prevState).borrow,
+            prevState = prevState,
+            prevState2 = prevState2,
+            prevGap = prevGap,
+            prevAmp = prevAmp,
+            prevAmp2 = prevAmp2,
+            // A new three-float array only while a voice plays: a frame is
+            // an immutable snapshot, and the draw may still hold the last.
+            mouth = if (voiced) floatArrayOf(mouthOpen, mouthWide, mouthRound) else null,
         )
     }
 
@@ -1102,6 +1244,9 @@ class FaceHost {
 }
 
 private fun smoothstep(x: Float) = x * x * (3f - 2f * x)
+
+/** 0..1, and NaN (a bad sample) as 0. */
+private fun unit(x: Float) = if (x.isNaN()) 0f else x.coerceIn(0f, 1f)
 
 /**
  * Dims by blending toward the background, never by multiplying toward zero.

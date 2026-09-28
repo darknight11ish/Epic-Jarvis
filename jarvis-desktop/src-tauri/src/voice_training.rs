@@ -1043,6 +1043,25 @@ pub async fn set_voice_speaker(app: AppHandle, speaker: String) -> Result<Value,
     voices_answer(status, &text)
 }
 
+/// "Voice follows the face": with an animal face showing, the built-in
+/// voice becomes that animal's (`GET /api/voice/voices` `face_voice`). Same
+/// shape as [`set_voice_speaker`]: no card either way, held on a stale link
+/// (rule 4) whichever way it is switched.
+#[tauri::command]
+pub async fn set_voice_face(app: AppHandle, enabled: bool) -> Result<Value, String> {
+    if stale(&app) {
+        return Err(HELD_STALE.to_string());
+    }
+    let (status, text) = post(
+        &app,
+        "/api/voice/voices/face",
+        &json!({ "enabled": enabled }),
+        VOICES_TIMEOUT,
+    )
+    .await?;
+    voices_answer(status, &text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
