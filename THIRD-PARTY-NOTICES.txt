@@ -126,6 +126,13 @@ jarvis-client/app/src/test/resources/lipsync/*.wav - test audio, not shipped
   model itself is not shipped. lipsync-golden.json beside them is numbers
   computed from these clips.
 
+backend/fixtures/mouth/*.wav - test audio, not shipped
+  Two short sentences of Jarvis's own built-in voice (Kokoro-82M v0.19, as
+  above, the default voice and the sea otter's), made by
+  backend/test_mouth.py --make-fixtures for the mouth-timing tests, each
+  with the "jmth" mouth chunk the PC adds. Test files only; the model is
+  not shipped.
+
 backend/jarvis_voicebank.py - generated numbers, not audio
   Voice prints (one averaged vector per speaker, per model) of 300 real
   speakers from Speech Commands v0.02, made by tools/gen_voicebank.py.
@@ -319,6 +326,49 @@ stream2sentence (Kolja Beigel), MIT - https://github.com/KoljaB/stream2sentence
   README; the repository has no LICENSE file of its own. Copyright (c)
   Kolja Beigel. The MIT License text is the one given for browser-use
   above, with this copyright line in place of that one.
+
+THE ANIMALS' MOUTHS FROM KOKORO'S OWN TIMING (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+backend/jarvis_mouth.py (2026-09-28) works out the speech sounds of each
+sentence and how long Kokoro makes each one. Installed on the PC by pip
+from backend/requirements.txt; none of these is shipped by this
+repository:
+  espeak-ng (the eSpeak NG authors), GPL-3.0-or-later -
+  https://github.com/espeak-ng/espeak-ng. Turns words into speech sounds.
+  The backend loads the library espeakng-loader carries, unmodified, and
+  reads the espeak-ng-data folder that comes with the Kokoro voice (the
+  same one sherpa-onnx already uses; sherpa-onnx itself has espeak-ng
+  built in). GPL-3 is fine for this personal, non-commercial build that is
+  never distributed as a product (rule 5); it is not inside either app.
+  espeakng-loader 0.2.4 (thewh1teagle), MIT -
+  https://github.com/thewh1teagle/espeakng-loader. Ships the espeak-ng
+  library (Windows, Linux, macOS) and its data. Its wheel's metadata names
+  no licence; its repository's LICENSE (read 2026-09-28) says "MIT License,
+  Copyright (c) 2025 thewh1teagle" - the full text is the MIT text given
+  for browser-use above with that copyright line in place of that one.
+  onnx (the ONNX Project), Apache-2.0 - https://github.com/onnx/onnx.
+  Used ONLY by the one-time step (jarvis_mouth.py --prepare) to copy the
+  timing part of the Kokoro model into model.durations.onnx; Kokoro-82M's
+  own licence (Apache-2.0) covers that copy.
+  How the sounds are read, and the idea of the timing itself, follow
+  piper-phonemize (rhasspy, MIT) as built into sherpa-onnx (its
+  phonemize_eSpeak and sherpa-onnx's PiperPhonemesToIdsKokoroOrKitten and
+  GeneratedAudio::ScaleSilence, Apache-2.0, read on sherpa-onnx master of
+  2026-09-22); jarvis_mouth.scale_silence is a line-for-line copy of that
+  ScaleSilence.
+HeadTTS (met4citizen), MIT - https://github.com/met4citizen/HeadTTS
+  jarvis_mouth.py's grouping of speech sounds into mouth shapes is adapted
+  from HeadTTS's modules/language.mjs table misakiToOculusViseme (which
+  sound belongs to which of the 15 Oculus mouth shapes), changed for
+  espeak-ng's sounds ("sh" and "zh" rounded, American "r" slightly rounded,
+  "h" and the glottal stop taking their neighbours' shape). The numbers
+  for each shape are Jarvis's own. Copyright (c) 2025 Mika Suominen.
+  Licensed under the MIT License, whose full text is the one given for
+  browser-use above with this copyright line in place of that one.
+  The blending of neighbouring shapes follows the published "dominance"
+  model of coarticulation (M. M. Cohen and D. W. Massaro, "Modeling
+  coarticulation in synthetic visual speech", in Models and Techniques in
+  Computer Animation, Springer, 1993) - the idea only.
 
 OFFERS NOBODY ASKED FOR (not generated - keep when regenerating)
 ---------------------------------------------------------------------------

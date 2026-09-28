@@ -886,6 +886,26 @@ interrupting Jarvis by talking (`source=barge_in`), the "One moment." clip
 delay step by step, in numbers. The first status read starts the warm-up in
 the background; the reply does not wait for it.
 
+**Since 2026-09-28 a Kokoro WAV from `/api/voice/say` may carry the mouth
+shapes** (`backend/jarvis_mouth.py`, docs/LIPSYNC.md "Mouths from Kokoro's
+own timing"): one extra RIFF chunk **after** `data`, id `jmth`, its payload
+ASCII `v1;src=kokoro;` + a lipsync.js `pack()` string (`100:<base64>`, 4
+bytes a frame: level, open, wide, round, 100 frames a second, as many frames
+as the clip's own analysis has). It is padded to even length and the RIFF
+size covers it; the `data` chunk still declares its real size, so the sound
+itself is unchanged and a reader that does not know `jmth` skips it. It is
+there only when the built-in voice (Kokoro) spoke and the PC could time
+every speech sound exactly (the predicted length equal to the real sound's,
+to the sample); a custom voice, the "One moment." clip (`/api/voice/moment`)
+and any doubt give a plain WAV, and the apps work the mouth out from the
+sound as before. Both apps take open, wide and round from it and loudness
+from the sound (lipsync.js `merge`, `LipSync.merge`). `/api/voice/status`'s
+`tts` block gained `mouth`: `{"available": bool, "status": "<ready, or why
+not in plain words - e.g. the one-time step to run>", "made", "skipped"
+(sentences the timing was tried on since the backend started, and how many
+of them got no block), "last_skip_why", "last_ms" (how long the last
+timing took)}`.
+
 **The audio format: 16-bit PCM in a WAV container. The two apps send
 different rates, and the server copes with both** (checked against the code
 on 2026-09-24):

@@ -687,6 +687,7 @@ $SHIPPED = @(
     'jarvis_learning_switch.py'  # learning-asks.patch: turning learning on raises an approval card
     'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
     'jarvis_voice_flow.py'       # voice-flow.patch: interrupting by talking, the delay in numbers, the "One moment." clip; jarvis_speech.py calls it
+    'jarvis_mouth.py'            # the animals' mouths timed by Kokoro itself (a "jmth" chunk in say()'s WAV); jarvis_speech.py calls it, no patch. One-time step: backend\README.md "Mouths that match the words"
     'jarvis_chat_log.py'         # chat-history.patch: chat history kept on this PC, encrypted
     'jarvis_paste_guard.py'      # feasibility I115, "Paste guard": masks a pasted password, PIN or one-time code before it is written to the encrypted database
     'jarvis_auto_learn.py'       # auto-learn.patch: facts from the owner's own words saved without a card

@@ -13759,3 +13759,90 @@ has the phone-parity row.
   estimated exist; every top-level section is "open"-able. The exact list
   is in `jarvis_settings_registry.py`'s own module header and
   `docs/JARVIS-API.md` section 58.2/58.3.
+
+# Mouths that match the words: `jarvis_mouth.py` (2026-09-28)
+
+## In plain words
+
+The animals' mouths used to be worked out by the apps from the sound alone.
+Now, when Jarvis speaks in its built-in voice (Kokoro), the PC also sends
+the exact moment of every speech sound, taken from Kokoro itself - so the
+lips shut for every "m", "b" and "p", bite for "f" and "v", round for "oo"
+and "w" (a little before the sound, as real lips do) and spread for "ee".
+The shapes ride inside the sound file the PC already sends (one extra
+labelled block after the sound); both apps use them. Nothing leaves the PC.
+
+It needs **one one-time step on the PC**: a small copy of the timing part of
+the voice model (`model.durations.onnx`, about 56 MB, next to `model.onnx`
+in `.openjarvis\voice-models\tts`). The voice model itself is only read,
+never changed. Until the step is done - or whenever anything about the
+timing is in doubt - the apps work the mouth out from the sound, exactly as
+before, and nothing else changes.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put it in** (from this repository's folder), then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. The one-time step.** It installs the two small packages it needs (if
+the step above has not already), then makes the copy and says what it did.
+Running it again does nothing ("Already done"):
+
+```powershell
+Push-Location "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 -m pip install onnx espeakng-loader; py -3 .\jarvis_mouth.py --prepare; Pop-Location
+```
+
+Then restart Jarvis. **To check it**: `py -3 .\jarvis_mouth.py` (same
+folder) prints whether mouths are ready and, after Jarvis has spoken, how
+many sentences got them and why any did not; the phone and desktop read
+the same from `/api/voice/status` (`tts.mouth`).
+
+## What the code does
+
+- `jarvis_mouth.py` (new, shipped whole): `prepare()` (the one-time step);
+  `phonemize()` (espeak-ng through the espeakng-loader package, read the way
+  sherpa-onnx's piper-phonemize reads it); `speak()` (asks sherpa-onnx for
+  Kokoro's sound with its pause-shortening off, one piece per sentence,
+  while the timing is worked out on a thread of its own, then shortens the
+  pauses itself with an exact copy of sherpa-onnx's own code, so the sound
+  is the same); `finish()` (checks every piece is exactly as long as the
+  timing says, to the sample - otherwise no mouth); `build_track()` (sounds
+  to mouth shapes, 100 a second); `add_chunk()` (the "jmth" block).
+- `jarvis_speech.py`: `say()` asks `kokoro_speak(..., mouth=[])` for the
+  shapes and adds the block to the WAV; `status()` gains `tts.mouth`; the
+  engine's own `silence_scale` is read when it is built. The "One moment."
+  clip, the barge-in reference and custom voices are made exactly as before
+  (no block).
+- `requirements.txt` / `requirements.lock`: `espeakng-loader` (runtime) and
+  `onnx` (the one-time step only).
+- docs: `docs/LIPSYNC.md` ("Mouths from Kokoro's own timing" - how, and the
+  measurements), `docs/JARVIS-API.md` section 5 (the block, `tts.mouth`),
+  `THIRD-PARTY-NOTICES.txt` (espeak-ng is GPL-3: fine for this personal,
+  non-commercial build; espeakng-loader MIT; HeadTTS's table MIT).
+
+## Test it
+
+    python3 backend/test_mouth.py
+    python3 backend/run_suites.py
+
+With the real voice files (`JARVIS_KOKORO_DIR` = a kokoro-en-v0_19 folder)
+`test_mouth.py` also checks the real model in all four voices.
+
+## Not checked, said plainly
+
+- **Not run on Windows or on the owner's PC.** Everything was measured in
+  the Linux dev container. The Windows espeakng-loader wheel was downloaded
+  and its `espeak-ng.dll` checked: it exports the three calls used
+  (`espeak_Initialize`, `espeak_SetVoiceByName`, `espeak_TextToPhonemes`)
+  and needs the Microsoft C++ runtime (`MSVCP140.dll`), which onnxruntime
+  already brings into the process. If it cannot load, status says so and
+  the apps work the mouth out from the sound.
+- **The timing reads the text the way sherpa-onnx does, but not with the
+  same espeak-ng build** (piper-phonemize's own call that says how a clause
+  ended is not in the standard library, so it is read from the text). On
+  48,424 lines (this repository's docs and the 36 test sentences) it
+  matched piper-phonemize on all but 8 odd code fragments; any mismatch makes that sentence's length check
+  fail, and it simply has no mouth block.

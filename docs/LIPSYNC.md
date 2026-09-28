@@ -37,6 +37,15 @@ There is nothing to switch on and no setting. If a mouth ever looks early or
 late on your PC or phone, say so - the timing numbers are below, and the
 fix is one number.
 
+**Since 2026-09-28 the PC can do better for its own voice.** When Jarvis
+speaks in its built-in voice (Kokoro), the PC works out the exact moment of
+every speech sound from Kokoro itself and sends the mouth shapes inside the
+same sound file; both apps use them instead of guessing the shape from the
+sound (they still take the loudness from the sound). It needs a one-time
+step on the PC; until then, and whenever anything is in doubt, everything
+works exactly as described here. See "Mouths from Kokoro's own timing" at
+the end.
+
 **Honest limits** (details under "Known limits"): the owl's rounded "oo"
 shapes are weaker than the other animals', because its voice is breathy; an
 "r" in the owl's voice can close the mouth as if it were an "m"; the mouth
@@ -62,17 +71,37 @@ JS      JarvisLipSync.FPS                  100
         JarvisLipSync.LEAD_S               0.05
         JarvisLipSync.analyse(samples: Float32Array (-1..1, mono), sampleRate)
             -> { fps, n, level, open, wide, round }   (Float32Array(n) each)
+        JarvisLipSync.ONSET_S              0.05
         JarvisLipSync.sample(track, tSeconds, out?) -> { level, open, wide, round }
             reads the track at tSeconds + LEAD_S, linear between frames;
-            all 0 before the start / after the end; null track -> null
-        JarvisLipSync.fromWav(ArrayBuffer | Uint8Array) -> { samples, sampleRate }
-            16-bit PCM, mono or stereo (averaged); anything else -> no samples
+            open, wide and round fade in over the first ONSET_S of playback
+            (level does not); all 0 before the start / after the end;
+            null track -> null
+        JarvisLipSync.fromWav(ArrayBuffer | Uint8Array) -> { samples, sampleRate, mouth? }
+            16-bit PCM, mono or stereo (averaged); anything else -> no samples.
+            `mouth`: the track in the clip's "jmth" chunk, only when there is a
+            valid one (see "Mouths from Kokoro's own timing")
+        JarvisLipSync.mouthFrom(payload: string) -> track | null   (strict)
+        JarvisLipSync.merge(audioTrack, mouthTrack) -> track
+            level from the audio track; open, wide, round from the mouth track
+            (a shorter one padded shut) - only when both are 100 fps and their
+            lengths differ by at most MERGE_SLACK (3) frames; otherwise the
+            audio track unchanged
         JarvisLipSync.pack(track) -> "100:<base64>"   (4 bytes a frame)
         JarvisLipSync.unpack(string) -> track
-Kotlin  LipSync.FPS, LipSync.LEAD_S, LipSync.Track(fps, level, open, wide, round) { n }
+Kotlin  LipSync.FPS, LipSync.LEAD_S, LipSync.ONSET_S, LipSync.MERGE_SLACK,
+        LipSync.Track(fps, level, open, wide, round) { n }
         LipSync.analyse(pcm: ShortArray, sampleRate) / analyse(samples: FloatArray, sampleRate)
+        LipSync.forClip(wav: ByteArray, pcm: ShortArray, sampleRate): Track
+            analyse(), merged with the clip's "jmth" mouth when it has a valid
+            one (Speaker.play uses this)
+        LipSync.mouthFrom(payload), LipSync.unpack(packed) (strict: null for
+            anything malformed), LipSync.merge(audio, mouth?)
         LipSync.sample(track?, tSeconds, out: FloatArray): Boolean
             out[0..3] = level, open, wide, round; false (and zeros) outside the clip
+        Wav.mouthChunk(wav: ByteArray): String?, Wav.MOUTH_CHUNK = "jmth"
+Python  backend/jarvis_mouth.py (the PC): pack() byte for byte the same as
+        lipsync.js pack(); add_chunk(wav, payload), read_chunk(wav)
 ```
 
 Frame `i` describes the moment `i / 100` seconds into the clip (its
@@ -107,6 +136,11 @@ both ways), and **anticipation** (lips move before the sound).
   - `fb` = 2100-3300 Hz vs 1400-2100 Hz: high for front vowels (ee: second
     and third formants up high), low for back and rounded ones - a
     stand-in for the second formant.
+  - `sh` = 2.5-5 kHz vs 300-1500 Hz (since 2026-09-28): "sh", "ch" and a
+    breath put their hiss at 2.5-5 kHz, inside the oral band, so `dH` alone
+    missed them (the owl's "Shall" opened to 0.87 on the "sh"); a vowel,
+    even "ee", is 20 dB or more the other way. 15-25 dB of it counts as
+    hiss, like `dH`.
 
   Band ratios were chosen over formant tracking on purpose: a peak-picking
   F2 estimate was tried and was wrong most of the time on this voice (it
@@ -191,6 +225,13 @@ ahead of the sound being heard.
   is still nearly shut. With the 50 ms lead, the mouth starts to open about
   30 ms before the sound, minus the screen's delay: early by roughly 0-30 ms
   - inside the region nobody notices, and never late.
+
+**The first 50 ms of a clip (ONSET_S).** Because of the lead, t = 0
+already reads 50 ms into the track, and Kokoro often starts sounding 10-50
+ms into a clip: the mouth used to jump from shut to a quarter open (the
+owl's "Shall": lips spread 0.9) in one frame at the start of a sentence.
+Since 2026-09-28 `sample()` fades open, wide and round in over the first
+ONSET_S (50 ms) of playback; `level` is not faded.
 
 The two apps also take the audio output's own delay off the playback clock
 before calling `sample()` (desktop: when the clip plays through the app's
@@ -318,7 +359,8 @@ once per sentence, before it plays, and not on the drawing thread.
   talking.
 - **"sh" is not rounded.** English "sh" is said with pushed-out lips; the
   hiss band that could tell "sh" from "s" did not separate them reliably in
-  Kokoro's voice, so both get the small "teeth" spread.
+  Kokoro's voice, so both get the small "teeth" spread. (With the PC's Kokoro timing,
+  "sh" is rounded - see the last section.)
 - **American "oo" is fronted** ("knew", "you"): its second formant sits
   between "ee" and "oh". Those vowels come out less round, which is roughly
   what the lips do too.
@@ -347,8 +389,203 @@ once per sentence, before it plays, and not on the drawing thread.
   oo rounder / ee wider), wide and round never both high, `sample()`'s lead
   and edges, pack/unpack, `fromWav` on mono, stereo and odd chunks, the speed
   of a 10 s clip, and that the fixture is fresh.
+- **The PC's mouth shapes in the WAV** (2026-09-28): `tools/gen_lipsync.py`
+  also builds `lipsync-mouth/kokoro-panda-lips-jmth.wav` (a committed clip
+  with a `jmth` chunk, payload `v1;src=fixture;...`) and puts its merged
+  track, its reads and a table of broken chunks (another version, a field
+  that is not key=value, bad base64, not whole frames, another frame rate,
+  the chunk before `data`, cut short, lengths more than 3 frames apart) in
+  the golden file. `lipsync.mjs` and `voice-mouth.mjs` (desktop) and
+  `LipSyncTest.kt` (phone) check both apps against it: a good chunk is
+  merged (level from the sound), every broken one is ignored and the clip
+  plays exactly as without it, and a WAV with no chunk behaves as before.
+- `backend/test_mouth.py` (the PC half): sherpa-onnx's pause shortening
+  copied exactly (against a line-for-line copy of the C++ loop), how a
+  clause ended, Kokoro's token pieces, the mouth on two committed real
+  Kokoro sentences (`backend/fixtures/mouth/`: m/b/p shut for their whole
+  sound, f/v a lip-bite, "oo"/"w" rounded and rounding 80 ms early, "ee"
+  spread, ah > eh > ee, pauses shut, no jumps), the chunk and every backend
+  reader of the WAV, lipsync.js reading the Python-made chunk (with node),
+  say() adding the chunk only when the timing is exact and speaking exactly
+  as before otherwise, status() wording, and the one-time step on a toy
+  model (with onnx). With `JARVIS_KOKORO_DIR` set to a kokoro-en-v0_19
+  folder it also runs the real model; `--make-fixtures` rebuilds the
+  fixtures from it.
 
 To change the analysis: change `lipsync.js` and `LipSync.kt` the same way,
 run `python3 tools/gen_lipsync.py`, then `node jarvis-desktop/tests/lipsync.mjs`.
 If a quality check fails, the change made the mouths worse on Jarvis's real
 voice - that is the point of those checks.
+
+## Mouths from Kokoro's own timing (the PC, 2026-09-28)
+
+The owner's choice, 2026-09-28: "Build it" - take the timing of each speech
+sound from Jarvis's voice engine instead of guessing it from the sound.
+
+### In plain words
+
+Before Kokoro makes any sound, it decides how long each speech sound will
+last (an "m", an "oo", the pause after a comma). sherpa-onnx, the
+program that runs Kokoro on the PC, never hands those numbers out. So the
+PC keeps a small copy of just the part of Kokoro that decides the lengths
+(`model.durations.onnx`, made once by a one-line step,
+backend/README.md "Mouths that match the words"), asks it the same question
+sherpa-onnx asks, and turns the answer into mouth shapes. They travel in
+the WAV `/api/voice/say` already returns, as one extra block after the
+sound (a RIFF chunk called `jmth`, docs/JARVIS-API.md section 5). Nothing
+leaves the PC; the voice model itself is never changed.
+
+It can only ever add: no one-time step yet, a custom (recorded) voice, the
+"One moment." clip, or any doubt about a sentence - and that WAV simply has
+no block, and the apps do exactly what the sections above describe.
+
+### How it works
+
+`backend/jarvis_mouth.py`, called from `jarvis_speech.kokoro_speak` for
+`say()` only:
+
+1. **Words to speech sounds**, exactly as sherpa-onnx makes them for
+   Kokoro v0.19: espeak-ng (the espeak-ng library the `espeakng-loader`
+   package ships - it has Windows builds; piper-phonemize, which sherpa-onnx
+   uses inside, has none), reading the Kokoro download's own
+   `espeak-ng-data` folder, clause by clause, the way piper-phonemize
+   calls it. One call piper-phonemize relies on (how a clause ended: ".",
+   "?", ",", a paragraph...) exists only in its own espeak-ng build, so the
+   ending is read from the text espeak-ng consumed (`_clause_end`).
+   **Measured:** equal to piper-phonemize on 48,416 of 48,424 lines (every
+   line of this repository's docs, plus the 36 test sentences below - all
+   36 equal), with piper-phonemize not loaded; the 8 that differ are code
+   fragments (`".."`, a full-width `？`, a colon after a closing quote).
+   Any difference changes a sentence's length, which step 4 catches.
+2. **Sounds to Kokoro's token numbers** (`tokens.txt`), split and padded as
+   sherpa-onnx does (a 0 at each end, a space after every ".", at most 510
+   a piece).
+3. **The durations model** (onnxruntime, one thread) with the same voice
+   style row and speed: frames per sound, 1 frame = 600 samples = 25 ms.
+   `model.durations.onnx` is Kokoro's graph walked backwards from node
+   `/Cast_output_0` (Round -> Clip -> Cast, checked by the one-time step),
+   56 MB from the 346 MB fp32 `model.onnx` the owner has; it has none of
+   Kokoro's random-noise nodes, so its answer is always the same.
+4. **The sound, and the proof.** sherpa-onnx is asked for the sound with
+   its pause-shortening off (`GenerationConfig.silence_scale = 1`), one
+   piece per sentence (its callback), while steps 1-3 run on a thread of
+   their own. Each piece must be exactly as long as step 3 says, to the
+   sample - otherwise no block. Then the pauses are shortened by
+   `scale_silence`, a line-for-line copy of sherpa-onnx's own
+   `GeneratedAudio::ScaleSilence` (a stretch of 0.2 s or more within
+   +-0.01 keeps its first 20 %, float32 arithmetic as in C++), which also
+   says where every sample went. The animal pitch rise
+   (`jarvis_speech.pitch_up`) then divides every time by 2^(semitones/12).
+5. **Sounds to mouth shapes** (`build_track`, 100 frames a second, the same
+   n as the apps' own analysis): each sound pulls the mouth towards its
+   shape with a weight that fades before and after it (Cohen and Massaro's
+   "dominance" model of coarticulation), so shapes blend instead of
+   jumping. Shapes by sound (the groups adapted from HeadTTS's
+   misakiToOculusViseme, MIT; the numbers are Jarvis's own, all in one
+   table `K` / `_V` / `_CLASS`):
+   - **m, b, p shut for their whole sound** (open forced to 0; closing over
+     50 ms before, opening over 50 ms after; a sound given no time still
+     shuts for 30 ms);
+   - **f, v: a lip-bite** - open at most 0.1 for their sound, lips spread;
+   - **"oo", "oh", "w", "sh", American "r": rounded**, starting early
+     (reach 75 ms before; measured below: already 0.42-0.52 round 80 ms
+     before an "oo" or "w");
+   - **"ee", "i", "y", "s": spread**; open by vowel: "ah" 0.95, "eh" 0.62,
+     "ee" 0.22 (times 0.82 unstressed, 0.92 secondary stress);
+   - t, d, n, l, k, g: jaw a little closed, lips borrowed from neighbours;
+     h and the glottal stop take their neighbours' shape;
+   - pauses and punctuation: shut.
+   Then `open` is scaled by the clip's own loudness per frame (the quietest
+   speech opens half as far as the shape says, the loudest all the way -
+   so stressed syllables open more), silence in the clip (80 ms or more
+   below the gate, as above) shuts the mouth, and everything is smoothed
+   lightly (12 ms each way). `level` is the same loudness channel as
+   lipsync.js's (the apps take their own anyway).
+6. **The block**: `v1;src=kokoro;` + `pack()` (byte for byte lipsync.js's -
+   checked by running lipsync.js on the Python output), after `data`,
+   padded to even length, RIFF size fixed. Every backend reader was checked
+   (Python `wave`, `_read_wav`, `jarvis_voice_flow._wav_samples`).
+
+### What was measured (dev container, 2026-09-28)
+
+The 36 test sentences (numbers, times, "a.m.", "Dr.", "U.S.", "#58213",
+"$12.99", "£10", an em dash, ellipses, questions, exclamations, quotes,
+brackets, three-sentence answers, one-word answers, "Beyoncé and Björk")
+in all four voices (default; red panda speaker 1, +2 semitones; pygmy owl
+speaker 2, speed 0.85, +1; sea otter speaker 4, speed 1.15, +3): 144
+sentences.
+
+- **Exactness: 144 / 144.** Every sentence piece sherpa-onnx spoke was
+  exactly the length the timing predicted (error 0 samples in every piece;
+  nothing fell back). The sound was **byte-for-byte the same** as
+  sherpa-onnx's own pause-shortened sound in 144/144 - measured with a test
+  copy of Kokoro whose two random-noise nodes were given fixed seeds,
+  because Kokoro's graph adds random noise (RandomNormalLike,
+  RandomUniformLike), so two runs of the real model differ by a few samples
+  in where each pause is cut, even in sherpa-onnx alone.
+- **Time added:** the timing (steps 1-3) took a median 104 ms (p90 168,
+  worst 217 ms) per sentence on one thread, against a median 1.98 s to
+  make the sound (sherpa-onnx, two threads) - it runs alongside, and never
+  once was it still running when the sound was ready. After the sound:
+  median 9.5 ms (p90 21, worst 37 ms) for the pause-shortening, the pitch
+  rise, the shapes and the WAV, for clips of 3.2 s median (10.9 s
+  longest). On the owner's PC both sides scale with the processor, so the
+  timing stays hidden behind the sound; loading the durations model
+  (about 0.4 s here) happens once, in the background, when the voice
+  loads. The one-time step took 1.8 s here.
+- **Against the analysis from the sound** (the sections above), over the
+  same 144 sentences - "closed" is the lowest opening in the sound under
+  0.1:
+
+| | default | panda | owl | otter |
+|---|---|---|---|---|
+| m, b, p shut (sound analysis / Kokoro timing) | 39/100 / **100/100** | 37/100 / **100/100** | 49/100 / **100/100** | 38/99 / **99/99** |
+| t, d, n, k between vowels shut the lips (should not) | 114/189 / 18/189 | 118/224 / 17/224 | 122/214 / 34/214 | 132/216 / 22/216 |
+| "r" shuts the lips (should not) | 19/36 / 5/36 | 16/41 / 7/41 | 11/30 / 6/30 | 24/48 / 8/48 |
+| f, v highest opening | 0.40 / **0.10** | 0.37 / **0.10** | 0.43 / **0.10** | 0.38 / **0.10** |
+| "oo", "oh", "w" mean round | 0.29 / **0.67** | 0.34 / **0.66** | 0.21 / **0.66** | 0.26 / **0.67** |
+| round 80 ms before "oo"/"w" | 0.19 / 0.44 | 0.29 / 0.44 | 0.15 / 0.52 | 0.21 / 0.42 |
+| "sh", "zh" mean round | 0.25 / 0.43 | 0.25 / 0.43 | 0.13 / 0.44 | 0.20 / 0.41 |
+| "ee", "ih" mean wide (round) | 0.28 (0.13) / **0.54 (0.03)** | 0.33 (0.12) / 0.53 (0.03) | 0.34 (0.07) / 0.52 (0.02) | 0.34 (0.09) / 0.52 (0.03) |
+| highest opening: ah / eh / ee | 0.70 0.53 0.25 / 0.68 0.47 0.24 | 0.66 0.50 0.25 / 0.69 0.46 0.23 | 0.73 0.58 0.31 / 0.72 0.47 0.22 | 0.77 0.62 0.27 / 0.68 0.45 0.23 |
+| mouth open in pauses | 0.02 / 0.00 | 0.02 / 0.00 | **0.20** / 0.00 | 0.01 / 0.00 |
+| biggest step in 10 ms | 0.42 / 0.27 | 0.44 / 0.27 | 0.48 / 0.27 | 0.46 / 0.27 |
+
+  Where they differ most (the largest single-frame differences): the
+  sound analysis reading **no rounding on "oo"** ("moons", "pool", "noon",
+  "you", "do" - American "oo" sounds half-way to "ee", its known limit)
+  where the timing knows it is /u/ and rounds (0.96); **open mouths on
+  "b" and "m"** ("backup", "because", "model": 0.93 open where the lips
+  are shut); **spread lips on "n" and "zh"** (0.99, hiss and nasal
+  murmur read as "ee"); and rounding carried across "n", "t", "d" next to
+  an "oo" (real coarticulation: the lips stay rounded through "moons").
+  The openness of vowels agrees (ah > eh > ee in both). Of the 117 t, d,
+  n, k and "r" the timing still shuts, 81 are where the sound itself is
+  below the silence gate at that moment (the hold of a "t" or "k" is
+  silent), 27 are next to an m, b or p (whose closing starts 50 ms early)
+  and 9 are other quiet "l", "n" and "r" sounds.
+
+### Limits, said plainly
+
+- **Not run on Windows or on the owner's PC.** The Windows espeakng-loader
+  wheel was downloaded and checked: its `espeak-ng.dll` exports the three
+  calls used and needs the Microsoft C++ runtime (`MSVCP140.dll`), which
+  onnxruntime brings into the process first. If it cannot load, status
+  says so and nothing else changes.
+- **Only the built-in Kokoro voice** (kokoro-en-v0_19, the model sherpa-onnx
+  speaks here). Custom voices and the "One moment." clip keep the sound
+  analysis (the "One moment." clip is made by jarvis_voice_flow.py, which
+  was not changed).
+- **The timing is Kokoro's plan, not a measurement of the lips.** The
+  shapes per sound are a model (tuned by eye and the numbers above), not
+  motion capture.
+- The apps show the mouth 50 ms early (LEAD_S) on top of the timing's own
+  anticipation, as for the sound analysis.
+
+### Tests
+
+`backend/test_mouth.py` (see "Tests" above); with `JARVIS_KOKORO_DIR` it
+also runs the real model in all four voices. The scratch scripts that made
+the numbers above (the 144-sentence exactness run with the seeded copy, the
+comparison, the 48,424-line espeak check) were run in the dev container and
+are not committed.

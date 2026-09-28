@@ -75,6 +75,8 @@ THIRD_PARTY = {
     "cryptography": "cryptography",
     "ddgs": "ddgs",
     "winrt": "winrt-Windows.Media.Control",
+    "espeakng_loader": "espeakng-loader",
+    "onnx": "onnx",
 }
 
 # Packages in requirements.txt that no shipped module imports BY NAME,
