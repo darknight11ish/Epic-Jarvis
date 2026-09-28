@@ -14,6 +14,8 @@
          composes nothing else until it is unlocked. -->
     <string name="shortcut_talk_short">Talk</string>
     <string name="shortcut_talk_long">Talk to Jarvis</string>
+    <string name="shortcut_live_short">Live</string>
+    <string name="shortcut_live_long">Jarvis Live</string>
     <string name="shortcut_note_short">Note</string>
     <string name="shortcut_note_long">Quick note</string>
     <string name="shortcut_brief_short">Brief me</string>

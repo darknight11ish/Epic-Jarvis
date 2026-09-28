@@ -103,6 +103,9 @@ await check("the contract's list and conversation are read as the PC sends them"
   assert.equal(c.turns[1].provenance, "", "an answer has no provenance");
   // A user turn that says nothing is "unknown", never assumed typed.
   assert.equal(readConversation({ turns: [{ role: "user", text: "x" }] }).turns[0].provenance, "unknown");
+  // Jarvis Live's side-talk marker in an older chat: shown as "(not for Jarvis)", never raw.
+  assert.equal(readConversation({ turns: [{ role: "assistant", text: "[not for me]" }] }).turns[0].text,
+    "(not for Jarvis)");
   // Recording only when the PC says so.
   assert.equal(readHistory({ enabled: true, conversations: [] }).recording, false);
 });

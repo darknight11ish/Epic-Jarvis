@@ -199,13 +199,14 @@ object StrictVoice {
         ),
         Choice(
             VoiceStrict.LIVE_LIKE_WAKE,
-            "Be as careful as with Hey Jarvis",
+            "Be as careful as with \"Hey Jarvis\"",
             "Everything said in Jarvis Live gets the \"Hey Jarvis\" caution: no facts learned without a " +
                 "card, and memory or private answers stay on screen.",
         ),
     )
 
-    const val HANDS_FREE_LIVE_TITLE = "Jarvis Live"
+    /** The review of 2026-09-28: say what the setting is, not just "Jarvis Live". */
+    const val HANDS_FREE_LIVE_TITLE = "How far Jarvis Live is trusted"
 
     /** Under the Live choices while "Same as the talk button" is chosen. The desktop's `LIVE_ONLY_WHEN_STRICT_NOTE`. */
     const val LIVE_ONLY_WHEN_STRICT =

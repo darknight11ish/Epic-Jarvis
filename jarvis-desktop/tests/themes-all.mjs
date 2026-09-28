@@ -29,6 +29,9 @@ const PAGES = [
   // whether or not the theme actually reached the window. `body` carries
   // the real, solid `var(--void)` underneath it.
   ["jarvis_hud.html", "body", 1100, 700],
+  // The Jarvis Live badge (live-badge.html): its own sign on top of every
+  // window, so it must follow the theme too (the Live review, 2026-09-28).
+  ["live-badge.html", "#badge", 420, 84],
   // `faces.html` is deliberately absent. It keeps the reactor kit's own
   // palette, because every colour on that window is a sample of the thing
   // being edited and a second palette around the swatches would make the

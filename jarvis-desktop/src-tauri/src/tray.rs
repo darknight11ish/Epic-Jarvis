@@ -134,6 +134,10 @@ struct Rows {
     update: MenuItem<tauri::Wry>,
 }
 
+/// What was last painted: the two colours, the notch count, the state, and
+/// whether Jarvis Live's mark was on it.
+type PaintKey = (Rgb, Rgb, u32, &'static str, bool);
+
 /// The colour last pushed to the shell, so an unchanged frame costs nothing.
 ///
 /// Registered on the builder in `run()` alongside every other managed type,
@@ -144,7 +148,7 @@ struct Rows {
 /// `windows_subsystem = "windows"`, so that panic went to a stderr that does
 /// not exist: no tray, no stream, no approvals, and nothing on screen to say so.
 #[derive(Default)]
-pub struct Painted(Mutex<Option<(Rgb, Rgb, u32, &'static str)>>);
+pub struct Painted(Mutex<Option<PaintKey>>);
 
 /// The tray's flash-safety governor — one instance, because the tray draws
 /// exactly one surface (the icon). See [`spec::FlashGovernor`] for why one of
@@ -332,6 +336,9 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &waiting,
             &mute,
             &stop_everything,
+            &PredefinedMenuItem::separator(app)?,
+            // Jarvis Live on its own line, away from "Stop everything" (the
+            // review of 2026-09-28: a click one row off started or ended it).
             &live,
             &PredefinedMenuItem::separator(app)?,
             // Windows, everyday ones first — the two with hotkeys are the two
@@ -603,7 +610,69 @@ const INK_LIGHT: Rgb = Rgb {
 /// shell to 16 px reads as a ragged blob, and the notification area is the one
 /// place where a few hundred float operations at 2 Hz is not worth optimising.
 fn draw(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> Image<'static> {
-    Image::new_owned(draw_pixels(a, b, filled, notches), ICON_SIZE, ICON_SIZE)
+    let mut pixels = draw_pixels(a, b, filled, notches);
+    if crate::live::on_here() {
+        mark_live(&mut pixels);
+    }
+    Image::new_owned(pixels, ICON_SIZE, ICON_SIZE)
+}
+
+/// Jarvis Live's colour on the icon: the sign's red dot (theme.css `--bad`
+/// in the default theme), with a white ring so it reads on a dark taskbar
+/// and a light one alike.
+const LIVE_DOT: Rgb = Rgb {
+    r: 0xE5,
+    g: 0x48,
+    b: 0x4D,
+};
+
+/// Paints Jarvis Live's mark - a small red dot with a light ring - over the
+/// lower-right of the icon, while Live is on on this PC. Over whatever the
+/// disc drew there: the mark is what says the microphone is open.
+fn mark_live(pixels: &mut [u8]) {
+    let size = ICON_SIZE as f64;
+    let (cx, cy) = (size - 7.0, size - 7.0);
+    let dot = 5.0f64;
+    let ring = 6.6f64;
+    for y in 0..ICON_SIZE {
+        for x in 0..ICON_SIZE {
+            let mut in_dot = 0.0f64;
+            let mut in_ring = 0.0f64;
+            for sy in 0..3 {
+                for sx in 0..3 {
+                    let px = x as f64 + (sx as f64 + 0.5) / 3.0;
+                    let py = y as f64 + (sy as f64 + 0.5) / 3.0;
+                    let d = ((px - cx).powi(2) + (py - cy).powi(2)).sqrt();
+                    if d <= dot {
+                        in_dot += 1.0 / 9.0;
+                    } else if d <= ring {
+                        in_ring += 1.0 / 9.0;
+                    }
+                }
+            }
+            if in_dot <= 0.0 && in_ring <= 0.0 {
+                continue;
+            }
+            let at = ((y * ICON_SIZE + x) * 4) as usize;
+            let cover = (in_dot + in_ring).clamp(0.0, 1.0);
+            let mix = |old: u8, dot_c: u8| {
+                let ring_c = 255.0;
+                let want = if in_dot + in_ring > 0.0 {
+                    (f64::from(dot_c) * in_dot + ring_c * in_ring) / (in_dot + in_ring)
+                } else {
+                    f64::from(old)
+                };
+                (f64::from(old) * (1.0 - cover) + want * cover)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            };
+            pixels[at] = mix(pixels[at], LIVE_DOT.r);
+            pixels[at + 1] = mix(pixels[at + 1], LIVE_DOT.g);
+            pixels[at + 2] = mix(pixels[at + 2], LIVE_DOT.b);
+            let alpha = f64::from(pixels[at + 3]);
+            pixels[at + 3] = (alpha + (255.0 - alpha) * cover).round().clamp(0.0, 255.0) as u8;
+        }
+    }
 }
 
 /// The pixel loop, split out from [`draw`] so it can be tested.
@@ -806,7 +875,15 @@ fn repaint(app: &AppHandle, link: &LinkState) {
         // `resolved.b` is in the key because `draw` uses it for the rim: a
         // rebind that lands on the same primary but a different secondary
         // repainted nothing and kept the old edge.
-        let key = (resolved.a, resolved.b, link.attention.pending, state);
+        // Jarvis Live on this PC adds its mark (the design's "a Live mark on
+        // the tray icon", missing until the review of 2026-09-28).
+        let key = (
+            resolved.a,
+            resolved.b,
+            link.attention.pending,
+            state,
+            crate::live::on_here(),
+        );
         if *slot == Some(key) {
             return;
         }
@@ -954,7 +1031,8 @@ fn live_label() -> &'static str {
     }
 }
 
-/// Jarvis Live started or ended here: the row and the tooltip follow.
+/// Jarvis Live started or ended here: the row, the tooltip and the icon's
+/// Live mark follow.
 pub fn live_changed(app: &AppHandle) {
     if let Some(rows) = app
         .state::<TrayHandles>()
@@ -968,6 +1046,7 @@ pub fn live_changed(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let link = app.state::<crate::stream::StreamState>().link();
         let _ = tray.set_tooltip(Some(tooltip(app, &link)));
+        repaint(app, &link);
     }
 }
 
@@ -1336,6 +1415,21 @@ fn run_status_check(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_live_mark_is_a_red_dot_at_the_lower_right() {
+        let mut px = vec![0u8; (ICON_SIZE * ICON_SIZE * 4) as usize];
+        mark_live(&mut px);
+        let at = |x: u32, y: u32| ((y * ICON_SIZE + x) * 4) as usize;
+        let c = at(ICON_SIZE - 7, ICON_SIZE - 7);
+        assert!(
+            px[c] > 200 && px[c + 1] < 120 && px[c + 3] == 255,
+            "red, opaque"
+        );
+        let ring = at(ICON_SIZE - 7 + 6, ICON_SIZE - 7);
+        assert!(px[ring + 1] > 150, "a light ring round it");
+        assert_eq!(px[at(4, 4) + 3], 0, "the rest of the icon untouched");
+    }
 
     /// Relative luminance, WCAG's definition, 0..1.
     ///

@@ -26,7 +26,6 @@
 
 import { announce, APPROVE_WHERE, onEvent, onLink, onQueue } from "./jarvis-link.js";
 import * as VT from "./voice-training.js";
-import { INTERRUPT, INTERRUPT_TITLE, loadInterrupt, saveInterrupt } from "./live-rules.js";
 import * as CV from "./custom-voices.js";
 
 const TAURI = globalThis.__TAURI__;
@@ -592,35 +591,22 @@ function paintSettings() {
       say($("vt-live-note"), liveNote);
     }
   }
-  paintInterrupt();
+  // The eighth: when App lock ends Jarvis Live on this PC (the owner's
+  // decision, 2026-09-28). "Only when Windows locks" is the looser one, the
+  // card, held on a stale link.
+  const endBox = $("vt-live-end-box");
+  if (endBox) {
+    endBox.hidden = !view.liveEnd;
+    if (view.liveEnd) {
+      group($("vt-live-end"), VT.LIVE_END, view.liveEnd, "live_end");
+      say($("vt-live-end-note"),
+        `${VT.LIVE_END.find((c) => c.id === view.liveEnd).detail} ${VT.LIVE_END_NOTE}`);
+    }
+  }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;
   w.textContent = waiting || "";
-}
-
-/** "Interrupting Jarvis in Live": this PC's own choice (live-rules.js),
- *  kept on this PC - it changes only how this PC listens while Jarvis
- *  talks, never what is trusted, so it needs no card either way. */
-function paintInterrupt() {
-  const box = $("vt-live-interrupt");
-  if (!box) return;
-  const title = $("vt-live-interrupt-title");
-  if (title) title.textContent = INTERRUPT_TITLE;
-  const chosen = loadInterrupt();
-  box.replaceChildren(...INTERRUPT.map((c) => {
-    const b = node("button", "choice", VT.choiceText(c));
-    b.type = "button";
-    b.dataset.value = c.id;
-    b.setAttribute("aria-pressed", String(c.id === chosen));
-    b.addEventListener("click", () => {
-      saveInterrupt(c.id);
-      paintInterrupt();
-      announce(`${INTERRUPT_TITLE}: ${c.label}.`);
-    });
-    return b;
-  }));
-  say($("vt-live-interrupt-note"), INTERRUPT.find((c) => c.id === chosen).detail);
 }
 
 async function changeSetting(setting, value, current) {

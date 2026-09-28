@@ -5,7 +5,7 @@
   did I miss; still meets App lock. No shortcuts.xml exists today.").
 
   STATIC shortcuts (declared here, not android.content.pm.ShortcutManager),
-  because all four are fixed, always-available actions - never per-owner
+  because all five are fixed, always-available actions - never per-owner
   data, so there is nothing dynamic to register or update at runtime.
 
   Talk and Note reuse the home-screen widget's own actions. "Brief me" and
@@ -34,6 +34,24 @@
         android:shortcutLongLabel="@string/shortcut_talk_long">
         <intent
             android:action="com.jarvis.client.action.START_VOICE"
+            android:targetPackage="com.jarvis.client"
+            android:targetClass="com.jarvis.client.MainActivity" />
+    </shortcut>
+
+    <!-- Jarvis Live (docs/LIVE-DESIGN.md section 2: "Phone: a Live button on
+         Home; an app-icon shortcut" - missing until the review of
+         2026-09-28). Opens the Live screen, the same action as the Live
+         notification's own tap (MainActivity.kt readLiveIntent). It does
+         NOT start Live by itself: the owner presses Start there, behind App
+         lock as ever. Second, so launchers that show only four keep it. -->
+    <shortcut
+        android:shortcutId="live"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_live_short"
+        android:shortcutLongLabel="@string/shortcut_live_long">
+        <intent
+            android:action="com.jarvis.client.action.OPEN_LIVE"
             android:targetPackage="com.jarvis.client"
             android:targetClass="com.jarvis.client.MainActivity" />
     </shortcut>

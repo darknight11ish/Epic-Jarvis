@@ -159,19 +159,21 @@
           <!-- Jarvis Live (live.rs, live-rules.js; docs/LIVE-DESIGN.md): a
                back-and-forth voice conversation, started and ended here.
                No wake word between turns; the voice check still runs on
-               every sentence. Its id is jarvis-live-*, not "live": the
-               Brain already has a "Live" tab (brain.html). -->
+               every sentence. Its id is jarvis-live-*. A visible "Live"
+               beside the icon (the review: an unlabelled icon that turned
+               red), one name and aria-pressed for on/off. -->
           <button
             id="jarvis-live-toggle"
-            class="icon-button"
+            class="icon-button live-toggle"
             type="button"
             aria-pressed="false"
-            title="Start Jarvis Live: talk back and forth, no wake word"
+            aria-label="Jarvis Live"
+            title="Jarvis Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M3 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 3 6.5Zm2.5-2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM8 2.5a.75.75 0 0 1 .75.75v9.5a.75.75 0 0 1-1.5 0v-9.5A.75.75 0 0 1 8 2.5Zm2.5 2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM13 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 13 6.5Z" />
             </svg>
-            <span class="sr-only" id="jarvis-live-toggle-label">Start Jarvis Live</span>
+            <span class="live-toggle-label" aria-hidden="true">Live</span>
           </button>
 
           <!-- Temporary chat (the owner's decision, 2026-09-25): while it is
@@ -227,15 +229,18 @@
             <strong id="jarvis-live-title">Jarvis Live</strong>
             <span id="jarvis-live-detail"></span>
           </div>
+          <p class="jarvis-live-hint" id="jarvis-live-hint" hidden></p>
           <div class="jarvis-live-actions">
-            <button id="jarvis-live-move" class="text-button" type="button" hidden></button>
+            <button id="jarvis-live-move" class="text-button" type="button" hidden>Move it here</button>
+            <button id="jarvis-live-fix" class="text-button" type="button" hidden>Open Settings, then Voice</button>
+            <button id="jarvis-live-show-card" class="text-button" type="button" hidden>Show the card</button>
             <button id="jarvis-live-carry-on" class="text-button" type="button" hidden>Carry on</button>
             <button id="jarvis-live-resume" class="text-button" type="button" hidden>Resume Live</button>
+            <button id="jarvis-live-more" class="text-button" type="button" hidden>20 more minutes</button>
             <button id="jarvis-live-stop-talking" class="text-button" type="button" hidden>Stop talking</button>
-            <button id="jarvis-live-mute" class="text-button" type="button" hidden>Mute</button>
-            <button id="jarvis-live-end" class="text-button" type="button" hidden>Stop</button>
+            <button id="jarvis-live-mute" class="text-button" type="button" hidden>Mic off</button>
+            <button id="jarvis-live-end" class="text-button" type="button" hidden>End Live</button>
           </div>
-          <div class="jarvis-live-chips" id="jarvis-live-chips" hidden aria-label="Quick answers"></div>
         </section>
         <!-- The marker for a whole temporary chat, and its one line while
              the chat is still empty (answer-memory.js). -->
@@ -634,6 +639,10 @@
             -->
             <article class="markdown" id="answer"></article>
             <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
+            <!-- Jarvis Live's tap buttons, under the answer they answer (the
+                 review: they sat in the sign's row, looking like its
+                 controls). Each is sent as the owner's TYPED words. -->
+            <div class="jarvis-live-chips" id="jarvis-live-chips" role="group" aria-label="Quick answers" hidden></div>
             <!-- A failed answer: ONE fix button, and the technical detail for a
                  bug report behind "Details" - scrubbed of tokens, keys,
                  passwords, email addresses and the Windows user name first

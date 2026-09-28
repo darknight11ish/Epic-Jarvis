@@ -1032,6 +1032,10 @@ def _strict_state(voice: dict) -> dict:
         # trust the talk button" - the owner's answer of 2026-09-28): "" from
         # an older jarvis_voice.py - not offered.
         "hands_free_live": str(voice.get("hands_free_live") or ""),
+        # The eighth (when App lock ends Jarvis Live on the PC - the owner's
+        # decision of 2026-09-28): "" from an older jarvis_voice.py - the
+        # desktop then does not offer it.
+        "live_end": str(voice.get("live_end") or ""),
         "settings": st or {"strictness": strict, "privacy": "private_on_screen",
                            "voice_is_enough_allowed": strict == "very_strict",
                            "min_command_seconds": 0.0},
@@ -1785,7 +1789,8 @@ def _offer_move(mic: str, engine: str, common: dict) -> Optional[Heard]:
     if not elsewhere:
         return None
     return Heard(True, text="", engine=engine, wake_heard=False, other_device=True,
-                 live_elsewhere=elsewhere, reason=f"Live is on your {elsewhere}", **common)
+                 live_elsewhere=elsewhere,
+                 reason=f"Live is on your {jarvis_live.device_words(elsewhere)}", **common)
 
 
 def _live_phrase(text: str):
@@ -2081,11 +2086,16 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         except Exception:
             pass
 
+    # A Live clip that was the owner's but could not become words keeps the
+    # session's fields, so the app keeps listening and says so rather than
+    # taking "not available" as Live being over (bug 2 of the review,
+    # 2026-09-28).
+    live_extra = _live_fields(mic) if live else {}
     if _stt_engine() is None:
         return Heard(True, available=False, wake_heard=wake,
                      reason="that was you, but no speech-to-text model is "
                             "installed here yet - see jarvis_speech.status()",
-                     **common)
+                     **common, **live_extra)
 
     # 5. The words.
     t = time.monotonic()
@@ -2094,7 +2104,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     except Exception as exc:
         return Heard(True, available=False, wake_heard=wake,
                      reason=f"transcription failed ({type(exc).__name__})",
-                     **common)
+                     **common, **live_extra)
     steps["stt"] = (time.monotonic() - t) * 1000.0
     engine = f"{STT_ENGINE}:{_stt_files()[0]}"
 

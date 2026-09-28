@@ -1370,7 +1370,7 @@ class MainActivity : FragmentActivity() {
                         val wakeWord by voice.wakeWord.collectAsState()
                         val voiceAnswered by voice.answered.collectAsState()
                         val phoneListening by WakeWordService.state.collectAsState()
-                        val bargeInSaved by JarvisRuntime.settings.bargeIn.collectAsState()
+                        val interruptChoice by JarvisRuntime.settings.interrupt.collectAsState()
                         val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
                         val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
                         // Asked once: whether this phone has an echo canceller
@@ -1449,11 +1449,11 @@ class MainActivity : FragmentActivity() {
                             },
                             wakeWordPending = voiceStatus.listening.wakeWordPending,
                             phoneListening = phoneListening,
-                            bargeIn = BargeIn.enabled(bargeInSaved, echoCanceller),
+                            interrupt = interruptChoice,
                             bargeInEchoCanceller = echoCanceller,
-                            // A switch on this phone only: it changes when the
+                            // A setting on this phone only: it changes when the
                             // phone listens, never what the desktop allows.
-                            onBargeIn = { on -> JarvisRuntime.settings.setBargeIn(on) },
+                            onInterrupt = { v -> JarvisRuntime.settings.setInterrupt(v) },
                             // Also this phone's own: whether "One moment." is
                             // played when a tool starts during a spoken question.
                             oneMoment = oneMomentOn,
@@ -1897,8 +1897,12 @@ class MainActivity : FragmentActivity() {
 
                     Screen.LIVE -> com.jarvis.client.ui.screens.LiveScreen(
                         onBack = { nav.back() },
-                        // "Show the card": the cards are on Home.
-                        onOpenCards = { nav.resetTo(Screen.HOME) },
+                        // "Show the card": the cards are on Home. Back comes
+                        // back to Live (the review's C7: it reset the stack).
+                        onOpenCards = { nav.go(Screen.HOME) },
+                        // "Jarvis Live didn't start: it needs your voice
+                        // trained first - Settings, then Train my voice."
+                        onTrainVoice = { nav.go(Screen.VOICE) },
                         modifier = root,
                     )
 

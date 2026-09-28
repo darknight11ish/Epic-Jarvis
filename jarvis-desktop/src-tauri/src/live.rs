@@ -15,7 +15,9 @@
 //! * **The watcher**, once a second while Live is on here, reads
 //!   `GET /api/voice/live` and tells every window (`LIVE_STATUS`); the badge
 //!   and the bar draw the sign from it (live-rules.js). It:
-//!   - ends Live when App lock would ask again, or Windows is locked;
+//!   - ends Live when App lock would ask again - or, when the owner chose
+//!     "Only when Windows locks" (the voice setting `live_end`, a card;
+//!     the PC's status says `end_on`), only when Windows is locked;
 //!   - CLOSES the microphone - not just ignores it, so Windows' own
 //!     microphone sign goes off too - while Live is muted, a card waits (or
 //!     the queue cannot be read), the bar shows a card, the link is stale,
@@ -51,9 +53,11 @@ pub const LIVE_STATUS: &str = "live-status";
 /// thinking" (a Live sentence passed the voice check) or "Didn't catch that
 /// - say a bit more" (probably the owner, too short). Never any words.
 pub const LIVE_HEARD: &str = "live-heard";
-/// The badge's size, in logical pixels.
+/// The badge's size, in logical pixels, at 100% text (live-badge.js grows
+/// it with the text size). Two rows: the review of 2026-09-28 found why
+/// Live paused cut off in 12 of 14 states at one row of 52 px.
 const BADGE_W: f64 = 420.0;
-const BADGE_H: f64 = 52.0;
+const BADGE_H: f64 = 84.0;
 /// How long the badge stays up after Live ended, showing why (and Resume).
 const BADGE_ENDED_FOR: Duration = Duration::from_secs(15);
 /// How often the watcher looks.
@@ -65,7 +69,13 @@ const READ_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The actions `live_act` takes. Stop is `live_stop`, Mute is `live_mute`.
-pub(crate) const ACTIONS: &[&str] = &["extend", "resume"];
+/// "active": the owner typed or tapped in Live (the PC's quiet clock starts
+/// again); "open" / "show_card": the badge opens the Jarvis bar (at the
+/// card); "show": the bar comes on screen without the keyboard for a Live
+/// answer. None of them approves, starts or widens anything.
+pub(crate) const ACTIONS: &[&str] = &["extend", "resume", "active", "open", "show_card", "show"];
+/// The actions that only put a window on screen here - nothing is sent.
+const WINDOW_ACTIONS: &[&str] = &["open", "show_card", "show"];
 /// How a start may say it was started (backend `APP_STARTS`).
 pub(crate) const STARTS: &[&str] = &["button", "tray", "hotkey"];
 /// The pauses that hold every clip AND close the microphone.
@@ -89,6 +99,15 @@ static CALL_UNKNOWN: AtomicBool = AtomicBool::new(false);
 /// go (a program that closed badly can leave its record "in use" for good,
 /// and the owner must not be muted forever by it).
 static MIC_OVERRIDDEN: AtomicBool = AtomicBool::new(false);
+/// The bar is playing an answer or a fixed line (live-rules / main.js
+/// `syncLiveAnswer`). voice.rs drops a Live sentence that BEGAN while this
+/// was true unless the PC said, over barge-in, that it was the owner - an
+/// "mm-hm" over an answer is not a new question (the review's bug 9).
+static SPEAKING: AtomicBool = AtomicBool::new(false);
+/// The owner chose "Only when Windows locks" for Live on this PC (the PC's
+/// status `end_on`, read by the watcher). False - App lock's rule - until
+/// the PC says otherwise.
+static END_ON_WINDOWS_LOCK: AtomicBool = AtomicBool::new(false);
 
 pub(crate) const LIVE_MISSING: &str = "This PC's Jarvis does not have Jarvis Live yet. Run \
      scripts\\apply-patches.ps1 on the PC to add it.";
@@ -96,10 +115,24 @@ const STALE_HELD: &str = "The connection to Jarvis is catching up, so Jarvis Liv
      until it does - try again in a moment.";
 pub(crate) const APP_LOCK_HELD: &str = "Jarvis is locked (App lock). Open the Jarvis bar \
      and unlock it with Windows Hello, then start Jarvis Live.";
+/// The talk button while Live has the microphone (live-rules.js
+/// `SEEN.busy_mic`, the same words on the phone).
+pub(crate) const BUSY_MIC: &str = "Jarvis Live is already listening - just talk";
 
 /// Whether Live is on here (the tray asks).
 pub fn on_here() -> bool {
     ON_HERE.load(Ordering::SeqCst)
+}
+
+/// Whether the bar is playing an answer or a fixed line in Live (voice.rs).
+pub(crate) fn answer_playing() -> bool {
+    on_here() && SPEAKING.load(Ordering::SeqCst)
+}
+
+/// Does App lock end Live on this PC now? Not when the owner chose "Only
+/// when Windows locks" (`end_on`, the PC's `live_end` setting).
+pub(crate) fn app_lock_ends(status_end_on: Option<&str>) -> bool {
+    status_end_on != Some("windows_lock")
 }
 
 /// voice.rs asks before sending a Live sentence: the PC paused Live for a
@@ -175,6 +208,9 @@ pub(crate) fn act_body(action: &str, minutes: Option<u32>) -> Result<serde_json:
         return Err(format!("Jarvis Live cannot {action:?}"));
     }
     let mut body = serde_json::json!({ "do": action });
+    if action == "active" {
+        body["device"] = serde_json::json!("desktop");
+    }
     if action == "extend" {
         let m = minutes.unwrap_or(20);
         if !(1..=120).contains(&m) {
@@ -391,8 +427,21 @@ pub async fn live_act(
     action: String,
     minutes: Option<u32>,
 ) -> Result<serde_json::Value, String> {
+    if WINDOW_ACTIONS.contains(&action.as_str()) {
+        match action.as_str() {
+            "show" => crate::windows::show_quickbar_quietly(&app)?,
+            "show_card" => {
+                crate::windows::show_quickbar(&app)?;
+                crate::emit_quickbar(&app, crate::events::SHOW_APPROVAL, None::<String>);
+            }
+            _ => crate::windows::show_quickbar(&app)?,
+        }
+        return Ok(serde_json::Value::Null);
+    }
     let body = act_body(&action, minutes)?;
-    if stale(&app) {
+    // "More time" and "Carry on" are held on a stale link; "active" only
+    // keeps open a session the owner started, and goes.
+    if action != "active" && stale(&app) {
         return Err(STALE_HELD.to_string());
     }
     let out = post(&app, body).await?;
@@ -430,13 +479,20 @@ pub async fn live_mute(app: AppHandle, muted: bool) -> Result<serde_json::Value,
 }
 
 /// The bar holds the microphone closed while it shows an approval card
-/// (`what: "card"`) or speaks an answer under "Interrupt by tap only"
-/// (`what: "answer"`). Takes effect at once, not at the next look.
+/// raised in this session (`what: "card"`) or speaks under "By button only"
+/// or "Don't interrupt" (`what: "answer"`). Takes effect at once, not at the
+/// next look. `what: "speaking"` holds nothing: it says an answer is
+/// playing, so a sentence that began over it is dropped unless the PC said
+/// it was the owner (voice.rs).
 #[tauri::command]
 pub async fn live_hold(app: AppHandle, what: String, on: bool) -> Result<(), String> {
     match what.as_str() {
         "card" => CARD_SHOWN.store(on, Ordering::SeqCst),
         "answer" => ANSWERING_TAP_ONLY.store(on, Ordering::SeqCst),
+        "speaking" => {
+            SPEAKING.store(on, Ordering::SeqCst);
+            return Ok(());
+        }
         other => return Err(format!("Jarvis Live cannot hold for {other:?}")),
     }
     if !on_here() {
@@ -489,6 +545,7 @@ async fn ended_here(app: &AppHandle) {
     CARD_PAUSED.store(false, Ordering::SeqCst);
     CARD_SHOWN.store(false, Ordering::SeqCst);
     ANSWERING_TAP_ONLY.store(false, Ordering::SeqCst);
+    SPEAKING.store(false, Ordering::SeqCst);
     LOCK_UNKNOWN.store(false, Ordering::SeqCst);
     voice::close_for_live(app).await;
     crate::tray::live_changed(app);
@@ -535,8 +592,16 @@ fn spawn_watcher(app: AppHandle) {
                 break;
             }
             // App lock first: it needs no network. Someone else at the PC
-            // must not talk to Jarvis through a session the owner left.
-            if crate::lock::app_locked(&app) {
+            // must not talk to Jarvis through a session the owner left -
+            // unless the owner chose "Only when Windows locks" (a card on
+            // the PC; the last status read says so), when Windows' own lock
+            // below ends it instead.
+            let end_on = if END_ON_WINDOWS_LOCK.load(Ordering::SeqCst) {
+                Some("windows_lock")
+            } else {
+                None
+            };
+            if crate::lock::app_locked(&app) && app_lock_ends(end_on) {
                 let _ = stop(&app, "app_lock").await;
                 break;
             }
@@ -556,6 +621,10 @@ fn spawn_watcher(app: AppHandle) {
                         break;
                     }
                     CARD_PAUSED.store(card_pause(&status), Ordering::SeqCst);
+                    END_ON_WINDOWS_LOCK.store(
+                        !app_lock_ends(status.get("end_on").and_then(|v| v.as_str())),
+                        Ordering::SeqCst,
+                    );
                     let others = mic_in_use_by_others();
                     CALL_UNKNOWN.store(others.is_none(), Ordering::SeqCst);
                     if others == Some(false) {
@@ -966,7 +1035,23 @@ mod tests {
     }
 
     #[test]
+    fn app_lock_ends_live_unless_the_owner_chose_windows_lock() {
+        assert!(app_lock_ends(None), "the default: App lock's rule");
+        assert!(app_lock_ends(Some("app_lock")));
+        assert!(
+            app_lock_ends(Some("nonsense")),
+            "anything else: the stricter"
+        );
+        assert!(!app_lock_ends(Some("windows_lock")));
+    }
+
+    #[test]
     fn only_fixed_actions_go_out() {
+        assert_eq!(
+            act_body("active", None).unwrap(),
+            json!({"do": "active", "device": "desktop"})
+        );
+        assert!(ACTIONS.contains(&"show_card") && WINDOW_ACTIONS.contains(&"open"));
         assert_eq!(
             act_body("extend", None).unwrap(),
             json!({"do": "extend", "minutes": 20})
@@ -999,6 +1084,23 @@ mod tests {
     fn live_audio_goes_only_to_this_pc() {
         assert!(voice::live_audio_refusal("http://127.0.0.1:7777").is_none());
         assert!(voice::live_audio_refusal("http://100.64.1.2:7777").is_some());
+    }
+
+    #[test]
+    fn a_sentence_over_an_answer_goes_only_when_it_was_the_owner() {
+        assert!(
+            voice::live_over_answer_sent(true, false, false),
+            "not over an answer"
+        );
+        assert!(
+            !voice::live_over_answer_sent(true, true, false),
+            "an mm-hm over an answer"
+        );
+        assert!(
+            voice::live_over_answer_sent(true, true, true),
+            "the owner cut in"
+        );
+        assert!(voice::live_over_answer_sent(false, true, false), "not Live");
     }
 
     #[test]

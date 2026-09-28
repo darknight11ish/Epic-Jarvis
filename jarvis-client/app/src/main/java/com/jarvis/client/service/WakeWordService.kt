@@ -31,6 +31,7 @@ import com.jarvis.client.audio.Wav
 import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.net.Heard
 import com.jarvis.client.voice.BargeIn
+import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.SpeechRun
 import com.jarvis.client.voice.VoiceFlow
 import com.jarvis.client.voice.OrtTurnModel
@@ -387,11 +388,13 @@ class WakeWordService : Service() {
         return out.copyOf(count)
     }
 
-    /** The owner's switch, or the default: on only with an echo canceller. */
-    private fun bargeInOn(): Boolean = BargeIn.enabled(
-        JarvisRuntime.settings.bargeIn.value,
-        runCatching { AcousticEchoCanceler.isAvailable() }.getOrDefault(false),
-    )
+    /**
+     * "Interrupting Jarvis" is "Interrupt by voice" (LiveRules.INTERRUPT;
+     * the default only with an echo canceller). "By button only" and
+     * "Don't interrupt" both keep this listener off while Jarvis talks, as
+     * the old switch's "off" did.
+     */
+    private fun bargeInOn(): Boolean = JarvisRuntime.settings.interrupt.value == LiveRules.INTERRUPT_VOICE
 
     /**
      * Sends [clip] as a wake-word clip and waits for the answer. With

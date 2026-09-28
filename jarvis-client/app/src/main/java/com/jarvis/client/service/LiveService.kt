@@ -88,6 +88,7 @@ class LiveService : Service() {
 
     @Volatile private var running = false
     private var shownSign: LiveRules.Sign? = null
+    private var shownTalking = false
 
     /** Clips go to the PC one at a time, in order, while the microphone keeps being read. */
     private val sending = Mutex()
@@ -105,12 +106,16 @@ class LiveService : Service() {
         when (intent?.action) {
             ACTION_END -> {
                 running = false
-                scope.launch { JarvisRuntime.liveStop("owner") }
+                // In the runtime's own scope: this service's scope is
+                // cancelled by stopSelf below, and the End could be lost with
+                // it (the review's B1).
+                JarvisRuntime.liveEndNow("owner")
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_MUTE -> scope.launch { JarvisRuntime.liveMute(true) }
             ACTION_UNMUTE -> scope.launch { JarvisRuntime.liveMute(false) }
+            ACTION_STOP_TALKING -> JarvisRuntime.voice.stopSpeaking()
         }
         if (loop == null) {
             running = true
@@ -119,7 +124,7 @@ class LiveService : Service() {
                     listen()
                 } catch (t: Throwable) {
                     Log.w(TAG, "Jarvis Live listening stopped", t)
-                    JarvisRuntime.liveNotice("The microphone stopped (${t.javaClass.simpleName}).")
+                    JarvisRuntime.liveNotice("The microphone stopped. Start Jarvis Live again from the Live screen.")
                 } finally {
                     running = false
                     stopSelf()
@@ -131,6 +136,7 @@ class LiveService : Service() {
 
     override fun onDestroy() {
         running = false
+        listening.value = false
         loop?.cancel()
         scope.cancel()
         runCatching { JarvisRuntime.voice.speaker.endVoiceCall() }
@@ -155,14 +161,17 @@ class LiveService : Service() {
         var canceller: AcousticEchoCanceler? = null
         var inVoiceCall = false
         val ring = WakeClip.Ring((PREROLL_SECONDS * RATE).toInt())
-        fun close() {
+        // [keepRing]: only the audio source changes (Jarvis stopped talking),
+        // so the half-second before is the owner's sentence going on - kept
+        // (the review's bug 1). A pause that closes the microphone drops it.
+        fun close(keepRing: Boolean = false) {
             runCatching { rec?.stop() }
             rec?.release()
             rec = null
             runCatching { canceller?.release() }
             canceller = null
             recSource = -1
-            ring.clear()
+            if (!keepRing) ring.clear()
         }
         try {
             while (running) {
@@ -175,8 +184,12 @@ class LiveService : Service() {
                 val may = LiveRules.listen(
                     status,
                     stale = JarvisRuntime.stale.value,
+                    // A card of THIS session closes the microphone at once -
+                    // the service used to leave that to the PC's pause, a
+                    // second later (the review's bug 3).
+                    cardShown = JarvisRuntime.liveCardHolds(),
                     answering = speaking,
-                    interrupt = JarvisRuntime.settings.liveInterrupt.value,
+                    interrupt = JarvisRuntime.settings.interrupt.value,
                 )
                 refreshNotification(status)
                 if (!may.mic) {
@@ -200,7 +213,7 @@ class LiveService : Service() {
                     MediaRecorder.AudioSource.VOICE_RECOGNITION
                 }
                 if (rec == null || recSource != source) {
-                    close()
+                    close(keepRing = rec != null)
                     val opened = openRecorder(source)
                     if (opened == null) {
                         JarvisRuntime.liveNotice("No microphone available right now.")
@@ -307,16 +320,23 @@ class LiveService : Service() {
         return out.copyOf(count)
     }
 
-    /** May the microphone stay open for this window? (Rechecked while it listens.) */
+    /**
+     * May the microphone stay open for this window? (Rechecked while it
+     * listens.) A window that began over a reply the owner's voice has just
+     * stopped carries on: that is the owner's next sentence, and it goes to
+     * the PC (the review's bug 1 - it used to be thrown away as soon as
+     * Jarvis went quiet).
+     */
     private fun stillOpen(overReply: Boolean): Boolean {
         val voice = JarvisRuntime.voice
         val speaking = voice.phase.value == VoiceSession.Phase.SPEAKING || voice.lineSpeaking
-        if (speaking != overReply) return false
+        if (speaking != overReply && !(overReply && voice.replyStopped())) return false
         val may = LiveRules.listen(
             JarvisRuntime.liveStatus.value,
             stale = JarvisRuntime.stale.value,
+            cardShown = JarvisRuntime.liveCardHolds(),
             answering = speaking,
-            interrupt = JarvisRuntime.settings.liveInterrupt.value,
+            interrupt = JarvisRuntime.settings.interrupt.value,
         )
         return may.mic && !LiveRules.onCall(audioMode(), voice.speaker.voiceCall)
     }
@@ -368,15 +388,23 @@ class LiveService : Service() {
     // ---------------------------------------------------------- notification
 
     private fun refreshNotification(status: kotlinx.serialization.json.JsonObject?) {
-        val sign = LiveRules.sign(status, stale = JarvisRuntime.stale.value)
-        if (sign == shownSign) return
+        val sign = LiveRules.sign(
+            status,
+            stale = JarvisRuntime.stale.value,
+            cardShown = JarvisRuntime.liveCardHolds(),
+        )
+        val talking = JarvisRuntime.voice.phase.value == VoiceSession.Phase.SPEAKING &&
+            JarvisRuntime.settings.interrupt.value != LiveRules.INTERRUPT_OFF
+        if (sign == shownSign && talking == shownTalking) return
+        shownTalking = talking
         goForeground(sign)
     }
 
     /**
      * The ongoing notification: fixed words only (the sign), never anything
      * said. It stays on this phone - never bridged to a watch - and has End
-     * (never held) and Mute or Unmute.
+     * Live (never held), Mic off / Mic on / Listen anyway, and Stop talking
+     * while Jarvis talks (unless "Don't interrupt" is chosen).
      */
     private fun goForeground(sign: LiveRules.Sign): Boolean {
         shownSign = sign
@@ -385,7 +413,12 @@ class LiveService : Service() {
             Intent(this, LiveService::class.java).setAction(ACTION_END),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val muted = sign.mute == "Unmute"
+        val muted = sign.mute.isNotEmpty() && sign.mute != LiveRules.MIC_OFF
+        val stopTalking = PendingIntent.getService(
+            this, 14,
+            Intent(this, LiveService::class.java).setAction(ACTION_STOP_TALKING),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         val mute = PendingIntent.getService(
             this, 12,
             Intent(this, LiveService::class.java).setAction(if (muted) ACTION_UNMUTE else ACTION_MUTE),
@@ -412,8 +445,9 @@ class LiveService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(open)
-            .addAction(0, "End", end)
-            .addAction(0, if (muted) "Unmute" else "Mute", mute)
+            .addAction(0, LiveRules.END_LIVE, end)
+            .addAction(0, sign.mute.ifEmpty { LiveRules.MIC_OFF }, mute)
+            .apply { if (shownTalking) addAction(0, LiveRules.STOP_TALKING, stopTalking) }
             .build()
         return try {
             ServiceCompat.startForeground(
@@ -422,16 +456,18 @@ class LiveService : Service() {
                 notification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
             )
+            listening.value = true
             true
         } catch (e: Exception) {
             // Android 14+ refuses a microphone service started from the
             // background or without the permission. Said, never retried.
             Log.w(TAG, "startForeground refused", e)
             JarvisRuntime.liveNotice(
-                "Android did not allow Jarvis Live to listen (${e.javaClass.simpleName}). " +
-                    "Open Jarvis and start Live from there.",
+                "Android did not let Jarvis Live listen from the background. Open Jarvis, " +
+                    "then start Live from the Live screen.",
             )
             running = false
+            listening.value = false
             false
         }
     }
@@ -443,6 +479,18 @@ class LiveService : Service() {
         const val ACTION_END = "com.jarvis.client.LIVE_END"
         const val ACTION_MUTE = "com.jarvis.client.LIVE_MUTE"
         const val ACTION_UNMUTE = "com.jarvis.client.LIVE_UNMUTE"
+        const val ACTION_STOP_TALKING = "com.jarvis.client.LIVE_STOP_TALKING"
+
+        /** The "Live is on your PC - move it here?" heads-up channel. */
+        const val OFFER_CHANNEL_ID = "jarvis_live_offer"
+        private const val OFFER_ID = 0x4A4D
+
+        /**
+         * True while the service holds the microphone as a foreground
+         * service - Android said yes. The runtime waits for it before saying
+         * "I'm listening." (the review's B7).
+         */
+        val listening = kotlinx.coroutines.flow.MutableStateFlow(false)
         private const val TURN_DIR = "turn"
         private const val RATE = WakeSpotter.SAMPLE_RATE
 
@@ -461,13 +509,60 @@ class LiveService : Service() {
         /** How often (in 80 ms steps) a window checks it may stay open: about every 0.4 s. */
         private const val CHECK_EVERY_STEPS = 5
 
-        /** Call from the app's own screen, or from a reply the app received in front. */
-        fun start(context: Context) {
+        /** Call from the app's own screen, or from a reply the app received in front. False when Android refused. */
+        fun start(context: Context): Boolean =
             runCatching {
                 ContextCompat.startForegroundService(context, Intent(context, LiveService::class.java))
             }.onFailure {
                 Log.w(TAG, "could not start", it)
-                JarvisRuntime.liveNotice("Android did not allow Jarvis Live to listen (${it.javaClass.simpleName}).")
+                JarvisRuntime.liveNotice(
+                    "Android did not let Jarvis Live listen from the background. Open Jarvis, then " +
+                        "start Live from the Live screen.",
+                )
+            }.isSuccess
+
+        /**
+         * "Hey Jarvis" to this phone while Live runs on the PC: a heads-up,
+         * kept on this phone, that opens the Live screen with "Move it here"
+         * on it. Fixed words only; gone after 30 seconds.
+         */
+        fun showMoveOffer(context: Context, device: String) {
+            val manager = ContextCompat.getSystemService(context, NotificationManager::class.java) ?: return
+            runCatching {
+                manager.createNotificationChannel(
+                    NotificationChannel(OFFER_CHANNEL_ID, "Jarvis Live offers", NotificationManager.IMPORTANCE_HIGH)
+                        .apply {
+                            description = "\"Live is on your PC - move it here?\" when you say \"Hey Jarvis\" to " +
+                                "this phone while Jarvis Live is on your PC."
+                            setShowBadge(false)
+                        },
+                )
+                val open = PendingIntent.getActivity(
+                    context, 15,
+                    Intent(context, MainActivity::class.java)
+                        .setAction(MainActivity.ACTION_OPEN_LIVE)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                val n = NotificationCompat.Builder(context, OFFER_CHANNEL_ID)
+                    .setLocalOnly(true)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle(LiveRules.moveWords(device))
+                    .setContentText("Open Jarvis Live to move it to this phone.")
+                    .setAutoCancel(true)
+                    .setTimeoutAfter(30_000L)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_STATUS)
+                    .setContentIntent(open)
+                    .addAction(0, "Move it here", open)
+                    .build()
+                manager.notify(OFFER_ID, n)
+            }
+        }
+
+        fun clearMoveOffer(context: Context) {
+            runCatching {
+                ContextCompat.getSystemService(context, NotificationManager::class.java)?.cancel(OFFER_ID)
             }
         }
 

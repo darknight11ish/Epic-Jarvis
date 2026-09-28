@@ -155,7 +155,8 @@ def t_start_stop_and_the_limits():
     st = e.status()
     check("the time runs out: ended, 'the time was up', and Resume Live is offered",
           st["state"] == "ended" and st["ended"] == "time"
-          and st["ended_words"] == "the time was up" and st["ended_device"] == "phone"
+          and st["ended_words"] == "The time was up." and st["ended_device"] == "phone"
+          and st["ended_say"] == "Live ended - the time was up."
           and st["resumable"] is True, st)
     w.clock.t += L.RESUME_S + 1
     check("...for ten minutes", e.status()["resumable"] is False)
@@ -164,21 +165,30 @@ def t_start_stop_and_the_limits():
     check("an end for the OTHER device does nothing (the phone's App lock "
           "cannot end the desktop's Live)", out["stopped"] is False and e.status()["on"])
     out = e.stop("owner")
-    check("End: ended, 'you ended it', no Resume offered",
-          out["stopped"] and e.status()["ended"] == "owner" and not e.status()["resumable"])
+    check("End: ended, 'you ended it', no Resume offered, nothing said (a tone only)",
+          out["stopped"] and e.status()["ended"] == "owner" and not e.status()["resumable"]
+          and e.status()["ended_words"] == "You ended it." and e.status()["ended_say"] is None)
     check("ending again is harmless", e.stop()["stopped"] is False)
     e.start("phone")
     e.stop("app_lock", device="phone")
     check("App lock's end, worded for either device",
-          e.status()["ended_words"] == "App lock came on")
+          e.status()["ended_words"] == "App lock came on."
+          and e.status()["ended_say"] == "Live ended - App lock came on.")
 
 
 def t_no_live_without_a_real_voice_check():
     w = World(voice_ready=lambda d: L.NEEDS_VOICE)
     out = w.engine.start("phone")
-    check("no voice print / broad mode: Live does not start, in plain words",
-          out["ok"] is False and out["error"] == L.NEEDS_VOICE and not w.engine.status()["on"]
+    check("no voice print / broad mode: Live does not start, in plain words, with where "
+          "this phone trains the voice",
+          out["ok"] is False and out["error"] == L.needs_voice_words("phone")
+          and out["error"] == ("Jarvis Live didn't start: it needs your voice trained first "
+                               "- Settings, then Train my voice.")
+          and out["needs"] == "voice" and not w.engine.status()["on"]
           and w.warmed == 0, out)
+    check("...and on the PC, where the PC trains it",
+          w.engine.start("desktop")["error"] == ("Jarvis Live didn't start: it needs your "
+                                                  "voice trained first - Settings, then Voice."))
     out = w.engine.start("phone", by="voice")
     check("...by voice either", out["ok"] is False)
     # The real check, against jarvis_voice.
@@ -268,7 +278,8 @@ def t_warning_quiet_sleep_and_lock():
     st = e.status()
     check("other voices do NOT keep Live open: 90 s after the owner, it ends",
           st["state"] == "ended" and st["ended"] == "quiet"
-          and st["ended_words"] == "it was quiet" and st["resumable"], st)
+          and st["ended_words"] == "It was quiet for a while." and st["resumable"]
+          and st["ended_say"] == L.SAY_QUIET, st)
 
     w = World()
     e = w.engine
@@ -276,6 +287,42 @@ def t_warning_quiet_sleep_and_lock():
     w.clock.t += L.SLEEP_GAP_S + 1
     e.tick(loop=True)
     check("a gap in the checks (the PC slept): ended", e.status()["ended"] == "slept")
+
+    # B8 of the review (2026-09-28): a status read, or a clip, after the PC
+    # woke used to move the clock the sleep check compares with, so the gap
+    # was never seen.
+    w = World()
+    e = w.engine
+    e.loop_ticks = True         # as on the PC: the session's own loop ticks
+    e.start("phone")
+    e.mute(True, "phone")
+    w.clock.t += L.SLEEP_GAP_S + 30
+    L.ENGINE, old = e, L.ENGINE
+    try:
+        L.handle_get("")
+    finally:
+        L.ENGINE = old
+    check("the PC slept, and a status READ came first: still ended as slept (muted)",
+          e.status()["ended"] == "slept", e.status())
+    w = World()
+    e = w.engine
+    e.loop_ticks = True
+    e.start("phone")
+    w.clock.t += 20
+    e.tick()                    # a read, not the loop: does not move the loop's clock
+    w.clock.t += 20
+    e.tick()
+    check("...and reads during a sleep cannot hide it (unmuted: slept, not quiet)",
+          e.status()["ended"] == "slept", e.status())
+    w = World()
+    e = w.engine
+    e.loop_ticks = True
+    e.start("phone")
+    for _ in range(40):
+        w.clock.t += 1
+        e.tick(loop=True)
+    check("...while an awake loop ticking every second never looks like a sleep",
+          e.status()["on"], e.status())
 
     w = World()
     e = w.engine
@@ -308,7 +355,8 @@ def t_standby_quiet_and_focus():
     w.engine.tick()
     check("Standby that begins DURING Live ends it, 'Jarvis went on standby'",
           w.engine.status()["ended"] == "standby"
-          and w.engine.status()["ended_words"] == "Jarvis went on standby")
+          and w.engine.status()["ended_words"] == "Jarvis went on standby."
+          and w.engine.status()["ended_say"] == "Live ended - Jarvis is on standby.")
     w = World(mode="quiet")
     w.engine.start("phone")
     w.engine.tick()
@@ -322,8 +370,10 @@ def t_mute_and_calls():
     e.start("phone")
     out = e.mute(True, "phone")
     st = e.status()
-    check("Mute: on, muted, the sign says 'Muted', clips refused unlooked-at",
-          out["ok"] and st["on"] and st["muted"] and st["muted_words"] == "Muted"
+    check("Mute: on, muted, the sign says 'Mic off' and how to carry on, clips refused "
+          "unlooked-at",
+          out["ok"] and st["on"] and st["muted"]
+          and st["muted_words"] == "Mic off - Jarvis can't hear you. Use Mic on to carry on"
           and e.accepts("phone")["ok"] is False and e.accepts("phone")["check"] is False, st)
     w.clock.t += 600
     e.tick()
@@ -337,7 +387,8 @@ def t_mute_and_calls():
     e.start("phone")
     e.mute(True, "phone", why="call")
     check("a call: paused, 'Paused: you're on a call'",
-          e.status()["muted_words"] == "Paused: you're on a call")
+          e.status()["muted_words"] == ("Paused: you're on a call - Live carries on after "
+                                        "it, or use Listen anyway"))
     e.mute(False, "phone", why="call")
     check("the call ends: listening again", not e.status()["muted"])
     e.mute(True, "phone")
@@ -348,7 +399,8 @@ def t_mute_and_calls():
     e.mute(False, "phone")
     e.mute(True, "phone", why="mic_in_use")
     check("the PC: another program has the microphone",
-          e.status()["muted_words"] == "Paused: another program is using the microphone")
+          e.status()["muted_words"].startswith("Paused: another program is using the "
+                                               "microphone - Live carries on when it lets go"))
     check("muting the other device's Live does nothing",
           e.mute(True, "desktop")["ok"] is False)
 
@@ -366,7 +418,8 @@ def t_cards_pause_it():
     acc = e.accepts("phone")
     check("a card raised since Live started: the clip is not looked at, and the sign says why",
           not acc["ok"] and acc["state"] == "paused" and acc["code"] == "card"
-          and acc["words"] == "Waiting for your tap on the card" and not acc["check"], acc)
+          and acc["words"] == L.PAUSE_WORDS["card"] and "approve or deny" in acc["words"]
+          and not acc["check"], acc)
     w.clock.t += 600
     e.tick()
     check("the quiet clock stands still while the card waits (10 minutes)",
@@ -386,7 +439,7 @@ def t_cards_pause_it():
     acc = w.engine.accepts("phone")
     check("the card queue cannot be read: PAUSED, 'Paused: can't check for cards'",
           not acc["ok"] and acc["code"] == "cards_unknown"
-          and acc["words"] == "Paused: can't check for cards", acc)
+          and acc["words"].startswith("Paused: can't check for cards - "), acc)
 
 
 def t_other_voices():
@@ -409,7 +462,8 @@ def t_other_voices():
     st = e.status()
     check("ten in a row: paused, 'Paused: other voices'",
           st["state"] == "paused" and st["paused"] == "other_voices"
-          and st["pause_words"] == "Paused: other voices", st)
+          and st["pause_words"] == "Paused: other voices - just talk to carry on, or use "
+          "Carry on", st)
     acc = e.accepts("phone")
     check("...clips are then CHECKED only (never transcribed unless the owner's)",
           not acc["ok"] and acc["check"] is True, acc)
@@ -463,7 +517,52 @@ def t_crisis_turns():
           st["on"] and st["quiet_left_s"] is None, st)
     w.clock.t = e.ends_at
     e.tick()
-    check("...the time limit still does", e.status()["ended"] == "time")
+    check("...the time limit still does, in the end", e.status()["ended"] == "time")
+
+    # The owner's answer of 2026-09-28: after a crisis turn Live quietly
+    # gets more time - it does not end at its limit until at least
+    # CRISIS_MORE_S after the LAST crisis turn - and skips the warning.
+    w = World()
+    e = w.engine
+    e.start("phone")
+    t0 = w.clock.t
+    w.clock.t = t0 + 25 * 60
+    with mock.patch.object(L, "ENGINE", e):
+        jarvis_agent.note_crisis_turn("chatcmpl-live-2")
+    check("a crisis turn 5 minutes before the end: the end moves to 30 minutes after it",
+          e.ends_at == w.clock.t + L.CRISIS_MORE_S == t0 + 55 * 60, e.ends_at - t0)
+    events = len(w.events)
+    for m in range(26, 55):
+        w.clock.t = t0 + m * 60
+        e.tick()
+    st = e.status()
+    check("...no 'minutes left' warning at all, and it is still on at minute 54",
+          st["on"] and not st["ending_soon"]
+          and not any(d.get("ending_soon") for _, d in w.events[events:]), st)
+    w.clock.t = t0 + 50 * 60
+    with mock.patch.object(L, "ENGINE", e):
+        jarvis_agent.note_crisis_turn("chatcmpl-live-3")
+    w.clock.t = t0 + 79 * 60
+    e.tick()
+    check("...a second crisis turn: 30 minutes after THAT one", e.status()["on"]
+          and e.ends_at == t0 + 80 * 60)
+    e.extend(20)
+    check("...'20 more minutes' still adds, and never shortens it",
+          e.ends_at == t0 + 100 * 60, e.ends_at - t0)
+    check("...the owner can still end it at any time", e.stop()["stopped"]
+          and e.status()["ended"] == "owner")
+    w = World()
+    e = w.engine
+    e.start("phone", minutes=60)
+    w.clock.t += 2 * 60
+    with mock.patch.object(L, "ENGINE", e):
+        jarvis_agent.note_crisis_turn("chatcmpl-live-4")
+    check("a crisis turn with more than 30 minutes left leaves the limit as it is",
+          e.ends_at == w.clock.t - 2 * 60 + 60 * 60)
+    w.clock.t = e.ends_at - L.WARN_BEFORE_S
+    e.tick()
+    check("...and still no warning before it", not e.status()["ending_soon"])
+    check("the bound is 30 minutes", L.CRISIS_MORE_S == 30 * 60)
     src = (HERE / "jarvis_live.py").read_text(encoding="utf-8")
     code = re.sub(r'"""[\s\S]*?"""', "", src)
     code = re.sub(r"#.*", "", code)
@@ -471,6 +570,104 @@ def t_crisis_turns():
           "suggest, learner call)",
           not re.search(r"note_struggle|note_correction|suggest|jarvis_auto_learn|"
                         r"jarvis_intake|jarvis_memory", code))
+
+
+def t_review_fixes_2026_09_28():
+    """The review of 2026-09-28 (docs/studio-2026-09-28/live-review-*.md)."""
+    # B4: typing or tapping in Live keeps it open.
+    w = World()
+    e = w.engine
+    e.start("phone")
+    w.clock.t += L.QUIET_S - 5
+    L.ENGINE, old = e, L.ENGINE
+    try:
+        code, out = L.handle_post({"do": "active", "device": "phone"})
+        check("POST active: the owner typed or tapped - 200", code == 200 and out["ok"], out)
+        w.clock.t += 10
+        e.tick()
+        check("...and the quiet clock started again from it", e.status()["on"], e.status())
+        code, out = L.handle_post({"do": "active", "device": "desktop"})
+        check("...not for the other device's session", code == 409 and not out["ok"])
+        e.mute(True, "phone")
+        L.handle_post({"do": "active", "device": "phone"})
+        check("...and it never unmutes", e.status()["muted"])
+        e.stop()
+        code, out = L.handle_post({"do": "active"})
+        check("...nor starts anything", code == 409 and not e.status()["on"])
+    finally:
+        L.ENGINE = old
+    # The PC's App lock setting (the owner's decision of 2026-09-28).
+    w = World()
+    check("end_on: App lock's rule by default",
+          w.engine.status()["end_on"] == L.END_ON_APP_LOCK)
+    w.engine.end_on = lambda: L.END_ON_WINDOWS_LOCK
+    check("...or only when Windows locks, when the setting says so",
+          w.engine.status()["end_on"] == L.END_ON_WINDOWS_LOCK)
+    w.engine.end_on = lambda: "nonsense"
+    check("...and App lock's rule for anything else", w.engine.status()["end_on"]
+          == L.END_ON_APP_LOCK)
+    w.engine.end_on = lambda: (_ for _ in ()).throw(OSError("unreadable"))
+    check("...or when it cannot be read", w.engine.status()["end_on"] == L.END_ON_APP_LOCK)
+    with T.Temp():
+        check("the real reader: the default is App lock's rule",
+              L._default_end_on() == L.END_ON_APP_LOCK)
+        check("...tightening needs no card, loosening does",
+              not V.is_loosening("live_end", "live_end_app_lock")
+              and V.is_loosening("live_end", "live_end_windows_lock"))
+        try:
+            V.set_setting("live_end", "live_end_windows_lock")
+            loosened = True
+        except ValueError:
+            loosened = False
+        check("...the looser choice is refused without the card", not loosened
+              and L._default_end_on() == L.END_ON_APP_LOCK)
+        V.set_setting("live_end", "live_end_windows_lock", approved=True)
+        check("...and after the card, Live ends only when Windows locks",
+              L._default_end_on() == L.END_ON_WINDOWS_LOCK)
+        V.set_setting("live_end", "live_end_app_lock")
+        check("...and back at once", L._default_end_on() == L.END_ON_APP_LOCK)
+    import jarvis_asks_first as AF
+    check("'What asks first' lists starting Live: does it without asking",
+          AF.FIXED["fixed:live"][1] == AF.SAYS_NO_CARD
+          and any("fixed:live" in rows for _, rows in AF.GROUPS))
+    # The words.
+    check("no fixed line says 'desktop' (it is 'your PC')",
+          all("desktop" not in str(v).lower() for d in (L.SEEN, L.PAUSE_WORDS, L.MUTE_WORDS,
+                                                         L.END_WORDS, L.END_SAID, L.LINES)
+              for v in d.values()) and L.device_words("desktop") == "PC")
+    check("every pause and mute line says what happens next or what to do",
+          all(" - " in v for v in list(L.PAUSE_WORDS.values()) + list(L.MUTE_WORDS.values())))
+    check("ending sentences are whole sentences",
+          all(v[0].isupper() and v.endswith(".") for v in L.END_WORDS.values()))
+    check("nothing is said when the owner ended it, said that's all, or pressed Stop "
+          "everything, or when nobody is at the PC",
+          not ({"owner", "bye", "stop_all", "locked", "slept"} & set(L.END_SAID)))
+    w = World()
+    e = w.engine
+    e.start("phone")
+    w.clock.t += 5
+    e.stop()
+    w.clock.t += 7
+    st = e.status()
+    check("ended_ago_s: how long ago it ended, as the PC counts it",
+          st["ended_ago_s"] == 7 and e.status()["limits"]["ended_show_s"] == L.ENDED_SHOW_S, st)
+
+
+def t_owner_words_that_cannot_become_words_keep_live():
+    with T.Temp() as t:
+        sp = Speech(t)
+        sp.w.engine.start("phone")
+        with mock.patch.object(S, "_stt_engine", return_value=None):
+            real = V.verify
+            with mock.patch.object(V, "EcapaEmbedder", lambda: sp.small), \
+                    mock.patch.object(V, "strong_embedder", lambda *a: None), \
+                    mock.patch.object(V, "verify", real), \
+                    mock.patch.object(S, "_speech_span", return_value="skip"), \
+                    mock.patch.object(L, "ENGINE", sp.w.engine):
+                h = S.hear(T._clip("owner", 2.5), source="live", mic="phone").as_dict()
+        check("no speech-to-text model: not available, but the reply still says Live is on "
+              "(the phone used to take it as the end)",
+              h["available"] is False and h["live"] == "on" and sp.w.engine.status()["on"], h)
 
 
 def t_stop_everything():
@@ -507,16 +704,17 @@ def t_status_and_events_carry_no_words():
     e.stop()
     allowed = {"state", "on", "device", "session", "left_s", "minutes_left", "quiet_left_s",
                "quiet_warn", "paused", "pause_words", "muted", "muted_why", "muted_words",
-               "started_by", "hint", "hint_words", "ending_soon", "ended", "ended_words",
-               "ended_device", "resumable", "turns", "refused_in_a_row", "limits", "lines",
-               "seen", "camera"}
+               "started_by", "started_at", "hint", "hint_words", "ending_soon", "ended", "ended_words",
+               "ended_say", "ended_device", "ended_ago_s", "resumable", "turns",
+               "refused_in_a_row", "limits", "lines", "seen", "camera", "end_on"}
     check("every event is the status and nothing else", w.events and all(
         k == "live" and set(d) == allowed for k, d in w.events), w.events[:1])
     fixed = (set(L.PAUSE_WORDS.values()) | set(L.HINT_WORDS.values())
              | set(L.END_WORDS.values()) | set(L.MUTE_WORDS.values()) | {None})
     check("the words in it come from the fixed lists", all(
         d["pause_words"] in fixed and d["hint_words"] in fixed and d["ended_words"] in fixed
-        and d["muted_words"] in fixed for _, d in w.events))
+        and d["muted_words"] in fixed and d["ended_say"] in set(L.END_SAID.values()) | {None}
+        for _, d in w.events))
 
 
 def t_screen_pictures_only_at_the_pc():
@@ -536,8 +734,8 @@ def t_phrases():
         "Okay Jarvis, that's all for now": ("end", None),
         "Thanks, that's all.": ("end", None), "Thank you, that's all": ("end", None),
         "Thanks, bye": ("end", None), "No, that's all": ("end", None),
-        "That's it for now": ("end", None), "that's it": ("end", None),
-        "I'm done": ("end", None), "Cheers, bye!": ("end", None),
+        "That's it for now": ("end", None), "I'm done for now": ("end", None),
+        "I'm done with Live": ("end", None), "Cheers, bye!": ("end", None),
         "Goodbye Jarvis": ("end", None), "That'll be all": ("end", None),
         "Bye!": ("end", None), "stop live": ("end", None), "bye then": ("end", None),
         "More time.": ("extend", None), "20 more minutes": ("extend", 20),
@@ -549,7 +747,11 @@ def t_phrases():
     for text in ("stop", "Stop.", "let's talk about my day", "that's all I wanted to know "
                  "about the weather", "is that everything", "more", "what time is it", "",
                  None, "bye the way, what's the time", "keep going", "no more time",
-                 "is that it"):
+                 "is that it",
+                 # Everyday confirmations (bug 5 of the review, 2026-09-28):
+                 # these used to end Live mid-task.
+                 "that's it", "Right, that's it.", "Okay, I'm done.", "I'm done",
+                 "Perfect, all done.", "all done", "We're done", "Great, that is it"):
         check(f"{text!r} is not a Live phrase (plain 'stop' still only stops Jarvis "
               "talking)", L.phrase(text) is None, L.phrase(text))
     check("the end hint teaches a phrase long enough to pass the check",
@@ -614,7 +816,8 @@ def t_live_clips_need_a_session():
         sp.w.engine.start("desktop")
         h = sp.hear(mic="phone")
         check("a session on the OTHER device: refused, with where it is",
-              h["live"] == "off" and "on your desktop" in h["reason"] and sp.calls == [], h)
+              h["live"] == "off" and "on your PC" in h["reason"]
+              and "desktop" not in h["reason"] and sp.calls == [], h)
         h = sp.hear(mic="")
         check("no device named: refused", h["live"] == "off" and sp.calls == [], h)
         sp.w.engine.start("phone")
@@ -742,7 +945,8 @@ def t_live_phrases_on_the_speech_path():
         sp.w.engine.voice_ready = lambda d: L.NEEDS_VOICE
         h = sp.hear(source="push_to_talk", words="let's talk")
         check("no real voice check: 'let's talk' is refused in plain words, nothing said",
-              h["live"] == "refused" and h["reason"] == L.NEEDS_VOICE and h["live_say"] == ""
+              h["live"] == "refused" and h["reason"] == L.needs_voice_words("phone")
+              and h["live_say"] == ""
               and not sp.w.engine.status()["on"], h)
 
 
@@ -1208,7 +1412,8 @@ def t_the_module_keeps_to_itself():
           not re.search(r"write_text|write_bytes|open\(", code))
     check("nothing the model can call starts Live (no tool, no schedule kind)",
           "register_kind" not in code and "TOOLS" not in code)
-    check("it never approves anything", not re.search(r"approve|decide\(", code))
+    check("it never approves anything",
+          not re.search(r"\.approve|approve\(|approved=|decide\(", code))
 
 
 def t_the_step_event_names_the_camera():
@@ -1234,6 +1439,21 @@ def t_the_shared_table_is_current():
               or table["statuses"][c["status"]].get("muted")))
     check("no chips ever while a card waits",
           all(c["want"] == [] for c in table["chips"] if c["card_shown"]))
+    check("no chip starts with punctuation or a question word (the garbled buttons of the "
+          "review, 2026-09-28)",
+          all(re.match(r"[A-Z0-9]", w) and w.split()[0].lower() not in
+              ("which", "what", "is", "do", "shall", "i", "prefer", "one")
+              for c in table["chips"] for w in c["want"] if w not in ("Yes", "No")))
+    check("the ended sign never stays: at most 15 s, or while Resume Live can be pressed",
+          all(not c["want"]["show"] for c in table["sign"]
+              if c["ended_ago"] is not None and c["ended_ago"] > L.ENDED_SHOW_S
+              and not c["want"]["resume"]))
+    check("the one interrupt setting: an old switch turned off carries over as Don't "
+          "interrupt, and a saved choice always wins",
+          all(c["want"] == "off" for c in table["interrupt_choice"]
+              if c["saved"] not in ("voice", "tap", "off") and c["old_barge_in"] is False)
+          and all(c["want"] == c["saved"] for c in table["interrupt_choice"]
+                  if c["saved"] in ("voice", "tap", "off")))
     check("the side-talk marker is never spoken",
           all(c["side_talk"] == L.is_side_talk(c["answer"]) for c in table["side_talk"]))
     check("the camera switch never shows on the desktop, nor with the camera not ready",

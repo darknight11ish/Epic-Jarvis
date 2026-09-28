@@ -54,13 +54,29 @@ await check("the fixed words are the PC's (title, lines, seen, pauses, interrupt
     { askAfterMs: T.turn.ask_after_ms, maxPauseMs: T.turn.max_pause_ms });
   assert.equal(R.DUCK_VOLUME, T.duck_volume);
   assert.equal(R.MAX_CHIPS, T.max_chips);
+  assert.deepEqual({ ...R.DEVICE_WORDS }, T.device_words);
+  assert.equal(R.CARD_WORDS, T.pause_words.card);
+  assert.equal(R.MOVED_SAID, T.end_said.other_device);
+  assert.deepEqual({ ...R.BUTTONS }, {
+    endLive: T.buttons.end_live, micOff: T.buttons.mic_off, micOn: T.buttons.mic_on,
+    listenAnyway: T.buttons.listen_anyway, moreTime: T.buttons.more_time, stopTalking: T.buttons.stop_talking,
+  });
+  assert.equal(R.MORE_TIME_WITHIN_MIN, T.more_time_within_min);
+  assert.equal(R.ENDED_SHOW_S, T.limits.ended_show_s);
+  assert.equal(R.RESUME_S, T.limits.resume_s);
+  assert.equal(R.CARD_SLACK_S, T.card_slack_s);
+  assert.deepEqual(R.END_TONE.map((t) => [...t]), T.end_tone);
+  assert.ok(T.needs_voice.startsWith(R.NEEDS_VOICE), "the PC's no-voice refusal is recognised");
+  assert.ok(`${R.NEEDS_VOICE} - ${T.needs_voice_where.desktop}.`.startsWith(R.NEEDS_VOICE));
 });
 
 await check(`the sign: all ${T.sign.length} cases`, () => {
   for (const c of T.sign) {
-    const got = R.liveSign(S[c.status], c.me, { stale: c.stale, thinking: c.thinking, short: c.short });
-    const { carryOn, ...rest } = got;
-    assert.deepEqual({ ...rest, carry_on: carryOn }, c.want, c.name);
+    const got = R.liveSign(S[c.status], c.me, {
+      stale: c.stale, thinking: c.thinking, short: c.short, cardShown: c.card_shown, endedAgo: c.ended_ago,
+    });
+    const { carryOn, moreTime, showCard, ...rest } = got;
+    assert.deepEqual({ ...rest, carry_on: carryOn, more_time: moreTime, show_card: showCard }, c.want, c.name);
   }
 });
 
@@ -120,17 +136,35 @@ await check(`the camera switch: never on the PC, off until the PC says ready (${
   assert.equal(R.cameraShown(S.desktop_camera_ready, "desktop"), false);
 });
 
-await check("the interrupt setting: stored per PC, default by voice, anything odd is by voice", () => {
+await check(`"Live is on your PC - move it here?", and which cards hold Live (${T.card_in_session.length} cases)`, () => {
+  for (const c of T.move) assert.equal(R.moveWords(c.device), c.want, c.device);
+  for (const c of T.card_in_session) assert.equal(R.cardInSession(c.created, S[c.status]), c.want, c.name);
+});
+
+await check(`the one interrupt setting: every carry-over case (${T.interrupt_choice.length})`, () => {
+  for (const c of T.interrupt_choice) {
+    assert.equal(R.interruptChoice(c.saved, c.old_barge_in, c.old_live, c.echo), c.want, JSON.stringify(c));
+  }
+});
+
+await check("the interrupt setting: stored per PC; the older two carry over; anything odd is by voice", () => {
   const box = new Map();
   const storage = { getItem: (k) => (box.has(k) ? box.get(k) : null), setItem: (k, v) => box.set(k, v) };
   assert.equal(R.loadInterrupt(storage), "voice");
-  R.saveInterrupt("tap", storage);
-  assert.equal(R.loadInterrupt(storage), "tap");
+  box.set(R.OLD_BARGE_IN_KEY, "off");
+  assert.equal(R.loadInterrupt(storage), "off", "the old switch turned off: Don't interrupt");
+  box.delete(R.OLD_BARGE_IN_KEY);
+  box.set(R.OLD_LIVE_INTERRUPT_KEY, "tap");
+  assert.equal(R.loadInterrupt(storage), "tap", "Live's tap only: By button only");
+  R.saveInterrupt("voice", storage);
+  assert.equal(R.loadInterrupt(storage), "voice", "a choice made now wins");
+  R.saveInterrupt("off", storage);
+  assert.equal(R.loadInterrupt(storage), "off");
   R.saveInterrupt("loud", storage);
   assert.equal(R.loadInterrupt(storage), "voice");
   const broken = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
   assert.equal(R.loadInterrupt(broken), "voice");
-  R.saveInterrupt("tap", broken);
+  assert.equal(R.saveInterrupt("tap", broken), false);
 });
 
 /* ── 2. The wiring ───────────────────────────────────────────────────── */
@@ -190,7 +224,7 @@ await check("Settings -> Voice: the Live trust setting's three choices, the same
   assert.deepEqual(VT.HANDS_FREE_LIVE.map((c) => c.id),
     ["live_trust_fully", "live_button_start_only", "live_like_hey_jarvis"]);
   assert.deepEqual(VT.HANDS_FREE_LIVE.map(VT.choiceText),
-    ["Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with Hey Jarvis"]);
+    ["Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with \"Hey Jarvis\""]);
   // Which way is looser depends on the choice now; unknown counts as the strictest.
   assert.equal(VT.loosens("hands_free_live", "live_button_start_only", "live_trust_fully"), false);
   assert.equal(VT.loosens("hands_free_live", "live_button_start_only", "live_like_hey_jarvis"), true);
@@ -203,10 +237,24 @@ await check("Settings -> Voice: the Live trust setting's three choices, the same
   for (const c of VT.HANDS_FREE_LIVE) assert.ok(kt.includes(c.detail), c.detail);
   assert.ok(kt.includes(VT.LIVE_ONLY_WHEN_STRICT_NOTE));
   const html = read("src/settings.html");
-  assert.ok(html.includes('id="vt-live"') && html.includes('id="vt-live-interrupt"'));
+  assert.ok(html.includes('id="vt-live"') && html.includes('id="vt-live-end"'));
+  assert.ok(html.includes("How far Jarvis Live is trusted"), "the heading says what it is");
+  // The ONE interrupt setting sits where the old switch was, outside the
+  // part that needs the PC to answer (it is this PC's own), and not above
+  // the "looser shows you an approval card" footnote.
+  assert.ok(!html.includes("vt-live-interrupt"), "no second interrupt setting");
+  const body = html.slice(html.indexOf('id="voice-body"'));
+  const at = html.indexOf('id="voice-interrupt"');
+  assert.ok(at > 0 && html.indexOf('id="vt-setting-status"') < at, "after the PC's settings");
+  assert.ok(body.length > 0);
   // The interrupt setting's words are the phone's too.
-  const rules = read("../jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveRules.kt");
-  for (const c of R.INTERRUPT) assert.ok(rules.includes(`"${c.label}"`) && rules.includes(c.detail.slice(0, 40)), c.id);
+  const rules = read("../jarvis-client/app/src/main/java/com/jarvis/client/voice/LiveRules.kt")
+    .replace(/"\s*\+\s*\n\s*"/g, "").replace(/\\"/g, '"');
+  for (const c of R.INTERRUPT) assert.ok(rules.includes(`"${c.label}"`) && rules.includes(c.detail), c.id);
+  // The PC's own setting: when Jarvis Live ends on this PC with App lock on.
+  assert.deepEqual(VT.LIVE_END.map((c) => c.id), ["live_end_app_lock", "live_end_windows_lock"]);
+  assert.equal(VT.loosens("live_end", "live_end_windows_lock"), true);
+  assert.equal(VT.loosens("live_end", "live_end_app_lock"), false);
 });
 
 /* ── 3. The Jarvis bar ───────────────────────────────────────────────── */
@@ -237,13 +285,17 @@ if (K) {
   };
   const hear = (page, heard) => page.evaluate((h) => window.__emit("voice-heard", h), heard);
 
-  await check("the sign in the bar: title, minutes, Stop and Mute; the Live button pressed", async () => {
+  await check("the sign in the bar: title, minutes, End Live and Mic off, the end hint; the Live button pressed", async () => {
     const page = await bar([]);
     assert.equal(await page.isHidden("#jarvis-live-strip"), false);
     assert.equal((await page.textContent("#jarvis-live-title")).trim(), "Jarvis Live · 30 min left");
-    assert.equal((await page.textContent("#jarvis-live-end")).trim(), "Stop");
-    assert.equal((await page.textContent("#jarvis-live-mute")).trim(), "Mute");
+    assert.equal((await page.textContent("#jarvis-live-end")).trim(), "End Live");
+    assert.equal((await page.textContent("#jarvis-live-mute")).trim(), "Mic off");
     assert.equal(await page.getAttribute("#jarvis-live-toggle", "aria-pressed"), "true");
+    assert.equal(await page.getAttribute("#jarvis-live-toggle", "aria-label"), "Jarvis Live", "one name");
+    assert.equal((await page.textContent("#jarvis-live-toggle")).trim(), "Live", "a visible label");
+    assert.ok((await page.textContent("#jarvis-live-hint")).length > 0, "the end hint or the first-time line");
+    assert.equal(await page.isHidden("#jarvis-live-more"), true, "20 more minutes only in the last five");
     await page.click("#jarvis-live-end");
     await page.click("#jarvis-live-mute");
     const calls = await page.evaluate(() => (window.__calls || []).map((c) => c[0]));
@@ -341,11 +393,12 @@ if (K) {
     await page.close();
   });
 
-  await check("hey Jarvis here while Live is on the phone: the offer to move it, one tap", async () => {
+  await check("hey Jarvis here while Live is on the phone: the offer to move it, one click", async () => {
     const page = await K.open(browser, base, "index.html", { chatReplies: [] });
     await hear(page, { ...K.HEARD_OWNER, source: "wake_word", text: "", wakeHeard: false, liveElsewhere: "phone" });
     await page.waitForTimeout(100);
-    assert.equal((await page.textContent("#jarvis-live-move")).trim(), "Live is on your phone - move it here?");
+    assert.equal((await page.textContent("#jarvis-live-detail")).trim(), "Live is on your phone - move it here?");
+    assert.equal((await page.textContent("#jarvis-live-move")).trim(), "Move it here");
     await page.click("#jarvis-live-move");
     const calls = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "live_start"));
     assert.deepEqual(calls[0][1], { by: "button" });
@@ -353,19 +406,144 @@ if (K) {
     await page.close();
   });
 
-  await check("a card on screen: the microphone is held closed, speech waits, and it is let go after", async () => {
+  await check("a card that was waiting from BEFORE Live does not hold it (the PC's rule, the review's B8)", async () => {
     const page = await K.open(browser, base, "index.html", { pending: [K.APPROVAL_PLAIN], chatReplies: [] });
     await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), ON);
     await page.waitForTimeout(100);
+    const holds = await page.evaluate(() =>
+      (window.__calls || []).filter((c) => c[0] === "live_hold" && c[1].what === "card"));
+    assert.deepEqual(holds, []);
+    await page.close();
+  });
+
+  await check("a card of this session on screen: the microphone is held closed, the sign says so, speech waits, and it is let go after", async () => {
+    const card = { ...K.APPROVAL_PLAIN, created: ON.started_at + 5 };
+    const page = await K.open(browser, base, "index.html", { pending: [card], chatReplies: [] });
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), ON);
+    await page.waitForTimeout(100);
     const holds = () => page.evaluate(() =>
-      (window.__calls || []).filter((c) => c[0] === "live_hold").map((c) => `${c[1].what}:${c[1].on}`));
+      (window.__calls || []).filter((c) => c[0] === "live_hold" && c[1].what === "card").map((c) => `${c[1].what}:${c[1].on}`));
     assert.deepEqual(await holds(), ["card:true"]);
+    assert.equal((await page.textContent("#jarvis-live-detail")).trim(), R.CARD_WORDS);
+    assert.equal(await page.isHidden("#jarvis-live-show-card"), false);
     // Cards are decided by tapping - here, Deny.
     await page.locator("#approval-deny").click();
     await page.waitForTimeout(200);
     await page.evaluate(() => window.__emit("approvals-changed", { count: 0, items: [] }));
     await page.waitForTimeout(300);
     assert.deepEqual(await holds(), ["card:true", "card:false"]);
+    await page.close();
+  });
+
+  await check("side talk after an answer: the answer (and a crisis panel) stays on screen, the sign says (not for Jarvis)", async () => {
+    const page = await bar([[delta("It is sunny today.")], [delta("[not for me]")]]);
+    await hear(page, { ...HEARD, text: "what's the weather" });
+    await page.waitForTimeout(500);
+    await hear(page, { ...HEARD, text: "pass me the salt please" });
+    await page.waitForTimeout(500);
+    assert.ok((await page.textContent("#answer")).includes("It is sunny today."), "the answer stayed");
+    assert.ok(!(await page.textContent("#answer")).includes("not for"), "no marker in the card");
+    assert.equal((await page.textContent("#jarvis-live-detail")).trim(), R.SEEN.not_for_me);
+    assert.deepEqual(await speakCalls(page), ["It is sunny today."]);
+    await page.close();
+  });
+
+  await check("Esc during Live hides the bar and keeps the conversation (the review's #1)", async () => {
+    const page = await bar([[delta("Sunny.")], [delta("Rain.")]]);
+    await hear(page, { ...HEARD, text: "what's the weather" });
+    await page.waitForTimeout(500);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(200);
+    const calls = await page.evaluate(() => (window.__calls || []).map((c) => c[0]));
+    assert.ok(calls.includes("hide_quickbar"));
+    await hear(page, { ...HEARD, text: "and tomorrow" });
+    await page.waitForTimeout(500);
+    const sent = await chats(page);
+    assert.equal(sent.length, 2);
+    assert.ok(JSON.stringify(sent[1].messages).includes("what's the weather"), "the conversation carried on");
+    await page.close();
+  });
+
+  await check("typing in Live keeps it open, and a Live turn brings the bar on screen quietly", async () => {
+    const page = await bar([[delta("Sunny.")], [delta("Fine.")]]);
+    await hear(page, { ...HEARD, text: "what's the weather" });
+    await page.waitForTimeout(400);
+    await page.fill("#prompt", "thanks");
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(400);
+    const acts = await page.evaluate(() =>
+      (window.__calls || []).filter((c) => c[0] === "live_act").map((c) => c[1].action));
+    assert.ok(acts.includes("show") && acts.includes("active"), JSON.stringify(acts));
+    await page.close();
+  });
+
+  await check("20 more minutes in the last five; the phone's Live shows here with Move it here", async () => {
+    const page = await K.open(browser, base, "index.html", { chatReplies: [] });
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), S.desktop_4_min);
+    await page.waitForTimeout(50);
+    assert.equal(await page.isHidden("#jarvis-live-more"), false);
+    await page.click("#jarvis-live-more");
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), S.phone_on);
+    await page.waitForTimeout(50);
+    assert.equal((await page.textContent("#jarvis-live-title")).trim(), "Jarvis Live is on your phone");
+    assert.equal(await page.isHidden("#jarvis-live-move"), false);
+    assert.equal(await page.isHidden("#jarvis-live-end"), true);
+    const acts = await page.evaluate(() =>
+      (window.__calls || []).filter((c) => c[0] === "live_act").map((c) => c[1]));
+    assert.deepEqual(acts[0], { action: "extend", minutes: 20 });
+    await page.close();
+  });
+
+  await check("Live running on the phone shows in the bar from the PC's event, with Move it here", async () => {
+    const page = await K.open(browser, base, "index.html", { chatReplies: [] });
+    await page.evaluate((st) => window.__emit("jarvis-event", { kind: "live", id: 7, data: st }), S.phone_on);
+    await page.waitForTimeout(100);
+    assert.equal(await page.isHidden("#jarvis-live-strip"), false);
+    assert.equal((await page.textContent("#jarvis-live-title")).trim(), "Jarvis Live is on your phone");
+    await page.click("#jarvis-live-move");
+    const calls = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "live_start"));
+    assert.equal(calls.length, 1);
+    await page.close();
+  });
+
+  await check("ended: the strip says why for 15 s and goes; a quiet end read on opening offers Resume Live", async () => {
+    const page = await K.open(browser, base, "index.html", { chatReplies: [] });
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), ON);
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), S.desktop_stopped);
+    await page.waitForTimeout(50);
+    assert.equal((await page.textContent("#jarvis-live-detail")).trim(), "You ended it.");
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }),
+      { ...S.desktop_stopped, session: 99, ended_ago_s: 16 });
+    await page.waitForTimeout(50);
+    assert.equal(await page.isHidden("#jarvis-live-strip"), true, "an old end is not shown");
+    const quiet = { ...S.phone_quiet, ended_device: "desktop", session: 100, ended_ago_s: 120 };
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), quiet);
+    await page.waitForTimeout(50);
+    assert.equal(await page.isHidden("#jarvis-live-resume"), false, "Resume Live, from the PC's own count");
+    await page.close();
+  });
+
+  await check("a refused start says why in the strip, with a button to Settings, then Voice", async () => {
+    const page = await K.open(browser, base, "index.html", { chatReplies: [] });
+    await page.evaluate((why) => {
+      const real = window.__TAURI__.core.invoke;
+      window.__TAURI__.core.invoke = async (cmd, args) => {
+        if (cmd === "live_start") {
+          window.__calls.push([cmd, args]);
+          throw new Error(why);
+        }
+        return real(cmd, args);
+      };
+    }, "Jarvis Live didn't start: it needs your voice trained first - Settings, then Voice.");
+    await page.click("#jarvis-live-toggle");
+    await page.waitForTimeout(150);
+    const detail = (await page.textContent("#jarvis-live-detail")).trim();
+    assert.ok(detail.startsWith(R.NEEDS_VOICE), detail);
+    assert.equal(await page.isHidden("#jarvis-live-fix"), false);
+    assert.equal(await page.isHidden("#answer-problem"), true, 'not "Jarvis could not answer"');
+    await page.click("#jarvis-live-fix");
+    const opened = await page.evaluate(() => (window.__calls || []).some((c) => c[0] === "open_fix_place"));
+    assert.ok(opened);
     await page.close();
   });
 

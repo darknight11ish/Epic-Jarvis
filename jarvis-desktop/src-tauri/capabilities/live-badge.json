@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/windows-schema.json",
   "identifier": "live-badge",
-  "description": "The Jarvis Live badge - a small always-on-top sign at the top of the screen while Jarvis Live is on on this PC (live.rs, live-badge.html). It shows only fixed words and minutes from the PC's jarvis_live.py (never anything anyone said), and its buttons: Mute or Unmute, Stop, Carry on and Resume Live. It holds the live set so the owner can always end Live from the sign that says it is on, whatever window is in front and whether or not App lock has hidden the Jarvis bar. No approvals, no chat, no voice capture: the microphone is the listener's in Rust, and the badge cannot open it.",
+  "description": "The Jarvis Live badge - a small always-on-top sign at the top of the screen while Jarvis Live is on on this PC (live.rs, live-badge.html). It shows only fixed words and minutes from the PC's jarvis_live.py (never anything anyone said), and its buttons: Mic off / Mic on / Listen anyway, End Live, Carry on, Resume Live, 20 more minutes, Show the card (opens the Jarvis bar at the card, behind App lock like any opening of the bar) - and clicking its words opens the Jarvis bar. It holds the live set so the owner can always end Live from the sign that says it is on, whatever window is in front and whether or not App lock has hidden the Jarvis bar. It reads the theme (theme-read) and follows the text size (its own webview zoom and window size). No approvals, no chat, no voice capture: the microphone is the listener's in Rust, and the badge cannot open it.",
   "windows": [
     "live-badge"
   ],
@@ -10,6 +10,9 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-size",
+    "core:webview:allow-set-webview-zoom",
+    "theme-read",
     "live"
   ]
 }

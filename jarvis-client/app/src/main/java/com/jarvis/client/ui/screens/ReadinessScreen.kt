@@ -50,6 +50,7 @@ import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.HeardSound
+import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.OneMoment
 import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceTraining
@@ -121,11 +122,15 @@ fun ReadinessScreen(
     wakeWordBusy: Boolean = false,
     /** What went wrong, or what the desktop said afterwards. */
     wakeWordNotice: String? = null,
-    /** "Interrupt Jarvis while it talks" on this phone (BargeIn). Null hides the switch. */
-    bargeIn: Boolean? = null,
+    /**
+     * "Interrupting Jarvis" on this phone (LiveRules.INTERRUPT): ONE setting
+     * for Jarvis Live and ordinary replies (the owner's answer of
+     * 2026-09-28). Null hides it.
+     */
+    interrupt: String? = null,
     /** Whether this phone has an echo canceller (the default follows it). */
     bargeInEchoCanceller: Boolean = false,
-    onBargeIn: ((Boolean) -> Unit)? = null,
+    onInterrupt: ((String) -> Unit)? = null,
     /** "Say 'One moment' if I'm kept waiting" on this phone (OneMoment). Null hides the switch. */
     oneMoment: Boolean? = null,
     onOneMoment: ((Boolean) -> Unit)? = null,
@@ -255,9 +260,9 @@ fun ReadinessScreen(
                     pending = wakeWordPending,
                     phone = phoneListening,
                     onPhone = onPhoneListening,
-                    bargeIn = bargeIn,
+                    interrupt = interrupt,
                     bargeInEchoCanceller = bargeInEchoCanceller,
-                    onBargeIn = onBargeIn,
+                    onInterrupt = onInterrupt,
                     oneMoment = oneMoment,
                     onOneMoment = onOneMoment,
                     heardSound = heardSound,
@@ -550,9 +555,9 @@ private fun WakeWordCard(
     pending: Boolean,
     phone: WakeListen,
     onPhone: ((Boolean) -> Unit)?,
-    bargeIn: Boolean? = null,
+    interrupt: String? = null,
     bargeInEchoCanceller: Boolean = false,
-    onBargeIn: ((Boolean) -> Unit)? = null,
+    onInterrupt: ((String) -> Unit)? = null,
     oneMoment: Boolean? = null,
     onOneMoment: ((Boolean) -> Unit)? = null,
     heardSound: Boolean? = null,
@@ -653,26 +658,37 @@ private fun WakeWordCard(
             )
         }
 
-        if (bargeIn != null && onBargeIn != null && state == WakeWord.ON) {
+        // "Interrupting Jarvis": ONE setting, for "hey Jarvis" replies and
+        // Jarvis Live alike (the owner's answer of 2026-09-28 merged "Interrupt
+        // Jarvis while it talks" and "Interrupting Jarvis in Live"). Shown
+        // whether or not "hey Jarvis" is on - it matters in Live too. This
+        // phone's own; no card either way.
+        if (interrupt != null && onInterrupt != null) {
             Gap(12)
             Text(
-                "Interrupt Jarvis while it talks",
+                LiveRules.INTERRUPT_TITLE,
                 style = MaterialTheme.typography.labelLarge,
                 color = chrome.textHi,
             )
-            Gap(4)
-            Text(
-                BargeIn.describe(bargeIn, bargeInEchoCanceller),
-                style = MaterialTheme.typography.bodySmall,
-                color = chrome.textMid,
-            )
-            Gap(6)
-            Secondary(
-                text = if (bargeIn) "Stop listening while Jarvis talks" else "Listen while Jarvis talks",
-                enabled = true,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { onBargeIn(!bargeIn) },
-            )
+            LiveRules.INTERRUPT.forEach { c ->
+                Gap(6)
+                OptionChip(
+                    label = if (c.recommended) "${c.label} (recommended)" else c.label,
+                    isSelected = interrupt == c.id,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onInterrupt(c.id) },
+                )
+                Gap(4)
+                Text(c.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            }
+            if (interrupt == LiveRules.INTERRUPT_VOICE && !bargeInEchoCanceller) {
+                Gap(4)
+                Text(
+                    BargeIn.describe(true, echoCancellerAvailable = false),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.warnInk,
+                )
+            }
         }
 
         // Not tied to "hey Jarvis": it is about any spoken question, the

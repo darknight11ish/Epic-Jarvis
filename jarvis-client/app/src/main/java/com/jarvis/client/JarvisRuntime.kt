@@ -49,6 +49,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import com.jarvis.client.net.CustomVoices
@@ -59,6 +60,7 @@ import com.jarvis.client.voice.VoiceSession
 import com.jarvis.client.voice.VoiceTraining
 import com.jarvis.client.voice.liveIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -594,11 +596,15 @@ object JarvisRuntime {
                 }
             },
             // Jarvis Live (voice/LiveRules.kt): lowered, not paused, while
-            // the PC checks another voice; no tap buttons while a card is
-            // on screen; and every reply that is about Live, not a question.
+            // the PC checks another voice; no tap buttons while a card of
+            // THIS session waits (LiveRules.cardInSession - an older card
+            // used to hide them for good); every reply that is about Live,
+            // not a question; and the first sound of a Live answer.
             liveOn = { liveOnHere() },
-            cardShown = { _pending.value.isNotEmpty() },
+            cardShown = { liveCardHolds() },
             onLive = { heard -> onLiveReply(heard) },
+            onLiveSound = { liveAnswerSounded() },
+            onLiveSideTalk = { liveSideTalk() },
         ) { text, live, onRoute, onStatus, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
@@ -628,6 +634,9 @@ object JarvisRuntime {
         updates = UpdateChecker(clientSettings)
         chat = chatSession
         voice = voiceSession
+        // Jarvis Live: a call ringing or starting while Jarvis talks takes
+        // the audio focus - Jarvis stops, and Live pauses for the call.
+        voiceSession.speaker.onFocusLost = { liveFocusLost() }
         stream = EventStream(jarvisApi)
         started = true
 
@@ -3604,8 +3613,8 @@ object JarvisRuntime {
     // a back-and-forth voice conversation the owner starts and stops. The
     // session is the PC's (GET/POST /api/voice/live); the phone's microphone
     // is service/LiveService.kt, its rules voice/LiveRules.kt, its screen
-    // ui/screens/LiveScreen.kt. While Live is on here, "hey Jarvis"
-    // listening lets go of the microphone (WakeWordService).
+    // ui/screens/LiveScreen.kt (and a strip on Home). While Live is on here,
+    // "hey Jarvis" listening lets go of the microphone (WakeWordService).
 
     private val _liveStatus = MutableStateFlow<JsonObject?>(null)
 
@@ -3613,35 +3622,97 @@ object JarvisRuntime {
     val liveStatus: StateFlow<JsonObject?> = _liveStatus.asStateFlow()
 
     /** "Heard you - thinking" or "Didn't catch that - say a bit more", for a moment. */
-    data class LiveFlash(val thinking: Boolean = false, val short: Boolean = false, val until: Long = 0L)
+    data class LiveFlash(
+        val thinking: Boolean = false,
+        val short: Boolean = false,
+        val trouble: Boolean = false,
+        val sideTalk: Boolean = false,
+        val until: Long = 0L,
+    )
 
     private val _liveFlash = MutableStateFlow(LiveFlash())
     val liveFlash: StateFlow<LiveFlash> = _liveFlash.asStateFlow()
 
     private val _liveMove = MutableStateFlow("")
 
-    /** "Live is on your desktop - move it here?": the other device's name, or "". */
+    /** "Live is on your PC - move it here?": the other device's name ("desktop"), or "". */
     val liveMove: StateFlow<String> = _liveMove.asStateFlow()
 
-    private val _liveNotice = MutableStateFlow<String?>(null)
+    /** Why Live could not start, or the microphone stopped - in words - and whether it is "train your voice". */
+    data class LiveNotice(val text: String, val needsVoice: Boolean = false)
 
-    /** Why Live could not start, or the microphone stopped - in words. */
-    val liveNoticeText: StateFlow<String?> = _liveNotice.asStateFlow()
+    private val _liveNotice = MutableStateFlow<LiveNotice?>(null)
+    val liveNoticeText: StateFlow<LiveNotice?> = _liveNotice.asStateFlow()
+
+    /** When the status was last read, and how long ago (by the PC) it had ended then. */
+    @Volatile private var liveEndedBase: Pair<Long, Int>? = null
 
     fun liveNotice(text: String?) {
-        _liveNotice.value = text
+        _liveNotice.value = text?.let { LiveNotice(it, it.startsWith(com.jarvis.client.voice.LiveRules.NEEDS_VOICE)) }
+        liveNoticeJob?.cancel()
+        if (text != null) {
+            // Never lingers (the review's C8): gone after half a minute.
+            liveNoticeJob = scope.launch {
+                delay(LIVE_NOTICE_MS)
+                _liveNotice.value = null
+            }
+        }
     }
 
+    @Volatile private var liveNoticeJob: Job? = null
+    @Volatile private var liveMoveJob: Job? = null
     @Volatile private var liveWatch: Job? = null
+    @Volatile private var liveWarnJob: Job? = null
+    @Volatile private var liveStopRetry: Job? = null
     @Volatile private var liveCallAsked: Boolean? = null
     @Volatile private var liveCallAskedAt = 0L
+
+    /** The owner pressed "Listen anyway" during a call: not muted again until the call is seen to end. */
+    @Volatile private var liveCallOverridden = false
+
+    /** "Resume Live" / "Move it here": the same chat carries on (no new conversation). */
+    @Volatile private var liveResuming = false
 
     /** Is Live on on THIS phone? */
     fun liveOnHere(): Boolean = com.jarvis.client.voice.LiveRules.onHere(_liveStatus.value)
 
+    /**
+     * Does a card this phone holds keep Live paused (microphone closed, no
+     * tap buttons)? Only one raised in THIS Live session - the PC's own rule
+     * (LiveRules.cardInSession; the review's bug 3 and B8: the service never
+     * passed it, and every old card hid the tap buttons for good).
+     */
+    fun liveCardHolds(): Boolean {
+        if (!liveOnHere()) return false
+        val st = _liveStatus.value
+        return _pending.value.any { com.jarvis.client.voice.LiveRules.cardInSession(it.createdAt, st) }
+    }
+
+    /** Seconds since Live ended, counted on from the PC's `ended_ago_s`; null when it has not. */
+    fun liveEndedAgo(): Int? {
+        val base = liveEndedBase ?: return null
+        return base.second + ((SystemClock.elapsedRealtime() - base.first) / 1000L).toInt()
+    }
+
+    private fun takeLiveStatus(st: JsonObject?) {
+        val before = _liveStatus.value
+        _liveStatus.value = st
+        val ended = (st?.get("state") as? JsonPrimitive)?.content == "ended"
+        if (!ended) {
+            liveEndedBase = null
+            return
+        }
+        val sameEnd = (before?.get("state") as? JsonPrimitive)?.content == "ended" &&
+            before?.get("session") == st?.get("session")
+        if (!sameEnd || liveEndedBase == null) {
+            val ago = (st?.get("ended_ago_s") as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+            liveEndedBase = SystemClock.elapsedRealtime() to ago
+        }
+    }
+
     /** `GET /api/voice/live`. A read: never held. */
     suspend fun liveRead() {
-        api.liveStatus().onOk { _liveStatus.value = it }
+        api.liveStatus().onOk { takeLiveStatus(it) }
     }
 
     /** The Live screen opened: read the session, and listen again if it is on here. */
@@ -3654,45 +3725,101 @@ object JarvisRuntime {
      * Start Jarvis Live on this phone. No card - the owner's own act - but
      * held on a stale link (rule 4). The PC refuses it until the owner's
      * voice is trained (the voice check runs on every clip), and says so.
-     * Null when it started, or why not in words.
+     * Null when it started, or why not in words. [resume]: "Resume Live" or
+     * "Move it here" - the same chat carries on; otherwise a new Live session
+     * is a new chat (docs/LIVE-DESIGN.md section 3.7; the review's C4).
      */
-    suspend fun liveStart(): String? {
+    suspend fun liveStart(resume: Boolean = false): String? {
         actionBlocker()?.let { return it }
-        _liveNotice.value = null
+        liveNotice(null)
         return when (val r = api.liveWrite(com.jarvis.client.voice.LiveRules.startBody())) {
             is ApiResult.Ok -> {
                 val (code, body) = r.value
                 if (code !in 200..299 || body?.get("ok")?.let { (it as? JsonPrimitive)?.content } != "true") {
-                    liveError(body, code)
+                    liveError(body, code).also { liveNotice(it) }
                 } else {
-                    (body["status"] as? JsonObject)?.let { _liveStatus.value = it }
-                    _liveMove.value = ""
-                    beginLiveHere()
-                    val say = (body["say"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
-                    scope.launch { voice.sayLine(say) }
-                    null
+                    if (!resume) chat.newConversation()
+                    (body["status"] as? JsonObject)?.let { takeLiveStatus(it) }
+                    clearLiveMove()
+                    // The start line only once the microphone service is in
+                    // the foreground: Android 14 refuses one started from the
+                    // background, and "I'm listening." must not be a promise
+                    // nobody keeps (the review's B7).
+                    if (beginLiveHere() && awaitLiveListening()) {
+                        val say = (body["say"] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+                        scope.launch { voice.sayLine(say) }
+                        null
+                    } else {
+                        liveStop("owner")
+                        LIVE_NOT_ALLOWED.also { liveNotice(it) }
+                    }
                 }
             }
-            is ApiResult.Failed -> liveFailed(r.error)
+            is ApiResult.Failed -> liveFailed(r.error).also { liveNotice(it) }
         }
     }
 
-    /** End Jarvis Live. Never held, never a card. The microphone closes here first. */
+    /**
+     * End Jarvis Live. Never held, never a card. The microphone closes here
+     * first, and the phone shows Live as ended at once; if the PC cannot be
+     * reached, the end is sent again in the background until it is (the
+     * review's B1 and B2: an End could be lost, and a bad link left the
+     * screen saying Live was on).
+     */
     suspend fun liveStop(why: String = "owner"): String? {
         endLiveHere()
         voice.endLiveTurn()
-        return when (val r = api.liveWrite(com.jarvis.client.voice.LiveRules.stopBody(why))) {
+        if (liveOnHere()) takeLiveStatus(endedLocally(why))
+        val body = com.jarvis.client.voice.LiveRules.stopBody(why)
+        return when (val r = api.liveWrite(body)) {
             is ApiResult.Ok -> {
-                (r.value.second?.get("status") as? JsonObject)?.let { _liveStatus.value = it }
+                (r.value.second?.get("status") as? JsonObject)?.let { takeLiveStatus(it) }
                 null
             }
-            is ApiResult.Failed -> liveFailed(r.error)
+            is ApiResult.Failed -> {
+                liveStopRetry?.cancel()
+                liveStopRetry = scope.launch {
+                    repeat(LIVE_STOP_RETRIES) {
+                        delay(LIVE_STOP_RETRY_MS)
+                        val again = api.liveWrite(body)
+                        if (again is ApiResult.Ok) {
+                            (again.value.second?.get("status") as? JsonObject)?.let { takeLiveStatus(it) }
+                            return@launch
+                        }
+                    }
+                }
+                "Live has ended on this phone. " + liveFailed(r.error)
+            }
         }
     }
 
-    /** Mute or Unmute: the microphone closes, the session and its time carry on. Never held. */
-    suspend fun liveMute(muted: Boolean): String? =
-        livePost(com.jarvis.client.voice.LiveRules.muteBody(muted, "owner"))
+    /** End Live from anywhere that must not wait (the notification, the End Live button): the runtime's own scope. */
+    fun liveEndNow(why: String = "owner") {
+        scope.launch { liveStop(why) }
+    }
+
+    /** What the phone shows while the PC has not yet answered an End. */
+    private fun endedLocally(why: String): JsonObject = kotlinx.serialization.json.buildJsonObject {
+        put("state", JsonPrimitive("ended"))
+        put("on", JsonPrimitive(false))
+        put("ended", JsonPrimitive(why))
+        put("ended_device", JsonPrimitive(com.jarvis.client.voice.LiveRules.ME))
+        put("ended_ago_s", JsonPrimitive(0))
+        put("resumable", JsonPrimitive(false))
+        _liveStatus.value?.get("session")?.let { put("session", it) }
+    }
+
+    /** Mic off / Mic on / Listen anyway: the microphone closes, the session and its time carry on. Never held. */
+    suspend fun liveMute(muted: Boolean): String? {
+        val st = _liveStatus.value
+        if (!muted && (st?.get("muted_why") as? JsonPrimitive)?.content == "call") {
+            // "Listen anyway": the owner's word over a call that still reads
+            // as on - a stuck in-communication mode must not keep them muted
+            // for good (the review's bug 4; the PC's MIC_OVERRIDDEN).
+            liveCallOverridden = true
+        }
+        return livePost(com.jarvis.client.voice.LiveRules.muteBody(muted, "owner"))
+    }
 
     /** "More time". Held on a stale link. */
     suspend fun liveExtend(minutes: Int = 20): String? {
@@ -3711,29 +3838,32 @@ object JarvisRuntime {
         when (val r = api.liveWrite(body)) {
             is ApiResult.Ok -> {
                 val (code, json) = r.value
-                (json?.get("status") as? JsonObject)?.let { _liveStatus.value = it }
+                (json?.get("status") as? JsonObject)?.let { takeLiveStatus(it) }
                 if (code in 200..299) null else liveError(json, code)
             }
             is ApiResult.Failed -> liveFailed(r.error)
         }
 
+    /** The PC's own words; never a bare status number (the review's C8). */
     private fun liveError(body: JsonObject?, code: Int): String =
         (body?.get("error") as? JsonPrimitive)?.takeIf { it.isString }?.content
-            ?: "Your PC said no to that ($code)."
+            ?: if (code == 404) LIVE_MISSING else "Your PC said no to that. Try again in a moment."
 
     private fun liveFailed(error: ApiError): String = when (error) {
         ApiError.NotFound -> LIVE_MISSING
         ApiError.BadToken -> "Your PC did not accept this phone's key. Pair it again."
-        else -> "Could not reach your PC."
+        else -> "Could not reach your PC. Check the link, then try again."
     }
 
     /**
      * A phone or video call began or ended (LiveService reads the audio
      * mode): Live mutes itself for it, and unmutes after - never undoing the
-     * owner's own Mute. Asked once, not every loop.
+     * owner's own Mic off, and never muting again after "Listen anyway"
+     * until the call is seen to end. Asked once, not every loop.
      */
     fun liveCall(onCall: Boolean) {
-        val change = com.jarvis.client.voice.LiveRules.callMuteChange(_liveStatus.value, onCall)
+        if (!onCall) liveCallOverridden = false
+        val change = com.jarvis.client.voice.LiveRules.callMuteChange(_liveStatus.value, onCall, liveCallOverridden)
         if (change == null) {
             liveCallAsked = null
             return
@@ -3745,6 +3875,21 @@ object JarvisRuntime {
         scope.launch { livePost(com.jarvis.client.voice.LiveRules.muteBody(change, "call")) }
     }
 
+    /**
+     * This phone lost the audio focus while Live is on here - a call ringing
+     * or starting while Jarvis talks (the review's B6: the audio mode alone
+     * was only read between answers). Jarvis stops talking, and Live pauses
+     * for the call; the service unmutes it when the call is over.
+     */
+    private fun liveFocusLost() {
+        if (!liveOnHere()) return
+        val mode = (appContext?.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager)?.mode ?: return
+        val ringing = mode == android.media.AudioManager.MODE_RINGTONE
+        if (!ringing && !com.jarvis.client.voice.LiveRules.onCall(mode, voice.speaker.voiceCall)) return
+        voice.stopSpeaking()
+        liveCall(true)
+    }
+
     /** A Live clip came back: "Heard you - thinking" at once when it was the owner's question. */
     fun liveHeard(heard: com.jarvis.client.net.Heard) {
         if (heard.ok && heard.owner && heard.text.isNotBlank() && heard.live.isNotEmpty()) {
@@ -3753,10 +3898,45 @@ object JarvisRuntime {
         }
     }
 
+    /** Jarvis's first sound for a Live answer: "Heard you - thinking" goes (the review's C9). */
+    fun liveAnswerSounded() {
+        if (_liveFlash.value.thinking) _liveFlash.value = LiveFlash()
+    }
+
+    /** A Live answer that was side talk: "(not for Jarvis)" on the sign for a moment. */
+    fun liveSideTalk() {
+        _liveFlash.value = LiveFlash(sideTalk = true, until = SystemClock.elapsedRealtime() + LIVE_FLASH_MS)
+    }
+
+    /**
+     * "Hey Jarvis" to this phone while Live runs on the PC (the review's #2
+     * and bug 7: it used to be silently ignored). Said in fixed words, and a
+     * notification offers to move Live here; both go after 30 seconds.
+     */
+    private fun offerLiveMove(device: String) {
+        _liveMove.value = device
+        val words = com.jarvis.client.voice.LiveRules.SEEN.getValue("elsewhere")
+            .replace("{device}", com.jarvis.client.voice.LiveRules.deviceWords(device)) + "."
+        scope.launch { voice.sayLine(words) }
+        appContext?.let { com.jarvis.client.service.LiveService.showMoveOffer(it, device) }
+        liveMoveJob?.cancel()
+        liveMoveJob = scope.launch {
+            delay(LIVE_MOVE_MS)
+            clearLiveMove()
+        }
+    }
+
+    private fun clearLiveMove() {
+        _liveMove.value = ""
+        liveMoveJob?.cancel()
+        appContext?.let { com.jarvis.client.service.LiveService.clearMoveOffer(it) }
+    }
+
     /**
      * A reply that was about Live, not a question to answer (VoiceSession's
      * `onLive`): "let's talk" started or refused, "that's all", too short,
-     * a pause, "move it here?". Only fixed lines are said.
+     * the words could not be made out, a pause, "move it here?". Only fixed
+     * lines are said.
      */
     private fun onLiveReply(heard: com.jarvis.client.net.Heard) {
         val rules = com.jarvis.client.voice.LiveRules
@@ -3771,13 +3951,25 @@ object JarvisRuntime {
                     return
                 }
                 scope.launch {
+                    chat.newConversation()
                     liveRead()
-                    beginLiveHere()
-                    voice.sayLine(reply.say)
+                    if (beginLiveHere() && awaitLiveListening()) {
+                        voice.sayLine(reply.say)
+                    } else {
+                        // Android would not let the microphone service start
+                        // from the background: said, and ended (the review's B7).
+                        liveStop("owner")
+                        liveNotice(LIVE_NOT_ALLOWED)
+                        voice.sayLine(LIVE_NOT_ALLOWED_SAID)
+                    }
                 }
             }
-            com.jarvis.client.voice.LiveRules.Action.REFUSED ->
-                _liveNotice.value = heard.reason.ifBlank { "Jarvis Live could not start." }
+            com.jarvis.client.voice.LiveRules.Action.REFUSED -> {
+                val why = heard.reason.ifBlank { "Jarvis Live could not start." }
+                liveNotice(why)
+                // Said aloud, in the PC's fixed words (the review's #7).
+                scope.launch { voice.sayLine(why) }
+            }
             com.jarvis.client.voice.LiveRules.Action.END -> {
                 endLiveHere()
                 scope.launch {
@@ -3785,12 +3977,17 @@ object JarvisRuntime {
                     voice.sayLine(reply.say)
                 }
             }
-            com.jarvis.client.voice.LiveRules.Action.MOVE -> _liveMove.value = heard.liveElsewhere
-            com.jarvis.client.voice.LiveRules.Action.STOP -> voice.stopSpeaking()
+            com.jarvis.client.voice.LiveRules.Action.MOVE -> offerLiveMove(heard.liveElsewhere)
+            com.jarvis.client.voice.LiveRules.Action.STOP ->
+                if (settings.interrupt.value != rules.INTERRUPT_OFF) voice.stopSpeaking()
             com.jarvis.client.voice.LiveRules.Action.SHORT -> {
                 _liveFlash.value = LiveFlash(short = true, until = now + LIVE_FLASH_MS)
                 scope.launch { voice.sayLine(reply.say) }
             }
+            com.jarvis.client.voice.LiveRules.Action.TROUBLE ->
+                // The owner's voice, but no words could be made of it: Live
+                // carries on (the review's bug 2 - it used to stop the mic).
+                _liveFlash.value = LiveFlash(trouble = true, until = now + LIVE_FLASH_MS)
             com.jarvis.client.voice.LiveRules.Action.PAUSE,
             com.jarvis.client.voice.LiveRules.Action.LISTEN,
             -> if (reply.say.isNotEmpty()) scope.launch { voice.sayLine(reply.say) }
@@ -3804,32 +4001,59 @@ object JarvisRuntime {
         liveType(words)
     }
 
-    /** The Live screen's text box: a typed question, with a typed answer's rules. */
+    /** The Live screen's text box: a typed question, with a typed answer's rules. It keeps Live open. */
     fun liveType(words: String) {
         val text = words.trim()
         if (text.isEmpty()) return
-        scope.launch { chat.send(text, provenance = com.jarvis.client.net.Provenance.TYPED) }
+        scope.launch {
+            // The conversation goes on: the PC's quiet clock starts again
+            // (the review's B4 - 90 s of typing used to end Live).
+            if (liveOnHere()) api.liveWrite(com.jarvis.client.voice.LiveRules.ACTIVE_BODY)
+            chat.send(text, provenance = com.jarvis.client.net.Provenance.TYPED)
+        }
     }
 
-    /** Live is on here: the microphone service and the watcher. */
-    private fun beginLiveHere() {
-        appContext?.let { com.jarvis.client.service.LiveService.start(it) }
+    /** The microphone service is in the foreground (Android said yes), within a few seconds. */
+    private suspend fun awaitLiveListening(): Boolean =
+        withTimeoutOrNull(LIVE_LISTEN_WAIT_MS) {
+            com.jarvis.client.service.LiveService.listening.first { it }
+        } == true
+
+    /** Live is on here: the microphone service and the watcher. False when Android refused the service. */
+    private fun beginLiveHere(): Boolean {
+        val started = appContext?.let { com.jarvis.client.service.LiveService.start(it) } ?: false
         watchLive()
+        return started
     }
 
-    /** Live is over here: the microphone closes. */
-    private fun endLiveHere() {
+    /**
+     * Live is over here: the microphone closes, the watcher stops (unless it
+     * is the one asking - [cancelWatch] false), and the end tone plays.
+     */
+    private fun endLiveHere(cancelWatch: Boolean = true) {
+        val was = liveOnHere() || liveWatch?.isActive == true
         appContext?.let { com.jarvis.client.service.LiveService.stop(it) }
         voice.clearLiveChips()
         liveCallAsked = null
+        liveCallOverridden = false
+        liveWarnJob?.cancel()
+        if (cancelWatch) liveWatch?.cancel()
+        if (was) {
+            voice.speaker.playTone(
+                com.jarvis.client.voice.HeardSound.samples(com.jarvis.client.voice.LiveRules.END_TONE),
+                com.jarvis.client.voice.HeardSound.RATE,
+            )
+        }
     }
 
     /**
      * Once a second while Live is on here: the session, the fixed lines when
-     * it changed by itself ("Two minutes left...", "Live ended - it was
-     * quiet."), the link, and App lock. When the link to the PC drops, the
-     * phone says so in its own offline voice (the PC's voice cannot reach
-     * it); the microphone is closed meanwhile (LiveRules.listen, rule 4).
+     * it changed by itself ("Two minutes left...", "Live ended - the time was
+     * up."), the link, and App lock. When the link to the PC drops, the phone
+     * says so in its own offline voice (the PC's voice cannot reach it); the
+     * microphone is closed meanwhile (LiveRules.listen, rule 4). When it
+     * comes back with Live still on here, listening starts again and it says
+     * "I'm back." (the review's B3); after a long drop it stops trying.
      */
     private fun watchLive() {
         if (liveWatch?.isActive == true) return
@@ -3837,12 +4061,12 @@ object JarvisRuntime {
             var failures = 0
             var wasDown = false
             while (true) {
-                delay(LIVE_WATCH_MS)
+                delay(if (failures >= LIVE_WATCH_FAILURES) LIVE_WATCH_SLOW_MS else LIVE_WATCH_MS)
                 val before = _liveStatus.value
                 when (val r = api.liveStatus()) {
                     is ApiResult.Ok -> {
                         failures = 0
-                        _liveStatus.value = r.value
+                        takeLiveStatus(r.value)
                     }
                     is ApiResult.Failed -> failures += 1
                 }
@@ -3852,22 +4076,34 @@ object JarvisRuntime {
                 if (down && !wasDown && here) {
                     runCatching { voice.speaker.speakOnDevice(com.jarvis.client.voice.LiveRules.LINK_LOST_SAID) }
                 }
+                if (!down && wasDown && here) {
+                    // Back: listening again (the service may have stopped).
+                    appContext?.let { com.jarvis.client.service.LiveService.start(it) }
+                    voice.sayLine(com.jarvis.client.voice.LiveRules.LINK_BACK_SAID)
+                }
                 wasDown = down
                 if (failures >= LIVE_WATCH_FAILURES) {
-                    endLiveHere()
-                    break
+                    // Nothing is heard meanwhile; the watcher keeps looking,
+                    // more slowly, for a while.
+                    appContext?.let { com.jarvis.client.service.LiveService.stop(it) }
+                    if (failures >= LIVE_WATCH_GIVE_UP) {
+                        endLiveHere(cancelWatch = false)
+                        break
+                    }
+                    continue
                 }
                 if (!here && failures == 0) {
-                    endLiveHere()
                     val line = com.jarvis.client.voice.LiveRules.transition(before, now)
+                    endLiveHere(cancelWatch = false)
                     if (line.isNotEmpty()) voice.sayLine(line)
                     break
                 }
                 if (here) {
                     val line = com.jarvis.client.voice.LiveRules.transition(before, now)
-                    if (line.isNotEmpty()) voice.sayLine(line)
+                    if (line.isNotEmpty()) sayLiveLine(line)
                     if (appLockWouldLock(SystemClock.elapsedRealtime(), settings.security.value)) {
-                        liveStop("app_lock")
+                        // In its own job: liveStop ends this watcher.
+                        scope.launch { liveStop("app_lock") }
                         break
                     }
                 }
@@ -3875,12 +4111,40 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * A fixed line while Live runs. "Two minutes left..." used to be skipped
+     * when Jarvis was talking (the review's #3): it waits for the answer to
+     * end, for up to a minute.
+     */
+    private suspend fun sayLiveLine(line: String) {
+        if (voice.sayLine(line)) return
+        liveWarnJob?.cancel()
+        liveWarnJob = scope.launch {
+            repeat(LIVE_LINE_RETRIES) {
+                delay(1000)
+                if (!liveOnHere()) return@launch
+                if (voice.sayLine(line)) return@launch
+            }
+        }
+    }
+
     private const val LIVE_MISSING = "This PC's Jarvis does not have Jarvis Live yet. Run " +
         "scripts\\apply-patches.ps1 on the PC to add it."
+    private const val LIVE_NOT_ALLOWED = "Android did not let Jarvis Live listen from the background. " +
+        "Open Jarvis, then start Live from the Live screen."
+    private const val LIVE_NOT_ALLOWED_SAID = "Open Jarvis to start Live."
     private const val LIVE_WATCH_MS = 1000L
+    private const val LIVE_WATCH_SLOW_MS = 5000L
     private const val LIVE_WATCH_FAILURES = 10
+    private const val LIVE_WATCH_GIVE_UP = 10 + 120 // about ten more minutes, every 5 s
     private const val LIVE_CALL_ASK_MS = 3000L
     private const val LIVE_FLASH_MS = 6000L
+    private const val LIVE_NOTICE_MS = 30_000L
+    private const val LIVE_MOVE_MS = 30_000L
+    private const val LIVE_STOP_RETRIES = 12
+    private const val LIVE_STOP_RETRY_MS = 5000L
+    private const val LIVE_LINE_RETRIES = 60
+    private const val LIVE_LISTEN_WAIT_MS = 4000L
 
     // ------------------------------------------------- Focus sessions ----
     // The owner's decision of 2026-09-25 - see [com.jarvis.client.net.Focus]

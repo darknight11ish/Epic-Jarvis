@@ -378,11 +378,12 @@ object HeardSound {
     const val FADE_MS = 10
     const val GAIN = 0.16
 
-    fun samples(): ShortArray {
+    /** The sound as 16-bit samples. [tones]: another pair of notes made the same way (Jarvis Live's end tone). */
+    fun samples(tones: List<Pair<Int, Int>> = TONES): ShortArray {
         val fade = (RATE * FADE_MS / 1000.0).roundToInt()
         val gap = (RATE * GAP_MS / 1000.0).roundToInt()
         val out = ArrayList<Short>()
-        TONES.forEachIndexed { i, (hz, ms) ->
+        tones.forEachIndexed { i, (hz, ms) ->
             if (i > 0) repeat(gap) { out.add(0) }
             val n = (RATE * ms / 1000.0).roundToInt()
             for (k in 0 until n) {

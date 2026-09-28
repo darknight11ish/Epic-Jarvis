@@ -150,6 +150,13 @@ TITLE_CHARS = 80
 #: temporary chat: a jarvis_chat_log.py without it would keep one.
 TEMPORARY_CHAT = True
 TEMPORARY_WHY = "a temporary chat is never kept"
+#: Jarvis Live's side talk (the owner's answer of 2026-09-28): a remark the
+#: model called "not for me" (jarvis_agent's `side_talk`) is not kept in chat
+#: history at all - neither the owner's words nor the marker. It goes in the
+#: live-turn registry (a hash, in memory) as "temporary", like a temporary
+#: chat's turn, so if an app ever re-sent it, automatic learning would make
+#: it a card, never a saved fact. jarvis_live.was_side_talk skips it anyway.
+SIDE_TALK_WHY = "a side remark in Jarvis Live is never kept"
 LIST_DEFAULT, LIST_MAX = 30, 100
 _CID = re.compile(r"[A-Za-z0-9_-]{8,64}")   # used with fullmatch: no trailing newline
 _SWEEP_EVERY = 86400
@@ -746,7 +753,8 @@ class ChatLog:
         answer_kept = bool(turn and turn.get("finish_reason") and not turn.get("client_gone")
                            and isinstance(answer, str) and answer.strip())
         rows = self._live_rows(live)
-        temporary = body.get("temporary") is True
+        side_talk = bool(turn and turn.get("side_talk") is True)
+        temporary = body.get("temporary") is True or side_talk
         if temporary:
             # temporary-chat.patch (the owner's decision, 2026-09-25): a
             # temporary chat is never kept. Its turns still go in the
@@ -765,6 +773,8 @@ class ChatLog:
         with self._lock:
             self._seed(cid, body.get("messages"))
         self._note_live(cid, rows, device, read_outside, now)
+        if side_talk:
+            return {"recorded": False, "why": SIDE_TALK_WHY}
         if temporary:
             return {"recorded": False, "why": TEMPORARY_WHY}
         aead, why = self._recording()

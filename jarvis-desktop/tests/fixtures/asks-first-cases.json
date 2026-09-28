@@ -568,6 +568,18 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
+    },
+    {
+     "rows": [
+      {
        "action": "change_own_config",
        "fixed": false,
        "id": "change_own_config",
@@ -1385,6 +1397,18 @@
     {
      "rows": [
       {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
+    },
+    {
+     "rows": [
+      {
        "action": "change_own_config",
        "fixed": false,
        "id": "change_own_config",
@@ -2198,6 +2222,18 @@
       }
      ],
      "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
     },
     {
      "rows": [
@@ -3024,6 +3060,18 @@
       }
      ],
      "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:live",
+       "note": "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still checked for your voice, and a card that comes up during Live still waits for your tap. How far Live is trusted is a Voice setting.",
+       "says": "Does it without asking",
+       "title": "Start Jarvis Live (a back-and-forth voice conversation)"
+      }
+     ],
+     "title": "Talking with Jarvis"
     },
     {
      "rows": [

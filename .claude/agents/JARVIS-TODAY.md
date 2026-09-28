@@ -65,9 +65,13 @@ spoken-style answers, "stop" and barge-in, "One moment", "I heard you". **Jarvis
 `jarvis_live.py`, JARVIS-API §63, `docs/LIVE-DESIGN.md`): a back-and-forth
 conversation started and ended by the owner, both apps (badge and tray on the
 PC, Live screen and notification on the phone), the voice check on every
-clip, cards pause it, Mute, calls pause it, side talk ignored, tap buttons,
-the `hands_free_live` setting; the camera is built OFF until the 12 GB card
-passes `jarvis_live_photo_test.py`.
+clip, cards pause it, Mic off, calls pause it, side talk ignored and not
+kept in history, tap buttons, more time after a crisis turn, the
+`hands_free_live` and (PC only) `live_end` settings, one "Interrupting
+Jarvis" setting for Live and ordinary voice, a Home strip and an app-icon
+shortcut on the phone, Brain's "Now" tab (renamed from "Live"); the camera
+is built OFF until the 12 GB card passes `jarvis_live_photo_test.py`.
+Reviewed and fixed 2026-09-28 (`docs/studio-2026-09-28/live-review-*.md`).
 Details: `backend/jarvis_speech.py`, `jarvis_voices.py`, `docs/WAKE-WORD.md`.
 
 **Everyday tools** - timers, alarms, reminders, to-do lists, one shared
@@ -146,13 +150,14 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
 - **The plan card is wired into the tool list** there too (7675da4d,
   `propose_plan`, gate `run_plan`), still switched off until a passing
   `tool_eval_results.json` exists.
-- **Being built on this branch's builders (2026-09-28):** Jarvis Live
-  (`docs/LIVE-DESIGN.md`, branch `studio-live`; voice conversation plus a
-  camera kept off until the 12 GB card passes a photo test), and the money
-  limit's hard stop (answer-length caps, `studio-money-hardstop`). Built and
-  merged: the money limit, Compare, the screen-answers voice setting.
-  `docs/studio-2026-09-28/gemini-live-comparison.md` compares Live with
-  Gemini Live.
+- **Built 2026-09-28:** Jarvis Live (`docs/LIVE-DESIGN.md`; voice
+  conversation plus a camera kept off until the 12 GB card passes a photo
+  test; four reviews and their fixes, branch `studio-live-fixes`), the money
+  limit and its hard stop (answer-length caps), Compare, the screen-answers
+  voice setting. `docs/studio-2026-09-28/gemini-live-comparison.md` compares
+  Live with Gemini Live. Not built from the Live reviews' ideas: a Live
+  hotkey, a Quick Settings tile, a "Resume" notification, headset buttons,
+  a pocket mode, share-to-Live.
 
 ## Decided but not built yet (don't propose these as new)
 
