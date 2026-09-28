@@ -1529,6 +1529,123 @@ body {
   color: var(--text-muted);
 }
 
+/* "History of this fact" (JARVIS-API.md section 71; fact-history.js). A
+   removed word is struck through and an added one underlined - never told
+   apart by colour alone. */
+.fact-history {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+}
+
+.fact-history-title {
+  margin: 0 0 4px;
+  font-size: var(--text-sm);
+}
+
+.fact-history-note {
+  margin: 0 0 6px;
+}
+
+.fact-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fact-history-item[data-this="true"] .fact-history-line {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fact-history-words {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.fact-history-erased {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+del.fact-diff {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  color: var(--text-muted);
+}
+
+ins.fact-diff {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+  background: rgb(var(--accent-rgb) / 0.16);
+  color: var(--text);
+}
+
+/* "Search what was said" and "Find in this chat" (JARVIS-API.md section 71).
+   A matched word is tinted AND underlined, so it does not rest on colour
+   alone; the current "find" match is outlined as well. */
+.search-snippet {
+  margin: 3px 0 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.search-who {
+  font-weight: 600;
+}
+
+mark.search-hit,
+mark.find-hit {
+  background: rgb(var(--accent-rgb) / 0.2);
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+mark.find-current {
+  background: rgb(var(--accent-rgb) / 0.38);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.history-search-note {
+  margin: 0 0 6px;
+}
+
+.history-search-status {
+  margin: 0 0 6px;
+}
+
+.history-find {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+
+.history-find-input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.history-find-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
 .history-turns {
   list-style: none;
   margin: 0;

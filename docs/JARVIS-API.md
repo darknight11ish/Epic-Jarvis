@@ -1089,7 +1089,7 @@ path ever appears in it (`routes.rs:67-101`).
 |---|---|---|---|---|
 | `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§28). `started` (2026-09-25) is when the server process started, in epoch seconds (§29). The desktop falls back to `/api/status` for anything an older server leaves out. |
 | `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Brain screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
-| `/api/graph` | GET | `routes.rs:15` | **no — by rule** | The memory graph stays off the phone. Gets its own longer timeout (`brain.rs:97`). |
+| `/api/graph` | GET | **no longer** (the HUD page only, through `hud_proxy.rs`) | **no — by rule** | The memory graph stays off the phone. **Taken off the Brain's allowlist on 2026-09-28** (§71.3, privacy finding B1): its fact dots were not hidden by "Windows Hello for memory lists". Galaxy is drawn from `/api/memory/entities` instead. The HUD's copy loses its fact, document and person dots while the lists are hidden (`lock/rules.rs` `redact_graph`). |
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |
 | `/api/compute` | GET | `routes.rs:18` | via `probe` | GPU/VRAM plan. Shape undocumented — see below. |
 | `/api/skills` | GET | `routes.rs:19` | via `probe` | |
@@ -3171,7 +3171,10 @@ other sections. (The HUD page sends `conversation_id`, `device: "hud"` and
   `docs/ARCHITECTURE.md` §5, "Searching your own old chats is a
   client-side filter, not a search feature", for why this is narrower than
   the 2026-09-26 decision that a search over `chat-history.db`'s words
-  waits.
+  waits. **Since 2026-09-28 the same box searches what was SAID** (§71):
+  two letters or more ask the PC (`GET /api/history/search`), which opens
+  each kept turn in memory for that one search; one letter, or an older
+  PC, still narrows the loaded list by title as above.
 - On a stale link (rule 4) both apps hold turning history ON, deleting a
   conversation and changing how long they are kept - each cannot be taken
   back or raises a card, and acts on a list that may be out of date, the
@@ -8860,6 +8863,8 @@ second version of any of it.
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
 
+---
+
 ## 70. Watches: a search, a price, GitHub, and a watch that breaks (added 2026-09-28)
 
 The owner chose the "Watches" group of `docs/RESEARCH-AUDIT-2026-09-28.md`
@@ -9035,6 +9040,204 @@ requests on repositories the owner names.
   `jarvis-framework.toml` (apply-patches.ps1 never overwrites it; its
   settings diff shows the line).
 - The phone half (Kotlin) was not compiled here; CI is the only compiler.
+
+---
+
+## 71. Brain upgrades: search what was said, a fact's history, and a Galaxy of people and things (added 2026-09-28)
+
+The owner chose this group on 2026-09-28, from
+`docs/RESEARCH-AUDIT-2026-09-28.md` section 8 (ideas 1, 2 and 4, and bugs
+B1, B3 and B7). Three things, one new patch (`backend/brain-reads.patch`,
+last in the stack) and one new shipped module
+(`backend/jarvis_brain_reads.py`), which answers two GET routes after the
+server's own token and origin checks - the same `install()` shape as
+`jarvis_news.py` and `jarvis_sources.py`. `backend/test_brain_reads.py`
+proves the backend half.
+
+**Neither route is a tool.** No model and no chat turn can call them:
+`jarvis_agent.py` offers nothing that reaches here (the test checks). What
+they return is shown on the owner's screen and nowhere else - the owner's
+own words of 2026-09-27: "shown on screen only; nothing saved, nothing
+handed to the AI".
+
+### 71.1 "Search what was said in old chats" (both apps)
+
+| Route | Method | Answers |
+|---|---|---|
+| `GET /api/history/search?q=<words>&limit=<1-50, default 20>` | GET | **200** the `GET /api/history` status fields (`enabled`, `recording`, `why_not`, `keep_days`, ...) plus `query_ok` (bool), `why` (a sentence when `query_ok` is false), `conversations` (each a `/api/history` row plus `hits` - how many messages hold a search word - and `snippet`), `more` (there were more matches than `limit`), `partial` (the scan stopped early) and `searched` (how many conversations were looked at). **200 with `query_ok: false`** and a sentence for words that are too short (fewer than two letters once one-letter words are skipped) or too long (more than 8 words or 100 characters). `503` without chat history on the PC; `501` from a `jarvis_chat_log.py` older than this section. Token + origin. |
+
+`snippet` is `{"role": "user" | "assistant" | "title", "at", "before",
+"after", "parts": [{"text", "hit"}]}` - a short piece (at most 180
+characters) of the message that holds the most different search words,
+cut on a space, `before`/`after` true where it was cut. It comes in
+**parts, never character offsets**: Python counts characters differently
+from JavaScript and Kotlin (an emoji is one character in Python, two in
+the apps), so offsets would put every mark after an emoji in the wrong
+place.
+
+**How it searches** (`jarvis_chat_log.ChatLog.search`): every word the owner
+typed (two letters or more, each once) must be somewhere in the
+conversation - its title or any message, the owner's words or Jarvis's -
+case ignored. Newest conversations first; at most 5,000 conversations or
+4 seconds per search, whichever comes first (`partial` then says so).
+
+**Unlock and scan, in memory, for each search.** Every kept turn is opened
+with the chat history key, compared, and dropped. **There is no search
+index** - not SQLite's FTS5 (Hermes's design, which the research looked
+at), not a word list, not a cache between searches: an index would be a
+plain-text copy of every chat on disk, beside the encrypted one, and
+"encrypted or not kept" (ARCHITECTURE §5) allows no such thing. The search
+words are not written anywhere, not logged and not audited (the test
+compares every byte of the history folder before and after searching).
+Said plainly: while one search runs, the opened words sit in the backend's
+memory, as they already do when a conversation is opened; Python cannot
+wipe them afterwards, it can only let them go.
+
+**What it reaches** is exactly what the History list shows: what is still
+kept. A temporary chat was never kept, so it is never found. With history
+OFF, what is already kept is still searched - the list still lists it - and
+searching keeps nothing new.
+
+**Both apps** - the History search box (`#history-filter` on the desktop,
+`HistoryScreen.kt` on the phone), placeholder "Search what was said…":
+
+- Two letters or more: after a short pause (350 ms) the PC is asked; the
+  results replace the list, each with its snippet, the search words
+  marked (tinted and underlined - never colour alone), "found in N
+  messages", and a line under the box: "Searched on your PC, in your kept
+  chats only. Nothing is saved and nothing is sent to the AI." Nothing
+  found: "No kept conversation has all of those words."
+- One letter, or a PC without this route (404 or 501): the box narrows the
+  loaded list by title, as it did before (§18.4), and says once: "This
+  PC's Jarvis can only search titles. To search what was said, update it
+  by running apply-patches.ps1 on the PC."
+- The words are held only while they are in the box: the desktop keeps
+  them in the page's memory and nowhere else (the test checks the page's
+  storage); the phone uses `remember`, not `rememberSaveable`, so they are
+  not put in the screen's saved state either.
+- **Hidden with the list**: while "Windows Hello for memory lists and chat
+  history" (desktop) or "Hide memory lists and chat history" (phone) hides
+  it, no search is sent and no snippet is shown - the desktop's Rust
+  refuses `brain_history_search` outright (`SEARCH_STILL_HIDDEN`), like
+  opening a conversation; the phone asks nothing while `privateHidden`.
+  App lock covers both screens as before, and the phone's screenshot block
+  (`FLAG_SECURE`) covers the results like the rest of History.
+- **"Find in this chat"**, when a conversation is open: a box, Previous,
+  Next and a count ("2 of 7", "1 match", "Not in this chat."). Done in the
+  app, over the conversation already open - the PC is not asked. Enter
+  steps to the next match on the desktop, Shift+Enter back; the current
+  match is outlined and scrolled into view. Opened from a search result,
+  the box starts with the search words. The words are words, not a
+  pattern (`(.*)` finds only those four characters).
+
+Desktop: `brain/history.rs` `brain_history_search` (`search_path`,
+`search_answer`), `history-view.js` (`readSearch`, `renderSnippet`,
+`findMatches`, `findCountWords`), `brain.js` (`onHistorySearch`,
+`paintSearchResults`, `findBar`). Phone: `net/ChatLog.kt` (`searchPath`,
+`search`, `findMatches`, `findCount`), `JarvisRuntime.historySearch`,
+`HistoryScreen.kt` (`FoundRow`, the find bar in `Conversation`).
+
+**What still waits** (ARCHITECTURE §5): a chat turn that asks Jarvis to
+search its own past conversations, or anything that hands past chat words
+to the model. This route is for the screen only.
+
+### 71.2 "History of this fact" (desktop)
+
+| Route | Method | Answers |
+|---|---|---|
+| `GET /api/memory/fact-history?id=<fact id>` | GET | **200** `{"id", "versions": [{"id", "text", "this", "current", "forgotten", "erased_at", "created", "valid_from", "valid_to", "retired_at", "retired_by", "source"}], "count", "more"}`, oldest first. **400** `{"error"}` for anything but one whole-number id above 0; **404** `{"error": "no such fact - ..."}`; `501` from a `jarvis_memory.py` older than this section. Token + origin. |
+
+A version is any fact joined to this one by `retired_by` (the old row's
+`retired_by` is the id of the row that replaced it - what a Reword, a
+correction card, or a correction kept as older news writes), followed both
+ways (`MemoryStore.fact_history`, adapted from supermemory's
+`version-chain.ts`, MIT - THIRD-PARTY-NOTICES.txt). Ordered by when each
+was true from, then when Jarvis was told. At most 50 (`more` says when
+there were more; the one asked about is always kept).
+
+**An erased version never comes with words**: `text` is `""` - never the
+`[erased]` marker - and `erased_at` says when. The Rust blanks the words of
+any version with `erased_at` again, and so does the page, so a PC that ever
+sent them would still show none. No meta and no conversation id are sent.
+
+**The desktop** (Brain -> Memory -> "What Jarvis knows about you"): a
+**History** button, first on any fact that has another wording on the
+loaded list (it was replaced, or a loaded fact names it as what replaced
+it). It opens every version under the row: "Version 2 · saved 12 September
+2026 · in use now · the one you opened", then its words, with the words
+that changed since the version before marked - removed words struck
+through (`<del>`), added words underlined (`<ins>`), never colour alone;
+`diffWords` is copied from Hindsight (MIT). An erased version reads "The
+words were erased." and no difference is drawn against it, so erased words
+cannot come back even as the "removed" half of a change. The old
+"replaced by #N" line now says "replaced by a newer wording". Hidden like
+every memory list (`brain/fact_history.rs` `redact_fact_history`: the
+versions taken out, the count kept). A read: nothing changes by looking.
+
+**The phone has none of it** (ARCHITECTURE §8): it lists only facts saved
+automatically that are still in use, and those are never corrections, so
+they almost never have an earlier wording; a view that brings back retired
+wordings of any fact is the deep memory editing that stays on the desktop.
+
+### 71.3 Galaxy, made of people and things (desktop only)
+
+Galaxy (Brain -> Advanced -> Galaxy) used to draw `GET /api/graph`, a map
+of the older memory files built by the owner's `build_graph()`. Its "fact"
+dots and side panel could carry a fact's words, and `graph` was never on
+the list "Windows Hello for memory lists" hides (`lock/rules.rs`
+`PRIVATE_LISTS`) - **privacy finding B1**. Now:
+
+- Galaxy draws **`/api/memory/entities`** (§6) - the people, pets, places
+  and things saved facts name, the list "About <name>" already reads and
+  already hides. **No new route.** Each dot is a name; its size is how many
+  facts name it; two names are joined when one fact names both, the line
+  as strong as how many facts they share - worked out on the page from the
+  fact ids the list carries (`galaxy-view.js` `buildEntityGraph`). A fact
+  naming more than 12 names joins nothing (it is a list, not a link). The
+  same five hues and two forms as before, now one per kind: people, pets,
+  places, organisations, projects, things, and "not sure what kind" - so
+  the colour-blind, reduced-motion and keyboard work all still holds.
+- Picking a name shows what the list says - how many facts name it, what
+  the owner calls it, other names joined to it, the names it shares facts
+  with - **never a fact's words**, and a button **"About <name>"** that
+  opens the Memory tab at that name (its facts word for word, read by id,
+  hidden like every memory list).
+- Hidden under Windows Hello: the picture is empty, says how many names
+  are hidden, and offers Show - no name reaches the page (Rust takes them
+  out before the page sees the list).
+- **The Brain cannot read `/api/graph` any more**: `graph` is off
+  `brain/routes.rs`'s `READ_ROUTES`, and a Rust test fails if it comes
+  back, or if any memory list there is not on the private list.
+- **The HUD window still reads `/api/graph`** (`hud_proxy.rs`), so while the
+  lists are hidden its copy loses every dot that is not one of Jarvis's
+  own parts (fact, document, person, or any group it does not know), and
+  its "what the brain reached for" trace (`/api/retrieve`) answers
+  `{"available": false, "hidden": true}` (`lock/rules.rs` `redact_graph`,
+  `redact_hud_read`). The HUD's waiting-card count
+  (`/api/memory/pending`) is left as it is: it shows a number, never
+  words.
+- **Finding a name** (bug **B3**: it jumped to the first match only and
+  said nothing when there was none): every match is counted, Enter steps
+  to the next and Shift+Enter back, and the line beside the box says "2 of
+  5. Press Enter for the next." or "No name matches that." It matches the
+  name, names joined to it, and what the owner calls it ("sister").
+
+The phone has no Galaxy: the memory graph stays off the phone (CLAUDE.md).
+
+### 71.4 Not checked, said plainly
+
+- The backend half ran only in the dev container, against a stand-in of
+  the owner's `jarvis_hud.py` built from the patch stack and a stand-in
+  key - never on the owner's PC, against a real Credential Manager, or
+  with a large real history. How long a search takes on the owner's own
+  history is not measured; the 4-second stop is there for that reason.
+- The phone half is not compiled here (no Android build in this
+  container); CI compiles it.
+- Whether the owner's `build_graph()` really put a fact's words on its fact
+  dots (the reason B1 was "likely") is still not checked - the fix does not
+  depend on it.
+
+---
 
 ## 72. Talk-to-type on the PC (added 2026-09-28)
 

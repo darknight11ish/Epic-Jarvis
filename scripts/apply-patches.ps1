@@ -633,6 +633,18 @@ $PATCHES = @(
     # tool loop already makes - for the local model only. Needs nothing new
     # copied in: jarvis_agent.py is already in this list.
     'rules-first-relay.patch'
+    # The Brain upgrades (the owner's choice, 2026-09-28; docs/JARVIS-API.md
+    # section 71): GET /api/history/search ("search what was said in old
+    # chats" - each kept turn opened in memory for that one search, no
+    # index, nothing written) and GET /api/memory/fact-history ("history of
+    # this fact" - an erased version never with its words). Reads for the
+    # apps only; nothing here reaches the AI model. Its jarvis_hud.py
+    # context is answer-sources.patch's own install block, so it goes after
+    # it - last, like every new patch. second-card-suggest.patch, above it
+    # in this list, touches a different part of the file (the POST route
+    # chain). Needs jarvis_brain_reads.py copied in; without it the banner
+    # says so and the two routes are simply not there (404).
+    'brain-reads.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -766,6 +778,8 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
+    # --- the Brain upgrades (2026-09-28, brain-reads.patch) ---
+    'jarvis_brain_reads.py'      # brain-reads.patch: GET /api/history/search and /api/memory/fact-history, reads for the apps only
 )
 
 # The settings file. Installed only where none exists; never overwritten.

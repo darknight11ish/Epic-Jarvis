@@ -2688,7 +2688,11 @@ pub async fn set_power_mode(app: &AppHandle, mode: &str) -> Result<String, Strin
 /// literal plus, so an id containing a space would address a different
 /// resource. Unreserved characters per RFC 3986 pass through; everything
 /// else becomes %XX.
-fn encode_path_segment(raw: &str) -> String {
+///
+/// Also used for a query value (brain/history.rs, the History search): with
+/// every reserved byte encoded, `&`, `=`, `#` and `+` in the owner's words
+/// can never start a second parameter or turn into a space.
+pub(crate) fn encode_path_segment(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     for byte in raw.as_bytes() {
         match byte {

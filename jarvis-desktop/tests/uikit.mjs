@@ -307,6 +307,34 @@ export function makeGraph(scale = 1) {
   return { nodes, links, counts: {}, sources: {}, config_dir: "C:\\Users\\pcadmin\\.openjarvis" };
 }
 
+/**
+ * A people-and-things list shaped like `entities_view()` builds one
+ * (backend/rebuilt/jarvis_memory.py; GET /api/memory/entities) - what the
+ * Galaxy draws since 2026-09-28. Priya is named by the most facts; some
+ * facts name two or three names, so there are links to draw; one name has
+ * no kind; `scale` grows it to judge the layout under load.
+ */
+export function makeEntities(scale = 1) {
+  const kinds = ["person", "pet", "place", "organisation", "project", "thing", null];
+  const entities = [
+    { id: 1, name: "Priya", kind: "person", also: [], aliases: ["sister"], fact_ids: [10, 11, 12, 13, 14] },
+    { id: 2, name: "Lisbon", kind: "place", also: [], aliases: [], fact_ids: [10, 15] },
+    { id: 3, name: "Miso", kind: "pet", also: [], aliases: ["cat"], fact_ids: [16, 11] },
+    { id: 4, name: "Initech", kind: "organisation", also: ["Initech Ltd"], aliases: [], fact_ids: [17, 18] },
+    { id: 5, name: "Marta", kind: "person", also: [], aliases: ["manager", "boss"], fact_ids: [17, 19] },
+    { id: 6, name: "Jarvis app", kind: "project", also: [], aliases: [], fact_ids: [20] },
+    { id: 7, name: "Blue bike", kind: "thing", also: [], aliases: [], fact_ids: [21, 12] },
+    { id: 8, name: "Okafor", kind: null, also: [], aliases: [], fact_ids: [22] },
+  ];
+  for (let i = 0; i < 32 * scale; i++) {
+    const id = 100 + i;
+    entities.push({ id, name: `Name ${i}`, kind: kinds[i % kinds.length], also: [], aliases: [],
+      fact_ids: [...new Set([1000 + i, 1000 + ((i * 7) % (32 * scale)), 10 + (i % 5)])] });
+  }
+  for (const e of entities) e.facts = e.fact_ids.length;
+  return { entities, count: entities.length, limit: 500 };
+}
+
 export const BRAIN = {
   graph: makeGraph(1),
   status: { available: true, lane: "local", model: "qwen3:8b", power: "active" },
@@ -1089,6 +1117,41 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return out;
           }
+          // brain/fact_history.rs brain_fact_history, over the stubbed
+          // memory_facts, the way jarvis_memory.fact_history_view answers:
+          // every row joined by retired_by, either way, oldest first; an
+          // erased row with no words. `window.__factHistoryMissing` is an
+          // older PC; hidden like every memory list.
+          case "brain_fact_history": {
+            window.__factHistoryReads = (window.__factHistoryReads || []).concat([args.id]);
+            if (window.__factHistoryMissing) {
+              return { available: false, why: "Your PC's Jarvis cannot show a fact's history yet - " +
+                "run apply-patches.ps1 on the PC to update it." };
+            }
+            const facts = ((brain && brain.memory_facts && brain.memory_facts.facts) || []);
+            const byId = new Map(facts.map((f) => [f.id, f]));
+            if (!byId.has(args.id)) throw new Error("That fact is not in Jarvis's memory any more. Refresh the list.");
+            const seen = new Set([args.id]);
+            const todo = [args.id];
+            while (todo.length) {
+              const cur = byId.get(todo.shift());
+              const near = facts.filter((f) => f.retired_by === cur.id).map((f) => f.id);
+              if (cur.retired_by && byId.has(cur.retired_by)) near.push(cur.retired_by);
+              for (const n of near) if (!seen.has(n)) { seen.add(n); todo.push(n); }
+            }
+            const versions = [...seen].map((id) => byId.get(id))
+              .sort((a, b) => (a.valid_from - b.valid_from) || (a.id - b.id))
+              .map((f) => ({ id: f.id, text: f.erased_at ? "" : f.text, this: f.id === args.id,
+                current: !f.erased_at && (f.valid_to === null || f.valid_to === undefined),
+                forgotten: false, erased_at: f.erased_at || null, created: f.created || f.valid_from,
+                valid_from: f.valid_from, valid_to: f.valid_to ?? null, retired_at: f.retired_at ?? null,
+                retired_by: f.retired_by ?? null, source: f.source || "" }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              return { id: args.id, versions: [], hidden: true, hidden_count: versions.length };
+            }
+            return { id: args.id, versions, count: versions.length, more: false };
+          }
           // lock.rs. `settings` is what is stored, `hello` this PC's Windows
           // Hello; `setFails` / `revealFails` are the sentences Rust rejects
           // with (Windows Hello said no, or is not set up).
@@ -1632,6 +1695,48 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return JSON.parse(JSON.stringify(t));
           }
+          // brain/history.rs brain_history_search, over the stubbed
+          // transcripts, the way jarvis_chat_log.ChatLog.search answers:
+          // every word somewhere in the conversation, case ignored, newest
+          // first, a snippet in parts. `searchMissing` is an older PC (the
+          // Rust's {available: false, why}); `searchFails` the sentence it
+          // rejects with; refused while the private lists are hidden.
+          case "brain_history_search": {
+            const h = window.__history;
+            h.searches.push(args.query);
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              throw new Error("Your chat history is hidden. Press Show on the Brain's History tab " +
+                "and confirm it is you with Windows Hello first.");
+            }
+            if (h.searchFails) throw new Error(h.searchFails);
+            if (h.searchMissing) {
+              return { available: false, why: "This PC's Jarvis can only search titles. To search " +
+                "what was said, update it by running apply-patches.ps1 on the PC." };
+            }
+            const words = String(args.query).trim().split(/\s+/).filter((w) => w.length >= 2);
+            const has = (s, w) => String(s).toLowerCase().includes(w.toLowerCase());
+            const found = [];
+            const all = [...h.conversations].sort((a, b) => b.updated - a.updated);
+            for (const c of all) {
+              const turns = (h.transcripts[c.id] && h.transcripts[c.id].turns) || [];
+              if (!words.every((w) => has(c.title, w) || turns.some((t) => has(t.text, w)))) continue;
+              const hitTurns = turns.filter((t) => words.some((w) => has(t.text, w)));
+              const best = hitTurns[0] || { role: "title", text: c.title, at: 0 };
+              const w0 = words.find((w) => has(best.text, w)) || words[0];
+              const at = best.text.toLowerCase().indexOf(w0.toLowerCase());
+              const parts = at < 0 ? [{ text: best.text, hit: false }] : [
+                { text: best.text.slice(0, at), hit: false },
+                { text: best.text.slice(at, at + w0.length), hit: true },
+                { text: best.text.slice(at + w0.length), hit: false },
+              ].filter((p) => p.text);
+              found.push({ ...c, hits: hitTurns.length,
+                snippet: { role: best.role, at: best.at, before: false, after: false, parts } });
+            }
+            return JSON.parse(JSON.stringify({ ...h.status, query_ok: true, why: "",
+              conversations: found.slice(0, 20), more: found.length > 20, partial: false,
+              searched: all.length }));
+          }
           case "brain_history_delete": {
             const h = window.__history;
             h.deleted.push(args.id);
@@ -1790,7 +1895,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
     status: { enabled: true, recording: true, why_not: "", waiting: false, keep_days: 0,
               encrypted: true, ...((history && history.status) || {}) },
   }));
-  Object.assign(window.__history, { reads: [], opened: [], deleted: [], settings: [] });
+  Object.assign(window.__history, { reads: [], opened: [], deleted: [], settings: [], searches: [] });
   // Unset, automatic learning as the owner has it by default: learning on,
   // learning automatically on, sensitive topics off, nothing waiting, and
   // nothing saved yet. `missing` is a PC without the list, `statusMissing`

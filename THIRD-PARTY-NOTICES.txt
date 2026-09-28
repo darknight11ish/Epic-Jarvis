@@ -34,7 +34,8 @@ Worth knowing:
   * The WebView2 Runtime is Microsoft's and is not redistributed: the
     installer uses Microsoft's own bootstrapper.
   * The desktop's JavaScript has no third-party libraries; its only
-    third-party files are the fonts below.
+    third-party files are the fonts below. A few small pieces of code or
+    word lists copied from other projects are named in section 1.
 
 1. PARTS NAMED BY HAND
 ======================
@@ -369,6 +370,32 @@ HeadTTS (met4citizen), MIT - https://github.com/met4citizen/HeadTTS
   model of coarticulation (M. M. Cohen and D. W. Massaro, "Modeling
   coarticulation in synthetic visual speech", in Models and Techniques in
   Computer Animation, Springer, 1993) - the idea only.
+
+THE BRAIN: A FACT'S HISTORY (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Hindsight (Vectorize AI), MIT - https://github.com/vectorize-io/hindsight
+  The word-by-word difference between two wordings of a fact, `diffWords`
+  (hindsight-control-plane/src/components/observation-history-view.tsx,
+  read on the default branch on 2026-09-28), is copied into
+  jarvis-desktop/src/fact-history.js, turned from TypeScript into plain
+  JavaScript. The copied function names its origin at its top. No other
+  Hindsight code is used; its entities view gave only the idea of the
+  people-and-things Galaxy (brain.js), and none of its code.
+  Copyright (c) 2025 Vectorize AI, Inc. Licensed under the MIT License,
+  whose full text is the one given for browser-use above with this
+  copyright line in place of that one.
+
+supermemory, MIT - https://github.com/supermemoryai/supermemory
+  The walk along a memory's versions in both directions,
+  VersionChainIndex.getChain (packages/memory-graph/src/canvas/
+  version-chain.ts, read on the default branch on 2026-09-28), is adapted
+  into backend/rebuilt/jarvis_memory.py, MemoryStore.fact_history(): the
+  link runs the other way in Jarvis (an old fact names what replaced it),
+  and every branch is followed, not the first one only. The adapted method
+  names its origin in its own description.
+  Copyright (c) 2025 supermemory. Licensed under the MIT License, whose
+  full text is the one given for browser-use above with this copyright
+  line in place of that one.
 
 OFFERS NOBODY ASKED FOR (not generated - keep when regenerating)
 ---------------------------------------------------------------------------

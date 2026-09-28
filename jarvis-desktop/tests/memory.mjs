@@ -449,8 +449,11 @@ await check("a replaced fact names what replaced it", async () => {
   const page = await memoryTab({ brain: { ...K.BRAIN,
     memory_facts: { available: true, learning: true, pending: 0, facts } } });
   const text = await page.locator("#memory-facts").innerText();
+  const history = await page.locator("#memory-facts").getByRole("button", { name: "History" }).count();
   await page.close();
-  assert.match(text, /replaced by #5/, `said "${text}"`);
+  // In words since 2026-09-28; "History" (fact-history.mjs) shows which.
+  assert.match(text, /replaced by a newer wording/, `said "${text}"`);
+  assert.equal(history, 2, "both wordings offer their history");
 });
 
 /* ── Export: to a file, never the clipboard ──────────────────────────────── */

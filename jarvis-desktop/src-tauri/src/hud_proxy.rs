@@ -180,11 +180,19 @@ pub async fn hud_get(app: AppHandle, path: String) -> Result<HudReply, String> {
             return Err("the Jarvis server sent a reply too large for the HUD".to_string());
         }
     }
+    let mut body = String::from_utf8_lossy(&bytes).into_owned();
+    // "Windows Hello for memory lists and chat history" (lock.rs) covers the
+    // HUD's copies too: its graph loses its fact and person dots, and its
+    // "what the brain reached for" trace is not shown, until Show on the
+    // Brain has passed Windows Hello (privacy finding B1, 2026-09-28).
+    if crate::lock::private_hidden(&app) {
+        body = crate::lock::redact_hud_read(&path, &body);
+    }
     Ok(HudReply {
         status,
         content_type,
         route,
-        body: String::from_utf8_lossy(&bytes).into_owned(),
+        body,
     })
 }
 

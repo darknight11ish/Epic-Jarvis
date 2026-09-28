@@ -51,6 +51,20 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **Page watches ignore hidden page bytes**, so a page nobody changed no
   longer counts as changed (a fix ported from another branch).
 
+**New: Brain upgrades**
+
+- **Search what was said in your old chats**, in both apps' History - not
+  just titles. Each match shows the words in place, and "Find in this chat"
+  steps through them. The search runs on your PC; nothing is saved and
+  nothing goes to the AI.
+- **"History of this fact"** on the PC's Memory tab: every earlier wording,
+  with the changed words marked. Erased words never come back.
+- **Galaxy now shows the people and things Jarvis knows about.** Click a name
+  to open "About <name>".
+- **Fixed: Galaxy could show memory while "Windows Hello for memory lists"
+  said it was hidden.** The HUD's copy is covered too. Galaxy's search now
+  counts every match and says when nothing matches.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

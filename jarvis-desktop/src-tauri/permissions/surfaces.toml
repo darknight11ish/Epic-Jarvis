@@ -645,6 +645,11 @@ permissions = [
   # Pin), held while the event stream is stale.
   "allow-brain-memory-shared",
   "allow-brain-memory-share",
+  # "History of this fact" (brain/fact_history.rs; the owner's choice,
+  # 2026-09-28): every version of ONE fact - a read, held back like the
+  # other memory lists while "Windows Hello for memory lists and chat
+  # history" hides them; an erased version never with its words.
+  "allow-brain-fact-history",
 ]
 
 # Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).
@@ -653,12 +658,17 @@ permissions = [
 # is ONE conversation per call; there is no "delete all" anywhere. The switch
 # is ONE setting per call: ON only raises an approval card (tier `ask`) and
 # is held while the event stream is stale, OFF is immediate.
+#
+# "Search what was said" (JARVIS-API.md section 71, 2026-09-28) is a read
+# too, held back the same way: the PC opens each kept turn in memory for
+# that one search, keeps no index, and nothing reaches the AI model.
 [[set]]
 identifier = "brain-history"
-description = "List and read the chat history kept on the PC, delete one conversation, and change its two settings (turning it on only raises an approval card). No bulk delete."
+description = "List, read and search the chat history kept on the PC, delete one conversation, and change its two settings (turning it on only raises an approval card). No bulk delete."
 permissions = [
   "allow-brain-history-list",
   "allow-brain-history-open",
+  "allow-brain-history-search",
   "allow-brain-history-delete",
   "allow-brain-history-settings",
 ]
