@@ -43,6 +43,7 @@ import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.MemoryCardKind
 import com.jarvis.client.net.MemoryCardView
 import com.jarvis.client.net.MemoryCards
+import com.jarvis.client.net.ModelChat
 import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
@@ -918,6 +919,11 @@ private fun ModelsPlate(
             entries.forEachIndexed { i, entry ->
                 if (i > 0) Rule()
                 val isCurrent = entry.ref == current
+                // An embedding model (nomic-embed-text) cannot answer anything,
+                // so it gets no "Use" - and the row says why rather than
+                // showing a greyed-out button (the desktop's rule and words,
+                // net/ModelChat.kt).
+                val chats = entry.canChat
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -932,6 +938,7 @@ private fun ModelsPlate(
                             entry.family,
                             entry.sizeBytes?.let { bytes(it) },
                             if (entry.ref == models.previous && !isCurrent) "the previous model" else null,
+                            if (chats) null else ModelChat.CANNOT_CHAT,
                         )
                         if (meta.isNotEmpty()) {
                             Gap(2)
@@ -945,7 +952,7 @@ private fun ModelsPlate(
                     Spacer(Modifier.width(8.dp))
                     if (isCurrent) {
                         Pill("Active", color = chrome.okInk)
-                    } else {
+                    } else if (chats) {
                         Quiet(
                             if (busy) "…" else "Use",
                             enabled = !busy && canAct,

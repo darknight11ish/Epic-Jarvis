@@ -1851,7 +1851,14 @@ out"), so `POST /api/feedback/mark` now ALSO accepts an optional
 - never stored in `feedback.db`, only used to bump this in-memory counter.
 Omitting it (an older client) works exactly as before; the phrase check
 above needs no such wiring at all, since it reads the turn it is already
-answering.
+answering. **A "wrong" mark on a crisis answer is never counted** (the
+owner, 2026-09-28; "crisis messages are never learned from and never
+counted"): when the chat route gives a crisis turn its `turn_id` (the
+`"wellbeing": "crisis"` flag in X-Jarvis-Route, or `jarvis_agent`'s own
+check once the turn is over), it tells `jarvis_agent.note_crisis_turn`
+that id - in memory only, ids never words - and `note_correction` then
+leaves the count as it was for that turn. Nothing changes for the apps:
+the mark is still saved and shown as usual.
 
 ---
 

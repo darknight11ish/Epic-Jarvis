@@ -12,6 +12,16 @@ number as the last part - `0.2.57` is a build of 0.2.
   conversation, a check before every message so nothing private leaves,
   and stops at any captcha or sign-in page. There is no button for it in
   either app yet, and the Gemini part is not built.
+- **Fixed: marking a crisis answer "wrong" counted toward "suggest the
+  bigger model".** Crisis messages are never learned from and never
+  counted; the thumbs-down on a crisis answer was the one place that still
+  counted. It no longer does. A thumbs-down on any other answer counts as
+  before.
+- **Fixed (phone): "Use" on a model that cannot chat.** Brain › Model on the
+  phone offered "Use" on memory-search models such as nomic-embed-text,
+  which would leave Jarvis unable to answer. Like the desktop, their row now
+  has no "Use" and says "for memory search only - it cannot chat". Both
+  apps follow one shared table of cases, so they cannot drift apart.
 - **Fixed (phone): "open help", "connection", "the morning briefing",
   "about" and "Jarvis's voices" opened Settings at the top.** Each now opens
   the phone's own place for it - Help, Checks, Brain or "Jarvis's voice" -
