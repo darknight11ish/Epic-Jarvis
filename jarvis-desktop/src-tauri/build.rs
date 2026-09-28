@@ -380,6 +380,14 @@ fn main() {
             // card, held on a stale link. The Jarvis bar and the Brain.
             "photo_scan",
             "photo_add_reminder",
+            // "Bring in chats from ChatGPT, Claude or Gemini"
+            // (history-import.patch, 2026-09-28): where a run is (a read),
+            // the Windows "Open" dialog then start (held on a stale link;
+            // it only PROPOSES - every fact waits for its own yes), and
+            // cancel (never held). Brain only.
+            "history_import_status",
+            "history_import_start",
+            "history_import_cancel",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on

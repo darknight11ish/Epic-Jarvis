@@ -1842,3 +1842,20 @@ mark.find-current {
   font-size: var(--text-2xs);
   color: var(--text-faint);
 }
+
+/* ---- Bring in old chats (history-import.js; JARVIS-API.md section 85) --- */
+
+.history-import-words {
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.history-import-words:empty {
+  display: none;
+}
+
+.history-import-words[data-tone="warn"] {
+  padding-left: 8px;
+  border-left: 2px solid var(--warn);
+}

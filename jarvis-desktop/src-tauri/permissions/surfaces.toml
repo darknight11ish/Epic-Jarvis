@@ -759,6 +759,21 @@ permissions = [
   "allow-photo-add-reminder",
 ]
 
+# "Bring in chats from ChatGPT, Claude or Gemini" (history-import.patch; the
+# owner's choice of 2026-09-28): the owner picks an export file on this PC in
+# the Windows "Open" dialog (run in Rust - the window gets no file access),
+# and the PC reads the owner's own messages in the background and PROPOSES
+# facts. Every one waits in "Waiting for you" for its own yes; nothing here
+# decides a card. Start is held on a stale link; cancel never is.
+[[set]]
+identifier = "brain-history-import"
+description = "Read where a chat-history import is, pick ONE export file on this PC and start reading it (it only proposes - every fact waits for its own yes), and stop it."
+permissions = [
+  "allow-history-import-status",
+  "allow-history-import-start",
+  "allow-history-import-cancel",
+]
+
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
 # timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
 # is a read. ONE thing per call to the running session - pause, resume, +10

@@ -481,7 +481,7 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus,
-  folders }) {
+  folders, historyImport }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
@@ -1078,6 +1078,24 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             st.pending = st.pending.filter((p) => p !== args.switch);
             const label = args.switch === "master" ? "The big model" : `"${row ? row.name : args.switch}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
+          }
+          // brain/history_import.rs: "Bring in old chats". Unset, an idle
+          // PC (the real jarvis_history_import.view(), below). A scenario's
+          // `historyImport`: `status` answers used in turn (the last
+          // repeating), `start` / `startFails`, `cancel`.
+          case "history_import_status":
+          case "history_import_start":
+          case "history_import_cancel": {
+            const hi = window.__historyImport;
+            hi.calls.push(cmd);
+            const copy = (v) => JSON.parse(JSON.stringify(v));
+            if (cmd === "history_import_start") {
+              if (hi.startFails) throw new Error(hi.startFails);
+              return copy(hi.start || null);
+            }
+            if (cmd === "history_import_cancel") return copy(hi.cancel || null);
+            hi.reads += 1;
+            return copy(hi.status[Math.min(hi.reads - 1, hi.status.length - 1)]);
           }
           // commands.rs get_deep / ask_deep. `status` is a real
           // deep_status(); `askAnswers` are real POST bodies (the 202 job, or
@@ -1890,6 +1908,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__bigModel = { reads: 0, changes: [], getFails: null, setFails: null,
                         unavailable: false, ...(bigModel || {}) };
   window.__bigModel.status = JSON.parse(JSON.stringify(window.__bigModel.status || null));
+  window.__historyImport = {
+    reads: 0, calls: [], start: null, startFails: null, cancel: null,
+    status: [{
+      ok: true, available: true, state: "idle", outcome: null, kind: null, source: null,
+      read: 0, before: 0, offered: 0, nothing: 0, waiting: 0, started: null, finished: null,
+      here: true, about: "",
+      words: "Bring in your old chats from ChatGPT, Claude or Gemini: choose the export "
+        + "file on this PC.",
+    }],
+    ...(historyImport || {}),
+  };
   window.__deep = { reads: 0, asks: [], askAnswers: [], getFails: null, askFails: null,
                     unavailable: false, ...(deep || {}) };
   window.__deep.status = JSON.parse(JSON.stringify(window.__deep.status || null));

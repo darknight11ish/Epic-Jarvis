@@ -227,6 +227,11 @@ SHIPPED = (
     # using the graphics card - read-only, answered without the model;
     # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
     "jarvis_pc_help.py",
+    # "Bring in chats from ChatGPT, Claude or Gemini" (2026-09-28,
+    # history-import.patch): the importer itself, and the Brain button's
+    # background run of it - every fact it finds waits for a yes
+    "import_history.py",
+    "jarvis_history_import.py",
 )
 
 

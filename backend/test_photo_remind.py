@@ -413,8 +413,13 @@ def t_patch_and_shipping():
     import _stack
     import _where
     order = _stack.order()
-    check("photo-reminder.patch is last in apply-patches.ps1",
-          order and order[-1] == "photo-reminder.patch", order[-3:])
+    # Last when it was written; history-import.patch (an install block right
+    # after this one's) now follows it and keeps this one's lines as context.
+    later = order[order.index("photo-reminder.patch") + 1:] \
+        if "photo-reminder.patch" in order else None
+    check("photo-reminder.patch is in apply-patches.ps1, followed only by "
+          "history-import.patch",
+          later is not None and later in ([], ["history-import.patch"]), order[-3:])
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("jarvis_photo_remind.py is shipped by the script and in _where.SHIPPED",
           "'jarvis_photo_remind.py'" in ps1 and "jarvis_photo_remind.py" in _where.SHIPPED)
@@ -424,7 +429,10 @@ def t_patch_and_shipping():
         at_ = text.find("import jarvis_photo_remind")
         sock = text.find("_loopback_companion(bind, HUD_PORT, Handler)", at_)
         check("the install sits after brain-reads' and right before the main socket",
-              text.rfind("import jarvis_brain_reads", 0, at_) != -1 and 0 < sock - at_ < 800,
+              text.rfind("import jarvis_brain_reads", 0, at_) != -1 and 0 < sock - at_ < 1600
+              # only history-import.patch's install block (after it) in between
+              and set(re.findall(r"import (\w+)", text[at_:sock])) <= {
+                  "jarvis_photo_remind", "jarvis_history_import"},
               (at_, sock))
         check("with the server's own token and origin checks",
               "jarvis_photo_remind.install(Handler, origin_ok=_origin_ok," in text)

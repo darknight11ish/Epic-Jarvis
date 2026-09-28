@@ -41,6 +41,7 @@ search half, as test_chat_log.py does.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 import traceback
@@ -543,7 +544,10 @@ def t_patch_and_shipping():
         at = text.find("import jarvis_brain_reads")
         sock = text.find("_loopback_companion(bind, HUD_PORT, Handler)", at)
         check("the install sits after sources' and right before the main socket",
-              text.rfind("import jarvis_sources", 0, at) != -1 and 0 < sock - at < 1200,
+              text.rfind("import jarvis_sources", 0, at) != -1 and 0 < sock - at < 2400
+              # only the install blocks of the patches after it in between
+              and set(re.findall(r"import (\w+)", text[at:sock])) <= {
+                  "jarvis_brain_reads", "jarvis_photo_remind", "jarvis_history_import"},
               (at, sock))
         check("with the server's own token and origin checks",
               "jarvis_brain_reads.install(Handler, origin_ok=_origin_ok," in text)

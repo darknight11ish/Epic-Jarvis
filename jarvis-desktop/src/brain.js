@@ -115,6 +115,7 @@ import {
   READING as PHOTO_READING,
   shrinkPicture,
 } from "./photo-reminder.js";
+import { HISTORY_IMPORT, mountHistoryImport } from "./history-import.js";
 import {
   HISTORY_BUTTON,
   HISTORY_BUTTON_TITLE,
@@ -402,6 +403,10 @@ const dom = {
   photoChoose: $("photo-choose"),
   photoNote: $("photo-note"),
   photoProposal: $("photo-proposal"),
+  historyImportWords: $("history-import-words"),
+  historyImportStart: $("history-import-start"),
+  historyImportStop: $("history-import-stop"),
+  historyImportHow: $("history-import-how"),
   todoList: $("todo-list"),
   todoForm: $("todo-form"),
   todoText: $("todo-text"),
@@ -463,6 +468,39 @@ const state = {
 
 /** Whether the four views behind "Advanced" are on the rail right now. */
 let advancedOpen = false;
+
+/* "Bring in old chats" (history-import.js; JARVIS-API.md section 85): a
+   ChatGPT, Claude or Gemini export, picked on this PC by the Windows dialog
+   in Rust, read in the background by the PC, which only PROPOSES - every
+   fact waits under "Waiting for you", one card each. Mounted here, before
+   the first render, so render("memory") can ask it where a run is. */
+const historyImport = dom.historyImportStart && dom.historyImportStop && dom.historyImportWords
+  ? mountHistoryImport({
+    words: dom.historyImportWords,
+    start: dom.historyImportStart,
+    stop: dom.historyImportStop,
+  }, {
+    invoke,
+    canAct: () => linkWords(currentLink()).canAct,
+    showing: () => state.view === "memory" && !document.hidden,
+    say: (said, tone) => toast(said, tone),
+    // New cards were made: re-read "Waiting for you" (the queue itself -
+    // never anything from the import).
+    onWaiting: () => load(["memory_pending"], { quiet: true }).then(() => {
+      if (state.view === "memory") renderProposals();
+    }),
+  })
+  : null;
+if (dom.historyImportHow) dom.historyImportHow.textContent = HISTORY_IMPORT.how;
+let historyImportAt = 0;
+
+/** Ask the PC where an import is: on opening Memory, at most every 5 s. */
+function renderHistoryImport() {
+  if (!historyImport || !IS_TAURI) return;
+  if (Date.now() - historyImportAt < 5000) return;
+  historyImportAt = Date.now();
+  historyImport.refresh();
+}
 
 /* ==========================================================================
    Plumbing
@@ -772,6 +810,7 @@ function render(name) {
       break;
     case "memory":
       renderLearning();
+      renderHistoryImport();
       renderProfile();
       renderShared();
       renderAuto();
@@ -6659,6 +6698,7 @@ onLink((link) => {
   dom.linkPill.title = link.error || `${link.base} · last event ${link.lastId}`;
   dom.reconnectLink.hidden = link.connected;
   syncLiveButtons();
+  if (historyImport) historyImport.sync();
   paintFreshness();
   if (state.view === "live") renderLive();
   renderCounts();
