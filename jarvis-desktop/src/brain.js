@@ -111,7 +111,13 @@ import {
 } from "./galaxy-view.js";
 import {
   addPage,
+  chatFactsHiddenLine,
+  chatFactsIntro,
+  deleteAndForgetQuestion,
+  deleteChatButton,
+  deleteDoneWords,
   deleteQuestion,
+  readChatFacts,
   DENIED_REPLY,
   deviceTag,
   FIND_LABEL,
@@ -1377,6 +1383,22 @@ function renderMemory() {
   for (const [k, v] of statusRows(body)) add(k, v);
   if (typeof body.db === "string") add("Store", body.db);
   if (dl.childElementCount) dom.memory.append(dl);
+  // The overnight tidy (2026-09-28, backend/jarvis_tidy.py): once it is on,
+  // turning it off is one tap, at once - it only makes Jarvis ask less, so
+  // it is not held on a stale link (brain.rs brain_memory_sleep_time).
+  // Turning it ON stays the daily offer's Enable.
+  if (body.sleep_time && body.sleep_time.enabled === true) {
+    const box = el("div", "row-actions");
+    box.append(button("Turn off overnight tidying", async () => {
+      await memoryWrite("brain_memory_sleep_time", { enabled: false }, OVERNIGHT_OFF_SAID);
+      if (state.data.memory && state.data.memory.sleep_time) {
+        state.data.memory.sleep_time.enabled = false;
+      }
+      renderMemory();
+    }, { title: "No more \u201cStill true?\u201d or \u201cWhich is true now?\u201d cards. "
+               + "Cards already waiting stay until you answer them." }));
+    dom.memory.append(box);
+  }
 
   const proposed = Array.isArray(pending.pending) ? pending.pending : [];
   if (pending.hidden === true && waitingCount(pending)) {
@@ -1465,6 +1487,12 @@ let memoryAsOfRows = null;
  */
 let cachedSleepOffer = null;
 let sleepOfferDismissed = false;
+
+/** What turning the overnight tidy on and off says (2026-09-28): the
+ *  phone's MemoryWords.OVERNIGHT_ON_SAID / OVERNIGHT_OFF_SAID, word for word. */
+const OVERNIGHT_ON_SAID = "Overnight tidying is on. Once a day Jarvis may ask about facts that "
+  + "look out of date, with review cards. Nothing changes without your yes.";
+const OVERNIGHT_OFF_SAID = "Overnight tidying is off. No more cards from it.";
 
 function noteSleepOffer(setup) {
   if (setup && setup.sleep_time_offer && !cachedSleepOffer && !sleepOfferDismissed) {
@@ -1664,7 +1692,7 @@ function renderLearning() {
       row({
         tag: "offer",
         state: "warn",
-        title: String(offer.title || "Overnight memory tidying - not built yet"),
+        title: String(offer.title || "Overnight memory tidying"),
         meta: [String(offer.body || "")],
         actions: [
           // Dismissed BEFORE the write, not after: `memoryWrite`'s own
@@ -1683,19 +1711,18 @@ function renderLearning() {
             const answered = cachedSleepOffer;
             dismissSleepOffer();
             render("memory");
-            // The truth, which is short: nothing is built, so nothing runs.
-            // This toast used to promise an overnight tidy that nothing does.
+            // The truth, which is short (2026-09-28, backend/jarvis_tidy.py):
+            // it only ASKS, with review cards, and changes nothing by itself.
             const out = await memoryWrite("brain_memory_sleep_time", { enabled: true },
-              "Noted that you want it. It is not built yet, so nothing runs "
-              + "and nothing in memory changes.");
+              OVERNIGHT_ON_SAID);
             if (!out || out.ok === false) {
               cachedSleepOffer = answered;
               sleepOfferDismissed = false;
               render("memory");
             }
-          }, { title: "Records that you want overnight tidying. It is not built yet: "
-                     + "nothing runs, and no fact changes without your yes on that "
-                     + "one fact.", live: true }),
+          }, { title: "Once a day, Jarvis may ask you about facts that look out of date, "
+                     + "with review cards - at most five a night. No fact changes without "
+                     + "your yes on that one fact.", live: true }),
           button("Not now", async () => {
             dismissSleepOffer();
             render("memory");
@@ -2587,6 +2614,14 @@ const chats = {
   /** "Find in this chat", over the conversation open: the words, which
    *  match is current, and how many there are. Asks the PC nothing. */
   find: { needle: "", current: 0, total: 0 },
+  /**
+   * Deleting a chat offers to forget the facts it taught (JARVIS-API.md
+   * section 79, 2026-09-28): the conversation being deleted, the facts it
+   * taught (brain_conversation_facts, hidden like every memory list), and
+   * the ones the owner ticked - NONE to start with. Kept here so the
+   * 15-second repaint keeps the ticks.
+   */
+  deleting: null,
 };
 /** The tab repaints often; the list is re-read at most this often. */
 const HISTORY_READ_MS = 15000;
@@ -2669,11 +2704,110 @@ async function toggleConversation(id, needle = "") {
   paintHistory();
 }
 
+/**
+ * Delete, on a conversation's row. Since 2026-09-28 (JARVIS-API.md section
+ * 79) it first asks the PC which facts in use this chat taught. None, or a
+ * PC that cannot say: the same "are you sure?" as before. Some: a list
+ * under the row with a tick box each - none ticked - and "Delete the chat"
+ * (or "... and forget 2 facts"), then the usual "are you sure?". Hidden
+ * memory lists: the facts are not shown, and are kept.
+ */
 async function deleteConversation(c) {
-  if (!window.confirm(deleteQuestion(c))) return;
+  if (chats.deleting && chats.deleting.id === c.id) {
+    chats.deleting = null;
+    paintHistory();
+    return;
+  }
+  let got = null;
+  try {
+    got = readChatFacts(await invoke("brain_conversation_facts", { conversationId: c.id }));
+  } catch {
+    got = null;          // an older app build, or the PC out of reach: ask as before
+  }
+  if (got && got.facts.length) {
+    chats.deleting = { id: c.id, facts: got.facts, ticked: new Set(), busy: false };
+    paintHistory();
+    return;
+  }
+  const note = got && got.hiddenCount ? chatFactsHiddenLine(got.hiddenCount) : "";
+  if (!window.confirm(deleteQuestion(c, note))) return;
+  await finishDelete(c, []);
+}
+
+/** The list under a row being deleted: each fact with a tick box, none
+ *  ticked; Delete (naming how many will be forgotten) and Cancel. */
+function deletingNode(c) {
+  const d = chats.deleting;
+  const box = el("div", "history-delete-facts");
+  box.id = "history-delete-facts";
+  box.append(el("p", "hint", chatFactsIntro(d.facts.length)));
+  const list = el("ul", "history-delete-list");
+  for (const f of d.facts) {
+    const li = el("li");
+    const label = el("label", "history-delete-fact");
+    const tick = document.createElement("input");
+    tick.type = "checkbox";
+    tick.checked = d.ticked.has(f.id);
+    tick.disabled = d.busy;
+    tick.dataset.factId = String(f.id);
+    tick.addEventListener("change", () => {
+      if (tick.checked) d.ticked.add(f.id);
+      else d.ticked.delete(f.id);
+      // Only the button's words change - no repaint, so the keyboard stays
+      // on this tick box.
+      const go = $("history-delete-go");
+      if (go) go.textContent = deleteChatButton(d.ticked.size);
+    });
+    label.append(tick, el("span", "", f.text));
+    li.append(label);
+    list.append(li);
+  }
+  box.append(list);
+  const actions = el("div", "row-actions");
+  const go = button(d.busy ? "Deleting…" : deleteChatButton(d.ticked.size), async () => {
+    // Read at the click, not when drawn: the ticks may have changed since.
+    const chosen = d.facts.filter((f) => d.ticked.has(f.id));
+    if (d.busy || !window.confirm(deleteAndForgetQuestion(c, chosen))) return;
+    d.busy = true;
+    paintHistory();
+    await finishDelete(c, chosen.map((f) => f.id));
+  }, { danger: true, live: true,
+       title: "Delete this conversation from this PC, and forget only the facts ticked above." });
+  go.id = "history-delete-go";
+  actions.append(
+    go,
+    button("Cancel", () => {
+      chats.deleting = null;
+      paintHistory();
+    }, { title: "Keep the conversation and every fact." }),
+  );
+  box.append(actions);
+  return box;
+}
+
+/** Delete the chat, then forget each ticked fact - ONE brain_memory_forget
+ *  per fact (held on a stale link in Rust, like every Forget). There is no
+ *  list form of Forget. */
+async function finishDelete(c, factIds) {
   try {
     const out = await invoke("brain_history_delete", { id: c.id });
-    toast(out && out.gone ? "That conversation was already deleted." : "Deleted from this PC.", "ok");
+    let forgot = 0;
+    let failed = 0;
+    for (const id of factIds) {
+      try {
+        const r = await invoke("brain_memory_forget", { id });
+        if (r && r.ok === false) failed += 1;
+        else {
+          forgot += 1;
+          autoL.rows = autoL.rows.filter((row) => row.id !== id);
+        }
+      } catch {
+        failed += 1;
+      }
+    }
+    toast(deleteDoneWords({ gone: Boolean(out && out.gone), forgot, failed }), failed ? "bad" : "ok");
+    if (factIds.length) refreshMemory();
+    chats.deleting = null;
     chats.rows = chats.rows.filter((r) => r.id !== c.id);
     if (chats.search.view) {
       chats.search.view.conversations = chats.search.view.conversations.filter((r) => r.id !== c.id);
@@ -2683,6 +2817,7 @@ async function deleteConversation(c) {
       chats.open = null;
     }
   } catch (error) {
+    if (chats.deleting) chats.deleting.busy = false;
     toast(errorText(error), "bad");
   }
   paintHistory();
@@ -2942,6 +3077,7 @@ function paintSearchResults(box) {
   const list = el("div", "rows history-rows history-search-rows");
   for (const c of v.conversations) {
     list.append(conversationRow(c, { needle: s.query, snippet: c.snippet }));
+    if (chats.deleting && chats.deleting.id === c.id) list.append(deletingNode(c));
     if (chats.openId === c.id) list.append(transcriptNode());
   }
   box.append(list);
@@ -3136,6 +3272,7 @@ function paintHistoryListNow(box) {
   const list = el("div", "rows history-rows");
   for (const c of shown) {
     list.append(conversationRow(c));
+    if (chats.deleting && chats.deleting.id === c.id) list.append(deletingNode(c));
     if (chats.openId === c.id) list.append(transcriptNode());
   }
   box.append(list);

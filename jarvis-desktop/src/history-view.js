@@ -89,10 +89,76 @@ export const TAINT_TITLE =
 export const NOT_KEPT_LINE =
   "Jarvis's answer to this was not kept: it came from a cloud model, or it did not finish.";
 
-/** Said with Delete, in both apps (ease-of-use audit 2026-09-27, #7). The
- *  phone's ChatLog.DELETE_KEEPS_FACTS. */
+/** Said with Delete, in both apps (ease-of-use audit 2026-09-27, #7), when
+ *  there is nothing to offer: the chat taught no fact still in use, or this
+ *  PC cannot list them. The phone's ChatLog.DELETE_KEEPS_FACTS. */
 export const DELETE_KEEPS_FACTS =
   "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain.";
+
+/* ── Deleting a chat offers to forget the facts it taught (2026-09-28) ──
+ * JARVIS-API.md section 79; the phone's ChatLog, word for word. The list
+ * comes from brain_conversation_facts (a read, hidden like every memory
+ * list). NOTHING IS TICKED to start with: deleting a chat must never widen
+ * into forgetting by itself - the owner ticks each fact to forget. Each
+ * ticked fact is then forgotten through the ordinary Forget, one at a time. */
+
+/** Above the list, with how many facts the chat taught. */
+export function chatFactsIntro(n) {
+  return n === 1
+    ? "Jarvis learned 1 fact from this chat. It is kept unless you tick it - a ticked fact is forgotten, like Forget in the Brain."
+    : `Jarvis learned ${n} facts from this chat. They are kept unless you tick them - each ticked fact is forgotten, like Forget in the Brain.`;
+}
+
+/** While the memory lists are hidden: the facts are not shown, and kept. */
+export function chatFactsHiddenLine(n) {
+  return `Jarvis learned ${n} ${n === 1 ? "fact" : "facts"} from this chat. `
+    + "Your memory lists are hidden, so they are kept. To forget any, show the memory lists first.";
+}
+
+/** The Delete button's words, with how many ticked facts go with it. */
+export function deleteChatButton(n) {
+  if (!n) return "Delete the chat";
+  return `Delete the chat and forget ${n} ${n === 1 ? "fact" : "facts"}`;
+}
+
+/** The "are you sure?" before deleting, with the ticked facts named. */
+export function deleteAndForgetQuestion(c, facts) {
+  const n = facts.length;
+  if (!n) {
+    return `Delete this conversation?\n\n${c.title || "(no title)"}\n\n`
+      + "It is removed from this PC. This cannot be undone. The facts it taught are kept.";
+  }
+  const list = facts.map((f) => `- ${f.text}`).join("\n");
+  return `Delete this conversation and forget ${n} ${n === 1 ? "fact" : "facts"}?\n\n`
+    + `${c.title || "(no title)"}\n\nForget:\n${list}\n\n`
+    + "The chat is removed from this PC and cannot be brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words.";
+}
+
+/** What happened, in one sentence. */
+export function deleteDoneWords({ gone = false, forgot = 0, failed = 0 } = {}) {
+  const chat = gone ? "That conversation was already deleted." : "Deleted from this PC.";
+  if (!forgot && !failed) return chat;
+  const done = forgot ? ` Forgot ${forgot} ${forgot === 1 ? "fact" : "facts"}.` : "";
+  const bad = failed
+    ? ` ${failed} ${failed === 1 ? "fact" : "facts"} could not be forgotten - try Forget on ${failed === 1 ? "it" : "them"} in the Brain.`
+    : "";
+  return chat + done + bad;
+}
+
+/**
+ * brain_conversation_facts's answer, read: {available, facts: [{id, text}],
+ * hiddenCount, why}. An older PC (`available: false`) or anything odd is
+ * "nothing to offer", and Delete asks exactly as it always did.
+ */
+export function readChatFacts(v) {
+  const o = v && typeof v === "object" ? v : {};
+  if (o.available === false) return { available: false, facts: [], hiddenCount: 0, why: text(o.why) };
+  const facts = (Array.isArray(o.facts) ? o.facts : [])
+    .filter((f) => f && Number.isInteger(f.id) && f.id > 0 && typeof f.text === "string" && f.text.trim())
+    .map((f) => ({ id: f.id, text: f.text.trim() }));
+  const hiddenCount = o.hidden === true ? Math.max(0, num(o.hidden_count) || 0) : 0;
+  return { available: true, facts, hiddenCount, why: "" };
+}
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const text = (v) => (typeof v === "string" ? v : "");
@@ -262,10 +328,10 @@ export function notRecordingLine(v) {
  * The confirm shown before deleting ONE conversation (brain.js asks it with
  * `window.confirm`, like Forget on a fact).
  */
-export function deleteQuestion(c) {
+export function deleteQuestion(c, note = "") {
   return (
     `Delete this conversation?\n\n${c.title || "(no title)"}\n\n` +
-    `It is removed from this PC. This cannot be undone.\n\n${DELETE_KEEPS_FACTS}`
+    `It is removed from this PC. This cannot be undone.\n\n${note || DELETE_KEEPS_FACTS}`
   );
 }
 

@@ -650,6 +650,12 @@ permissions = [
   # other memory lists while "Windows Hello for memory lists and chat
   # history" hides them; an erased version never with its words.
   "allow-brain-fact-history",
+  # "Facts this chat taught" (brain/conversation_facts.rs; the owner's
+  # choice, 2026-09-28): the facts in use ONE conversation taught, for
+  # History's Delete to offer forgetting them - a read, held back like the
+  # other memory lists. Forgetting each ticked fact is brain_memory_forget,
+  # one fact per call; nothing here forgets.
+  "allow-brain-conversation-facts",
 ]
 
 # Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).
