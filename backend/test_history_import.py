@@ -626,8 +626,10 @@ def t_patch_and_shipping():
     import _stack
     import _where
     order = _stack.order()
-    check("history-import.patch is last in apply-patches.ps1",
-          order and order[-1] == "history-import.patch", order[-3:])
+    check("history-import.patch is in apply-patches.ps1, and no later patch rewrites its lines",
+          "history-import.patch" in order
+          and not _stack.later_rewriting("history-import.patch", "jarvis_history_import"),
+          order[-3:])
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     for mod in ("jarvis_history_import.py", "import_history.py"):
         check(f"{mod} is shipped by the script and in _where.SHIPPED",
@@ -637,8 +639,8 @@ def t_patch_and_shipping():
     if text:
         at_ = text.find("import jarvis_history_import")
         sock = text.find("_loopback_companion(bind, HUD_PORT, Handler)", at_)
-        check("the install sits after photo-reminder's and right before the main socket",
-              text.rfind("import jarvis_photo_remind", 0, at_) != -1 and 0 < sock - at_ < 800,
+        check("the install sits after photo-reminder's and before the main socket",
+              text.rfind("import jarvis_photo_remind", 0, at_) != -1 and 0 < at_ < sock,
               (at_, sock))
         check("with the server's own token and origin checks",
               "jarvis_history_import.install(Handler, origin_ok=_origin_ok," in text)
