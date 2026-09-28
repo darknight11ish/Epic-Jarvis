@@ -3833,6 +3833,55 @@ object JarvisRuntime {
         }
     }
 
+    // -------------------------------------------------------- projects ----
+    // docs/JARVIS-API.md section 61 (the owner's decision of 2026-09-28) -
+    // see [com.jarvis.client.net.Projects] and ui/screens/ProjectsPlate.kt.
+    // The phone reads everything from the PC and keeps none of it.
+
+    private val _projectsTick = MutableStateFlow(0)
+
+    /** Goes up by one after a change from this phone, so Brain's Projects reads itself again. */
+    val projectsTick: StateFlow<Int> = _projectsTick.asStateFlow()
+
+    private val _projectsLast = MutableStateFlow<com.jarvis.client.net.Projects.Reply?>(null)
+
+    /** The PC's whole answer to the last Projects change - e.g. a new project's id. */
+    val projectsLast: StateFlow<com.jarvis.client.net.Projects.Reply?> = _projectsLast.asStateFlow()
+
+    /** A Projects read (a GET of a [com.jarvis.client.net.Projects] path). Never held. */
+    suspend fun projectsRead(path: String): ApiResult<com.jarvis.client.net.Projects.Reply> =
+        api.projectsCall(path, null)
+
+    /**
+     * ONE change to a project, a benchmark or a number. Held on a stale link
+     * (rule 4), like the desktop's `projects_write`, except Shareable OFF
+     * ([com.jarvis.client.net.Projects.heldOnStale]). The PC decides what
+     * asks first (Shareable ON, taking off Jarvis's own private mark); when
+     * it raised a card, the queue is read at once so the card shows here.
+     * [quiet] keeps a private number out of the sentence TalkBack reads out.
+     */
+    suspend fun projectsWrite(
+        action: String,
+        path: String?,
+        json: String,
+        done: String,
+        quiet: Boolean = false,
+        on: Boolean? = null,
+    ): com.jarvis.client.net.Projects.Outcome {
+        if (com.jarvis.client.net.Projects.heldOnStale(action, on)) {
+            actionBlocker()?.let { return com.jarvis.client.net.Projects.Outcome(false, false, it) }
+        }
+        val target = path ?: return com.jarvis.client.net.Projects.Outcome(false, false, "Not changed.")
+        return when (val r = api.projectsCall(target, json)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Projects.said(r.value, done, quiet).also {
+                if (it.waiting) refreshPending()
+                if (it.changed) _projectsTick.update { n -> n + 1 }
+                _projectsLast.value = r.value
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.Projects.Outcome(false, false, "Not changed. " + describe(r.error))
+        }
+    }
+
     // ---------------------------------------------------- chat history ----
     // docs/JARVIS-API.md section 18 (2026-09-24) - see
     // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The

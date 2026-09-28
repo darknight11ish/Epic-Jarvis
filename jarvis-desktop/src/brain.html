@@ -29,6 +29,7 @@
     <link rel="stylesheet" href="fonts/fonts.css" />
     <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="brain.css" />
+    <link rel="stylesheet" href="projects.css" />
   </head>
   <body>
     <div class="brain">
@@ -77,6 +78,13 @@
               <span class="rail-glyph" aria-hidden="true">▤</span>
               <span class="rail-label">Work</span>
               <span class="rail-count" id="count-work" hidden></span>
+            </button>
+          </li>
+          <li>
+            <button class="rail-item" role="tab" id="tab-projects" data-goto="projects"
+                    aria-selected="false" aria-controls="view-projects" tabindex="-1">
+              <span class="rail-glyph" aria-hidden="true">◇</span>
+              <span class="rail-label">Projects</span>
             </button>
           </li>
           <!-- The other four views are unchanged and still fully wired — see
@@ -535,6 +543,12 @@
               <div id="activity"></div>
             </div>
           </div>
+        </section>
+
+        <!-- ── Projects (projects-panel.js draws it) ──────────────────── -->
+        <section class="view view-panes" id="view-projects" role="tabpanel"
+                 aria-labelledby="tab-projects" hidden>
+          <div class="panes" id="projects-root"></div>
         </section>
 
         <!-- ── Trust ──────────────────────────────────────────────────── -->

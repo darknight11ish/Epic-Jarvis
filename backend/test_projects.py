@@ -943,6 +943,14 @@ def t_the_patch():
     check("jarvis_projects.py is shipped by apply-patches.ps1", "'jarvis_projects.py'" in ps1)
 
 
+def t_both_apps_read_the_current_contract():
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_projects_cases.py"), "--check"],
+                       capture_output=True, text=True, timeout=120,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    check("projects-cases.json (desktop and phone) is what the backend says today "
+          "(python3 tools/gen_projects_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+
+
 def t_audit_never_carries_words_or_numbers():
     words = ("Half marathon", "Keep me honest", "Race is 12 April", "Long run", "Weight",
              "72.5", "21.1", "pytest")

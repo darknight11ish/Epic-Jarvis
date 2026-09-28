@@ -46,6 +46,8 @@ import { validToFromText } from "./valid-to.js";
 // Whether a model can chat, and the words when it cannot (shared with the
 // phone through tests/fixtures/model-chat-cases.json).
 import { CANNOT_CHAT, canChat } from "./model-chat.js";
+// Brain -> Projects: its own module (projects-panel.js, projects.js).
+import { showProjects } from "./projects-panel.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -244,6 +246,7 @@ const VIEWS = {
   history: { title: "History", sub: "your conversations, kept on this PC" },
   faculties: { title: "Model", sub: "models, compute, skills, memory" },
   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
+  projects: { title: "Projects", sub: "what you are working on, and the numbers you track" },
   galaxy: { title: "Galaxy", sub: "what Jarvis knows" },
   live: { title: "Live", sub: "what Jarvis is doing" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
@@ -268,6 +271,8 @@ const VIEW_SECTIONS = {
   // `history` half - see brain/routes.rs's own comment on why one more GET
   // to that route is the right way to reach it.
   work: ["jobs", "undo", "gate_history"],
+  // Read through its own command (brain/projects.rs), by projects-panel.js.
+  projects: [],
   trust: ["content_risk", "ledger"],
   watch: ["watch", "watch_report"],
 };
@@ -724,6 +729,9 @@ function render(name) {
       renderJobs();
       renderUndo();
       renderActivity();
+      break;
+    case "projects":
+      showProjects();
       break;
     case "trust":
       renderContentRisk();
