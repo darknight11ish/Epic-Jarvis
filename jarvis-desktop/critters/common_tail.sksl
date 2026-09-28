@@ -147,11 +147,14 @@ float4 critter(float2 p) {
     // The animal's own colours. material() hands back the albedo and, in w,
     // how the surface takes light: 0 is fur or feathers (felt texture, soft
     // sheen, no shine), above 0 is glossy (eyes, nose, beak, water) by that
-    // much, and -1 is matte with no fur (the inside of a mouth).
+    // much, -1 is matte with no fur (bark), and -2 is the inside of a mouth:
+    // matte and out of the rim light, which would light it cold blue. In
+    // between blends smoothly, so a mouth's painted edge does not pop.
     float4 mat = material(id, pos, n);
     float3 alb = mat.rgb;
     float gloss = max(mat.w, 0.0);
-    float fuzz = mat.w == 0.0 ? 1.0 : 0.0;
+    float fuzz = mat.w > 0.0 ? 0.0 : clamp(1.0 + mat.w, 0.0, 1.0);
+    float rimK = clamp(2.0 + mat.w, 0.0, 1.0);
     alb *= 1.0 + 0.06 * fuzz * felt(pos);
 
     // --- light ---
@@ -182,7 +185,7 @@ float4 critter(float2 p) {
     col += alb * hot * orbLight * clamp(dot(n, ol / od) * 0.8 + 0.2, 0.0, 1.0) * ao * 3.0;
 
     // Rim light in the state's colour, the soft halo round the silhouette.
-    col += cool * fres * (0.55 + 0.45 * fuzz) * ao * 0.9;
+    col += cool * fres * (0.55 + 0.45 * fuzz) * ao * 0.9 * rimK;
     // Fur sheen.
     col += keyCol * fres * fres * 0.10 * fuzz * sh;
 

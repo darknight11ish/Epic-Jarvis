@@ -108,22 +108,30 @@ float partEyes(float3 h) {
     return sdEllipsoid(ep, float3(0.118, max(0.010, 0.118 * open), 0.075));
 }
 // How far the beak gapes: uMouth's open, a little less for a round sound
-// and flatter for a wide one.
-float gape() { return uMouth.x * (1.0 - 0.3 * uMouth.z) * (1.0 - 0.3 * uMouth.y); }
+// and flatter for a wide one - eased out (quick at first, gentle at the
+// top), so the everyday half-open of speech already shows a clear gap.
+float gape() {
+    float e = uMouth.x * (1.0 - 0.3 * uMouth.z) * (1.0 - 0.3 * uMouth.y);
+    return e * (2.0 - e);
+}
 // A small hooked beak: an upper half, and a lower half that drops to speak -
 // wider and flatter for a wide sound - with the dark of the open mouth
 // between them. Shut, the dark part is tucked away inside the upper half.
+// Dropping, the lower half also tucks back toward the face, and the dark
+// widens to the beak's own width, so a wide-open beak is still one beak
+// hinged at the face, not a piece hanging below it.
 float beakUp(float3 h) {
     return sdEllipsoid(h - float3(0.0, 0.215 + 0.012 * gape(), -0.395), float3(0.050, 0.070, 0.055));
 }
 float beakLo(float3 h) {
-    return sdEllipsoid(h - float3(0.0, 0.150 - 0.075 * gape(), -0.375),
+    float g = gape();
+    return sdEllipsoid(h - float3(0.0, 0.150 - 0.062 * g, -0.375 + 0.020 * g),
                        float3(0.038 + 0.012 * uMouth.y, 0.030 - 0.006 * uMouth.y, 0.042));
 }
 float beakIn(float3 h) {
     float g = gape();
-    return sdEllipsoid(h - float3(0.0, 0.160 - 0.040 * g, -0.372),
-                       float3(0.012 + 0.022 * g + 0.010 * uMouth.y, 0.012 + 0.040 * g, 0.030));
+    return sdEllipsoid(h - float3(0.0, 0.160 - 0.034 * g, -0.372 + 0.010 * g),
+                       float3(0.012 + 0.024 * g + 0.010 * uMouth.y, 0.012 + 0.034 * g, 0.030 + 0.006 * g));
 }
 float partBeak(float3 h) { return min(min(beakUp(h), beakLo(h)), beakIn(h)); }
 
@@ -227,7 +235,7 @@ float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     if (id == ID_EYE) return float4(eyeColour(h), 1.0);
     if (id == ID_BEAK) {
-        if (beakIn(h) < min(beakUp(h), beakLo(h))) return float4(GAPE, -1.0);
+        if (beakIn(h) < min(beakUp(h), beakLo(h))) return float4(GAPE, -2.0);
         return float4(HORN, 0.5);
     }
     if (id == ID_FEET) return float4(HORN * 0.9, 0.2);

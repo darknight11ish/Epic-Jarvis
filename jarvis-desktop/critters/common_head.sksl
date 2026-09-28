@@ -98,6 +98,65 @@ float seg2(float2 p, float2 a, float2 b) {
     return length(p - a - ba * k);
 }
 
+// THE PAINTED MOUTH of the panda and the otter: one drawing for every
+// opening, so shutting and opening is one mouth changing shape, never two
+// pictures swapping. Shut, it is the little line under the nose - a stem
+// down from the nose, and a small smile curving out and up to the corners.
+// Opening, the smile stays put as the upper lip and a lower lip curves down
+// away from it; the same dark line runs round the whole opening, so a slight
+// opening reads as the line thickening and parting, and the inside fills in
+// between. `q` is the point in the head's own x, y; g.x is where the stem
+// meets the lip in the middle, g.y how much higher the corners sit (the
+// smile's depth), g.z the half-width to the corners, g.w how far the lower
+// lip has dropped in the middle. `carved` is how much the point is on the jaw's carved hollow (the
+// hollow's own walls get the inside colours too). Returns the colour and
+// the lighting code for common_tail.sksl: 0 fur, down to -2 for the inside
+// of a mouth, which takes no rim light (it used to catch it and read blue).
+// Distance to an ellipse in 2D (half-axes ab), exact to a hair however
+// flat it is - a few Newton steps toward the nearest point on it (Inigo
+// Quilez's method). Only used once per pixel, for the painted mouth.
+float sdEllipse2(float2 p, float2 ab) {
+    p = abs(p);
+    float2 q = ab * (p - ab);
+    float w = q.x < q.y ? 1.5707963 : 0.0;
+    for (int i = 0; i < 4; i++) {
+        float2 u = ab * float2(cos(w), sin(w));
+        float2 v = ab * float2(-sin(w), cos(w));
+        w += dot(p - u, v) / (dot(p - u, u) + dot(v, v));
+    }
+    float d = length(p - ab * float2(cos(w), sin(w)));
+    return dot(p / ab, p / ab) > 1.0 ? d : -d;
+}
+const float3 MOUTH_IN = float3(0.105, 0.012, 0.012);
+const float3 TONGUE = float3(0.320, 0.080, 0.085);
+const float3 TEETH = float3(0.780, 0.680, 0.560);
+float4 mouthPaint(float3 fur, float3 ink, float2 q, float4 g, float stem, float wide, float carved) {
+    // Two half-ellipses hanging from the corners' height, cy: the upper
+    // lip is the small one (the shut smile, g.y deep), the lower lip the same
+    // one stretched g.w further down. The opening is the crescent between
+    // them - nothing at all while they coincide, which is the shut mouth.
+    float ax = abs(q.x);
+    float cy = g.x + g.y;
+    float s = sqrt(max(1.0 - ax * ax / (g.z * g.z), 0.0));
+    float2 e = float2(ax, q.y - cy);
+    // How far inside the opening, from its nearest edge (negative outside).
+    // Above the corners' height it is the way down to a corner, or to the
+    // upper lip.
+    float f = q.y > cy ? -min(length(float2(ax - g.z, e.y)), e.y + g.y * s + 8.0 * max(ax - g.z, 0.0))
+                       : min(sdEllipse2(e, g.zy), -sdEllipse2(e, float2(g.z, g.y + g.w)));
+    float line = 1.0 - smoothstep(0.004, 0.009, min(abs(f), seg2(q, float2(0.0, g.x), float2(0.0, g.x + stem))));
+    float inside = max(smoothstep(0.0, 0.004, f), carved);
+    // Inside: dark red, darker deeper in; the tongue low down in the
+    // middle; a row of teeth under the upper lip when the mouth goes wide.
+    // t runs 0 at the lower lip to 1 at the upper.
+    float t = clamp((q.y - cy + (g.y + g.w) * s) / max(g.w * s, 0.0001), 0.0, 1.0);
+    float u = ax / g.z;
+    float3 c = MOUTH_IN * mix(1.0, 0.45, smoothstep(0.004, 0.03, f));
+    c = mix(c, TONGUE, (1.0 - smoothstep(0.22, 0.5, t)) * (1.0 - smoothstep(0.35, 0.8, u)) * smoothstep(0.02, 0.06, g.w));
+    c = mix(c, TEETH, smoothstep(0.74, 0.86, t) * smoothstep(0.1, 0.6, wide) * smoothstep(0.02, 0.05, g.w));
+    return float4(mix(mix(fur, c, inside), ink, line), -2.0 * inside);
+}
+
 // Cheap fixed-pattern variation, standing in for felt or feathers: small
 // lumps in the colour, never moving, never flickering.
 float felt(float3 p) {

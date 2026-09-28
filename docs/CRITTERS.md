@@ -104,12 +104,22 @@ that moment**. Three numbers make a shape, each 0 to 1:
 
 | Number | Panda and otter | Owl |
 |---|---|---|
-| **open** | the jaw drops: a dark mouth opens downward from the little painted mouth line, with a hint of pink tongue low down, and the chin moves down with it | the lower half of the beak drops, showing the dark inside |
-| **wide** ("ee", "s", teeth) | the corners pull out and the opening gets thinner, with a pale row of teeth along the top | the lower half gets wider and flatter, and gapes a little less |
+| **open** | the jaw drops: the little smile under the nose stays as the upper lip, and a lower lip curves down away from it, with dark red inside and a muted pink tongue low down; the chin and the cream muzzle patch move down with it | the lower half of the beak drops (quickly at first, so half-open speech already shows a clear gap) and tucks back toward the face, showing the dark inside |
+| **wide** ("ee", "s", teeth) | the corners pull out and up and the opening gets thinner, with a pale row of teeth under the upper lip | the lower half gets wider and flatter, and gapes a little less |
 | **round** ("oo", "o", "w") | narrower, taller and pushed a little forward | a slightly smaller gape |
 
-Shut, the mouth is exactly the resting mouth line; the shapes blend into
-each other smoothly (nothing pops from one to the next). They were checked
+**One mouth, not two drawings.** For the panda and the otter the shut
+mouth - a short stem down from the nose and a small smile - is the same
+drawing as the open one: the same dark line runs round the whole opening,
+so a slight opening looks like the line thickening and parting, and a wide
+one like that line stretched round a big mouth. Closing on "m", "b" or "p"
+is that mouth shutting, never a jump to a different picture (the first
+version swapped a painted line for a separate oval, which flickered on every
+closure). The drawing lives in `common_head.sksl` (`mouthPaint`), shared by
+both animals; a hollow carved into the muzzle sits just inside it for depth.
+The inside of a mouth (and of the owl's beak) is kept out of the rim light,
+which used to light it a cold blue. The shapes blend smoothly at every
+opening (checked in steps of 0.02 to 0.2, then up to 1, with wide and round)
 by eye at 96 pixels and at 400.
 
 **No sound, no mouth movement.** A typed answer, Quiet mode, and an answer
