@@ -221,6 +221,7 @@ fun VoicesScreen(
                                 linkBlocker,
                                 onSet = { json -> act { setAnimal(json) } },
                                 onTry = tryAnimal,
+                                onAnswer = { face, use -> act { answerFaceOffer(face, use) } },
                             )
                         }
                     }
@@ -729,6 +730,7 @@ private fun AnimalVoicesPlate(
     linkBlocker: String?,
     onSet: (String) -> Unit,
     onTry: suspend (face: String, name: String, playing: (String) -> Unit) -> String,
+    onAnswer: (face: String, use: Boolean) -> Unit,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -837,6 +839,15 @@ private fun AnimalVoicesPlate(
                     modifier = Modifier.semantics { contentDescription = "Reset the ${a.name} to its own voice" },
                     enabled = canChange && a.changed,
                     onClick = { onSet(CustomVoices.animalResetBody(a.face)) },
+                )
+            }
+            // Change the one-time answer later (owner, 2026-09-28): nothing until answered.
+            CustomVoices.changeMindLabel(a.answer)?.let { label ->
+                Quiet(
+                    label,
+                    modifier = Modifier.semantics { contentDescription = "$label for the ${a.name}" },
+                    enabled = canChange,
+                    onClick = { CustomVoices.changeMindUse(a.answer)?.let { use -> onAnswer(a.face, use) } },
                 )
             }
             said?.takeIf { it.first == a.face }?.let { (_, words) ->
