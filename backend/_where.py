@@ -194,6 +194,9 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # Projects, build steps 1 and 2: projects, life benchmarks and their
+    # numbers in projects.db; GET/POST /api/projects (projects.patch)
+    "jarvis_projects.py",
 )
 
 

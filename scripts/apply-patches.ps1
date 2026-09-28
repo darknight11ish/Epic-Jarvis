@@ -626,6 +626,17 @@ $PATCHES = @(
     # rest of this feature as ordinary code, needing no patch (they are
     # whole shipped modules, copied in like every other one in this list).
     'second-card-suggest.patch'
+    # Projects, build steps 1 and 2 (the owner's decision of 2026-09-28,
+    # docs/PROJECTS-DESIGN.md): GET and POST /api/projects and its
+    # benchmarks. One hunk, the startup install() block; its context is
+    # answer-sources.patch's own install block (second-card-suggest.patch,
+    # just above, touches a different part of the file), so it goes after
+    # both - last, like every new patch. Needs jarvis_projects.py copied
+    # in; without it, or on any error, the banner says so and the routes
+    # are not there. goals.patch (continuation branch) anchors on the SAME
+    # lines: whichever of the two lands second is re-anchored on the
+    # other's block when that branch merges.
+    'projects.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -758,6 +769,8 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
+    # --- Projects, build steps 1 and 2 (projects.patch, 2026-09-28) ---
+    'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
 )
 
 # The settings file. Installed only where none exists; never overwritten.

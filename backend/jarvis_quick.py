@@ -92,6 +92,17 @@ likely Home Assistant names (switch.washing_machine, ...), through the
 gate like any read - and the answer then counts as having read outside
 text. The model has no tool for this.
 
+A NUMBER FOR A PROJECT (jarvis_projects.py, 2026-09-28, Projects build
+step 2) is here too: "log 5 km run", "log my weight as 72.5 kg", "I ran 5
+km", "I walked 10,000 steps today", "my weight is 72 kg" - but ONLY when
+one of the owner's life projects has a benchmark it fits (the name's
+words and the unit; 5 km is never logged as miles). With no such
+benchmark the sentence is not ours and goes to the model as before;
+projects.db is read only after the sentence already has that shape, and
+never created by it. No card: the owner is writing down their own
+number. A health or money benchmark's answer is `private`, so the apps
+keep it on screen and never read it aloud.
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
@@ -825,6 +836,11 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- "tell me when ..." (jarvis_tellme.py) ------------------------------------------
     got = _tellme(s, text, now)
+    if got is not None:
+        return got
+
+    # --- a number for a project's benchmark (jarvis_projects.py, 2026-09-28) ---------
+    got = _project_log(s)
     if got is not None:
         return got
 
@@ -1877,6 +1893,40 @@ MEDIA_MISSING = ("Your PC's Jarvis cannot control music or video yet - run apply
                  "on the PC.")
 
 
+def _project_log(s: str) -> Optional[Intent]:
+    """"log 5 km run", "I ran 5 km": ours only when a life project has a
+    benchmark it fits (jarvis_projects.quick_match). Without
+    jarvis_projects.py, or on any error reading it: not ours."""
+    try:
+        import jarvis_projects as PJ
+        found = PJ.quick_match(s)
+    except Exception:
+        return None
+    if not found:
+        return None
+    return Intent("project_log", {"found": found})
+
+
+def _run_project_log(f: dict, now: float) -> Result:
+    """Logged at once, no card - the owner's own number. A sensitive
+    (health or money) benchmark's answer is private: kept on screen."""
+    try:
+        import jarvis_projects as PJ
+    except Exception:
+        return Result("Your PC's Jarvis cannot keep projects yet - run apply-patches.ps1 "
+                      "on the PC.", "project_log")
+    found = f.get("found") or {}
+    private = any(b.get("sensitive") for b in
+                  ([found["match"]] if found.get("match") else found.get("ambiguous") or []))
+    try:
+        out = PJ.quick_log(found, now=now)
+    except Exception as exc:
+        why = str(PJ._err(exc)[1].get("error") or "it could not be saved")
+        return Result("That was not logged: " + why[:1].lower() + why[1:], "project_log",
+                      private=private)
+    return Result(out["said"], "project_log", private=bool(out.get("private")) or private)
+
+
 def _run_media(intent: Intent) -> Result:
     """Play/pause/next/previous act at once, no card (the owner's own
     words are the only permission this needs); "what's playing" says the
@@ -2133,6 +2183,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_media(intent)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
+    if n == "project_log":
+        return _run_project_log(f, now)
     if n.startswith("focus_"):
         return _run_focus(intent)
     if n == "timer_set":
