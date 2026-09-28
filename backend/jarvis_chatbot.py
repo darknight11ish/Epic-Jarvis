@@ -645,6 +645,19 @@ def _default_tier_of(action: str) -> str:
         return f"unreadable ({type(exc).__name__})"
 
 
+def _default_lockdown_on() -> bool:
+    """Lockdown (jarvis_asks_first.py): False without that module; True if
+    it cannot be read - a conversation that cannot tell stops."""
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
+
+
 def _default_gate(action: str, detail: dict, prompt: str):
     """jarvis_gate.check(), failing CLOSED on any error."""
     class _Refused:
@@ -737,6 +750,9 @@ class Deps:
     #: None: the registry's factory. Tests hand in their own FakeChatbot.
     make_adapter: Optional[Callable[[str], Adapter]] = None
     allow_test_adapters: bool = False
+    #: Lockdown (jarvis_asks_first.lockdown_on): a chatbot that is reached
+    #: over the internet is not started, and one already talking stops.
+    lockdown_on: Callable[[], bool] = _default_lockdown_on
 
 
 DEPS = Deps()
@@ -1037,6 +1053,8 @@ def plan(chatbot, goal, *, max_turns=None, max_minutes=None, never_send=None,
         except Exception as exc:
             why = f"{info.name} cannot be checked ({type(exc).__name__})"
         problem = why
+    if not problem:
+        problem = lockdown_problem([s.chatbot], d)
     if not problem and not g:
         problem = "there is no goal - say what Jarvis should find out"
     if not problem and len(g) > MAX_GOAL_CHARS:
@@ -1159,6 +1177,32 @@ def RESUME_HEADER(s: Session, done: int) -> str:
 #   The card
 # ============================================================================
 
+#: Why a conversation does not start while Lockdown is on.
+LOCKDOWN_WORDS = ("Lockdown is on, so Jarvis does not talk to chatbots until you turn Lockdown "
+                  "off (on the PC, Settings, What asks first).")
+
+
+def goes_out(chatbot) -> bool:
+    """Does this chatbot sit outside this PC? Everything but a "local" one
+    (another model on this PC, jarvis_chatbot_local.py) - an unknown one
+    counts as outside."""
+    i = _info(chatbot)
+    return i is None or i.kind != "local"
+
+
+def lockdown_problem(chatbots, deps: Optional[Deps] = None) -> str:
+    """LOCKDOWN_WORDS when Lockdown is on and any of `chatbots` sits outside
+    this PC, else "". A Lockdown check that raises counts as on."""
+    d = deps or DEPS
+    if not any(goes_out(c) for c in chatbots):
+        return ""
+    try:
+        on = bool(d.lockdown_on())
+    except Exception:
+        on = True
+    return LOCKDOWN_WORDS if on else ""
+
+
 def tier_problem(deps: Optional[Deps] = None) -> str:
     """"" when a conversation can be asked about, else why not."""
     d = deps or DEPS
@@ -1190,7 +1234,7 @@ def request_approval(s: Session, *, deps: Optional[Deps] = None) -> bool:
     d = deps or DEPS
     if s.problem:
         return False
-    why = tier_problem(d)
+    why = tier_problem(d) or lockdown_problem([s.chatbot], d)
     if why:
         s.state, s.problem = "refused", why
         return False
@@ -1449,6 +1493,7 @@ ENDED = {
     "stopped": "You stopped it. Nothing more is sent.",
     "driver_failed": "Jarvis's own model could not decide what to ask next.",
     "money_limit": "{name} was stopped before the next message to keep to your money limit.",
+    "lockdown": "Lockdown was turned on, so Jarvis stopped. Nothing more is sent to {name}.",
     "adapter_failed": "The {name} window could not be worked ({error}).",
 }
 
@@ -1546,10 +1591,17 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
     def elapsed() -> float:
         return base + (d.clock() - started)
 
+    def locked() -> None:
+        # Lockdown (jarvis_asks_first.py): checked before the window opens,
+        # before every message, and while a reply is awaited.
+        if lockdown_problem([s.chatbot], d):
+            raise _End("lockdown")
+
     def control() -> None:
         sig = checkpoint() if checkpoint is not None else None
         if sig == "stop" or s.stop_requested or _stopped_since(mark):
             raise _End("stopped")
+        locked()
         if sig == "pause":
             raise _Pause("paused", PAUSED["paused"])
         if s.turns_used >= s.limits.max_turns:
@@ -1600,6 +1652,7 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
         raise _End("driver_failed")
 
     try:
+        locked()
         try:
             if s.adapter is None:
                 s.adapter = _make_adapter(s, d)
@@ -1671,6 +1724,7 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
                 sig = checkpoint() if checkpoint is not None else None
                 if sig == "stop" or s.stop_requested or _stopped_since(mark):
                     raise _End("stopped")
+                locked()
                 if sig == "pause":
                     # The reply on its way is still read first: pausing
                     # between a message and its answer would lose the answer.
@@ -1803,7 +1857,7 @@ def _end_now(s: Session, code: str, words: str, d: Deps) -> None:
     with _LOCK:
         if s.state in ("done", "stopped"):
             return
-        s.state = "stopped" if code == "stopped" else "done"
+        s.state = "stopped" if code in ("stopped", "lockdown") else "done"
         s.ended_code = code
         s.ended_words = _end_words(s, code, words)
         s.steps = []
@@ -1818,7 +1872,7 @@ def _end_now(s: Session, code: str, words: str, d: Deps) -> None:
     # limited version lets the owner's own chat go first, for a while. A
     # conversation in a comparison has no summary of its own: the
     # comparison writes one for all of them.
-    use_model = code != "stopped" and not s.compare
+    use_model = code not in ("stopped", "lockdown") and not s.compare
     if use_model and s.tier.id == ONE_CARD:
         waited = 0.0
         while waited < SUMMARY_WAIT:
@@ -1985,6 +2039,25 @@ def _stop_everything() -> Optional[str]:
     for s in idle:
         try:
             _end_now(s, "stopped", "", DEPS)
+        except Exception:
+            pass
+    if not live:
+        return None
+    return "The chatbot conversation stopped; nothing more is sent to it."
+
+
+def stop_for_lockdown() -> Optional[str]:
+    """Lockdown was just turned on (jarvis_asks_first.request_lockdown): end
+    every conversation with a chatbot outside this PC. A running one stops
+    before its next message, or while it waits for a reply (run() reads
+    Lockdown itself); a paused one ends here, so Resume cannot pick it up.
+    Quick, never waits. Returns what was stopped, in words, or None."""
+    with _LOCK:
+        live = [s for s in _SESSIONS.values() if _live(s) and goes_out(s.chatbot)]
+        idle = [s for s in live if s.state == "paused"]
+    for s in idle:
+        try:
+            _end_now(s, "lockdown", "", DEPS)
         except Exception:
             pass
     if not live:

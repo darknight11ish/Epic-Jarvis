@@ -11066,6 +11066,21 @@ loosen what asks first", which covers both uses of that card.
   (`jarvis_mcp.card_every_start`); a "tell me when" does not look, and says
   why under the watch (`jarvis_tellme.readiness`); checking for tool updates
   raises its card again.
+- **Chatbot conversations and the online weather** (added 2026-09-28, after
+  the security audit's finding #2): turning Lockdown on ends a chatbot
+  conversation or comparison that is already talking to a chatbot outside
+  this PC (`jarvis_chatbot.stop_for_lockdown`,
+  `jarvis_chatbot_compare.stop_for_lockdown`, called by
+  `request_lockdown`); `run()` also reads Lockdown before the window opens,
+  before every message and while a reply is awaited, so nothing more is
+  sent. It ends with code `"lockdown"` and the words "Lockdown was turned
+  on, so Jarvis stopped. Nothing more is sent to <chatbot>." A new one is
+  refused before any card ("Lockdown is on, so Jarvis does not talk to
+  chatbots until you turn Lockdown off ..."). A chatbot on this PC only
+  (kind `local`) is not a way out and is left alone. The animal scene's
+  weather (`jarvis_sky`) reads neither Open-Meteo nor Home Assistant while
+  Lockdown is on, drops the weather already drawn, and says why under the
+  setting; it reads again as soon as Lockdown is off.
 - **Refused while on**: loosening any action (409), and turning the lights
   setting on (409).
 
