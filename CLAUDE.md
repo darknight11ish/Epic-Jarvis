@@ -527,6 +527,21 @@ before acting on any outside review; its disproven findings stay closed):
   (3) "quiz me on my notes" with FSRS, deferred until a note-review screen
   is designed. Details and limits are in that audit, section 6.
 
+Decided 2026-09-28, after the app-builder suggestions
+(`docs/APP-BUILDER-DESIGN.md` has the plan):
+- **Jarvis may build apps and write code for the owner** - web apps (React +
+  Vite, Android through Capacitor) and native Android apps (Kotlin).
+- **Local model first; a cloud model only when Jarvis is stuck.** After a
+  set number of failed tries on one step, Jarvis may OFFER cloud help on a
+  card listing the exact files and error text that would leave the PC. This
+  bends rule 1 for app project files only, one card per offer - never email,
+  notes, memory, chat history, settings, `.env` files, signing keys or
+  anything that looks like a secret. A project can be marked "never cloud".
+- **Every merge into an app and every command (npm, Gradle) asks with a
+  card**; a git worktree keeps changes apart but is not a sandbox for
+  running programs.
+- Offline developer docs (Dash/Zeal docsets): a candidate, not queued.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

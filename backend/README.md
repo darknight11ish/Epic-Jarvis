@@ -13892,3 +13892,30 @@ the relay did not call `keep_rules_first()` before this patch.
 That needs a first question on a turn with no tools enabled, where Jarvis
 recalls a fact, and a look at whether the answer follows the rules (for
 example "say what is a guess and what is verified").
+
+# The app builder's workspace: `jarvis_app_workspace.py` (2026-09-28)
+
+**What it is.** Milestone A of the app builder (`docs/APP-BUILDER-DESIGN.md`).
+It keeps app projects under `<settings folder>/apps/`, one git repository each.
+Every piece of work gets its own separate copy (a git worktree) on its own
+branch. When the work is ready, a merge card lists every file and shows the
+whole change before anything reaches the app. **It runs nothing:** no npm, no
+Gradle, no build.
+
+**Not switched on.** There is no patch, no model tool, no API route and no
+screen yet (milestone B), so nothing calls it. `apply-patches.ps1` copies it in
+so the later milestones find it there.
+
+**Needs** git on the PC (<https://git-scm.com>). Without it, every call answers
+"git is not installed" and nothing else happens.
+
+**Safety.** git gets the no-secrets environment every program Jarvis starts
+gets (`jarvis_child_env`), none of the owner's own git settings
+(`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM`), and an empty hooks folder. It has
+no remote, so there is no fetch and no push. File names are checked before
+anything is written: no `..`, nothing in `.git`, no Windows device names, and
+nothing that points outside the task's copy. A merge is refused if the task or
+the app changed after its card was built.
+
+**Tested by** `test_app_workspace.py` (36 checks, real git in a temporary
+folder).

@@ -13,7 +13,7 @@ ones back without new evidence from the code.
 | The backend's web server is Python's standard library `http.server` (`ThreadingHTTPServer`), not FastAPI. Nothing in the repo uses FastAPI, Starlette, uvicorn or aiohttp. | `backend/loopback-too.patch` (`httpd = ThreadingHTTPServer((bind, HUD_PORT), Handler)`), `backend/README.md` ("`main()` opens one socket: `ThreadingHTTPServer((bind, HUD_PORT), Handler)`") |
 | Rule 2's allowed addresses include the home network (10.x, 172.16-31.x, 192.168.x, `fc00::/7`, `.local`), as well as this PC and Tailscale/Meshnet (100.64.0.0/10). The owner added the home network on 2026-09-26. | `docs/ARCHITECTURE.md` §2 (the own-networks table), `CLAUDE.md` ("Decided 2026-09-26, after checking a Gemini audit finding") |
 | The animal motion is Jarvis's own procedural maths. It has no spring solver and no third-party motion code (not Spring-It-On, not TalkingHead). Each pose is a pure function of the state and the clock. | `jarvis-desktop/src/critter-pose.js` header: "Nothing carries over from the last frame" |
-| Jarvis has no tool that runs AI-written code. | `backend/README.md`: "there is no sandbox" |
+| **Corrected 2026-09-28 (this audit was wrong first time):** Jarvis HAS a tool that runs commands the model writes: `shell_exec` runs one shell command through `subprocess` (`shell=True`), with the owner's full Windows permissions, after an approval card showing the exact command. Its environment is an allowlist with no keys, tokens or passwords. There is no sandbox. | `backend/jarvis_agent.py` (`_run_shell_exec`, `shell_env`), `backend/README.md`: "there is no sandbox" |
 | No Temporal and no DBOS. There is one scheduler (`jarvis_schedule`). | Code search: no `temporalio` or `dbos` imports in `backend/` |
 | ZipVoice is already used, for custom voices. | `backend/jarvis_voices.py`, `THIRD-PARTY-NOTICES.txt` |
 | The PC already uses Silero VAD. The phone and the desktop app use a loudness rule to decide when you've stopped talking and when you're interrupting. The wake-up itself ("hey Jarvis") is done by the openWakeWord model, not by loudness. | `docs/ARCHITECTURE.md` §10 ("speech check (Silero VAD)"), `jarvis-client/.../voice/VoiceFlow.kt` (`trailingQuietMs`, `WakeClip.EndOfSpeech.threshold`), the desktop's `voice_flow.rs` (`trailing_quiet`) |
@@ -23,7 +23,7 @@ ones back without new evidence from the code.
 
 ## 2. Findings from the review that are disproven
 
-- "Replace bare `subprocess` execution of model-written Python with Monty." There is no such execution (above). Monty was only ever a candidate for a narrow spreadsheet query box (`CUTTING-EDGE-2026-09-26-round3-knowledge.md`, idea 6).
+- "Replace bare `subprocess` execution of model-written Python with Monty." **Half right; this audit first said it was wrong.** The concern is real: `shell_exec` (above) runs approved commands with full permissions, and a command can be `python -c ...`. But Monty doesn't fix that: it runs only a subset of Python, not shell commands, so it can't replace `shell_exec`. What protects the owner today is the card with the exact command, the no-secrets environment, and the stale-stream block. Monty stays a candidate only for the narrow spreadsheet query box (`CUTTING-EDGE-2026-09-26-round3-knowledge.md`, idea 6).
 - "Replace Temporal with DBOS." Neither is used. Adding DBOS's scheduler would break the one-scheduler rule. The research already chose to copy DBOS's resume-from-the-last-step *idea*, not the library.
 - "espeak-ng DLLs in the installer risk GPL contagion." They aren't there. (Keep it that way: never add espeak-ng to the installer's resources.)
 - "Add credits for TalkingHead and spring-motion code." Neither was used, so there is nothing to credit.
@@ -92,3 +92,45 @@ existing behaviour until it's switched on. Each gets the usual new-feature audit
 - **When.** Only once a note-review screen is designed. It would be one new
   kind on the existing scheduler, not a second scheduler, and notes stay
   outside text (never learned as facts).
+
+## 7. Rounds three and four (later on 2026-09-28)
+
+Two more batches of suggestions from Gemini, checked the same way.
+
+**Round three:**
+- **FlashRank (re-ranking memory results):** already done another way.
+  `backend/rebuilt/jarvis_memory.py` re-ranks with fastembed's cross-encoder
+  `Xenova/ms-marco-MiniLM-L-6-v2` on the processor, after the fused keyword
+  and meaning search (memory idea 1). A swap to FlashRank's bigger model
+  would be a memory change, so it has to beat `eval_memory.py` first. The
+  sample code Gemini gave also returns its "top 5" in the old order, not by
+  score.
+- **Monty with saved interpreter state:** see the corrected entry above.
+- **Dyad:** only relevant to the app builder; its per-project rules file is
+  taken as an idea (`docs/APP-BUILDER-DESIGN.md`, milestone D).
+- **ShowUI (clicking by screenshot):** goes against Jarvis's design.
+  `backend/jarvis_ui_control.py` clicks only named controls from Windows'
+  accessibility tree, stops the moment anything changes, and never guesses
+  pixel positions (`docs/UFO-SAFETY-DESIGN.md`). Mouse control also waits
+  (owner, 2026-09-25).
+- **Silero on the phone:** already milestone 1 (section 6). The phone sends
+  one finished clip, not a stream. `WakeWordService.kt` exists; wake-up is
+  still the wake-word model's job.
+- **microWakeWord (kahrendt/microWakeWord, code Apache-2.0):** a candidate
+  for the wake-word trial alongside livekit-wakeword. The licences of its
+  trained models and training data haven't been checked; they decide whether
+  it's really free of the non-commercial limit.
+
+**Round four** (all tied to building apps, which the owner then chose to do,
+in `docs/APP-BUILDER-DESIGN.md`):
+- The "headless coding sub-engine" Gemini described didn't exist, and nothing
+  in the backend used git worktrees. `ARCHITECTURE.md` section 11's "Sandbox:
+  Git worktrees, not Docker" was a decision with no code behind it. It is now
+  milestone A of the app builder. A worktree keeps changes apart; it is not a
+  sandbox for running programs (the design doc says what is done instead).
+- crawl4ai, RepoMapper/Aider RepoMap, bolt.diy, Roo Code and Plandex (AGPL):
+  ideas only, placed in the design doc's milestones or its "not adopted"
+  list.
+- **Offline developer docs (Dash/Zeal docsets):** a candidate for later, not
+  queued (owner, 2026-09-28).
+
