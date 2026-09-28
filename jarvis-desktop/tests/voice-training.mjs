@@ -727,6 +727,79 @@ await check("hands-free: \"only trust the talk button\" is at once; going back a
   assert.match(rust, /\("hands_free", "button_only"\) => \{?\s*Ok\(\("hands_free", "button_only", false\)\)/);
 });
 
+/** The same status with talk-to-type at `value`, or, with `value`
+ *  undefined, from a PC older than it. */
+const withTalkType = (st, value, where = "settings") => {
+  const c = JSON.parse(JSON.stringify(st));
+  delete c.gate.settings.talk_to_type;
+  delete c.gate.talk_to_type;
+  if (value === undefined) return c;
+  if (where === "settings") c.gate.settings.talk_to_type = value;
+  else c.gate.talk_to_type = value;
+  return c;
+};
+
+await check("talk-to-type: off by default, on is ONE card held on a stale link, off at once, only when the PC has it", async () => {
+  assert.deepEqual(VT.TALK_TO_TYPE.map(VT.choiceText), ["Off (default)", "On"]);
+  assert.match(VT.TALK_TO_TYPE[1].detail, /password box/);
+  assert.match(VT.TALK_TO_TYPE[1].detail, /not kept in chat history/);
+  assert.equal(VT.loosens("talk_to_type", "on"), true);
+  assert.equal(VT.loosens("talk_to_type", "off"), false);
+  // The REAL status (the backend's own, regenerated) carries it, off.
+  assert.equal(VT.settingsView(S.strong_ready).talkToType, "off");
+  assert.equal(VT.settingsView(withTalkType(S.strong_ready, "on", "gate")).talkToType, "on");
+  assert.equal(VT.settingsView(withTalkType(S.strong_ready, "maybe")).talkToType, "");
+  assert.equal(VT.settingsView(withTalkType(S.strong_ready)).talkToType, "");
+
+  const page = await open(S.strong_ready);
+  const got = await page.evaluate(() => ({
+    shown: !document.getElementById("vt-talktype-box").hidden,
+    title: document.querySelector("#vt-talktype-box h3").textContent,
+    pressed: document.querySelector('#vt-talktype button[aria-pressed="true"]').dataset.value,
+  }));
+  assert.equal(got.shown, true);
+  assert.equal(got.title, "Talk-to-type (this PC only)");
+  assert.equal(got.pressed, "off");
+  assert.equal(await text(page, "vt-talktype-note"), VT.TALK_TO_TYPE[0].detail);
+  await page.close();
+  const old = await open(withTalkType(S.strong_ready));
+  assert.equal(await old.evaluate(() => document.getElementById("vt-talktype-box").hidden), true);
+  await old.close();
+
+  // On, on a stale link: nothing sent, and it says why.
+  const held = await open(S.strong_ready, { link: { stale: true } });
+  await held.click('#vt-talktype button[data-value="on"]');
+  await held.waitForTimeout(150);
+  assert.deepEqual(await calls(held, "set_voice_setting"), []);
+  assert.match(await text(held, "vt-setting-status"), /catching up/);
+  await held.close();
+  // On a live link: sent - the PC answers with the card.
+  const live = await open(S.strong_ready);
+  await live.click('#vt-talktype button[data-value="on"]');
+  await live.waitForTimeout(150);
+  assert.deepEqual(await calls(live, "set_voice_setting"), [{ setting: "talk_to_type", value: "on" }]);
+  await live.close();
+  // Off: at once, even on a stale link.
+  const on = withTalkType(S.strong_ready, "on");
+  const off = await open(on, { link: { stale: true } });
+  await off.click('#vt-talktype button[data-value="off"]');
+  await off.waitForTimeout(150);
+  assert.deepEqual(await calls(off, "set_voice_setting"), [{ setting: "talk_to_type", value: "off" }]);
+  await off.close();
+
+  assert.match(VT.settingWaitingLine({ setting: "talk_to_type", value: "on" }, WHERE),
+    /^Waiting for your approval to change talk-to-type to "On"\./);
+  const card = { ...S.balanced.gate.training.last, setting: "talk_to_type", value: "on" };
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "setting_changed" }, on), "Approved: \"On\" is on now.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "denied" }, S.strong_ready), "You said no, so \"Off\" stays.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "withdrawn" }, S.strong_ready),
+    "You turned talk-to-type off while the card waited, so approving it changed nothing.");
+  // CONTROL: the Rust knows the setting, and holds only turning it on.
+  const rust = read("src-tauri/src/voice_training.rs");
+  assert.match(rust, /\("talk_to_type", "on"\) => \{?\s*Ok\(\("talk_to_type", "on", true\)\)/);
+  assert.match(rust, /\("talk_to_type", "off"\) => \{?\s*Ok\(\("talk_to_type", "off", false\)\)/);
+});
+
 await check("the guided test: 20 sentences, one request, the result in words", async () => {
   const page = await open(S.strong_ready);
   await click(page, "vt-test", "Start the test");

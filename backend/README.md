@@ -13983,3 +13983,57 @@ is opened: every way out is a fake.
   shown under the watch so this can be seen.
 - "What Jarvis can reach" does not list watches (it never listed page
   watches either).
+
+# Talk-to-type on the PC: `jarvis_voice.py`, `jarvis_voice_enroll.py`, `jarvis_speech.py` (2026-09-28)
+
+## In plain words
+
+The owner decided (2026-09-27): hold a key on the PC, speak, and Jarvis
+types what was said into the program in front. One approval card to switch
+it on; off at once; never on the phone. The desktop app does the typing
+(`jarvis-desktop/src-tauri/src/talk_type.rs`); the backend only holds the
+switch and turns the owner's voice into words, the same way it does for
+the talk button. `docs/JARVIS-API.md` section 72 has the whole design.
+
+## What changed
+
+No new patch, no new route, no new module - three shipped modules, whole:
+
+- `rebuilt/jarvis_voice.py`: a sixth voice setting, `talk_to_type`
+  (`"off"` by default, `"on"` the looser value), with the other five in
+  `voice-settings.json`; `talk_to_type_on()`; it is in `status()`.
+- `jarvis_voice_enroll.py`: `{"mode": "talk_to_type", "value": ...}` on
+  `POST /api/voice/enroll`, through the same `stage_setting` as the other
+  voice settings - "on" is ONE card (`change_own_config`) with its own
+  plain-words text, "off" is at once and withdraws a waiting card.
+- `jarvis_speech.py`: `source=talk_to_type` on `/api/voice/utterance`. With
+  the switch off, refused before the clip is even read. With it on, the
+  same order as every clip (speech, long enough, the owner's voice, only
+  then the words), then three differences: the words come back cleaned of
+  "um"/"uh" (`clean_dictation`, adapted from Handy, MIT -
+  THIRD-PARTY-NOTICES.txt), they are not noted for chat history or the
+  delay table, and nothing is marked to be read aloud. `gate.talk_to_type`
+  is in `status()`.
+
+The fixtures made from the real backend were regenerated
+(`tools/gen_voice_status_cases.py`, `gen_voice_training_cases.py`,
+`gen_phone_voice_cases.py`): the only change in each is the new setting.
+
+## Test it
+
+`python3 backend/test_talk_type.py` (38 checks): off by default; on is one
+card and deny, a timeout and a wrong tier change nothing; off is at once
+and withdraws a waiting card; while off, a clip is refused before
+anything runs; while on, a stranger is never transcribed, a short clip is
+"say a little more", the words come back cleaned and are not noted for
+history; the status carries it; `clean_dictation` on its own.
+`test_voice_strict.py`, `test_speech.py` and `test_voice_enroll.py` still
+pass.
+
+## Not checked, said plainly
+
+- **Not run on the owner's PC**, and no real paste on Windows has been
+  tried - the desktop half is compiled for Windows here, not run.
+- The desktop refuses to type into a password box using Windows' own
+  signs (UI Automation's `IsPassword`, a classic edit box's
+  `ES_PASSWORD`); a box that gives neither sign cannot be spotted.

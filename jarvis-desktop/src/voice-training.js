@@ -385,6 +385,7 @@ const SETTING_NAMES = {
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
   hands_free: "how far \"Hey Jarvis\" is trusted",
+  talk_to_type: "talk-to-type",
 };
 
 /** The choices, in the order they are shown, with plain words for each. */
@@ -474,10 +475,29 @@ export const HANDS_FREE = Object.freeze([
   },
 ]);
 
+/**
+ * Talk-to-type on this PC (the owner's decision, 2026-09-27; talk_type.rs;
+ * docs/JARVIS-API.md section 72). Off by default. On is the looser choice:
+ * one approval card, then no card each time. Off is at once.
+ */
+export const TALK_TO_TYPE = Object.freeze([
+  {
+    id: "off",
+    label: "Off",
+    isDefault: true,
+    detail: "Nothing listens for the talk-to-type key.",
+  },
+  {
+    id: "on",
+    label: "On",
+    detail: "Hold the talk-to-type key (Alt+Shift+T unless you changed it under Shortcuts) and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you tap again. Your voice is checked first and the words are made on this PC; they are not kept in chat history. It never types into a password box, or while Jarvis is locked.",
+  },
+]);
+
 function choiceWords(setting, value) {
   const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY
     : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY
-      : setting === "hands_free" ? HANDS_FREE : [];
+      : setting === "hands_free" ? HANDS_FREE : setting === "talk_to_type" ? TALK_TO_TYPE : [];
   return list.find((c) => c.id === value) || null;
 }
 
@@ -528,7 +548,7 @@ export function currentSetting(status, setting) {
   if (!view) return "";
   return setting === "strictness" ? view.strictness : setting === "privacy" ? view.privacy
     : setting === "memory" ? view.memory : setting === "sensitive_memory" ? view.sensitiveMemory
-      : setting === "hands_free" ? view.handsFree : "";
+      : setting === "hands_free" ? view.handsFree : setting === "talk_to_type" ? view.talkToType : "";
 }
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule. */
@@ -536,7 +556,8 @@ export function loosens(setting, value) {
   return (setting === "strictness" && value === "balanced") || (setting === "privacy" && value === "voice_is_enough")
     || (setting === "memory" && value === "memory_aloud")
     || (setting === "sensitive_memory" && value === "sensitive_aloud")
-    || (setting === "hands_free" && value === "same_as_button");
+    || (setting === "hands_free" && value === "same_as_button")
+    || (setting === "talk_to_type" && value === "on");
 }
 
 /**
@@ -565,12 +586,17 @@ export function settingsView(status) {
   // (or `gate.hands_free`). "" from a PC that does not have it - not offered.
   const rawHandsFree = s.hands_free !== undefined ? s.hands_free : gate.hands_free;
   const handsFree = rawHandsFree === "same_as_button" || rawHandsFree === "button_only" ? rawHandsFree : "";
+  // Talk-to-type (2026-09-28): `gate.settings.talk_to_type` (or
+  // `gate.talk_to_type`). "" from a PC that does not have it - not offered.
+  const rawTalk = s.talk_to_type !== undefined ? s.talk_to_type : gate.talk_to_type;
+  const talkToType = rawTalk === "off" || rawTalk === "on" ? rawTalk : "";
   return {
     strictness,
     privacy,
     memory,
     sensitiveMemory,
     handsFree,
+    talkToType,
     voiceIsEnoughAllowed: yes(s.voice_is_enough_allowed) && strictness === "very_strict",
     minSeconds: min,
     waiting: waiting && waiting.name ? { setting: String(waiting.name), value: String(waiting.value || "") } : null,

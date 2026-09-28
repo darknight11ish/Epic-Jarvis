@@ -51,6 +51,15 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **Page watches ignore hidden page bytes**, so a page nobody changed no
   longer counts as changed (a fix ported from another branch).
 
+**New: talk-to-type on the PC**
+
+- **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the
+  program in front. Off by default; turning it on shows one approval card,
+  turning it off is immediate. The voice check still comes first.
+- **It never types into a password box, while Jarvis is locked, or into a
+  window you switched to.** Your clipboard is put back afterwards, and the
+  words stay out of Windows' clipboard history. The words are not kept.
+
 **Fixed**
 
 - **Desktop security update.** The desktop app's framework (Tauri) goes from

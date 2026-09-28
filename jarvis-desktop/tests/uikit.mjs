@@ -443,6 +443,8 @@ export const HOTKEYS = [
     accelerator: "Alt+Shift+X", default: "Alt+Shift+X", registered: true, error: null },
   { id: "toggle_floating", label: "Show or hide the floating face", hint: "The small always-on-top window with just Jarvis's face - no chat box. Off by default.",
     accelerator: "Alt+Shift+F", default: "Alt+Shift+F", registered: true, error: null },
+  { id: "talk_to_type", label: "Talk-to-type", hint: "Hold it and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you press it again. Works once talk-to-type is on (Settings, Voice).",
+    accelerator: "Alt+Shift+T", default: "Alt+Shift+T", registered: true, error: null },
 ];
 
 export const UPDATE_NONE = {

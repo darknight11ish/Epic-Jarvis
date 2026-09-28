@@ -9035,3 +9035,135 @@ requests on repositories the owner names.
   `jarvis-framework.toml` (apply-patches.ps1 never overwrites it; its
   settings diff shows the line).
 - The phone half (Kotlin) was not compiled here; CI is the only compiler.
+
+## 72. Talk-to-type on the PC (added 2026-09-28)
+
+The owner's decision (2026-09-27): "Talk-to-type on the PC: one approval
+card to switch it on, then no card each time. Hold a key, speak, and
+Jarvis types what was said into the program in front - speech-to-text on
+the PC only, as always. Switching it off is immediate. Not on the phone."
+
+**No new route.** It is a sixth voice setting on the route the other five
+already use (section 16), and a new `source` on the route every clip
+already uses (section 5).
+
+### 72.1 The switch
+
+`GET /api/voice/status` carries it twice, like `hands_free`:
+
+```
+"gate": {
+  "talk_to_type": "off",              "off" (the default) or "on";
+                                      "" from a PC older than it
+  "settings": {
+    "talk_to_type": "off",
+    "choices":  {"talk_to_type": ["off", "on"], ...},
+    "defaults": {"talk_to_type": "off", ...}
+  }
+}
+```
+
+`POST /api/voice/enroll`:
+
+```
+{"mode": "talk_to_type", "value": "on"}    202 {"ok": true, "pending": true, ...}
+                                             ONE approval card (change_own_config,
+                                             tier "ask"); nothing changes until
+                                             it is approved
+{"mode": "talk_to_type", "value": "off"}   200 {"ok": true, "changed": true, ...}
+                                             at once, no card; also withdraws a
+                                             waiting "on" card (outcome "withdrawn")
+```
+
+Exactly the shape of `strictness`, `privacy`, `memory`, `sensitive_memory`
+and `hands_free`: the same one-at-a-time voice card, the same
+`gate.training.pending` / `kind: "setting"` / `setting: {"name":
+"talk_to_type", "value": "on"}` while it waits, and the same
+`gate.training.last` (`setting_changed`, `denied`, `timed_out`, `refused`,
+`withdrawn`, `failed`) when it ends. The card's `what` line is "turn on
+talk-to-type on this PC". Stored in `voice-settings.json` beside the voice
+prints (`jarvis_voice.settings()`); a missing, unreadable or unknown value
+reads as `off`.
+
+### 72.2 Hearing a clip for typing
+
+`POST /api/voice/utterance?source=talk_to_type&mic=desktop`, body one WAV,
+the same as the talk button. `jarvis_speech.hear()` then:
+
+- with the switch **off**: refuses before the WAV is even read -
+  `{"is_owner": false, "available": false, "reason": "talk-to-type is
+  switched off on this PC - turn it on in Settings, Voice (it shows you an
+  approval card first)"}`. Nothing checked, nothing transcribed.
+- with it **on**: every step a talk-button clip gets, in the same order -
+  speech or not (Silero VAD), long enough to check (the "say a little
+  more" rule), the owner's voice (a stranger is never transcribed) - and
+  only then the words. Three differences from the talk button:
+  - `text` comes back cleaned: "um", "uh", "hmm" and the like removed, a
+    word said three or more times in a row kept once, spaces tidied
+    (`clean_dictation`, adapted from Handy, MIT - THIRD-PARTY-NOTICES.txt);
+  - the words are **not** noted for chat history and are not a row in the
+    delay table - they are not a chat turn, and they are not kept;
+  - `private_aloud`, `memory_aloud` and `sensitive_aloud` are all `false`.
+
+Another client gains nothing from this source: the words are the ones the
+talk button would return, minus the fillers.
+
+### 72.3 What the desktop does with them
+
+The desktop app (`talk_type.rs`) is the only caller. Settings, Voice,
+"Talk-to-type (this PC only)" is the switch (Off (default) / On). The key
+is a hotkey like the others (Settings, Shortcuts): **Talk-to-type,
+`Alt+Shift+T`**, rebindable.
+
+- **Hold** the key and speak; let go and it types. A **tap** (under 0.35 s)
+  keeps listening until the key is pressed again. Two minutes at most,
+  then it stops by itself and types.
+- Before the microphone opens it refuses, with one plain notification,
+  when: the event stream is stale (rule 4); App lock is on and Jarvis is
+  locked (the owner was away longer than "Lock again after" - no Windows
+  Hello prompt is raised, because it would take the keyboard focus from
+  the program being typed into); Jarvis's address is not this PC (the
+  audio must not leave it); "hey Jarvis" listening, the talk button or a
+  Settings recording holds the microphone; or the PC says the switch is
+  off.
+- While it listens, the tray icon shows the "listening" colour and its
+  tooltip says "Jarvis — listening to type what you say"; the floating
+  face, when shown, shows "listening" too.
+- After the words come back, before typing: still live, still unlocked,
+  not stopped; every modifier key let go (so Ctrl+V is not read as
+  Ctrl+Alt+V); the **same window** still in front as when the key went down
+  (else nothing is typed); and the box with the keyboard focus is **not a
+  password box** - asked of Windows UI Automation (`IsPassword`) and, for
+  classic Win32 edit boxes, their `ES_PASSWORD` style. Either says
+  password: refused.
+- The paste is Handy's (MIT): the words go on the clipboard as a
+  delayed-render promise marked `ExcludeClipboardContentFromMonitorProcessing`,
+  `CanIncludeInClipboardHistory = 0` and `CanUploadToCloudClipboard = 0`
+  (kept out of Win+V history, Cloud Clipboard and clipboard managers);
+  Ctrl+V is pressed; Windows says when the program in front reads them;
+  then the owner's previous clipboard (every format) is put back - unless
+  the owner copied something newer meanwhile, which then wins.
+- **Stop everything** ends it at once: the microphone closes, the clip is
+  dropped, and nothing still on its way is typed.
+- The words are never in a notification, a log line or a file.
+
+### 72.4 Limits, said plainly
+
+- **Not run on Windows yet.** Written and compiled for Windows in the dev
+  container (`cargo check`/`clippy --target x86_64-pc-windows-msvc`); the
+  Rust tests compile but have not run, and no real paste has been tried.
+- **A password box that does not tell Windows it is one** (a program with
+  no UI Automation support and no classic edit box) cannot be spotted. If
+  UI Automation does not answer within 1.5 seconds, only the classic check
+  is used.
+- **A program running as administrator** ignores keys sent by one that is
+  not: nothing is typed, and after up to 8 seconds the owner is told "The
+  program in front did not take the words".
+- **It cannot share the microphone with "hey Jarvis" listening**: turn that
+  off in the Jarvis bar first. Pausing and resuming the listener around a
+  talk-to-type press is a possible follow-up.
+- **Short phrases** follow the voice check's own rule: at "Very strict" a
+  command needs about 2 seconds of speech, so a single word is refused
+  with "say a little more".
+- **Not on the phone** (ARCHITECTURE section 8): it types into the PC's own
+  programs, and a client must not do speech-to-text.

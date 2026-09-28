@@ -130,6 +130,20 @@ windows = { version = "0.61", features = [
   # already here - nothing new is downloaded.
   "Security_Credentials_UI",
   "Win32_System_WinRT",
+  # Talk-to-type (talk_type.rs, talk_type/paste_windows.rs - adapted from
+  # Handy, MIT): the clipboard as a delayed-render promise owned by a hidden
+  # message-only window, the owner's clipboard snapshotted and put back,
+  # Ctrl+V pressed with SendInput, which window is in front, and UI
+  # Automation's "is this a password box?". Features of a crate already
+  # here - nothing new is downloaded.
+  "Win32_System_DataExchange",
+  "Win32_System_Memory",
+  "Win32_System_Ole",
+  "Win32_System_LibraryLoader",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Accessibility",
 ] }
 # The type that Windows Hello's answer arrives in (IAsyncOperation). Not a new
 # download either: the `windows` crate above already depends on exactly this

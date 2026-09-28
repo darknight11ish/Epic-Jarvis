@@ -308,7 +308,9 @@
               computer, which ignores anything that does not start with
               "hey Jarvis". Windows dictation
               is not used, because it sends your voice to a company's
-              servers to turn it into text.
+              servers to turn it into text. To have Jarvis type what you say
+              into another program instead, turn on Talk-to-type in Voice
+              below, then hold Alt+Shift+T and speak.
             </p>
           </details>
 
@@ -590,6 +592,19 @@
               <h3 class="subhead">Hands-free ("Hey Jarvis")</h3>
               <div class="choices" id="vt-handsfree" role="group" aria-label="Hands-free: how far a question started with Hey Jarvis is trusted"></div>
               <p class="note" id="vt-handsfree-note"></p>
+            </div>
+            <!-- Talk-to-type on this PC (talk_type.rs; docs/JARVIS-API.md
+                 section 72). This PC only: it types into this PC's programs,
+                 so the phone has no such switch (ARCHITECTURE section 8). -->
+            <div id="vt-talktype-box" hidden>
+              <h3 class="subhead">Talk-to-type (this PC only)</h3>
+              <div class="choices" id="vt-talktype" role="group" aria-label="Talk-to-type: hold a key, speak, and Jarvis types what you said"></div>
+              <p class="note" id="vt-talktype-note"></p>
+              <p class="note">
+                It cannot share the microphone with "hey Jarvis" listening:
+                turn that off in the Jarvis bar first. Stop everything ends
+                it at once.
+              </p>
             </div>
             <p class="sc-line" id="vt-setting-waiting" data-tone="warn" hidden></p>
             <p class="note">

@@ -44,6 +44,10 @@ The whole order, since 2026-09-23 (each step can only refuse, never add):
 
     0. source=barge_in (2026-09-24): Jarvis is talking; barge_in() answers
        "stop or not" and NOTHING below runs - no speech-to-text, ever
+       source=talk_to_type (2026-09-28): with the owner's talk-to-type
+       switch off, refused here and NOTHING below runs; with it on, every
+       step below runs as for the talk button, and the words come back
+       cleaned of "um"/"uh" and are never noted for chat history
     1. read the WAV                      bad file        -> refused
     2. Silero VAD: is there speech?      only noise      -> refused, nothing else runs
     3. wake word (source=wake_word only): is it switched on, and is
@@ -940,6 +944,9 @@ def _strict_state(voice: dict) -> dict:
         # The fifth (how far "hey Jarvis" is trusted, the owner's decision of
         # 2026-09-24): "" from an older jarvis_voice.py - not offered.
         "hands_free": str(voice.get("hands_free") or ""),
+        # Talk-to-type on the PC (2026-09-28): "off" or "on"; "" from an
+        # older jarvis_voice.py - the desktop then does not offer it.
+        "talk_to_type": str(voice.get("talk_to_type") or ""),
         "settings": st or {"strictness": strict, "privacy": "private_on_screen",
                            "voice_is_enough_allowed": strict == "very_strict",
                            "min_command_seconds": 0.0},
@@ -1263,6 +1270,106 @@ def status() -> dict:
 # --------------------------------------------------------------------------
 
 SOURCE_WAKE_WORD = "wake_word"
+#: Talk-to-type on the PC (the owner's decision, 2026-09-27; docs/JARVIS-API.md
+#: section 72): the desktop app holds a key, records, and TYPES the words
+#: into the program in front instead of sending them to the chat. The same
+#: order as every clip - speech, the owner check, only then the words - plus
+#: three differences, all in hear(): refused before anything runs while the
+#: owner's switch (jarvis_voice `talk_to_type`) is off; the words are never
+#: noted for chat history or the delay table (they are not a chat turn); and
+#: they come back cleaned of "um"/"uh" (clean_dictation, below).
+SOURCE_TALK_TYPE = "talk_to_type"
+TALK_TYPE_OFF_REASON = ("talk-to-type is switched off on this PC - turn it on in "
+                        "Settings, Voice (it shows you an approval card first)")
+
+
+def _talk_type_on() -> bool:
+    """The owner's talk-to-type switch. A jarvis_voice.py older than it, or
+    one that cannot answer: off (fail closed - nothing is typed)."""
+    fn = getattr(jarvis_voice, "talk_to_type_on", None) if jarvis_voice is not None else None
+    if fn is None:
+        return False
+    try:
+        return bool(fn())
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# clean_dictation() - adapted from Handy (https://github.com/cjpais/Handy,
+# src-tauri/src/audio_toolkit/text.rs: remove_filler_words,
+# collapse_stutters, normalize_transcription_output), ported from Rust to
+# Python. MIT License, Copyright (c) 2025 CJ Pais - the full notice is in
+# THIRD-PARTY-NOTICES.txt at the top of this repository. Only the English
+# lists are used: the speech-to-text model on this PC is English.
+# ---------------------------------------------------------------------------
+
+#: Handy's UNIVERSAL_FILLER_WORDS (never a real word in any language) plus
+#: its English-only list ("um", "ah", "eh").
+_FILLER_WORDS = ("uh", "uhm", "umm", "uhh", "uhhh", "ehh", "ehm", "ahm", "hmm", "hm",
+                 "mmm", "um", "ah", "eh")
+_FILLER_PATTERNS = tuple(re.compile(r"\b" + re.escape(w) + r"\b[,.]?", re.IGNORECASE)
+                         for w in _FILLER_WORDS)
+_MULTI_SPACE = re.compile(r"\s{2,}")
+
+
+def _opens_sentence(kept: str) -> bool:
+    t = kept.rstrip()
+    return not t or t[-1] in ".!?…"
+
+
+def _remove_filler_matches(text: str, pattern) -> str:
+    """Deletes every match; a capitalised filler that opened a sentence
+    hands its capital on ("Um, so I think" -> "So I think")."""
+    kept = []
+    owed = False
+    resume = 0
+
+    def push(segment: str) -> None:
+        nonlocal owed
+        if owed:
+            for i, ch in enumerate(segment):
+                if ch.isalnum():
+                    owed = False
+                    kept.append(segment[:i] + ch.upper() + segment[i + 1:])
+                    return
+        kept.append(segment)
+
+    for m in pattern.finditer(text):
+        push(text[resume:m.start()])
+        if m.group(0)[:1].isupper() and _opens_sentence("".join(kept)):
+            owed = True
+        resume = m.end()
+    push(text[resume:])
+    return "".join(kept)
+
+
+def _collapse_stutters(text: str) -> str:
+    """Three or more of the same word in a row become one ("I I I" -> "I")."""
+    words = text.split()
+    if not words:
+        return text
+    out, i = [], 0
+    while i < len(words):
+        w = words[i]
+        low = w.lower()
+        n = 1
+        if low.isalpha():
+            while i + n < len(words) and words[i + n].lower() == low:
+                n += 1
+        out.append(w)
+        i += n if n >= 3 else 1
+    return " ".join(out)
+
+
+def clean_dictation(text: str) -> str:
+    """What talk-to-type types: the words without "um"/"uh", a stutter
+    collapsed, spaces tidied. Never adds a word."""
+    out = str(text or "")
+    for pattern in _FILLER_PATTERNS:
+        out = _remove_filler_matches(out, pattern)
+    out = _collapse_stutters(out)
+    return _MULTI_SPACE.sub(" ", out).strip()
 
 #: A clip longer than this (the VAD's speech span, which keeps 0.3 s either
 #: side - so about 1.4 s of words) is never a stop: "Hey Jarvis, stop the
@@ -1572,6 +1679,11 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         return Heard(False, source=source, available=bool(b.get("available")),
                      stop=bool(b.get("stop")), reason=str(b.get("reason") or ""),
                      seconds=float(b.get("seconds") or 0.0))
+    talk_type = source == SOURCE_TALK_TYPE
+    if talk_type and not _talk_type_on():
+        # Before the WAV is even read: with the owner's switch off, a
+        # talk-to-type clip is not checked, not transcribed, not kept.
+        return Heard(False, source=source, available=False, reason=TALK_TYPE_OFF_REASON)
     t_in = time.monotonic()
     steps = {}
     cold = _stt_cache is _UNSET
@@ -1742,6 +1854,15 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
             _flow("note_heard", t_in, steps, source=source, mic=mic,
                   waited_ms=waited_ms, cold=cold)
             _note_for_history(words, verdict, embedder, source)
+
+    if talk_type:
+        # Typed into another program, never a chat turn: not noted for chat
+        # history, not a row in the delay table, nothing read aloud. The
+        # words go back to the desktop app once, in this reply, and are not
+        # kept here.
+        quiet = {**common, "private_aloud": False, "memory_aloud": False,
+                 "sensitive_aloud": False}
+        return Heard(True, text=clean_dictation(text), engine=engine, **quiet)
 
     if not wake or via_window:
         if via_question:

@@ -5,8 +5,9 @@
 //!
 //! * plugin registration — global shortcut, clipboard manager, notifications;
 //! * the global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`,
-//!   `Alt+Shift+N`, `Alt+Shift+W`, "Stop everything" on `Alt+Shift+X`, and
-//!   the floating face on `Alt+Shift+F`; all rebindable, [`hotkeys`]);
+//!   `Alt+Shift+N`, `Alt+Shift+W`, "Stop everything" on `Alt+Shift+X`, the
+//!   floating face on `Alt+Shift+F`, and talk-to-type on `Alt+Shift+T`; all
+//!   rebindable, [`hotkeys`]);
 //! * the notification-area tray icon ([`tray::create_tray`]);
 //! * window vibrancy and focus-loss auto-hide ([`windows::setup_windows`]).
 //!
@@ -45,6 +46,7 @@ pub mod spec_drift;
 pub mod sse;
 pub mod stream;
 pub mod system_theme;
+pub mod talk_type;
 pub mod token_store;
 pub mod tool_updates;
 pub mod tray;
@@ -737,6 +739,8 @@ pub fn run() {
         .manage(system_theme::AppliedTheme::default())
         .manage(voice::VoiceCaptureState::default())
         .manage(voice::AutoListenState::default())
+        // Talk-to-type: the hotkey's microphone and typing (talk_type.rs).
+        .manage(talk_type::TalkTypeState::default())
         // Settings' voice recordings, held in memory until sent (voice_training.rs).
         .manage(voice_training::SampleState::default())
         // Windows Hello: when the owner was last here, and whether the
@@ -983,11 +987,6 @@ pub fn run() {
         builder = builder.plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
-                    // Key-up would otherwise fire every action twice.
-                    if event.state() != ShortcutState::Pressed {
-                        return;
-                    }
-
                     // Resolved against the LIVE bindings. This used to compare
                     // the fired shortcut against five values captured at
                     // startup, which is correct exactly until someone rebinds
@@ -996,6 +995,18 @@ pub fn run() {
                     let Some(action) = hotkeys::action_for(app, shortcut) else {
                         return;
                     };
+
+                    // Talk-to-type is the one action that reads key-up too:
+                    // holding the key is how long it listens (talk_type.rs).
+                    if action == talk_type::ACTION_ID {
+                        talk_type::on_hotkey(app, event.state() == ShortcutState::Pressed);
+                        return;
+                    }
+
+                    // Key-up would otherwise fire every action twice.
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
 
                     match action {
                         "toggle_quickbar" => match windows::toggle_quickbar(app) {
