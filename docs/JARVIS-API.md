@@ -12345,6 +12345,11 @@ and events.
   `textContent` only, never HTML. `widget_board_action` matches the five
   actions on a closed list in Rust; everything but Stop everything and Brief
   me is held on a stale link; Brief me opens the Brain (behind App lock).
+  **While App lock is on, Focus session, 10-min timer and Play/pause PC do
+  not act** (the owner, 2026-09-28): they open the Jarvis bar, which asks
+  Windows Hello, and say "App lock is on, so this opens the Jarvis bar
+  instead. Unlock it, then ask Jarvis there." - checked in `widget.js` and
+  again in Rust before anything is sent. Stop everything still works.
   While App lock is on or the lists are hidden, Rust takes every private
   block's words out. Read when the window opens, on a schedule or focus
   event, and once a minute while shown.

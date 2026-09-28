@@ -83,6 +83,11 @@ pub(crate) const PRIVATE_SOURCES: &[&str] =
 
 /// The timer button's words - the phone's `QuickTiles.TIMER_SET`.
 pub(crate) const TIMER_SET: &str = "10-minute timer set on your PC.";
+/// A tile that acts, pressed while App lock is on (the owner, 2026-09-28:
+/// under App lock the widget's buttons open the locked app first and do not
+/// act on their own). widget-board.js `LOCKED_OPENS_BAR`, the same words.
+pub(crate) const LOCKED_OPENS_BAR: &str =
+    "App lock is on, so this opens the Jarvis bar instead. Unlock it, then ask Jarvis there.";
 /// The focus button's length - the Focus session's own default.
 const FOCUS_MINUTES: u32 = 25;
 
@@ -301,6 +306,13 @@ pub(crate) fn action_of(action: &str) -> Option<&'static str> {
         .map(|(id, _)| *id)
 }
 
+/// Whether a button, under App lock, opens the Jarvis bar instead of acting:
+/// every one that starts or changes something. Stop everything only stops,
+/// and Brief me only opens the Brain (which asks for the lock itself).
+pub(crate) fn opens_bar_when_locked(action: &str) -> bool {
+    !matches!(action, "stop_everything" | "brief_me")
+}
+
 /// Whether a button waits for a live link (rule 4): everything but Stop
 /// everything (it only stops) and Brief me (it only opens the Brain).
 pub(crate) fn held_when_stale(action: &str) -> bool {
@@ -461,6 +473,12 @@ pub async fn widget_board_action(app: AppHandle, action: String) -> Result<Strin
     let Some(action) = action_of(&action) else {
         return Err("A widget can only use its own small buttons.".to_string());
     };
+    // App lock first: the tile only opens the (locked) Jarvis bar - it asks
+    // Windows Hello there, and nothing is started from this window.
+    if opens_bar_when_locked(action) && crate::lock::current(&app).app_lock {
+        crate::windows::show_quickbar(&app)?;
+        return Ok(LOCKED_OPENS_BAR.to_string());
+    }
     if held_when_stale(action) {
         require_link_live(&app)?;
     }
@@ -552,6 +570,12 @@ mod tests {
         assert!(!held_when_stale("brief_me"));
         assert!(held_when_stale("timer") && held_when_stale("focus"));
         assert!(held_when_stale("pc_play_pause"));
+        // Under App lock: only Stop everything and Brief me act from here.
+        assert!(!opens_bar_when_locked("stop_everything"));
+        assert!(!opens_bar_when_locked("brief_me"));
+        for a in ["focus", "timer", "pc_play_pause"] {
+            assert!(opens_bar_when_locked(a), "{a}");
+        }
     }
 
     #[test]

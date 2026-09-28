@@ -779,6 +779,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__taskNotes.push(args.note);
             if (window.__taskNoteFails) throw new Error(window.__taskNoteFails);
             return { ok: true };
+          // voice_training.rs get_face_voice_offer: the Faces window's one
+          // read - the PC's waiting animal voice question, or null, and
+          // whether the link is stale. A scenario sets window.__faceOffer.
+          case "get_face_voice_offer":
+            window.__calls.push(["__offerRead"]);
+            return JSON.parse(JSON.stringify(window.__faceOffer || { offer: null, stale: false }));
           case "get_appearance":
             if (window.__appearanceFails) throw new Error(window.__appearanceFails);
             return window.__appearance;
@@ -952,7 +958,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_voice_face":
           case "set_voice_animal":
           case "reset_voice_animal":
-          case "try_voice_animal": {
+          case "try_voice_animal":
+          case "answer_face_voice_offer": {
             const v = window.__vt;
             if (cmd !== "voice_sample_level") v.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
             if (v.fails[cmd]) throw new Error(v.fails[cmd]);
@@ -1015,6 +1022,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(v.animalReset));
               case "try_voice_animal":
                 return JSON.parse(JSON.stringify(v.animalTry));
+              // The one-time animal voice question (voice_training.rs
+              // answer_face_voice_offer). The test builds its own answer
+              // in `faceOfferAnswer` - the fixtures may not have it yet.
+              case "answer_face_voice_offer":
+                return JSON.parse(JSON.stringify(v.faceOfferAnswer
+                  || { ok: true, http: 200, message: "Done", face_voice: {} }));
               default:
                 return null;
             }
@@ -1667,6 +1680,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "widget_board_action": {
             window.__widgetCalls.push({ cmd, ...args });
+            // brain/widgets.rs: under App lock a tile that acts only opens
+            // the Jarvis bar (the owner, 2026-09-28).
+            if (window.__appLock && !["stop_everything", "brief_me"].includes(args.action)) {
+              window.__barOpened = (window.__barOpened || 0) + 1;
+              return "App lock is on, so this opens the Jarvis bar instead. Unlock it, then ask Jarvis there.";
+            }
             if (state.stale && !["stop_everything", "brief_me"].includes(args.action)) {
               throw new Error("the event stream is stale");
             }

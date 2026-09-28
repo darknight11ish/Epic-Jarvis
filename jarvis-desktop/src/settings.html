@@ -1018,6 +1018,16 @@
               </span>
             </label>
             <p class="note" id="cv-face-line" hidden></p>
+            <!-- The one-time question after an animal face is picked (the
+                 owner, 2026-09-28): the PC's own words, verbatim
+                 (custom-voices.js faceOfferView). "Use it" turns the switch
+                 above on; "Keep my voice" changes nothing. No card either
+                 way; greyed on a stale link (rule 4). -->
+            <div class="row" id="cv-face-offer" hidden>
+              <span id="cv-face-offer-question"></span>
+              <button type="button" class="btn" id="cv-face-offer-use"></button>
+              <button type="button" class="btn ghost" id="cv-face-offer-keep"></button>
+            </div>
             <div class="row">
               <span class="status" id="cv-face-status" role="status"></span>
             </div>

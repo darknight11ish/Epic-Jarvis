@@ -1587,8 +1587,12 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   owner's decision of 2026-09-26): with App lock on, the widget offers no
   note to a running task or a card, and `inject_task_note` and
   `amend_approval` refuse the widget in Rust - notes are added in the
-  Jarvis bar, which asks Windows Hello first. Stop everything (the hotkey
-  and the tray row) is never behind App lock. **The floating face**
+  Jarvis bar, which asks Windows Hello first. **The widget's own tiles
+  too** (the owner, 2026-09-28): with App lock on, Focus session, the
+  10-minute timer and Play/pause open the Jarvis bar instead of acting,
+  in `widget.js` and again in Rust (`brain/widgets.rs`). Stop everything
+  (the hotkey, the tray row and the widget's tile) is never behind App
+  lock. **The floating face**
   (2026-09-27) is not covered either, for a shorter reason than the
   widget's: it shows no approval card at all, ever - not even a title -
   only which of eight states Jarvis is in, the same information the tray
