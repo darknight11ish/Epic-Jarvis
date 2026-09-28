@@ -516,6 +516,15 @@ testers, scouts and integration scouts; `.claude/agents/`):
   terms forbid automated access and that the account could be closed. A
   request to add "tactics that help avoid bans" was declined: getting round
   a site's bot protection is not something this project builds.
+  **A spare Google account used only by Jarvis**, not the owner's main
+  one (owner, 2026-09-28): a ban cannot touch the owner's Gmail, and the
+  owner's email and Gemini's memory of them stay out of these chats.
+- **Inbox tidy by voice: yes** (owner, 2026-09-28) - archive, star, mark
+  read, or move to Trash. One approval card lists every email it will
+  touch, approved on screen (never by voice), then Undo. "Delete" only ever
+  moves to Trash. The card says when the choice came from reading email
+  (outside text). A new named way out of the PC (ARCHITECTURE §4) and its
+  own gate action, like sending email. Not built yet.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
