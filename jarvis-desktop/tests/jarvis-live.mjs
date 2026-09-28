@@ -494,6 +494,18 @@ if (K) {
     await page.close();
   });
 
+  await check("Live running on the phone shows in the bar from the PC's event, with Move it here", async () => {
+    const page = await K.open(browser, base, "index.html", { chatReplies: [] });
+    await page.evaluate((st) => window.__emit("jarvis-event", { kind: "live", id: 7, data: st }), S.phone_on);
+    await page.waitForTimeout(100);
+    assert.equal(await page.isHidden("#jarvis-live-strip"), false);
+    assert.equal((await page.textContent("#jarvis-live-title")).trim(), "Jarvis Live is on your phone");
+    await page.click("#jarvis-live-move");
+    const calls = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "live_start"));
+    assert.equal(calls.length, 1);
+    await page.close();
+  });
+
   await check("ended: the strip says why for 15 s and goes; a quiet end read on opening offers Resume Live", async () => {
     const page = await K.open(browser, base, "index.html", { chatReplies: [] });
     await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), ON);

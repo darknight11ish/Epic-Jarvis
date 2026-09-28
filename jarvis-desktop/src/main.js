@@ -5065,6 +5065,18 @@ listen("live-status", (event) => {
   paintLive();
 });
 
+/* Jarvis Live on the PHONE shows here too ("Jarvis Live is on your phone",
+   Move it here - the review: it was invisible on the PC). The PC's `live`
+   event carries the status; a session on THIS PC comes from live.rs's own
+   watcher instead (live-status above), so it is not taken twice. */
+onEvent((frame) => {
+  if (!frame || frame.kind !== "live" || !frame.data || typeof frame.data !== "object") return;
+  const s = frame.data;
+  if (liveOnHere() || s.device === LIVE_ME || s.ended_device === LIVE_ME) return;
+  liveTake({ status: s, stale: live.stale, lockUnknown: false, callUnknown: false });
+  paintLive();
+});
+
 listen("live-heard", (event) => {
   const p = (event && event.payload) || {};
   live.thinking = p.heard === true;
