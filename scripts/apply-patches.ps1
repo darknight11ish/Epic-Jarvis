@@ -626,6 +626,13 @@ $PATCHES = @(
     # rest of this feature as ordinary code, needing no patch (they are
     # whole shipped modules, copied in like every other one in this list).
     'second-card-suggest.patch'
+    # The Jarvis rules stay first on a turn with no tools enabled, too: one
+    # hunk in the relay's _open(), right after chat-history.patch's
+    # _chat_client_fields_off lines (so it goes after it, like every new
+    # patch), calling jarvis_agent.keep_rules_first() - the same call the
+    # tool loop already makes - for the local model only. Needs nothing new
+    # copied in: jarvis_agent.py is already in this list.
+    'rules-first-relay.patch'
     # Projects, build steps 1 and 2 (the owner's decision of 2026-09-28,
     # docs/PROJECTS-DESIGN.md): GET and POST /api/projects and its
     # benchmarks. One hunk, the startup install() block; its context is
@@ -665,13 +672,6 @@ $PATCHES = @(
     # like every new patch. Needs jarvis_live.py copied in; without it, or
     # on any error, the banner says so and the route is simply not there.
     'live.patch'
-    # The Jarvis rules stay first on a turn with no tools enabled, too: one
-    # hunk in the relay's _open(), right after chat-history.patch's
-    # _chat_client_fields_off lines (so it goes after it, like every new
-    # patch), calling jarvis_agent.keep_rules_first() - the same call the
-    # tool loop already makes - for the local model only. Needs nothing new
-    # copied in: jarvis_agent.py is already in this list.
-    'rules-first-relay.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

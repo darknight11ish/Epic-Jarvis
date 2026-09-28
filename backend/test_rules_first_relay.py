@@ -85,8 +85,12 @@ def _patched():
 
 def t_its_place_in_the_stack():
     order = _stack.order()
-    check(f"{PATCH} is in apply-patches.ps1's list, last",
-          PATCH in order and order[-1] == PATCH, order[-3:])
+    # It was last when it was added (main, PR #21); patches added on other
+    # branches since (projects, chatbot, Live) anchor on each other's install
+    # blocks and come after it. What matters is that it applies after the
+    # patches whose lines it touches - checked below - and on the full stack
+    # (the stand-in test above).
+    check(f"{PATCH} is in apply-patches.ps1's list", PATCH in order, order[-3:])
     for earlier in ("ollama-direct.patch", "chat-history.patch", "cloud-one-turn.patch",
                     "memory-prefix.patch"):
         check(f"after {earlier}", earlier in order and order.index(earlier) < order.index(PATCH))

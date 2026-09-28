@@ -719,7 +719,12 @@ testers, scouts and integration scouts; `.claude/agents/`):
   Jarvis window, talking does not count) by default, **with a setting to
   end it only when Windows itself locks**; the looser choice raises an
   approval card, the stricter one is immediate. **The desktop Brain's
-  existing "Live" tab is renamed "Now"** so it is not confused with
+  existing "Live" tab is renamed "Now"** (and, after the review track,
+  2026-09-28: **after a crisis turn, Live quietly gets more time and skips
+  the "minutes left" warning**; **the two interrupt settings become one** -
+  interrupt by voice, by tap only, or not at all - for Live and normal use
+  alike; **side remarks are not kept in chat history at all**) so it is
+  not confused with
   Jarvis Live.
 - **"Forget a time frame"** (owner, 2026-09-28): the owner may ask, by
   voice or typing, to forget what Jarvis learned or said in a time frame
