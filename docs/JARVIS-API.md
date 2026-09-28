@@ -8867,9 +8867,19 @@ NOTHING that acts - it only starts a repeating check-in, which is data,
 not action. Every acting step still needs its own separate card, raised by
 the ordinary chat/tool path, never by this feature.
 
-Not yet built: a UI in either app (Brain -> Work, beside Coming up, is the
-natural place, matching the morning briefing and the to-do list). Both
-apps' parity is tracked in `docs/ARCHITECTURE.md` §8 until then.
+**The phone's UI is built:** Brain, "Goals", right beside "Coming up"
+(`net/Goals.kt`, `ui/screens/GoalsPlate.kt`). It reuses `net/Schedule.kt`'s
+own job parser to read the check-in job `accept`'s answer carries, and its
+weekly check-in row is left showing on Coming up too (kind `goal_checkin`,
+`owner_listed=True`, unchanged from the backend's own default) - the ONLY
+place that job's live "waiting" state can still be read once this screen's
+own copy of one `accept` answer is gone, since no Goals route hands it out
+again. `Schedule.actionsOf` gives that row no Pause/Delete of its own for
+the same reason: only Stop tracking, on the goal itself, can take the
+check-in down cleanly. Not yet built: the desktop's own UI (Brain -> Work,
+beside Coming up, is the natural place, matching the morning briefing and
+the to-do list). `tools/check_parity.py` carries `/api/goals` as
+`desktop-todo` until then.
 
 ## 60. "One card, several steps" - the plan card (added 2026-09-28, SWITCHED OFF)
 
