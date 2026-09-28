@@ -43,6 +43,20 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **Docs: a Quick start at the top of `docs/INSTALL.md`** - the shortest
   way to a first typed chat, with the desktop app starting Jarvis, then
   pairing the phone.
+- **Projects, first part (on the PC's side only - not in the apps yet).**
+  Jarvis can now keep projects: a coding project (an app) or a life
+  project ("run a half marathon"), each with its own instructions, a few
+  notes, a to-do list and the goals it belongs to. A coding project's
+  folder must already be one of "Folders Jarvis may look in", and is
+  chosen on the PC. Each project can track numbers ("benchmarks"): say
+  "I ran 5 km" or "log my weight as 72.5 kg" and Jarvis writes it down
+  without the AI model and says whether it is better or worse than last
+  time - but only when one of your projects tracks that number.
+  Weight, heart rate, money and other health or money numbers stay on
+  screen and are never read aloud. A "Shareable" switch per project
+  starts off, and turning it on asks you with a card; nothing is ever
+  sent by it yet. Running tests and Jarvis changing code come later. The
+  screens in both apps are next.
 - **Fixed (phone): "open help", "connection", "the morning briefing",
   "about" and "Jarvis's voices" opened Settings at the top.** Each now opens
   the phone's own place for it - Help, Checks, Brain or "Jarvis's voice" -

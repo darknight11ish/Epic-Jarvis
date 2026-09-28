@@ -139,6 +139,7 @@ on a throwaway copy instead.
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Two more small hunks (the owner, 2026-09-28) hand a crisis turn's `turn_id` to `jarvis_agent.note_crisis_turn` - right after `feedback.patch` makes the id, on `wellbeing.patch`'s flag, and again after `run_local_turn` on its own crisis check - so a "wrong" mark on a crisis answer is never counted. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `projects.patch` | `jarvis_hud.py` | **Projects, build steps 1 and 2** (the owner's decision of 2026-09-28, `docs/PROJECTS-DESIGN.md`). One hunk, like every install()-shaped patch: `jarvis_projects.install(Handler, ...)` at start-up, answering `GET`/`POST /api/projects` and its benchmarks (`docs/JARVIS-API.md` §61). Its context is `answer-sources.patch`'s own install block, so it goes after it - last, like every new patch. **When the continuation branch merges:** `goals.patch` there anchors on the very same lines, so whichever lands second is re-anchored on the other's block. Needs `jarvis_projects.py`; without it, or on any error, the banner says so and the routes are not there. See "Projects", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -13834,3 +13835,73 @@ python3 backend/run_suites.py
   in a patch on the owner's PC); an unclassified action is already treated
   as risky, so Windows Hello is asked. The "What Jarvis can reach" row
   comes with the Gemini adapter.
+# Projects: `jarvis_projects.py`, `projects.patch` (2026-09-28, build steps 1 and 2)
+
+The owner's decision of 2026-09-28 (`CLAUDE.md`, "Projects, like Claude's
+Projects and more"), designed in `docs/PROJECTS-DESIGN.md`. This is the
+backend of build steps 1 and 2 only. `docs/JARVIS-API.md` section 61 has
+the routes. **Not in either app yet** (step 3).
+
+## In plain words
+
+- **A project** is one place for one thing the owner is working on: a
+  coding project (an app) or a life project ("run a half marathon"). It
+  keeps a name, "how Jarvis should work on this" (up to 1,500
+  characters), up to 10 short project notes, a folder (coding only), a
+  Shareable switch (off), a work list and the goals it is linked to.
+- **The folder** must already be on "Folders Jarvis may look in", or
+  inside one of them - there is no second folder list. It is chosen on
+  the PC only.
+- **The work list** is a named list on the one scheduler (the same lists
+  as "add milk to the shopping list"). It defaults to the project's name
+  when that makes a list name.
+- **Goals** live on the continuation branch (`jarvis_goals.py`), not
+  here, so a project keeps a list of goal ids on its own side for now.
+- **Benchmarks** are named measurements. A life benchmark is a number the
+  owner logs - by a tap, or by saying "I ran 5 km" / "log 5 km run" (60.4:
+  only when a benchmark fits). Each has dated results for a chart, and
+  "better or worse than last time" when the owner said which way is
+  better. A coding benchmark keeps its command, word for word, marked
+  "not runnable yet": nothing runs until the fence (build step 6).
+- **Sensitive numbers.** Health or money benchmarks (weight, heart rate,
+  savings, spending, a currency sign...) are marked from their name and
+  unit, or by the owner, and flagged "kept on screen": never read aloud,
+  never sent anywhere. The spoken "I weighed 72 kg" answer is private.
+- **Cards.** Only one: turning a project's Shareable switch on
+  (`change_own_config`, the same card "Folders Jarvis may look in" uses).
+  Everything else is the owner writing down their own things, like a to-do
+  item - no card.
+
+## What changed
+
+- `jarvis_projects.py` - new module, shipped whole. `projects.db` in the
+  settings folder (`JARVIS_PROJECTS_DB` overrides it). No socket, no
+  model, no command run; the audit log gets ids and counts only.
+- `jarvis_quick.py` - the "log a number" sentences (`project_log`),
+  asked only after a sentence already has that shape; `projects.db` is
+  never created by asking.
+- `projects.patch` - one hunk against `jarvis_hud.py` (see the table).
+- `scripts/apply-patches.ps1`, `backend/_where.py` - `projects.patch` added
+  to `$PATCHES` (last), `jarvis_projects.py` added to `$SHIPPED`.
+- `tools/check_parity.py` - the nine routes, as `planned`.
+- `docs/ARCHITECTURE.md` §8 - the folder and a command's words are PC-only.
+
+## Test it
+
+    python3 backend/test_projects.py
+    python3 backend/test_shipped_modules.py
+    python3 backend/run_suites.py
+    python3 tools/check_parity.py
+
+## Not built yet, said plainly
+
+- Running a benchmark (build step 6), Jarvis changing code (steps 5 and 7,
+  after the 12 GB card), the project chat context and project-labelled
+  facts (step 4), the chat-history `project` column (step 4), and both
+  apps' screens (step 3).
+- The goals.db `project` column and a goal step's measure: after the
+  continuation branch merges.
+- Backups do not include `projects.db` yet (`jarvis_backup.SOURCE_DBS` is
+  unchanged) - for the feature audit (step 8).
+- Not run on the owner's PC: tested in the dev container only, with a
+  stand-in approval gate.

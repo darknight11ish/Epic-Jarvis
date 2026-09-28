@@ -257,6 +257,22 @@ CLASSIFICATION = {
     "/api/backup/list": ("deliberate", "The kept backup files, by name and date - PC-only, the same reason as the folder above: a phone has nothing to do with a list of files on the PC's disk. ARCHITECTURE.md section 8."),
     "/api/backup/restore/preview": ("deliberate", "Decrypts a backup to show counts and a date, PC-only - the backup file is on the PC's disk, and the recovery code is typed there. ARCHITECTURE.md section 8."),
     "/api/backup/restore": ("deliberate", "Restoring replaces memory, chat history, settings and notes with an older backup: PC-only, ONE approval card that always needs Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from any other device too, whatever the gate's own risk table says). ARCHITECTURE.md section 8."),
+    # Projects, build steps 1 and 2 (the owner's decision of 2026-09-28;
+    # backend/jarvis_projects.py, projects.patch; JARVIS-API section 61).
+    # Built on the backend first; both apps' screens are build step 3. Both
+    # apps will call these; choosing a folder and writing a coding
+    # benchmark's command are refused by the PC from any other device (a
+    # field of the body, not a separate route - docs/PROJECTS-DESIGN.md
+    # section 6).
+    "/api/projects": ("planned", "Projects: the list (GET) and creating one (POST). Both apps, build step 3."),
+    "/api/projects/{id}": ("planned", "One project: read it (GET) or change what the owner typed (POST). Both apps, build step 3; its folder is chosen on the PC only."),
+    "/api/projects/{id}/delete": ("planned", "Delete one project after \"are you sure?\". Both apps, build step 3."),
+    "/api/projects/{id}/shareable": ("planned", "The Shareable switch: ON is one approval card, OFF is instant. Both apps, build step 3."),
+    "/api/projects/{id}/benchmarks": ("planned", "Define a benchmark. Both apps for a number; a coding command is PC only. Build step 3."),
+    "/api/projects/{id}/benchmarks/{id}": ("planned", "One benchmark: its chart points (GET) or a change (POST). Both apps, build step 3."),
+    "/api/projects/{id}/benchmarks/{id}/delete": ("planned", "Delete one benchmark. Both apps, build step 3."),
+    "/api/projects/{id}/benchmarks/{id}/log": ("planned", "Log one number, the owner's own tap, no card. Both apps, build step 3."),
+    "/api/projects/{id}/benchmarks/{id}/results/{id}/delete": ("planned", "Remove one logged number (a typo). Both apps, build step 3."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 

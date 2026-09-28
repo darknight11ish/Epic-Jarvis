@@ -1,6 +1,7 @@
 # Projects: design (2026-09-28)
 
-Status: **design only; nothing built.** For the owner's decision "Projects,
+Status: **build steps 1 and 2 built on the backend (2026-09-28); see
+"Build notes" at the end. Nothing in the apps yet.** For the owner's decision "Projects,
 like Claude's Projects and more" (`CLAUDE.md`, 2026-09-28): both coding and
 life projects, and Jarvis does real work on the PC with a card for every
 change. Queued after the chatbot driver. Written by the studio's designer;
@@ -293,3 +294,63 @@ Whether a git-undoable edit counts as risky depends on the risk table.
 Not verified: what Claude Projects does today, whether dev tools run inside
 an AppContainer, whether git is installed on the owner's PC, and
 `jarvis_undo`.
+
+## Build notes
+
+### Steps 1 and 2 (2026-09-28, backend only)
+
+**Built:** `backend/jarvis_projects.py` (shipped whole), `projects.db`,
+`projects.patch` (one install block), `backend/test_projects.py`, and the
+"log a number" sentences in `jarvis_quick.py`. Routes: `docs/JARVIS-API.md`
+section 61 (59 is Goals on the continuation branch, 60 the chatbot
+driver). Neither app calls them yet; `tools/check_parity.py` lists them
+as `planned`.
+
+What each part does, checked against the code it reuses:
+
+- **Folder:** must be one of `jarvis_documents.folders()` ("Folders Jarvis
+  may look in") or a folder inside one, exist, and not be
+  `jarvis_documents.protected()`. Chosen on the PC only
+  (`jarvis_owner_check.from_this_pc`, failing closed like
+  `jarvis_documents._from_this_pc`); clearing it works from either app. A
+  folder that later leaves the list shows as `"listed": false`.
+- **Work list:** a named list checked by `jarvis_schedule.list_key` (one
+  to three plain words, never the to-do list itself), one project per
+  list, defaulting to the project's name when that is a valid list name.
+  Items are added and read through the existing `/api/schedule` routes.
+- **Shareable:** off by default; ON is one `change_own_config` card (the
+  action "Folders Jarvis may look in" already uses, so `jarvis_gate.py`
+  needed no new line); OFF is instant and withdraws a waiting card. The
+  owner's answer did not say whether turning it on asks; every other
+  switch that loosens a rule does, so it does here. Nothing is sent: the
+  `jarvis_reach.KINDS` row and ARCHITECTURE §4 wait for the first real send.
+- **Sensitive:** `jarvis_sensitive.topic()` alone missed "weight", "body
+  weight", "resting heart rate", "calories" and "monthly spending"
+  (checked), so a short benchmark word list runs first. `keep_on_screen`
+  on the benchmark; the quick command's answer is `private`.
+- **Coding benchmarks:** the command is kept word for word (PC only, 300
+  characters, one line), `"runnable": false`; logging one by hand is
+  refused.
+- **Cards:** only Shareable ON. Creating, editing, deleting and logging
+  are the owner's own taps or words.
+
+**Waiting on the continuation branch (Goals):** a project keeps goal ids
+on its own side. After `claude/jarvis-continuation-03kls1` merges: the
+goals.db `project` column, `GET /api/goals?project=<id>`, and a goal
+step's measure (`{"bench": ..., "target": ...}`), as §1 says. At that
+merge, `goals.patch` and `projects.patch` anchor on the same lines of
+`jarvis_hud.py`; whichever lands second must be re-anchored on the
+other's block.
+
+**Not built, and why:** the chat-history `project` column (step 4 -
+nothing can set it until `/api/chat` carries a project id); the project
+chat context and project-labelled facts (step 4); the apps (step 3);
+running benchmarks (step 6); `project_edit` (steps 5 and 7). Backups
+(`jarvis_backup.SOURCE_DBS`) and the data-health check do not include
+`projects.db` yet - for the feature audit (step 8).
+
+**For the owner (not decided here):** `jarvis_sensitive` reads "5k" as
+money, so a benchmark named "5k time" is marked sensitive (money) and
+kept on screen. The owner can take off their own mark but not one made
+from the name. Should an automatic mark be clearable, and should
+clearing it ask first (it would let a number be read aloud)?

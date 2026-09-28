@@ -8935,3 +8935,129 @@ Gemini adapter (Playwright, a visible window, one browser profile, the
 spare account); keeping the transcript in the encrypted chat history (today
 it is in memory only and lost on a restart); the "What Jarvis can reach"
 row and the gate's `_RISK` line; the two-card version's measurements.
+## 61. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
+
+The owner's decision of 2026-09-28 (`CLAUDE.md`, "Projects, like Claude's
+Projects and more"), designed in `docs/PROJECTS-DESIGN.md`; this section is
+its **build steps 1 and 2 only**. `backend/jarvis_projects.py` (shipped
+whole), `projects.patch`, `projects.db` in the settings folder.
+**Neither app calls these routes yet** (step 3); `tools/check_parity.py`
+lists them as `planned`.
+
+Numbered 60, not 59: section 59 is Goals on the continuation branch
+(`claude/jarvis-continuation-03kls1`), which has not merged here yet.
+
+**What is not here yet, said plainly:** running a benchmark's command (the
+fence, build step 6) - a coding benchmark's command is kept as words and
+marked `"runnable": false`; Jarvis changing code (`project_edit`, after the
+12 GB card is measured); the project chat context and project-labelled
+facts (step 4); the chat-history `project` column (step 4 - nothing can
+set it until `/api/chat` carries a project id); and anything the Shareable
+switch would one day let out (it is a switch only; nothing is ever sent).
+Goals live on the continuation branch, so a project keeps a list of goal
+ids on its own side; the goals.db `project` column and a goal step's
+measure come after that branch merges.
+
+### 61.1 Who may do what, and which ask first
+
+| What | Card? | From |
+|---|---|---|
+| Create, edit, delete a project; its instructions, notes, goal ids, work list | no | either app |
+| Choose a coding project's folder | no card here - the folder must already be on "Folders Jarvis may look in" (§35), whose adding is the PC's own card | **PC only** (`403`, `"pc_only": true` from anywhere else) |
+| Clear a project's folder | no | either app (Jarvis sees less) |
+| Shareable **on** | **one card**, `change_own_config` at tier `ask` | either app |
+| Shareable off | no, instant (a waiting card is withdrawn) | either app |
+| Define, edit, delete a number benchmark; log a number; remove one number | no | either app, or the owner's own words ("I ran 5 km", 60.4) |
+| Write or change a coding benchmark's command | no card (nothing runs); the words are kept | **PC only** |
+
+"No card" rows are the owner writing down their own things, like a to-do
+item. Every other action still follows ARCHITECTURE §3.
+
+### 61.2 Routes
+
+Every route is token + origin, POST bodies are JSON objects, and an error
+is `{"ok": false, "error": "<a plain sentence>"}` with `400` (a limit or a
+bad field), `403` (PC only), `404` (no such project, benchmark or number),
+`409` (a limit on how many, a name used twice, a card already waiting) or
+`503`.
+
+| Route | Method | Body | Answers |
+|---|---|---|---|
+| `/api/projects` | GET | - | `{"ok", "available": true, "title": "Projects", "projects": [summary], "empty", "max": 30}` |
+| `/api/projects` | POST | `{"name", "kind": "coding"\|"life", "instructions"?, "notes"?, "goals"?, "work_list"?, "folder"?}` | `{"ok", "project": full}` |
+| `/api/projects/<id>` | GET | - | `{"ok", "project": full}` |
+| `/api/projects/<id>` | POST | any of `name`, `instructions`, `notes`, `goals`, `work_list`, `folder`, `"shareable": false` | `{"ok", "project": full}`. `"shareable": true` is refused here (use `/shareable`); `kind` never changes |
+| `/api/projects/<id>/delete` | POST | `{}` | `{"ok", "deleted": true}` - its benchmarks and numbers go with it (the apps ask "are you sure?" first) |
+| `/api/projects/<id>/shareable` | POST | `{"on": true\|false}` | off: `200` at once. on: `202` `{"ok", "waiting": true, ...}` and ONE card; the outcome shows as `shareable_last` |
+| `/api/projects/<id>/benchmarks` | POST | `{"name", "kind": "number"\|"command", "unit"?, "better"?: "higher"\|"lower", "target"?, "sensitive"?, "command"?}` | `{"ok", "benchmark": view}` |
+| `/api/projects/<id>/benchmarks/<bid>` | GET | `?points=N` (default 365, at most 1000) | `{"ok", "benchmark": view + "points": [{"id", "at", "value"}]}` - oldest first, for a chart |
+| `/api/projects/<id>/benchmarks/<bid>` | POST | any of `name`, `unit`, `better`, `target`, `sensitive`, `command` (PC only) | `{"ok", "benchmark": view}` |
+| `/api/projects/<id>/benchmarks/<bid>/delete` | POST | `{}` | `{"ok", "deleted": true}` |
+| `/api/projects/<id>/benchmarks/<bid>/log` | POST | `{"value", "at"?}` (`at`: seconds since 1970, at most a day ahead) | `{"ok", "benchmark": view + "logged"}` |
+| `/api/projects/<id>/benchmarks/<bid>/results/<rid>/delete` | POST | `{}` | `{"ok", "deleted": true}` (a typo) |
+
+**A project** (`full`; the list's `summary` leaves out `instructions`,
+`notes` and `benchmark_list`): `id`, `name`, `kind`, `instructions`,
+`notes` (list of lines), `folder` (`null` or `{"path", "name", "listed",
+"said"}` - `listed` false, with a sentence, when the folder has since left
+"Folders Jarvis may look in"), `shareable` (false by default),
+`shareable_waiting`, `shareable_last`, `work_list` (`null` or `{"name",
+"title"}` - a named list on the one scheduler, §21; its items are read
+and added through `/api/schedule` like any named list), `goals` (goal
+ids), `benchmarks` (a count), `benchmark_list`, `created`, `changed`,
+`max`.
+
+**A benchmark** (`view`): `id`, `name`, `kind`, `unit`, `better`,
+`target`, `sensitive`, `sensitive_why` (`"health"`, `"money"`, another
+sensitive topic, or `"you marked it"`), `marked_by_you`,
+`keep_on_screen`, `keep_on_screen_words`, `results` (a count), `latest`
+(`{"id", "value", "at"}` or `null`), `change` (60.3), `created`,
+`changed`; a command benchmark adds `command`, `"runnable": false` and
+`not_runnable_why`.
+
+**Limits:** 30 projects; a name 60 characters; instructions 1,500
+characters (the design's hard limit for what a project chat can carry on
+the 8 GB card); 10 notes of 200 characters, one line each; 20 goal ids;
+12 benchmarks per project, their names 40 characters, units 16; a command
+300 characters, one line; 5,000 numbers per benchmark.
+
+### 61.3 Better or worse than last time
+
+`change` compares the newest number with the one before it:
+`{"direction": "up"|"down"|"same", "by", "verdict": "better"|"worse"|
+"same"|null, "said", "target_reached"}`. **Without `better` there is no
+verdict** - up is not always good (a weight, a 5k time), so Jarvis says
+only "Higher than last time (by 1)." and does not guess. `target_reached`
+needs both a target and `better`. The first number says "The first
+number." `null` before any number.
+
+### 61.4 Logging by voice or chat, without the model
+
+`jarvis_quick.py` answers "log 5 km run", "log my weight as 72.5 kg", "I
+ran 5 km", "I walked 10,000 steps today", "I did 20 push ups", "my weight
+is 72 kg" (and "... yesterday") **only when a life benchmark fits** - a
+shared word that says what was done, and the same unit (5 km is never
+logged as miles; there is no converting). No benchmark fits: the sentence
+is not ours and goes to the model as before. Two fit: Jarvis asks which
+and logs nothing. Only the owner's own typed or spoken words, like
+everything in `jarvis_quick.py`; `projects.db` is read only after a
+sentence already has this shape, and never created by it. The answer is
+`quick: "project_log"` in `X-Jarvis-Route` and, for a sensitive
+benchmark, `gate: "private"` - kept on screen, never read aloud. The
+scheduler is told the sentence was a command, so it is never learned as a
+fact: life numbers are project data, not memory (`docs/PROJECTS-DESIGN.md`
+§2).
+
+### 61.5 Sensitive numbers
+
+A benchmark about health or money is marked from its name and unit - a
+short benchmark word list in `jarvis_projects.py` ("weight", "heart
+rate", "calories", "sleep", "savings", "spending", a currency sign, ...)
+and then `jarvis_sensitive.topic()` - or by the owner (`"sensitive":
+true`). `keep_on_screen` then says: never read aloud, and never sent
+anywhere (nothing here sends anything; a later Shareable send refuses
+these). The owner can take off their own mark, but not one made from the
+name. **Known false alarm:** `jarvis_sensitive` reads "5k" as money, so a
+"5k time" benchmark is marked money - whether the owner may clear an
+automatic mark (and whether that asks first) is the owner's call, written
+down in `docs/PROJECTS-DESIGN.md` "Build notes".

@@ -198,6 +198,9 @@ SHIPPED = (
     # check, one card per conversation (the core only; not routed yet, no
     # patch)
     "jarvis_chatbot.py",
+    # Projects, build steps 1 and 2: projects, life benchmarks and their
+    # numbers in projects.db; GET/POST /api/projects (projects.patch)
+    "jarvis_projects.py",
 )
 
 
