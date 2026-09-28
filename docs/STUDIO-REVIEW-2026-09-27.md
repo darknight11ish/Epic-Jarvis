@@ -44,6 +44,7 @@ The agents' own notes (condensed, with file and line references) are in
 | "Not connected" shown while only catching up; no Retry; no reconnect on return | phone |
 | The "Brief me now" / "What did I miss?" shortcuts did nothing useful | phone |
 | "answered on this PC" on the phone | phone |
+| The owner's own Meshnet machine name used as an example (docs, Settings help, tests) - now `my-pc.nord` (owner's OK, 2026-09-28) | docs, desktop, phone tests |
 | Answers from web search and home status never read aloud (owner's decision) | both apps, one shared table of 58 cases |
 | One "Hey Jarvis" heard by phone and PC answered twice (a timer could be set twice) | backend, PC only |
 
@@ -125,8 +126,6 @@ approvals (never re-run an approved action after a crash).
   browser-style pop-ups for Forget/Erase.
 - **Windows notifications' Deny/Snooze may not work** - needs one click on
   the owner's PC to find out (not confirmed).
-- **Privacy nit:** the owner's own Meshnet machine name is used as an
-  example in 5 places in the docs and Settings help.
 - **Docs out of date:** `MODEL-TOPOLOGY.md` on tool-call grammars;
   `gemma4:e4b` is not an 8 GB model; the Modelfile's `repeat_penalty`;
   sherpa-onnx's GPL espeak-ng needs a line in the notices.

@@ -622,7 +622,7 @@ Two things worth knowing:
 A private network between your own devices: **Tailscale** (both devices on the
 same tailnet, with MagicDNS on) or **NordVPN Meshnet** (both devices on your
 Meshnet). The owner's setup uses Meshnet, with names like
-`marioirelan11-alps.nord`. A private mesh between two devices you own is not a
+`my-pc.nord`. A private mesh between two devices you own is not a
 public tunnel; nothing is exposed to the internet.
 
 **You need one even at home, on the same Wi-Fi.** The phone app can only
@@ -685,7 +685,7 @@ and `localhost`, and every request it makes to anything else is refused.
 **On the phone, type the computer's NAME, not that number.** The desktop box
 takes the `100.x` address; the phone takes the name, followed by `:4719` — the
 Tailscale name ending in `.ts.net`, or the Meshnet name ending in `.nord`
-(for example `marioirelan11-alps.nord:4719`).
+(for example `my-pc.nord:4719`).
 
 That field only takes an address that starts with `100.64` up to `100.127`
 (the range Tailscale and NordVPN Meshnet hand out), `127.0.0.1` or
@@ -835,7 +835,7 @@ into both apps too).
    phone was signed with the old key; [`keystore/README.md`](../keystore/README.md)
    has the three steps (uninstall once, install, pair again).
 3. Open it → Pairing → host `yourpc.tailnet.ts.net:4719` (Tailscale) or
-   `yourpc.nord:4719` (Meshnet, e.g. `marioirelan11-alps.nord:4719`), then the
+   `yourpc.nord:4719` (Meshnet, e.g. `my-pc.nord:4719`), then the
    token: on the PC, the desktop app's **Settings → Connection → Show the
    token for my phone** (or `py -3 jarvis_token_store.py show` in the
    backend folder).

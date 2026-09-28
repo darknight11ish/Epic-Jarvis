@@ -117,7 +117,7 @@ class PhoneAddressTest {
     fun `matching is the platform's`() {
         val yes = listOf(
             "ts.net", "desk.ts.net", "desktop.tail1234.ts.net", "DESK.TS.NET", "desk.ts.net.",
-            "nord", "marioirelan11-alps.nord", "a.b.nord", "localhost", "foo.localhost", "127.0.0.1",
+            "nord", "my-pc.nord", "a.b.nord", "localhost", "foo.localhost", "127.0.0.1",
         )
         val no = listOf(
             "", ".", ".nord", "notmyts.net", "ts.net.evil.com", "mynord.com", "127.0.0.10",
@@ -169,7 +169,7 @@ class PhoneAddressTest {
     /** What the owner types, through [BaseUrl.normalise] as the app does. */
     @Test
     fun `mesh names pair, home-network forms are refused with the reason`() {
-        for (typed in listOf("marioirelan11-alps.nord", "desktop.tail1234.ts.net/", "localhost")) {
+        for (typed in listOf("my-pc.nord", "desktop.tail1234.ts.net/", "localhost")) {
             assertNull(typed, PhoneAddress.problem(BaseUrl.normalise(typed)!!))
         }
         val refused = listOf(
