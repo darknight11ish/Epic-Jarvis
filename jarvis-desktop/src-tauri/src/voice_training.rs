@@ -1308,6 +1308,92 @@ pub(crate) fn try_answer(bytes: &[u8]) -> Result<Value, String> {
     }))
 }
 
+// ---------------------------------------------------------------------------
+// The one-time animal voice question (the owner, 2026-09-28)
+// ---------------------------------------------------------------------------
+//
+// The first time the owner picks an animal face, one line asks "The Red
+// Panda has its own voice. Use it?" - "Use it" / "Keep my voice",
+// remembered per face ON THE PC. The PC decides whether to ask
+// (`GET /api/voice/voices` `face_voice.offer`) and says every word; the
+// apps show those words as they are. A face never changes the voice by
+// itself: only "Use it" turns "Voice follows the face" on.
+
+/// The longest question or button word the page is handed.
+const OFFER_MAX_CHARS: usize = 200;
+
+/// The PC's `face_voice.offer`, checked: `{face, question, use, keep}` for
+/// one of the four animals, every word present and short - or null.
+pub(crate) fn face_offer_of(status: &Value) -> Value {
+    let Some(offer) = status
+        .get("face_voice")
+        .and_then(|fv| fv.get("offer"))
+        .and_then(Value::as_object)
+    else {
+        return Value::Null;
+    };
+    let word = |key: &str| {
+        offer
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && s.chars().count() <= OFFER_MAX_CHARS)
+    };
+    let face = offer.get("face").and_then(Value::as_str).unwrap_or("");
+    match (
+        animal_id(face).ok(),
+        word("question"),
+        word("use"),
+        word("keep"),
+    ) {
+        (Some(face), Some(question), Some(use_it), Some(keep)) => json!({
+            "face": face,
+            "question": question,
+            "use": use_it,
+            "keep": keep,
+        }),
+        _ => Value::Null,
+    }
+}
+
+/// The body for the owner's answer (`POST /api/voice/voices/face_offer`),
+/// or why it cannot be sent.
+pub(crate) fn face_offer_body(face: &str, answer: &str) -> Result<Value, String> {
+    let face = animal_id(face)?;
+    let answer = answer.trim();
+    if answer != "use" && answer != "keep" {
+        return Err("Choose \"Use it\" or \"Keep my voice\".".to_string());
+    }
+    Ok(json!({ "face": face, "answer": answer }))
+}
+
+/// For the Faces window, which may not read the voices list itself: only
+/// the waiting question (or null) and whether the link is stale, so the
+/// page can grey its buttons (rule 4). A read; changes nothing.
+#[tauri::command]
+pub async fn get_face_voice_offer(app: AppHandle) -> Result<Value, String> {
+    let status = get_custom_voices(app.clone()).await?;
+    Ok(json!({ "offer": face_offer_of(&status), "stale": stale(&app) }))
+}
+
+/// The owner's answer to the one-time question: "use" turns "Voice follows
+/// the face" on, "keep" leaves the voice as it is; the PC remembers the
+/// face either way. No card (the switch itself has none), held on a stale
+/// link like every change sent to the PC (rule 4).
+#[tauri::command]
+pub async fn answer_face_voice_offer(
+    app: AppHandle,
+    face: String,
+    answer: String,
+) -> Result<Value, String> {
+    let body = face_offer_body(&face, &answer)?;
+    if stale(&app) {
+        return Err(HELD_STALE.to_string());
+    }
+    let (status, text) = post(&app, "/api/voice/voices/face_offer", &body, VOICES_TIMEOUT).await?;
+    voices_answer(status, &text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1758,5 +1844,46 @@ mod tests {
     fn the_loudest_sample() {
         assert_eq!(peak(&[0, 16384, -32768]), 1.0);
         assert_eq!(peak(&[]), 0.0);
+    }
+    #[test]
+    fn the_animal_voice_question_is_passed_on_only_when_whole() {
+        let st = json!({"face_voice": {"enabled": false, "offer": {
+            "face": "redpanda",
+            "question": "The Red Panda has its own voice. Use it?",
+            "use": "Use it", "keep": "Keep my voice"}}});
+        let got = face_offer_of(&st);
+        assert_eq!(got["face"], json!("redpanda"));
+        assert_eq!(
+            got["question"],
+            json!("The Red Panda has its own voice. Use it?")
+        );
+        assert_eq!(got["use"], json!("Use it"));
+        assert_eq!(got["keep"], json!("Keep my voice"));
+        assert!(face_offer_of(&json!({"face_voice": {"offer": null}})).is_null());
+        assert!(face_offer_of(&json!({"voices": []})).is_null());
+        let mut not_animal = st.clone();
+        not_animal["face_voice"]["offer"]["face"] = json!("orbit");
+        assert!(face_offer_of(&not_animal).is_null());
+        let mut no_words = st.clone();
+        no_words["face_voice"]["offer"]["keep"] = json!("");
+        assert!(face_offer_of(&no_words).is_null());
+        let mut long = st;
+        long["face_voice"]["offer"]["question"] = json!("x".repeat(OFFER_MAX_CHARS + 1));
+        assert!(face_offer_of(&long).is_null());
+    }
+
+    #[test]
+    fn the_answer_is_use_or_keep_for_an_animal() {
+        assert_eq!(
+            face_offer_body("seaotter", "use").unwrap(),
+            json!({"face": "seaotter", "answer": "use"})
+        );
+        assert_eq!(
+            face_offer_body(" monkey ", " keep ").unwrap(),
+            json!({"face": "monkey", "answer": "keep"})
+        );
+        assert!(face_offer_body("orbit", "use").is_err());
+        assert!(face_offer_body("redpanda", "yes").is_err());
+        assert!(face_offer_body("redpanda", "").is_err());
     }
 }

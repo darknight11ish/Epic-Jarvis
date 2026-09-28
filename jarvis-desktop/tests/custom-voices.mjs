@@ -425,6 +425,80 @@ await check("voice follows the face: one click, at once; held on a stale link", 
   assert.deepEqual(none, []);
 });
 
+/* The one-time animal voice question (the owner, 2026-09-28). The shared
+   fixtures may not carry `face_voice.offer` yet, so this test builds its own
+   status on top of the real `face_voice_off` one, in the exact shape the
+   PC's GET /api/voice/voices gives, and its own POST answer. */
+const OFFER = {
+  face: "redpanda",
+  question: "The Red Panda has its own voice. Use it?",
+  use: "Use it",
+  keep: "Keep my voice",
+};
+const withOffer = (st, offer = OFFER) => {
+  const copy = JSON.parse(JSON.stringify(st));
+  copy.face_voice = { ...(copy.face_voice || {}), offer };
+  return copy;
+};
+
+await check("the animal voice question: the PC's words as they are, or nothing", async () => {
+  const v = CV.faceOfferView(withOffer(V.face_voice_off));
+  assert.deepEqual(v, { show: true, ...OFFER });
+  assert.equal(CV.faceOfferView(V.face_voice_off).show, false, "no offer: nothing shown");
+  assert.equal(CV.faceOfferView(withOffer(V.face_voice_off, null)).show, false);
+  assert.equal(CV.faceOfferView(withOffer(V.face_voice_off, { ...OFFER, face: "orbit" })).show, false,
+    "only the four animals have a voice of their own");
+  assert.equal(CV.faceOfferView(withOffer(V.face_voice_off, { ...OFFER, keep: "" })).show, false);
+  assert.equal(CV.faceOfferView({ voices: [] }).show, false, "an older PC: nothing shown");
+  // The Rust checks the same shape for the Faces window.
+  const rs = read("src-tauri/src/voice_training.rs");
+  assert.ok(rs.includes('"/api/voice/voices/face_offer"'));
+  const answer = rs.slice(rs.indexOf("pub async fn answer_face_voice_offer"));
+  assert.ok(answer.slice(0, 600).includes("return Err(HELD_STALE.to_string())"), "held on a stale link");
+});
+
+await check("the animal voice question in Settings: one click answers it, no card; held on a stale link", async () => {
+  const page = await open(withOffer(V.face_voice_off), {
+    faceOfferAnswer: { ok: true, http: 200, message: "Jarvis's voice now follows the face",
+      face_voice: { enabled: true, offer: null } },
+  });
+  const shown = await page.evaluate(() => ({
+    hidden: document.getElementById("cv-face-offer").hidden,
+    question: document.getElementById("cv-face-offer-question").textContent,
+    use: document.getElementById("cv-face-offer-use").textContent,
+    keep: document.getElementById("cv-face-offer-keep").textContent,
+  }));
+  await page.click("#cv-face-offer-use");
+  await page.waitForTimeout(200);
+  const sent = await calls(page, "answer_face_voice_offer");
+  const said = await text(page, "cv-face-status");
+  await page.close();
+  assert.deepEqual(shown, { hidden: false, question: OFFER.question, use: OFFER.use, keep: OFFER.keep });
+  assert.deepEqual(sent, [{ face: "redpanda", answer: "use" }]);
+  assert.equal(said, "Jarvis's voice now follows the face.");
+  assert.doesNotMatch(said, /approv/i, "no card");
+
+  const keep = await open(withOffer(V.face_voice_off));
+  await keep.click("#cv-face-offer-keep");
+  await keep.waitForTimeout(200);
+  const kept = await calls(keep, "answer_face_voice_offer");
+  await keep.close();
+  assert.deepEqual(kept, [{ face: "redpanda", answer: "keep" }]);
+
+  const none = await open(V.face_voice_off);
+  const hidden = await none.evaluate(() => document.getElementById("cv-face-offer").hidden);
+  await none.close();
+  assert.equal(hidden, true, "no question when the PC asks none");
+
+  const stale = await open(withOffer(V.face_voice_off), {}, { link: { stale: true } });
+  const greyed = await stale.evaluate(() => [
+    document.getElementById("cv-face-offer-use").disabled,
+    document.getElementById("cv-face-offer-keep").disabled,
+  ]);
+  await stale.close();
+  assert.deepEqual(greyed, [true, true], "greyed on a stale link (rule 4)");
+});
+
 await check("each animal's voice: the PC's rows, choices and words, from every real status", async () => {
   for (const [name, st] of Object.entries(V)) {
     const av = CV.animalVoicesView(st);
