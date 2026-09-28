@@ -8870,3 +8870,101 @@ the ordinary chat/tool path, never by this feature.
 Not yet built: a UI in either app (Brain -> Work, beside Coming up, is the
 natural place, matching the morning briefing and the to-do list). Both
 apps' parity is tracked in `docs/ARCHITECTURE.md` §8 until then.
+
+## 60. "One card, several steps" - the plan card (added 2026-09-28, SWITCHED OFF)
+
+The owner's own words, 2026-09-28: "add the ability for jarvis to request a
+multi-step process that it does on its own, and it sends me a detailed
+approval card that I only give to approve once." This is the feasibility
+audit's I61, "the plan card" (`docs/FEASIBILITY-AUDIT-2026-09-26.md` line
+67) - the owner already decided, 2026-09-27, that it is "allowed later,
+only after the multi-step safety tests pass." `backend/jarvis_plan.py`
+(shipped whole, `plan-gate.patch` teaches `jarvis_gate.py` its two new
+action names) is that mechanism, fully built and tested - **and switched
+off**, on purpose, until a real run of `tools/tool_eval/ollama_tool_eval.py`
+on the owner's own PC clears the bar. See that module's own docstring for
+the full reasoning; this section is the route-level contract once it is
+wired in.
+
+**Not the same mechanism as `jarvis_ui_control.py`/`jarvis_android_control.py`/
+`jarvis_browser_control.py`'s own "one card, several steps".** Those three
+run every enumerated step once their one card is approved, including a
+step the model flagged `heavy` - the right shape for a single-domain tool.
+`jarvis_plan.py` is stricter, because a plan step can be ANY tool: **a
+risky step, or a step whose arguments came from an earlier step's real
+result, always gets its OWN separate card mid-run**, on the strength of
+the model's own real tool-calling gate - never the one card that started
+the plan. Only the steps neither of those applies to run on that one card
+alone.
+
+The four conditions this mechanism enforces (I61's own Rules/Security
+notes):
+1. Every step is shown, in full, on the one card - `describe()`, never a
+   vaguer summary.
+2. A step whose arguments are filled in from an EARLIER step's real result
+   is asked again, individually, with the real value - it could not be
+   shown truthfully on the first card.
+3. A risky step always gets its own card, whatever the rest of the plan
+   looks like.
+4. The plan grants nothing for later: once it ends - finished, stopped,
+   paused, or a risky step's own card was denied - continuing needs a
+   brand new proposal and a brand new decision on a fresh one card, never
+   an automatic resume.
+And: **a plan can only come from the owner's own words** - it is refused
+outright, before anything is shown, if the turn read outside text (an
+email, a file, a web page). A planted instruction is exactly what a
+plausible-sounding multi-step plan would be a good way to hide.
+
+**The safety gate, measured, not promised.** `jarvis_plan.enabled(model)`
+reads `tools/tool_eval/tool_eval_results.json` - the file
+`ollama_tool_eval.py` writes after a real run against the owner's own
+model - and says yes only once that run's own numbers, for this model,
+clear TWO bars: the multi-step suite passes at least 90% of its cases, AND
+the injection suite carried ZERO planted instructions into a tool call, of
+any it tried. No file, a stale one, or numbers under the bar: `enabled()`
+says exactly why, in one sentence - the same "measured before switched on"
+rule the memory re-ranker already follows (`docs/MEMORY-SCOREBOARD.md`).
+Nothing about this feature can be turned on by a setting, a card, or an
+app - only a real, run, passing result unlocks it.
+
+**What is built:**
+- `jarvis_plan.py`: `propose()` (validates and shapes a plan, refuses on
+  outside text or anything malformed), `describe()` (the one card's full
+  text), `run()` (executes it: safe steps run once; a risky or
+  result-filled step's own `gate_check` is consulted, blocking, before it
+  runs; a denial anywhere stops the whole plan there; `checkpoint`/
+  `announce` hooks match `jarvis_ui_control.py`'s own, so a caller wires
+  pause/stop and the live-progress line the exact same way), `enabled()`
+  (the safety gate above). `backend/test_plan.py`, 72 checks.
+- `plan-gate.patch`: two append-only hunks against `jarvis_gate.py` -
+  `run_plan`'s own risk classification (classified by its own worst case,
+  `("no", "outbound", ...)`, the same reasoning as `control_computer`'s
+  entry, even though every risky step inside still asks on ITS OWN
+  action's entry) and a tier line, `"propose_plan": "auto", "run_plan":
+  "run_plan"` (proposing and describing a plan reads and sends nothing, so
+  it is `auto`, the same reason `jarvis_ui_control_plan` is; `run_plan`
+  itself must stay `ask` - refusing to let it become anything else is
+  `jarvis_plan.py`'s own job, not this line's).
+- `jarvis_card_words.TITLES["run_plan"]` = "run the safe steps of an
+  approved plan" - so a card for it reads in plain words like any other.
+
+**What is NOT yet built, precisely:** `propose_plan` is not yet a
+model-callable tool in `jarvis_agent.py`'s `TOOLS` table. That needs: a
+`Tool` entry whose `prepare()` calls `jarvis_plan.enabled()` then
+`propose()`; an outright-refusal check mirroring `_send_email_refusal`'s
+own shape, using `_TurnWatch.tainted`/`.read`/`.provenance`/`.app_context`
+(confirmed real and in scope at the exact call site, `jarvis_agent.py`
+around the `tool.prepare(args)` call) so a plan proposed after outside
+text is refused before anything is shown, not just warned about; and a
+`run_step` dispatcher that calls back into `TOOLS[<the step's own tool
+name>]` to actually perform a safe step. That last part is real, available
+work, not a guess - `Tool.prepare`/`.execute`'s contract is exactly what
+`run_step` needs - but it was left for a following pass rather than rushed
+into a file this careful about exactly this kind of mistake, especially
+since the feature is switched off either way until the safety test passes,
+so nothing is lost by finishing the wiring once, correctly, next.
+
+**Not yet built either:** a UI in either app. Once wired in as a tool, a
+plan's card is shown exactly like any other approval card already is -
+`describe()`'s text is plain enough that no new card SHAPE is needed, only
+the ordinary approval flow already both apps have.

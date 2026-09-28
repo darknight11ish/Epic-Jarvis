@@ -401,6 +401,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -1174,6 +1183,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -1945,6 +1963,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
       },
       {
        "fixed": true,
@@ -2727,6 +2754,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
       },
       {
        "fixed": true,

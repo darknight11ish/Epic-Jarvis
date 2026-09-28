@@ -43,6 +43,9 @@ what changed when.
 
 | Date | Document | About |
 |---|---|---|
+| 2026-09-27 | [BACKGROUND-WORK-AUDIT-2026-09-27.md](BACKGROUND-WORK-AUDIT-2026-09-27.md) | Everything Jarvis does unattended - the scheduler, standby, briefing, "tell me when", focus, backups, initiative - checked and tested for real. |
+| 2026-09-27 | [GPU-SUPPORT-RESEARCH-2026-09-27.md](GPU-SUPPORT-RESEARCH-2026-09-27.md) | What a third graphics card, and AMD/Intel GPUs, would actually need - sized, not guessed. |
+| 2026-09-27 | [OFFLINE-MODELS-DESIGN-2026-09-27.md](OFFLINE-MODELS-DESIGN-2026-09-27.md) | Design for viewing installed models in both apps without a running backend. |
 | 2026-09-27 | [JARVIS-EVALUATION-2026-09-27.md](JARVIS-EVALUATION-2026-09-27.md) | Are the five core rules too strict, how Jarvis compares to Muse, and whether it actually flows as an assistant - three research passes, synthesized. Two questions for the owner. |
 | 2026-09-27 | [BUG-AUDIT-2026-09-27-backend.md](BUG-AUDIT-2026-09-27-backend.md), [-desktop-js](BUG-AUDIT-2026-09-27-desktop-js.md), [-desktop-rust](BUG-AUDIT-2026-09-27-desktop-rust.md), [-phone](BUG-AUDIT-2026-09-27-phone.md), [-cross-cutting](BUG-AUDIT-2026-09-27-cross-cutting.md) | The full bug audit, a team of agents, five reports. Every finding was fixed. |
 | 2026-09-27 | [QUALITY-AUDIT-2026-09-27.md](QUALITY-AUDIT-2026-09-27.md), [SECURITY-PRIVACY-DEPS-AUDIT-2026-09-27.md](SECURITY-PRIVACY-DEPS-AUDIT-2026-09-27.md), [SETUP-SETTINGS-RECOVERY-AUDIT-2026-09-27.md](SETUP-SETTINGS-RECOVERY-AUDIT-2026-09-27.md) and [handoff-2026-09-27/](handoff-2026-09-27/) | The three combined audit passes the owner asked for (quality; security/privacy/dependencies; setup/settings/recovery). |

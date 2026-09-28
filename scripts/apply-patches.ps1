@@ -650,6 +650,16 @@ $PATCHES = @(
     # the multi-step safety tests; see jarvis_goals.py's own docstring for
     # why the two are different and why this one was never waiting on that.
     'goals.patch'
+    # "One card, several steps" (feasibility I61, "the plan card"; the
+    # owner's own words, 2026-09-28). Two small hunks against jarvis_gate.py
+    # only: a risk entry for run_plan and a tier line for propose_plan/
+    # run_plan, both append-only next to their own kind's existing entries
+    # (control_computer's own risk line; draft_email's own tier line).
+    # jarvis_plan.py itself is SWITCHED OFF until tools/tool_eval's real
+    # results clear the bar - see that module's own docstring - so this
+    # patch alone changes nothing the model can reach yet; it only teaches
+    # the gate the two new action names for when it is turned on.
+    'plan-gate.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -784,6 +794,8 @@ $SHIPPED = @(
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
     # --- "Goals with one card per step" (goals.patch) ---
     'jarvis_goals.py'            # goals.patch: a goal's own plan and weekly check-in; accepting raises one card, like a repeating reminder; every acting step still asks through ordinary chat
+    # --- "One card, several steps" (plan-gate.patch) ---
+    'jarvis_plan.py'             # plan-gate.patch: the plan card's own module - SWITCHED OFF until tools/tool_eval's real results clear the bar; see its own docstring
 )
 
 # The settings file. Installed only where none exists; never overwritten.

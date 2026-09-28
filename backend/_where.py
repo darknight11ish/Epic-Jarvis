@@ -197,6 +197,9 @@ SHIPPED = (
     # "Goals with one card per step" (the owner's "build it now",
     # 2026-09-27; goals.patch): a goal's own plan and weekly check-in.
     "jarvis_goals.py",
+    # "One card, several steps" (the owner's own words, 2026-09-28;
+    # plan-gate.patch): SWITCHED OFF until tools/tool_eval clears the bar.
+    "jarvis_plan.py",
 )
 
 

@@ -548,6 +548,43 @@ the feasibility audit's I63/I64; `docs/JARVIS-API.md` §59).
   Work, beside Coming up, is the natural place, matching the briefing and
   the to-do list.
 
+Built 2026-09-28, the owner's own words: "add the ability for jarvis to
+request a multi-step process that it does on its own, and it sends me a
+detailed approval card that I only give to approve once. Really refine
+this" - **"one card, several steps", the plan card itself** (feasibility
+I61; `docs/JARVIS-API.md` §60), the mechanism the Goals entry above was
+careful to say it was NOT. Asked plainly first whether building this now
+conflicted with the owner's own 2026-09-27 decision to gate it behind the
+multi-step safety tests - it does not conflict, since those tests have not
+run, so **built fully, switched off**, the owner's own recommended choice:
+
+- `backend/jarvis_plan.py` (whole module) + `plan-gate.patch` (two
+  append-only hunks against `jarvis_gate.py`, both verified with
+  `_stack.py` against real, already-covered context - this call site,
+  unlike `cloud-say-yes.patch`'s, had prior patches touching it, so no
+  hand-verification against the owner's real file was needed this time).
+  `test_plan.py`, 72 checks. Stricter than `jarvis_ui_control.py`'s own
+  "one card, several steps": a risky or result-filled step always asks
+  again on its own separate card, mid-run, even inside an already-approved
+  plan - only the safe steps run on the strength of the one card that
+  started things. Refuses outright on outside text.
+- `jarvis_plan.enabled()` is the safety gate itself, measured not
+  promised: it reads `tools/tool_eval/tool_eval_results.json` and says yes
+  only once a real run, for the real model, clears two bars (90% on the
+  multi-step suite, zero carried planted instructions on the injection
+  suite) - the same "measured before switched on" rule the memory
+  re-ranker already follows. No file yet, so nothing is unlocked yet.
+- **Not yet wired as a model-callable tool** in `jarvis_agent.py`'s
+  `TOOLS` table - found and confirmed the exact three pieces that need it
+  (a `Tool` entry, an outright-refusal check reusing `_TurnWatch.tainted`
+  at the real, verified call site, and a `run_step` dispatcher reusing
+  `Tool.prepare`/`.execute`'s own documented contract), and left the actual
+  wiring for a following pass rather than rush it into the one file this
+  project is most careful about - the feature is switched off regardless,
+  so nothing is lost by finishing it correctly next instead of quickly now.
+- No UI in either app yet - once wired in as a tool, its card needs no new
+  shape, only the ordinary approval flow both apps already have.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

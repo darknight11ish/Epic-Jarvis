@@ -219,6 +219,10 @@
       "title": "Jarvis wants to go back to the AI model you had before"
     },
     {
+      "action": "run_plan",
+      "title": "Jarvis wants to run the safe steps of an approved plan"
+    },
+    {
       "action": "run_shell_on_host",
       "title": "Jarvis wants to run a command on this PC"
     },

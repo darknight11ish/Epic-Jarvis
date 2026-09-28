@@ -64,6 +64,7 @@ TITLES = {
     "run_shell_on_host": "run a command on this PC",
     "control_computer": "use the mouse and keyboard on this PC",
     "control_phone": "tap and type on your phone",
+    "run_plan": "run the safe steps of an approved plan",
     "control_browser": "work a web page for you in a browser",
     "spend_money": "spend money",
     "post_to_external_service": "post to an outside service",
