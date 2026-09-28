@@ -43,6 +43,7 @@ what changed when.
 
 | Date | Document | About |
 |---|---|---|
+| 2026-09-28 | [HARDWARE-DETECTION-AUDIT-2026-09-28.md](HARDWARE-DETECTION-AUDIT-2026-09-28.md) | How well Jarvis detects hardware (graphics cards, Windows Hello, the phone's mic/notifications/battery, RAM and disk), adapts to it, and tells the owner why - every mechanism, not only GPUs. One small wording bug found. |
 | 2026-09-27 | [BACKGROUND-WORK-AUDIT-2026-09-27.md](BACKGROUND-WORK-AUDIT-2026-09-27.md) | Everything Jarvis does unattended - the scheduler, standby, briefing, "tell me when", focus, backups, initiative - checked and tested for real. |
 | 2026-09-27 | [GPU-SUPPORT-RESEARCH-2026-09-27.md](GPU-SUPPORT-RESEARCH-2026-09-27.md) | What a third graphics card, and AMD/Intel GPUs, would actually need - sized, not guessed. |
 | 2026-09-27 | [OFFLINE-MODELS-DESIGN-2026-09-27.md](OFFLINE-MODELS-DESIGN-2026-09-27.md) | Design for viewing installed models in both apps without a running backend. |
