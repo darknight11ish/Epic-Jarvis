@@ -478,14 +478,14 @@ here rather than patched blind:
   checked the fixture against the app, never the app against the fixture -
   a phrase added straight to the phone's list, in neither direction, would
   have passed silently.
-- **Written down, not fixed (owner said fix it, 2026-09-28 - see below):** marking a crisis answer "wrong" (the thumbs-
-  down button) still counts toward "suggest the bigger model" - the crisis
-  exclusion above only covers the live phrase-based signal and the
-  struggle count. Fixing it needs the turn's crisis flag and its id joined
-  across two separate patches (`chat-stream.patch`, which has the flag, and
-  `second-card-suggest.patch`, which has the id) - mechanical, but not done
-  without the owner's go-ahead given how carefully this project already
-  treats crisis handling.
+- **Fixed 2026-09-28 (the owner said fix it; commit 248227a2):** marking a
+  crisis answer "wrong" (the thumbs-down button) used to count toward
+  "suggest the bigger model" - the crisis exclusion above only covered the
+  live phrase-based signal and the struggle count. Now the chat route hands
+  a crisis turn's id to `jarvis_agent.note_crisis_turn` when it makes the
+  id (`second-card-suggest.patch`, on `wellbeing.patch`'s flag and again on
+  `run_local_turn`'s own check), and `note_correction` does not count a
+  mark on that id. `test_wellbeing.py` runs the join end to end.
 
 Decided 2026-09-27, the owner's answers after the studio review (play
 testers, scouts and integration scouts; `.claude/agents/`):
@@ -558,7 +558,7 @@ testers, scouts and integration scouts; `.claude/agents/`):
   or replaces an approval card.
 - **A thumbs-down on a crisis answer stops counting toward "suggest the
   bigger model"** (owner, 2026-09-28) - closes the gap written down in the
-  Opus 5.5 re-check above.
+  Opus 5.5 re-check above. Done (commit 248227a2).
 - **Build the chatbot driver first** (owner, 2026-09-28), ahead of easier
   setup, voice upgrades and the other new abilities. It is **versatile**:
   one driver with a separate "adapter" per chatbot website, Gemini first,
