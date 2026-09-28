@@ -158,17 +158,31 @@ mod tests {
             .all(|(_, p)| !p.starts_with("/api/graph")));
         // The counts ("memory" -> /api/memory/status) are numbers, not memory.
         const NOT_A_LIST: &[&str] = &["/api/memory/status"];
-        let body = serde_json::json!({
-            "facts": [{"id": 1, "text": "Owner's sister is called Priya"}],
-            "pending": [{"id": 2, "text": "Owner likes jazz"}],
-            "entities": [{"id": 3, "name": "Priya"}],
-        });
+        // Each memory route answers with its OWN list (facts, pending or
+        // entities), so each is given only that one - a body carrying all
+        // three would make the pending route "leak" facts it never sends.
+        // A memory section this test does not know gets all three, and fails
+        // unless it is on PRIVATE_LISTS: the point of the test.
+        let body_for = |section: &str| match section {
+            "memory_facts" => {
+                serde_json::json!({"facts": [{"id": 1, "text": "Owner's sister is called Priya"}]})
+            }
+            "memory_pending" => {
+                serde_json::json!({"pending": [{"id": 2, "text": "Owner's sister Priya likes jazz"}]})
+            }
+            "memory_entities" => serde_json::json!({"entities": [{"id": 3, "name": "Priya"}]}),
+            _ => serde_json::json!({
+                "facts": [{"id": 1, "text": "Owner's sister is called Priya"}],
+                "pending": [{"id": 2, "text": "Owner likes jazz"}],
+                "entities": [{"id": 3, "name": "Priya"}],
+            }),
+        };
         for (section, path) in READ_ROUTES {
             let route = path.split('?').next().unwrap_or(path);
             if !route.starts_with("/api/memory/") || NOT_A_LIST.contains(&route) {
                 continue;
             }
-            let hidden = crate::lock::redact_private(section, body.clone());
+            let hidden = crate::lock::redact_private(section, body_for(section));
             assert_eq!(
                 hidden["hidden"], true,
                 "`{section}` ({path}) is memory but is not on lock/rules.rs PRIVATE_LISTS"
