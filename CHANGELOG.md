@@ -6,6 +6,26 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Chatbot driver fixes, and a correction: every chatbot is reachable from
+  both apps.** The entries below that say "still not usable from either
+  app" are out of date: both apps' chatbot screens can start a
+  conversation with any of the chatbots once it is set up (a website signed
+  in, a key saved, or the model chosen). None has been tried against the
+  real site or service yet. Fixed at the same time: a website window no
+  longer reads an answer from a different chat you clicked while the first
+  answer was coming; each site's self-check now asks two questions in the
+  same chat, so a wrong guess about a site's chat address is caught by the
+  check rather than mid-conversation; a site no longer shows "ready" after
+  a sign-in window that was closed before you finished signing in (if you
+  signed in to Gemini before this change, run
+  `py -3 jarvis_chatbot_gemini.py sign-in` once more - it finishes at once
+  if it is still signed in); the second AI on your PC no longer ends with a
+  wrong "did not answer within 180 seconds" when it was only waiting for
+  your own chat, and Stop now cancels its answer so the graphics card is
+  freed; and a few words are now right (no "leaves this PC" or "(this PC)
+  (this PC)" for the second AI on your PC, and the real reason when a
+  key-based chatbot is not set up).
+
 - **The chatbot driver can now work eight more chatbot websites - still not
   usable from either app.** ChatGPT, Claude, Microsoft Copilot and
   Perplexity, plus DeepSeek, Grok, Le Chat (Mistral) and Meta AI (these

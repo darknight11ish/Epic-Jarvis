@@ -9021,12 +9021,23 @@ sees or keeps the password. The owner's three lines, in PowerShell:
 
 - install (once): `py -3 -m pip install playwright; py -3 -m playwright install chromium`
 - sign in (once): `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py sign-in`
-- check the selectors (sends the one fixed question "What is 2 plus 2?",
-  prints PASS/FAIL per step and which selector matched):
+- check the selectors (sends two fixed questions in one new chat, "What is
+  2 plus 2?" then "And what is 3 plus 3?" - the second proves the
+  conversation carries on in the same chat - and prints PASS/FAIL per step
+  and which selector matched):
   `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py check; Write-Host "The results are also saved in $env:USERPROFILE\.openjarvis\chatbot\gemini-check.txt"`
 
 `JARVIS_GEMINI_BROWSER=msedge` (or `chrome`) uses the browser already on
 the PC instead of Playwright's Chromium.
+
+**"Signed in" means the sign-in finished** (2026-09-28): the sign-in helper
+writes a small note, `jarvis-signed-in.txt` (the date, nothing else), into
+the profile folder only when it sees the site's message box. The profile
+folder alone is not enough - opening the sign-in window makes it - so a
+folder without the note reads "not signed in yet", with the sign-in line.
+A window signed in before this note existed must run its sign-in line once
+more; if it is still signed in, it finishes as soon as the message box
+shows.
 
 ### 60.4.1 Through an official API with a key (`jarvis_chatbot_api.py`, 2026-09-28)
 
@@ -9139,8 +9150,12 @@ report, `<config>/chatbot/<site>-check.txt`.
 | `lechat_web` | `chat.mistral.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py check` |
 | `metaai_web` | `www.meta.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py check` |
 
-Each self-check sends the one fixed question "What is 2 plus 2?" and prints
-PASS/FAIL per step and which selector matched. `JARVIS_<SITE>_BROWSER`
+Each self-check sends two fixed questions in one new chat ("What is 2 plus
+2?", then "And what is 3 plus 3?") and prints PASS/FAIL per step and which
+selector matched. The second question is there because a site gives a new
+chat its own address around the first reply: a wrong `chat_address` guess
+in a site file shows only on the next message, and the check names that
+line when it does. `JARVIS_<SITE>_BROWSER`
 (for example `JARVIS_CHATGPT_BROWSER=msedge`), or `JARVIS_CHATBOT_BROWSER`
 for all of them, uses a browser already on the PC.
 

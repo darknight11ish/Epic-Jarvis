@@ -1,20 +1,22 @@
 # Chatbot driver: Jarvis talks to ChatGPT or Gemini for you (design)
 
-Status: **partly built, not reachable from either app** (2026-09-28): the
-core (`backend/jarvis_chatbot.py`) and Gemini's website adapter
-(`backend/jarvis_chatbot_gemini.py`, driven openly as the owner chose);
-no route or app screen yet (`docs/JARVIS-API.md` section 60). Since
-"the chatbot driver becomes versatile" (owner, 2026-09-28), eight more
-websites are built the same open way over one shared base
-(`backend/jarvis_chatbot_web.py`): ChatGPT, Claude, Copilot, Perplexity,
-DeepSeek, Grok, Le Chat and Meta AI, each with its own spare account and
-self-check, none yet tried against its real site (section 60.5). Written 2026-09-27 by the
-since 2026-09-28 also the API adapters (`backend/jarvis_chatbot_api.py`:
-OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq, one key each) and "a
-second AI on this PC" (`backend/jarvis_chatbot_local.py`); the money cap
-in section 2 is NOT built (token counts are recorded and shown);
-no route or app screen yet (`docs/JARVIS-API.md` section 60). Written 2026-09-27 by the
-studio's designer for the owner's decision in `CLAUDE.md` ("Decided
+Status: **built, reachable from both apps, not yet tried for real**
+(2026-09-28). Built: the core (`backend/jarvis_chatbot.py`); Gemini's
+website adapter (`backend/jarvis_chatbot_gemini.py`, driven openly as the
+owner chose); since "the chatbot driver becomes versatile" (owner,
+2026-09-28), eight more websites built the same open way over one shared
+base (`backend/jarvis_chatbot_web.py`): ChatGPT, Claude, Copilot,
+Perplexity, DeepSeek, Grok, Le Chat and Meta AI, each with its own spare
+account and self-check; the API adapters (`backend/jarvis_chatbot_api.py`:
+OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq, one key each); and "a
+second AI on this PC" (`backend/jarvis_chatbot_local.py`). The routes
+(`/api/chatbot/*`, `backend/jarvis_chatbot_routes.py`) take any of these
+ids, and both apps' chatbot screens list every one, so each is reachable
+from both apps once it is set up: a website signed in, a key saved, or the
+local model chosen (`docs/JARVIS-API.md` section 60). **None has been tried
+against its real site or service yet** (section 60.5). The money cap in
+section 2 is NOT built (token counts are recorded and shown). Written
+2026-09-27 by the studio's designer for the owner's decision in `CLAUDE.md` ("Decided
 2026-09-27, the owner's answers after the studio review"): Jarvis may hold a
 conversation with an AI chatbot for the owner, following up **on its own,
 within limits the owner sets**. The two questions at the end come back to

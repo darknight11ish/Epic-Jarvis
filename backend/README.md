@@ -13927,8 +13927,11 @@ the routes. **Not in either app yet** (step 3).
 # Talking to an AI chatbot for you, step 2: Gemini's window, `jarvis_chatbot_gemini.py` (2026-09-28)
 
 Step 2 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`;
-`docs/JARVIS-API.md` section 60.4). **Still not usable from either app**:
-no route and no app screen yet. Shipped whole, like the core.
+`docs/JARVIS-API.md` section 60.4). ~~Still not usable from either app:
+no route and no app screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
+(`chatbot-routes.patch`) take any chatbot id, so this is reachable
+from both apps once it is set up; it has not been tried against the
+real gemini.google.com yet. Shipped whole, like the core.
 
 ## In plain words
 
@@ -13966,8 +13969,9 @@ never your main account. Jarvis never types or keeps the password.
 3. **Check it works on the real site.** How Jarvis finds Gemini's message
    box, send button and answer could not be tested against the real
    gemini.google.com (the place this was built cannot reach it). This line
-   sends ONE harmless fixed question, "What is 2 plus 2?", and prints PASS
-   or FAIL for each step, and which way of finding each part worked:
+   sends two harmless fixed questions in one new chat, "What is 2 plus 2?"
+   and "And what is 3 plus 3?", and prints PASS or FAIL for each step, and
+   which way of finding each part worked:
 
    ```
    cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py check; Write-Host "The results are also saved in $env:USERPROFILE\.openjarvis\chatbot\gemini-check.txt"
@@ -14007,9 +14011,12 @@ Windows 11) instead of Playwright's own Chromium.
 # Talking to an AI chatbot for you, the routes and both apps: `chatbot-routes.patch` (2026-09-28)
 
 Step 3 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md` sections 2
-and 6; `docs/JARVIS-API.md` section 60). **Still not usable**: Gemini's
+and 6; `docs/JARVIS-API.md` section 60). ~~Still not usable: Gemini's
 adapter is not built, so every start is refused with "Gemini through its
-website is not built yet." and no card. Everything around it now is.
+website is not built yet." and no card.~~ **Corrected 2026-09-28:** the
+Gemini adapter (the section above) and every later adapter are built and
+reachable through these routes once set up; none has been tried against
+its real site or service yet.
 
 ## In plain words
 
@@ -14116,8 +14123,11 @@ The owner's decision "the chatbot driver becomes versatile" (`CLAUDE.md`,
 2026-09-28): ChatGPT, Claude, Microsoft Copilot, Perplexity and other
 commonly used chatbot websites, each driven **openly like Gemini**, each
 with **its own spare account** used only by Jarvis. `docs/JARVIS-API.md`
-section 60.5. **Still not usable from either app**: no route and no app
-screen yet.
+section 60.5. ~~Still not usable from either app: no route and no app
+screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
+(`chatbot-routes.patch`) take any chatbot id, so this is reachable
+from both apps once it is set up; it has not been tried against the
+real sites yet.
 
 ## In plain words
 
@@ -14183,9 +14193,11 @@ comparison can say which answers came with sources.
 
 3. **Check it works on the real site.** How Jarvis finds each site's
    message box, send button and answer could not be tried against the real
-   sites (the place this was built cannot reach them). Each line sends ONE
-   harmless fixed question, "What is 2 plus 2?", and prints PASS or FAIL
-   for each step and which way of finding each part worked; the results
+   sites (the place this was built cannot reach them). Each line sends two
+   harmless fixed questions in one new chat, "What is 2 plus 2?" and "And
+   what is 3 plus 3?" (the second proves the conversation carries on in the
+   same chat), and prints PASS or FAIL for each step and which way of
+   finding each part worked; the results
    are also saved in `%USERPROFILE%\.openjarvis\chatbot\<site>-check.txt`:
 
    ```
@@ -14240,8 +14252,11 @@ instead of Playwright's own Chromium.
 Owner's decision (CLAUDE.md, "The chatbot driver becomes versatile"): one
 adapter speaking the common OpenAI-style API, so a key reaches ChatGPT,
 DeepSeek, Mistral, Grok, OpenRouter and similar; and a second AI on the
-owner's own PC. Still **not usable from either app** - no route or screen
-yet (`docs/JARVIS-API.md` 60.4.1 and 60.4.2).
+owner's own PC (`docs/JARVIS-API.md` 60.4.1 and 60.4.2). ~~Still not
+usable from either app - no route or screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
+(`chatbot-routes.patch`) take any chatbot id, so this is reachable
+from both apps once it is set up; it has not been tried against the
+real services or a real Ollama yet.
 
 ## In plain words
 
@@ -14375,6 +14390,88 @@ readiness, a whole session.
 - **One card, local:** the rule "only the everyday model" comes from
   MODEL-TOPOLOGY's numbers (the 8 GB card is full at 16K), not from a
   measurement. The two-card swap time is not measured either.
+
+# Talking to an AI chatbot for you: audit fixes (2026-09-28)
+
+Five findings from the chatbot driver's audit, each checked against the
+source first, and fixed. No new feature; nothing the owner must switch on.
+
+## In plain words
+
+- **A website window could read the answer from a different chat.** The
+  window only checked which chat it was in AFTER the first answer had been
+  read. If you clicked an old chat in the window while that first answer
+  was still coming, Jarvis took the old chat's last answer and typed its
+  follow-ups there. Now the chat is fixed the moment the first message is
+  sent: Jarvis accepts exactly one change of address - the site giving
+  that new chat its own address - and reads an answer only while the
+  window shows that chat. Anything else pauses and asks you.
+- **The self-check asks two questions now** ("What is 2 plus 2?", then
+  "And what is 3 plus 3?" in the same chat). A wrong guess about the
+  address a site gives a new chat used to show only on the second message
+  of a real conversation; now the check FAILs and names the line to fix.
+- **"Signed in" means the sign-in finished.** Opening the sign-in window
+  made the profile folder, and the folder alone counted as signed in. Now
+  the sign-in helper writes a small note (`jarvis-signed-in.txt`, the date
+  and nothing else) only when it sees the site's message box. **If you
+  signed in to Gemini (or any site) before this change, run its sign-in
+  line once more**; if it is still signed in, it finishes as soon as the
+  message box shows:
+
+  ```
+  cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py sign-in
+  ```
+
+- **The second AI on your PC, on one graphics card,** waits while you chat
+  with Jarvis. That wait used to count against the driver's 3-minute limit
+  for an answer, so a long chat of yours plus a slow answer ended with a
+  wrong "did not answer within 180 seconds". The wait no longer counts
+  (the conversation's own minutes still do, as its card says), Jarvis says
+  it is waiting for your chat, and Stop now closes the connection to
+  Ollama, so Ollama stops that answer and the graphics card is free.
+- **Wording.** The resume card no longer says a message "leaves this PC"
+  for the second AI on this PC; its card no longer reads "A second AI on
+  this PC (this PC)"; and "What Jarvis can reach" gives the real reason a
+  key-based chatbot is not set up (a bad model line, or Windows Credential
+  Manager - the password store - cannot be read) instead of always "no key
+  is saved". The docs and every module's opening lines no longer say the
+  chatbots are unreachable from the apps.
+
+## What changed
+
+- `jarvis_chatbot_web.py`: the chat is locked at the first send;
+  `_read_here` reads only while `status()` is ok; the self-check's second
+  question and its plain-words hint for a wrong `chat_address`;
+  `SIGNED_IN_MARKER`, `mark_signed_in()`, and `ready()` checking it (the
+  new `Site.sign_in_unfinished` words).
+- `jarvis_chatbot_local.py`: `waiting_for_owner()`; `close()` closes the
+  request's connection (`_Line`, `_LineHandler`).
+- `jarvis_chatbot.py`: the reply wait skips time an adapter says it is
+  waiting for the owner (`_held_for_owner`); `RESUME_HEADER` and the card's
+  "Chatbot:" line word the local kind correctly.
+- `jarvis_reach.py`: the true reason in the "with a key (API)" row.
+- Every site file, `jarvis_chatbot_api.py`, `jarvis_chatbot_local.py`:
+  opening lines; `docs/ARCHITECTURE.md` sections 4 and 8,
+  `docs/CHATBOT-DRIVER-DESIGN.md`, `docs/JARVIS-API.md` 60.4 and 60.5.
+
+## Test it
+
+```
+cd backend; python3 test_chatbot_local.py; python3 test_reach.py; python3 test_chatbot_gemini.py; python3 test_chatbot_sites.py
+```
+
+## Not checked, said plainly
+
+- **Nothing here was tried against a real site or a real Ollama.** The
+  fake pages prove the logic; Ollama stopping an answer when its
+  connection closes is how its server is written to behave, not something
+  measured here.
+- **One gap stays:** if a site has not yet given the new chat its own
+  address when you click an old chat whose address has the same shape,
+  that one move is still accepted as "the new chat's address". It needs
+  both a slow site and a click in the window during the first answer.
+  Reading your own message back off the page would close it, but the
+  selectors for that are unproven, so it was not added.
 
 # Looking at the screen, steps 1 and 2: `jarvis_front.py` and `jarvis_screen.py` (2026-09-28)
 
