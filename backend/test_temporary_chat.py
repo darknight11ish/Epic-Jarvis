@@ -364,6 +364,10 @@ def t_the_flag_never_reaches_a_model():
     got = ns["_chat_client_fields_off"]([{"role": "user", "content": "hi", "temporary": True}])
     check("\"temporary\" is one of the apps' bookkeeping fields, taken off every message",
           "temporary" in ns["_CHAT_CLIENT_FIELDS"] and got == [{"role": "user", "content": "hi"}])
+    got = ns["_chat_client_fields_off"]([{"role": "user", "content": "hi", "provenance": "voice",
+                                          "live": True}])
+    check("Jarvis Live's \"live\" mark comes off every message too (the chat audit, 2026-09-28)",
+          "live" in ns["_CHAT_CLIENT_FIELDS"] and got == [{"role": "user", "content": "hi"}], got)
     frag = _stack.fragment_with(src, 'body = dict(payload); body["model"] = lane')
     a = next(i for i, line in enumerate(frag) if 'body = dict(payload); body["model"] = lane' in line)
     b = next(i for i, line in enumerate(frag) if "return urllib.request.urlopen(" in line)
