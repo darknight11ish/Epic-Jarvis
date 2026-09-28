@@ -1297,6 +1297,15 @@ const CRITTER_TIME_WRAP = (2 * Math.PI / 1.3) * 1000;
 // Seconds an animal's option weight (calm, serious, still) takes to ease
 // fully on or off.
 const OPTION_EASE_S = 1;
+// A face's memory (critterFace's `mem`, one per surface) that has not been
+// drawn for this long is stale - the face was switched away and back, or its
+// window was hidden: it is started afresh, as for a face opening, so its
+// option weights are taken at once rather than eased on from where they were
+// left (which drew it moving under Still, or half faded, for most of a
+// second), and its "rested a while" starts again. Over the slowest rest
+// rate an animal is drawn at (dozing, 2 a second), so a face that is still
+// being drawn never counts as stale.
+const MEM_STALE_S = 1;
 // The "Still" option (the animals only breathe and blink): Settings ->
 // "Animal options" -> "Keep the animal still", shared with the phone and
 // kept on the PC; this computer's copy is in localStorage (animal-shared.js).
@@ -1445,6 +1454,10 @@ function paintSky(g, w, h){
 function paintSeason(s, g, w, h, state){
   window.__faceSeason = null;
   if(typeof JarvisSeason === "undefined") return;
+  // Until the stored options are read (FACE_OPTS_READS), Still is not known
+  // yet: the easing starts afresh once they are, so a face set to Still
+  // never shows the touches for the second it would take to ease them away.
+  if(!s.seasonRead && FACE_OPTS_READS > 0){ s.seasonMem = null; s.seasonRead = true; }
   const mem = s.seasonMem || (s.seasonMem = {});
   const f = JarvisSeason.follow(mem, { state, still: FACE_STILL, serious: faceSerious() }, performance.now() / 1000);
   if(!FACE_ANIMAL.seasonal){ window.__faceSeason = { ops: 0 }; return; }
@@ -1548,11 +1561,18 @@ function critterFace(o){
     // same half second at any speed-slider setting - and matches the phone,
     // whose FaceHost measures it the same way.
     mem: new WeakMap(),
-    track(st, amp){
+    track(st, amp, t){
       const now = performance.now() / 1000;
       let m = this.mem.get(VIEW);
+      // Not drawn for a while (switched away and back, or hidden): start
+      // afresh, as a face opening does (MEM_STALE_S says why).
+      if(m && now - m.optAt > MEM_STALE_S) m = null;
       if(!m){
-        m = { st, prev: st, at: -1e9, lastAmp: amp, past: [],
+        // `born`: when this memory started. A fresh memory has no change of
+        // state to count from (at: -1e9, "long settled"), so how long it has
+        // RESTED - the cute moments' and the robot's zip's gate - counts from
+        // here instead (since(), below).
+        m = { st, prev: st, at: -1e9, born: now, lastAmp: amp, past: [],
               lookW: 0, lookAt: now, tx: TOUCH.x, ty: TOUCH.y,
               // The option weights start where they are, not eased in from 0.
               calmR: CALM.matches ? 1 : 0, seriousR: faceSerious() ? 1 : 0, stillR: FACE_STILL ? 1 : 0,
@@ -1568,13 +1588,6 @@ function critterFace(o){
               petR: 0, petX: 0, petDir: 0, focusEndAt: 0 };
         this.mem.set(VIEW, m);
       }
-      if(m.st !== st && st === "speaking"){
-        // Gestures on Jarvis's phrase ends (the "nods" switch): decided as an
-        // answer starts, never in the middle of one, and only when a real
-        // voice is being heard - a typed or quiet answer has no phrase ends
-        // to find, and keeps the gestures' own timing.
-        m.phraseOn = FACE_ANIMAL.nods && realVoiceNow();
-      }
       if(m.st !== st){
         // What CritterPose.pose needs to carry on from what was on screen:
         // every change it may still be settling from, newest first - the
@@ -1584,6 +1597,22 @@ function critterFace(o){
         // smoothly; one level of memory snapped the oldest.
         m.past = [{ state: m.st, gap: now - m.at, amp: m.lastAmp }].concat(m.past).slice(0, 6);
         m.prev = m.st; m.st = st; m.at = now;
+      }
+      // Gestures on Jarvis's phrase ends (the "nods" switch). The face turns
+      // to "speaking" as the answer's text starts streaming, before any of it
+      // is heard, so this is not decided at that change: while speaking it
+      // turns ON the first time a real voice is heard, if "nods" is on and
+      // none of the animal's own talking gestures is playing at that moment
+      // (so one is never cut off half way; it waits for the next frame
+      // clear of one), and OFF when the speaking stretch ends. A typed or
+      // quiet answer has no phrase ends to find, and keeps the gestures' own
+      // timing. The phone's FaceView keeps the same rule.
+      if(st !== "speaking") m.phraseOn = false;
+      else if(!m.phraseOn && FACE_ANIMAL.nods && realVoiceNow()
+              && !(typeof t === "number" && this.species && this.species.gesturing && this.species.gesturing(t))){
+        m.phraseOn = true;
+        // An earlier answer's last phrase end is no gesture of this one.
+        if(m.phrase) m.phrase = { talk: 0, quiet: 0, ago: 1e9, n: m.phrase.n };
       }
       m.lastAmp = amp;
       // Calm motion (the OS's reduced motion), a serious moment (the
@@ -1682,15 +1711,28 @@ function critterFace(o){
     },
     pose(t, st, amp){
       if(!this.species) return null;
-      const m = this.track(st, amp);
+      const m = this.track(st, amp, t);
       const e = (r) => r * r * (3 - 2 * r);
       const o = Object.assign({ calm: e(m.calmR), serious: e(m.seriousR), still: e(m.stillR) }, this.behaviours(m, e));
       // Kept for the frame pacer (busy) and the face switch's fade (draw).
       m.opts = o;
       // For tests: what display mode's one face was last handed.
       if(DISPLAY_MODE) window.__faceOpts = o;
-      return this.species.pose(st, m.prev, performance.now() / 1000 - m.at, t, amp, this.look(m),
+      return this.species.pose(st, m.prev, this.since(m, st), t, amp, this.look(m),
                               { past: m.past }, o);
+    },
+    // How long the face has been in its state, as the pose and the frame
+    // pacer are told it. Idle: how long it has RESTED, which a face that
+    // has only just opened (or come back) has not, however long ago its
+    // memory's last change of state was (a fresh memory's is -1e9) - so a
+    // cute moment or the robot's zip waits its "rested a while" as it
+    // should, instead of being able to start during the hello. Any other
+    // state: seconds since the change into it, as before - a face opening
+    // straight into waiting on you or an error has no change to react to,
+    // and plays no arrival reaction.
+    since(m, st){
+      const now = performance.now() / 1000;
+      return st === "idle" ? Math.min(now - m.at, now - m.born) : now - m.at;
     },
     gpu(g, w, h, t, st, amp, P){
       if(typeof GPU === "undefined" || GPU.dead || !GPUOK || !P) return false;
@@ -1762,14 +1804,21 @@ function critterFace(o){
       // plays - or one of its cute moments, which the pose finds from how
       // long it has been idle and its switches. Not under "Still" or reduced
       // motion, which take them away.
-      const m = this.mem.get(VIEW);
-      VIEW.busy = !!(this.species && this.species.busy && !FACE_STILL && !CALM.matches && m
-                     && this.species.busy(st, t, performance.now() / 1000 - m.at, m.opts));
+      // Also while it is being stroked, or a fact's nod, the long answer's
+      // glow or the stretch as a focus session ends plays
+      // (CritterPose.momentsBusy). Not for the happenings while a focus
+      // session or a serious moment has taken them away.
+      const m = this.mem.get(VIEW), sp = this.species, o = m && m.opts;
+      const hushed = !!o && (o.focus * o.focus_buddy >= 0.99 || o.serious >= 0.99);
+      VIEW.busy = !!(sp && m && (
+        (sp.busy && !FACE_STILL && !CALM.matches && !hushed && sp.busy(st, t, this.since(m, st), o))
+        || (typeof CritterPose !== "undefined" && CritterPose.momentsBusy && CritterPose.momentsBusy(st, o))));
       // How opaque the face switch draws it (display mode's switchFace): 1
       // while the animal plays its own goodbye or hello; a gentle cross-fade
-      // under Still, calm motion or a serious moment, when it plays neither.
+      // under Still, calm motion or a serious moment - and while waiting on
+      // you or at an error, which count as serious - when it plays neither.
       VIEW.alpha = m && m.opts && typeof CritterPose !== "undefined" && CritterPose.switchAlpha
-        ? CritterPose.switchAlpha(m.opts) : 1;
+        ? CritterPose.switchAlpha(m.opts, st) : 1;
       // Standby's dim follows the pose nodding off and waking (sleepDim).
       FACE_DIM = sleepDim(FACE_DIM_AWAKE, P ? Math.max(0, Math.min(1, +P.asleep || 0)) : (st === "standby" ? 1 : 0));
       if(this.gpu(g, w, h, t, st, amp, P)){

@@ -66,6 +66,17 @@ abstract class CritterFace(
      */
     open fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts): Boolean = busyAt(state, t)
 
+    /**
+     * Whether one of the face's own-timed talking gestures (a nod, a paw or
+     * a mitten, a tilt - the timing used until the host hands the pose
+     * Jarvis's phrase ends) is playing at clock [t]: its pose's `gesturing`,
+     * the desktop's `gesturing(t)`, checked against it by CritterPoseTest.
+     * The host asks before it switches the gestures over to the phrase ends
+     * part way into an answer, so a gesture is never cut off half way. A
+     * face with no talking gestures of its own need not override it.
+     */
+    open fun talkingAt(t: Float): Boolean = false
+
     /** What the host remembered at the last state changes (see [CritterPose.Hist]). */
     protected fun hist(f: FaceFrame) =
         CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp, prevAmp2 = f.prevAmp2, past = f.past)
@@ -375,6 +386,7 @@ object RedPanda : CritterFace("redpanda", "Red Panda", CritterShaders.RED_PANDA)
     override fun busyAt(state: FaceState, t: Float) = CritterPose.busy(state, t)
     override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
         CritterPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = CritterPose.gesturing(t)
 }
 
 /** The pygmy owl on its branch, its orb floating beside it. */
@@ -386,6 +398,7 @@ object PygmyOwl : CritterFace("pygmyowl", "Pygmy Owl", CritterShaders.PYGMY_OWL)
     override fun busyAt(state: FaceState, t: Float) = OwlPose.busy(state, t)
     override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
         OwlPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = OwlPose.gesturing(t)
 }
 
 /** The sea otter afloat in its pool, a glowing pebble on its chest. */
@@ -397,6 +410,7 @@ object SeaOtter : CritterFace("seaotter", "Sea Otter", CritterShaders.SEA_OTTER)
     override fun busyAt(state: FaceState, t: Float) = OtterPose.busy(state, t)
     override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
         OtterPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = OtterPose.gesturing(t)
 }
 
 /**
@@ -411,6 +425,7 @@ object Monkey : CritterFace("monkey", "Monkey", CritterShaders.MONKEY) {
     override fun busyAt(state: FaceState, t: Float) = MonkeyPose.busy(state, t)
     override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
         MonkeyPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = MonkeyPose.gesturing(t)
 }
 
 /**
@@ -430,6 +445,7 @@ object Robot : CritterFace("robot", "Robot", CritterShaders.ROBOT) {
     override fun busyAt(state: FaceState, t: Float) = RobotPose.busy(state, t)
     override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
         RobotPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = RobotPose.gesturing(t)
 }
 
 /**

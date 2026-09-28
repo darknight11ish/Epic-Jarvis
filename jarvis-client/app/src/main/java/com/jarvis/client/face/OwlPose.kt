@@ -34,7 +34,7 @@ import com.jarvis.client.face.CritterPose.cuteAt
 import com.jarvis.client.face.CritterPose.cuteBusy
 import com.jarvis.client.face.CritterPose.cuteOf
 import com.jarvis.client.face.CritterPose.cuteQuiet
-import com.jarvis.client.face.CritterPose.extras
+import com.jarvis.client.face.CritterPose.switchE
 import com.jarvis.client.face.CritterPose.focusEndOf
 import com.jarvis.client.face.CritterPose.focusOf
 import com.jarvis.client.face.CritterPose.gaze
@@ -121,6 +121,12 @@ object OwlPose {
         state == FaceState.IDLE && (CritterPose.playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)) ||
             cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
+    /** Whether one of its own talking gestures is playing at clock [t] - the desktop's gesturing(t). */
+    fun gesturing(t: Float): Boolean {
+        val b = beat(t, S_BEAT, S_GAZE, 1.8f, 6f, 0.65f)
+        return b[0] >= 0f && b[1] >= 0f && b[1] < CritterPose.GESTURE_S
+    }
+
     // Thinking: the orb circles the head, riding high in front, and comes up
     // the right-hand side first - the desktop's orbit() and its note.
     private const val ORBIT_K = 147f
@@ -154,6 +160,7 @@ object OwlPose {
         val cu = if (state == FaceState.IDLE) cuteAt(t, since, S_CUTE, CUTE_LEN) else NONE
         val cw = if (cu[0] >= 0f) cuteOf(o) else 0f
         val fw = if (state == FaceState.IDLE) focusOf(o) else 0f
+        val fp = fw * (1f - 0.6f * o.calm)   // the focus pose itself: smaller under calm (the happenings still go by fw)
         // (and so do the stretch as a focus session ends, and being stroked)
         val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
         val pw = if (awake(state)) petOf(o) else 0f
@@ -342,11 +349,11 @@ object OwlPose {
                 if (fw > 0f) {
                     // Working beside you: it half turns to watch the work, far fewer looks.
                     val f = gaze(t, S_FOCUS, 4f, 12f, 0.75f, 0.3f, 0.12f, 0f, 0.02f, 1.6f)
-                    p[HEAD_YAW] += (0.35f + 0.4f * f[2] - p[HEAD_YAW]) * fw
-                    p[HEAD_PITCH] += (-0.12f + 0.12f * f[3] - p[HEAD_PITCH]) * fw
-                    p[LOOK_X] += (f[0] - 0.8f * f[2] - p[LOOK_X]) * fw
-                    p[LOOK_Y] += (-0.2f + f[1] - 0.8f * f[3] - p[LOOK_Y]) * fw
-                    turnBlink *= 1f - fw
+                    p[HEAD_YAW] += (0.35f + 0.4f * f[2] - p[HEAD_YAW]) * fp
+                    p[HEAD_PITCH] += (-0.12f + 0.12f * f[3] - p[HEAD_PITCH]) * fp
+                    p[LOOK_X] += (f[0] - 0.8f * f[2] - p[LOOK_X]) * fp
+                    p[LOOK_Y] += (-0.2f + f[1] - 0.8f * f[3] - p[LOOK_Y]) * fp
+                    turnBlink *= 1f - fp
                 }
                 // The small stretch as a focus session ends: a ruffle, wings eased out.
                 if (fe > 0f) {
@@ -417,15 +424,16 @@ object OwlPose {
     /**
      * Hello and goodbye - the desktop's owl farewell(): a small bow, then it
      * flies up out of the picture (its branch stays); hello, it flutters down
-     * onto the branch with a fluff and looks at you.
+     * onto the branch with a fluff and looks at you. Waiting on you or at an
+     * error: none of it, the host's cross-fade ([CritterPose.switchE]).
      */
     private const val RISE = 2.2f
     private fun farewell(p: FloatArray, state: FaceState, o: Opts) {
         val g = o.goodbye
         val h = o.hello
         if (g <= 0f && h >= 1f) return
-        val e = extras(o)
-        val aw = if (awake(state) || state == FaceState.APPROVAL || state == FaceState.ERROR) 1f else 0f
+        val e = switchE(o, state)
+        val aw = if (awake(state)) 1f else 0f
         if (g > 0f) {
             val a = e * aw * bump(clamp(g / 0.6f, 0f, 1f))
             val at = e * aw * ease(g / 0.2f)

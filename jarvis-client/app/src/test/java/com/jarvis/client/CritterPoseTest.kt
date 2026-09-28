@@ -186,6 +186,32 @@ class CritterPoseTest {
             assertEquals("$sp: busy differs from the desktop's", want, got)
             for (st in FaceState.entries) if (st != FaceState.IDLE) assertTrue("$sp busy in $st", times.none { fn(st, it) })
         }
+        // And whether one of its own talking gestures plays - what the host
+        // checks before it hands the pose Jarvis's phrase ends mid-answer.
+        assertEquals(o["gesture_s"]!!.jsonPrimitive.float, CritterPose.GESTURE_S, 0f)
+        val gest = o["gesturing"]!!.jsonObject
+        val phoneG = mapOf<String, (Float) -> Boolean>(
+            "redpanda" to CritterPose::gesturing, "pygmyowl" to OwlPose::gesturing, "seaotter" to OtterPose::gesturing,
+            "monkey" to MonkeyPose::gesturing, "robot" to RobotPose::gesturing,
+        )
+        assertEquals(phoneG.keys, gest.keys)
+        for ((sp, fn) in phoneG) {
+            val want = gest[sp]!!.jsonPrimitive.content
+            assertEquals("$sp: gesturing differs from the desktop's", want, times.joinToString("") { if (fn(it)) "1" else "0" })
+            assertTrue("$sp: never gestures", '1' in want)
+            assertTrue("$sp: always gestures", '0' in want)
+        }
+        // And whether a moment the host hands in plays (a stroke, a fact's
+        // nod, the glow, the focus stretch) - the frame pacer draws those at
+        // the full rate too.
+        val moments = o["moments"]!!.jsonArray
+        assertTrue(moments.size > 20)
+        for (c in moments) {
+            val m = c.jsonObject
+            val st = state(m["state"]!!.jsonPrimitive.content)
+            val want = m["busy"]!!.jsonPrimitive.content.toBooleanStrict()
+            assertEquals("momentsBusy $m", want, CritterPose.momentsBusy(st, optsOf(m["opts"]?.jsonObject)))
+        }
     }
 
     @Test
@@ -1011,9 +1037,11 @@ class CritterPoseTest {
             var calm = 0f
             for (f in 0 until 40) {
                 val t = 70f + f * 0.13f
-                // (Not the focus session: that takes movement away, calm or not.)
-                full = maxOf(full, bodyGap(u(a, s, 20f, t, opts()), u(a, s, 20f, t, everything().copy(goodbye = 0f, focus = 0f))))
-                calm = maxOf(calm, bodyGap(u(a, s, 20f, t, opts(calm = 1f)), u(a, s, 20f, t, everything(opts(calm = 1f)).copy(goodbye = 0f, focus = 0f))))
+                // (The focus session too, since 2026-09-28: its pose is taken
+                // smaller under calm, like every other behaviour; only the
+                // happenings it takes away stay away, calm or not.)
+                full = maxOf(full, bodyGap(u(a, s, 20f, t, opts()), u(a, s, 20f, t, everything().copy(goodbye = 0f))))
+                calm = maxOf(calm, bodyGap(u(a, s, 20f, t, opts(calm = 1f)), u(a, s, 20f, t, everything(opts(calm = 1f)).copy(goodbye = 0f))))
             }
             assertTrue("${a.id} $s: calm $calm against $full", calm <= full * 0.75f + 1e-4f)
         }
@@ -1181,6 +1209,58 @@ class CritterPoseTest {
             val sw = gap(u(a, FaceState.IDLE, 20f, 30f, opts()), u(a, FaceState.IDLE, 20f, 30f, opts().copy(focus = 1f, focusEnd = 1.2f, focusBuddy = 0f)))
             assertTrue("${a.id}: focus buddy with the switch off", sw < 1e-5f)
         }
+    }
+
+    /** The biggest difference between two poses' head turns (the head's rotation). */
+    private fun headGap(a: Map<String, FloatArray>, b: Map<String, FloatArray>): Float {
+        var worst = 0f
+        for (name in listOf("uHeadR0", "uHeadR1", "uHeadR2")) for (i in 0 until 3) {
+            worst = maxOf(worst, abs(a.getValue(name)[i] - b.getValue(name)[i]))
+        }
+        return worst
+    }
+
+    @Test
+    fun `calm makes the focus buddy's pose smaller too`() {
+        // The owner's rule: calm makes every behaviour smaller. The focus pose
+        // (the owl's half turn to watch the work, the panda's look into its
+        // orb...) used to be drawn in full under calm - the owl's head turned
+        // 20 to 43 degrees. Measured against the still animal at the same
+        // moment, the head turns clearly less under calm (the pose is taken
+        // at 40 percent), while the happenings stay away all the same.
+        for (a in sleepers) {
+            var full = 0f
+            var calm = 0f
+            for (f in 0 until 80) {
+                val t = 30f + f * 0.53f
+                val rest = u(a, FaceState.IDLE, 20f, t, opts(still = 1f))
+                full = maxOf(full, headGap(rest, u(a, FaceState.IDLE, 20f, t, opts().copy(focus = 1f))))
+                calm = maxOf(calm, headGap(rest, u(a, FaceState.IDLE, 20f, t, opts(calm = 1f).copy(focus = 1f))))
+            }
+            assertTrue("${a.id}: the focus pose under calm turned the head $calm against $full", calm < 0.75f * full)
+        }
+    }
+
+    @Test
+    fun `waiting on you or at an error, a face switch is only the cross-fade`() {
+        // The owner's rule: approval and error are serious moments, and under
+        // a serious moment a face switch is a quick gentle cross-fade - no
+        // bow, no ducking out of view, no bounce.
+        for (a in sleepers) for (s in listOf(FaceState.APPROVAL, FaceState.ERROR)) {
+            val rest = u(a, s, 20f, 30f, opts())
+            for (w in listOf(0.2f, 0.5f, 0.9f)) {
+                val g = gap(rest, u(a, s, 20f, 30f, opts().copy(goodbye = w)))
+                val h = gap(rest, u(a, s, 20f, 30f, opts().copy(hello = w)))
+                assertTrue("${a.id} $s: the goodbye moved it by $g at $w", g < 1e-5f)
+                assertTrue("${a.id} $s: the hello moved it by $h at $w", h < 1e-5f)
+            }
+            assertEquals("$s", 0.3f, CritterPose.switchAlpha(opts().copy(goodbye = 0.7f), s), 1e-5f)
+            assertEquals("$s", 0.25f, CritterPose.switchAlpha(opts().copy(hello = 0.25f), s), 1e-5f)
+        }
+        // Awake, the animal plays its own piece and is drawn whole; the old
+        // one-argument call answers as it always did.
+        assertEquals(1f, CritterPose.switchAlpha(opts().copy(goodbye = 0.7f), FaceState.IDLE), 0f)
+        assertEquals(1f, CritterPose.switchAlpha(opts().copy(goodbye = 0.7f)), 0f)
     }
 
     @Test

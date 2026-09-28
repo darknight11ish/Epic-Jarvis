@@ -803,6 +803,35 @@
       || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
   /**
+   * Whether one of its own talking gestures (beat(): the timing used until
+   * the host hands it Jarvis's phrase ends) is playing at clock t - a nod, a
+   * paw lift or a tilt, at most GESTURE_S long. The host asks before it
+   * switches the gestures over to the phrase ends part way into an answer
+   * (faces.html's phraseOn), so a gesture is never cut off half way.
+   */
+  const GESTURE_S = 2;
+  function gesturing(t) {
+    const b = beat(t, S_BEAT, S_GAZE, 1.8, 6, 0.65);
+    return b[0] >= 0 && b[1] >= 0 && b[1] < GESTURE_S;
+  }
+  /**
+   * Whether one of the moments the host hands in is playing, for the frame
+   * pacer (it draws them at the full rate, as it does a happening): being
+   * stroked, a fact's nod, the long answer's glow (awake) or the stretch as a
+   * focus session ends (idle). `opts` as the host hands the pose; none under
+   * still or a serious moment, which take them away. Every animal's are the
+   * same length, so this is one function for all five.
+   */
+  function momentsBusy(state, opts) {
+    const o = optsOf(opts, 0);
+    if (o.still >= 0.99 || o.serious >= 0.99) return false;
+    // (Worked out at clock 0, each moment's clock is minus its "seconds since".)
+    const on = (at, len) => -at > 0 && -at < len;
+    if (AWAKE[state] && ((o.pet > 0 && o.petting > 0)
+        || (o.acks > 0 && (on(o.nodAt, ACK_S) || on(o.glowAt, GLOW_S))))) return true;
+    return state === "idle" && o.focusBuddy > 0 && on(o.focusEndAt, FOCUS_END_S);
+  }
+  /**
    * Whether a cute moment is playing, for the frame pacer: only when the
    * host passes how long the animal has been idle (`since`) and its opts,
    * so a host that passes neither is told exactly what it was before.
@@ -836,6 +865,7 @@
     const cu = state === "idle" ? cuteAt(t, since, S_CUTE, CUTE_LEN) : NONE;
     const cw = cu[0] >= 0 ? cuteOf(o) : 0;
     const fw = state === "idle" ? focusOf(o) : 0;
+    const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
     // (and so do the stretch as a focus session ends, and being stroked)
     const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
     m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
@@ -1082,12 +1112,12 @@
         // orb in its lap, head a little down, looking up now and then - far
         // fewer looks, and no happenings (hap, above).
         const f = gaze(t, S_FOCUS, 4, 12, 0.75, 0.3, 0.12, 0, 0.03, 1.6);
-        P.lookX += (f[0] - 0.4 * f[2] - P.lookX) * fw;
-        P.lookY += (-0.6 + f[1] - 0.4 * f[3] - P.lookY) * fw;
-        P.headYaw += (0.2 * f[2] - P.headYaw) * fw;
-        P.headPitch += (-0.16 + 0.1 * f[3] - P.headPitch) * fw;
-        P.lean += 0.02 * fw;
-        turnBlink *= 1 - fw;
+        P.lookX += (f[0] - 0.4 * f[2] - P.lookX) * fp;
+        P.lookY += (-0.6 + f[1] - 0.4 * f[3] - P.lookY) * fp;
+        P.headYaw += (0.2 * f[2] - P.headYaw) * fp;
+        P.headPitch += (-0.16 + 0.1 * f[3] - P.headPitch) * fp;
+        P.lean += 0.02 * fp;
+        turnBlink *= 1 - fp;
       }
       // The small stretch as a focus session ends (the idle stretch's).
       if (fe > 0) {
@@ -1200,23 +1230,27 @@
    * in (about HELLO_S and GOODBYE_S seconds each). Left out: none. Every
    * animal's is built the same way (see the owl's, the otter's and the
    * monkey's):
-   *  - Goodbye: a little wave (a small bow while waiting on you or after
-   *    something went wrong; nothing while asleep or dozing), looking at
+   *  - Goodbye: a little wave (nothing while asleep or dozing), looking at
    *    you, then out of view - the panda ducks down below the picture.
    *  - Hello: it comes back up into view, a small bounce past its place,
    *    and looks at you.
-   * Under still, calm or a serious moment (E, the same weight as the
-   * wake-up's extras) the pose plays none of it and the host cross-fades
-   * the faces instead - switchAlpha() says how much.
+   * Under still, calm or a serious moment - and while waiting on you or
+   * after something went wrong, which the owner's rules treat as serious
+   * moments too (switchE) - the pose plays none of it and the host
+   * cross-fades the faces instead: switchAlpha() says how much.
    */
   const HELLO_S = 1.0, GOODBYE_S = 1.0;
   const DROP = 2.1;   // how far down it goes to be out of view, ear tips and all
+  // Waiting on you and something wrong: attentive and still, so a face
+  // switch there is the quick gentle cross-fade, as under a serious moment.
+  const STILL_SWITCH = { approval: 1, error: 1 };
+  /** How much of its own hello and goodbye an animal plays: the extras, none while waiting on you or at an error. */
+  function switchE(o, state) { return STILL_SWITCH[state] ? 0 : extras(o); }
   function farewell(P, state, o) {
     const g = o.goodbye, h = o.hello;
     if (g <= 0 && h >= 1) return;
-    const E = extras(o);
-    const awake = AWAKE[state] || state === "approval" || state === "error" ? 1 : 0;
-    const wave1 = AWAKE[state] ? 1 : 0;
+    const E = switchE(o, state);
+    const awake = AWAKE[state] ? 1 : 0;
     if (g > 0) {
       const a = E * bump(clamp(g / 0.6, 0, 1));
       const at = E * awake * ease(g / 0.2);
@@ -1224,13 +1258,10 @@
       P.headYaw += (0 - P.headYaw) * at;
       // The wave: its right paw up by its shoulder, waving side to side
       // about one and a half times a second (by how far the goodbye has got).
-      const wv = a * wave1;
+      const wv = a * awake;
       P.pawRx += 0.12 * wv + 0.06 * wv * Math.sin(TAU * 1.6 * g);
       P.pawRy += 0.36 * wv; P.pawRz -= 0.08 * wv;
       P.brow += 0.2 * wv;
-      // The bow, instead, while waiting on you or after something wrong.
-      const bw = a * (awake - wave1);
-      P.headPitch -= 0.22 * bw; P.lean += 0.05 * bw;
       P.bob -= E * DROP * ease((g - 0.4) / 0.6);
     }
     if (h < 1) {
@@ -1239,18 +1270,21 @@
       const at = E * awake * ease((h - 0.25) / 0.25) * (1 - ease((h - 0.8) / 0.2));
       P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
       P.headYaw += (0 - P.headYaw) * at; P.headPitch += (0.04 - P.headPitch) * at;
-      P.brow += 0.2 * at * wave1;
+      P.brow += 0.2 * at;
     }
   }
   /**
    * How opaque the host draws an animal while it says hello or goodbye:
    * 1 while the pose plays the piece itself; under still, calm or a serious
-   * moment (when it does not) the host cross-fades instead - the leaving
-   * face fading out as its goodbye goes 0 to 1, the new one in with its
-   * hello. `opts` is what the host hands the pose.
+   * moment, or while waiting on you or at an error (when it does not), the
+   * host cross-fades instead - the leaving face fading out as its goodbye
+   * goes 0 to 1, the new one in with its hello. `opts` is what the host
+   * hands the pose; `state` the state it is drawn in (left out: no state
+   * counts as serious, as before). A state that changes part way through a
+   * switch changes this at once - rare, since a switch lasts a second.
    */
-  function switchAlpha(opts) {
-    const o = optsOf(opts, 0), E = extras(o);
+  function switchAlpha(opts, state) {
+    const o = optsOf(opts, 0), E = switchE(o, state);
     return clamp(1 - (1 - E) * Math.max(o.goodbye, 1 - o.hello), 0, 1);
   }
 
@@ -1855,21 +1889,23 @@
     // numbers, how opaque to draw a face while it says hello or goodbye, and
     // how long each of those takes.
     PAUSE, pauseStep, switchAlpha, HELLO_S, GOODBYE_S,
+    // ...and whether a moment it hands in (a stroke, a nod, a glow, a stretch) is playing.
+    momentsBusy,
     // Every animal, by face id. The owl and the otter add themselves. Each
     // has `mouth(P, mouth)` too (the same mouthOf), for a drawing that is not
     // the shader - the flat fallback - to open the same mouth, and
     // `overlay(P, view)` for where its sleeping Zs rise from, and
     // `busy(state, t)`: whether an idle happening is playing (the frame pacer's).
-    species: { redpanda: { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, HELLO_S, GOODBYE_S } },
+    species: { redpanda: { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, gesturing, HELLO_S, GOODBYE_S } },
     // Shared with the other animals' files, so all three do their sums alike.
     util: { makePose, halfLives, mouthOf, clamp, smooth, ease, rx, ry, rz, mul, apply, add, invRow,
             wave, bump, envAHR, happening, beat, shift, gaze, looks, restingGaze, optsOf, mods, chain,
             gauss, blinkAt, overlayAt, phaseOf, LOOP, PERIOD, TAU, playing,
             toward, eyesOpen, eyesClose, WAKE_S, SLEEP_S,
             // The new behaviours' shared parts (see "New behaviours").
-            NEVER, NONE, ZERO2, ZERO4, ZERO5, AWAKE, newOf, varOf, focusOf, petOf, cuteOf, extras, bagKind,
+            NEVER, NONE, ZERO2, ZERO4, ZERO5, AWAKE, newOf, varOf, focusOf, petOf, cuteOf, extras, switchE, bagKind,
             listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt, cuteQuiet, fullTurn,
-            cuteBusy, HELLO_S, GOODBYE_S },
+            cuteBusy, GESTURE_S, HELLO_S, GOODBYE_S },
   };
   root.CritterPose = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -132,6 +132,14 @@ if (!K) {
   };
   const post = (page, m) => page.evaluate((x) => window.postMessage(x, location.origin), m);
   const opts = (page) => page.evaluate(() => window.__faceOpts);
+  // Holds every request for `glob` until release() - the page's read of the
+  // stored options, say, until the test has seen a frame drawn without them.
+  const hold = async (page, glob) => {
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    await page.route(glob, async (route) => { await gate; await route.continue(); });
+    return { release };
+  };
 
   await check("the pose is handed variety and the owner's switches, eased", async () => {
     const { page, done } = await open("redpanda", { animal: { nods: false, cute_moments: false } });
@@ -155,11 +163,11 @@ if (!K) {
     const page = await ctx.newPage();
     await page.addInitScript(() => localStorage.setItem("jarvis.animal.v1",
       JSON.stringify({ nods: false, cute_moments: false, still: true })));
-    await page.route("**/animal-shared.js", async (route) => {
-      await new Promise((r) => setTimeout(r, 1500));
-      await route.continue();
-    });
-    await page.goto(`${base}/faces.html?mode=display&feed=parent&face=redpanda`);
+    // Held until the first frame has been drawn (not for a fixed time: on a
+    // slow run a fixed 1.5 s could run out before the first frame, and the
+    // check then saw the stored values from the start - 2 runs in 13).
+    const read = await hold(page, "**/animal-shared.js");
+    await page.goto(`${base}/faces.html?mode=display&feed=parent&face=redpanda`, { waitUntil: "commit" });
     await page.waitForFunction(() => window.__faceOpts, null, { timeout: 60000 });
     const early = await opts(page);
     // Every value the pose is handed, frame by frame, until the read lands.
@@ -169,6 +177,8 @@ if (!K) {
                            requestAnimationFrame(tick); };
       requestAnimationFrame(tick);
     });
+    await page.waitForTimeout(300);
+    read.release();
     await page.waitForFunction(() => window.__faceOpts && window.__faceOpts.nods === 0, null, { timeout: 8000 });
     await page.waitForTimeout(200);
     const seen = await page.evaluate(() => window.__nodsSeen);
@@ -227,6 +237,9 @@ if (!K) {
 
   await check("listening: the owner's pauses are counted; speaking: phrase ends only for a real voice", async () => {
     const { page, done } = await open();
+    // (Its own talking gestures held off, so the switch to phrase ends is
+    // not kept waiting for one - the next check covers that.)
+    await page.evaluate(() => { CritterPose.species.redpanda.gesturing = () => false; });
     await post(page, { type: "jarvis-hud-face", state: "listening" });
     for (let i = 0; i < 26; i++) {
       await post(page, { type: "jarvis-face-voice", mic: i < 16 ? 0.4 : 0 });
@@ -239,9 +252,11 @@ if (!K) {
     const typed = await opts(page);
     await post(page, { type: "jarvis-hud-face", state: "idle" });
     await page.waitForTimeout(200);
-    // A spoken one.
-    await page.evaluate(() => setSpeechLevel(0.4));
+    // A spoken one - in the order the app sees it: the face turns to
+    // speaking as the answer's text starts streaming, and the voice is
+    // heard a moment later.
     await post(page, { type: "jarvis-hud-face", state: "speaking" });
+    await page.waitForTimeout(200);
     for (let i = 0; i < 24; i++) {
       await page.evaluate((v) => setSpeechLevel(v), i < 16 ? 0.4 : 0);
       await page.waitForTimeout(60);
@@ -251,6 +266,159 @@ if (!K) {
     assert.ok(heard.heardN >= 1 && heard.heard < 1.5, JSON.stringify([heard.heardN, heard.heard]));
     assert.ok(!("phraseN" in typed), "a typed answer keeps the gestures' own timing");
     assert.ok(spoken.phraseN >= 1 && spoken.phraseEnd < 1.2, JSON.stringify([spoken.phraseN, spoken.phraseEnd]));
+  });
+
+  await check("speaking: phrase gestures switch on at the first real voice, never over a gesture, and off when speaking ends", async () => {
+    const { page, done } = await open();
+    // Stand in for the panda's own gesture timing, to hold one "playing".
+    await page.evaluate(() => { window.__gest = true; CritterPose.species.redpanda.gesturing = () => window.__gest; });
+    await post(page, { type: "jarvis-hud-face", state: "speaking" });
+    await page.waitForTimeout(250);
+    const text = await opts(page);
+    const voice = async () => {
+      for (let i = 0; i < 6; i++) { await page.evaluate(() => setSpeechLevel(0.4)); await page.waitForTimeout(60); }
+    };
+    await voice();
+    const overGesture = await opts(page);
+    await page.evaluate(() => { window.__gest = false; });
+    await voice();
+    const on = await opts(page);
+    await post(page, { type: "jarvis-hud-face", state: "idle" });
+    await page.waitForTimeout(200);
+    const after = await opts(page);
+    await done();
+    assert.ok(!("phraseN" in text), "text streaming, nothing heard yet: the gestures' own timing");
+    assert.ok(!("phraseN" in overGesture), "not while one of its own gestures plays");
+    assert.ok("phraseN" in on && on.phraseN >= 0, "on once a voice is heard and no gesture plays");
+    assert.ok(!("phraseN" in after), "off once the speaking stretch ends");
+  });
+
+  await check("switching back to a face shown earlier takes today's options at once", async () => {
+    const { page, done } = await open("redpanda");
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.__faceSwitch.to("pygmyowl"));
+    await page.waitForFunction(() => { const n = window.__faceSwitch.now(); return n.face === "pygmyowl" && n.phase === null; },
+      null, { timeout: 8000 });
+    // "Keep the animal still" turned on while the panda is not shown, and
+    // the owl settled into it.
+    await page.evaluate(() => applyFaceStill({ still: true }));
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => {
+      window.__stillSeen = [];
+      const tick = () => { if (window.__faceOpts) window.__stillSeen.push(window.__faceOpts.still);
+                           requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+    await page.evaluate(() => window.__faceSwitch.to("redpanda"));
+    await page.waitForFunction(() => { const n = window.__faceSwitch.now(); return n.face === "redpanda" && n.phase === null; },
+      null, { timeout: 8000 });
+    await page.waitForTimeout(200);
+    const seen = await page.evaluate(() => window.__stillSeen);
+    await done();
+    assert.ok(seen.length > 10, `frames seen: ${seen.length}`);
+    assert.deepEqual(seen.filter((v) => v !== 1), [], "the panda came back eased toward Still from where it was left");
+  });
+
+  await check("a face that has just opened has not rested yet; one opening straight into waiting on you has nothing to react to", async () => {
+    const { page, done } = await open("robot");
+    // What the pose is told, frame by frame: seconds in the state (for idle,
+    // how long it has rested - the cute moments' and the zip's gate).
+    await page.evaluate(() => {
+      for (const id of Object.keys(CritterPose.species)) {
+        const sp = CritterPose.species[id], p = sp.pose;
+        sp.pose = function (...a) { window.__since = [id, a[0], a[2]]; return p.apply(this, a); };
+      }
+    });
+    await page.waitForTimeout(300);
+    const idle = await page.evaluate(() => window.__since);
+    await post(page, { type: "jarvis-hud-face", state: "approval" });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => window.__faceSwitch.to("monkey"));
+    await page.waitForFunction(() => window.__since && window.__since[0] === "monkey", null, { timeout: 8000 });
+    const approval = await page.evaluate(() => window.__since);
+    await done();
+    assert.equal(idle[1], "idle");
+    assert.ok(idle[2] < 5, `rested ${idle[2]} s the moment it opened`);
+    assert.equal(approval[1], "approval");
+    assert.ok(approval[2] > 1e8, `opened into waiting on you ${approval[2]} s after a change - an arrival reaction`);
+  });
+
+  await check("waiting on you, a face switch is only the cross-fade", async () => {
+    const { page, done } = await open("redpanda");
+    await post(page, { type: "jarvis-hud-face", state: "approval" });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.__faceSwitch.to("seaotter"));
+    await page.waitForTimeout(500);
+    const mid = await page.evaluate(() => window.__faceSwitch.now());
+    const o = await opts(page);
+    await done();
+    assert.equal(mid.face, "redpanda");
+    assert.ok(o.goodbye > 0.2 && o.goodbye < 0.9, `goodbye ${o.goodbye}`);
+    assert.ok(+mid.opacity < 0.85 && +mid.opacity > 0.05, `cross-fade ${mid.opacity}`);
+  });
+
+  await check("seasonal touches never show under Still while the stored options are still loading", async () => {
+    const ctx = await browser.newContext({ viewport: { width: 300, height: 300 } });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => localStorage.setItem("jarvis.animal.v1",
+      JSON.stringify({ still: true, seasonal: true })));
+    const read = await hold(page, "**/animal-shared.js");
+    await page.goto(`${base}/faces.html?mode=display&feed=parent&face=redpanda`, { waitUntil: "commit" });
+    await page.waitForFunction(() => window.__faceOpts, null, { timeout: 60000 });
+    await page.waitForTimeout(600);
+    await page.evaluate(() => {
+      window.__seasonSeen = [];
+      const tick = () => { const s = window.__faceSeason; if (s && "hide" in s) window.__seasonSeen.push(s.hide);
+                           requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+    read.release();
+    await page.waitForFunction(() => window.__faceOpts && window.__faceOpts.still === 1, null, { timeout: 8000 });
+    await page.waitForTimeout(300);
+    const seen = await page.evaluate(() => window.__seasonSeen);
+    await ctx.close();
+    assert.ok(seen.length > 5, `frames seen: ${seen.length}`);
+    assert.deepEqual(seen.filter((h) => h !== 1), [], "the touches eased away under Still instead of never showing");
+  });
+
+  await check("the frame pacer draws a stroke, a fact's nod and the focus stretch at the full rate - and no happening a focus session has taken away", async () => {
+    const { page, done } = await open();
+    await post(page, { type: "jarvis-hud-face", state: "idle" });
+    await page.waitForTimeout(300);
+    const at = (fn) => page.evaluate(fn);
+    const busyNow = () => at(() => window.__faceSwitch.surface.view.busy);
+    // Nothing playing: at rest (a happening may play by chance - look for a
+    // clock with none).
+    await at(() => {
+      const s = window.__faceSwitch.surface, sp = CritterPose.species[s.theme.id];
+      let t = Math.ceil(s.clock) + 10;
+      while (sp.busy("idle", t) || sp.busy("idle", t + 2)) t += 0.5;
+      s.clock = t;
+    });
+    await page.waitForTimeout(120);
+    const rest = await busyNow();
+    await post(page, { type: "jarvis-face-moment", kind: "fact" });
+    await page.waitForTimeout(250);
+    const nod = await busyNow();
+    // A focus session on, then a clock where an idle happening would play.
+    await post(page, { type: "jarvis-face-moment", kind: "focus", on: true });
+    await page.waitForTimeout(1600);
+    await at(() => {
+      const s = window.__faceSwitch.surface, sp = CritterPose.species[s.theme.id];
+      let t = Math.ceil(s.clock) + 10;
+      while (!(sp.busy("idle", t) && sp.busy("idle", t + 1))) t += 0.25;
+      s.clock = t;
+    });
+    await page.waitForTimeout(250);
+    const focused = await busyNow();
+    await post(page, { type: "jarvis-face-moment", kind: "focus", on: false });
+    await page.waitForTimeout(250);
+    const stretch = await busyNow();
+    await done();
+    assert.equal(rest, false, "at rest");
+    assert.equal(nod, true, "a fact's nod");
+    assert.equal(focused, false, "a happening a focus session has taken away");
+    assert.equal(stretch, true, "the stretch as the session ends");
   });
 
   await check("a stroke across the Widget's face pets the animal, and it eases off", async () => {
@@ -357,7 +525,9 @@ if (!K) {
     const r = await page.evaluate(() => {
       const s = window.__faceSwitch.surface, sp = CritterPose.species[s.theme.id];
       const m = s.theme.mem.get(s.view);
-      m.at = performance.now() / 1000 - 1000;
+      // Idle, and rested, for 1000 s (born then too: a face rests only from
+      // when it opened).
+      m.at = m.born = performance.now() / 1000 - 1000;
       for (let t = Math.ceil(s.clock) + 200; t < s.clock + 3000; t += 0.25) {
         if (sp.busy("idle", t, 1000, m.opts) && !sp.busy("idle", t)) { s.clock = t + 1; return true; }
       }

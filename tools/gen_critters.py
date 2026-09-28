@@ -22,7 +22,9 @@ sleeping Zs drawn over an animal on standby (`zs` in `critter-pose.js`,
 `CritterPose.zs` on the phone): their numbers and their answers go into
 `critter-zs-golden.json`, which the same test reads. And whether an idle
 happening is playing (`busy` in each pose file), which both apps' frame pacers
-read: `critter-busy-golden.json`.
+read, and whether one of its own talking gestures is (`gesturing`), which both
+hosts read before handing the pose Jarvis's phrase ends:
+`critter-busy-golden.json`.
 
     python3 tools/gen_critters.py          # write all four outputs
     python3 tools/gen_critters.py --check  # exit 1 if any is out of date
@@ -331,8 +333,9 @@ def behaviour_cases(sp):
     add("idle", 30.0, {"focus": 1, "focus_buddy": 0})
     add("idle", 30.0, {"focusEnd": 1.2, "focus_buddy": 0})
     add("idle", 30.0, {"pet": 1, "petX": 0.5, "petting": 0})
-    # Goodbye and hello, part way; a bow (not a wave) while waiting on you;
-    # nothing but the move out of view asleep; only a cross-fade under calm.
+    # Goodbye and hello, part way; none of it while waiting on you (the
+    # host's cross-fade, as in a serious moment); nothing but the move out of
+    # view asleep; only a cross-fade under calm.
     for g in (0.3, 0.7):
         add("idle", 30.0, {"goodbye": g})
     for h in (0.2, 0.6):
@@ -362,6 +365,12 @@ def behaviour_cases(sp):
     add("idle", CUTE[sp][1] + 2.6, {"cute_moments": 0.5}, since=1e6, amp=0.0)
     add("idle", CUTE[sp][0] + 2.6, {"calm": 1}, since=1e6, amp=0.0)
     add("idle", CUTE[sp][0] + 2.6, {}, since=100.0, amp=0.0)
+    # Added 2026-09-28 (the audit's fixes): a focus session under calm (its
+    # pose smaller), and a hello and a goodbye at an error (none of it).
+    add("idle", 30.0, {"focus": 1, "calm": 1})
+    add("idle", 77.3, {"focus": 1, "calm": 0.5})
+    add("error", 30.0, {"hello": 0.6})
+    add("error", 30.0, {"goodbye": 0.7})
     return cases
 
 
@@ -402,6 +411,10 @@ def robot_cases():
             hist={"past": [{"state": "standby", "gap": 9.0, "amp": 0.0}, {"state": "idle", "gap": 20.0, "amp": 0.0}]})
     for n in range(6):
         add("speaking", 20.0 + 3 * n, {"phraseEnd": 0.5, "phraseN": n})
+    # Added 2026-09-28: its hello's fin flick, awake, asleep and dozing (none
+    # but awake), and waiting on you (none of the hello at all).
+    for st in ("idle", "standby", "banked", "approval"):
+        add(st, 30.0, {"hello": 0.6})
     return cases
 
 
@@ -452,13 +465,30 @@ process.stdout.write(JSON.stringify(out, (k, v) =>
 BUSY_TIMES = [round(k * 0.25 + 0.013, 3) for k in range(1280)] + \
              [round(86400 + k * 0.25 + 0.013, 3) for k in range(160)]
 
+# Whether a moment the host hands in is playing (critter-pose.js
+# momentsBusy, the frame pacer's): a stroke, a fact's nod, the long answer's
+# glow and the focus stretch, inside and just outside their lengths, in the
+# states they play in and those they do not, and under still and serious.
+MOMENT_CASES = [
+    {"state": st, "opts": o}
+    for st in ("idle", "speaking", "approval", "standby")
+    for o in ({}, {"pet": 0.4}, {"pet": 1, "petting": 0}, {"ackNod": 0.5}, {"ackNod": 1.3}, {"ackNod": 0.5, "acks": 0},
+              {"ackGlow": 1.7}, {"ackGlow": 1.9}, {"focusEnd": 3.1}, {"focusEnd": 3.3}, {"focusEnd": 1, "focus_buddy": 0},
+              {"pet": 1, "still": 1}, {"ackNod": 0.5, "serious": 1}, {"ackNod": 0.5, "calm": 1})
+]
+
 BUSY_NODE = r"""
 for (const f of process.argv.slice(1)) require(f);
 const C = globalThis.CritterPose;
-const times = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-const out = { happening_s: C.HAPPENING_S, times, busy: {} };
+const inp = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const times = inp.times;
+const out = { happening_s: C.HAPPENING_S, times, busy: {}, gesture_s: C.util.GESTURE_S, gesturing: {},
+              moments: inp.moments.map(c => ({ ...c, busy: C.momentsBusy(c.state, c.opts) })) };
 for (const sp of Object.keys(C.species)) {
   out.busy[sp] = times.map(t => C.species[sp].busy('idle', t) ? '1' : '0').join('');
+  // Whether one of its own talking gestures plays (the host's check before
+  // it hands the pose Jarvis's phrase ends part way into an answer).
+  out.gesturing[sp] = times.map(t => C.species[sp].gesturing(t) ? '1' : '0').join('');
   // Never outside idle.
   for (const st of ['listening', 'thinking', 'speaking', 'approval', 'standby', 'error', 'banked'])
     if (times.some(t => C.species[sp].busy(st, t))) throw new Error(sp + ' is busy in ' + st);
@@ -512,7 +542,7 @@ def build():
                          capture_output=True, text=True, check=True)
     zs = subprocess.run(["node", "-e", ZS_NODE, *pose_files], input=json.dumps(zs_cases()),
                         capture_output=True, text=True, check=True)
-    busy = subprocess.run(["node", "-e", BUSY_NODE, *pose_files], input=json.dumps(BUSY_TIMES),
+    busy = subprocess.run(["node", "-e", BUSY_NODE, *pose_files], input=json.dumps({"times": BUSY_TIMES, "moments": MOMENT_CASES}),
                           capture_output=True, text=True, check=True)
     return {OUT_JS: js, OUT_KT: kt, OUT_GOLDEN: res.stdout, OUT_ZS: zs.stdout, OUT_BUSY: busy.stdout}
 

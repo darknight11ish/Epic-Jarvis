@@ -167,17 +167,20 @@ class AnimalFeedTest {
     }
 
     @Test
-    fun phraseEndsWaitForTheNextAnswerWhenAGestureIsPlaying() {
+    fun phraseEndsWaitForAGestureToFinish() {
         val f = AnimalFeed()
         var asked = 0
         f.onState(FaceState.SPEAKING, voiced = false) { asked++; false }
-        assertEquals("asked only as the voice is first heard", 0, asked)
+        assertEquals("asked only once a voice is heard", 0, asked)
         f.onState(FaceState.SPEAKING, voiced = true) { asked++; true }
         assertFalse("a gesture of its own is playing: switching now would cut it off", f.phraseOn)
         f.onState(FaceState.SPEAKING, voiced = true) { asked++; false }
-        assertFalse("decided once per speaking stretch", f.phraseOn)
-        assertEquals(1, asked)
+        assertTrue("on at the first clear frame (the desktop's rule)", f.phraseOn)
+        f.onState(FaceState.SPEAKING, voiced = true) { asked++; true }
+        assertTrue("once on, it stays on for the answer", f.phraseOn)
+        assertEquals("not asked again once on", 2, asked)
         f.onState(FaceState.IDLE, voiced = false)
+        assertFalse("off after the answer", f.phraseOn)
         f.onState(FaceState.SPEAKING, voiced = true) { false }
         assertTrue("the next answer decides afresh", f.phraseOn)
     }

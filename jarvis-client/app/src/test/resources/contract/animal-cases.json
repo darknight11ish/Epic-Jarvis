@@ -1395,7 +1395,7 @@
    {
     "built": true,
     "default": true,
-    "detail": "Stroke the animal and it leans in. On the phone it is a long press on the face, which does not open the Brain.",
+    "detail": "Stroke the animal and it leans in. On the PC: on the Widget's face, or press and hold, then stroke, in the Faces window (the floating face and the HUD let clicks through). On the phone it is a long press on the face, which does not open the Brain.",
     "id": "petting",
     "label": "Petting",
     "on": true

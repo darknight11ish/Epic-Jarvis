@@ -403,12 +403,16 @@ class FaceSwitchTest {
         assertEquals("the voice arrives: they follow its phrase ends", 0, host.snapshot().behave.phraseN)
         runIn(host, a, FaceState.IDLE, 3f)
         assertEquals("off after the answer", -1, host.snapshot().behave.phraseN)
-        // Until the pose can say whether a gesture is playing, a character
-        // keeps its gestures' own timing (talkingGestureAt).
+        // While the face's own gesture plays, it waits; then it switches.
         val h2 = FaceHost()
+        var playing = true
+        h2.talkingGesture = { _, _ -> playing }
         runIn(h2, a, FaceState.SPEAKING, 0.5f)
         runIn(h2, a, FaceState.SPEAKING, 0.5f, voice = true)
-        assertEquals(-1, h2.snapshot().behave.phraseN)
+        assertEquals("a gesture is playing: not yet", -1, h2.snapshot().behave.phraseN)
+        playing = false
+        runIn(h2, a, FaceState.SPEAKING, 0.2f, voice = true)
+        assertEquals("clear: now it follows the phrase ends", 0, h2.snapshot().behave.phraseN)
     }
 
     @Test

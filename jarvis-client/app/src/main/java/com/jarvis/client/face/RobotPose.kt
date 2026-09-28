@@ -19,7 +19,7 @@ import com.jarvis.client.face.CritterPose.cuteOf
 import com.jarvis.client.face.CritterPose.cuteQuiet
 import com.jarvis.client.face.CritterPose.ease
 import com.jarvis.client.face.CritterPose.envAHR
-import com.jarvis.client.face.CritterPose.extras
+import com.jarvis.client.face.CritterPose.switchE
 import com.jarvis.client.face.CritterPose.eyesClose
 import com.jarvis.client.face.CritterPose.focusEndOf
 import com.jarvis.client.face.CritterPose.focusOf
@@ -154,6 +154,12 @@ object RobotPose {
     fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
         state == FaceState.IDLE && (CritterPose.playing(idleEvent(t)) || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
+    /** Whether one of its own talking gestures is playing at clock [t] - the desktop's gesturing(t). */
+    fun gesturing(t: Float): Boolean {
+        val b = beat(t)
+        return b[0] >= 0f && b[1] >= 0f && b[1] < CritterPose.GESTURE_S
+    }
+
     /** The zip: where it is, [x] seconds in, from its resting place (the desktop's zipAt). */
     private const val ZIP_S = 2.6f
     private fun zipAt(x: Float, at: Float): FloatArray {
@@ -253,6 +259,7 @@ object RobotPose {
         val cu = if (state == FaceState.IDLE) cuteAt(t, since, S_CUTE, CUTE_LEN) else NONE
         val cw = if (cu[0] >= 0f) cuteOf(o) else 0f
         val fw = if (state == FaceState.IDLE) focusOf(o) else 0f
+        val fp = fw * (1f - 0.6f * o.calm)   // the focus pose itself: smaller under calm (the happenings still go by fw)
         val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f))
         val sw = o.sway
         val play = o.play
@@ -481,14 +488,14 @@ object RobotPose {
                 if (fw > 0f) {
                     // Working beside you: mittens together in front, tinkering, eyes on them.
                     val f = gaze(t, S_FOCUS, 4f, 12f, 0.75f, 0.3f, 0.12f, 0f, 0.03f, 1.6f)
-                    p[LOOK_X] += (f[0] - 0.4f * f[2] - p[LOOK_X]) * fw
-                    p[LOOK_Y] += (-0.6f + f[1] - 0.4f * f[3] - p[LOOK_Y]) * fw
-                    p[HEAD_YAW] += (0.2f * f[2] - p[HEAD_YAW]) * fw
-                    p[HEAD_PITCH] += (-0.14f + 0.1f * f[3] - p[HEAD_PITCH]) * fw
-                    handL(p, floatArrayOf(-0.14f, -0.14f + 0.01f * sw * wave(t, 260f, 0f), -0.30f), fw)
-                    handR(p, floatArrayOf(0.14f, -0.14f + 0.01f * sw * wave(t, 260f, 2.1f), -0.30f), fw)
-                    p[HAPPY] += (0.5f - p[HAPPY]) * fw
-                    turnBlink *= 1f - fw
+                    p[LOOK_X] += (f[0] - 0.4f * f[2] - p[LOOK_X]) * fp
+                    p[LOOK_Y] += (-0.6f + f[1] - 0.4f * f[3] - p[LOOK_Y]) * fp
+                    p[HEAD_YAW] += (0.2f * f[2] - p[HEAD_YAW]) * fp
+                    p[HEAD_PITCH] += (-0.14f + 0.1f * f[3] - p[HEAD_PITCH]) * fp
+                    handL(p, floatArrayOf(-0.14f, -0.14f + 0.01f * sw * wave(t, 260f, 0f), -0.30f), fp)
+                    handR(p, floatArrayOf(0.14f, -0.14f + 0.01f * sw * wave(t, 260f, 2.1f), -0.30f), fp)
+                    p[HAPPY] += (0.5f - p[HAPPY]) * fp
+                    turnBlink *= 1f - fp
                 }
                 // The small stretch as a focus session ends.
                 val fe = focusEndOf(t, o)
@@ -601,28 +608,29 @@ object RobotPose {
         return p
     }
 
-    /** Hello and goodbye (the desktop's farewell, and its notes); returns how open the eyes are. */
+    /**
+     * Hello and goodbye (the desktop's farewell, and its notes); returns how
+     * open the eyes are. No fin flick asleep or dozing; none of it waiting on
+     * you or at an error ([CritterPose.switchE]).
+     */
     private const val UP = 2.3f
     private const val DOWN = 2.1f
     private fun farewell(p: FloatArray, state: FaceState, o: Opts): Float {
         val g = o.goodbye
         val h = o.hello
         if (g <= 0f && h >= 1f) return 1f
-        val e = extras(o)
-        val awakeK = if (awake(state) || state == FaceState.APPROVAL || state == FaceState.ERROR) 1f else 0f
-        val wave1 = if (awake(state)) 1f else 0f
+        val e = switchE(o, state)
+        val awakeK = if (awake(state)) 1f else 0f
         var lid = 1f
         if (g > 0f) {
             val a = e * bump(clamp(g / 0.6f, 0f, 1f))
             val at = e * awakeK * ease(g / 0.2f)
             p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
             p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
-            val wv = a * wave1
+            val wv = a * awakeK
             handR(p, WAVE_R, wv)
             p[R_HX] += 0.06f * wv * sin(TAU * 1.6f * g)
             p[HAPPY] += (1f - p[HAPPY]) * wv
-            val bw = a * (awakeK - wave1)
-            p[HEAD_PITCH] -= 0.2f * bw; p[PITCH] += 0.04f * bw
             val go = e * ease((g - 0.45f) / 0.55f)
             p[POS_Y] += UP * go; p[POS_Z] += 0.2f * go
             p[FIN_L] += 0.2f * go; p[FIN_R] += 0.2f * go
@@ -630,12 +638,12 @@ object RobotPose {
         if (h < 1f) {
             lid *= toward(1f, ease((h - 0.35f) / 0.3f) * (1f - bump((h - 0.72f) / 0.18f)), e)
             p[POS_Y] += e * (DOWN * (1f - ease(h / 0.55f)) - 0.045f * bump((h - 0.52f) / 0.33f))
-            val f = e * bump((h - 0.6f) / 0.3f)
+            val f = e * awakeK * bump((h - 0.6f) / 0.3f)
             p[FIN_L] -= 0.25f * f; p[FIN_R] -= 0.25f * f
             val at = e * awakeK * ease((h - 0.4f) / 0.2f) * (1f - ease((h - 0.85f) / 0.15f))
             p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
             p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
-            p[HAPPY] += (1f - p[HAPPY]) * e * wave1 * bump((h - 0.6f) / 0.4f)
+            p[HAPPY] += (1f - p[HAPPY]) * e * awakeK * bump((h - 0.6f) / 0.4f)
         }
         return lid
     }

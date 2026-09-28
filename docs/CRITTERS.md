@@ -231,8 +231,10 @@ under calm, Still or a serious moment: only the eyes.
 **Hello and goodbye** (switching faces): goodbye is a quick wave with happy
 eyes, then it zips up and out of the top of the picture; hello, it drops in
 from above, settles with a small bounce, its eyes boot up, blink and look
-at you. Under Still, calm or a serious moment it plays none of it, like the
-animals, and the host cross-fades (`CritterPose.switchAlpha`). Same inputs
+at you. Under Still, calm or a serious moment - or while waiting on you or
+at an error - it plays none of it, like the animals, and the host
+cross-fades (`CritterPose.switchAlpha`). Asleep or dozing it drops in without
+the fin flick. Same inputs
 as every animal (`goodbye`, `hello`, 0..1, over `GOODBYE_S` / `HELLO_S`, 1 s
 each - see "What a host passes" below).
 
@@ -536,10 +538,16 @@ from, on each app, is in "What each app feeds them" below.
 The rules each one keeps:
 
 - **Still and serious switch every one off; calm makes them smaller**
-  (to 40 percent). Each is eased in and out, so nothing snaps.
+  (to 40 percent) - the focus buddy's pose too (until 2026-09-28 it was
+  drawn full size under calm: the owl's head turned 20 to 43 degrees). What
+  a focus session takes away - the idle happenings, the cute moments, the
+  robot's zip - stays away under calm as well. Each is eased in and out, so
+  nothing snaps.
 - **Nothing cute while waiting on you or after something went wrong** - only
   a small reaction as either arrives (below), then attentive and still.
-  Nothing while asleep or dozing.
+  Nothing while asleep or dozing. A face switch then is the quick gentle
+  cross-fade, as in a serious moment (2026-09-28; before, the animal bowed
+  and dropped out of view).
 - **The mouth is never touched.** It follows Jarvis's real voice only.
 - **Within the comfort limits.** Eased (no sudden change of speed, checked
   at 240 frames a second), nothing but a blink faster than three times a
@@ -611,7 +619,7 @@ into the clock it happened at itself.
 | `nods`, `focus_buddy`, `acks`, `petting`, `cute_moments` (phone: `nods`, `focusBuddy`, `acks`, `petting`, `cute`) | weight, default 1 | the owner's switches, by their ids in `jarvis_animal.SWITCHES`. Pass the switch eased (1 on, 0 off). |
 | `variety` | weight, default 0 | the variants of listening and thinking and the arrival reactions. Not an owner option (the owner decided variety for every face): **hosts pass 1**. It is an input only so that a host that passes nothing draws exactly what it drew before. |
 | `heard`, `heardN` | moment + count | the latest pause in the owner's talking, and how many there have been (`heardN` -1 or left out: none). Worked out from the microphone level the host already has, with `CritterPose.pauseStep` (below). Listening only. |
-| `phraseEnd`, `phraseN` | moment + count | the latest end of one of Jarvis's phrases, and how many. **Passing `phraseN` (0 or more) switches the talking gestures over** from their own random timing to the phrase ends: with `phraseN` 0 and no phrase ended yet, no gesture. From `pauseStep` on Jarvis's voice level, or from the lip-sync track's phrase ends (Kokoro knows where each sentence and comma is). Start or stop passing it between answers, not in the middle of one, and only while the "nods" switch is on. |
+| `phraseEnd`, `phraseN` | moment + count | the latest end of one of Jarvis's phrases, and how many. **Passing `phraseN` (0 or more) switches the talking gestures over** from their own random timing to the phrase ends: with `phraseN` 0 and no phrase ended yet, no gesture. From `pauseStep` on Jarvis's voice level, or from the lip-sync track's phrase ends (Kokoro knows where each sentence and comma is). Start passing it only while none of the animal's own gestures is playing (`gesturing(t)`, below), so none is cut off half way, and only while the "nods" switch is on; stop at the end of the answer. |
 | `ackNod` | moment | a fact was just saved (`memory_saved`). **The host must not pass it while App lock or "Hide memory lists" is on** (the owner's rule). |
 | `ackGlow` | moment | a long answer is ready (`deep` done). |
 | `focus` | weight | a focus session is on (the `focus` event), eased. |
@@ -638,10 +646,24 @@ Helpers for the host, in the same files:
   again before the last one has finished - a host that counts moments its
   own way must keep them at least that far apart too (and a fact's nod, and
   the glow, at least 1.2 and 1.8 s apart).
-- **`CritterPose.switchAlpha(opts)`**: how opaque to draw the face during a
-  hello or goodbye. 1 while the animal plays its own piece; under still,
-  calm or a serious moment the pose plays none of it and this fades the face
-  instead - the quick gentle cross-fade the owner asked for.
+- **`CritterPose.switchAlpha(opts, state)`**: how opaque to draw the face
+  during a hello or goodbye. 1 while the animal plays its own piece; under
+  still, calm or a serious moment, and while waiting on you or at an error
+  (`state` "approval" or "error" - the owner's rules treat both as serious
+  moments), the pose plays none of it and this fades the face instead - the
+  quick gentle cross-fade the owner asked for. Called without `state` (the
+  phone: `switchAlpha(opts)`, `state` defaults to null) no state counts as
+  serious, as before. A state that changes part way through the one-second
+  switch changes the fade at once - rare, and written down rather than
+  eased.
+- **`gesturing(t)`** (each animal's, the phone's `gesturing(t)` on each pose
+  object and `CritterFace.talkingAt(t)`): whether one of its own-timed
+  talking gestures is playing at clock `t`. A host checks it before it
+  starts passing `phraseN` part way into an answer.
+- **`CritterPose.momentsBusy(state, opts)`**: whether a moment the host hands
+  in is playing - being stroked, a fact's nod, the long answer's glow, the
+  focus stretch - so the frame pacer draws it at the full rate, as it does a
+  happening. None under still or serious.
 - **`busy(state, t, since, opts)`**: the frame pacer's "a happening is
   playing" now also covers the cute moments - but only when the host passes
   how long it has been idle (`since`) and its opts. Called the old way it
@@ -718,18 +740,34 @@ composition a frame apart); every later change eases as usual. Without
 this, a face set to Still, or with a behaviour switched off, moved for a
 moment as it opened and then settled.
 
+On the desktop the same holds for a face switched back to after another,
+and for a window that was hidden: each face keeps its memory per surface,
+and one not drawn for over a second (`MEM_STALE_S`, over the slowest rest
+rate, 2 a second dozing) is started afresh, as for a face opening - before
+2026-09-28 it carried on easing from the values it was left with, so it
+could move under Still, or flash half faded, for most of a second. A face
+that has just opened (or come back) has not **rested** yet: the idle `since`
+it hands the pose counts from when its memory started (`born`), not from
+the fresh memory's "long settled" -1e9, so the cute moments and the robot's
+zip wait their "rested a while" (the audit put the chance of one starting
+at once, sometimes during the hello, at about 2 percent of opens). The other states keep "seconds since the change", so a
+face that opens straight into waiting on you or an error has no change to
+react to and plays no arrival reaction. The seasonal touches wait for the
+stored options the same way (their easing starts afresh at the first read),
+so they never show for a second under Still as a page opens.
+
 | Input | Desktop | Phone |
 |---|---|---|
 | `nods`, `focus_buddy`, `acks`, `petting`, `cute_moments` | the switches this computer keeps from the PC (`animal-shared.js`, read with Still), each eased over a second | `AppearanceStore.animal`, handed to `AnimalNow` by JarvisRuntime, eased the same way |
 | `variety` | 1, always | 1, always |
 | `heard`, `heardN` | `pauseStep` on the microphone's level as heard (the `voice-level` event's, under the room's gate), while listening | the same, on the recorder's level (`micLevel`) |
-| `phraseEnd`, `phraseN` | `pauseStep` on Jarvis's voice as heard (the lip-sync track's level), while speaking; passed only when a real voice is heard as an answer starts and "Listening nods" is on - decided then, never in the middle of an answer. A typed or quiet answer keeps the gestures' own timing | the same, on the speaker's level (`speechMouth` / `speechLevel`) |
+| `phraseEnd`, `phraseN` | `pauseStep` on Jarvis's voice as heard (the lip-sync track's level), while speaking. The face turns to "speaking" as the answer's text starts streaming, before any sound, so this is not decided at that change: while speaking it switches ON the first time a real voice is heard, if "Listening nods" is on and none of the animal's own talking gestures is playing at that moment (`gesturing(t)`; with one playing it waits for the next frame clear of one), and OFF when the speaking stretch ends (until 2026-09-28 it was decided at the change to speaking, and so almost never came on). A typed or quiet answer keeps the gestures' own timing | the same, on the speaker's level (`speechMouth` / `speechLevel`) |
 | `ackNod` | the `memory_saved` event, relayed by the window around the face (`face-moments.js`); never while App lock or "Hide memory lists and chat history" is on, or before the app knows (a new two-answer command, `get_lock_flags`, then the `security-changed` event); a replayed event never nods twice; at least 1.2 s apart | the same event (`JarvisRuntime.onMemorySaved`, fresh ids only), held back while App lock or "Hide memory lists" is on |
 | `ackGlow` | the `deep` event with `state: "done"`, relayed the same way; at least 1.8 s apart | the same event |
 | `focus`, `focusEnd` | the `focus` event (`started` / `changed`: on; `ended`: off), eased; the stretch is handed on once Jarvis is idle again (dropped after a minute of waiting) | the same |
 | `pet`, `petX`, `petDir` | a press on the Widget's face that moves, or is held half a second; in the Faces window, only a held press (a quick drag still turns the face round). In over 0.3 s, out over 1 s | a long press on the face (half a second), then moving the finger strokes; a quick drag still turns it round. The long press never opens the Brain (Home's tap does, only when short) |
 | `goodbye`, `hello` | the face switch below | the face switch below |
-| `busy(state, t, since, opts)` | the frame pacer (`dueFrame`, display mode's tick) passes how long the face has been in its state and its opts, so a cute moment is drawn at the full rate | `FaceHost.restFps`, the same (`CritterFace.busyAt` with `since` and `opts`) |
+| `busy(state, t, since, opts)` | the frame pacer (`dueFrame`, display mode's tick) passes how long the face has rested (idle) or been in its state, and its opts, so a cute moment is drawn at the full rate - and, with `CritterPose.momentsBusy`, a stroke, a fact's nod, the glow and the focus stretch too; a happening that a focus session or a serious moment has taken away does not count | `FaceHost.restFps`, the same (`CritterFace.busyAt` with `since` and `opts`) |
 
 **Switching faces** (both apps). When the owner picks another face - in the
 Faces window, on the phone, or by asking Jarvis - each face surface plays it
@@ -737,7 +775,8 @@ out: the leaving character's `goodbye` from 0 to 1 over `GOODBYE_S`, then the
 new one, whose `hello` goes 0 to 1 over `HELLO_S`. A face that is not a
 character fades out, or in, on its side. Under Still, calm motion or a
 serious moment the pose plays neither, and the host fades the face by
-`CritterPose.switchAlpha(opts)` - the quick gentle cross-fade. Two faces
+`CritterPose.switchAlpha(opts, state)` - the quick gentle cross-fade; the
+same while waiting on you or at an error. Two faces
 that are neither switch at once, as they always did. Both apps key this on
 "is it a character face" (the desktop's `family: "critter"`, any
 `critterFace()`; the phone's `CritterFace`), never on a list of names, so the

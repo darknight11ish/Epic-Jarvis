@@ -49,7 +49,7 @@ export const SWITCHES = [
   { id: "acks", label: "Small acknowledgements", default: true, built: true,
     detail: "A small nod when Jarvis saves a fact (not while App lock or \"Hide memory lists\" is on), and a glow when a long answer is ready." },
   { id: "petting", label: "Petting", default: true, built: true,
-    detail: "Stroke the animal and it leans in. On the phone it is a long press on the face, which does not open the Brain." },
+    detail: "Stroke the animal and it leans in. On the PC: on the Widget's face, or press and hold, then stroke, in the Faces window (the floating face and the HUD let clicks through). On the phone it is a long press on the face, which does not open the Brain." },
   { id: "cute_moments", label: "Cute idle moments", default: true, built: true,
     detail: "Now and then, after the face has rested a while, one of its two short cute moments plays, then it settles back. Never during an approval or an error." },
   { id: "seasonal", label: "Seasonal touches", default: false, built: true,

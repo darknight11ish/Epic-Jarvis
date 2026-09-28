@@ -1753,7 +1753,7 @@ class FaceHost {
         val behave = feed.opts(smoothstep(calmRamp), smoothstep(seriousRamp), smoothstep(stillRamp), goodbye, hello)
         val alpha = when {
             switchPhase == 0 -> 1f
-            character -> CritterPose.switchAlpha(behave)
+            character -> CritterPose.switchAlpha(behave, state)
             switchPhase == 1 -> 1f - goodbye
             else -> hello
         }
@@ -1845,18 +1845,12 @@ class FaceHost {
 private fun smoothstep(x: Float) = x * x * (3f - 2f * x)
 
 /**
- * Whether [face]'s own-timed talking gesture (a nod, a paw or wing lift, a
- * tilt) is playing at its clock [t] - asked once per speaking stretch, as
- * the voice is first heard, because turning the phrase-end gestures on then
- * would cut that gesture off in one frame ([AnimalFeed.onState]).
- *
- * Not known yet: the pose files keep each face's gesture timing private and
- * CritterFace has no way to ask it. Until it does, a character answers
- * "maybe", so its gestures keep their own timing through every answer
- * rather than risk a jump (docs/CRITTERS.md). A face that is not a character
- * has no gestures.
+ * Whether [face]'s own-timed talking gesture is playing at [t] - asked as
+ * the voice is first heard in a speaking stretch ([AnimalFeed.onState]):
+ * switching the gestures to the phrase ends while one plays would cut it
+ * off in a frame. The pose's `gesturing`, the desktop's same question.
  */
-internal fun talkingGestureAt(face: Face, t: Float): Boolean = face is CritterFace
+internal fun talkingGestureAt(face: Face, t: Float): Boolean = (face as? CritterFace)?.talkingAt(t) ?: false
 
 /** [from] moved [step] toward 1 (on) or 0 (off). */
 private fun ramp(from: Float, on: Boolean, step: Float): Float =

@@ -161,8 +161,9 @@ SWITCHES: tuple = (
         "small acknowledgements are off, on your PC and phone"),
     Switch(
         "petting", "Petting",
-        "Stroke the animal and it leans in. On the phone it is a long press on the face, which "
-        "does not open the Brain.",
+        "Stroke the animal and it leans in. On the PC: on the Widget's face, or press and hold, "
+        "then stroke, in the Faces window (the floating face and the HUD let clicks through). On "
+        "the phone it is a long press on the face, which does not open the Brain.",
         True, True,
         ("petting", "the animal's petting", "petting the animal", "pet mode"),
         "petting is on for your PC and phone",

@@ -264,12 +264,12 @@ class AnimalFeed {
      * The state shown and whether a real voice is heard ([voiced]), every
      * advance. The face turns to speaking as the answer's words start to
      * arrive, before any voice (the voice is made sentence by sentence), so
-     * the choice is made when the voice is first heard in a speaking
-     * stretch, once: the gestures follow the phrase ends from then while the
-     * "nods" switch is on and no talking gesture of the face's own timing is
-     * playing at that moment ([gesture], asked only then) - switching then
-     * would cut it off. Off again when the speaking stretch ends. A typed or
-     * quiet answer keeps the gestures' own timing.
+     * the gestures switch to the phrase ends on the first frame of a speaking
+     * stretch where a real voice is heard, the "nods" switch is on and no
+     * talking gesture of the face's own timing is playing ([gesture]) -
+     * switching while one plays would cut it off, so it waits for a clear
+     * frame. Off again when the speaking stretch ends. A typed or quiet answer
+     * keeps the gestures' own timing. The desktop's faces.html, the same rule.
      */
     fun onState(next: FaceState, voiced: Boolean, gesture: () -> Boolean = { false }) {
         if (next != lastState) {
@@ -278,10 +278,11 @@ class AnimalFeed {
             phraseDecided = false
         }
         if (next != FaceState.SPEAKING || !voiced || phraseDecided) return
+        if (!AnimalNow.nods || gesture()) return
         phraseDecided = true
-        phraseOn = AnimalNow.nods && !gesture()
+        phraseOn = true
         // A new answer's phrase ends: nothing from an earlier one carries over.
-        if (phraseOn) phrase = phrase?.let { CritterPose.PauseRec(n = it.n) }
+        phrase = phrase?.let { CritterPose.PauseRec(n = it.n) }
     }
 
     /**
