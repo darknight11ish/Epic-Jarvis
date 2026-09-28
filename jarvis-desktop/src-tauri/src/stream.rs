@@ -738,6 +738,20 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             ));
         }
 
+        // A "tell me when" cannot look (backend jarvis_tellme.py,
+        // 2026-09-28): `{"id", "kind": "tellme", "state": "broken"}` - never
+        // a word. The PC says it once per problem; the toast reads the
+        // job's `broken` sentence by id, says only the generic words while
+        // App lock is on or the private lists are hidden, and never rings
+        // (brain/schedule.rs toast_broken). Fanned out below too.
+        "schedule" if event.data["state"].as_str() == Some("broken") => {
+            tauri::async_runtime::spawn(crate::brain::schedule::toast_broken(
+                app.clone(),
+                base.to_string(),
+                crate::brain::schedule::with_event_id(&event.data, event.id),
+            ));
+        }
+
         // A focus session has a line to say (backend/focus.patch):
         // `{"state": "callout", "seq"}` - a number, never words. The sound is
         // fetched from THIS PC only and played by the Jarvis bar

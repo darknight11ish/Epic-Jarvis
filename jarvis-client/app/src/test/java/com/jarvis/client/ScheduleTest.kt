@@ -310,6 +310,33 @@ class ScheduleTest {
     }
 
     @Test
+    fun aWatchThatCannotLookSaysSoOnceAndOnlyTheGenericWordsWhenLocked() {
+        val broken = obj(
+            """{"id":"s00000000cc","kind":"tellme","text":"CI fails on o/r","state":"active",
+              "broken":"Your \"tell me when\" (CI fails on o/r) cannot look right now. GitHub did not answer.",
+              "broken_at":1790000000}""",
+        )
+        val j = Schedule.job(broken)!!
+        assertEquals(1_790_000_000.0, j.brokenAt!!, 0.0)
+        val (title, text) = Schedule.brokenNotification(j, false)
+        assertEquals("Tell me when", title)
+        assertTrue(text.startsWith("Your \"tell me when\" (CI fails on o/r)"))
+        val (_, locked) = Schedule.brokenNotification(j, true)
+        assertEquals(Schedule.TELLME_BROKEN_LOCK_SCREEN, locked)
+        assertFalse(locked.contains("o/r"))
+        assertEquals(Schedule.TELLME_BROKEN_LOCK_SCREEN, Schedule.brokenNotification(null, false).second)
+        assertEquals("s00000000cc", Schedule.brokenFrom(obj("""{"id":"s00000000cc","kind":"tellme","state":"broken"}""")))
+        assertNull(Schedule.brokenFrom(obj("""{"id":"s00000000cc","kind":"tellme","state":"matched"}""")))
+        assertNull(Schedule.brokenFrom(obj("""{"id":"all","kind":"tellme","state":"broken"}""")))
+        assertNull(Schedule.brokenFrom(obj("""{"id":"s00000000cc","kind":"timer","state":"broken"}""")))
+        // A broken notice is not a match: it never rings.
+        assertNull(Schedule.matchedFrom(obj("""{"id":"s00000000cc","kind":"tellme","state":"broken"}""")))
+        // Hidden lists blank it like the alert.
+        val hidden = Schedule.hide(Schedule.View(jobs = listOf(j), todo = emptyList(), hidden = false))
+        assertEquals("", hidden.jobs.single().broken)
+    }
+
+    @Test
     fun alarmsAndUrgentTellMeWhensRingUntilSeen() {
         assertTrue(Schedule.rings("alarm", urgent = false))
         assertTrue(Schedule.rings("tellme", urgent = true))

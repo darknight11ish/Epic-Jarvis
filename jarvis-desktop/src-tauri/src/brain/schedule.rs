@@ -200,6 +200,10 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
                         if o.contains_key("alert") {
                             o.insert("alert".into(), serde_json::json!(""));
                         }
+                        // ... and so does its "cannot look" notice (2026-09-28).
+                        if o.contains_key("broken") {
+                            o.insert("broken".into(), serde_json::json!(""));
+                        }
                         o.insert("hidden".into(), serde_json::json!(true));
                         let named = o
                             .get("list")
@@ -337,6 +341,29 @@ pub(crate) fn wants_toast(data: &serde_json::Value) -> bool {
 /// phone's `Schedule.TELLME_LOCK_SCREEN`).
 pub(crate) const TELLME_LOCK_SCREEN: &str =
     "Jarvis: something you asked to be told about happened.";
+
+/// A "tell me when" that cannot look (2026-09-28) - what a toast says about
+/// it while App lock or the hidden lists are on (jarvis_tellme's
+/// BROKEN_LOCK_SCREEN; the phone's `Schedule.TELLME_BROKEN_LOCK_SCREEN`).
+pub(crate) const TELLME_BROKEN_LOCK_SCREEN: &str =
+    "Jarvis: a \"tell me when\" cannot look right now.";
+
+/// (title, body) for a "tell me when" that cannot look: the job's `broken`
+/// sentence (made on the PC from the owner's own words and fixed words
+/// about the problem), or only the generic words when `private` or when
+/// there is none.
+pub(crate) fn broken_words(job: Option<&serde_json::Value>, private: bool) -> (String, String) {
+    let title = toast_title("tellme").to_string();
+    let said = job
+        .and_then(|j| j.get("broken"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .unwrap_or("");
+    if private || said.is_empty() {
+        return (title, TELLME_BROKEN_LOCK_SCREEN.to_string());
+    }
+    (title, said.to_string())
+}
 
 /// The toast's title for a kind - both apps' words.
 pub(crate) fn toast_title(kind: &str) -> &'static str {
@@ -576,6 +603,36 @@ pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value
     let private = security.app_lock || crate::lock::private_hidden(&app);
     let (title, body) = toast_words("tellme", job.as_ref(), private);
     show(&app, &title, &body, rings("tellme", &data), None);
+}
+
+/// A "tell me when" cannot look (`{"id", "kind": "tellme", "state":
+/// "broken"}`, 2026-09-28): read its `broken` sentence by id and show it.
+/// The PC says this once per problem (repeats held back for hours, cleared
+/// by itself at the next good look). An ordinary toast - it never rings, an
+/// urgent watch included: only a real match rings. Once per telling, even
+/// when a reconnect replays the event.
+pub async fn toast_broken(app: AppHandle, base: String, data: serde_json::Value) {
+    let Some(id) = data.get("id").and_then(|v| v.as_str()).map(str::to_string) else {
+        return;
+    };
+    if !valid_id(&id) || data.get("kind").and_then(|v| v.as_str()) != Some("tellme") {
+        return;
+    }
+    let job = read_job(&app, &base, &id).await;
+    let at = job
+        .as_ref()
+        .and_then(|j| j.get("broken_at"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as i64;
+    if let Some(key) = shown_key(at, &data) {
+        if !first_time(&format!("{id}#broken"), key) {
+            return;
+        }
+    }
+    let security = crate::lock::current(&app);
+    let private = security.app_lock || crate::lock::private_hidden(&app);
+    let (title, body) = broken_words(job.as_ref(), private);
+    show(&app, &title, &body, false, None);
 }
 
 /// One toast: a ringing one (an alarm, an urgent "tell me when") through
@@ -1023,6 +1080,23 @@ mod tests {
         assert_eq!(toast_words("tellme", None, false).1, TELLME_LOCK_SCREEN);
         let hidden = redact_list(serde_json::json!({"jobs": [job], "todo": []}));
         assert!(!hidden.to_string().contains("Alex"));
+    }
+
+    #[test]
+    fn a_tell_me_when_that_cannot_look_says_so_and_only_the_generic_words_when_locked() {
+        let job = serde_json::json!({"id": "s0123456789", "kind": "tellme",
+            "text": "CI fails on o/r",
+            "broken": "Your \"tell me when\" (CI fails on o/r) cannot look right now. GitHub did not answer.",
+            "broken_at": 1_790_000_000.0});
+        let (t, b) = broken_words(Some(&job), false);
+        assert_eq!(t, "Tell me when");
+        assert!(b.starts_with("Your \"tell me when\" (CI fails on o/r)"));
+        let (_, b) = broken_words(Some(&job), true);
+        assert_eq!(b, TELLME_BROKEN_LOCK_SCREEN);
+        assert!(!b.contains("o/r"));
+        assert_eq!(broken_words(None, false).1, TELLME_BROKEN_LOCK_SCREEN);
+        let hidden = redact_list(serde_json::json!({"jobs": [job], "todo": []}));
+        assert!(!hidden.to_string().contains("o/r"));
     }
 
     #[test]
