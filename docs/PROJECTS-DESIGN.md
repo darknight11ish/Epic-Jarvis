@@ -276,6 +276,10 @@ Whether a git-undoable edit counts as risky depends on the risk table.
   (build steps 1-4 and 6); code writing (`project_edit`, steps 5 and 7)
   once the 12 GB card is installed and measured.
 
+- **An automatic private mark can be removed by the owner, with a card
+  first** (2026-09-28): the builder found `jarvis_sensitive` reads "5k" as
+  money. To build with the Projects screens (step 3).
+
 ## 10. Questions for the owner (answered above)
 
 1. **Sharing.** Jarvis could ask Gemini (or a web search) for help with your

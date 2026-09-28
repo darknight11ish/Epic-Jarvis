@@ -593,6 +593,11 @@ testers, scouts and integration scouts; `.claude/agents/`):
   **Build order inside Projects:** projects, goals, benchmarks, charts and
   running tests first; Jarvis writing code comes once the 12 GB card is
   installed and measured.
+  **A private mark Jarvis added by itself to a benchmark** (a tracked
+  number, e.g. "5k time" mistaken for money) **can be removed by the owner,
+  with a card first** (owner, 2026-09-28), because afterwards those numbers
+  may be read aloud. A mark the owner added comes off with no card, as
+  built.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
