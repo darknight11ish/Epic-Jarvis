@@ -1024,7 +1024,8 @@ class MainActivity : FragmentActivity() {
         LaunchedEffect(openTileSettingsRequested.value) {
             if (!openTileSettingsRequested.value) return@LaunchedEffect
             openTileSettingsRequested.value = false
-            pendingSettingsSection = QUICK_TILES_SECTION
+            pendingSection = QUICK_TILES_SECTION
+            pendingSectionScreen = Screen.SETTINGS.name
             nav.resetTo(Screen.HOME)
             nav.go(Screen.SETTINGS)
         }
