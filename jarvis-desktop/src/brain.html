@@ -177,10 +177,17 @@
         <!-- ── Galaxy ─────────────────────────────────────────────────── -->
         <section class="view view-galaxy" id="view-galaxy" role="tabpanel"
                  aria-labelledby="tab-galaxy">
+          <!-- The people and things Jarvis's saved facts name (2026-09-28;
+               /api/memory/entities, hidden with the memory lists under
+               Windows Hello). Two names are joined when a fact names both.
+               It used to draw /api/graph, whose fact dots were not hidden
+               with the memory lists (privacy finding B1). -->
           <div class="galaxy-bar">
             <input class="field search" id="graph-search" type="search"
-                   placeholder="Search the graph…" spellcheck="false"
-                   autocomplete="off" aria-label="Search the graph" />
+                   placeholder="Find a name…" spellcheck="false"
+                   autocomplete="off" aria-label="Find a person or thing by name"
+                   aria-describedby="graph-find" />
+            <span class="stat graph-find" id="graph-find" role="status" aria-live="polite"></span>
             <div class="legend" id="legend" role="group" aria-label="Filter by kind"></div>
             <div class="galaxy-actions">
               <span class="stat mono" id="graph-stat">—</span>
@@ -194,10 +201,11 @@
                  node count is set by how much the owner's memory store knows
                  rather than by anything the UI controls. -->
             <canvas id="graph-canvas" tabindex="0"
-                    aria-label="Memory graph, drawn on a canvas. Arrow keys pan, plus and minus zoom, 0 fits. To select a node, use the search field; the panel that opens reports it and lists what it connects to."></canvas>
+                    aria-label="The people and things Jarvis knows about, drawn on a canvas. Arrow keys pan, plus and minus zoom, 0 fits. To pick a name, use the search field; the panel that opens reports it and lists the names it shares facts with."></canvas>
 
             <div class="galaxy-empty" id="graph-empty" hidden>
-              <p id="graph-empty-text">Reading the graph…</p>
+              <p id="graph-empty-text">Reading the names…</p>
+              <div class="row-actions" id="graph-empty-actions"></div>
             </div>
 
             <!-- The inspector doubles as the accessible view of the canvas:
@@ -212,7 +220,8 @@
               </header>
               <h2 class="inspector-title" id="node-label" tabindex="-1"></h2>
               <dl class="inspector-facts" id="node-facts"></dl>
-              <h3 class="inspector-sub">Connected</h3>
+              <div class="row-actions" id="node-actions"></div>
+              <h3 class="inspector-sub">Shares facts with</h3>
               <ul class="inspector-links" id="node-links"></ul>
             </aside>
           </div>
@@ -431,14 +440,15 @@
                 everything": delete them one at a time, or choose above how
                 long they are kept.
               </p>
-              <!-- Filters the list already loaded, by title (ease-of-use
-                   audit row 20; the owner's answer of 2026-09-27: "shown on
-                   screen only; nothing saved, nothing handed to the AI").
-                   Asks the PC nothing - the same shape as "What Jarvis knows
-                   about you"'s filter above. -->
+              <!-- "Search what was said" (JARVIS-API.md section 71; the
+                   owner's answer of 2026-09-27: "shown on screen only;
+                   nothing saved, nothing handed to the AI"). Two letters or
+                   more: the PC searches the kept chats' words, in memory,
+                   keeping no index (brain_history_search). One letter, or an
+                   older PC: the loaded list, by title. -->
               <input class="field search history-filter" id="history-filter" type="search"
-                     placeholder="Search this list…" spellcheck="false" autocomplete="off"
-                     aria-label="Search your chat history" />
+                     placeholder="Search what was said…" spellcheck="false" autocomplete="off"
+                     aria-label="Search what was said in your chats" />
               <div id="history-list"></div>
             </div>
           </div>

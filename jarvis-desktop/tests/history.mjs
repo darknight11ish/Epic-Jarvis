@@ -32,6 +32,12 @@ import {
   DELETE_KEEPS_FACTS,
   deleteQuestion,
   deviceTag,
+  findCountWords,
+  findMatches,
+  hitsWords,
+  readSearch,
+  searchMoreWords,
+  TITLES_ONLY,
   NOT_KEPT_LINE,
   keepConfirm,
   keepNeedsConfirm,
@@ -117,6 +123,31 @@ await check("the words under a user turn: quiet for typed and voice, said for ev
   assert.match(provenanceWords("voice_unverified"), /not confirmed/);
   assert.equal(provenanceWords("something new"), "not known where from");
   assert.equal(provenanceWords(undefined), "not known where from");
+});
+
+await check("the PC's search answer is read defensively, and find counts every place", async () => {
+  const v = readSearch({ query_ok: true, more: true, conversations: [
+    { id: "c-1", title: "Dentist", hits: 2, snippet: { role: "assistant", before: true,
+      parts: [{ text: "on ", hit: false }, { text: "Mill", hit: true }, { text: 7, hit: true }] } },
+    { title: "no id" }] });
+  assert.equal(v.available, true);
+  assert.equal(v.conversations.length, 1, "a row with no id cannot be opened");
+  assert.deepEqual(v.conversations[0].snippet.parts, [{ text: "on ", hit: false }, { text: "Mill", hit: true }]);
+  assert.equal(v.conversations[0].snippet.role, "assistant");
+  assert.equal(readSearch({ available: false }).why, TITLES_ONLY);
+  assert.equal(readSearch({ query_ok: false, why: "Type at least two letters to search what was said.",
+    conversations: [] }).queryOk, false);
+  assert.match(searchMoreWords(v), /newest matches only/);
+  assert.equal(hitsWords(1), "found in 1 message");
+  assert.equal(hitsWords(0), "");
+  const conv = { turns: [{ text: "Mill Road, then mill road again" }, { text: "no" }, { text: "Road!" }] };
+  const m = findMatches(conv, "mill road");
+  assert.deepEqual(m.map((x) => [x.turn, conv.turns[x.turn].text.slice(x.start, x.end)]),
+    [[0, "Mill"], [0, "Road"], [0, "mill"], [0, "road"], [2, "Road"]]);
+  assert.deepEqual(findMatches(conv, "(.*)"), [], "the words are words, not a pattern");
+  assert.equal(findCountWords(0, 0), "Not in this chat.");
+  assert.equal(findCountWords(0, 1), "1 match");
+  assert.equal(findCountWords(2, 5), "3 of 5");
 });
 
 await check("paging: the next page goes under, never twice, and asks from the oldest shown", async () => {
@@ -208,30 +239,157 @@ await check("each row: title, when, which app, and the voice and read-outside ma
   assert.match(taintTitle, /did not come from you/);
 });
 
-await check("a search box narrows the loaded list by title, and asks the PC nothing (ease-of-use audit row 20)", async () => {
-  const convs = [
+/* ── "Search what was said" and "Find in this chat" (section 71) ───────── */
+
+const SEARCHED = {
+  conversations: [
     { id: "c-1", title: "Dentist on Tuesday", started: NOW - 3600, updated: NOW - 3300, turns: 2, device: "phone" },
     { id: "c-2", title: "Summarise that PDF", started: NOW - 7200, updated: NOW - 7000, turns: 4, device: "desktop" },
-    { id: "c-3", title: "Weekend hiking plan", started: NOW - 10800, updated: NOW - 10700, turns: 3, device: "phone" },
-  ];
-  const page = await historyTab({ conversations: convs });
-  const before = await page.locator("#history-list .row-item").count();
-  await page.locator("#history-filter").fill("dentist");
-  await page.waitForTimeout(100);
+    { id: "c-3", title: "Weekend plan", started: NOW - 10800, updated: NOW - 10700, turns: 3, device: "phone" },
+  ],
+  transcripts: {
+    "c-1": { id: "c-1", title: "Dentist on Tuesday", tainted: false, turns: [
+      { role: "user", text: "when is the dentist?", at: NOW - 3600, provenance: "typed" },
+      { role: "assistant", text: "Tuesday at 3, on Mill Road.", at: NOW - 3596 }] },
+    "c-2": { id: "c-2", title: "Summarise that PDF", tainted: true, turns: [
+      { role: "user", text: "summarise the lease", at: NOW - 7200, provenance: "typed" },
+      { role: "assistant", text: "The lease ends in March.", at: NOW - 7190 }] },
+    "c-3": { id: "c-3", title: "Weekend plan", tainted: false, turns: [
+      { role: "user", text: "hiking near Mill Road? or the lake", at: NOW - 10800, provenance: "typed" },
+      { role: "assistant", text: "Mill Road has a short loop; the lake a long one. Mill Road it is.", at: NOW - 10790 }] },
+  },
+};
+
+await check("the search box asks the PC to search what was SAID, and shows a snippet with the words marked", async () => {
+  const page = await historyTab(SEARCHED);
+  await page.locator("#history-filter").fill("mill road");
+  await page.waitForTimeout(700);
   const titles = await page.locator("#history-list .row-title").allInnerTexts();
-  await page.locator("#history-filter").fill("zzz-nothing");
-  await page.waitForTimeout(100);
-  const none = await page.locator("#history-list").innerText();
-  await page.locator("#history-filter").fill("");
-  await page.waitForTimeout(100);
-  const after = await page.locator("#history-list .row-item").count();
-  const sent = await page.evaluate(() => window.__calls.map((c) => c[0]));
+  const snippet = await page.locator("#history-list .search-snippet").first().innerText();
+  const marks = await page.locator("#history-list .search-snippet mark").first().innerText();
+  const text = await listText(page);
+  const asked = await page.evaluate(() => window.__history.searches);
   await page.close();
-  assert.equal(before, 3);
+  assert.deepEqual(titles.map((t) => t.trim()), ["Dentist on Tuesday", "Weekend plan"],
+    "found by words said inside the chat, not in the title");
+  assert.match(snippet, /^Jarvis: Tuesday at 3, on Mill Road\./);
+  assert.equal(marks.trim(), "Mill");
+  assert.match(text, /Nothing is saved and nothing is sent to the AI/);
+  assert.match(text, /2 conversations match/);
+  assert.deepEqual(asked, ["mill road"], "one search, after typing paused");
+});
+
+await check("nothing found says so; one letter and a cleared box go back to the list, asking nothing", async () => {
+  const page = await historyTab(SEARCHED);
+  await page.locator("#history-filter").fill("quokka");
+  await page.waitForTimeout(700);
+  const none = await listText(page);
+  await page.locator("#history-filter").fill("w");
+  await page.waitForTimeout(700);
+  const oneLetter = await page.locator("#history-list .row-title").allInnerTexts();
+  await page.locator("#history-filter").fill("");
+  await page.waitForTimeout(700);
+  const all = await page.locator("#history-list .row-item").count();
+  const asked = await page.evaluate(() => window.__history.searches);
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
+  await page.close();
+  assert.match(none, /No kept conversation has all of those words/);
+  assert.deepEqual(oneLetter.map((t) => t.trim()), ["Weekend plan"], "one letter narrows titles");
+  assert.equal(all, 3);
+  assert.deepEqual(asked, ["quokka"]);
+  assert.ok(!/quokka/.test(stored), "the words searched for are not kept in the window's storage");
+});
+
+await check("an older PC: the box narrows the loaded list by title, and says why", async () => {
+  const page = await historyTab({ ...SEARCHED, searchMissing: true });
+  await page.locator("#history-filter").fill("dentist");
+  await page.waitForTimeout(700);
+  const titles = await page.locator("#history-list .row-title").allInnerTexts();
+  const text = await listText(page);
+  await page.locator("#history-filter").fill("mill road");
+  await page.waitForTimeout(700);
+  const none = await listText(page);
+  const asked = await page.evaluate(() => window.__history.searches);
+  await page.close();
   assert.deepEqual(titles.map((t) => t.trim()), ["Dentist on Tuesday"]);
-  assert.match(none, /No conversations match that search/);
-  assert.equal(after, 3);
-  assert.ok(!sent.includes("brain_history_search"), "no new backend route is called");
+  assert.match(text, /can only search titles/);
+  assert.match(none, /No conversations match that search/, "words said are not searched on an older PC");
+  assert.deepEqual(asked, ["dentist"], "asked once, then remembered for this window");
+});
+
+await check("opening a result finds the search words in it: marked, counted, Next and Previous step", async () => {
+  const page = await historyTab(SEARCHED);
+  await page.locator("#history-filter").fill("mill road");
+  await page.waitForTimeout(700);
+  await page.locator("#history-list .row-item").nth(1).getByRole("button", { name: "Open" }).click();
+  await page.waitForTimeout(300);
+  const find = await page.locator("#history-find").inputValue();
+  const count = await page.locator("#history-find-count").innerText();
+  const marks = await page.locator("#history-transcript mark.find-hit").count();
+  const current = await page.locator("#history-transcript mark.find-current").count();
+  await page.locator("#history-find-next").click();
+  const second = await page.locator("#history-find-count").innerText();
+  await page.locator("#history-find-prev").click();
+  await page.locator("#history-find-prev").click();
+  const last = await page.locator("#history-find-count").innerText();
+  await page.close();
+  assert.equal(find, "mill road");
+  // "Mill", "Road" x3 each in c-3 = 6 places.
+  assert.equal(marks, 6);
+  assert.equal(current, 1);
+  assert.equal(count.trim(), "1 of 6");
+  assert.equal(second.trim(), "2 of 6");
+  assert.equal(last.trim(), "6 of 6", "Previous from the first wraps to the last");
+});
+
+await check("Find in this chat works on a conversation opened from the list, with Enter, and asks the PC nothing", async () => {
+  const page = await historyTab(SEARCHED);
+  await page.locator("#history-list .row-item").first().getByRole("button", { name: "Open" }).click();
+  await page.waitForTimeout(300);
+  const empty = await page.locator("#history-find").inputValue();
+  await page.locator("#history-find").fill("TUESDAY");
+  const one = await page.locator("#history-find-count").innerText();
+  await page.locator("#history-find").fill("zzz");
+  const none = await page.locator("#history-find-count").innerText();
+  await page.locator("#history-find").fill("e");
+  await page.locator("#history-find").press("Enter");
+  const stepped = await page.locator("#history-find-count").innerText();
+  const focused = await page.evaluate(() => document.activeElement.id);
+  const asked = await page.evaluate(() => window.__history.searches);
+  await page.close();
+  assert.equal(empty, "", "opened from the list, nothing to find yet");
+  assert.equal(one.trim(), "1 match");
+  assert.equal(none.trim(), "Not in this chat.");
+  assert.match(stepped.trim(), /^2 of \d+$/);
+  assert.equal(focused, "history-find", "the find box keeps the keyboard");
+  assert.deepEqual(asked, []);
+});
+
+await check("the words found are set as text: a transcript cannot become markup", async () => {
+  const evil = { ...SEARCHED, transcripts: { ...SEARCHED.transcripts,
+    "c-1": { id: "c-1", title: "x", turns: [{ role: "user", text: "<img src=x onerror=alert(1)> dentist", at: NOW }] } } };
+  const page = await historyTab(evil);
+  await page.locator("#history-filter").fill("dentist");
+  await page.waitForTimeout(700);
+  await page.locator("#history-list .row-item").first().getByRole("button", { name: "Open" }).click();
+  await page.waitForTimeout(300);
+  const imgs = await page.locator("#history-list img").count();
+  const shown = await page.locator("#history-transcript").innerText();
+  await page.close();
+  assert.equal(imgs, 0);
+  assert.match(shown, /<img src=x onerror=alert\(1\)> dentist/);
+});
+
+await check("hidden under Windows Hello: no search is sent, no snippet shown", async () => {
+  const page = await historyTab(SEARCHED, { security: { hidden: true } });
+  await page.locator("#history-filter").fill("mill road");
+  await page.waitForTimeout(700);
+  const text = await listText(page);
+  const asked = await page.evaluate(() => window.__history.searches);
+  await page.close();
+  assert.match(text, /hidden until Windows Hello/);
+  assert.doesNotMatch(text, /Mill Road/);
+  assert.deepEqual(asked, []);
 });
 
 await check("Load older asks for the page before the oldest shown, and adds it underneath", async () => {
@@ -267,7 +425,9 @@ await check("opening one shows it read-only, with where pasted, shared or clipbo
   const turns = await page.locator("#history-transcript .history-turn").allInnerTexts();
   const note = await page.locator("#history-transcript .history-taint-note").innerText();
   const bold = await page.locator("#history-transcript b").count();
-  const buttons = await page.locator("#history-transcript button").count();
+  const buttons = await page.locator("#history-transcript-turns button").count();
+  // "Find in this chat" (section 71) only moves between matches.
+  const findButtons = await page.locator("#history-transcript button").allInnerTexts();
   const opened = await page.evaluate(() => window.__history.opened);
   await page.getByRole("button", { name: "Close" }).click();
   await page.waitForTimeout(100);
@@ -284,6 +444,7 @@ await check("opening one shows it read-only, with where pasted, shared or clipbo
   assert.match(turns[5], /<b>check the web<\/b>/, "the text was not shown as it was written");
   assert.equal(bold, 0, "a transcript's text became markup");
   assert.equal(buttons, 0, "a read-only transcript has controls in it");
+  assert.deepEqual(findButtons, ["Previous", "Next"], "only the find bar's two steps");
   assert.match(note, /did not come from you/);
   assert.equal(closed, 0);
 });
@@ -540,7 +701,8 @@ await check("CONTROL: only the Brain holds the history commands, and ON is held 
   const sets = toml.split("[[set]]").slice(1);
   const holders = (perm) => sets.filter((s) => s.includes(`"${perm}"`))
     .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
-  const cmds = ["brain_history_list", "brain_history_open", "brain_history_delete", "brain_history_settings"];
+  const cmds = ["brain_history_list", "brain_history_open", "brain_history_search",
+    "brain_history_delete", "brain_history_settings"];
   for (const cmd of cmds) {
     const perm = `allow-${cmd.replace(/_/g, "-")}`;
     assert.deepEqual(holders(perm), ["brain-history"], `${perm} is held by ${holders(perm)}`);
