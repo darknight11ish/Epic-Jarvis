@@ -41,9 +41,9 @@ abstract class CritterFace(
     /** This animal's pose for the frame, as uniform name to value. */
     protected abstract fun uniforms(f: FaceFrame): Map<String, FloatArray>
 
-    /** What the host remembered at the last state change (see [CritterPose.Hist]). */
+    /** What the host remembered at the last state changes (see [CritterPose.Hist]). */
     protected fun hist(f: FaceFrame) =
-        CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp)
+        CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp, prevAmp2 = f.prevAmp2)
 
     // The shell's spin rate. This receives the BORROWED movement (approval,
     // standby and banked arrive as IDLE, error as THINKING), so the desktop's
@@ -90,27 +90,38 @@ abstract class CritterFace(
     }
 
     /**
-     * The small offscreen pictures this animal is traced into, one per size.
+     * The small offscreen pictures this animal is traced into, one per size
+     * STEP, kept apart for the still thumbnail and the live face.
      *
-     * One per SIZE rather than one shared: the live face and the picker's
-     * still thumbnail can be on screen together, and a picture re-recorded
-     * for one would change the other's too - a thumbnail that is only drawn
-     * once would start showing the live animal. Different places draw it at
-     * different sizes, so the size tells them apart. Capped, because a face
-     * whose size animates passes through many sizes; dropping one is safe -
-     * whatever already drew it keeps its own reference until it redraws.
+     * Kept apart because the live face and the picker's still thumbnail can
+     * be on screen together, and a picture re-recorded for one would change
+     * the other's too - a thumbnail that is only drawn once would start
+     * showing the live animal. So [FaceFrame.still] is part of the key.
+     *
+     * One per size STEP ([LAYER_STEP] pixels), not per exact size: while
+     * Jarvis speaks or listens the face's radius wobbles a few percent with
+     * the voice, and keyed by the exact size that was a new node and a new
+     * offscreen buffer almost every frame. Rounded up to a step, the wobble
+     * lands on one size, or two neighbours that both stay here. The picture
+     * is traced at the step's size, so it is at most a step sharper than
+     * asked, never blurrier.
+     *
+     * Least recently used goes first when full, because a face whose size
+     * animates passes through many steps; dropping one is safe - whatever
+     * already drew it keeps its own reference until it redraws.
      */
-    private val layers = LinkedHashMap<Int, android.graphics.RenderNode>()
+    private val layers = LinkedHashMap<Int, android.graphics.RenderNode>(8, 0.75f, true)
 
-    private fun layerFor(px: Int): android.graphics.RenderNode {
-        layers[px]?.let { return it }
+    private fun layerFor(px: Int, still: Boolean): android.graphics.RenderNode {
+        val key = if (still) -px else px
+        layers[key]?.let { return it }
         if (layers.size >= 4) layers.remove(layers.keys.first())
         return android.graphics.RenderNode(id).apply {
             // Forces an offscreen buffer the size of this node. That buffer
             // is what makes this cheaper: the shader runs once per pixel of
             // IT, and the enlarging happens when it is drawn scaled below.
             setUseCompositingLayer(true, null)
-            layers[px] = this
+            layers[key] = this
         }
     }
 
@@ -151,14 +162,19 @@ abstract class CritterFace(
             return@with
         }
 
-        val px = kotlin.math.ceil(side * traceScale()).toInt().coerceIn(64, kotlin.math.ceil(side).toInt().coerceAtLeast(64))
+        // The size traced at: the tier's share of full size, rounded UP to a
+        // whole step (see [layers]), and never under 64. Every number the
+        // shader gets below is worked out from this px - the node's real
+        // size - so the picture fills the face exactly whatever the rounding.
+        val need = kotlin.math.ceil(side * traceScale()).toInt().coerceAtLeast(64)
+        val px = (need + LAYER_STEP - 1) / LAYER_STEP * LAYER_STEP
         val k = px / side
         shader.setFloatUniform("uCenter", px / 2f, px / 2f)
         shader.setFloatUniform("uR", 2f * r * k)
         // One pixel of the small picture, for the shader's feathered outline.
         shader.setFloatUniform("uPx", 1f / (2f * r * k))
 
-        val node = layerFor(px)
+        val node = layerFor(px, f.still)
         node.setPosition(0, 0, px, px)
         val rec = node.beginRecording(px, px)
         try {
@@ -175,10 +191,23 @@ abstract class CritterFace(
     }
 }
 
+/**
+ * The size step the animals' offscreen pictures are rounded up to, in
+ * pixels - see [CritterFace]'s `layers`. Small enough that the extra
+ * sharpness costs little (at most 15 pixels a side), big enough that the
+ * voice's wobble in the face's size stays inside one or two steps.
+ */
+private const val LAYER_STEP = 16
+
+// Each animal's mouth is the voice's own mouth shape ([FaceFrame.mouth]: the
+// mouth track sampled at what is being heard), or shut when there is none -
+// a typed answer, Quiet mode, an answer kept on screen.
+
 /** The red panda, holding its orb in its lap. */
 object RedPanda : CritterFace("redpanda", "Red Panda", CritterShaders.RED_PANDA) {
     override fun uniforms(f: FaceFrame) = CritterPose.uniforms(
         CritterPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f)),
+        f.mouth,
     )
 }
 
@@ -186,6 +215,7 @@ object RedPanda : CritterFace("redpanda", "Red Panda", CritterShaders.RED_PANDA)
 object PygmyOwl : CritterFace("pygmyowl", "Pygmy Owl", CritterShaders.PYGMY_OWL) {
     override fun uniforms(f: FaceFrame) = OwlPose.uniforms(
         OwlPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f)),
+        f.mouth,
     )
 }
 
@@ -193,5 +223,6 @@ object PygmyOwl : CritterFace("pygmyowl", "Pygmy Owl", CritterShaders.PYGMY_OWL)
 object SeaOtter : CritterFace("seaotter", "Sea Otter", CritterShaders.SEA_OTTER) {
     override fun uniforms(f: FaceFrame) = OtterPose.uniforms(
         OtterPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f)),
+        f.mouth,
     )
 }

@@ -107,6 +107,26 @@ def golden_cases(species):
         cases.append({"species": sp, "state": "approval", "prev": "error", "since": 0.3, "t": 8.4,
                       "amp": 0.28, "look": {"x": -0.5, "y": 0.2, "w": 0.4},
                       "hist": {"prev2": "standby", "gap": 0.4}})
+        # A quick A -> B -> A: back to speaking 0.2 s after leaving it. The
+        # speaking pose the idle one was melting from is drawn at the
+        # loudness of the EARLIER change (prevAmp2), not the latest one.
+        cases.append({"species": sp, "state": "speaking", "prev": "idle", "since": 0.1, "t": 6.2,
+                      "amp": 0.3, "look": {},
+                      "hist": {"prev2": "speaking", "gap": 0.2, "prevAmp": 0.05, "prevAmp2": 0.7}})
+        # The mouth: the voice's own shape (open, wide, round), scaled by how
+        # much the pose is speaking - fully while speaking, part way through
+        # a melt in or out, not at all in any other state; values outside
+        # 0..1 are clamped.
+        for mouth in ({"open": 0.6, "wide": 0.3, "round": 0.1}, {"open": 1.4, "wide": -0.2, "round": 0.9}):
+            cases.append({"species": sp, "state": "speaking", "prev": "speaking", "since": 5.0, "t": 2.5,
+                          "amp": 0.3, "look": {}, "mouth": mouth})
+        mouth = {"open": 0.8, "wide": 0.5, "round": 0.2}
+        cases.append({"species": sp, "state": "speaking", "prev": "thinking", "since": 0.2, "t": 3.1,
+                      "amp": 0.4, "look": {}, "mouth": mouth})
+        cases.append({"species": sp, "state": "idle", "prev": "speaking", "since": 0.3, "t": 3.7,
+                      "amp": 0.0, "look": {}, "hist": {"prevAmp": 0.5}, "mouth": mouth})
+        cases.append({"species": sp, "state": "listening", "prev": "listening", "since": 5.0, "t": 1.9,
+                      "amp": 0.5, "look": {}, "mouth": mouth})
     return cases
 
 
@@ -116,7 +136,7 @@ const C = globalThis.CritterPose;
 const cases = JSON.parse(require('fs').readFileSync(0, 'utf8'));
 const out = cases.map(c => {
   const api = C.species[c.species];
-  return { ...c, uniforms: api.uniforms(api.pose(c.state, c.prev, c.since, c.t, c.amp, c.look, c.hist)) };
+  return { ...c, uniforms: api.uniforms(api.pose(c.state, c.prev, c.since, c.t, c.amp, c.look, c.hist), c.mouth) };
 });
 // Six decimals: the Kotlin copies run in 32-bit floats and are checked to
 // within a thousandth, so more digits would only be noise in the diff.

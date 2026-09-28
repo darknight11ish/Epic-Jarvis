@@ -411,6 +411,10 @@ fn main() {
             // The HUD's mic button. Shows the quickbar with push-to-talk
             // ready; records nothing. The one command the HUD holds.
             "summon_push_to_talk",
+            // Lip-sync: hands the Jarvis bar's mouth track and playback
+            // clock to every window's face (voice.rs `face_voice`). Checked
+            // shape only; no words, no audio. Quickbar only.
+            "face_voice",
             // Before a screen capture is sent: can the local model see it?
             // Asks the Jarvis server and loopback Ollama; quickbar only.
             "local_model_vision",

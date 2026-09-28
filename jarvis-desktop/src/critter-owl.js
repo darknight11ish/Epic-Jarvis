@@ -16,12 +16,12 @@
 (function (root) {
   "use strict";
   const C = root.CritterPose;
-  const { makePose, clamp, rx, ry, rz, mul, apply, add, invRow } = C.util;
+  const { makePose, mouthOf, clamp, rx, ry, rz, mul, apply, add, invRow } = C.util;
   const TAU = Math.PI * 2;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "neckDrop", "bob", "breath", "fluff",
-    "eyeL", "eyeR", "brow", "beak", "lookX", "lookY", "wingL", "wingR",
+    "eyeL", "eyeR", "brow", "speak", "lookX", "lookY", "wingL", "wingR",
     "orbX", "orbY", "orbZ", "orbR", "orbGlow",
   ];
 
@@ -32,7 +32,7 @@
   function stateTargets(state, t, amp, look) {
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, neckDrop: 0, bob: 0, breath: 1, fluff: 1,
-      eyeL: 1, eyeR: 1, brow: 0, beak: 0, lookX: 0, lookY: 0, wingL: 0, wingR: 0,
+      eyeL: 1, eyeR: 1, brow: 0, speak: 0, lookX: 0, lookY: 0, wingL: 0, wingR: 0,
       orbX: ORB_REST[0], orbY: ORB_REST[1] + 0.03 * Math.sin(t * 1.4), orbZ: ORB_REST[2],
       orbR: ORB_REST[3], orbGlow: 0.55,
     };
@@ -64,8 +64,10 @@
       P.brow = 0.3;
       P.orbGlow = 0.95 + 0.2 * Math.sin(t * 2.6);
     } else if (state === "speaking") {
-      // The beak rides Jarvis's voice, with a nod.
-      P.beak = clamp(amp * 1.4, 0, 1);
+      // A nod rides Jarvis's voice. The beak follows the mouth track of the
+      // words being heard (see critter-pose.js's mouthOf); `speak` says how
+      // much of it to show.
+      P.speak = 1;
       P.headPitch = 0.04 + 0.08 * amp;
       P.headYaw = 0.10 * Math.sin(t * 0.7);
       P.headRoll = 0.05 * Math.sin(t * 0.9);
@@ -142,7 +144,7 @@
 
   const SEAT_Y = -0.93;
 
-  function uniforms(P) {
+  function uniforms(P, mouth) {
     const bodyPos = [0, SEAT_Y + P.bob, 0];
     const B = rx(0);
     const toWorld = (v) => add(bodyPos, apply(B, v));
@@ -160,12 +162,13 @@
       uHeadR0: invRow(H, 0), uHeadR1: invRow(H, 1), uHeadR2: invRow(H, 2),
       uWingL0: invRow(WL, 0), uWingL1: invRow(WL, 1), uWingL2: invRow(WL, 2),
       uWingR0: invRow(WR, 0), uWingR1: invRow(WR, 1), uWingR2: invRow(WR, 2),
-      uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), P.brow, clamp(P.beak, 0, 1)],
+      uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), P.brow],
+      uMouth: mouthOf(P, mouth),
       uLook: [clamp(P.lookX, -1, 1), clamp(P.lookY, -1, 1)],
       uOrb: [...toWorld([P.orbX, P.orbY, P.orbZ]), P.orbR],
       uOrbGlow: [clamp(P.orbGlow, 0, 1.5)],
     };
   }
 
-  C.species.pygmyowl = { KEYS, stateTargets, pose, uniforms };
+  C.species.pygmyowl = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf };
 })(typeof globalThis !== "undefined" ? globalThis : this);

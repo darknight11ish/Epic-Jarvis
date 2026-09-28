@@ -15,12 +15,12 @@
 (function (root) {
   "use strict";
   const C = root.CritterPose;
-  const { makePose, clamp, rx, ry, rz, mul, apply, add, invRow } = C.util;
+  const { makePose, mouthOf, clamp, rx, ry, rz, mul, apply, add, invRow } = C.util;
   const TAU = Math.PI * 2;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "bob", "rock", "tilt", "breath",
-    "eyeL", "eyeR", "paddle", "mouth", "lookX", "lookY",
+    "eyeL", "eyeR", "paddle", "speak", "lookX", "lookY",
     "pawLx", "pawLy", "pawLz", "pawRx", "pawRy", "pawRz",
     "orbX", "orbY", "orbZ", "orbR", "orbGlow", "ripple", "wave",
   ];
@@ -43,7 +43,7 @@
   function stateTargets(state, t, amp, look) {
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, bob: 0, rock: 0, tilt: 0.10, breath: 1,
-      eyeL: 1, eyeR: 1, paddle: 0, mouth: 0, lookX: 0, lookY: 0,
+      eyeL: 1, eyeR: 1, paddle: 0, speak: 0, lookX: 0, lookY: 0,
       pawLx: -0.14, pawLy: 0.33, pawLz: -0.09, pawRx: -0.14, pawRy: 0.33, pawRz: 0.09,
       orbX: PEBBLE[0], orbY: PEBBLE[1], orbZ: PEBBLE[2], orbR: PEBBLE[3], orbGlow: 0.55, ripple: 0.010,
       // Where the rings on the water have spread to: every state shares it.
@@ -70,7 +70,8 @@
       P.lookY = -0.7; P.lookX = 0.3;
       P.orbGlow = 0.95 + 0.2 * Math.sin(t * 2.6);
     } else if (state === "speaking") {
-      P.mouth = clamp(amp * 1.35, 0, 1);
+      // The mouth follows the words being heard (critter-pose.js's mouthOf).
+      P.speak = 1;
       P.headPitch = 0.04 + 0.08 * amp;
       P.headYaw = 0.08 * Math.sin(t * 0.7);
       P.headRoll = 0.06 * Math.sin(t * 0.9);
@@ -155,7 +156,7 @@
 
   const WATER_Y = -0.42;
 
-  function uniforms(P) {
+  function uniforms(P, mouth) {
     const bodyPos = [0.02, WATER_Y + 0.02 + P.bob, 0];
     // Tilt lifts the head end; rock rolls the otter about its spine.
     const B = mul(rz(-P.tilt), rx(P.rock));
@@ -167,7 +168,8 @@
       uBreath: [P.breath],
       uNeck: toWorld(NECK),
       uHeadR0: invRow(H, 0), uHeadR1: invRow(H, 1), uHeadR2: invRow(H, 2),
-      uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), clamp(P.paddle, 0, 1), clamp(P.mouth, 0, 1)],
+      uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), clamp(P.paddle, 0, 1)],
+      uMouth: mouthOf(P, mouth),
       uLook: [clamp(P.lookX, -1, 1), clamp(P.lookY, -1, 1)],
       // Shoulders on top of the chest, so the short arms lie along it.
       uShL: toWorld([-0.34, 0.20, -0.13]),
@@ -180,5 +182,5 @@
     };
   }
 
-  C.species.seaotter = { KEYS, stateTargets, pose, uniforms };
+  C.species.seaotter = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf };
 })(typeof globalThis !== "undefined" ? globalThis : this);

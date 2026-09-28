@@ -156,6 +156,12 @@ jobs:
           sudo apt-get install -y -q glslang-tools > /dev/null
           python tools/gen_critters.py --check
           python tools/shader_size.py --check
+      # The mouths' lip-sync analysis is written twice - lipsync.js on the
+      # desktop, LipSync.kt on the phone - and the phone's LipSyncTest checks
+      # its copy against a fixture the JavaScript writes. A stale fixture
+      # would let the two drift apart with every test still green.
+      - name: Lip-sync - the phone's golden fixture matches lipsync.js
+        run: python tools/gen_lipsync.py --check
       # A command registered in lib.rs but missing from build.rs's own ACL
       # export list has no permission at all, and every window's call to it
       # is refused at runtime - a compile-time-invisible break that bit two

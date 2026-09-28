@@ -46,7 +46,7 @@ object CritterPose {
     private const val EYE_L = 8
     private const val EYE_R = 9
     private const val BROW = 10
-    private const val MOUTH = 11
+    private const val SPEAK = 11
     private const val LOOK_X = 12
     private const val LOOK_Y = 13
     private const val PAW_LX = 14
@@ -104,7 +104,7 @@ object CritterPose {
     fun stateTargets(state: FaceState, t: Float, amp: Float, look: Look): FloatArray {
         val p = FloatArray(N)
         p[HEAD_YAW] = 0f; p[HEAD_PITCH] = 0f; p[HEAD_ROLL] = 0f; p[LEAN] = 0f; p[BOB] = 0f; p[BREATH] = 1f
-        p[EAR_L] = 0.2f; p[EAR_R] = 0.2f; p[EYE_L] = 1f; p[EYE_R] = 1f; p[BROW] = 0f; p[MOUTH] = 0f
+        p[EAR_L] = 0.2f; p[EAR_R] = 0.2f; p[EYE_L] = 1f; p[EYE_R] = 1f; p[BROW] = 0f; p[SPEAK] = 0f
         p[LOOK_X] = 0f; p[LOOK_Y] = 0f
         p[PAW_LX] = LAP_PAW_L[0]; p[PAW_LY] = LAP_PAW_L[1]; p[PAW_LZ] = LAP_PAW_L[2]
         p[PAW_RX] = LAP_PAW_R[0]; p[PAW_RY] = LAP_PAW_R[1]; p[PAW_RZ] = LAP_PAW_R[2]
@@ -144,7 +144,9 @@ object CritterPose {
                 p[ORB_GLOW] = 0.95f + 0.2f * sin(t * 2.6f)
             }
             FaceState.SPEAKING -> {
-                p[MOUTH] = clamp(amp * 1.35f, 0f, 1f)
+                // The mouth follows the words being heard (see [mouthOf]),
+                // not the loudness; this only says how much of it to show.
+                p[SPEAK] = 1f
                 p[HEAD_PITCH] = 0.04f + 0.08f * amp
                 p[HEAD_YAW] = 0.08f * sin(t * 0.7f)
                 p[HEAD_ROLL] = 0.05f * sin(t * 0.9f)
@@ -238,8 +240,18 @@ object CritterPose {
      * @param prev2 the state before the previous one (null: none).
      * @param gap seconds the previous state had been showing when it ended.
      * @param prevAmp the loudness at the change (NaN: use the current one).
+     * @param prevAmp2 the loudness at the change BEFORE that one - what
+     *   [prev2] was drawn with. Without it a quick A -> B -> A drew [prev2]
+     *   at the latest change's loudness and the orb and nod jumped. NaN:
+     *   use [prevAmp], as before it existed. A host keeps it by doing, at
+     *   each change of state, `prevAmp2 = prevAmp` before `prevAmp = last`.
      */
-    data class Hist(val prev2: FaceState? = null, val gap: Float = 1e9f, val prevAmp: Float = Float.NaN)
+    data class Hist(
+        val prev2: FaceState? = null,
+        val gap: Float = 1e9f,
+        val prevAmp: Float = Float.NaN,
+        val prevAmp2: Float = Float.NaN,
+    )
 
     /** The pose shown: the previous state's melting into the current one. */
     fun pose(
@@ -270,10 +282,36 @@ object CritterPose {
         val k = clamp(since / BLEND_S, 0f, 1f)
         if (k >= 1f || prevState == state) return cur
         val prevAmp = if (hist.prevAmp.isNaN()) amp else hist.prevAmp
-        val prev = blend(targets, prevState, hist.prev2 ?: prevState, since + hist.gap, t, prevAmp, look, Hist())
+        val prevAmp2 = if (hist.prevAmp2.isNaN()) prevAmp else hist.prevAmp2
+        val prev = blend(
+            targets, prevState, hist.prev2 ?: prevState, since + hist.gap, t, prevAmp, look,
+            Hist(prevAmp = prevAmp2),
+        )
         val e = smooth(k)
         return FloatArray(cur.size) { prev[it] + (cur[it] - prev[it]) * e }
     }
+
+    /**
+     * The mouth to draw, [open, wide, round] each 0..1 - the desktop's
+     * `mouthOf`. [mouth] is the mouth track sampled at what is being heard
+     * right now (open, wide, round; see `audio/LipSync.kt`), scaled by how
+     * much the pose is speaking ([speak]: 1 in SPEAKING, 0 elsewhere, melting
+     * with the state). Null - no real voice playing: a typed answer, Quiet
+     * mode, an answer kept on screen - keeps the mouth SHUT. An animal never
+     * makes up mouth movements that match no sound.
+     */
+    internal fun mouthOf(speak: Float, mouth: FloatArray?): FloatArray {
+        val w = clamp(speak, 0f, 1f)
+        if (mouth == null || w <= 0f) return floatArrayOf(0f, 0f, 0f)
+        return floatArrayOf(mouthCh(mouth, 0) * w, mouthCh(mouth, 1) * w, mouthCh(mouth, 2) * w)
+    }
+    private fun mouthCh(m: FloatArray, i: Int): Float {
+        val v = if (i < m.size) m[i] else 0f
+        return if (v.isNaN()) 0f else clamp(v, 0f, 1f)
+    }
+
+    /** How much this pose is speaking, 0..1 - what [uniforms] scales the mouth by. */
+    fun speakingWeight(p: FloatArray): Float = clamp(p[SPEAK], 0f, 1f)
 
     // --- from a pose to the numbers the shader reads -----------------------
 
@@ -318,8 +356,15 @@ object CritterPose {
 
     private const val SEAT_Y = -0.90f
 
-    /** Uniform name to value, exactly as the desktop's `uniforms()` returns. */
-    fun uniforms(p: FloatArray): Map<String, FloatArray> {
+    // The tail's uniform names, made once rather than as a new string for
+    // every segment on every frame.
+    private val TAIL_NAMES = arrayOf("uTail0", "uTail1", "uTail2", "uTail3", "uTail4", "uTail5")
+
+    /**
+     * Uniform name to value, exactly as the desktop's `uniforms()` returns.
+     * [mouth] is the voice's mouth shape now, or null - see [mouthOf].
+     */
+    fun uniforms(p: FloatArray, mouth: FloatArray? = null): Map<String, FloatArray> {
         val bodyPos = floatArrayOf(0f, SEAT_Y + p[BOB], 0f)
         val bm = rx(-p[LEAN])
         fun toWorld(x: Float, y: Float, z: Float): FloatArray {
@@ -346,9 +391,8 @@ object CritterPose {
         out["uHeadR0"] = invRow(hm, 0); out["uHeadR1"] = invRow(hm, 1); out["uHeadR2"] = invRow(hm, 2)
         out["uEarL0"] = invRow(el, 0); out["uEarL1"] = invRow(el, 1); out["uEarL2"] = invRow(el, 2)
         out["uEarR0"] = invRow(er, 0); out["uEarR1"] = invRow(er, 1); out["uEarR2"] = invRow(er, 2)
-        out["uFace"] = floatArrayOf(
-            clamp(p[EYE_L], 0f, 1.2f), clamp(p[EYE_R], 0f, 1.2f), p[BROW], clamp(p[MOUTH], 0f, 1f),
-        )
+        out["uFace"] = floatArrayOf(clamp(p[EYE_L], 0f, 1.2f), clamp(p[EYE_R], 0f, 1.2f), p[BROW])
+        out["uMouth"] = mouthOf(p[SPEAK], mouth)
         out["uLook"] = floatArrayOf(clamp(p[LOOK_X], -1f, 1f), clamp(p[LOOK_Y], -1f, 1f))
         out["uShL"] = toWorld(-0.24f, 0.48f, -0.10f)
         out["uShR"] = toWorld(0.24f, 0.48f, -0.10f)
@@ -375,7 +419,7 @@ object CritterPose {
             z = base[2] + dx * sin(ang) + dz * cos(ang)
             y += abs(s) * 0.05f * k
             val w = toWorld(x, y, z)
-            out["uTail$i"] = floatArrayOf(w[0], w[1], w[2], a[3])
+            out[TAIL_NAMES[i]] = floatArrayOf(w[0], w[1], w[2], a[3])
         }
         return out
     }

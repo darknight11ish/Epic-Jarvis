@@ -35,7 +35,7 @@ object OtterPose {
     private const val EYE_L = 7
     private const val EYE_R = 8
     private const val PADDLE = 9
-    private const val MOUTH = 10
+    private const val SPEAK = 10
     private const val LOOK_X = 11
     private const val LOOK_Y = 12
     private const val PAW_LX = 13
@@ -105,7 +105,8 @@ object OtterPose {
                 p[ORB_GLOW] = 0.95f + 0.2f * sin(t * 2.6f)
             }
             FaceState.SPEAKING -> {
-                p[MOUTH] = clamp(amp * 1.35f, 0f, 1f)
+                // The mouth follows the words being heard (CritterPose.mouthOf).
+                p[SPEAK] = 1f
                 p[HEAD_PITCH] = 0.04f + 0.08f * amp
                 p[HEAD_YAW] = 0.08f * sin(t * 0.7f)
                 p[HEAD_ROLL] = 0.06f * sin(t * 0.9f)
@@ -193,6 +194,9 @@ object OtterPose {
         return p
     }
 
+    /** How much this pose is speaking, 0..1 - what [uniforms] scales the mouth by. */
+    fun speakingWeight(p: FloatArray): Float = clamp(p[SPEAK], 0f, 1f)
+
     fun pose(
         state: FaceState,
         prevState: FaceState,
@@ -205,7 +209,8 @@ object OtterPose {
 
     private const val WATER_Y = -0.42f
 
-    fun uniforms(p: FloatArray): Map<String, FloatArray> {
+    /** Uniform name to value; [mouth] as for [CritterPose.uniforms]. */
+    fun uniforms(p: FloatArray, mouth: FloatArray? = null): Map<String, FloatArray> {
         val bodyPos = floatArrayOf(0.02f, WATER_Y + 0.02f + p[BOB], 0f)
         val bm = mul(rz(-p[TILT]), rx(p[ROCK]))
         fun toWorld(x: Float, y: Float, z: Float): FloatArray {
@@ -220,10 +225,8 @@ object OtterPose {
             "uBreath" to floatArrayOf(p[BREATH]),
             "uNeck" to toWorld(NECK[0], NECK[1], NECK[2]),
             "uHeadR0" to invRow(hm, 0), "uHeadR1" to invRow(hm, 1), "uHeadR2" to invRow(hm, 2),
-            "uFace" to floatArrayOf(
-                clamp(p[EYE_L], 0f, 1.2f), clamp(p[EYE_R], 0f, 1.2f),
-                clamp(p[PADDLE], 0f, 1f), clamp(p[MOUTH], 0f, 1f),
-            ),
+            "uFace" to floatArrayOf(clamp(p[EYE_L], 0f, 1.2f), clamp(p[EYE_R], 0f, 1.2f), clamp(p[PADDLE], 0f, 1f)),
+            "uMouth" to CritterPose.mouthOf(p[SPEAK], mouth),
             "uLook" to floatArrayOf(clamp(p[LOOK_X], -1f, 1f), clamp(p[LOOK_Y], -1f, 1f)),
             "uShL" to toWorld(-0.34f, 0.20f, -0.13f),
             "uShR" to toWorld(-0.34f, 0.20f, 0.13f),

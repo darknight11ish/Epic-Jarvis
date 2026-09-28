@@ -115,6 +115,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode, setLevel, attachSpeechSource } from "./voice.js";
+import { followClip, trackFor } from "./face-voice.js";
 import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
 import {
   createCutOff,
@@ -3115,6 +3116,32 @@ function speechContext() {
   return speechAudioCtx;
 }
 
+/**
+ * Lip-sync (face-voice.js): tells the faces in the other windows - the
+ * Widget's, the floating face, the HUD's - about one clip as it plays: its
+ * mouth track once, then where the playback is. Every sound Jarvis makes
+ * here goes through this - the answer's sentences, "One moment.", a focus
+ * line, a timer said aloud - so the animals' mouths move with every word
+ * and never without one. Returns the function that stops following it.
+ *
+ * `routed`: the clip plays through `speechContext()`'s Web Audio graph
+ * (`attachSpeechSource`), whose own output delay the element's clock does
+ * not include - so it is taken off, and the mouth follows what is HEARD,
+ * not what has been handed to the graph.
+ */
+function followForFaces(audio, uri, routed = false) {
+  const ctx = routed ? speechAudioCtx : null;
+  const latency = ctx ? (Number(ctx.baseLatency) || 0) + (Number(ctx.outputLatency) || 0) : 0;
+  return followClip(audio, uri, { send: sendFaceVoice, latency });
+}
+
+/** One lip-sync message to Rust, which hands it to every window
+ *  (voice.rs `face_voice`). Failures are the caller's to drop quietly. */
+function sendFaceVoice(cue) {
+  if (!IS_TAURI) return Promise.resolve();
+  return TAURI.core.invoke("face_voice", { cue });
+}
+
 /** Interrupting by talking and "One moment." (voice-flow.js): the rules,
  *  and what the PC allows (`get_voice_flow`, the `flow` block of
  *  /api/voice/status - nothing, until it says). */
@@ -3264,7 +3291,13 @@ function takeNextLine() {
  *  is logged, and the line is skipped, not shown as an error banner over a
  *  perfectly good answer already on screen. */
 function requestClip(text) {
-  const request = invokeStrict("speak_reply", { text }).catch((error) => {
+  const request = invokeStrict("speak_reply", { text }).then((uri) => {
+    // Lip-sync: the clip's mouth track is worked out as soon as its sound
+    // arrives - usually while the sentence before it is still playing - so
+    // starting it later waits on nothing (face-voice.js keeps the result).
+    if (uri) trackFor(uri);
+    return uri;
+  }, (error) => {
     console.info("[quickbar] spoken reply unavailable:", error);
     return null;
   });
@@ -3368,6 +3401,8 @@ async function playClip(dataUri, generation, text = "") {
   const speechCtx = speechContext();
   if (speechCtx && speechCtx.state === "suspended") speechCtx.resume().catch(() => {});
   const detachLevel = speechCtx ? attachSpeechSource(audio, { context: speechCtx }) : () => {};
+  // Lip-sync: the faces in the other windows follow this clip's own clock.
+  const unfollow = followForFaces(audio, dataUri, Boolean(speechCtx));
   try {
     try {
       await audio.play();
@@ -3389,6 +3424,7 @@ async function playClip(dataUri, generation, text = "") {
     console.info("[quickbar] spoken reply unavailable:", error);
   } finally {
     detachLevel();
+    unfollow();
     if (playingText === own) playingText = null;
     if (generation === speechGeneration) {
       clipPlaying = false;
@@ -3446,10 +3482,14 @@ let focusAudio = null;
 let focusStoppedAt = 0;
 const FOCUS_STOP_QUIET_MS = 5000;
 
+/** Stops following the focus line playing now, for the faces (lip-sync). */
+let focusUnfollow = () => {};
+
 function stopFocusCallout() {
   if (!focusAudio) return;
   focusAudio.onended = null;
   focusAudio.pause();
+  focusUnfollow();
   focusAudio = null;
 }
 
@@ -3460,11 +3500,16 @@ function playFocusCallout(payload) {
   if (focusStoppedAt && Date.now() - focusStoppedAt < FOCUS_STOP_QUIET_MS) return;
   const audio = new Audio(uri);
   focusAudio = audio;
+  // Lip-sync, as for an answer's sentence; `ended` or `stopFocusCallout`
+  // stops following it.
+  const unfollow = followForFaces(audio, uri);
+  focusUnfollow = unfollow;
   audio.onended = () => {
     if (focusAudio === audio) focusAudio = null;
   };
   audio.play().catch((error) => {
     console.info("[quickbar] focus callout could not play:", error);
+    unfollow();
     if (focusAudio === audio) focusAudio = null;
   });
 }
@@ -3598,10 +3643,14 @@ function maybeSayOneMoment(data) {
   if (!momentFlow.toolStarted(loadMoment() && voiceFlow.moment, Boolean(momentClip))) return;
   const audio = new Audio(momentClip.uri);
   momentAudio = audio;
+  // Lip-sync: "One moment." moves the mouths too; `end` stops following it
+  // however it ends (played out, stopped, or the 3-second bound).
+  const unfollow = followForFaces(audio, momentClip.uri);
   momentDone = new Promise((resolve) => {
     let bound = null;
     const end = () => {
       clearTimeout(bound);
+      unfollow();
       if (momentAudio === audio) momentAudio = null;
       if (finishMoment === end) finishMoment = null;
       resolve();
@@ -4298,7 +4347,14 @@ onEvent((frame) => {
 async function sayAside(line) {
   try {
     const uri = await invokeStrict("speak_reply", { text: line });
-    if (uri) await new Audio(uri).play();
+    if (!uri) return;
+    const audio = new Audio(uri);
+    // Lip-sync, as for an answer's sentence; `ended` stops following it.
+    const unfollow = followForFaces(audio, uri);
+    await audio.play().catch((error) => {
+      unfollow();
+      throw error;
+    });
   } catch (error) {
     console.info("[quickbar] could not say it aloud:", error);
   }

@@ -22,6 +22,12 @@ number as the last part - `0.2.57` is a build of 0.2.
   circles clear of its head, and its glow no longer shows through the face;
   no starburst of streaks on the owl's crown seen from above; the panda's
   tail no longer shades itself with a false shadow band.
+- **The animals' mouths follow Jarvis's real voice.** Each spoken answer is
+  read up front into a mouth track - how open, how wide ("ee"), how round
+  ("oo"), shut in pauses and on m/b/p - and played in step with the sound
+  you actually hear, on the PC (every window that shows a face) and the
+  phone. When Jarvis answers without speaking (typed, Quiet mode, kept on
+  screen), the animals keep their mouths shut. See `docs/LIPSYNC.md`.
 - **Voice follows the face.** With the red panda, owl or otter showing,
   Jarvis's built-in voice becomes that animal's - its own voice, pace and a
   slightly higher pitch. A switch in both apps, on to start, right under

@@ -21,7 +21,8 @@ uniform float3 uNeck;
 uniform float3 uHeadR0;
 uniform float3 uHeadR1;
 uniform float3 uHeadR2;
-uniform float4 uFace;      // eye open L, eye open R, feet paddle, mouth open
+uniform float3 uFace;      // eye open L, eye open R, feet paddle
+uniform float3 uMouth;     // open, wide, round - all 0 unless it is speaking
 uniform float2 uLook;      // where the eyes look, -1..1
 uniform float3 uShL;
 uniform float3 uShR;
@@ -43,7 +44,9 @@ const float3 FUR = float3(0.045, 0.019, 0.011);
 const float3 FUR_LIGHT = float3(0.110, 0.056, 0.032);
 const float3 FACE = float3(0.640, 0.540, 0.400);
 const float3 INK = float3(0.004, 0.004, 0.006);
-const float3 MOUTH_IN = float3(0.180, 0.018, 0.020);
+const float3 MOUTH_IN = float3(0.060, 0.008, 0.010);
+const float3 TONGUE = float3(0.700, 0.160, 0.170);
+const float3 TEETH = float3(0.880, 0.840, 0.760);
 const float3 WATER = float3(0.006, 0.060, 0.090);
 const float3 FOAM = float3(0.700, 0.820, 0.880);
 
@@ -81,18 +84,31 @@ float partFeet(float3 b) {
 float partArms(float3 p) {
     return min(sdCapsule(p, uShL, uPawL, 0.072), sdCapsule(p, uShR, uPawR, 0.072));
 }
+// The mouth, carved into the muzzle and shaped by uMouth exactly as the red
+// panda's is: open drops the jaw, wide pulls the corners out and flattens
+// it, round draws it in, taller and a little forward.
+// Its half-height; the top stays tucked under the painted line, so it opens
+// down from where the shut mouth is drawn.
+float mouthH() { return 0.0015 + uMouth.x * (0.042 - 0.016 * uMouth.y + 0.012 * uMouth.z); }
 float mouthShape(float3 h) {
-    float open = uFace.w;
-    return sdEllipsoid(h - float3(0.0, -0.115 - 0.01 * open, -0.255),
-                       float3(0.040, 0.006 + 0.030 * open, 0.050));
+    float3 m = uMouth;
+    return sdEllipsoid(h - float3(0.0, -0.106 - mouthH(), -0.255 - 0.008 * m.z),
+                       float3(0.034 + 0.024 * m.y - 0.016 * m.z + 0.012 * m.x, mouthH(), 0.050));
 }
+// What is actually carved. Shut, the hollow is pulled back out of the
+// surface altogether (by more than the fillet), so no groove is left under
+// the painted line to catch the rim light; it sinks in over the first
+// eighth of an opening, so nothing pops.
+float mouthCarve(float3 h) { return mouthShape(h) + 0.013 * (1.0 - min(uMouth.x * 8.0, 1.0)); }
 // A round head with a whiskery muzzle and two tiny ears.
 float partHead(float3 h) {
     float3 hs = float3(abs(h.x), h.y, h.z);
     float d = sdEllipsoid(h, float3(0.25, 0.23, 0.23));
-    d = smin(d, sdEllipsoid(h - float3(0.0, -0.075, -0.18), float3(0.135, 0.090, 0.105)), 0.06);
+    // The muzzle; its chin drops as the jaw opens.
+    d = smin(d, sdEllipsoid(h - float3(0.0, -0.075 - 0.020 * uMouth.x, -0.18 - 0.008 * uMouth.z),
+                            float3(0.135, 0.090 + 0.020 * uMouth.x, 0.105)), 0.06);
     d = smin(d, length(hs - float3(0.19, 0.14, 0.03)) - 0.045, 0.03);
-    return smax(d, -mouthShape(h), 0.01);
+    return smax(d, -mouthCarve(h), 0.01);
 }
 float partNose(float3 h) {
     return sdEllipsoid(h - float3(0.0, -0.035, -0.285), float3(0.048, 0.030, 0.032));
@@ -161,13 +177,15 @@ float mapLite(float3 p) {
 float3 headColour(float3 h) {
     // Pale and grizzled on the face, darkening to chocolate behind and at
     // the neck; a darker line for the mouth when it is shut.
-    float pale = smoothstep(0.12, -0.10, h.z) * smoothstep(-0.26, -0.05, h.y + 0.1 * h.z);
+    float pale = (1.0 - smoothstep(-0.10, 0.12, h.z)) * smoothstep(-0.26, -0.05, h.y + 0.1 * h.z);
     float grizzle = 0.85 + 0.15 * felt(h * 2.0);
     float3 c = mix(FUR_LIGHT, FACE * grizzle, pale);
     float3 hs = float3(abs(h.x), h.y, h.z);
     float ml = min(seg2(hs.xy, float2(0.0, -0.07), float2(0.0, -0.11)),
-                   seg2(hs.xy, float2(0.0, -0.11), float2(0.05, -0.10)));
-    float line = (1.0 - smoothstep(0.004, 0.009, ml)) * smoothstep(-0.22, -0.26, h.z) * (1.0 - uFace.w);
+                   seg2(hs.xy, float2(0.0, -0.11),
+                        float2(0.05 + 0.022 * uMouth.y - 0.018 * uMouth.z, -0.10 + 0.006 * uMouth.y)));
+    float line = (1.0 - smoothstep(0.004, 0.009, ml)) * (1.0 - smoothstep(-0.26, -0.22, h.z)) *
+                 (1.0 - smoothstep(0.0, 0.5, uMouth.x));
     return mix(c, INK * 3.0, line);
 }
 
@@ -176,7 +194,14 @@ float4 material(float id, float3 pos, float3 n) {
     if (id == ID_EYE) return float4(INK, 1.0);
     if (id == ID_NOSE) return float4(INK * 2.0, 0.7);
     if (id == ID_HEAD) {
-        if (mouthShape(h) < 0.010 && h.z < -0.22 && uFace.w > 0.02) return float4(MOUTH_IN, -1.0);
+        if (mouthCarve(h) < 0.010 && h.z < -0.20 && uMouth.x > 0.02) {
+            // Dark inside, deeper toward the back, the tongue low, teeth
+            // along the top when wide.
+            float v = (h.y + 0.106) / mouthH() + 1.0;
+            float3 c = mix(MOUTH_IN, TONGUE, (1.0 - smoothstep(-0.7, -0.2, v)) * 0.7);
+            c = mix(c, TEETH, smoothstep(0.45, 0.65, v) * smoothstep(0.1, 0.6, uMouth.y));
+            return float4(c * mix(1.0, 0.4, smoothstep(-0.245, -0.215, h.z)), -1.0);
+        }
         return float4(headColour(h), 0.0);
     }
     if (id == ID_WATER) {

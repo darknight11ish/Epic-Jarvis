@@ -737,6 +737,9 @@ class MainActivity : FragmentActivity() {
         // which is what makes the face fall back to its own envelope, and 0f is
         // "a voice is playing and is silent", which does not.
         val speechLevel = voice.speaker.level.collectAsState()
+        // The voice at the moment being heard, for the face's frame loop -
+        // a plain function it calls each frame, not state: nothing recomposes.
+        val speechMouth = remember(voice) { voice.speaker::mouthNow }
 
         // Collected, not read. `chat.reply` is a StateFlow, and reading
         // `.value` in a composable is not a snapshot read — so nothing
@@ -1995,6 +1998,7 @@ class MainActivity : FragmentActivity() {
                         draft = { draft },
                         micLevel = micLevel,
                         speechLevel = speechLevel,
+                        speechMouth = speechMouth,
                         actions = remember {
                             HomeActions(
                                 onDraftChange = {

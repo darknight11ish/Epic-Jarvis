@@ -17,8 +17,9 @@
  * build, not a panda that waves differently on the phone.
  *
  * Everything here is a pure function of (state, previous state, seconds
- * since the change, clock, loudness, where the pointer is). Nothing carries
- * over from the last frame, so the same inputs always draw the same panda.
+ * since the change, clock, loudness, where the pointer is, and the mouth
+ * shape being heard). Nothing carries over from the last frame, so the same
+ * inputs always draw the same panda.
  *
  * Coordinates: x to the viewer's right, y up, the panda faces -z (toward the
  * camera). Angles in radians.
@@ -35,7 +36,7 @@
   // element by element. These are the names, in order.
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "lean", "bob", "breath",
-    "earL", "earR", "eyeL", "eyeR", "brow", "mouth", "lookX", "lookY",
+    "earL", "earR", "eyeL", "eyeR", "brow", "speak", "lookX", "lookY",
     "pawLx", "pawLy", "pawLz", "pawRx", "pawRy", "pawRz",
     "tailSwing", "tailCurl", "orbX", "orbY", "orbZ", "orbR", "orbGlow",
   ];
@@ -80,7 +81,7 @@
   function stateTargets(state, t, amp, look) {
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, lean: 0, bob: 0, breath: 1,
-      earL: 0.2, earR: 0.2, eyeL: 1, eyeR: 1, brow: 0, mouth: 0, lookX: 0, lookY: 0,
+      earL: 0.2, earR: 0.2, eyeL: 1, eyeR: 1, brow: 0, speak: 0, lookX: 0, lookY: 0,
       pawLx: LAP.pawL[0], pawLy: LAP.pawL[1], pawLz: LAP.pawL[2],
       pawRx: LAP.pawR[0], pawRy: LAP.pawR[1], pawRz: LAP.pawR[2],
       tailSwing: 0, tailCurl: 0.75,
@@ -117,8 +118,12 @@
       P.tailSwing = 0.35 * Math.sin(t * 1.7);
       P.orbGlow = 0.95 + 0.2 * Math.sin(t * 2.6);
     } else if (state === "speaking") {
-      // Mouth and a small nod ride Jarvis's own voice; one paw talks too.
-      P.mouth = clamp(amp * 1.35, 0, 1);
+      // A small nod rides Jarvis's own voice, and one paw talks too. The
+      // mouth itself is NOT worked out from the loudness any more: it follows
+      // the mouth track of the words actually being heard (uniforms' `mouth`),
+      // and `speak` only says how much of it to show - 1 here, 0 in every
+      // other state, melting between them with the rest of the pose.
+      P.speak = 1;
       P.headPitch = 0.04 + 0.08 * amp;
       P.headYaw = 0.08 * Math.sin(t * 0.7);
       P.headRoll = 0.05 * Math.sin(t * 0.9);
@@ -208,6 +213,10 @@
   }
 
   /**
+   * Makes an animal's pose() from its stateTargets() and the names of its
+   * pose numbers. Every animal melts between states the same way, so the
+   * owl and the otter use this too (critter-owl.js, critter-otter.js).
+   *
    * The pose actually shown: the previous state's melting into the current
    * one over BLEND_S. Both keep moving while they blend, so a change of
    * state never freezes the panda for the length of the fade.
@@ -215,18 +224,22 @@
    * `hist` is what the caller remembered at the moment of the change:
    *   prevAmp - the loudness then. The previous state's pose is drawn with
    *             it, not with the new state's: leaving `speaking`, the new
-   *             loudness is 0, and the mouth would shut in one frame.
+   *             loudness is 0, and the nod and the orb would drop in one frame.
    *   prev2, gap - the state before the previous one, and how long the
    *             previous state had been showing. If that was less than
    *             BLEND_S, the previous state was itself still melting in, so
    *             the "from" pose carries on that blend instead of jumping to
    *             where it would have settled. One level is enough: a third
    *             change inside the same half second is the only case left.
-   */
-  /**
-   * Makes an animal's pose() from its stateTargets() and the names of its
-   * pose numbers. Every animal melts between states the same way, so the
-   * owl and the otter use this too (critter-owl.js, critter-otter.js).
+   *   prevAmp2 - the loudness at the change BEFORE that one, which is what
+   *             the state before the previous one (prev2) was drawn with.
+   *             Without it a quick A -> B -> A drew prev2 at the latest
+   *             change's loudness, and the orb and nod jumped. Optional: a
+   *             caller that does not keep it gets prevAmp, as before.
+   *
+   * A caller keeps these by doing, at each change of state, in this order:
+   *   prev2 = prev; gap = now - changedAt; prevAmp2 = prevAmp;
+   *   prevAmp = <the loudness of the last frame>; prev = state; ...
    */
   function makePose(targets, keys) {
     return function pose(state, prevState, since, t, amp, look, hist) {
@@ -236,8 +249,10 @@
       const k = clamp(since / BLEND_S, 0, 1);
       if (k >= 1 || !prevState || prevState === state) return cur;
       const prevAmp = typeof hist.prevAmp === "number" ? hist.prevAmp : amp;
+      const prevAmp2 = typeof hist.prevAmp2 === "number" ? hist.prevAmp2 : prevAmp;
       const gap = typeof hist.gap === "number" ? hist.gap : 1e9;
-      const prev = pose(prevState, hist.prev2 || prevState, since + gap, t, prevAmp, look);
+      const prev = pose(prevState, hist.prev2 || prevState, since + gap, t, prevAmp, look,
+                        { prevAmp: prevAmp2 });
       const e = smooth(k), out = {};
       for (const key of keys) out[key] = prev[key] + (cur[key] - prev[key]) * e;
       return out;
@@ -245,6 +260,28 @@
   }
   const pose = makePose(stateTargets, KEYS);
 
+  /**
+   * The mouth to draw: [open, wide, round], each 0..1.
+   *
+   * `mouth` is the mouth track sampled at what is being heard right now
+   * ({open, wide, round}, or an array in that order), from the voice's own
+   * sound - see docs/LIPSYNC.md. It is scaled by how much the pose is
+   * speaking (`P.speak`: 1 in speaking, 0 elsewhere, melting with the
+   * state), so the mouth settles shut over the same half second as the rest
+   * of the pose when speaking ends.
+   *
+   * No mouth (null or undefined) means no real voice is playing - a typed
+   * answer, Quiet mode, an answer kept on screen - and the mouth stays SHUT.
+   * An animal never makes up mouth movements that match no sound.
+   */
+  function mouthOf(P, mouth) {
+    const w = clamp(+P.speak || 0, 0, 1);
+    if (!mouth || w <= 0) return [0, 0, 0];
+    const arr = typeof mouth.length === "number";
+    const ch = (v) => clamp(+v || 0, 0, 1) * w;
+    return arr ? [ch(mouth[0]), ch(mouth[1]), ch(mouth[2])]
+               : [ch(mouth.open), ch(mouth.wide), ch(mouth.round)];
+  }
 
   /* ------------------------------------------------------------------ *
    * From a pose to the numbers the shader reads.
@@ -291,8 +328,9 @@
   /**
    * Everything the shader needs, as named float arrays: one per uniform,
    * so each app can hand them over with whatever call its GPU API uses.
+   * `mouth` is optional - see mouthOf().
    */
-  function uniforms(P) {
+  function uniforms(P, mouth) {
     const bodyPos = [0, SEAT_Y + P.bob, 0];
     // Leaning forward tips the top of the body toward the camera (-z).
     const B = rx(-P.lean);
@@ -336,7 +374,8 @@
       uHeadR0: invRow(H, 0), uHeadR1: invRow(H, 1), uHeadR2: invRow(H, 2),
       uEarL0: invRow(EL, 0), uEarL1: invRow(EL, 1), uEarL2: invRow(EL, 2),
       uEarR0: invRow(ER, 0), uEarR1: invRow(ER, 1), uEarR2: invRow(ER, 2),
-      uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), P.brow, clamp(P.mouth, 0, 1)],
+      uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), P.brow],
+      uMouth: mouthOf(P, mouth),
       uLook: [clamp(P.lookX, -1, 1), clamp(P.lookY, -1, 1)],
       uShL: toWorld([-0.24, 0.48, -0.10]),
       uShR: toWorld([0.24, 0.48, -0.10]),
@@ -348,11 +387,13 @@
   }
 
   const api = {
-    KEYS, BLEND_S, hash01, blink, stateTargets, pose, uniforms,
-    // Every animal, by face id. The owl and the otter add themselves.
-    species: { redpanda: { KEYS, stateTargets, pose, uniforms } },
+    KEYS, BLEND_S, hash01, blink, stateTargets, pose, uniforms, mouthOf,
+    // Every animal, by face id. The owl and the otter add themselves. Each
+    // has `mouth(P, mouth)` too (the same mouthOf), for a drawing that is not
+    // the shader - the flat fallback - to open the same mouth.
+    species: { redpanda: { KEYS, stateTargets, pose, uniforms, mouth: mouthOf } },
     // Shared with the other animals' files, so all three do their sums alike.
-    util: { makePose, clamp, smooth, rx, ry, rz, mul, apply, add, invRow },
+    util: { makePose, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow },
   };
   root.CritterPose = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -23,7 +23,8 @@ uniform float3 uEarL2;
 uniform float3 uEarR0;
 uniform float3 uEarR1;
 uniform float3 uEarR2;
-uniform float4 uFace;      // eye open L, eye open R, brow, mouth open
+uniform float3 uFace;      // eye open L, eye open R, brow
+uniform float3 uMouth;     // open, wide, round - all 0 unless it is speaking
 uniform float2 uLook;      // where the eyes look, -1..1
 uniform float3 uShL;
 uniform float3 uShR;
@@ -58,8 +59,9 @@ const float3 RUST_DEEP = float3(0.330, 0.050, 0.010);
 const float3 CREAM = float3(0.930, 0.830, 0.680);
 const float3 DARK = float3(0.034, 0.012, 0.007);
 const float3 INK = float3(0.004, 0.004, 0.006);
-const float3 MOUTH_IN = float3(0.180, 0.018, 0.020);
+const float3 MOUTH_IN = float3(0.060, 0.008, 0.010);
 const float3 TONGUE = float3(0.700, 0.160, 0.170);
+const float3 TEETH = float3(0.880, 0.840, 0.760);
 
 // Where the camera looks, how far back it sits, and the sphere the animal
 // fits inside (rays that miss it are not marched at all).
@@ -112,21 +114,37 @@ float partTail(float3 p) {
     d = smin(d, sdCapsule(p, uTail3.xyz, uTail4.xyz, 0.5 * (uTail3.w + uTail4.w)), 0.05);
     return smin(d, sdCapsule(p, uTail4.xyz, uTail5.xyz, 0.5 * (uTail4.w + uTail5.w)), 0.05);
 }
+// The mouth: a hollow carved into the muzzle, shaped by uMouth. Open drops
+// the jaw (the hollow grows down, and the chin with it - see partHead); wide
+// pulls the corners out and flattens it (ee, teeth showing); round draws it
+// in narrower and taller and a little forward (oo). Shut, it is a hairline
+// groove under the painted mouth line.
+// Its half-height; the top edge stays tucked under the painted line, so the
+// mouth opens DOWN from where the closed mouth was drawn.
+float mouthH() { return 0.0015 + uMouth.x * (0.056 - 0.024 * uMouth.y + 0.018 * uMouth.z); }
 float mouthShape(float3 h) {
-    float open = uFace.w;
-    return sdEllipsoid(h - float3(0.0, 0.150 - 0.02 * open, -0.395),
-                       float3(0.055 + 0.01 * open, 0.010 + 0.050 * open, 0.075));
+    float3 m = uMouth;
+    return sdEllipsoid(h - float3(0.0, 0.188 - mouthH(), -0.395 - 0.012 * m.z),
+                       float3(0.048 + 0.036 * m.y - 0.024 * m.z + 0.020 * m.x, mouthH(), 0.075));
 }
+// What is actually carved. Shut, the hollow is pulled back out of the
+// surface altogether (by more than the fillet), so no groove is left under
+// the painted line to catch the rim light; it sinks in over the first
+// eighth of an opening, so nothing pops.
+float mouthCarve(float3 h) { return mouthShape(h) + 0.013 * (1.0 - min(uMouth.x * 8.0, 1.0)); }
 // The head (head frame, unscaled): skull, cheek fluff, muzzle and eyebrow
 // puffs, with the mouth carved out of it.
 float partHead(float3 h) {
     float3 hs = float3(abs(h.x), h.y, h.z);
     float d = sdEllipsoid(h - float3(0.0, 0.34, 0.0), float3(0.45, 0.37, 0.39));
     d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
-    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205, -0.29), float3(0.155, 0.115, 0.13)), 0.07);
+    // The muzzle; its lower edge - the chin - drops as the jaw opens, and
+    // it pushes forward a little for an "oo".
+    d = smin(d, sdEllipsoid(h - float3(0.0, 0.205 - 0.022 * uMouth.x, -0.29 - 0.012 * uMouth.z),
+                            float3(0.155 - 0.012 * uMouth.z, 0.115 + 0.022 * uMouth.x, 0.13)), 0.07);
     // (The eyebrow spots are painted on - see headColour - not modelled:
     // two more shapes here cost more than they showed.)
-    return smax(d, -mouthShape(h), 0.012);
+    return smax(d, -mouthCarve(h), 0.012);
 }
 // An ear: a flattened ellipsoid, pinched toward the tip.
 float earShape(float3 e) {
@@ -230,9 +248,9 @@ float tailParam(float3 p) {
 // run from each eye down toward the mouth.
 float3 headColour(float3 h) {
     float3 hs = float3(abs(h.x), h.y, h.z);
-    float front = smoothstep(0.02, -0.12, h.z);
+    float front = (1.0 - smoothstep(-0.12, 0.02, h.z));
     float muzzle = (1.0 - smoothstep(0.13, 0.20, length((h.xy - float2(0.0, 0.20)) * float2(1.0, 1.25)))) *
-                   smoothstep(-0.12, -0.22, h.z);
+                   (1.0 - smoothstep(-0.22, -0.12, h.z));
     float cheek = (1.0 - smoothstep(0.12, 0.17, length(hs.xy - float2(0.26, 0.17)))) * front;
     float brow = 1.0 - smoothstep(0.045, 0.075, length(hs - float3(0.14, 0.535 + 0.025 * uFace.z, -0.28)));
     float cream = clamp(max(max(muzzle, cheek), brow), 0.0, 1.0);
@@ -241,16 +259,20 @@ float3 headColour(float3 h) {
     cream *= 1.0 - 0.85 * tear;
     float3 fur = mix(RUST, RUST_DEEP, smoothstep(0.1, 0.35, h.z) * 0.6);
     float3 c = mix(fur, CREAM, cream);
-    // The little mouth line under the nose: down, then out both ways.
+    // The little mouth line under the nose: down, then out both ways - its
+    // corners pulled out by a wide mouth and in by a round one. It fades as
+    // the mouth opens and the real opening takes over.
     float ml = min(seg2(hs.xy, float2(0.0, 0.25), float2(0.0, 0.19)),
-                   seg2(hs.xy, float2(0.0, 0.19), float2(0.052, 0.203)));
-    float line = (1.0 - smoothstep(0.004, 0.009, ml)) * smoothstep(-0.30, -0.36, h.z) * (1.0 - uFace.w);
+                   seg2(hs.xy, float2(0.0, 0.19),
+                        float2(0.052 + 0.03 * uMouth.y - 0.025 * uMouth.z, 0.203 + 0.008 * uMouth.y)));
+    float line = (1.0 - smoothstep(0.004, 0.009, ml)) * (1.0 - smoothstep(-0.36, -0.30, h.z)) *
+                 (1.0 - smoothstep(0.0, 0.5, uMouth.x));
     return mix(c, DARK * 2.0, line);
 }
 
 // Body: rust back, dark front and belly.
 float3 bodyColour(float3 b) {
-    float belly = smoothstep(-0.05, -0.22, b.z) * (1.0 - smoothstep(0.45, 0.62, b.y));
+    float belly = (1.0 - smoothstep(-0.22, -0.05, b.z)) * (1.0 - smoothstep(0.45, 0.62, b.y));
     return mix(RUST, DARK * 1.6, belly);
 }
 
@@ -258,7 +280,7 @@ float3 earColour(float3 e) {
     // Cream rim all round, dark inside on the front face, rust behind.
     float r = length((e.xy - float2(0.0, 0.12)) / float2(0.12, 0.16));
     float rim = smoothstep(0.62, 0.80, r);
-    float inside = smoothstep(0.0, -0.02, e.z) * (1.0 - rim);
+    float inside = (1.0 - smoothstep(-0.02, 0.0, e.z)) * (1.0 - rim);
     float3 c = mix(RUST, DARK, inside);
     return mix(c, CREAM, rim);
 }
@@ -272,8 +294,13 @@ float4 material(float id, float3 pos, float3 n) {
     if (id == ID_HEAD) {
         // Only the carved-out cavity itself: points right on the mouth's
         // own surface, on the front of the muzzle, while it is open.
-        if (mouthShape(h) < 0.012 && h.z < -0.33 && uFace.w > 0.02) {
-            return float4(mix(MOUTH_IN, TONGUE, smoothstep(0.14, 0.10, h.y) * 0.8), -1.0);
+        if (mouthCarve(h) < 0.012 && h.z < -0.31 && uMouth.x > 0.02) {
+            // Inside: dark, deeper toward the back, the tongue low down, and
+            // a row of teeth along the top that shows as the mouth goes wide.
+            float v = (h.y - 0.188) / mouthH() + 1.0;
+            float3 c = mix(MOUTH_IN, TONGUE, (1.0 - smoothstep(-0.7, -0.2, v)) * 0.7);
+            c = mix(c, TEETH, smoothstep(0.45, 0.65, v) * smoothstep(0.1, 0.6, uMouth.y));
+            return float4(c * mix(1.0, 0.4, smoothstep(-0.38, -0.33, h.z)), -1.0);
         }
         return float4(headColour(h), 0.0);
     }

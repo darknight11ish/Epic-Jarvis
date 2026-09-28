@@ -196,6 +196,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 <script src="critter-owl.js"></script>
 <script src="critter-otter.js"></script>
 <script src="critters-gen.js"></script>
+<script src="lipsync.js"></script>
 <script>
 "use strict";
 // The spec is loaded from `faces-spec.js`, generated from
@@ -1184,15 +1185,17 @@ function critterFace(o){
       const now = performance.now() / 1000;
       let m = this.mem.get(VIEW);
       if(!m){
-        m = { st, prev: st, prev2: st, at: -1e9, gap: 1e9, prevAmp: amp, lastAmp: amp,
+        m = { st, prev: st, prev2: st, at: -1e9, gap: 1e9, prevAmp: amp, prevAmp2: amp, lastAmp: amp,
               lookW: 0, lookAt: now };
         this.mem.set(VIEW, m);
       }
       if(m.st !== st){
         // What CritterPose.pose needs to carry on from what was on screen:
-        // the loudness at the change, and whether the state being left was
-        // itself still melting in.
-        m.prev2 = m.prev; m.gap = now - m.at; m.prevAmp = m.lastAmp;
+        // the loudness at the change (and at the change before, which the
+        // state before that was drawn with), and whether the state being
+        // left was itself still melting in. Order matters: critter-pose.js
+        // makePose's own note.
+        m.prev2 = m.prev; m.gap = now - m.at; m.prevAmp2 = m.prevAmp; m.prevAmp = m.lastAmp;
         m.prev = m.st; m.st = st; m.at = now;
       }
       m.lastAmp = amp;
@@ -1215,13 +1218,16 @@ function critterFace(o){
       if(!this.species) return null;
       const m = this.track(st, amp);
       return this.species.pose(st, m.prev, performance.now() / 1000 - m.at, t, amp, this.look(m),
-                              { prev2: m.prev2, gap: m.gap, prevAmp: m.prevAmp });
+                              { prev2: m.prev2, gap: m.gap, prevAmp: m.prevAmp, prevAmp2: m.prevAmp2 });
     },
     gpu(g, w, h, t, st, amp, P){
       if(typeof GPU === "undefined" || GPU.dead || !GPUOK || !P) return false;
       if(typeof JARVIS_CRITTERS === "undefined") return false;
       const rw = Math.max(96, Math.min(w, GPUPX));
-      const U = this.species.uniforms(P);
+      // FACE_MOUTH: the mouth track of the voice being heard, or null (shut)
+      // - see LIP-SYNC. The pose scales it by how much it is speaking.
+      const U = this.species.uniforms(P, FACE_MOUTH);
+      if(U.uMouth) window.__faceVoice.lastMouth = Array.from(U.uMouth);
       const p = this.st[st];
       const bg = parseCol(this.swatch[0]), hot = parseCol(p.hot), cool = parseCol(p.glow);
       if(!JARVIS_CRITTERS[this.id]) return false;
@@ -1253,7 +1259,11 @@ function critterFace(o){
     draw(g, w, h, t, st, amp){
       const P = this.pose(t, st, amp);
       if(this.gpu(g, w, h, t, st, amp, P)) return;
-      this.flat(g, w, h, st, P);
+      // The flat drawing opens the same mouth the shader would: the pose
+      // code's own mouthOf, [open, wide, round], shut with no real voice.
+      const M = P && this.species && this.species.mouth ? this.species.mouth(P, FACE_MOUTH) : [0, 0, 0];
+      window.__faceVoice.lastMouth = Array.from(M);
+      this.flat(g, w, h, st, P, M);
     },
   }, o);
 }
@@ -3028,8 +3038,9 @@ critterFace({
   // ray-traced, but it still tilts its head, blinks, perks its ears, holds
   // its orb and closes its eyes to sleep - the parts that say what Jarvis is
   // doing survive; the lighting does not.
-  flat(g, w, h, st, P){
+  flat(g, w, h, st, P, M){
     if(!P) return;
+    M = M || [0, 0, 0];
     const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1);
     const X = x => w / 2 + x * S / 1.08, Y = y => h / 2 - (y + 0.08) * S / 1.08;
     const R = r => r * S / 1.08;
@@ -3075,7 +3086,8 @@ critterFace({
       ell(ex, ey, .07 * hs, .08 * hs * open, "#0b0b0e");
       if(open > .3) ell(ex - .02 * hs, ey + .025 * hs, .018 * hs, .018 * hs, "#ffffff");
     }
-    if(P.mouth > .05) ell(0, ny + .15 * hs, .05 * hs, .05 * hs * P.mouth, "#4a0d10");
+    // The mouth track: open is its height, wide stretches it, round narrows it.
+    if(M[0] > .05) ell(0, ny + .15 * hs, .05 * hs * (1 + .5 * M[1] - .35 * M[2]), .05 * hs * M[0], "#4a0d10");
     g.restore();
     // The orb and the paws holding it sit in front of everything, the chin
     // included - thinking lifts them right up to it.
@@ -3095,8 +3107,9 @@ critterFace({
   spec:"A pygmy owl on a branch, made of maths rather than a model file: one egg of a body, a big round head with huge yellow eyes in pale facial discs, folded spotted wings and a streaked front, all ray-traced with soft shadows. Owls have no hands, so its orb floats beside it - the state colour, and a real light on its feathers. It turns its head to follow what is going on, tips it right over while it thinks, waves a wing when something is waiting on you and puffs up round to sleep.",
   // Without a GPU: a flat owl in the same pose - head tilt, eyes, beak,
   // wings and orb - without the lighting.
-  flat(g, w, h, st, P){
+  flat(g, w, h, st, P, M){
     if(!P) return;
+    M = M || [0, 0, 0];
     const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1);
     const X = x => w / 2 + x * S / 1.08, Y = y => h / 2 - (y + 0.12) * S / 1.08;
     const R = r => r * S / 1.08;
@@ -3131,7 +3144,9 @@ critterFace({
         ell(ex - .03, ey + .036, .018, .018, "#ffffff");
       }
     }
-    ell(0, ny + .21 - .02 * P.beak, .05, .07, HORN);
+    // The beak drops open with the mouth track, a dark gap under it.
+    if(M[0] > .05) ell(0, ny + .15 - .02 * M[0], .035 * (1 + .3 * M[1] - .2 * M[2]), .025 * M[0], "#4a0d10");
+    ell(0, ny + .21 - .02 * M[0], .05, .07, HORN);
     g.restore();
     const ox = P.orbX, oy = seat + P.orbY, or = P.orbR;
     const og = g.createRadialGradient(X(ox), Y(oy), 0, X(ox), Y(oy), R(or * 3.2));
@@ -3146,8 +3161,9 @@ critterFace({
   spec:"A sea otter floating on its back in a small round pool, made of maths rather than a model file and ray-traced with soft shadows; rings spread across the water from it as it bobs. It holds a glowing pebble on its chest - the orb, in the state colour, and a real light on its paws and face. It taps the pebble while it thinks, puts its paws to its cheeks to listen, waves while something is waiting on you and covers its eyes with its paws to sleep.",
   // Without a GPU: a flat otter on a flat pool, in the same pose, without
   // the lighting.
-  flat(g, w, h, st, P){
+  flat(g, w, h, st, P, M){
     if(!P) return;
+    M = M || [0, 0, 0];
     const p = this.st[st], S = Math.min(w, h) / 2 * (VIEW.zoom || 1);
     const X = x => w / 2 + x * S / 1.1, Y = y => h / 2 - (y + 0.05) * S / 1.1;
     const R = r => r * S / 1.1;
@@ -3170,7 +3186,8 @@ critterFace({
       ell(hx + side * .095, hy + .05, .035, .035 * open, DARK);
     }
     ell(hx, hy - .03, .045, .03, DARK);
-    if(P.mouth > .05) ell(hx, hy - .10, .035, .03 * P.mouth, "#4a0d10");
+    // The mouth track: open is its height, wide stretches it, round narrows it.
+    if(M[0] > .05) ell(hx, hy - .10, .035 * (1 + .5 * M[1] - .35 * M[2]), .03 * M[0], "#4a0d10");
     g.restore();
     // The paws, then the pebble on its chest.
     for(const k of ["L", "R"]){
@@ -3626,6 +3643,165 @@ function stepAmp(dt){
   if(HUD.voice < 1e-4) HUD.voice = 0;
 }
 window.setSpeechLevel = setSpeechLevel;
+
+/* ---------------------------------------------------------------------- *
+ * LIP-SYNC - Jarvis's real voice, from the window that plays it.
+ *
+ * The Jarvis bar plays every spoken clip. It analyses each one up front into
+ * a mouth track (lipsync.js: loudness, open, wide, round, 100 times a
+ * second) and sends it once, then only its PLAYBACK CLOCK - where the audio
+ * element is, when that was read, playing or not - through Rust to every
+ * window, whose page posts it into this frame (face-voice.js). See
+ * docs/LIPSYNC.md.
+ *
+ * Every frame, lipStep() works out where the audio is NOW: the last clock,
+ * plus the time since it was read (on the sender's own clock, so the trip
+ * between windows costs nothing), frozen while paused. It samples the track
+ * there (lipsync.js adds a small lead - lips move just before the sound)
+ * and:
+ *   - feeds the loudness to setSpeechLevel(), so ALL faces talk with the
+ *     real voice instead of the made-up 4.2 Hz beat (synthVoice);
+ *   - hands the mouth {open, wide, round} to the animals (FACE_MOUTH).
+ *
+ * With no real voice playing - a typed answer, Quiet mode, an answer kept
+ * on screen, all of which still stream as `speaking` - FACE_MOUTH is null
+ * and the animals keep their mouths SHUT; the other faces keep the made-up
+ * beat, as before. Only the Faces window's own preview (not display mode)
+ * shows a made-up mouth, because nothing there is Jarvis really talking.
+ *
+ * The microphone's level arrives the same way ({mic}), about 30 times a
+ * second while it is open, so `listening` follows the owner's real voice.
+ * ---------------------------------------------------------------------- */
+const LIP = {
+  id: 0,            // the clip being followed; messages about older ones are stale
+  n: -1,            // the newest message about it, by its count
+  track: null,      // its unpacked mouth track
+  dur: 0,           // its length, seconds
+  ended: true,
+  playing: false,
+  t: 0,             // the last clock: seconds into the clip...
+  base: 0,          // ...at this moment on OUR performance.now() clock
+  rate: 1,
+  est: 0,           // where the audio is now, as last worked out
+  heardAt: -1e9,    // performance.now() when real voice last played
+  micAt: 0,         // performance.now() of the last microphone level; 0 = none
+  out: { level: 0, open: 0, wide: 0, round: 0 },
+  mouth: null,      // the mouth now, or null when no real voice is playing
+};
+// A clock older than this (no word from the Jarvis bar for this long while
+// "playing") is lost, not extrapolated: the mouth shuts rather than run on.
+// Generous, because a hidden window's timers may be slowed to once a second;
+// its media events (pause, ended) still come at once.
+const LIP_LOST_S = 5;
+// Past the end of the track by this much, a clip whose `end` never arrived
+// is over.
+const LIP_END_SLACK_S = 0.25;
+// For this long after real voice was last heard, speaking stays on the real
+// (silent) level instead of the made-up beat - the gap between two
+// sentences is silence, not syllables.
+const LIP_QUIET_HOLD_S = 2;
+// ...and for this long, a face whose state says idle/thinking still shows
+// speaking (lipState): the last sentences often play after the answer's text
+// has finished streaming, when the backend already says `idle`.
+const LIP_STATE_HOLD_S = 0.6;
+// A microphone level older than this is the microphone closing: back to 0.
+const MIC_STALE_S = 0.3;
+// Where the next frame will draw the animals' mouth from; see drawSurface.
+let FACE_MOUTH = null;
+
+/** One message from face-voice.js: a clip's track and/or clock, or {mic}. */
+function lipCue(c){
+  if(!c || typeof c !== "object") return;
+  if(typeof c.mic === "number"){
+    setLevel(c.mic);
+    LIP.micAt = performance.now();
+    return;
+  }
+  const id = +c.id, n = +c.n || 0;
+  if(!(id > 0) || id < LIP.id) return;            // about an older clip: stale
+  if(id > LIP.id){
+    Object.assign(LIP, { id, n: -1, track: null, dur: 0, ended: false, playing: false, t: 0 });
+  }
+  if(typeof c.track === "string" && !LIP.track && typeof JarvisLipSync !== "undefined"){
+    try {
+      const tr = JarvisLipSync.unpack(c.track);
+      if(tr && tr.n > 0 && tr.fps > 0){ LIP.track = tr; LIP.dur = tr.n / tr.fps; }
+    } catch(e){ LIP.track = null; }
+  }
+  if(n <= LIP.n || LIP.ended) return;             // an older clock, or already over
+  LIP.n = n;
+  if(c.end){ LIP.ended = true; LIP.playing = false; return; }
+  const now = performance.now();
+  // The sender read its clock at `at` (ms since 1970, the same PC clock this
+  // page sees): count from THEN, so the trip here is not a delay. A stamp
+  // that makes no sense (in the future, or seconds old) counts from now.
+  const age = Date.now() - (+c.at || 0);
+  LIP.t = Math.max(0, +c.t || 0);
+  LIP.base = now - (age >= -50 && age < 2000 ? Math.max(0, age) : 0);
+  LIP.rate = +c.rate > 0 ? Math.min(4, +c.rate) : 1;
+  LIP.playing = !!c.playing;
+}
+
+/** Once a frame, before anything draws: where the audio is, and what it
+ *  says the voice level and the mouth are right now. */
+function lipStep(){
+  const now = performance.now();
+  if(LIP.micAt && (now - LIP.micAt) / 1000 > MIC_STALE_S){ setLevel(0); LIP.micAt = 0; }
+  LIP.mouth = null;
+  if(LIP.track && !LIP.ended){
+    let t = LIP.t;
+    if(LIP.playing){
+      const since = (now - LIP.base) / 1000;
+      if(since > LIP_LOST_S){ LIP.playing = false; LIP.ended = true; }
+      else {
+        t += Math.max(0, since) * LIP.rate;
+        if(t > LIP.dur + LIP_END_SLACK_S){ LIP.playing = false; LIP.ended = true; }
+      }
+    }
+    LIP.est = Math.min(t, LIP.dur);
+    // Paused: the time is frozen where it stopped (so a resume carries on
+    // from there) and the mouth is shut - nothing is sounding.
+    if(LIP.playing){
+      LIP.heardAt = now;
+      LIP.mouth = JarvisLipSync.sample(LIP.track, LIP.est, LIP.out);
+      setSpeechLevel(LIP.mouth.level);
+      return;
+    }
+  }
+  if((now - LIP.heardAt) / 1000 < LIP_QUIET_HOLD_S) setSpeechLevel(0);
+}
+
+/** The state a live face shows: while Jarvis's real voice is playing, a
+ *  resting or busy face is speaking. An approval, an error, listening and
+ *  speaking itself are left alone. */
+const LIP_TALKS_OVER = new Set(["idle", "thinking", "standby", "banked"]);
+function lipState(state){
+  const talking = LIP.mouth || (performance.now() - LIP.heardAt) / 1000 < LIP_STATE_HOLD_S;
+  return talking && LIP_TALKS_OVER.has(state) ? "speaking" : state;
+}
+
+/** The mouth the animals draw on surface `s` in `state`: the real one while
+ *  Jarvis's voice plays; in the Faces window's preview of `speaking`, a
+ *  made-up one in step with the made-up beat; otherwise none (shut). */
+function faceMouth(state, s){
+  if(LIP.mouth) return LIP.mouth;
+  if(DISPLAY_MODE || state !== "speaking") return null;
+  const age = (s && s.fxAge) || 0;
+  const syl = Math.floor(age * 4.2), h = hash01(syl * 13 + 5);
+  return { open: Math.min(1, synthVoice(age) * 1.15),
+           wide: h > .55 ? (h - .55) * 2 : 0,
+           round: h < .3 ? (.3 - h) * 2.5 : 0 };
+}
+
+// For tests/voice-mouth.mjs and anyone debugging: what the voice is doing.
+window.__faceVoice = {
+  cue: lipCue,
+  now: () => ({ id: LIP.id, playing: LIP.playing, ended: LIP.ended, est: LIP.est,
+                mouth: LIP.mouth ? { open: LIP.mouth.open, wide: LIP.mouth.wide, round: LIP.mouth.round } : null,
+                voiceRaw: HUD.voiceRaw, mic: HUD.raw }),
+  lastMouth: null,  // the animal's uMouth as last drawn: [open, wide, round]
+  lastState: null,  // the state the display face last drew
+};
 // Two faces (swarm, fullerene) carry no per-state palette at all - their
 // colours are literals inside the draw. Those literals were rewritten at
 // build time to read this array, so the palette reaches them too. Order is
@@ -4041,6 +4217,8 @@ function drawSurface(s, dt, state){
     fx0 = s.ack.dx * flinch; fy0 = s.ack.dy * flinch;
   }
   const scaled = (fit !== 1 || push !== 1 || fx0 || fy0) && !th.persistent;
+  // The animals' mouth for this surface (LIP-SYNC): read by critterFace.
+  FACE_MOUTH = faceMouth(state, s);
   withOverride(th, motion, col, () => {
     for(let i=0;i<reps;i++){
       s.clock += dt * sub;
@@ -4361,6 +4539,7 @@ function frame(now){
   // draws. Faces read the result and must not filter it again: three of them
   // used to apply their own per-frame lerp on top, which is a second filter
   // with a different time constant that also changed with the refresh rate.
+  lipStep();
   stepAmp(dt);
   lastDrawn = now;
   const t0 = performance.now();
@@ -5487,8 +5666,13 @@ async function bootDisplay() {
       owed = 0;
       lastDraw = now;
       const t0 = performance.now();
+      // Jarvis's real voice first (LIP-SYNC): the level every face moves
+      // with, the animals' mouth, and speaking while it plays.
+      lipStep();
       stepAmp(dt);
-      drawSurface(surface, dt, LIVE_STATE);
+      const shown = lipState(LIVE_STATE);
+      window.__faceVoice.lastState = shown;
+      drawSurface(surface, dt, shown);
       govern(performance.now() - t0, now);
     }
     requestAnimationFrame(tick);
@@ -5503,6 +5687,8 @@ async function bootDisplay() {
       // Only the page that embeds this frame, on this origin.
       if (event.source !== window.parent || event.origin !== location.origin) return;
       const data = event.data;
+      // Lip-sync: Jarvis's voice and the owner's microphone (face-voice.js).
+      if (data && data.type === "jarvis-face-voice") { lipCue(data); return; }
       if (!data || data.type !== "jarvis-hud-face") return;
       // A state id this build of the spec does not know is ignored, not
       // guessed at: the face keeps showing the last state it was told.

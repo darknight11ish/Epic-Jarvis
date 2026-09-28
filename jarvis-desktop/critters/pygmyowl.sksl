@@ -25,7 +25,8 @@ uniform float3 uWingL2;
 uniform float3 uWingR0;
 uniform float3 uWingR1;
 uniform float3 uWingR2;
-uniform float4 uFace;      // eye open L, eye open R, brow, beak open
+uniform float3 uFace;      // eye open L, eye open R, brow
+uniform float3 uMouth;     // open, wide, round - all 0 unless it is speaking
 uniform float2 uLook;      // where the eyes look, -1..1
 
 const float ID_BODY = 1.0;
@@ -45,6 +46,7 @@ const float3 IRIS = float3(1.000, 0.600, 0.035);
 const float3 INK = float3(0.004, 0.004, 0.006);
 const float3 HORN = float3(0.780, 0.520, 0.190);
 const float3 BARK = float3(0.085, 0.040, 0.020);
+const float3 GAPE = float3(0.055, 0.008, 0.010);
 
 const float3 CAM_TARGET = float3(0.0, -0.12, 0.0);
 const float CAM_DIST = 3.35;
@@ -105,13 +107,25 @@ float partEyes(float3 h) {
     float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.30);
     return sdEllipsoid(ep, float3(0.118, max(0.010, 0.118 * open), 0.075));
 }
-// A small hooked beak: an upper half, and a lower half that drops to speak.
-float partBeak(float3 h) {
-    float open = uFace.w;
-    float up = sdEllipsoid(h - float3(0.0, 0.215, -0.395), float3(0.050, 0.070, 0.055));
-    float lo = sdEllipsoid(h - float3(0.0, 0.150 - 0.05 * open, -0.375), float3(0.038, 0.030, 0.042));
-    return min(up, lo);
+// How far the beak gapes: uMouth's open, a little less for a round sound
+// and flatter for a wide one.
+float gape() { return uMouth.x * (1.0 - 0.3 * uMouth.z) * (1.0 - 0.3 * uMouth.y); }
+// A small hooked beak: an upper half, and a lower half that drops to speak -
+// wider and flatter for a wide sound - with the dark of the open mouth
+// between them. Shut, the dark part is tucked away inside the upper half.
+float beakUp(float3 h) {
+    return sdEllipsoid(h - float3(0.0, 0.215 + 0.012 * gape(), -0.395), float3(0.050, 0.070, 0.055));
 }
+float beakLo(float3 h) {
+    return sdEllipsoid(h - float3(0.0, 0.150 - 0.075 * gape(), -0.375),
+                       float3(0.038 + 0.012 * uMouth.y, 0.030 - 0.006 * uMouth.y, 0.042));
+}
+float beakIn(float3 h) {
+    float g = gape();
+    return sdEllipsoid(h - float3(0.0, 0.160 - 0.040 * g, -0.372),
+                       float3(0.012 + 0.022 * g + 0.010 * uMouth.y, 0.012 + 0.040 * g, 0.030));
+}
+float partBeak(float3 h) { return min(min(beakUp(h), beakLo(h)), beakIn(h)); }
 
 float map(float3 p) {
     float3 b = toBody(p);
@@ -169,7 +183,7 @@ float spots(float2 q, float k) {
 
 float3 headColour(float3 h) {
     float3 hs = float3(abs(h.x), h.y, h.z);
-    float front = smoothstep(0.0, -0.18, h.z);
+    float front = (1.0 - smoothstep(-0.18, 0.0, h.z));
     // Pale facial discs round each eye, and white "eyebrows" meeting in a V.
     float disc = (1.0 - smoothstep(0.15, 0.20, length(hs.xy - float2(0.165, 0.32)))) * front;
     float brow = 1.0 - smoothstep(0.012, 0.024,
@@ -187,9 +201,9 @@ float3 headColour(float3 h) {
 float3 bodyColour(float3 b) {
     // A pale front, narrower than the owl, with brown streaks running down
     // it; brown sides and back with white spots.
-    float front = smoothstep(-0.02, -0.20, b.z) * (1.0 - smoothstep(0.16, 0.26, abs(b.x)));
+    float front = (1.0 - smoothstep(-0.20, -0.02, b.z)) * (1.0 - smoothstep(0.16, 0.26, abs(b.x)));
     float streak = smoothstep(0.35, 0.75, sin(b.x * 30.0 + sin(b.y * 6.0) * 1.6)) *
-                   smoothstep(0.80, 0.25, b.y);
+                   (1.0 - smoothstep(0.25, 0.80, b.y));
     float3 belly = mix(CREAM, BROWN * 1.15, streak * 0.85);
     float3 back = mix(BROWN, CREAM, spots(float2(atan(b.x, b.z), b.y), 6.0) * 0.8
                       * smoothstep(0.08, 0.20, length(float2(b.x, b.z - 0.02))));
@@ -205,14 +219,17 @@ float3 eyeColour(float3 h) {
     float2 look = uLook * float2(0.022, 0.018);
     float r = length(q - look);
     float3 c = mix(IRIS, IRIS * 0.55, smoothstep(0.02, 0.085, r));
-    c = mix(c, INK, smoothstep(0.050, 0.044, r));
+    c = mix(c, INK, (1.0 - smoothstep(0.044, 0.050, r)));
     return mix(c, INK, smoothstep(0.086, 0.094, r));
 }
 
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     if (id == ID_EYE) return float4(eyeColour(h), 1.0);
-    if (id == ID_BEAK) return float4(HORN, 0.5);
+    if (id == ID_BEAK) {
+        if (beakIn(h) < min(beakUp(h), beakLo(h))) return float4(GAPE, -1.0);
+        return float4(HORN, 0.5);
+    }
     if (id == ID_FEET) return float4(HORN * 0.9, 0.2);
     if (id == ID_HEAD) return float4(headColour(h), 0.0);
     if (id == ID_BRANCH) {

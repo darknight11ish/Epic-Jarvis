@@ -116,6 +116,10 @@ permissions = [
   # clip (GET /api/voice/moment).
   "allow-get-voice-flow",
   "allow-get-voice-moment",
+  # Lip-sync (face-voice.js; voice.rs `face_voice`): the mouth track and
+  # playback clock of the clip playing here, handed to every window's face.
+  # Only that checked shape - no words, no audio - and it decides nothing.
+  "allow-face-voice",
 ]
 
 # The HUD's mic button, and nothing else. The HUD loads a page vendored from

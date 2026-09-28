@@ -165,11 +165,19 @@ pub mod events {
     /// utterance the Jarvis bar asked about: stop the reply, or carry on.
     pub const VOICE_BARGE_VERDICT: &str = "voice-barge-verdict";
     /// Payload: `f32`, 0.0-1.0 - the microphone's own loudness, while
-    /// push-to-talk or "hey Jarvis" listening holds it open. Sent to the
-    /// quickbar only (`emit_quickbar`), which is the one window whose
-    /// reactor reads it (`voice.js` `setLevel`). Never the audio itself -
-    /// one number, computed from samples that never leave this process.
+    /// push-to-talk or "hey Jarvis" listening holds it open, about 30 times
+    /// a second. Sent to every window (`emit_all`): the quickbar's reactor
+    /// reads it (`voice.js` `setLevel`), and the Widget, the floating face
+    /// and the HUD pass it into their faces, so `listening` follows the
+    /// owner's real voice (face-voice.js `relayFaceVoice`). Never the audio
+    /// itself - one number, computed from samples that never leave this
+    /// process.
     pub const VOICE_LEVEL: &str = "voice-level";
+    /// Payload: [`crate::voice::FaceVoiceCue`] - lip-sync: the mouth track
+    /// of the clip the Jarvis bar is playing, then its playback clock, sent
+    /// to every window by [`crate::voice::face_voice`] for the faces to
+    /// move with (face-voice.js; docs/LIPSYNC.md). No words, no audio.
+    pub const FACE_VOICE: &str = "face-voice";
     /// Payload: [`crate::lock::Security`] - the Security settings changed
     /// (Settings' Windows Hello section). The Brain re-reads its memory
     /// lists, which may now be hidden or shown.
@@ -932,6 +940,8 @@ pub fn run() {
             voice_flow::get_voice_flow,
             voice_flow::get_voice_moment,
             voice::summon_push_to_talk,
+            // Lip-sync: the Jarvis bar's clip, for the faces in every window.
+            voice::face_voice,
             voice::get_voice_status,
             voice::set_wake_word,
             // Settings -> Voice: training on this PC, the voice-check settings,

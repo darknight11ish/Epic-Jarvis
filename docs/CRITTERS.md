@@ -37,7 +37,7 @@ them.
 | Idle | Sits holding its orb in its lap and looks slowly round the room. Blinks every few seconds, breathes, swishes its tail. |
 | Listening | Perks both ears up, tilts its head about 15 degrees and leans in. Your voice makes its ears twitch and the orb glow brighter. |
 | Thinking | Lifts the orb up in both paws and gazes into it. The orb glows its brightest. |
-| Speaking | Its mouth opens and closes with Jarvis's voice, and it nods and gestures with one paw. |
+| Speaking | Its mouth makes the shapes of the words it is saying (see "How the mouths talk" below), and it nods and gestures with one paw. |
 | Waiting on you | Looks straight at you with its eyebrows up, and waves. |
 | Asleep | Eyes shut, head drooped, ears down, tail wrapped round, breathing slowly. The orb dims to an ember. |
 | Something went wrong | Tilts its head, one ear droops, squints and scratches its head. |
@@ -55,7 +55,7 @@ orb floats beside it.
 | Idle | Surveys the room, turning its head well round - and now and then a quick look over its shoulder. Blinks, breathes. |
 | Listening | Tilts its head right over and opens its eyes wide; your voice makes its head twitch. The orb comes close. |
 | Thinking | The orb circles its head, passing behind it, and the owl follows it round with its head tipped over. |
-| Speaking | Its beak opens and closes with Jarvis's voice. |
+| Speaking | Its beak opens with the words it is saying, showing the dark inside. |
 | Waiting on you | Looks straight at you and waves a wing. |
 | Asleep | Fluffs up round, sinks its head in, eyes shut to slits. The orb settles on the branch, dim. |
 | Something went wrong | A hard head tilt, one eye squinting, wings half out, feathers ruffled. |
@@ -73,7 +73,7 @@ orb - on its chest. Rings spread across the water as it bobs.
 | Idle | Bobs and rocks on the water, looks about, and paddles its feet now and then. |
 | Listening | Lifts and tilts its head, paws to its cheeks. |
 | Thinking | Taps the pebble on its belly, watching it. |
-| Speaking | Its mouth opens and closes with Jarvis's voice, and one paw gestures. |
+| Speaking | Its mouth makes the shapes of the words it is saying, and one paw gestures. |
 | Waiting on you | Looks at you and waves a paw in the air. |
 | Asleep | Covers its eyes with its paws and drifts. |
 | Something went wrong | The pebble has slipped to one side; it squints and scratches its head. |
@@ -89,8 +89,43 @@ camera round it, as for every 3D face.
 A change of state melts from one pose to the next over about half a second.
 It starts from what was actually on screen: leaving "speaking" the mouth
 closes over that half second rather than at once, and a second change
-arriving mid-melt carries on from the half-finished pose. Three changes
-inside the same half second can still show a small jump. The approval clock,
+arriving mid-melt carries on from the half-finished pose - even a quick
+change back (speaking, something else, speaking again), which used to make
+the orb jump because the older pose was drawn at the wrong loudness. Three
+changes inside the same half second can still show a small jump.
+
+### How the mouths talk
+
+Every spoken reply reaches the app as a whole sound clip before it plays.
+The app works out from the sound, in advance, what shape a mouth would make
+at each hundredth of a second (docs/LIPSYNC.md explains how), and while the
+clip plays each animal is handed the shape for **what you are hearing at
+that moment**. Three numbers make a shape, each 0 to 1:
+
+| Number | Panda and otter | Owl |
+|---|---|---|
+| **open** | the jaw drops: a dark mouth opens downward from the little painted mouth line, with a hint of pink tongue low down, and the chin moves down with it | the lower half of the beak drops, showing the dark inside |
+| **wide** ("ee", "s", teeth) | the corners pull out and the opening gets thinner, with a pale row of teeth along the top | the lower half gets wider and flatter, and gapes a little less |
+| **round** ("oo", "o", "w") | narrower, taller and pushed a little forward | a slightly smaller gape |
+
+Shut, the mouth is exactly the resting mouth line; the shapes blend into
+each other smoothly (nothing pops from one to the next). They were checked
+by eye at 96 pixels and at 400.
+
+**No sound, no mouth movement.** A typed answer, Quiet mode, and an answer
+kept on screen rather than read aloud all show as "speaking" with no sound.
+Then the mouth stays shut: the animals never make up mouth movements that
+match nothing you can hear. (They used to open and close with the loudness,
+which also meant a mouth flapping in time with no voice at all.) The nod
+and the paw still follow the loudness.
+
+For anyone changing the code: the shader reads a uniform `uMouth` (open,
+wide, round). Each animal's `uniforms(pose, mouth)` (`CritterPose.uniforms(p,
+mouth)` and friends on the phone) takes the shape - or nothing - and
+multiplies it by how much the pose is currently speaking (the pose's
+`speak`, 1 in speaking, 0 elsewhere, melting with the state), so the mouth
+settles shut over the same half second as the rest of the pose when
+speaking ends. The approval clock,
 the error shake and the dimming that every face gets still happen on top.
 
 **Colour.** Each animal keeps its own fur or feather colours in every state.
@@ -193,10 +228,11 @@ Sketchfab). Four reasons:
   crashed the phone app**. The desktop, and the newer Skia used for checking
   on a PC, accepted it without complaint; GitHub's emulator test caught it
   before it reached a phone. The shader was rebuilt to fit (smaller shapes,
-  32 march steps, a simplified panda for shadows) and now measures about
-  55,000 by `tools/shader_size.py`, which counts the way Skia does. The owl
-  (about 31,000) and the otter (about 38,000) were measured before they were
-  ever pushed. CI runs that check on every push, so none of them can quietly
+  32 march steps, a simplified panda for shadows) and measured about 55,000
+  by `tools/shader_size.py`, which counts the way Skia does; the talking
+  mouth brought it to about 58,000, inside the 60,000 each animal is held
+  to. The owl (now about 35,000) and the otter (about 40,500) were measured
+  before they were ever pushed. CI runs that check on every push, so none of them can quietly
   grow over.
 - **Cost.** Measured through Skia (the engine Android draws with), per
   pixel: the **panda about 4 to 5 times Nucleus's work**, the **owl about
@@ -220,10 +256,17 @@ Sketchfab). Four reasons:
     quarter of the pixels should land at or below Nucleus's own cost, but
     only the phone can confirm it. If it stutters or gets warm, say so - the next
     step would be a lower scale.
-- **The phone makes about 90 small throwaway objects a frame** for an
-  animal (its pose maths builds fresh number lists). Nucleus makes none. It
-  is not measurable as slowness on its own, but it is more garbage than
-  this app likes; worth tidying if the phone shows stutter with an animal.
+- **The phone makes about 85 small throwaway objects a frame** for an
+  animal (its pose maths builds fresh number lists; the six tail names are
+  no longer rebuilt every frame). Nucleus makes none. It is not measurable
+  as slowness on its own, but it is more garbage than this app likes; worth
+  tidying further if the phone shows stutter with an animal.
+- **The phone's small offscreen picture is kept between frames.** While
+  Jarvis speaks or listens the face's size wobbles a few percent with the
+  voice; the picture used to be keyed by its exact size, so it was thrown
+  away and a new one made almost every frame. Its size is now rounded up to
+  a step of 16 pixels, so the wobble reuses one or two pictures, and the
+  picker's still thumbnail keeps a picture of its own.
 - **Not yet tried on a real phone or a real graphics card.** Each has been
   rendered through the phone's own drawing library (Skia, via skia-python)
   and through the desktop's WebGL in a browser without a graphics card, and
