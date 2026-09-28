@@ -57,7 +57,9 @@ import kotlin.coroutines.resume
  * not with *his* cadence.
  *
  * Lip-sync (docs/LIPSYNC.md): the PC's clip is analysed whole into a mouth
- * track ([LipSync.analyse]) before it plays, and [mouthNow] reads that track
+ * track ([LipSync.forClip]: the clip's own analysis, with the PC's mouth
+ * shapes from the voice engine's timing when the WAV carries them) before it
+ * plays, and [mouthNow] reads that track
  * at the moment the owner is actually HEARING - the AudioTrack's own
  * presentation clock ([PresentedFrames]), not what has been written to it,
  * which runs ahead by the whole output path. [level] comes from the same
@@ -340,8 +342,11 @@ class Speaker(private val context: Context) {
         val rate = runCatching { Wav.rateOf(wav) }.getOrDefault(Wav.SAMPLE_RATE)
         // The whole clip, analysed up front: a few milliseconds for a
         // sentence, done before the first sample sounds. Guarded like the
-        // decode - a failure here costs the mouth, never the voice.
-        val lips = runCatching { LipSync.analyse(pcm, rate) }.getOrNull()
+        // decode - a failure here costs the mouth, never the voice. When the
+        // PC put the voice engine's own mouth shapes in the WAV (the "jmth"
+        // chunk after the sound), they shape the mouth; the level is still
+        // this clip's own. Without them it is the analysis alone.
+        val lips = runCatching { LipSync.forClip(wav, pcm, rate) }.getOrNull()
         val minBuf = AudioTrack.getMinBufferSize(
             rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(4096)

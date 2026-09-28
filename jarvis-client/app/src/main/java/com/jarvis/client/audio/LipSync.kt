@@ -43,6 +43,15 @@ object LipSync {
      */
     const val LEAD_S = 0.05f
 
+    /**
+     * The mouth (open, wide, round - not the level) fades in over the first
+     * [ONSET_S] of each clip's playback. The lead means t = 0 already reads
+     * 50 ms in, and Kokoro often starts sounding 10-50 ms into a clip:
+     * without this the mouth jumped from shut to a quarter open in one frame
+     * at the start of a sentence. The desktop's `sample()` does the same.
+     */
+    const val ONSET_S = 0.05f
+
     class Track(
         val fps: Int,
         val level: FloatArray,
@@ -59,7 +68,8 @@ object LipSync {
 
     /**
      * Reads the track at [tSeconds] of playback (+ [LEAD_S]), linearly
-     * between frames, into `out[0..3]` = level, open, wide, round. Outside the
+     * between frames, into `out[0..3]` = level, open, wide, round (the mouth
+     * three faded in over the first [ONSET_S] of the clip). Outside the
      * clip (or no track) it writes zeros and returns false.
      */
     fun sample(track: Track?, tSeconds: Float, out: FloatArray): Boolean {
@@ -70,15 +80,111 @@ object LipSync {
         val i = floor(f).toInt()
         val u = (f - i).toFloat()
         val j = min(i + 1, track.n - 1)
+        val td = tSeconds.toDouble()
+        val g = (if (td >= ONSET_S_D) 1.0 else if (td > 0.0) td / ONSET_S_D else 0.0).toFloat()
         out[0] = track.level[i] + (track.level[j] - track.level[i]) * u
-        out[1] = track.open[i] + (track.open[j] - track.open[i]) * u
-        out[2] = track.wide[i] + (track.wide[j] - track.wide[i]) * u
-        out[3] = track.round[i] + (track.round[j] - track.round[i]) * u
+        out[1] = (track.open[i] + (track.open[j] - track.open[i]) * u) * g
+        out[2] = (track.wide[i] + (track.wide[j] - track.wide[i]) * u) * g
+        out[3] = (track.round[i] + (track.round[j] - track.round[i]) * u) * g
         return true
+    }
+
+    // ---- Mouth shapes carried inside the WAV ---------------------------------
+
+    /**
+     * Frames by which the PC's mouth track and the clip's own may differ in
+     * length and still be [merge]d (30 ms).
+     */
+    const val MERGE_SLACK = 3
+
+    /**
+     * The mouth track for one clip [Speaker] is about to play: the clip's own
+     * analysis ([analyse]), with open, wide and round taken instead from the
+     * mouth shapes the PC put in the WAV, when it did ([Wav.mouthChunk],
+     * [mouthFrom], [merge]). A clip without them, or with ones that are in
+     * any way wrong, gets exactly the analysis - a fault in the chunk costs
+     * the better mouth, never the mouth.
+     */
+    fun forClip(wav: ByteArray, pcm: ShortArray, sampleRate: Int): Track {
+        val audio = analyse(pcm, sampleRate)
+        val mouth = try {
+            Wav.mouthChunk(wav)?.let { mouthFrom(it) }
+        } catch (e: RuntimeException) {
+            null
+        }
+        return merge(audio, mouth)
+    }
+
+    private val FIELD = Regex("[A-Za-z0-9_]+=[^;]*")
+    private val PACKED = Regex("([0-9]{1,4}):([A-Za-z0-9+/]*)(={0,2})")
+    private const val B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+    /**
+     * The track in a "jmth" chunk's payload ("v1;src=kokoro;" + a packed
+     * track), or null for anything else: another version, a field that is not
+     * `key=value`, or a packed track [unpack] refuses. Trailing NULs and
+     * spaces (padding) are not data. The desktop's `mouthFrom` is the same.
+     */
+    fun mouthFrom(text: String): Track? {
+        val t = text.trimEnd { it == '\u0000' || it == '\t' || it == '\n' || it == '\r' || it == ' ' }
+        val parts = t.split(";")
+        if (parts.size < 2 || parts[0] != "v1") return null
+        for (i in 1 until parts.size - 1) if (!FIELD.matches(parts[i])) return null
+        return unpack(parts[parts.size - 1])
+    }
+
+    /**
+     * A packed track (the desktop's `pack()`: "<fps>:" + base64 of 4 bytes a
+     * frame - level, open, wide, round, each 0..255), or null unless it is
+     * well-formed, at [FPS] frames a second, whole frames, at least one.
+     */
+    fun unpack(packed: String): Track? {
+        val m = PACKED.matchEntire(packed) ?: return null
+        val body = m.groupValues[2]
+        val pad = m.groupValues[3].length
+        val chars = body.length + pad
+        if (m.groupValues[1].toInt() != FPS || chars == 0 || chars % 4 != 0) return null
+        val len = chars / 4 * 3 - pad
+        if (len % 4 != 0) return null
+        val bytes = IntArray(len)
+        var j = 0
+        var i = 0
+        while (i < body.length) {
+            fun at(k: Int) = if (k < body.length) B64.indexOf(body[k]) else 0
+            val v = (at(i) shl 18) or (at(i + 1) shl 12) or (at(i + 2) shl 6) or at(i + 3)
+            if (j < len) bytes[j++] = (v shr 16) and 255
+            if (j < len) bytes[j++] = (v shr 8) and 255
+            if (j < len) bytes[j++] = v and 255
+            i += 4
+        }
+        val n = len / 4
+        return Track(
+            FPS,
+            FloatArray(n) { (bytes[it * 4] / 255.0).toFloat() },
+            FloatArray(n) { (bytes[it * 4 + 1] / 255.0).toFloat() },
+            FloatArray(n) { (bytes[it * 4 + 2] / 255.0).toFloat() },
+            FloatArray(n) { (bytes[it * 4 + 3] / 255.0).toFloat() },
+        )
+    }
+
+    /**
+     * A track with `level` from the clip's own sound ([audio]) and open, wide
+     * and round from the PC's mouth shapes ([mouth]) - only when both are at
+     * [FPS] and their lengths agree within [MERGE_SLACK] frames; otherwise
+     * [audio] as it is. Frames past the end of a shorter [mouth] are closed.
+     */
+    fun merge(audio: Track, mouth: Track?): Track {
+        if (mouth == null || audio.fps != FPS || mouth.fps != FPS || mouth.n <= 0 ||
+            abs(audio.n - mouth.n) > MERGE_SLACK
+        ) return audio
+        val n = audio.n
+        fun take(ch: FloatArray) = FloatArray(n) { if (it < mouth.n) ch[it].coerceIn(0f, 1f) else 0f }
+        return Track(FPS, audio.level, take(mouth.open), take(mouth.wide), take(mouth.round))
     }
 
     // The same number JavaScript uses (0.05 as a double, not 0.05f widened).
     private const val LEAD_S_D = 0.05
+    private const val ONSET_S_D = 0.05
 
     private fun clamp01(x: Double) = if (x < 0.0) 0.0 else if (x > 1.0) 1.0 else x
     private fun smooth01(a: Double, b: Double, x: Double): Double {
@@ -250,6 +356,8 @@ object LipSync {
         const val fbA = 1400.0; const val fbB = 2100.0; const val fbC = 2100.0; const val fbD = 3300.0
         const val fbAdapt = 0.8; const val fbPrior = 2.0; const val fbN0 = 80.0
         const val fricLo = 10.0; const val fricHi = 22.0; const val nasLo = 2.0; const val nasHi = 8.0
+        const val shA = 300.0; const val shB = 1500.0; const val shC = 2500.0; const val shD = 5000.0
+        const val shLo = 15.0; const val shHi = 25.0
         const val openRange = 30.0; const val lmOpen = 8.0; const val openMs = 25.0
         const val dipLo = 7.5; const val dipHi = 12.0; const val dipMix = 0.3
         const val wide0 = 7.0; const val wide1 = 7.0; const val round0 = 1.0; const val round1 = 3.5
@@ -293,6 +401,9 @@ object LipSync {
         val dL = DoubleArray(n)
         val lm = DoubleArray(n)
         val fb = DoubleArray(n)
+        // sh: 2.5-5 kHz vs 300-1500 Hz - the hiss of "sh", "ch" and a breath,
+        // which sits inside the oral band where dH cannot see it.
+        val sh = DoubleArray(n)
         val x80 = bandPos(80.0)
         val x300 = bandPos(300.0)
         val x1000 = bandPos(1000.0)
@@ -306,11 +417,16 @@ object LipSync {
         val xB = bandPos(K.fbB)
         val xC = bandPos(K.fbC)
         val xD = bandPos(K.fbD)
+        val xS0 = bandPos(K.shA)
+        val xS1 = bandPos(K.shB)
+        val xS2 = bandPos(K.shC)
+        val xS3 = bandPos(K.shD)
         for (i in 0 until n) {
             val o = i * NB
             dO[i] = db(bandSum(b, o, x300, x4000))
             dH[i] = db(bandSum(b, o, x4000, x10k))
             dL[i] = db(bandSum(b, o, x80, x1000))
+            sh[i] = db(bandSum(b, o, xS2, xS3)) - db(bandSum(b, o, xS0, xS1))
             lm[i] = db(bandSum(b, o, xE, xF)) - db(bandSum(b, o, xG, xH))
             fb[i] = db(bandSum(b, o, xC, xD)) - db(bandSum(b, o, xA, xB))
         }
@@ -318,7 +434,7 @@ object LipSync {
         for (i in 0 until n) if (f.all[i] > gate) tmp[m++] = dO[i]
         val refO = percentile(tmp, m, 0.95)
 
-        // Soft frame classes (0..1): hiss, nasal/closed-lip murmur, vowel.
+        // Soft frame classes (0..1): hiss (s, sh, f, a breath), nasal/closed-lip murmur, vowel.
         val fric = DoubleArray(n)
         val nas = DoubleArray(n)
         val vow = DoubleArray(n)
@@ -329,7 +445,9 @@ object LipSync {
             lo[i] = dL[i] - dO[i]
         }
         for (i in 0 until n) {
-            fric[i] = if (speech[i]) smooth01(K.fricLo, K.fricHi, dH[i] - dO[i]) else 0.0
+            fric[i] = if (speech[i]) {
+                max(smooth01(K.fricLo, K.fricHi, dH[i] - dO[i]), smooth01(K.shLo, K.shHi, sh[i]))
+            } else 0.0
             nas[i] = if (speech[i]) smooth01(K.nasLo, K.nasHi, lo[i]) else 0.0
             vow[i] = smooth01(refO - 22, refO - 10, dO[i]) * (1 - fric[i]) * (1 - nas[i])
         }

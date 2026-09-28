@@ -325,6 +325,59 @@ await check("a clip's track goes first, then its clock, in order, and its end", 
   assert.ok(second.length === 2 && second[0].id > cues[0].id, "the next clip's id did not go up");
 });
 
+/* ── Mouth shapes inside the WAV (the "jmth" chunk) ─────────────────────── */
+
+const RES = join(HERE, "..", "..", "jarvis-client", "app", "src", "test", "resources");
+const JMTH = readFileSync(join(RES, "lipsync-mouth", "kokoro-panda-lips-jmth.wav"));
+const PLAIN = readFileSync(join(RES, "lipsync", "kokoro-panda-lips.wav"));
+const uriOf = (b) => "data:audio/wav;base64," + b.toString("base64");
+
+await check("a clip carrying the PC's mouth shapes sends them merged; a plain clip, the analysis as before", async () => {
+  const page = await browser.newPage();
+  await page.route(`${base}/blank.html`, (route) => route.fulfill({
+    status: 200, contentType: "text/html", body: "<!doctype html><meta charset=utf-8>" }));
+  await page.goto(`${base}/blank.html`);
+  const got = await page.evaluate(async ([a, b]) => {
+    const m = await import("./face-voice.js");
+    return [m.trackFor(a), m.trackFor(b)];
+  }, [uriOf(JMTH), uriOf(PLAIN)]);
+  await page.close();
+  const w = L.fromWav(new Uint8Array(JMTH)), p = L.fromWav(new Uint8Array(PLAIN));
+  assert.ok(w.mouth, "the fixture carries a mouth");
+  assert.equal(got[0], L.pack(L.merge(L.analyse(w.samples, w.sampleRate), w.mouth)), "not the merged track");
+  assert.equal(got[1], L.pack(L.analyse(p.samples, p.sampleRate)), "a plain clip's track changed");
+  assert.notEqual(got[0], got[1]);
+});
+
+await check("the browser plays a clip with the chunk exactly as without it (no extra sound)", async () => {
+  const page = await browser.newPage();
+  await page.route(`${base}/blank.html`, (route) => route.fulfill({
+    status: 200, contentType: "text/html", body: "<!doctype html><meta charset=utf-8>" }));
+  await page.goto(`${base}/blank.html`);
+  const got = await page.evaluate(async ([a, b]) => {
+    const decode = async (uri) => {
+      const buf = await (await fetch(uri)).arrayBuffer();
+      const ctx = new OfflineAudioContext(1, 1, 24000);
+      const d = await ctx.decodeAudioData(buf);
+      return { rate: d.sampleRate, len: d.length, data: Array.from(d.getChannelData(0)) };
+    };
+    const duration = (uri) => new Promise((resolve) => {
+      const el = new Audio();
+      el.preload = "metadata";
+      el.onloadedmetadata = () => resolve(el.duration);
+      el.onerror = () => resolve(`error ${el.error && el.error.code}`);
+      el.src = uri;
+    });
+    return { with: await decode(a), without: await decode(b), dWith: await duration(a), dWithout: await duration(b) };
+  }, [uriOf(JMTH), uriOf(PLAIN)]);
+  await page.close();
+  assert.equal(got.with.rate, got.without.rate);
+  assert.equal(got.with.len, got.without.len, "the decoded length changed: the chunk was played as sound");
+  assert.ok(got.with.data.every((x, i) => x === got.without.data[i]), "the decoded samples differ");
+  assert.equal(got.dWith, got.dWithout, "the <audio> element's duration changed");
+  assert.ok(typeof got.dWith === "number" && got.dWith > 1, `duration ${got.dWith}`);
+});
+
 await check("the Jarvis bar sends lip-sync for a spoken answer", async () => {
   const delta = (text) => JSON.stringify({ choices: [{ delta: { content: text } }] });
   const page = await K.open(browser, base, "index.html", {

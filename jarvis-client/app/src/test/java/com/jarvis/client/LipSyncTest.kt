@@ -11,11 +11,17 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.intOrNull
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 import kotlin.math.abs
 import kotlin.math.sin
 
@@ -43,6 +49,11 @@ class LipSyncTest {
     private fun clip(name: String): ByteArray =
         checkNotNull(javaClass.classLoader?.getResourceAsStream("lipsync/$name")) {
             "test clip lipsync/$name is missing"
+        }.readBytes()
+
+    private fun resource(path: String): ByteArray =
+        checkNotNull(javaClass.classLoader?.getResourceAsStream(path)) {
+            "test resource $path is missing - run tools/gen_lipsync.py"
         }.readBytes()
 
     private val tol = 1e-3f
@@ -108,7 +119,8 @@ class LipSyncTest {
         assertFalse("after the last frame", LipSync.sample(track, 0.09f - LipSync.LEAD_S + 0.01f, out))
         assertArrayEquals(FloatArray(4), out, 0f)
         assertTrue("inside", LipSync.sample(track, 0.02f, out))
-        assertArrayEquals(floatArrayOf(1f, 1f, 0.5f, 0.25f), out, 1e-6f)
+        // 20 ms in: the mouth is 40% faded in (ONSET_S), the level is not faded.
+        assertArrayEquals(floatArrayOf(1f, 0.4f, 0.2f, 0.1f), out, 1e-5f)
 
         val empty = LipSync.Track(LipSync.FPS, FloatArray(0), FloatArray(0), FloatArray(0), FloatArray(0))
         assertFalse(LipSync.sample(empty, 0f, out))
@@ -122,11 +134,16 @@ class LipSyncTest {
         val out = FloatArray(4)
         // At playback time t the mouth shows frame (t + LEAD_S) * FPS.
         assertTrue(LipSync.sample(track, 0.0f, out))
-        assertEquals(LipSync.LEAD_S * LipSync.FPS / (n - 1f), out[1], 1e-4f)
-        // Halfway between frames 7 and 8.
+        assertEquals(LipSync.LEAD_S * LipSync.FPS / (n - 1f), out[0], 1e-4f)
+        // The mouth starts shut and fades in over ONSET_S; the level does not.
+        assertEquals(0.05f, LipSync.ONSET_S, 0f)
+        assertEquals(0f, out[1], 0f)
+        // Halfway between frames 7 and 8, and half faded in (25 ms).
         assertTrue(LipSync.sample(track, 0.075f - LipSync.LEAD_S, out))
         assertEquals(7.5f / (n - 1f), out[0], 1e-4f)
-        assertEquals(7.5f / (n - 1f), out[1], 1e-4f)
+        assertEquals(0.5f * 7.5f / (n - 1f), out[1], 1e-4f)
+        assertTrue(LipSync.sample(track, 0.1f, out))
+        assertEquals("fully in from ONSET_S on", out[0], out[1], 1e-6f)
     }
 
     @Test
@@ -166,4 +183,151 @@ class LipSyncTest {
                 track.wide[i] in 0f..1f && track.round[i] in 0f..1f)
         }
     }
+
+    // ---- Mouth shapes inside the WAV (the "jmth" chunk) ----------------------
+
+    private val mouth: JsonObject get() = golden["mouth"]!!.jsonObject
+
+    @Test
+    fun `a clip carrying the PC's mouth shapes merges them as the desktop does`() {
+        val m = mouth
+        val wav = resource("lipsync-mouth/${m["file"]!!.jsonPrimitive.content}")
+        val src = clip(m["source"]!!.jsonPrimitive.content)
+        // The chunk is never sound: the same samples, the same rate, as the clip without it.
+        assertArrayEquals("the chunk was read as sound", Wav.decode(src), Wav.decode(wav))
+        assertEquals(Wav.rateOf(src), Wav.rateOf(wav))
+        val text = Wav.mouthChunk(wav)
+        assertNotNull("the fixture should carry a jmth chunk", text)
+        assertTrue(text!!.startsWith("v1;"))
+        val lips = LipSync.mouthFrom(text)
+        assertNotNull("the fixture's chunk should parse", lips)
+        assertEquals(m["mouthN"]!!.jsonPrimitive.int, lips!!.n)
+
+        val pcm = Wav.decode(wav)
+        val rate = Wav.rateOf(wav)
+        val audio = LipSync.analyse(pcm, rate)
+        val track = LipSync.forClip(wav, pcm, rate)
+        assertEquals(m["n"]!!.jsonPrimitive.int, track.n)
+        assertArrayEquals("the level stays the clip's own", audio.level, track.level, 0f)
+        for ((key, got) in listOf("level" to track.level, "open" to track.open,
+            "wide" to track.wide, "round" to track.round)) {
+            val want = m[key]!!.jsonArray
+            assertEquals("$key length", want.size, got.size)
+            for (i in got.indices) {
+                val w = want[i].jsonPrimitive.float
+                assertTrue("$key[$i] is ${got[i]}, the desktop says $w", abs(got[i] - w) <= tol)
+            }
+        }
+        // The frames past the end of the (2 frames shorter) mouth are closed.
+        for (i in lips.n until track.n) {
+            assertEquals(0f, track.open[i], 0f); assertEquals(0f, track.wide[i], 0f); assertEquals(0f, track.round[i], 0f)
+        }
+        val out = FloatArray(4)
+        for (r in m["reads"]!!.jsonArray) {
+            val t = r.jsonObject["t"]!!.jsonPrimitive.float
+            val want = r.jsonObject["out"]!!.jsonArray.map { it.jsonPrimitive.float }
+            LipSync.sample(track, t, out)
+            for (k in 0..3) assertTrue("sample($t)[$k] is ${out[k]}, the desktop says ${want[k]}", abs(out[k] - want[k]) <= tol)
+        }
+    }
+
+    @Test
+    fun `every good and broken chunk is read as the desktop reads it, and a broken one changes nothing`() {
+        val src = clip(mouth["source"]!!.jsonPrimitive.content)
+        val srcPcm = Wav.decode(src)
+        val rate = Wav.rateOf(src)
+        val plain = LipSync.analyse(srcPcm, rate)
+        val cases = mouth["cases"]!!.jsonArray
+        assertTrue("the fixture should list the variants", cases.size >= 20)
+        for (c in cases) {
+            val spec = c.jsonObject
+            val name = spec["name"]!!.jsonPrimitive.content
+            val wav = variant(src, spec)
+            assertEquals("$name: not the bytes tools/gen_lipsync.py built", spec["sha256"]!!.jsonPrimitive.content, sha256(wav))
+            val lips = Wav.mouthChunk(wav)?.let { LipSync.mouthFrom(it) }
+            assertEquals("$name: a mouth?", spec["mouth"]!!.jsonPrimitive.boolean, lips != null)
+            val pcm = Wav.decode(wav)
+            assertArrayEquals("$name: the sound changed", srcPcm, pcm)
+            assertEquals("$name: the rate changed", rate, Wav.rateOf(wav))
+            val audio = LipSync.analyse(pcm, rate)
+            val merged = LipSync.merge(audio, lips) !== audio
+            assertEquals("$name: merged?", spec["merged"]!!.jsonPrimitive.boolean, merged)
+            val track = LipSync.forClip(wav, pcm, rate)
+            if (!merged) {
+                // Exactly as without the chunk.
+                for ((a, b) in listOf(plain.level to track.level, plain.open to track.open,
+                    plain.wide to track.wide, plain.round to track.round)) assertArrayEquals(name, a, b, 0f)
+            } else {
+                assertArrayEquals("$name: level", plain.level, track.level, 0f)
+                assertFalse("$name: the shapes were not taken", plain.open.contentEquals(track.open))
+            }
+        }
+    }
+
+    @Test
+    fun `unpack refuses anything that is not whole frames at FPS`() {
+        // One frame, 4 bytes: level 255, open 0, wide 128, round 1.
+        val one = LipSync.unpack("100:/wCAAQ==")
+        assertNotNull(one)
+        assertEquals(1, one!!.n)
+        assertArrayEquals(floatArrayOf(1f, 0f, 128 / 255f, 1 / 255f),
+            floatArrayOf(one.level[0], one.open[0], one.wide[0], one.round[0]), 1e-6f)
+        for (bad in listOf("", "100:", "50:/wCAAQ==", "100/wCAAQ==", "100:/wCAAQ=", "100:/wCAAQ", "100:/wC*AQ==",
+            "100:/w==AQ==", "100:/wCA", "abc:/wCAAQ==", "100:/wCAAQ==\n", " 100:/wCAAQ==", "10000:/wCAAQ==")) {
+            assertNull("\"$bad\" should be refused", LipSync.unpack(bad))
+        }
+        assertNull(LipSync.mouthFrom("v1;src=kokoro"))
+        assertNull(LipSync.mouthFrom("v1;src=kokoro;;100:/wCAAQ=="))
+        assertNull(LipSync.mouthFrom("V1;100:/wCAAQ=="))
+        assertNotNull(LipSync.mouthFrom("v1;src=kokoro;100:/wCAAQ==\u0000"))
+        assertNotNull(LipSync.mouthFrom("v1;100:/wCAAQ=="))
+    }
+
+    @Test
+    fun `merge takes the level from the clip and the shapes from the PC, within 3 frames`() {
+        fun t(n: Int, v: Float, fps: Int = LipSync.FPS) =
+            LipSync.Track(fps, FloatArray(n) { v }, FloatArray(n) { v }, FloatArray(n) { v }, FloatArray(n) { v })
+        val audio = t(10, 0.25f)
+        val m = LipSync.merge(audio, t(8, 0.75f))
+        assertEquals(10, m.n)
+        assertSame(audio.level, m.level)
+        assertEquals(0.75f, m.open[7], 0f); assertEquals(0f, m.open[8], 0f); assertEquals(0f, m.round[9], 0f)
+        assertEquals(10, LipSync.merge(audio, t(13, 0.75f)).n)
+        assertEquals(0.75f, LipSync.merge(audio, t(7, 0.75f)).wide[0], 0f)
+        assertSame(audio, LipSync.merge(audio, t(6, 0.75f)))
+        assertSame(audio, LipSync.merge(audio, t(14, 0.75f)))
+        assertSame(audio, LipSync.merge(audio, null))
+        assertSame(audio, LipSync.merge(audio, t(10, 0.75f, fps = 50)))
+        assertSame(audio, LipSync.merge(audio, t(0, 0.75f)))
+    }
+
+    /** The same bytes as tools/gen_lipsync.py's `variant()`: change both together. */
+    private fun variant(src: ByteArray, spec: JsonObject): ByteArray {
+        fun le32(v: Int) = byteArrayOf(v.toByte(), (v ushr 8).toByte(), (v ushr 16).toByte(), (v ushr 24).toByte())
+        fun ascii(s: String) = s.toByteArray(Charsets.US_ASCII)
+        val payload = spec["payload"]!!.jsonPrimitive.content.toByteArray(Charsets.ISO_8859_1)
+        val declared = payload.size + (spec["sizeDelta"]?.jsonPrimitive?.intOrNull ?: 0)
+        val chunk = ByteArrayOutputStream()
+        chunk.write(ascii("jmth")); chunk.write(le32(declared)); chunk.write(payload)
+        val pad = spec["pad"]?.jsonPrimitive?.boolean ?: true
+        if (pad && declared % 2 == 1) chunk.write(0)
+        val list = spec["list"]?.jsonPrimitive?.content
+        val extra = if (list == null) ByteArray(0) else
+            ascii("LIST") + le32(3) + ascii("abc") + (if (list == "padded") byteArrayOf(0) else ByteArray(0))
+        val where = spec["where"]?.jsonPrimitive?.content ?: "after"
+        val out = if (where == "after") {
+            src + extra + chunk.toByteArray()
+        } else {
+            var at = 12
+            while (!(src[at] == 'd'.code.toByte() && src[at + 1] == 'a'.code.toByte() &&
+                    src[at + 2] == 't'.code.toByte() && src[at + 3] == 'a'.code.toByte())) at++
+            src.copyOfRange(0, at) + chunk.toByteArray() + src.copyOfRange(at, src.size)
+        }
+        le32(out.size - 8).copyInto(out, 4)
+        val cut = spec["cut"]?.jsonPrimitive?.intOrNull ?: 0
+        return out.copyOfRange(0, out.size - cut)
+    }
+
+    private fun sha256(b: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
 }

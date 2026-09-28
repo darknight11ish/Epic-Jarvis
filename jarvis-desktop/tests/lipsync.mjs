@@ -84,7 +84,7 @@ check("a classic script: no import/export, sets globalThis.JarvisLipSync", () =>
   const ctx = {};
   vm.runInNewContext(src, ctx);
   assert.equal(typeof ctx.JarvisLipSync?.analyse, "function");
-  for (const k of ["analyse", "sample", "fromWav", "pack", "unpack"]) assert.equal(typeof L[k], "function", k);
+  for (const k of ["analyse", "sample", "fromWav", "pack", "unpack", "mouthFrom", "merge"]) assert.equal(typeof L[k], "function", k);
   assert.equal(L.FPS, 100);
   assert.ok(L.LEAD_S > 0 && L.LEAD_S <= 0.1, `LEAD_S ${L.LEAD_S}`);
 });
@@ -94,6 +94,7 @@ check("the Kotlin copy has the same FPS and LEAD_S", () => {
     "audio", "LipSync.kt"), "utf8");
   assert.match(kt, new RegExp(`const val FPS = ${L.FPS}\\b`));
   assert.match(kt, new RegExp(`const val LEAD_S = ${L.LEAD_S}f\\b`));
+  assert.match(kt, new RegExp(`const val ONSET_S = ${L.ONSET_S}f\\b`));
 });
 
 /* ── Measured on Jarvis's own voice ───────────────────────────────────────── */
@@ -164,9 +165,15 @@ check("sample() reads LEAD_S ahead, interpolates, and is all zeros outside", () 
   const t = { fps: 100, n, level: ramp, open: ramp, wide: new Float32Array(n), round: new Float32Array(n) };
   assert.equal(L.sample(null, 0.1), null);
   const at0 = L.sample(t, 0);
-  assert.ok(Math.abs(at0.open - (L.LEAD_S * 100) / (n - 1)) < 1e-6, "t=0 reads frame LEAD_S*FPS");
+  assert.ok(Math.abs(at0.level - (L.LEAD_S * 100) / (n - 1)) < 1e-6, "t=0 reads frame LEAD_S*FPS");
   const mid = L.sample(t, 0.075 - L.LEAD_S);
   assert.ok(Math.abs(mid.level - 7.5 / (n - 1)) < 1e-6, "halfway between frames 7 and 8");
+  // The mouth (not the level) fades in over the clip's first ONSET_S.
+  assert.equal(L.ONSET_S, 0.05);
+  assert.equal(at0.open, 0, "the mouth starts shut at t = 0");
+  assert.ok(Math.abs(mid.open - 0.5 * 7.5 / (n - 1)) < 1e-6, "half faded in at 25 ms");
+  const full = L.sample(t, 0.1);
+  assert.ok(Math.abs(full.open - full.level) < 1e-6, "fully in from ONSET_S on");
   const zero = { level: 0, open: 0, wide: 0, round: 0 };
   assert.deepEqual({ ...L.sample(t, -L.LEAD_S - 0.001) }, zero, "before the start");
   assert.deepEqual({ ...L.sample(t, (n - 1) / 100 - L.LEAD_S + 0.001) }, zero, "after the end");
@@ -245,6 +252,107 @@ check("fromWav reads mono and stereo (averaged) 16-bit, whatever chunks surround
   const eight = L.fromWav(wav({ bits: 8, frames: [1, 2] }));
   assert.equal(eight.samples.length, 0, "not 16-bit: no samples rather than noise");
   assert.equal(L.fromWav(new Uint8Array(10)).samples.length, 0, "not a WAV");
+});
+
+/* ── Mouth shapes inside the WAV: the "jmth" chunk ──────────────────────── */
+
+const RES = join(REPO, "jarvis-client", "app", "src", "test", "resources");
+const golden = JSON.parse(readFileSync(join(RES, "lipsync-golden.json"), "utf8"));
+
+check("a clip with a jmth chunk: the same sound, plus the PC's mouth shapes", () => {
+  const src = L.fromWav(readFileSync(join(CLIPS, golden.mouth.source)));
+  const fx = L.fromWav(readFileSync(join(RES, "lipsync-mouth", golden.mouth.file)));
+  assert.deepEqual(Array.from(fx.samples), Array.from(src.samples), "the chunk was read as sound");
+  assert.equal(fx.sampleRate, src.sampleRate);
+  assert.equal(src.mouth, undefined, "a clip without the chunk has no mouth - exactly as before");
+  assert.ok(fx.mouth && fx.mouth.fps === 100, "no mouth read from the chunk");
+  const audio = L.analyse(fx.samples, fx.sampleRate), m = L.merge(audio, fx.mouth);
+  assert.equal(fx.mouth.n, audio.n - 2);
+  assert.equal(m.n, audio.n);
+  assert.equal(m.level, audio.level, "the level is the clip's own");
+  for (let i = 0; i < m.n; i++) {
+    const want = i < fx.mouth.n ? [fx.mouth.open[i], fx.mouth.wide[i], fx.mouth.round[i]] : [0, 0, 0];
+    assert.deepEqual([m.open[i], m.wide[i], m.round[i]], want, `frame ${i}`);
+  }
+  // pack() gives back the very string the chunk carried.
+  const text = readFileSync(join(RES, "lipsync-mouth", golden.mouth.file)).toString("latin1");
+  const packed = text.slice(text.indexOf("v1;src=fixture;") + 15).replace(/\0+$/, "");
+  assert.equal(L.pack(fx.mouth), packed);
+});
+
+check("every good and broken jmth variant is read as meant (gen_lipsync.py's list)", () => {
+  const want = { "merged": 0, "kept apart": 0, "ignored": 0 };
+  for (const c of golden.mouth.cases) {
+    want[c.want]++;
+    const seen = c.merged ? "merged" : c.mouth ? "kept apart" : "ignored";
+    assert.equal(seen, c.want, c.name);
+    assert.ok(c.sameSound, `${c.name}: the sound changed`);
+  }
+  assert.ok(want.merged >= 5 && want["kept apart"] >= 2 && want.ignored >= 10, JSON.stringify(want));
+});
+
+check("fromWav: a broken or misplaced jmth chunk changes nothing", () => {
+  const frames = [0, 16384, -32768, 32767];
+  const plain = L.fromWav(wav({ frames }));
+  const chunk = (payload, size = payload.length) => {
+    const b = new Uint8Array(8 + payload.length + (size & 1));
+    b.set([106, 109, 116, 104]); new DataView(b.buffer).setUint32(4, size, true);
+    for (let i = 0; i < payload.length; i++) b[8 + i] = payload.charCodeAt(i);
+    return b;
+  };
+  const withChunk = (c, before = false) => {
+    const base = wav({ frames }), at = before ? 36 : base.length;
+    const out = new Uint8Array(base.length + c.length);
+    out.set(base.subarray(0, at)); out.set(c, at); out.set(base.subarray(at), at + c.length);
+    new DataView(out.buffer).setUint32(4, out.length - 8, true);
+    return out;
+  };
+  const good = "v1;src=kokoro;100:/wCAAQ==";
+  const ok = L.fromWav(withChunk(chunk(good)));
+  assert.deepEqual(Array.from(ok.samples), Array.from(plain.samples));
+  assert.equal(ok.mouth.n, 1);
+  assert.deepEqual([ok.mouth.level[0], ok.mouth.open[0]], [1, 0]);
+  assert.ok(Math.abs(ok.mouth.wide[0] - 128 / 255) < 1e-6 && Math.abs(ok.mouth.round[0] - 1 / 255) < 1e-6);
+  const broken = {
+    "version 2": withChunk(chunk("v2;src=kokoro;100:/wCAAQ==")),
+    "bad base64": withChunk(chunk("v1;src=kokoro;100:/w*AAQ==")),
+    "not whole frames": withChunk(chunk("v1;src=kokoro;100:/wCA")),
+    "another frame rate": withChunk(chunk("v1;src=kokoro;50:/wCAAQ==")),
+    "before data": withChunk(chunk(good), true),
+    "declared past the end": withChunk(chunk(good, good.length + 9)),
+    "cut short": withChunk(chunk(good)).subarray(0, 60 + good.length),
+    "odd size, one byte short": withChunk(chunk(good, good.length - 1)),
+  };
+  for (const [name, bytes] of Object.entries(broken)) {
+    const w = L.fromWav(bytes);
+    assert.equal(w.mouth, undefined, name);
+    assert.deepEqual(Array.from(w.samples), Array.from(plain.samples), name);
+    assert.equal(w.sampleRate, plain.sampleRate, name);
+  }
+});
+
+check("mouthFrom / merge: the same rules as the phone's LipSync.mouthFrom / unpack / merge", () => {
+  for (const bad of ["", "v1;", "v1;100:", "v1;50:/wCAAQ==", "v1;100/wCAAQ==", "v1;100:/wCAAQ=", "v1;100:/wCAAQ",
+    "v1;100:/wC*AQ==", "v1;100:/w==AQ==", "v1;100:/wCA", "v1;abc:/wCAAQ==", "v1; 100:/wCAAQ==", "v1;10000:/wCAAQ==",
+    "v1;src=kokoro", "v1;src=kokoro;;100:/wCAAQ==", "V1;100:/wCAAQ==", null, 7]) {
+    assert.equal(L.mouthFrom(bad), null, JSON.stringify(bad));
+  }
+  assert.equal(L.mouthFrom("v1;src=kokoro;100:/wCAAQ==\0").n, 1);
+  assert.equal(L.mouthFrom("v1;100:/wCAAQ==").n, 1);
+  const t = (n, v, fps = 100) => ({ fps, n, level: new Float32Array(n).fill(v), open: new Float32Array(n).fill(v),
+    wide: new Float32Array(n).fill(v), round: new Float32Array(n).fill(v) });
+  const audio = t(10, 0.25), m = L.merge(audio, t(8, 0.75));
+  assert.equal(m.n, 10); assert.equal(m.level, audio.level);
+  assert.deepEqual([m.open[7], m.open[8], m.round[9]], [0.75, 0, 0]);
+  assert.equal(L.merge(audio, t(13, 0.75)).n, 10);
+  assert.equal(L.merge(audio, t(7, 0.75)).wide[0], 0.75);
+  for (const other of [t(6, 0.75), t(14, 0.75), null, undefined, t(10, 0.75, 50), t(0, 0.75)]) {
+    assert.equal(L.merge(audio, other), audio);
+  }
+  assert.equal(L.MERGE_SLACK, 3);
+  const kt = readFileSync(join(REPO, "jarvis-client", "app", "src", "main", "java", "com", "jarvis", "client",
+    "audio", "LipSync.kt"), "utf8");
+  assert.match(kt, new RegExp(`const val MERGE_SLACK = ${L.MERGE_SLACK}\\b`));
 });
 
 /* ── Cheap enough ─────────────────────────────────────────────────────────── */

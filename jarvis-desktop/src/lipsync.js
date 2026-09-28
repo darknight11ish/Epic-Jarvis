@@ -22,6 +22,12 @@
   // before the sound they make, and viewers accept a mouth that is early far
   // more readily than one that is late (docs/LIPSYNC.md, "Why 50 ms").
   var LEAD_S = 0.05;
+  // The mouth (open, wide, round - not the level) fades in over the first
+  // ONSET_S of each clip's playback. The lead means t = 0 already reads 50 ms
+  // in, and Kokoro often starts sounding 10-50 ms into a clip: without this
+  // the mouth jumped from shut to a quarter open (the owl's "Shall": the
+  // lips spread 0.9) in one frame at the start of a sentence.
+  var ONSET_S = 0.05;
 
   function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
   function smooth01(a, b, x) { var t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); }
@@ -154,7 +160,8 @@
   var K = {
     lmA: 300, lmB: 700, lmC: 800, lmD: 1400, lmAdapt: 0.9, lmPrior: 4,
     fbA: 1400, fbB: 2100, fbC: 2100, fbD: 3300, fbAdapt: 0.8, fbPrior: 2, fbN0: 80,
-    fricLo: 10, fricHi: 22, nasLo: 2, nasHi: 8, openRange: 30, lmOpen: 8,
+    fricLo: 10, fricHi: 22, shA: 300, shB: 1500, shC: 2500, shD: 5000, shLo: 15, shHi: 25,
+    nasLo: 2, nasHi: 8, openRange: 30, lmOpen: 8,
     openMs: 25, dipLo: 7.5, dipHi: 12, dipMix: 0.3, wide0: 7, wide1: 7, round0: 1, round1: 3.5,
     round2: 6, lipFwdMs: 40, lipBackMs: 60, teeth: 0.45
   };
@@ -191,11 +198,16 @@
     // fb: 2100-3300 vs 1400-2100 Hz - high for front vowels (ee: second
     //     and third formants up there), low for back and rounded ones (oo,
     //     oh, ah): a stand-in for the second formant. Band ratios, not
-    //     formant tracking: cheap, and no peak-picking to go wrong.
+    //     formant tracking: cheap, and no peak-picking to go wrong;
+    // sh: 2.5-5 kHz vs 300-1500 Hz - "sh", "ch" and a breath put their hiss
+    //     at 2.5-5 kHz, INSIDE the oral band, so dH alone misses them (the
+    //     owl's "Shall" opened to 0.87 on the sh); a vowel, even "ee", is
+    //     20 dB or more the other way.
     var dO = new Float64Array(n), dH = new Float64Array(n), dL = new Float64Array(n),
-      lm = new Float64Array(n), fb = new Float64Array(n);
+      lm = new Float64Array(n), fb = new Float64Array(n), sh = new Float64Array(n);
     var x80 = bandPos(80), x300 = bandPos(300), x1000 = bandPos(1000),
       x4000 = bandPos(4000), x10k = bandPos(10000),
+      xS0 = bandPos(K.shA), xS1 = bandPos(K.shB), xS2 = bandPos(K.shC), xS3 = bandPos(K.shD),
       xE = bandPos(K.lmA), xF = bandPos(K.lmB), xG = bandPos(K.lmC), xH = bandPos(K.lmD),
       xA = bandPos(K.fbA), xB = bandPos(K.fbB), xC = bandPos(K.fbC), xD = bandPos(K.fbD);
     for (i = 0; i < n; i++) {
@@ -203,6 +215,7 @@
       dO[i] = db(bandSum(B, o, x300, x4000));
       dH[i] = db(bandSum(B, o, x4000, x10k));
       dL[i] = db(bandSum(B, o, x80, x1000));
+      sh[i] = db(bandSum(B, o, xS2, xS3)) - db(bandSum(B, o, xS0, xS1));
       lm[i] = db(bandSum(B, o, xE, xF)) - db(bandSum(B, o, xG, xH));
       fb[i] = db(bandSum(B, o, xC, xD)) - db(bandSum(B, o, xA, xB));
     }
@@ -210,7 +223,7 @@
     for (i = 0; i < n; i++) if (F.all[i] > gate) tmp[m++] = dO[i];
     var refO = percentile(tmp, m, 0.95);
 
-    // Soft frame classes (0..1): fric - hiss (s, sh, f); nas - a nasal
+    // Soft frame classes (0..1): fric - hiss (s, sh, f, a breath); nas - a nasal
     // murmur (m, n) or a closed-lip voice bar (b), where the low band carries
     // on but the oral band has dropped; vow - a clear vowel, the only frames
     // the lip shape is read from.
@@ -221,7 +234,8 @@
       lo[i] = dL[i] - dO[i];
     }
     for (i = 0; i < n; i++) {
-      fric[i] = speech[i] ? smooth01(K.fricLo, K.fricHi, dH[i] - dO[i]) : 0;
+      fric[i] = speech[i] ? Math.max(smooth01(K.fricLo, K.fricHi, dH[i] - dO[i]),
+        smooth01(K.shLo, K.shHi, sh[i])) : 0;
       nas[i] = speech[i] ? smooth01(K.nasLo, K.nasHi, lo[i]) : 0;
       vow[i] = smooth01(refO - 22, refO - 10, dO[i]) * (1 - fric[i]) * (1 - nas[i]);
     }
@@ -349,11 +363,77 @@
       return out;
     }
     var i = Math.floor(f), u = f - i, j = Math.min(i + 1, track.n - 1);
+    var g = t >= ONSET_S ? 1 : t > 0 ? t / ONSET_S : 0;
     out.level = track.level[i] + (track.level[j] - track.level[i]) * u;
-    out.open = track.open[i] + (track.open[j] - track.open[i]) * u;
-    out.wide = track.wide[i] + (track.wide[j] - track.wide[i]) * u;
-    out.round = track.round[i] + (track.round[j] - track.round[i]) * u;
+    out.open = (track.open[i] + (track.open[j] - track.open[i]) * u) * g;
+    out.wide = (track.wide[i] + (track.wide[j] - track.wide[i]) * u) * g;
+    out.round = (track.round[i] + (track.round[j] - track.round[i]) * u) * g;
     return out;
+  }
+
+  // ---- Mouth shapes carried inside the WAV ---------------------------------
+  // The PC may append one extra RIFF chunk AFTER `data`, id "jmth", whose
+  // ASCII payload is "v1;src=kokoro;" + a pack() string: the mouth shapes
+  // worked out from the voice engine's own timing of each speech sound
+  // (docs/LIPSYNC.md, "Mouths from Kokoro's own timing"). It is never sound:
+  // the samples below stop at the end of `data`. Anything about it that is
+  // not exactly right - another version, bad base64, a length that is not
+  // whole frames, another frame rate, a chunk before `data`, a chunk cut
+  // short - and it is ignored: the clip is read exactly as if it were not
+  // there. The Kotlin copy (Wav.mouthChunk + LipSync.mouthFrom) follows the
+  // same rules.
+  var MOUTH_ID = "jmth", MOUTH_MAX = 1 << 20;
+  // A strict unpack(): null for anything that is not a well-formed track at
+  // FPS frames a second, 4 bytes a frame, at least one frame.
+  function unpackStrict(str) {
+    var m = /^([0-9]{1,4}):([A-Za-z0-9+/]*)(={0,2})$/.exec(str);
+    if (!m) return null;
+    var body = m[2], pad = m[3].length, chars = body.length + pad;
+    if (parseInt(m[1], 10) !== FPS || chars === 0 || chars % 4 !== 0) return null;
+    var len = chars / 4 * 3 - pad;
+    if (len % 4 !== 0) return null;
+    return unpack(str);
+  }
+  function mouthFrom(text) {
+    if (typeof text !== "string") return null;
+    text = text.replace(/[\0\t\n\r ]+$/, ""); // padding, if any, is not data
+    var parts = text.split(";");
+    if (parts.length < 2 || parts[0] !== "v1") return null;
+    for (var i = 1; i < parts.length - 1; i++) if (!/^[A-Za-z0-9_]+=[^;]*$/.test(parts[i])) return null;
+    return unpackStrict(parts[parts.length - 1]);
+  }
+  // The "jmth" chunk's payload as text, from a walk that has passed `data`
+  // (p = the chunk after it), or null.
+  function mouthChunk(u8, dv, p) {
+    while (p + 8 <= u8.length) {
+      var id = String.fromCharCode(u8[p], u8[p + 1], u8[p + 2], u8[p + 3]);
+      var size = dv.getUint32(p + 4, true);
+      if (size > u8.length - p - 8) return null;
+      if (id === MOUTH_ID) {
+        if (size > MOUTH_MAX) return null;
+        var s = "";
+        for (var i = 0; i < size; i++) s += String.fromCharCode(u8[p + 8 + i]);
+        return s;
+      }
+      p += 8 + size + (size & 1);
+    }
+    return null;
+  }
+
+  // A track with `level` from the clip's own sound (audio) and open, wide
+  // and round from the mouth shapes the PC sent (mouth). Only when both are
+  // FPS frames a second and their lengths agree within 3 frames (30 ms);
+  // otherwise the audio track as it is. Frames past the end of a shorter
+  // mouth track are closed.
+  var MERGE_SLACK = 3;
+  function merge(audio, mouth) {
+    if (!audio || !mouth || audio.fps !== FPS || mouth.fps !== FPS ||
+      !(mouth.n > 0) || Math.abs(audio.n - mouth.n) > MERGE_SLACK) return audio;
+    var n = audio.n, open = new Float32Array(n), wide = new Float32Array(n), round = new Float32Array(n);
+    for (var i = 0; i < n && i < mouth.n; i++) {
+      open[i] = clamp01(mouth.open[i]); wide[i] = clamp01(mouth.wide[i]); round[i] = clamp01(mouth.round[i]);
+    }
+    return { fps: FPS, n: n, level: audio.level, open: open, wide: wide, round: round };
   }
 
   function fromWav(buf) {
@@ -368,7 +448,7 @@
         rate = dv.getUint32(p + 12, true);
         bits = dv.getUint16(p + 22, true);
       } else if (id === "data") {
-        data = [p + 8, Math.min(size, u8.length - p - 8)];
+        data = [p + 8, Math.min(size, u8.length - p - 8), p + 8 + size + (size & 1)];
         break;
       }
       p += 8 + size + (size & 1);
@@ -381,7 +461,10 @@
       for (var c = 0; c < ch; c++) s += dv.getInt16(data[0] + (i * ch + c) * 2, true);
       out[i] = s / ch / 32768;
     }
-    return { samples: out, sampleRate: rate };
+    var res = { samples: out, sampleRate: rate }, mouth = null;
+    try { mouth = mouthFrom(mouthChunk(u8, dv, data[2])); } catch (e) { mouth = null; }
+    if (mouth) res.mouth = mouth;
+    return res;
   }
 
   var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -426,8 +509,9 @@
     return t;
   }
 
-  var JarvisLipSync = { FPS: FPS, LEAD_S: LEAD_S, analyse: analyse, sample: sample,
-    fromWav: fromWav, pack: pack, unpack: unpack };
+  var JarvisLipSync = { FPS: FPS, LEAD_S: LEAD_S, ONSET_S: ONSET_S, analyse: analyse, sample: sample,
+    fromWav: fromWav, pack: pack, unpack: unpack, mouthFrom: mouthFrom, merge: merge,
+    MERGE_SLACK: MERGE_SLACK };
   globalThis.JarvisLipSync = JarvisLipSync;
   if (typeof module !== "undefined") module.exports = JarvisLipSync;
 })();

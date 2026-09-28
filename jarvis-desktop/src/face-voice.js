@@ -14,8 +14,10 @@
  *  1. SENDER (main.js, `followClip`). Every spoken clip reaches the Jarvis
  *     bar as a complete WAV before it plays. It is analysed once, up front,
  *     into a "mouth track" (lipsync.js: 100 frames a second of loudness,
- *     open, wide, round), packed small (~4 KB for 10 s), and sent with the
- *     first message about that clip. After that only the PLAYBACK CLOCK is
+ *     open, wide, round; open/wide/round come instead from the voice
+ *     engine's own timing when the PC put that in the clip - the "jmth"
+ *     chunk, lipsync.js `merge`), packed small (~4 KB for 10 s), and sent
+ *     with the first message about that clip. After that only the PLAYBACK CLOCK is
  *     sent: where the audio element is (`currentTime`, the truth about what
  *     is being heard), when that was read, and whether it is playing - at
  *     play, pause, seek and end, and every 250 ms while it plays.
@@ -83,7 +85,12 @@ export function trackFor(uri) {
     if (L && bytes) {
       const wav = L.fromWav(bytes);
       if (wav && wav.samples && wav.samples.length > 0) {
-        const track = L.analyse(wav.samples, wav.sampleRate);
+        let track = L.analyse(wav.samples, wav.sampleRate);
+        // Mouth shapes from the voice engine's own timing, when the PC put
+        // them in the clip ("jmth" chunk, lipsync.js): the loudness stays
+        // this clip's own, the shapes come from the PC. A clip without
+        // them, or with ones that do not fit, keeps the analysis above.
+        if (track && wav.mouth && typeof L.merge === "function") track = L.merge(track, wav.mouth);
         if (track && track.n > 0) {
           const s = L.pack(track);
           if (typeof s === "string" && s.length <= MAX_TRACK_CHARS) packed = s;
