@@ -427,6 +427,13 @@ injection detector warns). Sign-in cookies for real accounts in the Jarvis
 profile ("Forget my sign-ins" button; App lock covers the screens). The
 widget changes its layout (the general check, then a pause with a reason).
 
+### The owner's answers (2026-09-28)
+
+- **Jarvis sends the messages itself** (human speed, openly an AI), and each
+  support card names that company's terms risk before the owner approves.
+- **Identity checks are always handed to the owner** (last four digits of a
+  card, security questions, codes) - never answered by Jarvis, never on a card.
+
 ### 10. Build plan (each step tested on 127.0.0.1)
 
 1. The shared website base out of `GeminiWeb` (Gemini's tests still pass).

@@ -622,6 +622,12 @@ testers, scouts and integration scouts; `.claude/agents/`):
   nothing is accepted until the owner approves it; and **Jarvis says at the
   start that it is an AI assistant writing for the owner**, never pretending
   to be them. Designed in `docs/CHATBOT-DRIVER-DESIGN.md` before it is built.
+  Owner's answers to the design (2026-09-28): **Jarvis sends the messages
+  itself**, at human speed and openly as an AI, and **each card names that
+  company's terms risk** before the owner approves (the real account could
+  be closed); **identity checks** (last digits of a card, security
+  questions, codes) **are always handed to the owner** in the window, never
+  answered by Jarvis.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
