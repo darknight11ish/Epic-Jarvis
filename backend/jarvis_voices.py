@@ -513,7 +513,10 @@ def set_speaker(body) -> tuple:
 FACE_VOICES = {
     "redpanda": {"name": "Red Panda", "speaker": "1", "speed": 1.0, "semitones": 2.0},
     "pygmyowl": {"name": "Pygmy Owl", "speaker": "2", "speed": 0.85, "semitones": 1.0},
-    "seaotter": {"name": "Sea Otter", "speaker": "4", "speed": 1.15, "semitones": 3.0},
+    # Not "4" ("Sky"): the owner's 2026-09-28 decision - its name matches the
+    # voice OpenAI withdrew in 2024 over a likeness complaint. Sarah, with the
+    # same playful lift and pace the otter had.
+    "seaotter": {"name": "Sea Otter", "speaker": "3", "speed": 1.15, "semitones": 3.0},
     # The fourth animal (owner, 2026-09-28): "a male voice, a touch
     # energetic". Michael, one step higher at normal pace. Made with the real
     # Kokoro model (kokoro-en-v0_19) and MEASURED, not judged by ear: his
@@ -528,7 +531,9 @@ FACE_VOICES = {
 MIN_SEMITONES = -3.0
 MAX_SEMITONES = 4.0
 PITCH_STEP = 0.5
-FACE_VOICE_DEFAULT = True
+#: Off until the owner turns it on (the owner's 2026-09-28 decision: the
+#: switch stays, but starts off). Turning it on or off never asks first.
+FACE_VOICE_DEFAULT = False
 FACE_VOICE_TITLE = "Voice follows the face"
 FACE_VOICE_DETAIL = ("With an animal face showing, Jarvis's built-in voice becomes that "
                      "animal's: its own voice, pace and pitch, which you can change for each "

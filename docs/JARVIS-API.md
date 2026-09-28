@@ -2272,7 +2272,7 @@ order: a custom voice the owner chose; then the face's voice; then the
 built-in voice choice above. The owner's speaking speed still applies on
 top of the animal's pace. A chosen recorded voice wins; when it cannot be
 used right now, the built-in voice speaks instead - and so, with an animal
-face showing, the animal does, and `face_voice.line` says so. An on/off switch, **on by default**, right under
+face showing, the animal does, and `face_voice.line` says so. An on/off switch, **off by default** (the owner's 2026-09-28 decision), right under
 the built-in voice choice in both apps: `status()` carries it and every word
 (`face_voice`, below); `POST /api/voice/voices/face` sets it. **No card
 either way** - it only changes how Jarvis sounds, never what it does, asks

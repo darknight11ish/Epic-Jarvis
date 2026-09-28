@@ -120,7 +120,10 @@ class FakePocket:
         return types.SimpleNamespace(samples=x, sample_rate=24000)
 
 
-def reset():
+def reset(face_voice=True):
+    """A fresh config folder. `face_voice`: the "Voice follows the face"
+    switch starts ON here, as most of these tests are about it working; it
+    ships OFF (FACE_VOICE_DEFAULT, checked on its own with face_voice=None)."""
     V._reset_for_tests()
     d = Path(tempfile.mkdtemp(prefix="cfg-", dir=TMP))
     CFG.clear()
@@ -142,6 +145,10 @@ def reset():
     V._ZIP.update(engine=FakeZip(), why="ready", built=True)
     S._tts_cache = FakeKokoro()
     S._cfg = lambda k, default=None: CFG.get(k, default)
+    if face_voice is not None:
+        V._write_state(face_voice=face_voice)
+        AUDIT.clear()
+        EVENTS.clear()
     return d
 
 
@@ -361,8 +368,12 @@ def _show_face(d: Path, face):
 
 
 def t_face_voice_needs_an_animal_face():
-    d = reset()
-    check("on by default", V.face_voice_on() is True and V.FACE_VOICE_DEFAULT is True)
+    d = reset(face_voice=None)
+    check("off by default (the owner's 2026-09-28 decision)",
+          V.face_voice_on() is False and V.FACE_VOICE_DEFAULT is False)
+    check("the sea otter does not start on Kokoro's \"Sky\" voice",
+          V.FACE_VOICES["seaotter"]["speaker"] != "4")
+    V._write_state(face_voice=True)  # the rest of this test is about it switched on
     check("no appearance.json: no face, so the owner's built-in voice as before",
           V.face_voice() is None and V.builtin_voice() == (0, 1.0, 0.0, ""))
     view = V.face_voice_view()
@@ -383,7 +394,7 @@ def t_face_voice_needs_an_animal_face():
 def t_each_animal_speaks_in_its_own_voice():
     d = reset()
     for face, sid, pace, semis in (("redpanda", 1, 1.0, 2.0), ("pygmyowl", 2, 0.85, 1.0),
-                                   ("seaotter", 4, 1.15, 3.0), ("monkey", 6, 1.0, 1.0)):
+                                   ("seaotter", 3, 1.15, 3.0), ("monkey", 6, 1.0, 1.0)):
         _show_face(d, face)
         check(f"{face}: its own voice, pace and pitch",
               V.builtin_voice() == (sid, pace, semis, face), V.builtin_voice())
@@ -445,7 +456,7 @@ def t_a_recorded_voice_still_wins():
     check("a chosen recorded voice that cannot be used falls back to the animal - "
           "and the line says so, rather than claiming the recorded voice speaks",
           view["speaking"] and "cannot be used right now" in view["line"]
-          and S.tts_voice() == (4, 1.15, 3.0), (view, S.tts_voice()))
+          and S.tts_voice() == (3, 1.15, 3.0), (view, S.tts_voice()))
 
 
 def t_the_voice_is_read_once_per_sentence():
@@ -491,8 +502,8 @@ def t_the_face_switch_asks_nothing_and_says_so():
         code, out = V.set_face_voice(bad)
         check(f"refused: {bad!r}", code == 400 and out["ok"] is False, (code, out))
     V._state_path().write_text(json.dumps({"active": "builtin", "face_voice": "no"}))
-    check("a damaged switch in state.json is no choice (the default, on)",
-          V._read_state()["face_voice"] is None and V.face_voice_on())
+    check("a damaged switch in state.json is no choice (the default, off)",
+          V._read_state()["face_voice"] is None and not V.face_voice_on())
 
 
 def t_the_one_moment_clip_and_the_echo_check_follow_the_face():
@@ -514,7 +525,7 @@ def t_the_one_moment_clip_and_the_echo_check_follow_the_face():
     finally:
         S._sherpa_tts_paths = _S_PATHS
     check("talking over the otter is checked against the otter's pitched voice",
-          keys and keys[0][1] == "4" and keys[0][-1] == "3.0", keys)
+          keys and keys[0][1] == "3" and keys[0][-1] == "3.0", keys)
 
 
 # ------------------------------------------------------ each animal's voice --
@@ -594,14 +605,14 @@ def t_reset_and_its_own_voice():
     EVENTS.clear(); AUDIT.clear()
     code, out = V.handle_post("/api/voice/voices/face_animal", {"face": "seaotter", "reset": True})
     check("reset: 200, at once, no card, its own voice back",
-          code == 200 and not CARDS and V.builtin_voice() == (4, 1.15, 3.0, "seaotter")
+          code == 200 and not CARDS and V.builtin_voice() == (3, 1.15, 3.0, "seaotter")
           and out["message"] == "The Sea Otter speaks in its own voice again.", (code, out))
     check("... nothing kept for it, and it is announced and audited without words",
           V._read_state()["face_animals"] == {}
           and EVENTS == [{"what": "face_animal", "outcome": "reset"}]
           and AUDIT == [("voices.face_animal", {"face": "seaotter", "reset": True})],
           (EVENTS, AUDIT))
-    V.set_face_animal({"face": "seaotter", "speaker": "4", "semitones": 3.0, "pace": "faster"})
+    V.set_face_animal({"face": "seaotter", "speaker": "3", "semitones": 3.0, "pace": "faster"})
     check("choosing exactly its own voice keeps no choice (so it is not marked changed)",
           V._read_state()["face_animals"] == {}
           and not V.face_voice_view()["animals"][2]["changed"])
@@ -697,7 +708,7 @@ def t_try_it_plays_the_animal_as_it_is_now():
     V.set_face_voice({"enabled": False})
     S._tts_cache = FakeKokoro()
     check("it plays with the switch off too (it is a preview)",
-          V.try_face_animal({"face": "seaotter"})[0] == 200 and S._tts_cache.sids == [4])
+          V.try_face_animal({"face": "seaotter"})[0] == 200 and S._tts_cache.sids == [3])
     for bad in ({}, {"face": "orbit"}, {"face": "redpanda", "text": "say this"}, None):
         code, out = V.try_face_animal(bad)
         check(f"refused: {bad!r} (an app never sends words to be spoken)",
