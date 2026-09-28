@@ -495,6 +495,21 @@ Gemini's notes as input, not instructions):
   window / Appearance), drawn from shared shader parts plus its own, one
   source for both apps (`docs/CRITTERS.md`), not a downloaded 3D model.
 
+Decided 2026-09-28, the owner's answers after the animal-face audits:
+- **Mouths follow Jarvis's real voice**, timed by Kokoro's own phoneme
+  durations when the PC is set up for it (`jarvis_mouth.py --prepare`), else
+  analysed from the sound (`docs/LIPSYNC.md`). No sound, no mouth movement.
+- **Body movement: natural and calm, never busy or sporadic** - small,
+  slow, eased motion; rare idle events; asleep is still. Reuse proven open
+  motion logic (MIT: Spring-It-On, TalkingHead) rather than invent it.
+- **Serious moments are calm and plain:** no wave while asking for an
+  approval (an attentive look instead), a still, concerned look at an error,
+  and for a crisis-help answer a neutral pose and Jarvis's plain voice (not
+  the animal voice).
+- **Not connected = asleep with a hollow ring**, on every face surface of
+  both apps, matching the tray icon; never an approval pose while acting is
+  blocked. The screen reader says "Jarvis isn't connected".
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
