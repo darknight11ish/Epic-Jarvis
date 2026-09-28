@@ -14264,3 +14264,238 @@ code and the new last patch.
   first question after a switch reads everything, as before. The same for
   the first question after the PC starts (nothing has been asked yet, so
   there is no tool list to copy).
+
+# Better voice: `jarvis_microwake.py`, `jarvis_speech.py`, `jarvis_voice.py`, `jarvis_bakeoff.py` (2026-09-28)
+
+## In plain words
+
+Three voice parts that may be better than what Jarvis uses today, each
+**off, or not the default, until it is measured on your PC**. You chose
+this group on 2026-09-28 from the research audit
+(`docs/RESEARCH-AUDIT-2026-09-28.md`, sections 1.4 and 5).
+
+1. **A newer speech detector.** The "is there any speech in this
+   recording?" step (Silero VAD) uses a file whose own label says it is
+   version 4. Version 6 (the newest, 6.2.3) can now be downloaded beside it.
+   Jarvis keeps using v4 until the bake-off below says v6 is no worse, and
+   you then change one line. There is no switch in the apps: nobody can
+   judge a speech detector by looking at it, so the measurement decides.
+2. **A second "hey Jarvis" detector** (microWakeWord). With the new
+   setting **Second "hey Jarvis" check -> Two detectors must agree** (both
+   apps, Settings -> Voice), Jarvis wakes only when BOTH detectors hear "hey
+   Jarvis" within a second of each other. They are built differently, so
+   they rarely make the same mistake: fewer false wake-ups, and possibly a
+   few more misses. Off by default. Turning it on is at once; going back to
+   one detector shows you an approval card. It cannot be turned on until
+   the package is installed (step 1 below) - the apps say so in words.
+3. **A third voice-ID model** (WeSpeaker ResNet221), the part that tells
+   your voice from other people's. **Settings -> Voice -> Voice-ID model**
+   (both apps): "The stronger one (measured)" stays the default;
+   "The newer one (not measured yet)" shows you an approval card, and
+   cannot be chosen until its file is installed (step 3). It starts on
+   general bars, because nobody has measured it on real voices yet - and
+   on computer-made voices (below) it let in far more of the other voices
+   than the model you use now. **Do not choose it before running step 7.**
+   Like every voice check, it cannot tell your voice from a recording or a
+   copy of it.
+
+Nothing switches by itself. Nothing leaves the PC.
+
+**The phone is unchanged, on purpose.** Its own "hey Jarvis" listener
+(`WakeSpotter.kt`) only decides when to send a sentence to your PC; the PC
+then checks the phrase again - with the second detector too, when you
+chose two - before your voice is checked or a word is written down. So the
+setting covers the phone's "hey Jarvis" as well. Putting microWakeWord on
+the phone itself would need a second kind of model runtime in the app
+(TensorFlow Lite) - a separate decision (`docs/ARCHITECTURE.md` section 8).
+
+## Owner steps
+
+Paste each line into PowerShell, one at a time. Change the backend path if
+yours is elsewhere. Steps 1-3 download things; nothing is used until you
+choose it.
+
+**1. Install the second "hey Jarvis" detector** (pymicro-wakeword 2.5.0
+and pymicro-features 2.0.2, Apache-2.0, about 2 MB, checked against their
+SHA-256 by pip itself):
+
+```powershell
+$t = Join-Path $env:TEMP 'jarvis-microwake.txt'; Set-Content -Path $t -Encoding ascii -Value @('pymicro-wakeword==2.5.0 --hash=sha256:e518dd2256436e57134cabb91b83a0b434aff6c34fdbada2841ff4b1f0f20ff5', 'pymicro-features==2.0.2 --hash=sha256:e76b656ce6a2eab9571657bbecaf17a5c07830306f9b544fbbea16c567bd78fb'); py -3 -m pip install --require-hashes --no-deps --only-binary ':all:' -r $t; Remove-Item $t; py -3 -c "import pymicro_wakeword; print('OK - the second hey Jarvis detector is installed')"
+```
+
+**2. Download the newer speech detector** (Silero VAD v6.2.3, MIT, 2.3 MB).
+It lands beside today's as `voice-models\vad\silero_vad_v6.onnx` inside your
+`.openjarvis` folder, and is not used until step 8:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path $base 'voice-models\vad'; New-Item -ItemType Directory -Force -Path $d | Out-Null; $p = Join-Path $d 'silero_vad_v6.onnx'; Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.3/src/silero_vad/data/silero_vad.onnx' -OutFile $p; if ((Get-FileHash $p -Algorithm SHA256).Hash -eq '1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3') { Write-Host "OK - the newer speech detector is at $p (not used until you choose it)" -ForegroundColor Green } else { Remove-Item $p; Write-Host 'That is not the expected file, so it was deleted. Run this line again.' -ForegroundColor Red }
+```
+
+**3. Download the newer voice-ID model** (WeSpeaker ResNet221, CC BY 4.0,
+95 MB, from the same sherpa-onnx releases page as the other two). It lands
+as `voice-models\speaker\resnet221.onnx`, and is not used until you choose
+it in Settings:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path $base 'voice-models\speaker'; New-Item -ItemType Directory -Force -Path $d | Out-Null; $p = Join-Path $d 'resnet221.onnx'; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet221_LM.onnx' -OutFile $p; if ((Get-FileHash $p -Algorithm SHA256).Hash -eq '182F4AE144D70DFEB78064F6D507F8AADA35C732A782631152A2626A4F20A60A') { Write-Host "OK - the newer voice-ID model is at $p (not used until you choose it)" -ForegroundColor Green } else { Remove-Item $p; Write-Host 'That is not the expected file, so it was deleted. Run this line again.' -ForegroundColor Red }
+```
+
+**4. Put the new code on the PC** (from this repository's folder), then
+restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**5. Measure the second "hey Jarvis" detector.** It asks how many of your
+own "hey Jarvis" sentences to record (the rules need 10; none is kept) and
+how many minutes of the room to listen to (the rules need 60 - talk and
+have the television on, but do not say "hey Jarvis"). Then it tries 110
+sentences in Jarvis's built-in voices. It prints how often each was missed
+and how often each woke by mistake - today's detector alone, the new one
+alone, and both together - and ends with **TURN ON BOTH DETECTORS** or
+**KEEP ONE DETECTOR**. The results land in the `voice\bakeoff` folder inside
+your `.openjarvis` folder:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_bakeoff.py --wake2
+```
+
+If it says TURN ON, choose "Two detectors must agree" in Settings -> Voice
+(either app). If it says KEEP, leave it.
+
+**6. Measure the speech detector.** It asks how many of your own sentences
+to record (10 are needed; none is kept), then compares v4 and v6 on them
+(and, when your voice is trained, how many pass your voice check with each
+one cutting the recording), on 110 built-in-voice sentences clean and with
+hiss at three levels, and on seven sounds with no speech in them (hiss, a
+fan, hum, knocks, silence). It ends with **USE V6** or **KEEP V4**:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_bakeoff.py --vad
+```
+
+**7. Measure the newer voice-ID model** before anyone chooses it. It needs
+your own sentences (it asks to record 20; none is kept - or put WAV files
+of you in the `voice\bakeoff\my-voice` folder) and **other real people's**:
+at least 50 WAV sentences in the `voice\bakeoff\other-voices` folder (both
+inside your `.openjarvis` folder). For each model it prints, bar by bar,
+how often you were refused and how often other people were let in, and
+what bar the newer model needs to keep people out as well as today's very
+strict does. Send the results back; the newer model gets its own bars
+written into `jarvis_voice.py` from them, the way the stronger model's
+were, and only then is it worth choosing:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_bakeoff.py --voice-id
+```
+
+**8. Only if step 6 said USE V6: use the newer speech detector.** This adds
+(or changes) one line, `vad_version = "v6"`, under `[voice]` in your
+`jarvis-framework.toml`, keeping a copy of the old file beside it
+(`jarvis-framework.toml.before-vad`). To go back later, run it again with
+`'v4'` instead of `'v6'` at the start. Restart Jarvis afterwards:
+
+```powershell
+$v = 'v6'; cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $t = py -3 -c "import jarvis_framework as f; print(f.config_path() or '')"; if (-not $t) { Write-Host 'Could not find jarvis-framework.toml (or jarvis_framework.py is not in this folder). Nothing was changed.' -ForegroundColor Red } else { $s = [IO.File]::ReadAllText($t); Copy-Item $t "$t.before-vad" -Force; $rx = [regex]'(?m)^([ \t]*)vad_version[ \t]*=[^\r\n]*'; $sec = [regex]'(?m)^\[voice\][ \t]*\r?$'; if ($rx.IsMatch($s)) { $s = $rx.Replace($s, ('${1}vad_version = "' + $v + '"'), 1) } elseif ($sec.IsMatch($s)) { $s = $sec.Replace($s, ("[voice]`r`nvad_version = `"" + $v + "`""), 1) } else { $s = $s + "`r`n[voice]`r`nvad_version = `"$v`"`r`n" }; [IO.File]::WriteAllText($t, $s, (New-Object Text.UTF8Encoding $false)); Write-Host "OK - $t now says vad_version = $v (the old copy is $t.before-vad). Restart Jarvis." -ForegroundColor Green }
+```
+
+Settings -> Voice then says which speech detector is in use ("Speech
+detector (Silero VAD): v6, the newer one"), and says plainly when the
+chosen one could not be used (the file is missing, or is not the pinned
+file - then v4 is used).
+
+## What changed
+
+No new patch and no new route. One new module, four updated ones:
+
+- `jarvis_microwake.py` (new, shipped whole): the second detector. Loads
+  `pymicro-wakeword`'s own `hey_jarvis.tflite` only if it is exactly the
+  pinned file (SHA-256 `21a7976a...`, byte-identical to ESPHome's
+  micro-wake-word-models, Apache-2.0). `confirm()` can only say no.
+- `jarvis_speech.py`: step 3a in `hear()` - after openWakeWord heard "hey
+  Jarvis", and only with "two detectors", the second must agree within 1.0
+  s, else the clip is refused **before the voice check and before any
+  words exist**. The order of the checks is otherwise unchanged. The speech
+  detector file is chosen by `vad_version` ("v4" default, "v6"); v6 is
+  used only when its SHA-256 is the pinned one, because sherpa-onnx ends
+  the whole program on a VAD file whose layout it does not know
+  (`silero-vad-model.cc`, `SHERPA_ONNX_EXIT`). `status()` has
+  `wake.confirm` and `vad.version / chosen / note`.
+- `rebuilt/jarvis_voice.py`: two new voice settings, `wake_confirm`
+  (`one` / `both`) and `voice_id_model` (`titanet` / `resnet221`), in the
+  same `voice-settings.json`, with the same rules as the other six. The
+  newer model is used only when chosen AND its pinned file is there; if it
+  goes missing, the measured stronger model is used - never the weak small
+  one on that account - and the status says so. Training now puts every
+  installed stronger model into your voice print, so switching between
+  them needs no new training. The model starts on `GENERIC_BARS`.
+- `jarvis_voice_enroll.py`: the two new modes on `POST /api/voice/enroll`,
+  each with its own plain-words card; a choice that needs something not
+  installed is refused before any card, in words.
+- `jarvis_bakeoff.py`: three new parts, run only when asked (`--wake2`,
+  `--vad`, `--voice-id`), each with its rules written down before it runs.
+  Like the rest of the bake-off, it changes no setting and sends nothing
+  anywhere.
+
+## What was measured here, and what was not
+
+In the dev container (Linux, a shared 4-core processor, no microphone),
+with sherpa-onnx 1.13.8, onnxruntime 1.30.0, pymicro-wakeword 2.5.0 and the
+real downloads above. **All the speech was made by Kokoro's 11 built-in
+voices - no real person.** Computer-made voices behave unlike real people
+(section "The stricter voice check" found the same), so these numbers say
+the parts work, not which is better for you. Your PC's measurements decide.
+
+- **Two "hey Jarvis" detectors** (110 sentences, 44 with "hey Jarvis"):
+
+  | | "hey Jarvis" heard | woke on the other 66 |
+  |---|---|---|
+  | today's (openWakeWord) alone | 44 of 44 | 7 |
+  | the second (microWakeWord) alone | 41 of 44 | 1 |
+  | both must agree | 41 of 44 | 1 |
+
+  Six of today's seven false wake-ups were "In that film, the computer was
+  called Jarvis" (the PC already drops those after speech-to-text); the
+  second detector woke on one of them. The three it missed were two
+  voices saying "Hey Jarvis, what time is it?" and one saying "..., what
+  is the weather like tomorrow?". On every sentence both heard, they
+  agreed within 0.08 s. The second detector costs about 15 ms a sentence.
+- **The speech detector**: v4 and v6 both found speech in all 110 clean
+  sentences and cut into none; with hiss at 5, 0 and -5 dB below the voice,
+  v4 found 324 of 330, v6 329 of 330; on the seven sounds with no speech,
+  neither said "speech". v6 loads in sherpa-onnx 1.13.8 with Jarvis's own
+  settings (window 512), as its code says it would.
+- **The newer voice-ID model**: it loads, and takes about 0.4-0.5 s per
+  3-second sentence here (TitaNet 0.11 s; CAM++ 0.05 s) - a very strict
+  check would take noticeably longer. With one built-in voice standing in
+  for you and ten others for other people, at the general very-strict bar
+  (0.45) it let in 83% of the other voices' sentences, against 20% for
+  TitaNet at its own bar (0.50). Computer-made voices are more alike than
+  people, so this may be far too pessimistic - which is exactly why step
+  7 exists.
+- **Not checked:** anything on Windows - these PowerShell lines were
+  parsed by PowerShell 7 here but not run on 5.1; the pip install on
+  Windows (the wheel hashes above are the win_amd64 ones from PyPI); a real
+  microphone, a real room, a real voice.
+
+## Test it
+
+```powershell
+py -3 backend\test_better_voice.py
+```
+
+`test_better_voice.py`: both settings start where nothing changes and read
+strict when damaged; "two detectors" is at once and refused (before any
+card) while not installed; going back to one is one card, and choosing two
+again while it waits withdraws it; the newer model is one card, refused
+while its file is missing or is not the pinned file, and falls back to the
+measured model if the file goes; in `hear()`, the second detector runs
+only after the first said yes and before the voice check, and can only
+refuse; the one-second agreement; the package-missing and wrong-model
+paths; the speech detector choice (missing and wrong files fall back to
+v4); training puts the other model into the print; the bake-off's three
+verdicts by their rules, and that its new parts run only when asked. With
+`$env:JARVIS_TEST_VOICE_MODELS` set to your `voice-models` folder (and step
+1 done) it also loads both speech detector files and has the real second
+detector hear a built-in voice's "hey Jarvis".

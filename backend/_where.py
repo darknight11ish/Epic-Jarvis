@@ -199,6 +199,9 @@ SHIPPED = (
     # The Brain upgrades (2026-09-28, brain-reads.patch): GET
     # /api/history/search and /api/memory/fact-history, for the apps only
     "jarvis_brain_reads.py",
+    # "Better voice" (2026-09-28): the second "hey Jarvis" detector
+    # (microWakeWord); jarvis_speech.py and jarvis_voice.py call it
+    "jarvis_microwake.py",
 )
 
 

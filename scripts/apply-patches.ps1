@@ -789,6 +789,8 @@ $SHIPPED = @(
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
     # --- the Brain upgrades (2026-09-28, brain-reads.patch) ---
     'jarvis_brain_reads.py'      # brain-reads.patch: GET /api/history/search and /api/memory/fact-history, reads for the apps only
+    # --- "Better voice" (2026-09-28, no patch of its own) ---
+    'jarvis_microwake.py'        # the second "hey Jarvis" detector (microWakeWord), off unless the owner chooses both; jarvis_speech.py calls it
 )
 
 # The settings file. Installed only where none exists; never overwritten.

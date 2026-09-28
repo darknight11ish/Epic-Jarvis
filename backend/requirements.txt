@@ -51,3 +51,10 @@ tzdata; sys_platform == "win32"        # calendar: time-zone data, so an event s
 #                FLAC files on this PC (`py -3 jarvis_voice.py --build-cohort
 #                <folder>`, rebuilt jarvis_voice.py). Nothing else reads FLAC;
 #                backend\README.md "The stricter voice check" has the line.
+#   pymicro-wakeword  the second "hey Jarvis" detector (jarvis_microwake.py),
+#                used only when you choose "both detectors must agree" in
+#                Settings, Voice (off by default). Apache-2.0; brings
+#                pymicro-features (Apache-2.0) and a TensorFlow Lite library
+#                inside its own wheel. backend\README.md, "Better voice", has
+#                the one line that installs version 2.5.0 with its hashes
+#                checked. Without it the setting cannot be switched on.
