@@ -80,7 +80,18 @@ Everything here is research. Nothing in the apps or the backend was changed.
 
    Handy (MIT) has a finished version of talk-to-type (typing what you say
    into the program in front), which the owner already decided to build.
-5. **Speed: the Python code is not the slow part.** A warm turn spends only
+5. **The Brain (section 8): no project has a better one overall, but
+   several have single pieces finished and better made.** Examples:
+   - a recall debugger;
+   - "history of this fact";
+   - word search in old chats;
+   - "forgotten stays forgotten".
+
+   The audit also found three memory gaps. Most important: a fact you
+   forget can be learned again automatically from the same chat about a
+   minute later. It also found a likely privacy gap: the Galaxy graph is
+   not hidden by "Windows Hello for memory lists".
+6. **Speed: the Python code is not the slow part.** A warm turn spends only
    4-15 ms in Jarvis's own code before the model starts (measured). The
    waiting comes from three places:
    - the model re-reading the conversation after its short-term memory was
@@ -477,7 +488,184 @@ can test into code GitHub can test.
 
 ## 8. Jarvis's Brain next to projects that have one finished
 
-*(Filled in below from the two Brain audits.)*
+Two separate audits:
+
+- **8.1-8.3, the Brain screen**, on both apps: how the owner sees and
+  manages what Jarvis knows and does.
+- **8.4-8.6, the memory behind it**: how Jarvis learns, stores, finds and
+  forgets facts.
+
+Full notes: `research-audit-2026-09-28/report-brain-screen.md` and
+`report-brain-core.md`.
+
+**The short answer:**
+
+- **No open-source project has a better Brain overall.** None combines:
+  - learning from the owner's words only;
+  - two dates per fact;
+  - Forget and Erase;
+  - a review queue;
+  - approval cards;
+  - a memory self-test.
+- **Several have one piece finished and better made,** and most are MIT or
+  Apache licensed, so the code may be copied:
+  - Hindsight: a recall debugger and scoring;
+  - supermemory: "history of this fact";
+  - Letta: a "what fills the model's attention" bar;
+  - Hermes: word search in chat history;
+  - OpenClaw: "forgotten stays forgotten";
+  - Graphiti: spotting facts that contradict each other.
+- **The audits also found three memory gaps and one likely privacy gap**
+  (8.3 and 8.6).
+
+### 8.1 What the Brain screen has today
+
+- **The desktop.** The rail shows four tabs: Memory, History, Model and
+  Work. Four more sit behind "Advanced": Galaxy (a picture of how things
+  connect), Live (what Jarvis is doing right now), Trust (the tamper-proof
+  record) and Watch (GitHub watches).
+- **The phone.** One long list under four headings: Now, Memory, Model and
+  PC, and Settings. By rule, the phone has no Galaxy and no full fact list.
+- **Unmerged branches** add a **Projects** tab and a "Talk to a chatbot"
+  card (research branch), and a **Goals** card (continuation branch).
+
+### 8.2 Brain screen: the ten best things to copy or emulate
+
+| # | Idea | Taken from (licence) | Apps | Effort |
+|---|---|---|---|---|
+| 1 | **Galaxy made of people and things.** Rebuild the Galaxy picture from the people-and-things list the desktop already reads (and already hides behind Windows Hello). Each dot is a person or thing; clicking one opens "About <name>". It also closes the privacy gap in 8.3. | Hindsight `entities-view.tsx` + `constellation.tsx` (MIT), idea | PC | M |
+| 2 | **Search what was said in old chats, not just titles**, with a highlighted snippet and "find in this chat" (the owner allowed this on 2026-09-27). **Do not copy Hermes's search index**: it would be an unencrypted copy of every chat on disk. Instead, the PC unlocks and scans the chats in memory for each search. | Hermes `hermes_state_search.py` (MIT), Goose `SearchView.tsx` (Apache), idea | Both | M |
+| 3 | **"Test what Jarvis would recall."** Type a question and see what each search method found, how they were merged, and the final order, with scores. PC only, behind Windows Hello. Mainly for measuring memory changes. | Hindsight `search-debug-view.tsx` (MIT), idea | PC | M |
+| 4 | **"History of this fact"**: each earlier version, with the changed words marked. Today it only says "replaced by #N". | supermemory `version-chain.ts` + Hindsight `diffWords` (MIT), **copy**, about 130 lines | PC first, then phone as text | S |
+| 5 | **One row per answer in the Live trace**, e.g. "model 1.2 s → calendar 0.3 s → answer 4.1 s", instead of a flat list. No backend change. | Langfuse `timeline/layout.ts` (MIT), Opik (Apache), idea | Both | S-M |
+| 6 | **"Used in 14 answers, marked wrong 2"** on each fact. The numbers already exist (`/api/feedback/counts`), but no app shows them. | the old OpenMemory access log (Apache), idea | Both | S-M |
+| 7 | **"What fills Jarvis's attention" bar**: pinned facts, recalled facts, the tool list and the conversation, against the model's limit. Needs the backend to count each part. | Letta `context-usage.ts` (Apache), **copy** | PC (phone: numbers only) | M |
+| 8 | **Activity: a filter** (Approved / Denied / Timed out, this week) **and a link** from each past approval to the steps of the answer that raised it | Hindsight audit log (MIT), OpenClaw decision receipts (MIT), idea | Both | S-M |
+| 9 | **An optional "why" when forgetting.** The "are you sure?" question stays. | Hindsight `invalidate-memory-dialog.tsx` (MIT), idea | Both | S |
+| 10 | **The Trust tab in plain words**: "History checked: nobody has changed it since <date> (N entries)" instead of raw hashes | Jarvis's own need; nothing better elsewhere | Both | S |
+
+**Skipped:**
+
+- **Open WebUI's code.** Its licence forbids removing its branding, so it
+  is ideas only. Its "clear all memories" button is also out: Jarvis has
+  no delete-everything by design.
+- **Hermes's "expensive model" slots.** Jarvis's switch, with a card, is
+  stricter.
+- **OpenClaw's "always allow".**
+- **Swapping Galaxy's drawing code for a library** (sigma.js,
+  force-graph). Today's version is already tuned for colour-blind users,
+  reduced motion and keyboard use.
+
+### 8.3 Brain screen: problems found in Jarvis's own code
+
+- **B1, a likely privacy gap.** "Windows Hello for memory lists" hides
+  three lists: facts, pending facts, and people and things
+  (`src-tauri/src/lock/rules.rs`, `PRIVATE_LISTS`). **(checked)** The
+  Galaxy graph is not on that list. It has "fact" dots (`brain.js:4962`),
+  and its side panel prints each dot's label and fields.
+  - **Not checked:** whether a fact dot carries the fact's words. That is
+    decided in `build_graph()`, which lives on the owner's PC, not in this
+    repo.
+  - **If it does,** Galaxy shows memory while the lists say "hidden".
+    App lock still covers the whole window.
+  - **Fix:** idea 1 above, or add `graph` to the hidden list.
+- **B2.** Galaxy reads the older memory files (`documents-honesty.patch:29-34`),
+  not today's memory store, so it may not match the Memory tab. Not
+  checked on the PC.
+- **B3.** Galaxy's search only jumps to the first match, and says nothing
+  when nothing matches.
+- **B4.** The Trust tab uses raw jargon ("Head sequence", "seq",
+  "unverified"), against CLAUDE.md's "explain simply".
+- **B5.** The Live trace shows raw event data for any event kind it does
+  not know. A list of allowed kinds would be safer. Minor.
+- **B6.** A finished backend feature nobody can see: `/api/feedback/counts`
+  (idea 6).
+- **B7.** History search only matches titles (idea 2).
+
+### 8.4 How Jarvis's memory works, in one breath
+
+1. It reads only the owner's own turns.
+2. The model proposes facts.
+3. Plain-code checks decide whether each fact saves by itself or waits on
+   a card: sensitive, grounded in what was said, a correction, a
+   contradiction.
+4. The fact is stored with a "true from" date.
+5. Recall merges three searches: words, meaning, and people-and-things.
+   An optional re-ranker then re-orders them. It is off until measured.
+6. Forget hides a fact; Erase wipes its words.
+
+The tests are `eval_memory.py` (167 questions) and `eval_learner.py`
+(85 cases). The biggest known weakness, from the memory scoreboard: on a
+question Jarvis should answer "I don't know", it still pulls in about 1.5
+wrong facts.
+
+### 8.5 The memory: the ten best things to copy or emulate
+
+Every one of these must beat the memory self-test and the learner test
+before it is kept, as the owner's rule says. Each line says how it would be
+measured.
+
+| # | Idea | Taken from (licence) | Measured by | Effort |
+|---|---|---|---|---|
+| 1 | **Forgotten stays forgotten** (gap A in 8.6). When a fact is forgotten or erased, keep a scrambled fingerprint of it (never the words) plus the conversation it came from. The same sentence from the same chat is then never saved again. The same words said later make a card, never an automatic save. | OpenClaw `memory-provenance.md` (MIT), idea | 3 new learner cases; the gate cases stay 37/37 | S |
+| 2 | **Drop weak facts by score.** Turn the re-ranker's scores into 0-1 and drop facts under a floor. The owner already approved this "only if the PC's self-test shows it helps". | Hindsight `reranking.py` (MIT), **copy** | Keep only if the "I don't know" wrong facts fall from about 1.5 to about 0.7, and recall and people questions hold. PC run. | S |
+| 3 | **Give the re-ranker the fact's date**, plus small boosts for recent facts and facts close to the date asked about (the planned memory idea 6). | Hindsight (MIT), **copy** | Time questions stay 10/10; "replaced came back" does not rise | S |
+| 4 | **"True until" from the owner's words** (gap B). "On holiday until 12 October" gets an end date. After that date, a tidy card asks "Still true?". Never hidden on its own. | Graphiti's two dates (Apache), done with fixed rules | New learner cases; time questions asked after the date | M |
+| 5 | **Spot facts that contradict without saying so** (gap C), such as "started a new job at Globex" against "works at Initech". Runs in the overnight tidy, at most 5 cards a night, never changes memory by itself. | Graphiti `dedupe_edges.py` `resolve_edge` (Apache), prompt pattern | A new test of 20 real and 20 fake conflicts; keep if it is right at least 8 times in 10 | M |
+| 6 | **Better learning rules for the model**, e.g. "I used to love hiking" means no longer; a fact tucked inside a question still counts. Add about 30 test cases that run the real model. | mem0 `prompts.py` (Apache), **copy the rule lines only**, never its "learn from the assistant" rules | `eval_learner --learner-model` must rise | S |
+| 7 | **A standard long-memory test, run overnight on the PC**: the owner-side questions from LongMemEval. It is scored by plain code, not a cloud judge. | LongMemEval (MIT code; data licence not checked) | a new scoreboard row | M |
+| 8 | **Search hints** (planned memory idea 5): add the owner's own related words to a search | LongMemEval's "key expansion" | recall on reworded questions, and the "I don't know" count | M |
+| 9 | **Only recall memory when the message is about the owner** ("my …", "I …") and asks something. First add about 20 general questions ("why is the sky blue") to the test. | OpenHuman `auto_recall/gate.rs` (GPL: the idea only, written fresh) | wrong facts on general questions go to 0 | S |
+| 10 | **A search model for more than one language** (paraphrase-multilingual-MiniLM, Apache). Only if the owner talks to Jarvis in other languages. | fastembed 0.8.1 | English recall must not drop | S-M |
+
+### 8.6 Memory gaps found in Jarvis's own code
+
+- **A. A forgotten or erased fact can be saved again, automatically, from
+  the same chat.**
+  - **How it happens:** the learner re-reads the whole conversation on
+    each pass. Nothing in `jarvis_intake.py` or `jarvis_auto_learn.py`
+    mentions forgotten facts. **(checked: 0 matches)** The duplicate check
+    only looks at current facts and at pending or rejected suggestions
+    (`jarvis_intake.py:1119-1146`). **(checked)**
+  - **Why:** a code comment in `memory-noise.patch` shows that learning a
+    fact again after it was retired was deliberately allowed, "when the
+    owner genuinely wants it back". That comment was written when every
+    fact waited for a yes. Since automatic learning (2026-09-24), the same
+    sentence can be saved again about 45 seconds after the owner forgets
+    it.
+  - **Not checked:** part of the check lives on the owner's PC
+    (`jarvis_extract.py`), so a learner test case should confirm it
+    before the fix.
+  - **Fix:** idea 1.
+- **B. End dates in the owner's words are never read** (the helper ran the
+  code). "On holiday in Lisbon until 12 October 2026" is stored with no
+  end, so it stays current for ever. The same happened for "lease ends in
+  December 2026" and "lived in Leeds until 2024". Fix: idea 4.
+- **C. Contradictions without a change word slip through** (the helper ran
+  the code).
+  - Stored facts "works at Initech" and "has a cat called Biscuit" were
+    not flagged against:
+    - "started a new job at Globex";
+    - "cat Biscuit died last week";
+    - "signed a lease on a flat in York".
+  - Only "lives in York" was caught.
+  - Fix: idea 5.
+- **D. The re-ranker sees only the fact's words**
+  (`rebuilt/jarvis_memory.py:680`). **(checked)** It never sees the date
+  or how often the owner said it. Fix: idea 3. Using the "said again"
+  count to rank would change a written rule (ARCHITECTURE §5 says nothing
+  reads that count to decide anything), so that part is the owner's call.
+
+**Checked and skipped:**
+
+- **Letta, mem0's memory writer, nanobot and Hermes's background
+  reviewer.** The AI writes its own memory.
+- **HippoRAG and LightRAG.** An AI-built graph over every fact; the
+  people-and-things layer already gives the cheap version.
+- **basic-memory.** AGPL licence.
+- **The LoCoMo and HaluMem data.** Their licences forbid adapting it;
+  their metric names are still useful.
+- **Anything that needs a cloud judge to score.**
 
 ---
 
