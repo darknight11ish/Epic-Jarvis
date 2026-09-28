@@ -1043,6 +1043,153 @@ await check("CONTROL: only the Brain holds the history commands, and ON is held 
   assert.ok(open.indexOf("private_hidden") < open.indexOf("get(&app"), "a transcript opens while hidden");
 });
 
+/* ── The chat audit in the windows (2026-09-28) ─────────────────────────── */
+
+const KINDS_LIST = [
+  { id: "conv-live-0001", title: "Planning the weekend", started: NOW - 7200, updated: NOW - 6480, turns: 8,
+    device: "desktop", has_voice: true, tainted: false, kind: "live" },
+  { id: "conv-supp-0001", title: "Groupon refund", started: NOW - 9000, updated: NOW - 8800, turns: 12,
+    device: "desktop", has_voice: false, tainted: true, kind: "support" },
+  { id: "conv-chat-0001", title: "Dentist on Tuesday", started: NOW - 9600, updated: NOW - 9500, turns: 2,
+    device: "phone", has_voice: false, tainted: false, kind: "chat" },
+];
+
+await check("rows say their kind, a Live session its length, and Show asks the PC for one kind", async () => {
+  const page = await historyTab({ conversations: KINDS_LIST });
+  const rows = await page.locator("#history-list .row-item").allInnerTexts();
+  const status = await page.locator("#freshness").innerText().catch(() => "");
+  await page.selectOption("#history-kind", "live");
+  await page.waitForTimeout(300);
+  const reads = await page.evaluate(() => window.__history.reads);
+  const after = await page.locator("#history-list .row-item").allInnerTexts();
+  const forgetLink = await page.locator("#history-tools .history-forget-range-link").innerText();
+  await page.close();
+  assert.match(rows[0], /Live · 12 min · Today \d\d:\d\d · 8 messages/);
+  assert.match(rows[1], /Support chat/);
+  assert.doesNotMatch(rows[2], /Support chat|Chat with an AI|Comparison/);
+  assert.doesNotMatch(status, /reading…/, "History's status line is stuck on reading");
+  assert.deepEqual(reads.at(-1), { before: null, limit: 30, kind: "live" });
+  assert.equal(after.length, 1);
+  assert.equal(forgetLink, "Forget a time frame…");
+});
+
+await check("Continue this chat names the chat to the bar; a support record says why it cannot be", async () => {
+  const chat = { ...CONV, id: "conv-chat-0001", kind: "chat", continuable: true };
+  const support = { id: "conv-supp-0001", title: "Groupon refund", tainted: true, kind: "support",
+    continuable: false, continue_why: "A customer-support record can't be continued: it is the company's " +
+      "words and what was sent in your name, kept as your record.",
+    turns: [{ role: "support", text: "Hello, how can I help?", provenance: "support_company", read_outside: true }] };
+  const page = await historyTab({ conversations: KINDS_LIST,
+    transcripts: { "conv-chat-0001": chat, "conv-supp-0001": support } });
+  await page.locator("#history-list .row-item").nth(2).getByRole("button", { name: "Open" }).click();
+  await page.waitForTimeout(250);
+  await page.getByRole("button", { name: "Continue this chat" }).click();
+  await page.waitForTimeout(150);
+  const continued = await page.evaluate(() => window.__history.continued);
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.locator("#history-list .row-item").nth(1).getByRole("button", { name: "Open" }).click();
+  await page.waitForTimeout(250);
+  const why = await page.locator("#history-transcript .history-continue-why").innerText();
+  const cont = await page.getByRole("button", { name: "Continue this chat" }).count();
+  await page.close();
+  assert.deepEqual(continued, ["conv-chat-0001"]);
+  assert.equal(why, support.continue_why);
+  assert.equal(cont, 0);
+});
+
+await check("an old answer's markdown is drawn, escaped, and Copy copies it privately", async () => {
+  const conv = { ...CONV, turns: [
+    { role: "user", text: "list it", at: NOW - 60, provenance: "typed" },
+    { role: "assistant", text: "## Plan\n- **one** <script>x</script>\n- two", at: NOW - 50 },
+  ] };
+  const page = await historyTab({ conversations: LIST.conversations, transcripts: { [conv.id]: conv } });
+  await page.getByRole("button", { name: "Open" }).click();
+  await page.waitForTimeout(250);
+  const strong = await page.locator("#history-transcript .history-md strong").count();
+  const scripts = await page.locator("#history-transcript .history-md script").count();
+  const md = await page.locator("#history-transcript .history-md").innerText();
+  await page.getByRole("button", { name: "Copy" }).click();
+  await page.waitForTimeout(100);
+  const copied = await calls(page, "write_clipboard_private");
+  await page.close();
+  assert.equal(strong, 1);
+  assert.equal(scripts, 0, "an old answer's HTML ran as markup");
+  assert.doesNotMatch(md, /\*\*|##/);
+  assert.deepEqual(copied, [{ text: conv.turns[1].text }]);
+});
+
+/* ── The Jarvis bar ─────────────────────────────────────────────────────── */
+
+async function bar(extra = {}) {
+  const page = await K.open(browser, base, "index.html", { chatReplies: [], ...extra }, { width: 760, height: 900 });
+  await page.waitForTimeout(250);
+  return page;
+}
+
+await check("the bar: Earlier chats opens History; Esc says where the chat went", async () => {
+  const page = await bar({ chatReplies: ["Tuesday at 3."] });
+  await page.fill("#prompt", "when is the dentist?");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  const ended = await page.locator("#chat-ended-note").innerText();
+  await page.locator("#earlier-chats-primer").click();
+  await page.waitForTimeout(100);
+  const opened = await calls(page, "open_fix_place");
+  const footer = await page.locator("footer .keys").innerText();
+  await page.close();
+  assert.equal(ended, CASES.words.ended_saved);
+  assert.deepEqual(opened, [{ place: "history" }]);
+  assert.match(footer, /Esc\s*end chat/);
+});
+
+await check("the bar: Continue this chat loads the kept turns into the thread, the same id goes with the next question", async () => {
+  const conv = { id: "conv-chat-0001", title: "Dentist on Tuesday", kind: "chat", tainted: true, turns: [
+    { role: "user", text: "when is the dentist?", provenance: "typed" },
+    { role: "assistant", text: "Tuesday at 3." },
+    { role: "user", text: "ask the cloud", provenance: "typed", answer_kept: false },
+  ] };
+  const page = await bar({ history: { transcripts: { [conv.id]: conv } }, chatReplies: ["Bring your card."] });
+  await page.evaluate(() => window.__emit("continue-chat", "conv-chat-0001"));
+  await page.waitForTimeout(300);
+  const note = await page.locator("#chat-note").innerText();
+  const thread = await page.locator("#previous-answer-body").innerText();
+  const summary = await page.locator("#previous-answer-summary").innerText();
+  await page.fill("#prompt", "what should I bring?");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  const sent = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "stream_chat").map((c) => c[1]));
+  await page.close();
+  assert.equal(note, `Carrying on "Dentist on Tuesday". ${CASES.words.continued_tainted}`);
+  assert.match(thread, /when is the dentist\?[\s\S]*Tuesday at 3\./);
+  assert.doesNotMatch(thread, /ask the cloud/, "a question whose answer was not kept came back");
+  assert.equal(summary, "Earlier in this chat · 1 question");
+  const last = sent.at(-1);
+  assert.equal(JSON.stringify(last).includes("conv-chat-0001"), true, "the next question did not carry the chat's id");
+});
+
+await check("the bar: a chat deleted in the Brain ends here too, and says so", async () => {
+  const page = await bar({ chatReplies: ["Tuesday at 3."] });
+  await page.fill("#prompt", "when is the dentist?");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  const cid = await page.evaluate(() => {
+    const c = (window.__calls || []).filter((x) => x[0] === "stream_chat").at(-1);
+    return JSON.stringify(c[1]).match(/"conversation_?[iI]d":"([^"]+)"/)[1];
+  });
+  await page.evaluate((id) => {
+    localStorage.setItem("jarvis.chat.gone", JSON.stringify({ ids: [id], at: Date.now() }));
+    window.dispatchEvent(new Event("focus"));
+  }, cid);
+  await page.waitForTimeout(150);
+  const note = await page.locator("#chat-note").innerText();
+  await page.close();
+  assert.equal(note, CASES.words.chat_gone);
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nchat history is shown, one at a time");

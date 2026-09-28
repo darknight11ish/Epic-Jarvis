@@ -48,7 +48,20 @@ mind"), people and aliases, "Used in this answer", temporary chat. Search:
 fastembed bge-small-en-v1.5 + sqlite-vec + FTS5/bm25, a MiniLM re-ranker
 (off until measured). Self-tests: `backend/eval_memory.py`,
 `backend/eval_learner.py`, `docs/MEMORY-SCOREBOARD.md`. Encrypted chat
-history on the PC with History search in the apps. **"Forget a time frame"**
+history on the PC with History search in the apps (words searched on the PC
+for the screen only, §71 - no index). **After the chat audit (2026-09-28,
+JARVIS-API §18.6, both apps):** every History row has a kind (chat, live,
+support, chatbot, compare; no "imported" - §85's import only proposes
+facts) and an empty `project` column; "Show" filters by kind; "Continue
+this chat" carries a chat or Live session on in the Jarvis bar / on Home
+(same conversation id, newest kept messages that fit, taint carried); the
+whole current conversation is a scrolling thread; a new conversation after
+30 quiet minutes; "Earlier chats" links; chatbot chats and comparisons kept
+(outside text, never learned from); crisis chats titled "A difficult
+moment"; support records never auto-deleted and unticked in Forget a time
+frame; the HUD's chat box opens the Jarvis bar. Not built, proposals only:
+rename, pin, archive, branching, edit-and-resend, wider word search.
+**"Forget a time frame"**
 (2026-09-28, `jarvis_forget_range.py`, JARVIS-API §64, both apps; merged): a checked list of the facts saved
 and chats from some days, ONE card (`memory_forget_range`), forgotten as
 Forget does, 10 minutes of Undo; also by voice ("forget what you learned

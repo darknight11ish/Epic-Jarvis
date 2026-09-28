@@ -958,7 +958,8 @@ function render(name) {
       renderActivity();
       break;
     case "projects":
-      showProjects();
+      // Its own read; the status line is painted again once it is in.
+      showProjects().then(() => paintFreshness(), () => paintFreshness());
       break;
     case "trust":
       renderContentRisk();
@@ -2869,6 +2870,7 @@ async function loadHistory() {
     if (kind !== chats.kind) return;       // the filter changed while this read ran
     chats.view = v;
     chats.readOkAt = Date.now();
+    paintFreshness();
     // The re-read every 15 seconds replaces the newest page only: pages
     // "Load older" brought in stay, and so does a conversation opened
     // from one of them. A hidden list (Windows Hello) keeps nothing.

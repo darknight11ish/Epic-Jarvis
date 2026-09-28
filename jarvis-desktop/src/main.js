@@ -604,9 +604,11 @@ const temporaryChat = createTemporaryToggle({
   check: () => (IS_TAURI ? invokeStrict("temporary_chat_available") : Promise.resolve(false)),
   restart: () => {
     state.turnQuestion = null;
+    // The toggle has already flipped: the chat that ends here was the other kind.
+    const wasTemporary = !temporaryChat.on;
+    closeCard({ wasTemporary });
     state.conversation = [];
     state.thread = [];
-    closeCard();
     focusInput();
   },
   busy: () => Boolean(state.inFlight || state.abort),
@@ -876,7 +878,7 @@ function syncPrimer() {
 }
 
 /** Collapses the card and clears everything it was showing. */
-function closeCard() {
+function closeCard({ wasTemporary = temporaryChat.on } = {}) {
   dom.card.hidden = true;
   dom.answer.innerHTML = "";
   dom.answer.classList.remove("wellbeing-crisis");
@@ -903,9 +905,12 @@ function closeCard() {
   // Where it went, said the next time the bar is opened, until a question
   // is asked (the chat audit, 2026-09-28: Esc used to end a chat without a
   // word). A temporary chat was never kept, so it says nothing.
-  if (dom.chatEndedNote) {
-    dom.chatEndedNote.hidden = !(hadChat && !temporaryChat.on);
-    dom.chatEndedNote.textContent = dom.chatEndedNote.hidden ? "" : ENDED_SAVED;
+  // A second Esc with no chat left leaves the line as it is. Turning a
+  // temporary chat on says the same of the chat it ended, which was kept
+  // (the chat audit, desktop C11: it used to go without a word).
+  if (dom.chatEndedNote && hadChat) {
+    dom.chatEndedNote.hidden = wasTemporary;
+    dom.chatEndedNote.textContent = wasTemporary ? "" : ENDED_SAVED;
   }
   paintedBlocks = 0;
   spokenUpTo = 0;
