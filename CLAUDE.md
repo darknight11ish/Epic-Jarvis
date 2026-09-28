@@ -737,6 +737,10 @@ testers, scouts and integration scouts; `.claude/agents/`):
   good stays the separate per-fact "Erase the words". This is the one
   exception to "irreversible bulk actions stay off the API" (JARVIS-API
   §18), made safe by the list, the card and the Undo window.
+  Built 2026-09-28 (JARVIS-API §64); **the owner kept its card a risky
+  approval** (Windows Hello on the PC, the screen lock on the phone),
+  because after the 10 minutes the chats are gone for good; Undo stays one
+  tap.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
