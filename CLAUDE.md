@@ -627,7 +627,11 @@ testers, scouts and integration scouts; `.claude/agents/`):
   Jarvis also asks each service to cap how long an answer can be, so one
   long answer cannot carry a month past the limit. Each service names that
   setting differently, so each one's own documentation is checked before
-  it is used.
+  it is used. Built 2026-09-28 (field names confirmed from each company's
+  own code on GitHub, their documentation sites being blocked); **the owner
+  chose (2026-09-28): DeepSeek, whose field could not be confirmed, stays
+  usable with the estimate check only, and OpenAI keeps gpt-5-mini** even
+  though its hidden thinking can shorten answers near the limit.
   **Compare, as built, is confirmed** (owner, 2026-09-28): up to 3 chatbots
   per comparison on one graphics card and 4 on two, asked one after
   another; a chatbot that shows a captcha or sign-in page is left out and
