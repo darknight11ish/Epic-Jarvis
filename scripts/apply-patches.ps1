@@ -815,6 +815,8 @@ $SHIPPED = @(
     'jarvis_pc_help.py'          # "why is my PC slow?", "how full is my disk?" and three more, read-only, no model; GET /api/pc/help through jarvis_brain_reads.py
     # --- "Smarter answers" (2026-09-28, no patch of its own) ---
     'jarvis_claims.py'           # "I've done it" when nothing was done: one plain line at the end of the answer; jarvis_agent.py calls it
+    # --- "Widgets you describe" (2026-09-28, no patch of its own) ---
+    'jarvis_widgets.py'          # a widget as a small checked description (never code): the model's JSON from a fixed menu; /api/widgets routes, switched on by jarvis_brain_reads.py
 )
 
 # The settings file. Installed only where none exists; never overwritten.

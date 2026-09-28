@@ -231,6 +231,10 @@ SHIPPED = (
     # an answer; jarvis_agent.py calls it, and the tool test shares its
     # pattern - no patch
     "jarvis_claims.py",
+    # "Widgets you describe" (2026-09-28): a small checked description (never
+    # code) of what a home-screen / desktop widget shows; switched on by
+    # jarvis_brain_reads.install(), no patch of its own
+    "jarvis_widgets.py",
 )
 
 

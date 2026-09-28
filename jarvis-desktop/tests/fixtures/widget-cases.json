@@ -1,0 +1,1066 @@
+{
+ "actions": [
+  {
+   "id": "focus",
+   "label": "Focus session"
+  },
+  {
+   "id": "timer",
+   "label": "10-min timer"
+  },
+  {
+   "id": "brief_me",
+   "label": "Brief me"
+  },
+  {
+   "id": "stop_everything",
+   "label": "Stop everything"
+  },
+  {
+   "id": "pc_play_pause",
+   "label": "Play/pause PC"
+  }
+ ],
+ "cases": {
+  "focus_and_music": {
+   "answer": {
+    "at": 1790589600.0,
+    "blocks": [
+     {
+      "fraction": 0.4,
+      "label": "Focus session",
+      "private": false,
+      "source": "focus",
+      "type": "progress",
+      "value": "10:00 left"
+     },
+     {
+      "empty": "Nothing playing.",
+      "items": [
+       {
+        "text": "Playing: “Song” by Band.",
+        "when": ""
+       }
+      ],
+      "label": "Playing on your PC",
+      "max": 1,
+      "more": 0,
+      "private": true,
+      "source": "now_playing",
+      "type": "list"
+     },
+     {
+      "empty": "Your to-do list is empty.",
+      "items": [
+       {
+        "text": "Milk",
+        "when": ""
+       }
+      ],
+      "label": "To do",
+      "max": 1,
+      "more": 1,
+      "private": true,
+      "source": "todo",
+      "type": "list"
+     },
+     {
+      "label": "To do",
+      "private": false,
+      "source": "todo_count",
+      "type": "number",
+      "value": "2"
+     },
+     {
+      "action": "focus",
+      "label": "Focus session",
+      "type": "button"
+     },
+     {
+      "action": "pc_play_pause",
+      "label": "Play/pause PC",
+      "type": "button"
+     },
+     {
+      "action": "brief_me",
+      "label": "Brief me",
+      "type": "button"
+     }
+    ],
+    "id": "w0123456789",
+    "name": "Desk",
+    "ok": true
+   },
+   "hidden": {
+    "blocks": [
+     {
+      "fraction": 0.4,
+      "hidden": false,
+      "label": "Focus session",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": "10:00 left"
+     },
+     {
+      "empty": "Nothing playing.",
+      "hidden": true,
+      "items": [],
+      "label": "Playing on your PC",
+      "more": 0,
+      "note": "Hidden - open Jarvis to see it.",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "empty": "Your to-do list is empty.",
+      "hidden": true,
+      "items": [],
+      "label": "To do",
+      "more": 0,
+      "note": "Hidden - open Jarvis to see it.",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "hidden": false,
+      "label": "To do",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     },
+     {
+      "action": "focus",
+      "label": "Focus session",
+      "type": "button"
+     },
+     {
+      "action": "pc_play_pause",
+      "label": "Play/pause PC",
+      "type": "button"
+     },
+     {
+      "action": "brief_me",
+      "label": "Brief me",
+      "type": "button"
+     }
+    ],
+    "name": "Desk"
+   },
+   "view": {
+    "blocks": [
+     {
+      "fraction": 0.4,
+      "hidden": false,
+      "label": "Focus session",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": "10:00 left"
+     },
+     {
+      "empty": "Nothing playing.",
+      "hidden": false,
+      "items": [
+       {
+        "text": "Playing: “Song” by Band.",
+        "when": ""
+       }
+      ],
+      "label": "Playing on your PC",
+      "more": 0,
+      "note": "",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "empty": "Your to-do list is empty.",
+      "hidden": false,
+      "items": [
+       {
+        "text": "Milk",
+        "when": ""
+       }
+      ],
+      "label": "To do",
+      "more": 1,
+      "note": "",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "hidden": false,
+      "label": "To do",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     },
+     {
+      "action": "focus",
+      "label": "Focus session",
+      "type": "button"
+     },
+     {
+      "action": "pc_play_pause",
+      "label": "Play/pause PC",
+      "type": "button"
+     },
+     {
+      "action": "brief_me",
+      "label": "Brief me",
+      "type": "button"
+     }
+    ],
+    "name": "Desk"
+   }
+  },
+  "hostile": {
+   "answer": {
+    "at": 1790589600.0,
+    "blocks": [
+     {
+      "text": "alert(1)",
+      "type": "script"
+     },
+     {
+      "html": "<img src=x onerror=alert(1)>",
+      "type": "html"
+     },
+     {
+      "action": "approve",
+      "label": "Approve",
+      "type": "button"
+     },
+     {
+      "action": "deny_all",
+      "type": "button"
+     },
+     {
+      "action": "timer",
+      "label": "Approve everything",
+      "type": "button"
+     },
+     {
+      "text": "\u0007Hi\tthere\n\n  you⁦",
+      "type": "title"
+     },
+     {
+      "empty": "none",
+      "items": [
+       {
+        "text": "item 0",
+        "when": "now"
+       },
+       {
+        "text": "item 1",
+        "when": "now"
+       },
+       {
+        "text": "item 2",
+        "when": "now"
+       },
+       {
+        "text": "item 3",
+        "when": "now"
+       },
+       {
+        "text": "item 4",
+        "when": "now"
+       },
+       {
+        "text": "item 5",
+        "when": "now"
+       },
+       {
+        "text": "item 6",
+        "when": "now"
+       },
+       {
+        "text": "item 7",
+        "when": "now"
+       },
+       {
+        "text": "item 8",
+        "when": "now"
+       },
+       {
+        "text": "item 9",
+        "when": "now"
+       },
+       {
+        "text": "item 10",
+        "when": "now"
+       },
+       {
+        "text": "item 11",
+        "when": "now"
+       },
+       {
+        "text": "item 12",
+        "when": "now"
+       },
+       {
+        "text": "item 13",
+        "when": "now"
+       },
+       {
+        "text": "item 14",
+        "when": "now"
+       },
+       {
+        "text": "item 15",
+        "when": "now"
+       },
+       {
+        "text": "item 16",
+        "when": "now"
+       },
+       {
+        "text": "item 17",
+        "when": "now"
+       },
+       {
+        "text": "item 18",
+        "when": "now"
+       },
+       {
+        "text": "item 19",
+        "when": "now"
+       },
+       {
+        "text": "item 20",
+        "when": "now"
+       },
+       {
+        "text": "item 21",
+        "when": "now"
+       },
+       {
+        "text": "item 22",
+        "when": "now"
+       },
+       {
+        "text": "item 23",
+        "when": "now"
+       },
+       {
+        "text": "item 24",
+        "when": "now"
+       },
+       {
+        "text": "item 25",
+        "when": "now"
+       },
+       {
+        "text": "item 26",
+        "when": "now"
+       },
+       {
+        "text": "item 27",
+        "when": "now"
+       },
+       {
+        "text": "item 28",
+        "when": "now"
+       },
+       {
+        "text": "item 29",
+        "when": "now"
+       },
+       {
+        "text": "item 30",
+        "when": "now"
+       },
+       {
+        "text": "item 31",
+        "when": "now"
+       },
+       {
+        "text": "item 32",
+        "when": "now"
+       },
+       {
+        "text": "item 33",
+        "when": "now"
+       },
+       {
+        "text": "item 34",
+        "when": "now"
+       },
+       {
+        "text": "item 35",
+        "when": "now"
+       },
+       {
+        "text": "item 36",
+        "when": "now"
+       },
+       {
+        "text": "item 37",
+        "when": "now"
+       },
+       {
+        "text": "item 38",
+        "when": "now"
+       },
+       {
+        "text": "item 39",
+        "when": "now"
+       },
+       "junk",
+       7
+      ],
+      "label": "L",
+      "more": -3,
+      "private": false,
+      "source": "reminders",
+      "type": "list"
+     },
+     {
+      "label": "New",
+      "source": "brand_new_source",
+      "type": "number",
+      "value": "12"
+     },
+     {
+      "fraction": 7,
+      "private": false,
+      "source": "disk_free",
+      "type": "progress",
+      "value": "x"
+     },
+     {
+      "label": [
+       "no"
+      ],
+      "source": "todo_count",
+      "type": "number",
+      "value": 5
+     },
+     "not a block",
+     null,
+     3
+    ],
+    "id": "w0123456789",
+    "name": "Evil‮​ namexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "ok": true
+   },
+   "hidden": {
+    "blocks": [
+     {
+      "action": "timer",
+      "label": "10-min timer",
+      "type": "button"
+     },
+     {
+      "text": "Hi there you",
+      "type": "title"
+     },
+     {
+      "empty": "none",
+      "hidden": true,
+      "items": [],
+      "label": "L",
+      "more": 0,
+      "note": "Hidden - open Jarvis to see it.",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "hidden": true,
+      "label": "New",
+      "note": "Hidden - open Jarvis to see it.",
+      "private": true,
+      "type": "number",
+      "value": ""
+     }
+    ],
+    "name": "Evil namexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   "view": {
+    "blocks": [
+     {
+      "action": "timer",
+      "label": "10-min timer",
+      "type": "button"
+     },
+     {
+      "text": "Hi there you",
+      "type": "title"
+     },
+     {
+      "empty": "none",
+      "hidden": false,
+      "items": [
+       {
+        "text": "item 0",
+        "when": "now"
+       },
+       {
+        "text": "item 1",
+        "when": "now"
+       },
+       {
+        "text": "item 2",
+        "when": "now"
+       },
+       {
+        "text": "item 3",
+        "when": "now"
+       },
+       {
+        "text": "item 4",
+        "when": "now"
+       }
+      ],
+      "label": "L",
+      "more": 35,
+      "note": "",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "hidden": false,
+      "label": "New",
+      "note": "",
+      "private": true,
+      "type": "number",
+      "value": "12"
+     }
+    ],
+    "name": "Evil namexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   }
+  },
+  "missing_private_flag": {
+   "answer": {
+    "blocks": [
+     {
+      "fraction": 0.5,
+      "source": "focus",
+      "type": "progress",
+      "value": "5:00 left"
+     }
+    ],
+    "name": "M",
+    "ok": true
+   },
+   "hidden": {
+    "blocks": [
+     {
+      "fraction": 0.0,
+      "hidden": true,
+      "label": "",
+      "note": "Hidden - open Jarvis to see it.",
+      "private": true,
+      "type": "progress",
+      "value": ""
+     }
+    ],
+    "name": "M"
+   },
+   "view": {
+    "blocks": [
+     {
+      "fraction": 0.5,
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": true,
+      "type": "progress",
+      "value": "5:00 left"
+     }
+    ],
+    "name": "M"
+   }
+  },
+  "morning": {
+   "answer": {
+    "at": 1790589600.0,
+    "blocks": [
+     {
+      "text": "Good morning",
+      "type": "title"
+     },
+     {
+      "empty": "Nothing coming up.",
+      "items": [
+       {
+        "text": "Alarm",
+        "when": "10:10"
+       },
+       {
+        "text": "Call mum",
+        "when": "12:00"
+       }
+      ],
+      "label": "Next up",
+      "max": 3,
+      "more": 0,
+      "private": true,
+      "source": "reminders",
+      "type": "list"
+     },
+     {
+      "label": "Unread email",
+      "private": false,
+      "source": "email_count",
+      "type": "number",
+      "value": "4"
+     },
+     {
+      "fraction": 0.443,
+      "label": "Disk free",
+      "private": false,
+      "source": "disk_free",
+      "type": "progress",
+      "value": "412 GB free of 931 GB"
+     },
+     {
+      "action": "timer",
+      "label": "10-min timer",
+      "type": "button"
+     },
+     {
+      "action": "stop_everything",
+      "label": "Stop everything",
+      "type": "button"
+     }
+    ],
+    "id": "w0123456789",
+    "name": "Morning",
+    "ok": true
+   },
+   "hidden": {
+    "blocks": [
+     {
+      "text": "Good morning",
+      "type": "title"
+     },
+     {
+      "empty": "Nothing coming up.",
+      "hidden": true,
+      "items": [],
+      "label": "Next up",
+      "more": 0,
+      "note": "Hidden - open Jarvis to see it.",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "hidden": false,
+      "label": "Unread email",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "4"
+     },
+     {
+      "fraction": 0.443,
+      "hidden": false,
+      "label": "Disk free",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": "412 GB free of 931 GB"
+     },
+     {
+      "action": "timer",
+      "label": "10-min timer",
+      "type": "button"
+     },
+     {
+      "action": "stop_everything",
+      "label": "Stop everything",
+      "type": "button"
+     }
+    ],
+    "name": "Morning"
+   },
+   "view": {
+    "blocks": [
+     {
+      "text": "Good morning",
+      "type": "title"
+     },
+     {
+      "empty": "Nothing coming up.",
+      "hidden": false,
+      "items": [
+       {
+        "text": "Alarm",
+        "when": "10:10"
+       },
+       {
+        "text": "Call mum",
+        "when": "12:00"
+       }
+      ],
+      "label": "Next up",
+      "more": 0,
+      "note": "",
+      "private": true,
+      "type": "list"
+     },
+     {
+      "hidden": false,
+      "label": "Unread email",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "4"
+     },
+     {
+      "fraction": 0.443,
+      "hidden": false,
+      "label": "Disk free",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": "412 GB free of 931 GB"
+     },
+     {
+      "action": "timer",
+      "label": "10-min timer",
+      "type": "button"
+     },
+     {
+      "action": "stop_everything",
+      "label": "Stop everything",
+      "type": "button"
+     }
+    ],
+    "name": "Morning"
+   }
+  },
+  "not_ok": {
+   "answer": {
+    "error": "That widget is not there any more.",
+    "ok": false
+   },
+   "hidden": null,
+   "view": null
+  },
+  "odd_values": {
+   "answer": {
+    "blocks": [
+     {
+      "fraction": 7,
+      "private": false,
+      "source": "disk_free",
+      "type": "progress",
+      "value": "x"
+     },
+     {
+      "fraction": -1,
+      "private": false,
+      "source": "disk_free",
+      "type": "progress"
+     },
+     {
+      "fraction": true,
+      "private": false,
+      "source": "disk_free",
+      "type": "progress"
+     },
+     {
+      "label": [
+       "no"
+      ],
+      "private": false,
+      "source": "todo_count",
+      "type": "number",
+      "value": 5
+     },
+     {
+      "items": "not a list",
+      "more": true,
+      "source": "todo",
+      "type": "list"
+     }
+    ],
+    "name": 42,
+    "ok": true
+   },
+   "hidden": {
+    "blocks": [
+     {
+      "fraction": 1.0,
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": "x"
+     },
+     {
+      "fraction": 0.0,
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": ""
+     },
+     {
+      "fraction": 0.0,
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": ""
+     },
+     {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": ""
+     },
+     {
+      "empty": "",
+      "hidden": true,
+      "items": [],
+      "label": "",
+      "more": 0,
+      "note": "Hidden - open Jarvis to see it.",
+      "private": true,
+      "type": "list"
+     }
+    ],
+    "name": ""
+   },
+   "view": {
+    "blocks": [
+     {
+      "fraction": 1.0,
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": "x"
+     },
+     {
+      "fraction": 0.0,
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": ""
+     },
+     {
+      "fraction": 0.0,
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": ""
+     },
+     {
+      "hidden": false,
+      "label": "",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": ""
+     },
+     {
+      "empty": "",
+      "hidden": false,
+      "items": [],
+      "label": "",
+      "more": 0,
+      "note": "",
+      "private": true,
+      "type": "list"
+     }
+    ],
+    "name": ""
+   }
+  },
+  "too_many_blocks": {
+   "answer": {
+    "blocks": [
+     {
+      "text": "T0",
+      "type": "title"
+     },
+     {
+      "text": "T1",
+      "type": "title"
+     },
+     {
+      "text": "T2",
+      "type": "title"
+     },
+     {
+      "text": "T3",
+      "type": "title"
+     },
+     {
+      "text": "T4",
+      "type": "title"
+     },
+     {
+      "text": "T5",
+      "type": "title"
+     },
+     {
+      "text": "T6",
+      "type": "title"
+     },
+     {
+      "text": "T7",
+      "type": "title"
+     },
+     {
+      "text": "T8",
+      "type": "title"
+     },
+     {
+      "text": "T9",
+      "type": "title"
+     },
+     {
+      "text": "T10",
+      "type": "title"
+     },
+     {
+      "text": "T11",
+      "type": "title"
+     },
+     {
+      "text": "T12",
+      "type": "title"
+     },
+     {
+      "text": "T13",
+      "type": "title"
+     },
+     {
+      "text": "T14",
+      "type": "title"
+     },
+     {
+      "text": "T15",
+      "type": "title"
+     },
+     {
+      "text": "T16",
+      "type": "title"
+     },
+     {
+      "text": "T17",
+      "type": "title"
+     },
+     {
+      "text": "T18",
+      "type": "title"
+     },
+     {
+      "text": "T19",
+      "type": "title"
+     }
+    ],
+    "name": "Many",
+    "ok": true
+   },
+   "hidden": {
+    "blocks": [
+     {
+      "text": "T0",
+      "type": "title"
+     },
+     {
+      "text": "T1",
+      "type": "title"
+     },
+     {
+      "text": "T2",
+      "type": "title"
+     },
+     {
+      "text": "T3",
+      "type": "title"
+     },
+     {
+      "text": "T4",
+      "type": "title"
+     },
+     {
+      "text": "T5",
+      "type": "title"
+     },
+     {
+      "text": "T6",
+      "type": "title"
+     },
+     {
+      "text": "T7",
+      "type": "title"
+     }
+    ],
+    "name": "Many"
+   },
+   "view": {
+    "blocks": [
+     {
+      "text": "T0",
+      "type": "title"
+     },
+     {
+      "text": "T1",
+      "type": "title"
+     },
+     {
+      "text": "T2",
+      "type": "title"
+     },
+     {
+      "text": "T3",
+      "type": "title"
+     },
+     {
+      "text": "T4",
+      "type": "title"
+     },
+     {
+      "text": "T5",
+      "type": "title"
+     },
+     {
+      "text": "T6",
+      "type": "title"
+     },
+     {
+      "text": "T7",
+      "type": "title"
+     }
+    ],
+    "name": "Many"
+   }
+  }
+ },
+ "comment": "Made by tools/gen_widget_cases.py - do not edit by hand. docs/JARVIS-API.md section 87.",
+ "hidden_words": "Hidden - open Jarvis to see it.",
+ "limits": {
+  "blocks": 8,
+  "items": 5,
+  "label": 40,
+  "name": 40,
+  "text": 60
+ },
+ "private_sources": [
+  "now_playing",
+  "reminders",
+  "timers",
+  "today",
+  "todo"
+ ]
+}
