@@ -923,6 +923,8 @@ $SHIPPED = @(
     'jarvis_history_import.py'   # history-import.patch: the Brain's button runs import_history.run() in the background; every fact waits for a yes
     # --- "Widgets you describe" (2026-09-28, no patch of its own) ---
     'jarvis_widgets.py'          # a widget as a small checked description (never code): the model's JSON from a fixed menu; /api/widgets routes, switched on by jarvis_brain_reads.py
+    # --- "Solve it here" (2026-09-28): a captcha or sign-in page handed to the owner's phone ---
+    'jarvis_handoff.py'          # one picture at a time of the ONE paused browser window, and the owner's own taps and typing to it, only while paused there; routes in jarvis_chatbot_routes.py
 )
 
 # The settings file. Installed only where none exists; never overwritten.

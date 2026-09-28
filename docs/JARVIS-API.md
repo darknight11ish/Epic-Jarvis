@@ -9671,6 +9671,92 @@ Activity lines: each conversation's own, prefixed "Comparing (2 of 3): ",
 and "You paused the comparison. ..." - the phone's `isChatbotActivity`
 knows both, and "Continuing chatbot_compare..." after a Resume.
 
+### 60.8 "Solve it here" - a captcha or sign-in page handed to the phone (`jarvis_handoff.py`, 2026-09-28)
+
+The owner's decision (CLAUDE.md, "A captcha can be handed to the owner's
+phone"): when a chatbot website (60.4, 60.5) or a customer-support chat (65)
+pauses at a captcha, a sign-in page or an "unusual activity" page, the phone
+gets an alert and offers **"Solve it here"**: a live picture of THAT ONE
+browser window, sent PC to phone over the owner's own link, never saved, and
+the owner's taps and typing passed to that window only while Jarvis is
+paused there. Solving it in the window on the PC still works. Jarvis itself
+never solves a captcha. Every rule is `jarvis_handoff.py`'s; the routes are
+answered by `jarvis_chatbot_routes.py` (shipped whole - no patch).
+
+**What starts one.** Only a session paused with the code `captcha`, `login`
+or `unusual` (the adapter's own "needs the owner" words, 60.4), whose adapter
+is a browser window. Never: a running session, any other pause (a card, an
+"are you a bot?" question, an identity check, Pause), a comparison's
+conversation (a chatbot at a captcha is left out of a comparison, not
+paused), an API service or the second local AI (no window).
+
+**`GET /api/chatbot/status`** also carries `handoff` - never a picture, never
+a word from the page:
+
+```json
+{"available": true, "kind": "chatbot", "id": "chat_...", "site": "Gemini",
+ "reason": "captcha", "reason_words": "a captcha (a \"prove you are a person\" check)",
+ "title": "Gemini needs you",
+ "text": "Jarvis paused: a captcha (...). Solve it here, or in the window on the PC.",
+ "active": "ho_...", "ended": {}}
+```
+
+`{"available": false, "active": "", "ended": {...}}` when nothing waits.
+`kind` is `chatbot` or `support`; `active` is the hand-off going on now for
+that session, or `""`.
+
+| Route | Body / query | What it does |
+|---|---|---|
+| `POST /api/chatbot/handoff/start` | `{"kind", "id"}` | Starts passing that one window on - **no card** (nothing leaves the owner's devices; nothing is done but what the owner does). The hosts the window may show meanwhile are fixed now: the site's own, its sign-in hosts, and the one it shows at this moment. One hand-off at a time: a new one ends the old. 409 with the reason when nothing waits. Returns `handoff` (`ho_` + 16 hex), `frames_per_s`, `idle_s` |
+| `GET /api/chatbot/handoff/frame?h=` | | ONE picture: Playwright's own screenshot of that ONE page (never the screen, another window or a tab) as a JPEG in page pixels, base64 in `jpeg`, with `width`, `height`, `seq`. Kept nowhere - not on disk, not in memory after the answer. At most 2 a second (429 with `retry_ms`) |
+| `POST /api/chatbot/handoff/input` | `{"h", "type": "tap", "x", "y"}` (fractions 0..1 of the last picture), `{"type": "text", "text"}` (1-200 characters, no control characters), `{"type": "key", "key"}` (Enter, Backspace, Delete, Tab, Escape, Space, the arrows - nothing that reaches the browser itself), `{"type": "scroll", "dy"}` (capped at 1500) | ONE input from the owner, to that page only. At most 30 in 3 seconds. The audit line has counts and key names, never typed text |
+| `POST /api/chatbot/handoff/end` | `{"h"}` | Ends it. Never held, never a card |
+
+**Every picture and every input checks again**, first, that the session is
+still paused at that same code with that same window, and that the window
+shows one of the fixed hosts - and checks the host again after an input.
+Otherwise the answer is **410** with `ended` and the sentence in `error`:
+`resumed` (the owner pressed Resume, or the session runs again), `stopped`,
+`left` (the window went to another site - nothing more is passed on),
+`closed`, `idle` (no picture asked for 45 seconds: the phone left the
+screen), `time` (15 minutes), `stop_all` (Stop everything ends it too),
+`replaced`, `owner`. The words are `jarvis_handoff.ENDED`; the sentences the
+apps show are `jarvis_handoff.WORDS` (`tools/gen_handoff_cases.py` writes
+both apps' `handoff-cases.json` from the real routes).
+
+**What the apps must do.**
+- **Phone** (`net/Handoff.kt`, `ui/screens/HandoffScreen.kt`,
+  `service/HandoffNotifier.kt`): an alert when `handoff` becomes available -
+  its own channel, **always kept on the phone** (`setLocalOnly(true)`), the
+  site and the reason only; while App lock or "Hide memory lists and chat
+  history" is on, only "A website Jarvis is using needs you", and the lock
+  screen always shows only that. "Solve it here" opens the screen (behind
+  App lock, as ever): the picture is asked for about once a second only
+  while the screen is in front and the app unlocked (it is not composed
+  behind the lock screen), held in memory for the screen only, and
+  screenshots of Jarvis are blocked while it shows. A tap on the picture
+  goes as fractions; a tap on the margin goes nowhere; typing is masked on a
+  sign-in page and never kept in the app's saved state. **Input is held on a
+  stale link** ("The link to your PC is catching up, so your taps and typing
+  are held until it is back."); End and "Solve it on the PC instead" never
+  are. The screen says plainly: "Some captchas refuse taps passed on from a
+  phone this way. If it keeps saying no, solve it on the PC instead." The
+  Brain's chatbot and support plates show "Solve it here" on the paused
+  session too.
+- **Desktop** (`src/handoff.js`): the window is right there, so the Brain's
+  Work tab shows the same alert on the paused session ("Gemini needs you on
+  this PC", pointing at the browser window). It **never calls** the picture
+  or input routes (`tests/handoff.mjs` checks) - one-sided on purpose
+  (ARCHITECTURE.md section 8).
+
+**Said plainly.** A tap passed on this way reaches the page as Playwright's
+own mouse event; a captcha may tell, and refuse it. A site that opens a new
+window or tab for a sign-in is finished on the PC: only the first window is
+passed on. A typed password travels over the owner's own link (Tailscale or
+Meshnet, scrambled) and through the PC's memory for that one input; it is
+never logged or kept. Tried against a fake page in a real Chromium
+(`test_handoff.py`); not yet against a real captcha.
+
 ## 61. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
 
 The owner's decision of 2026-09-28 (`CLAUDE.md`, "Projects, like Claude's
@@ -10131,7 +10217,7 @@ One action per request; only these fixed words are read.
 | Body | What it does | Held on a stale link? |
 |---|---|---|
 | `{"do": "start", "device", "by"?: "button"\|"tray"\|"hotkey", "minutes"?}` | Starts Live on that device (ends one on the other). **No card** ("What asks first" lists it as a fixed row, "Start Jarvis Live - does it without asking"). 409 with `"needs": "voice"` and, in `error`, "Jarvis Live didn't start: it needs your voice trained first - Settings, then Voice." (the phone's: "- Settings, then Train my voice.") until the owner's voice print and the better voice model are there; both apps add a button that goes there. On Standby it starts and says "Waking up, a few seconds"; otherwise it loads the everyday model. Returns `status` and the `say` line | Yes |
-| `{"do": "stop", "why"?: "owner"\|"app_lock"\|"locked", "device"?}` | Ends it | **Never** |
+| `{"do": "stop", "why"?: "owner"\|"app_lock"\|"locked"\|"screen_lock", "device"?}` | Ends it. `screen_lock` ("The phone's screen locked.") is the phone's, under its "End Live when: Only when the phone's screen locks" (63.4) | **Never** |
 | `{"do": "active", "device"?}` | The owner typed, or tapped a quick answer, in Live: the quiet clock starts again, as a spoken sentence does. Nothing typed comes here (the words go to the chat route as usual); it can only keep open a session that is already on | **Never** |
 | `{"do": "extend", "minutes"?}` | More time (20 by default), never more than 2 hours ahead | Yes |
 | `{"do": "resume"}` | "Carry on" after a voice pause | Yes |
@@ -10216,6 +10302,45 @@ the words couldn't be made out - say it again" and keeps listening.
 - **Ending**: the device the session was on plays a short end tone when the
   owner ends it, and says `ended_say` when it ended by itself. Each session
   is a new conversation in the app; "Resume Live" continues the old one.
+
+**The Live extras (the owner's decisions of 2026-09-28).** No new route;
+each uses the ones above.
+- **PC hotkey** "Start or end Jarvis Live" (`hotkeys.rs` `toggle_live`),
+  **off until the owner picks a key** in Settings -> Shortcuts (the hint
+  suggests Alt+Shift+L, checked free of every shipped key; clashes are
+  refused by name like any other). Start sends `"by": "hotkey"` and is held
+  on a stale link and while App lock would ask, like the tray's row; End is
+  never held.
+- **Phone Quick Settings tile** (`LiveTileService`): End in the tile, never
+  held; Start opens the app, which starts Live after App lock (a microphone
+  service may only start from an app in front). It shows "12 min left" from
+  `minutes_left` while Live is on here.
+- **Phone headset button** (a media session, only while Live runs here):
+  press = stop Jarvis talking (not under "Don't interrupt"), hold = Mic off /
+  Mic on. It never approves, denies or starts anything. Android gives the
+  button to the app that played sound last, and some phones open their
+  assistant on a hold; the Live screen says so.
+- **"Live ended - Resume"** (phone): after Live ended here and the PC says
+  `resumable`, a notification kept on the phone offers Resume Live for the
+  rest of `limits.resume_s`; Resume opens the app and starts Live in the
+  same chat (after App lock; held on a stale link).
+- **A Bluetooth headset's microphone** is preferred on the phone while one
+  is connected (Android's communication device plus the recorder's
+  preferred input; no Bluetooth permission), falling back to the phone's
+  own; the Live screen says which ("Microphone: your Bluetooth headset
+  (Buds)"). On the PC Windows picks the microphone (the default one), and the
+  Voice settings already say which it is.
+- **"Talk about this in Live"** (phone): a second entry in the Share sheet
+  (text only). The text waits on the Live screen as a "Shared text" chip and
+  goes, on Send, as its own message tagged `provenance: "shared"` - outside
+  text, exactly as a share to Home (section 18): the chat counts as having
+  read it, and nothing is learned from it.
+- **"End Live when"** (phone, Security screen), the same setting as the PC's
+  `live_end`: with App lock on, "When App lock would ask again" (default) or
+  "Only when the phone's screen locks" (then the phone reports
+  `why: "screen_lock"`). The looser choice asks for the fingerprint or PIN,
+  like every loosening there; back is instant. With App lock off neither
+  ends Live, as before. Saved on the phone only.
 
 ### 63.5 Trust: `hands_free_live`
 
@@ -10590,6 +10715,10 @@ chat.
 - The phone's ongoing notification: "Chat with Groupon: offer waiting"
   (and the other `notify_*` lines), with Stop; a locked phone shows only
   "Jarvis is chatting with customer support for you."
+- A chat paused at a captcha, a sign-in page or an "unusual activity" page
+  can be handed to the phone - "Solve it here" (60.8). The owner's identity
+  checks and "are you a bot?" questions are NOT: those are answered in the
+  window on the PC, as before.
 
 ### 65.7 The window, and a chat in a frame from another host
 

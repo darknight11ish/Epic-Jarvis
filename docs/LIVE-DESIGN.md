@@ -54,8 +54,10 @@ the gate):
   Carry on, Resume Live), a tray row and a red mark on the tray icon, the
   microphone in Live mode (`live.rs`, `voice.rs`), the rules in
   `live-rules.js`, "How far Jarvis Live is trusted" and "End Live when" in
-  Settings -> Voice, and the one "Interrupting Jarvis" setting there. There
-  is **no hotkey** (Alt+Shift+L was proposed; not built).
+  Settings -> Voice, and the one "Interrupting Jarvis" setting there. **A
+  hotkey since 2026-09-28** ("Start or end Jarvis Live", Settings ->
+  Shortcuts), off until the owner picks a key; the hint suggests
+  Alt+Shift+L.
 - **The phone**: a Live screen (Home -> Live, a strip on Home while Live is
   on, and a "Live" app-icon shortcut - long-press Jarvis's icon), the Live
   microphone service with its notification (End Live, Mic off, Stop
@@ -202,9 +204,11 @@ stops it.
 words overlapping the owner's are never turned into words (voice review
 finding 8); a voice on the 2060; a hotkey; the phone's camera capture;
 measuring anything on the owner's PC and phone (step 5). From the reviews'
-idea lists, also not built: a Quick Settings tile, a "Live ended - Resume"
-notification, headset-button and Bluetooth-microphone handling, a dim
-"pocket" mode, and "Talk about this in Live" from the share sheet.
+idea lists, still not built: a dim "pocket" mode. **Built 2026-09-28 (the
+owner's "Jarvis Live extras, all yes")**: the PC hotkey, the phone's Quick
+Settings tile, the headset button, "Live ended - Resume", the Bluetooth
+headset microphone, "Talk about this in Live", and the phone's own "End Live
+when" - see "The Live extras" at the end.
 
 ## What the reviews fixed (2026-09-28, branch `studio-live-fixes`)
 
@@ -332,9 +336,14 @@ card to start"). It needs no approval card, and it does **not** need the
 "Hey Jarvis" switch to be on. Ways to start:
 
 - **PC:** a **Live** button next to the microphone in the Jarvis bar; a tray
-  row; an optional key (Alt+Shift+L, unbound by default - Alt+Shift+S, N, W,
-  X and F are taken, `hotkeys.rs:71-108`) - **the key is not built yet**.
-- **Phone:** a **Live** button on Home; an app-icon shortcut.
+  row; an optional key (Alt+Shift+L suggested, unbound by default -
+  Alt+Shift+S, N, W, X and F are taken) - **built 2026-09-28**
+  (`hotkeys.rs` `toggle_live`; held on a stale link and under App lock like
+  the tray's row; End never held).
+- **Phone:** a **Live** button on Home; an app-icon shortcut; **a Quick
+  Settings tile** (2026-09-28: End in the tile, Start through the app after
+  App lock); "Resume Live" from the "Live ended" notification; "Talk about
+  this in Live" from the Share sheet.
 - **By voice:** "Hey Jarvis, let's talk" (or "go live"), answered by the
   PC's speech route (`jarvis_speech.hear`, as built) without the model, on the device that heard it. Only
   words that passed the owner check can start it. **The model gets no tool
@@ -859,3 +868,24 @@ Sources: the files named in each section; Android's camera privacy
 indicator and while-in-use microphone rules (platform behaviour, not
 re-checked for this document); Gemini Live's shape as described in the
 owner's decision.
+
+## The Live extras (built 2026-09-28)
+
+The owner's decision (CLAUDE.md, "Jarvis Live extras, all yes"), built on
+branch `studio-captcha-live-extras`. No new route; the rules are
+`voice/LiveExtras.kt` (phone, `LiveExtrasTest`) and `hotkeys.rs` (PC).
+
+| Extra | Where | What it does, and what it never does |
+|---|---|---|
+| A hotkey "Start or end Jarvis Live" | PC, Settings -> Shortcuts | **Off until the owner picks a key**; the hint suggests Alt+Shift+L (checked free of every shipped key). Start is the tray row's own start (`"by": "hotkey"`): held on a stale link and while App lock would ask. End is never held. A clash with another action is refused by name; "Turn off" takes the key off again. |
+| A Quick Settings tile | Phone | "Jarvis Live - 12 min left" while on here. Tapping it ends Live at once (never held); starting opens the app on the Live screen and starts there, after App lock - Android only lets a microphone service start from an app in front. |
+| The headset button | Phone, only while Live runs here | Press = stop Jarvis talking (not under "Don't interrupt"); hold = Mic off / Mic on. **It never approves, denies or starts anything** (the source check in `LiveExtrasTest`). Android gives the button to the app that played sound last, and on some phones a hold opens the phone's assistant - the Live screen says so; Mic off is on the screen and the notification too. |
+| "Live ended - Resume" | Phone | After Live ended on the phone and the PC says it can be resumed (quiet, time up), a notification kept on the phone offers Resume Live for the rest of the PC's 10 minutes. Resume opens the app and continues the same chat (after App lock; held on a stale link). |
+| A Bluetooth headset's microphone | Phone | Preferred while one is connected (Android's communication device plus the recorder's preferred input - no Bluetooth permission). If it cannot be used, the phone's own; the Live screen says "Microphone: your Bluetooth headset (Buds)" or the phone's. On the PC Windows chooses the microphone (ARCHITECTURE section 8). The voice check still runs on every clip - a headset microphone is a different microphone, so a voice trained on the phone's own may be recognised less well through it; retraining with the headset on helps. |
+| "Talk about this in Live" | Phone, Android's Share sheet (text) | The text waits on the Live screen as a "Shared text" chip and goes with the next Send as its own message tagged `shared` - outside text, like any share: the chat counts as having read it and nothing is learned from it. Live starts (after App lock) if it was off. |
+| "End Live when" | Phone, Security | The same setting as the PC's: with App lock on, "When App lock would ask again" (default) or "Only when the phone's screen locks" (looser: asks for the fingerprint or PIN; the phone then reports `why: "screen_lock"`). With App lock off neither ends Live. |
+
+**Not verified:** none of the phone's extras has been built by Android's
+compiler here (CI is the only one) or tried on a real phone: the tile, the
+media session's button delivery, the Bluetooth routing and the share entry
+are written from Android's documentation and the app's own patterns.

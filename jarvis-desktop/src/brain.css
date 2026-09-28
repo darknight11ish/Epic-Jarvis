@@ -1331,6 +1331,14 @@ body {
   border-left-color: var(--warn);
 }
 
+/* "Solve it here" on the PC: the window is right here (handoff.js). */
+.chatbot-handoff {
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--warn-faint);
+}
+
 .chatbot-now[data-state="done"],
 .chatbot-now[data-state="stopped"],
 .chatbot-now[data-state="refused"] {

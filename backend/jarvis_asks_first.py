@@ -333,7 +333,7 @@ GROUPS = (
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
                       "control_browser", "post_to_external_service", "open_public_tunnel",
                       "news_read", "page_read", "github_read", "chatbot_session",
-                      "support_chat", "support_offer"]),
+                      "support_chat", "support_offer", "fixed:handoff"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage"]),
@@ -382,6 +382,14 @@ FIXED = {
                    "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still "
                    "checked for your voice, and a card that comes up during Live still waits "
                    "for your tap. How far Live is trusted is a Voice setting."),
+    # "Solve it here" (the owner's decision of 2026-09-28; jarvis_handoff.py):
+    # the page promises every action. Decided in the code: no card - only
+    # the owner's own taps and typing pass, only while Jarvis is paused there.
+    "fixed:handoff": ("Solve a captcha or sign-in page from your phone (\"Solve it here\")",
+                      SAYS_NO_CARD,
+                      "Your own taps and typing, passed to that one browser window on the PC "
+                      "only while Jarvis is paused at the page. Jarvis never solves it, and "
+                      "the picture is never saved. Resume still asks with a card."),
     "fixed:plugin_use": ("Use a tool from a plug-in program on this PC (MCP)",
                          "Asks you first, every time",
                          "Always asks, whatever your settings file says: it is someone "

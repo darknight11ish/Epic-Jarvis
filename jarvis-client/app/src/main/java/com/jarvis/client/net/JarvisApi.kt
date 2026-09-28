@@ -1402,6 +1402,47 @@ class JarvisApi(
         return rawPost(path, json)
     }
 
+    /**
+     * "Solve it here" (JARVIS-API §60.8): `POST /api/chatbot/handoff/start`,
+     * `/input` or `/end`, with a body made by [Handoff.startBody],
+     * [Handoff.tapBody] and the rest, or [Handoff.endBody]. Any other path is
+     * refused here, before anything is sent. The status and body come back
+     * whole: a 410 says the hand-off ended, and why.
+     */
+    suspend fun handoffWrite(path: String, json: String): ApiResult<Chatbot.Reply> {
+        if (path !in Handoff.WRITE_PATHS) {
+            return ApiResult.Failed(ApiError.Malformed("not a hand-off route"))
+        }
+        return rawPost(path, json)
+    }
+
+    /**
+     * `GET /api/chatbot/handoff/frame?h=` - ONE picture of the paused browser
+     * window, as the PC's JSON (a base64 JPEG). Held in memory by the screen
+     * that asked, never written anywhere. The status and body come back whole
+     * (a 429 "too soon", a 410 "ended").
+     */
+    suspend fun handoffFrame(h: String): ApiResult<Chatbot.Reply> =
+        withContext(Dispatchers.IO) {
+            if (!Handoff.validHid(h)) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a hand-off"))
+            }
+            val target = url("${Handoff.FRAME_PATH}?h=$h") ?: return@withContext ApiResult.Failed(noAddress())
+            val req = Request.Builder().url(target).get().authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when (resp.code) {
+                        401, 403 -> ApiResult.Failed(ApiError.BadToken)
+                        404 -> ApiResult.Failed(ApiError.NotFound)
+                        else -> ApiResult.Ok(Chatbot.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     /** One POST whose status and body come back whole - for [supportWrite]. */
     private suspend fun rawPost(path: String, json: String): ApiResult<Chatbot.Reply> =
         withContext(Dispatchers.IO) {

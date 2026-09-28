@@ -298,6 +298,9 @@ SHIPPED = (
     # code) of what a home-screen / desktop widget shows; switched on by
     # jarvis_brain_reads.install(), no patch of its own
     "jarvis_widgets.py",
+    # "Solve it here" (2026-09-28): a captcha or sign-in page handed to the
+    # owner's phone. No patch: jarvis_chatbot_routes.py answers its routes.
+    "jarvis_handoff.py",
 )
 
 

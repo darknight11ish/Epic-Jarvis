@@ -325,6 +325,14 @@ STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 # "desktop-todo"  - the desktop should have it too, and nobody has built it
 PHONE_ONLY = {
     "/api/notifications/watch": ("phone-only", "The smartwatch notification setting (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). A smartwatch pairs with a phone, never a Windows PC; the setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or writes it (docs/ARCHITECTURE.md §8)."),
+    # "Solve it here" (the owner's decision of 2026-09-28): a captcha or
+    # sign-in page handed to the owner's PHONE. On the PC the browser window
+    # is right there; the desktop shows the same alert (handoff.js, from
+    # /api/chatbot/status) and never pictures or relays anything.
+    "/api/chatbot/handoff/start": ("phone-only", "\"Solve it here\" (the owner's decision, 2026-09-28): a captcha or sign-in page handed to the phone. On the PC the window is right there; the desktop shows the same alert from /api/chatbot/status and points at it (docs/ARCHITECTURE.md §8)."),
+    "/api/chatbot/handoff/frame": ("phone-only", "One picture of the paused browser window, for the phone's Solve it here screen. The PC shows the real window (docs/ARCHITECTURE.md §8)."),
+    "/api/chatbot/handoff/input": ("phone-only", "The owner's taps and typing from the phone, to the paused window only. On the PC the owner uses the window itself (docs/ARCHITECTURE.md §8)."),
+    "/api/chatbot/handoff/end": ("phone-only", "Ends the phone's hand-off. The desktop never starts one (docs/ARCHITECTURE.md §8)."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 

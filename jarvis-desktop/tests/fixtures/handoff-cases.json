@@ -1,0 +1,212 @@
+{
+  "end": {
+    "body": {
+      "ended": true,
+      "ok": true
+    },
+    "code": 200
+  },
+  "ended_words": {
+    "closed": "The browser window closed.",
+    "idle": "Nobody was looking at the picture for a while, so the hand-off ended.",
+    "left": "The window went to another site, so the hand-off ended. Nothing more is passed on - look at the window on the PC.",
+    "owner": "You ended it.",
+    "replaced": "A new hand-off started.",
+    "resumed": "The page is no longer waiting for you - the conversation carried on or was resumed.",
+    "stop_all": "Stop everything ended it.",
+    "stopped": "The conversation stopped.",
+    "time": "The hand-off ended after 15 minutes."
+  },
+  "frame": {
+    "body": {
+      "handoff": "ho_0000000000000001",
+      "height": 300,
+      "jpeg": "/9j/wAARCAEsAYYDASIAAhEBAxEB/9k=",
+      "ok": true,
+      "reason": "captcha",
+      "seq": 1,
+      "site": "Gemini",
+      "width": 390
+    },
+    "code": 200
+  },
+  "frame_after_end": {
+    "body": {
+      "ended": "owner",
+      "error": "You ended it.",
+      "ok": false
+    },
+    "code": 410
+  },
+  "frame_left": {
+    "body": {
+      "ended": "left",
+      "error": "The window went to another site, so the hand-off ended. Nothing more is passed on - look at the window on the PC.",
+      "ok": false
+    },
+    "code": 410
+  },
+  "frame_too_soon": {
+    "body": {
+      "error": "Too soon for another picture.",
+      "ok": false,
+      "retry_ms": 501
+    },
+    "code": 429
+  },
+  "input_after_resume": {
+    "body": {
+      "ended": "resumed",
+      "error": "The page is no longer waiting for you - the conversation carried on or was resumed.",
+      "ok": false
+    },
+    "code": 410
+  },
+  "key_refused": {
+    "body": {
+      "error": "That key cannot be passed on.",
+      "ok": false
+    },
+    "code": 400
+  },
+  "keys": [
+    "Enter",
+    "Backspace",
+    "Delete",
+    "Tab",
+    "Escape",
+    "Space",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight"
+  ],
+  "limits": {
+    "frames_per_s": 2.0,
+    "idle_s": 45.0,
+    "most_s": 900.0,
+    "scroll_most": 1500,
+    "text_most": 200
+  },
+  "offer_active": {
+    "active": "ho_0000000000000001",
+    "available": true,
+    "ended": {},
+    "id": "chat_000000000001",
+    "kind": "chatbot",
+    "reason": "captcha",
+    "reason_words": "a captcha (a \"prove you are a person\" check)",
+    "site": "Gemini",
+    "text": "Jarvis paused: a captcha (a \"prove you are a person\" check). Solve it here, or in the window on the PC.",
+    "title": "Gemini needs you"
+  },
+  "offer_after_resume": {
+    "active": "",
+    "available": false,
+    "ended": {
+      "ho_0000000000000001": "resumed"
+    }
+  },
+  "offer_captcha": {
+    "active": "",
+    "available": true,
+    "ended": {},
+    "id": "chat_000000000001",
+    "kind": "chatbot",
+    "reason": "captcha",
+    "reason_words": "a captcha (a \"prove you are a person\" check)",
+    "site": "Gemini",
+    "text": "Jarvis paused: a captcha (a \"prove you are a person\" check). Solve it here, or in the window on the PC.",
+    "title": "Gemini needs you"
+  },
+  "offer_none": {
+    "active": "",
+    "available": false,
+    "ended": {}
+  },
+  "offer_other_pause": {
+    "active": "",
+    "available": false,
+    "ended": {}
+  },
+  "offer_support": {
+    "active": "",
+    "available": true,
+    "ended": {},
+    "id": "sup_000000000001",
+    "kind": "support",
+    "reason": "login",
+    "reason_words": "a sign-in page",
+    "site": "Groupon",
+    "text": "Jarvis paused: a sign-in page. Solve it here, or in the window on the PC.",
+    "title": "Groupon needs you"
+  },
+  "owner_codes": [
+    "captcha",
+    "login",
+    "unusual"
+  ],
+  "routes": {
+    "end": "/api/chatbot/handoff/end",
+    "frame": "/api/chatbot/handoff/frame",
+    "input": "/api/chatbot/handoff/input",
+    "start": "/api/chatbot/handoff/start"
+  },
+  "start": {
+    "body": {
+      "frames_per_s": 2.0,
+      "handoff": "ho_0000000000000001",
+      "idle_s": 45.0,
+      "ok": true,
+      "reason": "captcha",
+      "reason_words": "a captcha (a \"prove you are a person\" check)",
+      "site": "Gemini"
+    },
+    "code": 200
+  },
+  "start_nothing": {
+    "body": {
+      "error": "Nothing is waiting for you on a website right now.",
+      "ok": false
+    },
+    "code": 409
+  },
+  "tap": {
+    "body": {
+      "ok": true
+    },
+    "code": 200
+  },
+  "text": {
+    "body": {
+      "ok": true
+    },
+    "code": 200
+  },
+  "words": {
+    "alert_locked": "A website Jarvis is using needs you",
+    "alert_text": "Jarvis paused: {reason}. Solve it here, or in the window on the PC.",
+    "alert_title": "{site} needs you",
+    "detail": "A live picture of that one browser window on your PC, sent only to this phone and never saved. Your taps and typing go to that window only, and only while Jarvis is paused there. Jarvis never solves it for you.",
+    "end": "End",
+    "held_stale": "The link to your PC is catching up, so your taps and typing are held until it is back.",
+    "here_button": "Solve it here",
+    "keys_label": "Keys",
+    "locked": "Unlock Jarvis to see the page.",
+    "may_refuse": "Some captchas refuse taps passed on from a phone this way. If it keeps saying no, solve it on the PC instead.",
+    "new_window": "If the site opens a new window or tab, finish there on the PC - only the first window is passed on.",
+    "pc_button": "Solve it on the PC instead",
+    "pc_text": "Jarvis paused: {reason}. Deal with it in the browser window, then press Resume. Your phone can do it too (Solve it here).",
+    "pc_title": "{site} needs you on this PC",
+    "reason_captcha": "a captcha (a \"prove you are a person\" check)",
+    "reason_login": "a sign-in page",
+    "reason_unusual": "an \"unusual activity\" page",
+    "scroll_down": "Scroll down",
+    "scroll_up": "Scroll up",
+    "then_resume": "When it is done, press Resume. Resume asks with a card, as always.",
+    "title": "Solve it here",
+    "type_label": "Type into the page",
+    "type_send": "Type it",
+    "waiting": "Getting the picture..."
+  }
+}

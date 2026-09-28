@@ -64,7 +64,8 @@
     "locked": "Windows locked.",
     "slept": "The PC went to sleep.",
     "app_lock": "App lock came on.",
-    "standby": "Jarvis went on standby."
+    "standby": "Jarvis went on standby.",
+    "screen_lock": "The phone's screen locked."
   },
   "end_said": {
     "quiet": "Live ended - it was quiet.",
@@ -81,7 +82,8 @@
   "app_end_reasons": [
     "owner",
     "app_lock",
-    "locked"
+    "locked",
+    "screen_lock"
   ],
   "voice_pauses": [
     "other_voices",

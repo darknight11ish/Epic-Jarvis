@@ -34,6 +34,8 @@
  * @module chatbot
  */
 
+import { readHandoff } from "./handoff.js";
+
 /** The sentences both apps show, word for word (jarvis_chatbot_routes.WORDS). */
 export const WORDS = {
   title: "Talk to a chatbot for me",
@@ -311,6 +313,8 @@ export function readChatbot(body) {
     session: readSession(o.session),
     compare: readCompare(o.compare),
     limits: { waiting: lim.waiting === true, said: text(lim.said) },
+    // "Solve it here": a page waiting for the owner (handoff.js), or null.
+    handoff: readHandoff(o.handoff),
   };
 }
 

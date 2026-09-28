@@ -36,7 +36,7 @@ the code, one question at a time after the owner's yes** (ARCHITECTURE §11;
 lane is configured on the owner's PC**: the lane list comes from
 `litellm-proxy.yaml`, which `backend/README.md` (~line 2339) says does not
 exist there, so every turn is local. Talking to an outside AI through its
-API is designed in `docs/CHATBOT-DRIVER-DESIGN.md`; the owner chose Gemini's website instead, and "Talk to a chatbot for me" is built (JARVIS-API §60; one card per conversation; the driver core `jarvis_chatbot.py`, `/api/chatbot/*` routes and both apps' screens) and reaches: nine chatbot websites driven openly with a spare account each (Gemini, ChatGPT, Claude, Copilot, Perplexity, DeepSeek, Grok, Le Chat, Meta AI; shared base `jarvis_chatbot_web.py`), six services by API key (`jarvis_chatbot_api.py`, OpenAI-style: OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq), and a second local AI on the PC (`jarvis_chatbot_local.py`). None is tried against the real sites yet. "Ask several and compare" is built too (`jarvis_chatbot_compare.py`, one card, one summary; up to 3 chatbots on one card, 4 on two - confirmed by the owner). The API services have a monthly money limit each, set on the PC (`py -3 jarvis_chatbot_api.py limit|price|spent`; an estimate from an UNVERIFIED default price list; no limit = not used; JARVIS-API §60.4.1). Customer-support chats are built too (`jarvis_support.py` + `jarvis_support_widget.py`, JARVIS-API §65; Groupon first, a typed help page for any other company; ONE card listing every detail Jarvis may give, ONE card per offer, "are you a bot?" and identity checks handed to the owner, no opening AI line; kept in the encrypted history) - not yet tried against Groupon's real site. A cloud turn carries only the owner's newest words, never private,
+API is designed in `docs/CHATBOT-DRIVER-DESIGN.md`; the owner chose Gemini's website instead, and "Talk to a chatbot for me" is built (JARVIS-API §60; one card per conversation; the driver core `jarvis_chatbot.py`, `/api/chatbot/*` routes and both apps' screens) and reaches: nine chatbot websites driven openly with a spare account each (Gemini, ChatGPT, Claude, Copilot, Perplexity, DeepSeek, Grok, Le Chat, Meta AI; shared base `jarvis_chatbot_web.py`), six services by API key (`jarvis_chatbot_api.py`, OpenAI-style: OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq), and a second local AI on the PC (`jarvis_chatbot_local.py`). None is tried against the real sites yet. "Ask several and compare" is built too (`jarvis_chatbot_compare.py`, one card, one summary; up to 3 chatbots on one card, 4 on two - confirmed by the owner). The API services have a monthly money limit each, set on the PC (`py -3 jarvis_chatbot_api.py limit|price|spent`; an estimate from an UNVERIFIED default price list; no limit = not used; JARVIS-API §60.4.1). Customer-support chats are built too (`jarvis_support.py` + `jarvis_support_widget.py`, JARVIS-API §65; Groupon first, a typed help page for any other company; ONE card listing every detail Jarvis may give, ONE card per offer, "are you a bot?" and identity checks handed to the owner, no opening AI line; kept in the encrypted history) - not yet tried against Groupon's real site. **"Solve it here"** (2026-09-28, `jarvis_handoff.py`, JARVIS-API §60.8): a conversation or support chat paused at a captcha, sign-in or "unusual activity" page alerts the phone, which can show a live picture of that one PC browser window and pass the owner's taps and typing to it - only while paused there, never saved; the desktop shows the same alert. A cloud turn carries only the owner's newest words, never private,
 tainted or picture turns (ARCHITECTURE §4). Big-model switch across both
 cards (`jarvis_big_model.py`). Simple commands answered without the model
 (`jarvis_quick.py`). Short tool list with more on request; MCP bridge for
@@ -71,6 +71,12 @@ Jarvis" setting for Live and ordinary voice, a Home strip and an app-icon
 shortcut on the phone, Brain's "Now" tab (renamed from "Live"); the camera
 is built OFF until the 12 GB card passes `jarvis_live_photo_test.py`.
 Reviewed and fixed 2026-09-28 (`docs/studio-2026-09-28/live-review-*.md`).
+**Live extras** (2026-09-28, branch `studio-captcha-live-extras`): a PC
+hotkey (off until picked, Alt+Shift+L suggested), and on the phone a Quick
+Settings tile, the headset button (press = stop talking, hold = mic off/on,
+never approves), "Live ended - Resume" for 10 minutes, a Bluetooth headset
+microphone preferred, "Talk about this in Live" from Share, and the phone's
+own "End Live when" on Security (`voice/LiveExtras.kt`, JARVIS-API 63.4).
 Details: `backend/jarvis_speech.py`, `jarvis_voices.py`, `docs/WAKE-WORD.md`.
 
 **Everyday tools** - timers, alarms, reminders, to-do lists, one shared
@@ -167,9 +173,9 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   test; four reviews and their fixes, branch `studio-live-fixes`), the money
   limit and its hard stop (answer-length caps), Compare, the screen-answers
   voice setting. `docs/studio-2026-09-28/gemini-live-comparison.md` compares
-  Live with Gemini Live. Not built from the Live reviews' ideas: a Live
-  hotkey, a Quick Settings tile, a "Resume" notification, headset buttons,
-  a pocket mode, share-to-Live.
+  Live with Gemini Live. Not built from the Live reviews' ideas: a pocket
+  mode (the hotkey, tile, "Resume" notification, headset button, Bluetooth
+  microphone and share-to-Live were built later the same day - see Voice).
 
 ## Decided but not built yet (don't propose these as new)
 

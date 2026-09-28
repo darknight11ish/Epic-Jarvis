@@ -374,6 +374,12 @@ private fun SessionPart(
         Text(Chatbot.statusLine(s), style = MaterialTheme.typography.bodySmall,
             color = if (s.state == "paused") chrome.warnInk else chrome.textMid)
     }
+    // "Solve it here": paused at a captcha, a sign-in page or an "unusual
+    // activity" page (com.jarvis.client.net.Handoff).
+    val waiting by JarvisRuntime.handoffOffer.collectAsState()
+    if (s.state == "paused" && waiting?.kind == "chatbot" && waiting?.id == s.id) {
+        Quiet(com.jarvis.client.net.Handoff.HERE_BUTTON, onClick = { JarvisRuntime.openHandoff() })
+    }
     if (s.state != "refused") {
         Text(Chatbot.progressLine(s), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
     }

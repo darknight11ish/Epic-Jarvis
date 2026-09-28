@@ -433,6 +433,13 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -1309,6 +1316,13 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -2181,6 +2195,13 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -3047,6 +3068,13 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -3913,6 +3941,13 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -4792,6 +4827,13 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -5664,6 +5706,13 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
