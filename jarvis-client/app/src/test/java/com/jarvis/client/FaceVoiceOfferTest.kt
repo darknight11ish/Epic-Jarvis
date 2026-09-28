@@ -81,7 +81,7 @@ class FaceVoiceOfferTest {
     // ---- Changing the one-time answer later, on each animal's row ----
 
     private fun animalRow(vararg extra: Pair<String, JsonElement>) = JsonObject(
-        mapOf(
+        mapOf<String, JsonElement>(
             "face" to JsonPrimitive("redpanda"),
             "name" to JsonPrimitive("Red Panda"),
             "speaker" to JsonPrimitive("3"),
