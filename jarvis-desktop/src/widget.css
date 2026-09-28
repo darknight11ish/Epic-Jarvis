@@ -184,6 +184,39 @@ body {
   min-width: 0;
 }
 
+/* "Jarvis is working on your screen" (screen-work.js): the same shape as the
+   focus countdown, edged in the warn colour - Jarvis is moving the mouse and
+   typing right now, which is worth noticing - with the words carrying it
+   too, never hue alone. */
+.screen-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 6px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--warn);
+  border-radius: var(--radius-chip, 4px);
+  background: var(--warn-faint);
+  font-size: var(--text-xs);
+  color: var(--text);
+}
+
+.screen-strip .screen-word {
+  flex: 1;
+  min-width: 0;
+}
+
+/* `.btn`, further down this file, sets flex: 1 and would stretch Stop across
+   half the strip; the clock and the words need that room. */
+.screen-strip .btn-quiet {
+  flex: none;
+}
+
+.screen-strip .screen-clock {
+  font-size: var(--text-md);
+  color: var(--text);
+}
+
 /* A button that is an offer, not an emphasis: the emphatic control in this
    window is Approve, and nothing else may compete with it. */
 .btn-quiet {

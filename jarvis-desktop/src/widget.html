@@ -92,6 +92,18 @@
         <button class="btn btn-quiet" type="button" id="focus-stop">Stop</button>
       </div>
 
+      <!-- ── "Jarvis is working on your screen" (screen-work.js) ──────────
+           Shown only while an approved Windows screen-control plan runs -
+           the PC's own running list says so, not a guess - in both the pill
+           and the card, so Stop is always on the desktop. Stop is the Stop
+           everything key. No step's words and no window's name: the widget
+           sits outside App lock. -->
+      <div class="screen-strip" id="screen-strip" hidden>
+        <span class="screen-word" id="screen-word">Jarvis is working on your screen</span>
+        <span class="screen-clock mono" id="screen-clock" aria-label="How long it has been working">0:00</span>
+        <button class="btn btn-quiet" type="button" id="screen-stop">Stop</button>
+      </div>
+
       <!-- ── Expanded tray: telemetry, gates, capture ───────────────────── -->
       <main class="widget-tray" id="widget-tray" hidden>
         <!-- Jarvis's live face — the same renderer as the Faces window, in

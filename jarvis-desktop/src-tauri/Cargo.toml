@@ -29,6 +29,13 @@ tauri-plugin-notification = "2"
 tauri-plugin-store = "2"
 # Build order step 3: starting the app twice focuses the running window.
 tauri-plugin-single-instance = "2"
+# Brain, Settings, Faces and the HUD open where the owner last left them, at
+# the size they left them (window_memory.rs). Pinned exactly: 2.5.0 needs
+# Rust 1.90 and this crate's rust-version is 1.89. Its default also restores
+# whether a window was VISIBLE, which would put the HUD on screen before
+# Windows Hello while App lock is on - window_memory.rs restricts it to size,
+# position and maximised, and a test holds that line.
+tauri-plugin-window-state = "=2.4.1"
 # 0.6, not 0.5 and not 0.8. Tauri 2.11.5 itself depends on 0.6.0, so 0.5.3
 # compiled a second copy of the crate; 0.8 would compile a second copy again in
 # the other direction. 0.5 -> 0.6 is an objc2 bump and an MSRV raise; the

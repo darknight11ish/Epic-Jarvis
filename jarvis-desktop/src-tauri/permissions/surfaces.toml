@@ -90,6 +90,12 @@ permissions = [
   "allow-resume-task",
   "allow-stop-task",
   "allow-inject-task-note",
+  # "Jarvis is working on your screen, 0:42 - Stop" (screen_work.rs): which
+  # screen-control plan runs (ids and times only, never its words), and the
+  # line's Stop, which is exactly the Stop everything hotkey - it stops, it
+  # never approves or starts anything.
+  "allow-screen-work",
+  "allow-stop-everything",
 ]
 
 # Real microphone capture and the spoken reply - see src-tauri/src/voice.rs's

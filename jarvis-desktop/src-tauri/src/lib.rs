@@ -40,6 +40,7 @@ pub mod plain_errors;
 pub mod proctree;
 pub mod pyfind;
 pub mod reach;
+pub mod screen_work;
 pub mod sidecar;
 pub mod spec;
 pub mod spec_drift;
@@ -56,6 +57,7 @@ pub mod voice;
 pub mod voice_flow;
 pub mod voice_training;
 pub mod web_search;
+pub mod window_memory;
 pub mod windows;
 #[cfg(windows)]
 pub mod winrt_toast;
@@ -609,7 +611,13 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     // where it stays hidden anyway.
     let lock_first = !hidden && lock::current(app).app_lock;
 
-    tauri::WebviewWindowBuilder::new(
+    // Built hidden in every case, then put back where the owner left it
+    // (window_memory.rs), then shown if it should be: a window built visible
+    // would flash up centred and then jump. Hidden ones get their size and
+    // place now and their maximise when they are shown - maximising is what
+    // would otherwise show them, before Windows Hello.
+    let show_now = !hidden && !lock_first;
+    let hud = tauri::WebviewWindowBuilder::new(
         app,
         HUD_LABEL,
         tauri::WebviewUrl::App("jarvis_hud.html".into()),
@@ -623,13 +631,19 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     .always_on_top(false)
     .skip_taskbar(false)
     .resizable(true)
-    .visible(!hidden && !lock_first)
-    .focused(!hidden && !lock_first)
+    .visible(false)
+    .focused(false)
     .shadow(true)
     .theme(Some(tauri::Theme::Dark))
     .initialization_script(&script)
     .build()
     .map_err(|e| format!("{e}"))?;
+
+    window_memory::restore(&hud, show_now);
+    if show_now {
+        let _ = hud.show();
+        let _ = hud.set_focus();
+    }
 
     if lock_first {
         if let Err(err) = windows::show_hud(app) {
@@ -712,6 +726,9 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        // Brain, Settings, Faces and the HUD open where they were left - size,
+        // place and maximised only, never visibility (window_memory.rs).
+        .plugin(window_memory::plugin())
         // Registering this is not optional and its absence was invisible:
         // `UpdaterExt::updater_builder` resolves `state::<UpdaterState>()`,
         // which PANICS when the type was never managed. The empty `pubkey` in
@@ -729,6 +746,7 @@ pub fn run() {
         .manage(tray::TrayFlashGovernor::default())
         .manage(windows::WidgetState::default())
         .manage(windows::FloatingState::default())
+        .manage(window_memory::PendingMaximize::default())
         .manage(RouteState::default())
         // Registered here with every other managed type, not inside setup: the
         // shortcut handler reads it and would panic on an unregistered state
@@ -781,6 +799,10 @@ pub fn run() {
             commands::pause_task,
             commands::resume_task,
             commands::stop_task,
+            // "Jarvis is working on your screen, 0:42 - Stop" (screen_work.rs):
+            // the widget's line, and its Stop, which is the hotkey's.
+            screen_work::screen_work,
+            screen_work::stop_everything,
             commands::inject_task_note,
             commands::amend_approval,
             commands::set_route_lane,

@@ -767,6 +767,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__taskActions.push(cmd);
             if (window.__taskActionFails) throw new Error(window.__taskActionFails);
             return { ok: true };
+          // "Jarvis is working on your screen" (screen_work.rs): a scenario
+          // sets window.__screenWork to what Rust would answer.
+          case "screen_work":
+            if (window.__screenWorkFails) throw new Error(window.__screenWorkFails);
+            return window.__screenWork || { running: false, id: null, elapsed_ms: null };
+          case "stop_everything":
+            return null;
           case "inject_task_note":
             window.__taskNotes = window.__taskNotes || [];
             window.__taskNotes.push(args.note);
