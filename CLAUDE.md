@@ -1375,7 +1375,13 @@ Decided 2026-09-28, the owner's answers after the post-change audits
   approval button did.
 - **A goal's weekly check-in needs no card**, like plain repeating
   reminders: it only reminds and never acts.
-- **QR-code pairing keeps waiting** for per-device keys ("more devices").
+- ~~QR-code pairing keeps waiting~~ - **changed the same day (owner):
+  build QR-code pairing now**, together with per-device keys ("more
+  devices"), as the 2026-09-24 decision already said: a QR code with a short
+  typed code as the backup, an approval card on the PC before any key is
+  handed over, a key per device listed in both apps with its own Remove.
+  Designed first in `docs/PAIRING-DESIGN.md`, checked against the real code,
+  then built.
 - **The app builder's projects join Projects**: an app is a coding project
   whose tests are its benchmarks - one list, not two.
 
