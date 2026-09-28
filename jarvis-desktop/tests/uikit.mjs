@@ -1667,6 +1667,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "widget_board_action": {
             window.__widgetCalls.push({ cmd, ...args });
+            // brain/widgets.rs: under App lock a tile that acts only opens
+            // the Jarvis bar (the owner, 2026-09-28).
+            if (window.__appLock && !["stop_everything", "brief_me"].includes(args.action)) {
+              window.__barOpened = (window.__barOpened || 0) + 1;
+              return "App lock is on, so this opens the Jarvis bar instead. Unlock it, then ask Jarvis there.";
+            }
             if (state.stale && !["stop_everything", "brief_me"].includes(args.action)) {
               throw new Error("the event stream is stale");
             }

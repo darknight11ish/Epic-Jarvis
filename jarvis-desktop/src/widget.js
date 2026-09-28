@@ -62,6 +62,7 @@ import {
 } from "./screen-work.js";
 import {
   FACE_OPTION as BOARD_FACE_OPTION,
+  LOCKED_OPENS_BAR as BOARD_LOCKED_OPENS_BAR,
   hideView as boardHideView,
   NEVER_HELD as BOARD_NEVER_HELD,
   paint as paintBoardBlocks,
@@ -601,7 +602,24 @@ function boardCanPress(action) {
   return BOARD_NEVER_HELD.includes(action) || linkWords(currentLink()).canAct;
 }
 
+/** Under App lock the tiles that act open the locked Jarvis bar instead
+ *  (the owner, 2026-09-28) - like the approval's Approve. Stop everything
+ *  and Brief me (which opens the Brain behind the lock) are unchanged. */
+function boardOpensBar(action) {
+  return state.appLock && !BOARD_NEVER_HELD.includes(action);
+}
+
 async function pressBoard(action, btn) {
+  if (boardOpensBar(action)) {
+    flash(BOARD_LOCKED_OPENS_BAR);
+    try {
+      // Rust refuses to act under App lock too: it only opens the bar.
+      await invokeStrict("widget_board_action", { action });
+    } catch (error) {
+      flash(String((error && error.message) || error), "bad");
+    }
+    return;
+  }
   if (!boardCanPress(action)) return;
   btn.disabled = true;
   try {

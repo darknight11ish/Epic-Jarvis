@@ -240,6 +240,34 @@ await check("widget window: App lock hides the private words, keeps counts", asy
   assert.ok(text.includes("412 GB free of 931 GB"));
 });
 
+await check("widget window: under App lock the tiles open the Jarvis bar and do not act; Stop everything still works", async () => {
+  const { LOCKED_OPENS_BAR } = await import("../src/widget-board.js");
+  const page = await widgetWindow({ ...BOARD, appLock: true });
+  const timer = page.locator("#board-blocks button[data-action='timer']");
+  assert.equal(await timer.isDisabled(), false, "pressable: it opens the bar");
+  await timer.click();
+  await page.waitForTimeout(300);
+  const flashText = (await page.locator("#widget-flash").innerText()).trim();
+  const opened = await page.evaluate(() => window.__barOpened || 0);
+  await page.locator("#board-blocks button[data-action='stop_everything']").click();
+  await page.waitForTimeout(300);
+  const stopFlash = (await page.locator("#widget-flash").innerText()).trim();
+  await page.close();
+  assert.equal(flashText, LOCKED_OPENS_BAR);
+  assert.equal(opened, 1, "the Jarvis bar was opened, nothing set");
+  assert.equal(stopFlash, "Stop everything sent.");
+});
+
+await check("Rust: under App lock the acting tiles only open the Jarvis bar, before anything is sent", async () => {
+  const rs = readRepo("jarvis-desktop/src-tauri/src/brain/widgets.rs");
+  const { LOCKED_OPENS_BAR } = await import("../src/widget-board.js");
+  assert.ok(rs.includes(`"${LOCKED_OPENS_BAR}"`), "the same words in both");
+  const body = rs.slice(rs.indexOf("pub async fn widget_board_action"));
+  const lock = body.indexOf("opens_bar_when_locked(action) && crate::lock::current(&app).app_lock");
+  assert.ok(lock > 0 && lock < body.indexOf("match action"), "checked before any action");
+  assert.ok(body.slice(lock, lock + 300).includes("show_quickbar"));
+});
+
 await check("widget window: no widgets, no picker - the face as before", async () => {
   const page = await widgetWindow({ widgets: { widgets: [] } }, "");
   const board = await page.locator("#board").isHidden();

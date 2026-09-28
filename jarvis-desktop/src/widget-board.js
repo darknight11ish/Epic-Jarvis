@@ -47,6 +47,10 @@ export const ACTIONS = {
   stop_everything: "Stop everything",
   pc_play_pause: "Play/pause PC",
 };
+/** Under App lock, every other button opens the Jarvis bar instead of acting
+ *  (the owner, 2026-09-28). brain/widgets.rs `LOCKED_OPENS_BAR`. */
+export const LOCKED_OPENS_BAR =
+  "App lock is on, so this opens the Jarvis bar instead. Unlock it, then ask Jarvis there.";
 /** Buttons that still work on a stale link: they only stop, or only open. */
 export const NEVER_HELD = ["stop_everything", "brief_me"];
 export const PRIVATE_SOURCES = ["now_playing", "reminders", "timers", "today", "todo"];
