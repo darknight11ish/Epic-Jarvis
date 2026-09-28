@@ -174,6 +174,15 @@ def t_start_stop_and_the_limits():
     check("App lock's end, worded for either device",
           e.status()["ended_words"] == "App lock came on."
           and e.status()["ended_say"] == "Live ended - App lock came on.")
+    e.start("phone")
+    code, out = L.handle_post({"do": "stop", "why": "screen_lock", "device": "phone"}) \
+        if L.ENGINE is e else (200, e.stop("screen_lock", device="phone"))
+    check("the phone's 'Only when the phone's screen locks' end is its own reason, "
+          "worded plainly, not resumable, nothing said (nobody is looking)",
+          e.status()["ended"] == "screen_lock"
+          and e.status()["ended_words"] == "The phone's screen locked."
+          and e.status()["ended_say"] is None and not e.status()["resumable"]
+          and "screen_lock" in L.APP_END_REASONS, e.status())
 
 
 def t_no_live_without_a_real_voice_check():

@@ -1072,6 +1072,8 @@ function accelerator(event) {
 
 /** The accelerator as a person reads it. */
 function prettyKey(accel) {
+  // An action that ships OFF (the Jarvis Live key, until the owner picks one).
+  if (!accel) return "Off - pick a key";
   return String(accel)
     .split("+")
     .map((part) => MOD_LABEL[part] || part.replace(/^Key|^Digit/, ""))
@@ -1111,14 +1113,36 @@ function renderHotkeys() {
     // in the startup toast but missed on this row (Opus 5.5 re-check,
     // 2026-09-27). A real OS-level refusal still names "another app",
     // since that one really is one.
+    // An action that ships OFF (row.default is empty - the Jarvis Live key,
+    // the owner's decision of 2026-09-28) and has no key yet is simply
+    // "off": nothing is wrong, and nothing blames another app.
+    const offByDefault = !row.default;
     state.textContent = row.registered
       ? "working"
-      : row.error
-        ? row.accelerator ? "in use by another app" : "needs a different key"
-        : "not bound";
+      : offByDefault && !row.accelerator
+        ? "off"
+        : row.error
+          ? row.accelerator ? "in use by another app" : "needs a different key"
+          : "not bound";
     if (!row.registered && row.error) state.title = row.error;
 
     wrap.append(name, key, hint, state);
+    // A key picked for an off-by-default action can be taken off again
+    // (Save shortcuts applies it, like every other change here).
+    if (offByDefault && row.accelerator) {
+      const off = document.createElement("button");
+      off.type = "button";
+      off.className = "btn ghost hotkey-off";
+      off.textContent = "Turn off";
+      off.setAttribute("aria-label", `${row.label}: turn the key off`);
+      off.addEventListener("click", () => {
+        stopRecording();
+        row.accelerator = "";
+        renderHotkeys();
+        report(dom.hotkeyStatus, "Not saved yet — press Save shortcuts.", "");
+      });
+      wrap.append(off);
+    }
     dom.hotkeyRows.append(wrap);
   }
 }
@@ -1185,7 +1209,8 @@ dom.saveHotkeys.addEventListener("click", async () => {
   try {
     hotkeys = await invoke("set_hotkeys", { bindings });
     renderHotkeys();
-    const refused = hotkeys.filter((h) => !h.registered);
+    // A key left off on purpose is not "held by another application".
+    const refused = hotkeys.filter((h) => !h.registered && h.accelerator);
     if (refused.length) {
       // Saved is not the same as working, and saying "Saved" alone is how the
       // old build left someone believing a shortcut was live when it was not.

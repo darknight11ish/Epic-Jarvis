@@ -513,12 +513,21 @@ pub async fn live_hold(app: AppHandle, what: String, on: bool) -> Result<(), Str
 /// The tray's row: start or end. A refusal is a notification - the bar may
 /// be hidden (or locked).
 pub fn toggle_from_tray(app: &AppHandle) {
+    toggle(app, "tray");
+}
+
+/// Start or end Live from the tray's row (`by` "tray") or the Live hotkey
+/// (`by` "hotkey", hotkeys.rs `toggle_live`, off until the owner picks a
+/// key). Start is held on a stale link and while App lock would ask; End
+/// never is. A refusal is a notification.
+pub fn toggle(app: &AppHandle, by: &'static str) {
+    let by = if STARTS.contains(&by) { by } else { "button" };
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let result = if on_here() {
             stop(&app, "owner").await
         } else {
-            start(&app, Some("tray")).await
+            start(&app, Some(by)).await
         };
         if let Err(why) = result {
             commands::notify(&app, "Jarvis Live", &why);

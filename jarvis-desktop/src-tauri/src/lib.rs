@@ -1053,6 +1053,11 @@ pub fn run() {
                         // not by a waiting card. Stopping only makes Jarvis
                         // do less (backend/jarvis_stop_all.py).
                         "stop_everything" => commands::stop_everything_now(app),
+                        // Jarvis Live's own key, OFF until the owner picks
+                        // one (the owner's decision of 2026-09-28). Start is
+                        // held on a stale link and under App lock, exactly
+                        // as the tray's row; End never is.
+                        "toggle_live" => crate::live::toggle(app, "hotkey"),
                         other => eprintln!("[jarvis] no handler for hotkey action `{other}`"),
                     }
                 })

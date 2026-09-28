@@ -105,6 +105,7 @@ import {
   whoOf as supportWhoOf,
   WORDS as SUPPORT,
 } from "./support.js";
+import { pcLine as handoffPcLine } from "./handoff.js";
 import {
   actionsOf,
   addPlaceholder,
@@ -4435,6 +4436,10 @@ function paintChatbot() {
     now.dataset.state = s.state;
     now.append(el("p", "chatbot-head", s.live ? chatbotTalkingLine(s) : `${s.name}: ${chatbotStatusLine(s)}`));
     if (s.live) now.append(el("p", "chatbot-line", chatbotStatusLine(s)));
+    // "Solve it here" (handoff.js): paused at a captcha, a sign-in page or
+    // an "unusual activity" page - the window is right here on the PC.
+    const waitsForYou = s.state === "paused" ? handoffPcLine(v.handoff, "chatbot", s.id) : null;
+    if (waitsForYou) now.append(handoffAlert(waitsForYou));
     if (s.state !== "refused") now.append(el("p", "note", chatbotProgress(s)));
     if (s.usage) now.append(el("p", "note chatbot-usage", chatbotUsageLine(s.usage)));
     if (s.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${s.tierName}`));
@@ -4924,6 +4929,18 @@ function supportOfferBox(c) {
   return box;
 }
 
+/**
+ * "Solve it here" on the PC: the same alert the phone gets, pointing at the
+ * browser window on this PC (handoff.js). Only a site and a reason - never
+ * a picture or a word from the page.
+ */
+function handoffAlert(line) {
+  const box = el("div", "chatbot-handoff");
+  box.setAttribute("role", "status");
+  box.append(el("p", "subhead", line.title), el("p", "note", line.text));
+  return box;
+}
+
 function paintSupport() {
   const box = dom.support;
   if (!box) return;
@@ -4956,6 +4973,8 @@ function paintSupport() {
     now.append(el("p", "chatbot-head", c.live ? supportTalkingLine(c)
       : `${c.companyName}: ${supportStatusLine(c)}`));
     if (c.live) now.append(el("p", "chatbot-line", supportStatusLine(c)));
+    const waitsForYou = c.state === "paused" ? handoffPcLine(v.handoff, "support", c.id) : null;
+    if (waitsForYou) now.append(handoffAlert(waitsForYou));
     if (c.state !== "refused") now.append(el("p", "note", supportProgress(c)));
     if (c.tierName) now.append(el("p", "note", `${SUPPORT.version}: ${c.tierName}`));
     if (c.hidden) {

@@ -22,6 +22,8 @@
  * @module support
  */
 
+import { readHandoff } from "./handoff.js";
+
 /** The sentences both apps show, word for word (jarvis_support.WORDS). */
 export const WORDS = {
   title: "Chat with customer support for me",
@@ -260,6 +262,8 @@ export function readSupport(body) {
       queueMax: num(t.queue_max, 120),
     },
     chat: readChat(o.support),
+    // "Solve it here": a page waiting for the owner (handoff.js), or null.
+    handoff: readHandoff(o.handoff),
   };
 }
 

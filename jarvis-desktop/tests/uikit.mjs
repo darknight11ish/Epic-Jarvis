@@ -443,6 +443,9 @@ export const HOTKEYS = [
     accelerator: "Alt+Shift+X", default: "Alt+Shift+X", registered: true, error: null },
   { id: "toggle_floating", label: "Show or hide the floating face", hint: "The small always-on-top window with just Jarvis's face - no chat box. Off by default.",
     accelerator: "Alt+Shift+F", default: "Alt+Shift+F", registered: true, error: null },
+  // Jarvis Live's key ships OFF (the owner's decision of 2026-09-28).
+  { id: "toggle_live", label: "Start or end Jarvis Live", hint: "Off until you pick a key - Alt+Shift+L is free for it. Starting is held while the connection is catching up or App lock would ask; ending never is.",
+    accelerator: "", default: "", registered: false, error: null },
 ];
 
 export const UPDATE_NONE = {
@@ -775,7 +778,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return null;
           case "reset_hotkeys":
             window.__hotkeys = window.__hotkeys.map((h) => ({
-              ...h, accelerator: h.default, registered: true, error: null,
+              ...h, accelerator: h.default, registered: Boolean(h.default), error: null,
             }));
             return window.__hotkeys;
           case "set_hotkeys": {
@@ -783,6 +786,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             // written, so a rejected save leaves the bindings untouched.
             const seen = new Map();
             for (const [id, accel] of Object.entries(args.bindings)) {
+              // Blank: an action left off (hotkeys.rs skips it).
+              if (!accel) continue;
               const mods = String(accel).split("+").slice(0, -1);
               if (!mods.length) throw new Error(`${id}: \`${accel}\` has no modifier.`);
               const key = String(accel).toLowerCase();
@@ -794,8 +799,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__hotkeys = window.__hotkeys.map((h) => ({
               ...h,
               accelerator: args.bindings[h.id] ?? h.accelerator,
-              // The scenario decides which combinations the "OS" refuses.
-              registered: !(window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator),
+              // The scenario decides which combinations the "OS" refuses. A
+              // blank one is off: not registered, and no error.
+              registered: Boolean(args.bindings[h.id] ?? h.accelerator)
+                && !(window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator),
               error: (window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator)
                 ? "HotKey already registered"
                 : null,

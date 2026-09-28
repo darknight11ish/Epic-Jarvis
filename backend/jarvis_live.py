@@ -259,10 +259,14 @@ END_WORDS = {
     "slept": "The PC went to sleep.",
     "app_lock": "App lock came on.",
     "standby": "Jarvis went on standby.",
+    # The phone's "End Live when: Only when the phone's screen locks" (the
+    # owner's decision of 2026-09-28, the Jarvis Live extras): the phone
+    # reports it when its own screen lock comes on.
+    "screen_lock": "The phone's screen locked.",
 }
 #: The end reasons an APP may report (POST {"do": "stop", "why": ...}). The
 #: rest are the PC's own.
-APP_END_REASONS = ("owner", "app_lock", "locked")
+APP_END_REASONS = ("owner", "app_lock", "locked", "screen_lock")
 
 #: What Jarvis says, in fixed words - safe in any room (nothing heard, nothing
 #: private). jarvis_speech hands the right one to the app as `live_say`. Any
