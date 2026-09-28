@@ -79,7 +79,9 @@ import kotlinx.coroutines.launch
  *  - restart itself. START_NOT_STICKY, and it is never started at boot: after
  *    a reboot, or Android closing the app, it is off until switched on again.
  *    (Android would not allow a microphone service to start from the
- *    background anyway.)
+ *    background anyway.) Since 2026-09-28 a restart leaves ONE quiet
+ *    notification if it was on ([com.jarvis.client.data.WakeResume]); its tap
+ *    opens the app, and the app starts this service from there.
  *  - run without its notification. Its own foreground-service type is
  *    `microphone` - separate from the event link's `specialUse` service, so
  *    each can stop without the other - and Android shows the microphone
@@ -125,6 +127,10 @@ class WakeWordService : Service() {
         if (intent?.action == ACTION_STOP) {
             running = false
             _state.value = WakeListen.Off
+            // Stopped on purpose (the notification's Stop, the Checks switch,
+            // the desktop's wake word going off): no "turn it back on"
+            // notice after the next restart.
+            forgetWanted(this)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -871,6 +877,11 @@ class WakeWordService : Service() {
         /** Call from the app's own screen only - Android refuses it from the background. */
         fun start(context: Context) {
             if (_state.value is WakeListen.Failed) _state.value = WakeListen.Off
+            // The owner switched it on: remembered, so a restart can offer
+            // ONE "tap to turn it back on" notice (data/WakeResume.kt) - and
+            // that notice, if showing, has done its job.
+            runCatching { JarvisRuntime.settings.phoneListeningWanted = true }
+            WakeResumeNotifier.cancel(context)
             runCatching {
                 ContextCompat.startForegroundService(context, Intent(context, WakeWordService::class.java))
             }.onFailure {
@@ -881,9 +892,18 @@ class WakeWordService : Service() {
 
         fun stop(context: Context) {
             if (_state.value !is WakeListen.Failed) _state.value = WakeListen.Off
+            forgetWanted(context)
             runCatching {
                 context.startService(Intent(context, WakeWordService::class.java).setAction(ACTION_STOP))
             }
+        }
+
+        /** Listening was stopped on purpose: no restart notice, and none showing. */
+        private fun forgetWanted(context: Context) {
+            runCatching {
+                if (JarvisRuntime.isInitialized) JarvisRuntime.settings.phoneListeningWanted = false
+            }
+            WakeResumeNotifier.cancel(context)
         }
 
         fun ensureChannel(context: Context) {

@@ -1648,6 +1648,38 @@ object JarvisRuntime {
     }
 
     /**
+     * The 10-minute timer tile (Quick Settings tiles, docs/JARVIS-API.md
+     * section 81.2): ONE plain timer, `POST /api/schedule/add {"kind":
+     * "timer", "seconds": 600}` - no card (a plain timer needs none), held on
+     * a stale link (rule 4) like every change. @return whether it was set,
+     * and the sentence to show.
+     */
+    suspend fun addTileTimer(): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.data.QuickTiles.timerBody()
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> {
+                val (ok, words) = com.jarvis.client.net.Schedule.said(r.value)
+                if (ok) {
+                    _scheduleTick.update { n -> n + 1 }
+                    true to com.jarvis.client.data.QuickTiles.TIMER_SET
+                } else {
+                    false to words
+                }
+            }
+            is ApiResult.Failed -> false to ("Not set. " + describe(r.error))
+        }
+    }
+
+    /**
+     * Runs [block] on the runtime's own long-lived scope rather than a
+     * caller's. For a Quick Settings tile: Android may unbind the tile (and
+     * cancel its own scope) the moment the panel closes, which would cut a
+     * request off half way.
+     */
+    fun launchDetached(block: suspend () -> Unit): Job = scope.launch { block() }
+
+    /**
      * "Lights, plugs and fans without a card" - the desktop's
      * `set_lights_without_card`. ON is held on a stale link (rule 4) and
      * raises ONE approval card on the PC; OFF is never held.

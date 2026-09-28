@@ -62,6 +62,11 @@
         Deny answers it directly; approving always opens the app.</string>
 
     <!-- "Hey Jarvis" on this phone (service/WakeWordService.kt). -->
+    <!-- The three Quick Settings tile slots, as Android's tile editor lists
+         them (data/QuickTiles.kt). The tile itself shows the chosen action. -->
+    <string name="tile_slot_1">Jarvis tile 1</string>
+    <string name="tile_slot_2">Jarvis tile 2</string>
+    <string name="tile_slot_3">Jarvis tile 3</string>
     <string name="channel_wake_name">Listening for \"hey Jarvis\"</string>
     <string name="channel_wake_desc">Shown for as long as this phone listens for
         \"hey Jarvis\". The microphone is open the whole time.</string>

@@ -28,7 +28,9 @@
     <!-- "Hey Jarvis" on this phone (WakeWordService). Listening with the
          screen off or the app in the background needs a foreground service
          of type microphone, and on Android 14+ this permission with it.
-         Only ever started from the app's own Checks screen, never at boot;
+         Only ever started from the app's own Checks screen (or the app
+         itself, opened by the owner's tap on the one "tap to turn it back
+         on" notice after a restart - data/WakeResume.kt), never at boot;
          Android shows the microphone indicator for as long as it runs. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- "Interrupt Jarvis while it talks" (Speaker.beginVoiceCall): the reply
@@ -207,6 +209,44 @@
             android:exported="true"
             android:icon="@drawable/ic_notification"
             android:label="@string/app_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- "Quick Settings tiles you choose" (data/QuickTiles.kt,
+             service/QuickTileService.kt; docs/JARVIS-API.md section 81.2).
+             Android cannot add a tile at run time, so three fixed slots;
+             the owner picks each one's action in Settings -> Quick Settings
+             tiles, from a short safe list that never includes Approve or
+             Deny. Exported with BIND_QUICK_SETTINGS_TILE, exactly like
+             LinkTileService above: only the system can bind them. -->
+        <service
+            android:name=".service.QuickTileOneService"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/tile_slot_1"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".service.QuickTileTwoService"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/tile_slot_2"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".service.QuickTileThreeService"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/tile_slot_3"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

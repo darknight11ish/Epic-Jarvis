@@ -100,7 +100,24 @@ private fun BubbleExplainer(onOpenBubbleSettings: () -> Unit) {
     )
     Gap(8)
     Quiet("Check Android's bubble setting for Jarvis", onClick = onOpenBubbleSettings)
+    Gap(8)
+    // Android 17 (docs/JARVIS-API.md section 81.4). Help only: nothing in
+    // this app changed. MainActivity is resizeable, which that feature needs.
+    Text(
+        ANDROID_17_BUBBLE_LINE,
+        style = MaterialTheme.typography.bodySmall,
+        color = chrome.textLo,
+    )
 }
+
+/**
+ * Android 17's own "Bubble" for any app: long-press the app icon. Not
+ * checked on a real phone yet, so it says "try".
+ */
+internal const val ANDROID_17_BUBBLE_LINE =
+    "On Android 17 and later you can also try Android's own way: touch and hold " +
+        "the Jarvis app icon and choose \"Bubble\". If that option is not there, " +
+        "your phone does not offer it."
 
 /**
  * `TYPE_APPLICATION_OVERLAY` - a window Jarvis draws on top of every other

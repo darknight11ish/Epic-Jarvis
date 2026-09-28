@@ -94,6 +94,21 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **Deleting a chat offers to forget the facts it taught you**, with nothing
   ticked to start, and "are you sure?" before anything is forgotten.
 
+**New: phone conveniences**
+
+- **After a restart, a quiet "Hey Jarvis is off - tap to turn it back on"
+  notice**, if listening was on before. Nothing opens the microphone by
+  itself.
+- **Three Quick Settings tiles you choose:** a focus session, a 10-minute
+  timer, Brief me, Stop everything, or play/pause on the PC. Never Approve or
+  Deny. Held while the connection catches up. Stop everything works even
+  while the app is locked, like the PC's hotkey.
+- **Notes for Android 17:** Jarvis's voice has its own volume slider, and
+  Floating Jarvis may work as an app bubble (touch and hold the icon).
+- **Install notes for 2027:** Google will require extra steps to install
+  unverified apps by tapping the file; installing from the PC with adb stays
+  allowed (docs/INSTALL.md).
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the
