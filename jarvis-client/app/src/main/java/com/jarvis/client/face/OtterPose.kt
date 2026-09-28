@@ -89,6 +89,10 @@ object OtterPose {
     // wash, roll left, roll right, kick, rub.
     private val EVENTS = floatArrayOf(14f, 20f, 20f, 20f, 26f)
 
+    /** Whether one of its idle happenings is playing at clock [t] - the desktop's busy(state, t). */
+    fun busy(state: FaceState, t: Float): Boolean =
+        state == FaceState.IDLE && CritterPose.playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS))
+
     private fun headTurn(p: FloatArray): FloatArray =
         mul(ry(-(HEAD_BASE_YAW + p[HEAD_YAW])), mul(rx(HEAD_BASE_PITCH + p[HEAD_PITCH]), rz(-p[HEAD_ROLL])))
 

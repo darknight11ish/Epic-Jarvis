@@ -196,6 +196,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 </div>
 
 <script src="faces-spec.js"></script>
+<script src="face-pace.js"></script>
 <script src="critter-pose.js"></script>
 <script src="critter-owl.js"></script>
 <script src="critter-otter.js"></script>
@@ -1482,7 +1483,17 @@ function critterFace(o){
     gpu(g, w, h, t, st, amp, P){
       if(typeof GPU === "undefined" || GPU.dead || !GPUOK || !P) return false;
       if(typeof JARVIS_CRITTERS === "undefined") return false;
-      const rw = Math.max(96, Math.min(w, GPUPX));
+      // How many pixels a side it is traced at: the level's share of the
+      // screen's pixels (GPUPX), times its supersample - 2x2 at Maximum,
+      // capped at FacePace.MAX_PX - and then drawn into the w-pixel canvas
+      // below with high-quality smoothing, which averages the extra samples
+      // down. uPx follows rw, so the soft outline is one TRACED pixel wide.
+      const rw = typeof FacePace !== "undefined" ? FacePace.tracePx(w, GPUPX, QNAME)
+                                                  : Math.max(96, Math.min(w, GPUPX));
+      // For the readout under the full-size face (solo-read): traced / drawn.
+      // One object per view, reused - not a new one every frame.
+      const tr = VIEW.trace || (VIEW.trace = { px: 0, of: 0 });
+      tr.px = rw; tr.of = w;
       // FACE_MOUTH: the mouth track of the voice being heard, or null (shut)
       // - see LIP-SYNC. The pose scales it by how much it is speaking.
       const U = this.species.uniforms(P, FACE_MOUTH);
@@ -1517,6 +1528,11 @@ function critterFace(o){
         // One pixel in the shader's own units (it spans -1..1 across rw), for
         // its soft outline.
         G.uniform1f(L.uPx, 2 / rw);
+        // No soft shadow on a small face or at Lower (spec
+        // frame_rate.animals.no_shadow_below_px): measured on the face's own
+        // device pixels, w, not the traced ones.
+        if(L.uNoShadow) G.uniform1f(L.uNoShadow,
+          typeof FacePace !== "undefined" && FacePace.noShadow(w, QNAME) ? 1 : 0);
       });
       if(!out) return false;
       g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
@@ -1525,6 +1541,12 @@ function critterFace(o){
     },
     draw(g, w, h, t, st, amp){
       const P = this.pose(t, st, amp);
+      // Whether one of its idle happenings is playing, for the frame pacer
+      // (dueFrame, display mode's tick): at rest an animal is drawn 30 or 60
+      // times a second, and at the full rate while a stretch or a scratch
+      // plays. Not under "Still" or reduced motion, which take them away.
+      VIEW.busy = !!(this.species && this.species.busy && !FACE_STILL && !CALM.matches
+                     && this.species.busy(st, t));
       // Standby's dim follows the pose nodding off and waking (sleepDim).
       FACE_DIM = sleepDim(FACE_DIM_AWAKE, P ? Math.max(0, Math.min(1, +P.asleep || 0)) : (st === "standby" ? 1 : 0));
       if(this.gpu(g, w, h, t, st, amp, P)){
@@ -4308,7 +4330,15 @@ window.HUD = HUD;
 // The blocky look was the second one: a mesh or volumetric buffer sized for
 // a 232px thumbnail, then upscaled across a full-width phone card.
 //   post    - whether the glow/bloom layer is drawn at all (medium tier and up)
-const Q = { ss: 1.5, detail: 1.0, gpu: 0.80, post: true };
+//   shaderSS - samples per screen pixel, each way, an ANIMAL is traced at
+//             (2 at Maximum: 2x2, averaged down - see critterFace.gpu)
+const Q = { ss: 1.5, detail: 1.0, gpu: 0.80, post: true, shaderSS: 1 };
+// Every setting of Q from a tier goes through here, so a new lever cannot be
+// forgotten in one of the five places that pick a tier.
+function useQ(name){
+  const t = TIERS[name] || TIERS.high;
+  Q.ss = t.ss; Q.detail = t.detail; Q.gpu = t.gpu; Q.post = t.post; Q.shaderSS = t.shaderSS || 1;
+}
 const surfaces = [];
 
 /* ====================================================================== *
@@ -5180,7 +5210,10 @@ function applyTarget(){
   let want = t === "auto" || t === "max" ? CLOCK.hz : Math.min(+t, CLOCK.hz);
   if(GRID_ONLY && t === "auto") want = Math.min(want, GRID_HZ);
   if(CALM.matches) want = Math.min(want, SOLO_CRITTER ? CRITTER_CALM_HZ : CALM_HZ);
-  CLOCK.stride = Math.max(1, Math.round(CLOCK.hz / want));
+  // The pick rule (spec frame_rate.pick_rule): the nearest whole share of
+  // the screen's rate, never more than a fifth faster than the pick - so 90
+  // is 72 on a 144 Hz screen. The same function display mode and the phone use.
+  CLOCK.stride = FacePace.strideNear(CLOCK.hz, want);
   CLOCK.minStride = CLOCK.stride;
   CLOCK.budget = 1000 / (CLOCK.hz / CLOCK.stride);
   paintClock();
@@ -5224,10 +5257,13 @@ function frame(now){
   if(SOLO){
     // While solo is open the grid is not visible, so nothing else is drawn -
     // the whole frame budget goes to the one face you are actually looking at.
-    if(dueFrame(SOLO, dt, PREVIEW)) drawSurface(SOLO, SOLO.acc, PREVIEW), SOLO.acc = 0;
+    const due = dueFrame(SOLO, dt, PREVIEW);
+    if(due) drawSurface(SOLO, SOLO.acc, PREVIEW), SOLO.acc = 0;
     // The card's own time counts too (GPU WATCHDOG): the script alone says
     // nothing about how long a shader face takes to draw.
-    budget(Math.max(performance.now() - t0, SOLO.gpuOk !== false ? SOLO.gpuMs || 0 : 0), 1);
+    const soloCost = Math.max(performance.now() - t0, SOLO.gpuOk !== false ? SOLO.gpuMs || 0 : 0);
+    budget(soloCost, due ? 1 : 0);
+    if(due) soloStats(now, soloCost);
     rafId = requestAnimationFrame(frame);
     return;
   }
@@ -5267,15 +5303,39 @@ function frame(now){
  * never seen to stutter. Active states are untouched. */
 function dueFrame(s, dt, state){
   s.acc = (s.acc || 0) + dt;
-  const fps = STATE_FPS[state];
+  const fps = restFpsOf(s, state, CLOCK.target, HEADROOM.on);
   if(!fps || (s.fxState === state && s.fxAge < 0.6) || s.fxState !== state || s.ack) return true;
-  return s.acc >= (1 / fps) - 0.002;
+  return s.acc >= restStep(fps, CLOCK.hz) - 0.002;
 }
+/* The resting rate for a surface. An ANIMAL follows the spec's
+ * frame_rate.animals.rest_fps (FacePace.restFps): with Frame rate on Auto it
+ * rests at 60 while frames are cheap (HEADROOM) and 30 when not, and draws
+ * every frame while an idle happening plays (its pose's busy(), recorded by
+ * critterFace.draw as view.busy); a picked 30/60/90/120/Max sets its
+ * resting rate; standby 15 and banked 2 always. The other faces keep
+ * state_fps, as before. Shared with display mode's tick(). */
+function restFpsOf(s, state, target, headroom){
+  if(s.theme && s.theme.family === "critter" && typeof FacePace !== "undefined")
+    return FacePace.restFps(state, target, headroom, !!(s.view && s.view.busy));
+  return STATE_FPS[state] || 0;
+}
+/* Seconds between resting frames: on whole vsyncs of the screen (the pick
+ * rule), so 60 on a 144 Hz screen is every other vsync, not every 2.4th. */
+function restStep(fps, hz){
+  if(typeof FacePace === "undefined" || !(hz > 0)) return 1 / fps;
+  return FacePace.strideNear(hz, fps) / hz;
+}
+/* Whether frames are cheap enough for an animal to rest at 60 (spec
+ * frame_rate.animals.headroom), from the frame costs budget() is given. */
+const HEADROOM = typeof FacePace !== "undefined" ? FacePace.makeHeadroom() : { frame(){ return false; }, on: false, reset(){} };
 
 // Adaptive quality: if a frame costs more than the budget, step the
 // supersample down rather than letting the browser thermally throttle into
 // uneven stutter. It steps back up when there is room.
 let costAvg = 0, lastQ = 0, drawn = 0, fpsWin = 0;
+// The animal ladder's holds (FacePace.makeHolds): a step just come down
+// from is not climbed back to for a while, longer each time.
+const EDITOR_HOLDS = typeof FacePace !== "undefined" ? FacePace.makeHolds() : null;
 // The readout element, looked up once. It used to be `getElementById` on every
 // frame, and the `textContent` write next to it forced a full document layout
 // per rendered frame — measured one-for-one with the draw rate. A developer
@@ -5284,6 +5344,8 @@ let costAvg = 0, lastQ = 0, drawn = 0, fpsWin = 0;
 let perfEl = null, perfAt = 0;
 function budget(cost, drew){
   costAvg = costAvg * .9 + cost * .1;
+  // Only frames that drew something say what a frame costs.
+  if(drew) HEADROOM.frame(cost);
   const nowMs = performance.now();
   if(nowMs - perfAt > 250){
     perfAt = nowMs;
@@ -5297,6 +5359,22 @@ function budget(cost, drew){
   // between the two thresholds, and at most one change every two seconds.
   const now = performance.now();
   if(!AUTO || now - lastQ < 2000) return;   // you picked a tier; it stays picked
+  // An ANIMAL, alone in the full-size view, follows the spec's own ladder
+  // (frame_rate.animals.auto): Maximum -> High, then the frame rate to 60,
+  // then Balanced, then 30, then Lower - and may climb to Maximum when its
+  // frames take under a quarter of their budget.
+  if(SOLO && SOLO_CRITTER && typeof FacePace !== "undefined"){
+    const L = FacePace.ladder(CLOCK.hz, CLOCK.minStride);
+    const i = FacePace.rungOf(L, QNAME, CLOCK.stride);
+    const j = FacePace.decide(L, i, costAvg / CLOCK.budget, "max", EDITOR_HOLDS, now);
+    const r = L[j];
+    if(r.tier === QNAME && r.stride === CLOCK.stride) return;
+    const tierChanged = r.tier !== QNAME;
+    QNAME = r.tier; CLOCK.stride = r.stride; CLOCK.budget = 1000 / (CLOCK.hz / CLOCK.stride);
+    lastQ = now; paintClock();
+    if(tierChanged){ useQ(QNAME); applyQuality(); }
+    return;
+  }
   const order = ["low","medium","high","max"];
   const i = order.indexOf(QNAME);
   // Thresholds are fractions of the REAL budget, not fixed milliseconds. At
@@ -5318,8 +5396,24 @@ function budget(cost, drew){
     lastQ = now; paintClock(); return;
   }
   else return;
-  Q.ss = TIERS[QNAME].ss; Q.detail = TIERS[QNAME].detail; Q.gpu = TIERS[QNAME].gpu; Q.post = TIERS[QNAME].post;
+  useQ(QNAME);
   lastQ = now; applyQuality();
+}
+/* The line under the full-size face's name (solo-read): what it is, then
+ * how it is running - frames a second, milliseconds a frame, and for an
+ * animal the resolution it is traced at (FacePace.readout). Written twice a
+ * second, not per frame: a text write forces a layout. */
+let SOLO_BASE = "", soloN = 0, soloMs = 0, soloAt = 0;
+function soloStats(now, cost){
+  soloN++; soloMs += cost;
+  if(!soloAt){ soloAt = now; return; }
+  if(now - soloAt < 500) return;
+  const fps = soloN / ((now - soloAt) / 1000), ms = soloMs / Math.max(1, soloN);
+  soloN = 0; soloMs = 0; soloAt = now;
+  const el = $("solo-read");
+  if(!el || !SOLO) return;
+  const trace = SOLO.theme && SOLO.theme.family === "critter" ? SOLO.view.trace : null;
+  el.textContent = SOLO_BASE + " · " + FacePace.readout(fps, ms, trace);
 }
 function applyQuality(){
   surfaces.forEach(s => {
@@ -5485,10 +5579,15 @@ const TIERS = {
   // it - so unlike ss, this tops out at one.
   // post is the glow/bloom layer. Off at low: a machine that has already been
   // pushed to the low tier has no budget for a halo, however cheap.
-  low:    { ss: 1,   detail: 0.75, gpu: 0.62, post: false },
-  medium: { ss: 1.5, detail: 1.0,  gpu: 0.80, post: true  },
-  high:   { ss: 2,   detail: 1.4,  gpu: 1.00, post: true  },
-  max:    { ss: 2,   detail: 2.0,  gpu: 1.00, post: true  },
+  // shaderSS is for the ANIMALS only (critterFace.gpu): at Maximum each is
+  // traced at 2x2 samples per screen pixel and averaged down, which is what
+  // takes the last jagged edge off them (the owner's "sharp animals on
+  // capable hardware", 2026-09-28). Their names on screen are the spec's
+  // frame_rate.animals.levels labels: Lower, Balanced, High, Maximum.
+  low:    { ss: 1,   detail: 0.75, gpu: 0.62, post: false, shaderSS: 1 },
+  medium: { ss: 1.5, detail: 1.0,  gpu: 0.80, post: true,  shaderSS: 1 },
+  high:   { ss: 2,   detail: 1.4,  gpu: 1.00, post: true,  shaderSS: 1 },
+  max:    { ss: 2,   detail: 2.0,  gpu: 1.00, post: true,  shaderSS: 2 },
 };
 let QNAME = "medium", AUTO = true;
 function buildFps(){
@@ -5497,7 +5596,9 @@ function buildFps(){
   // past the display's own rate - but both are listed because the Android
   // renderer treats them differently: there, "max" also REQUESTS the highest
   // supported mode from the system, which auto does not.
-  [["auto","auto"],["60","60"],["120","120"],["max","max"]].forEach(([id,label]) => {
+  // 30 and 90 joined them (2026-09-28): 30 for a quiet machine, 90 for a
+  // 90 Hz screen. Each lands on whole vsyncs (FacePace.strideNear).
+  [["auto","auto"],["30","30"],["60","60"],["90","90"],["120","120"],["max","max"]].forEach(([id,label]) => {
     const b = document.createElement("button");
     b.className = "chip"; b.dataset.f = id; b.textContent = label;
     b.onclick = () => {
@@ -5516,10 +5617,12 @@ function buildQuality(){
   Object.keys(TIERS).forEach(name => {
     const b = document.createElement("button");
     b.className = "chip"; b.dataset.q = name;
-    b.textContent = name;
+    // The same words as Settings and the phone: Lower, Balanced, High, Maximum.
+    b.textContent = typeof FacePace !== "undefined" ? FacePace.level(name).label : name;
+    b.title = typeof FacePace !== "undefined" ? FacePace.level(name).note || "" : "";
     b.onclick = () => {
       QNAME = name; AUTO = false;            // an explicit choice is not overridden
-      Q.ss = TIERS[name].ss; Q.detail = TIERS[name].detail; Q.gpu = TIERS[name].gpu; Q.post = TIERS[name].post;
+      useQ(name);
       applyQuality();
     };
     box.appendChild(b);
@@ -5707,6 +5810,10 @@ function openSolo(theme){
   if(SOLO && SOLO._fit) window.removeEventListener("resize", SOLO._fit);
   GRID_ONLY = false; SOLO_CRITTER = theme.family === "critter";
   applyTarget();   // the one face being looked at
+  // An animal starts at High under Auto (spec frame_rate.animals.auto.start),
+  // whatever the grid had settled on; the ladder in budget() takes it from
+  // there, up to Maximum on a capable graphics chip. A picked level stays.
+  if(AUTO && SOLO_CRITTER && QNAME !== "high"){ QNAME = "high"; useQ("high"); applyQuality(); }
   SOLO = makeSurface(theme, cv, null);
   SOLO.seed = 99;
   SOLO.ss = 2;                                  // always full pixel density
@@ -5716,7 +5823,9 @@ function openSolo(theme){
   $("solo-name").textContent = theme.name;
   syncFaceChoice();
   const f = FACE[theme.id];
-  $("solo-read").textContent = `${f.geometry} · ${f.integrates_per_frame ? "sub-stepped" : f.dim}`;
+  SOLO_BASE = `${f.geometry} · ${f.integrates_per_frame ? "sub-stepped" : f.dim}`;
+  $("solo-read").textContent = SOLO_BASE;
+  soloN = 0; soloMs = 0; soloAt = 0;
   // `surf`, not the global SOLO: a listener should only ever resize the
   // surface it was created for, and reading the global is what made a stray
   // listener able to throw after SOLO went null.
@@ -5777,6 +5886,9 @@ function closeSolo(){
   stopSoloCycle();
   SOLO = null; $("solo").hidden = true;
   GRID_ONLY = true; SOLO_CRITTER = false; applyTarget();
+  // Maximum is for one animal on its own: twenty cards at 2x2 would be
+  // twenty times the work. Under Auto the grid goes back to High.
+  if(AUTO && QNAME === "max"){ QNAME = "high"; useQ("high"); applyQuality(); }
   // Back to the card it was opened from, so a keyboard user is not dropped
   // at the top of the page.
   if(wasOpen && SOLO_OPENER && document.contains(SOLO_OPENER)) SOLO_OPENER.focus();
@@ -6301,7 +6413,7 @@ async function bootDisplay() {
   // governor exists for twenty full-size tiles at once. "high" and not "max"
   // because high is as far as budget() itself ever climbs on its own - this
   // copies what the kit actually does, rather than going past it.
-  Q.ss = TIERS.high.ss; Q.detail = TIERS.high.detail; Q.gpu = TIERS.high.gpu; Q.post = TIERS.high.post;
+  useQ("high");
   QNAME = "high";
 
   const surface = makeSurface(THEME[faceId], canvas, null);
@@ -6331,10 +6443,13 @@ async function bootDisplay() {
   // Medium would bounce between the two every two seconds, each bounce a
   // resize.
   let downFrom = null, downAt = 0;
+  // Whether frames are cheap enough for an animal to rest at 60 (spec
+  // frame_rate.animals.headroom).
+  const headroom = FacePace.makeHeadroom();
   function useTier(name) {
     const t = TIERS[name] || TIERS.high;
     tier = TIERS[name] ? name : "high";
-    Q.ss = t.ss; Q.detail = t.detail; Q.gpu = t.gpu; Q.post = t.post; QNAME = tier;
+    useQ(tier); QNAME = tier;
     // High and Max keep the kit's solo floor and full pixel density - what
     // this frame always drew. Low and Medium deliberately do not: with the
     // floor they would cost the same as High and save nothing (FaceBudget.kt).
@@ -6352,12 +6467,12 @@ async function bootDisplay() {
     stride = baseStride;
     useTier(TUNE.autoAdjust ? "high" : TUNE.quality);
   }
-  // The kit's divisor rule (face-tuning.js strideFor), inlined so the pacing
-  // does not wait on the module.
+  // The pick rule (FacePace.strideFor - the same one face-tuning.js, the
+  // Faces window and the phone use): 90 is 72 on a 144 Hz screen.
   function strideForRate(rate) {
-    const want = rate === "60" ? 60 : rate === "120" ? 120 : hz;
-    return Math.max(1, Math.round(hz / Math.min(want, hz)));
+    return FacePace.strideFor(rate, hz);
   }
+  const isAnimal = () => !!(surface.theme && surface.theme.family === "critter");
   import("./face-tuning.js").then((m) => {
     applyTune(m.loadFaceTuning());
     // A change made in Settings, which is another window on the same origin.
@@ -6369,10 +6484,27 @@ async function bootDisplay() {
   // step the quality down, then the frame rate; comfortably under, step back
   // up - to High at most, as far as budget() itself ever climbs. At most one
   // change every two seconds, because each quality change resizes the canvas.
+  // An animal follows the spec's ladder instead (FacePace.ladder /
+  // decide): Maximum -> High, the frame rate to 60, Balanced, 30, Lower -
+  // and climbs to Maximum only while its frames take under a quarter of
+  // their budget. Starts at High, as before.
+  const holds = FacePace.makeHolds();
   function govern(cost, now) {
-    if (!TUNE.autoAdjust) return;
     costAvg = costAvg * 0.9 + cost * 0.1;
+    if (!TUNE.autoAdjust) return;
     if (now - lastStep < 2000) return;
+    if (isAnimal()) {
+      const L = FacePace.ladder(hz, baseStride);
+      const i = FacePace.rungOf(L, tier, stride);
+      const r = L[FacePace.decide(L, i, costAvg / (1000 / (hz / stride)), "max", holds, now)];
+      if (r.tier === tier && r.stride === stride) return;
+      if (r.tier !== tier) useTier(r.tier);
+      stride = r.stride;
+      lastStep = now;
+      return;
+    }
+    // Maximum is for an animal: another face worn after one goes back to High.
+    if (tier === "max") { useTier("high"); lastStep = now; return; }
     const order = ["low", "medium", "high"];
     const i = Math.max(0, order.indexOf(tier));
     const budgetMs = 1000 / (hz / stride);
@@ -6416,15 +6548,30 @@ async function bootDisplay() {
     }
     vsync++;
     const paced = stride <= 1 || vsync % stride === 0;
-    const calmHz = surface.theme && surface.theme.family === "critter" ? CRITTER_CALM_HZ : CALM_HZ;
-    if (paced && (!CALM.matches || now - lastDraw >= 1000 / calmHz)) {
-      const dt = Math.min(0.1, owed);   // the same 0.1s cap as before
+    const calmHz = isAnimal() ? CRITTER_CALM_HZ : CALM_HZ;
+    // The resting rates (dueFrame's rule, which this loop used to skip): the
+    // other faces keep state_fps (idle 30, standby 15, banked 2); an animal
+    // follows FacePace.restFps - with Frame rate on Auto 60 while frames
+    // are cheap, else 30, and every frame while an idle happening plays; a
+    // picked rate lifts its rest to that. The first 600 ms after a change of
+    // state run at the full rate, so no change is seen to stutter.
+    // Jarvis's real voice first (LIP-SYNC), on every paced tick as before -
+    // not only on drawn ones - so a voice that starts while the face rests
+    // at 2 or 15 a second turns it to speaking straight away.
+    if (paced) lipStep();
+    const shownNow = lipState(LIVE_STATE);
+    const rest = restFpsOf(surface, shownNow, TUNE.autoAdjust ? "auto" : TUNE.frameRate, headroom.on);
+    const fresh = surface.fxState !== shownNow || (surface.fxAge || 0) < 0.6;
+    const restStepS = rest > 0 ? restStep(rest, hz) : 0;
+    const restDue = !rest || fresh || owed >= restStepS - 0.002;
+    if (paced && restDue && (!CALM.matches || now - lastDraw >= 1000 / calmHz)) {
+      // The same 0.1 s cap as before - or one resting step, when that is
+      // longer (banked's half second), so a slow rest keeps its real speed.
+      const dt = Math.min(Math.max(0.1, restStepS * 1.5), owed);
       owed = 0;
       lastDraw = now;
       const t0 = performance.now();
-      // Jarvis's real voice first (LIP-SYNC): the level every face moves
-      // with, the animals' mouth, and speaking while it plays.
-      lipStep();
+      // (lipStep ran above.) The level every face moves with.
       stepAmp(dt);
       const shown = lipState(LIVE_STATE);
       window.__faceVoice.lastState = shown;
@@ -6438,7 +6585,9 @@ async function bootDisplay() {
       // GPU WATCHDOG). The script alone reads well under a millisecond while
       // the card takes most of a second.
       const cardMs = surface.gpuOk !== false ? (surface.gpuMs || 0) : 0;
-      govern(Math.max(performance.now() - t0, cardMs), now);
+      const frameMs = Math.max(performance.now() - t0, cardMs);
+      headroom.frame(frameMs);
+      govern(frameMs, now);
     }
     requestAnimationFrame(tick);
   }

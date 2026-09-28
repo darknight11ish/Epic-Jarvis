@@ -613,6 +613,92 @@ files and the animals' `.sksl`; nothing the animals do changed.
   head's surface: round dots on top, upright dashes on the sides like the
   back's.
 
+### Resolution and frame rate (owner, 2026-09-28)
+
+The owner's ask: "if Jarvis detects capable hardware (and the user opts for
+better quality and not battery save mode) the resolutions will all be high",
+and higher resolution and frame-rate choices for the animals on both apps.
+The numbers live once, in `jarvis-visual-spec.json` (`frame_rate.animals`
+and `frame_rate.pick_rule`); the desktop reads them through `face-pace.js`,
+the phone keeps the same numbers in `FaceBudget.kt` (`QualityTier`,
+`AnimalPace`) and its SpecDriftTest fails if they drift.
+
+**Quality levels** - the same words in both apps (Settings, "Face on this
+computer" on the PC; Appearance, Face editor on the phone). The stored ids
+are still `low`, `medium`, `high`, `max`, so a saved setting keeps working.
+The lowest is "Lower", not "Battery saver": the phone already has a Battery
+saver switch, and it still overrides everything here.
+
+| Level | Desktop animal | Phone animal | Its one line in both apps |
+|---|---|---|---|
+| Lower | 62% of the screen's pixels | 0.4 of full resolution | Softest picture and the least work for the graphics chip. Easiest on battery and heat. |
+| Balanced | 80% | 0.5 | A little softer than High, with less work for the graphics chip. |
+| High | 100% | 0.75 | Sharp. A fair amount of work for the graphics chip. |
+| Maximum | 2x2 per pixel, averaged down (at most 2,400 pixels a side) | 1.0 | The sharpest edges. The most work for the graphics chip, and the most battery and heat. |
+
+Measured the audit's way (a red panda against an 8x - 240 px - or 6x - 600
+px - supersampled reference, through Skia; mean error on its edges, out of
+255; lower is sharper):
+
+| | 240 px | 600 px |
+|---|---|---|
+| desktop High (before and after) | 9.4 | 9.4 |
+| desktop Maximum (new) | **3.2** | **3.1** |
+| phone High before (0.5) | 23.1 | 19.9 |
+| phone High now (0.75) | 13.0 | 11.9 |
+| phone Maximum now (1.0) | 9.4 | 9.4 |
+
+Cost: Maximum on the desktop traces four times the pixels of High. On the
+phone, High now traces 2.25 times the pixels it did (0.75 against 0.5 each
+way), and Maximum four times.
+
+**Auto adjust** starts an animal at High. It steps down in this order when
+frames run late: Maximum to High, then the frame rate to 60, then Balanced,
+then 30, then Lower (frame-rate steps are whole shares of the screen's rate,
+never under 30). It climbs back the same way, held off for a while after
+each step down - and it may climb to **Maximum**, for an animal only, when
+its frames take under a quarter of their time. On the phone never in
+Battery saver (the switch or the phone's own) and never while the phone is
+warm; on a software renderer (the emulator) it stays at Lower. A level or
+frame rate picked by hand stays picked.
+
+**Frame rate** choices: Auto, 30, 60, 90, 120, Max (30 and 90 are new). A
+picked rate is drawn on whole shares of the screen's rate, the nearest one
+but never more than a fifth faster than the pick: 90 becomes 72 on a 144 Hz
+screen and 60 on a 120 Hz one.
+
+**Resting.** An animal at rest (idle, or waiting on an approval) with Frame
+rate on Auto is drawn 60 times a second while frames are cheap (they cost
+under half of a 60 fps frame's time; it drops back to 30 above 0.8 of it),
+else 30 - and at the screen's full rate while one of its idle happenings (a
+stretch, a scratch, an ear turning) is playing, which each pose file reports
+as `busy(state, t)` (`critter-busy-golden.json` holds the phone's copy to
+the desktop's). A picked 30, 60, 90, 120 or Max sets its resting rate to
+that. Standby stays 15 and banked 2 whatever is picked. The other faces
+keep the spec's resting rates. The desktop's widget, HUD and floating face
+used to draw every frame in every state; they now rest by the same rules as
+the Faces window. On the phone, resting at 30 or more strides on the
+display's own frames (it used to sleep on a timer, which landed 30 frames a
+second unevenly on a 120 Hz screen); standby and banked still sleep on a
+timer.
+
+**No shadow on a small face.** Under 200 device pixels (the animal's square)
+or at Lower, the soft shadow is skipped (`uNoShadow` in
+`common_tail.sksl`): at that size it is a few pixels of shading. Measured
+through Skia at 256 px it is about 10 to 20% of an animal's cost (panda 406
+-> 331 ms; the monkey showed no difference), and it changes the picture by
+about 1.5 of 255 on average for the panda. Shader sizes after: panda 58,740,
+monkey 58,273, otter 54,134, owl 48,168 (the limit here is 60,000).
+
+**What it shows.** Under the full-size face in the desktop's Faces window,
+and at the bottom of the phone's Frame rate setting: "60 fps · 4.2 ms per
+frame · animal resolution 1200 px (200%)" - frames a second, the time each
+takes, and the size the animal is traced at against the size it is shown.
+
+**Not yet measured on real hardware.** Whether Auto reaches Maximum depends
+on the owner's graphics card and phone; the rules and pacing are tested,
+the speed is not.
+
 ### Adding another animal
 
 The monkey (2026-09-28) was the fourth, added by this list:
@@ -820,18 +906,16 @@ Sketchfab). Four reasons:
   little more than Nucleus", which was a guess, and wrong.) Most of it is
   finding the animal's surface for each pixel; the shadows are the rest.
   These timings wobble by a fifth or so from run to run.
-  - **On the phone each animal is drawn at lower resolution and enlarged**: half the
-    width and height at the High quality tier - a quarter of the pixels,
-    measured at 4.3 times less work, so in total about what Nucleus costs - and less again when Auto adjust steps
-    down to Medium (0.4) or Low (about 0.31). Max, chosen by hand, uses 0.75.
-    Because the animals are soft and rounded, the enlarged picture differs from
-    the sharp one by about 1 part in 255 on average; the shader feathers its
-    outline so the enlarging does not show as steps. A software canvas (a
-    bitmap snapshot) still draws it at full size.
-  - **On the desktop** it is drawn at full resolution; the GPU watchdog
-    (see "On a PC without a working graphics card") switches to the flat
-    version if the graphics card cannot keep up, and tries the card again
-    later.
+  - **How sharp each animal is drawn depends on the Quality level** (see
+    "Resolution and frame rate" below): on the phone it is traced at part of
+    the screen's resolution and enlarged - 0.4, 0.5, 0.75 or all of it for
+    Lower, Balanced, High and Maximum; on the desktop at 62%, 80% or 100% of
+    the screen's pixels, and at Maximum at 2x2 samples per pixel, averaged
+    down. A software canvas (a bitmap snapshot) on the phone still draws it
+    at full size.
+  - **On the desktop** the GPU watchdog (see "On a PC without a working
+    graphics card") switches to the flat version if the graphics card cannot
+    keep up, and tries the card again later.
   - **Not yet measured on a real phone.** A few times Nucleus per pixel at a
     quarter of the pixels should land at or below Nucleus's own cost, but
     only the phone can confirm it. If it stutters or gets warm, say so - the next

@@ -83,6 +83,7 @@ import {
 } from "./security-settings.js";
 import {
   FRAME_RATES,
+  FRAME_RATE_NOTE,
   loadFaceTuning,
   QUALITIES,
   saveFaceTuning,
@@ -651,8 +652,24 @@ function paintFaceTuning() {
   if (note) {
     note.textContent = faceTuning.autoAdjust
       ? "Auto adjust is choosing. Picking one turns Auto adjust off."
-      : "High matches the reactor kit. Low is easiest on the graphics card.";
+      : "High matches the reactor kit. Lower is easiest on the graphics chip.";
   }
+}
+
+// The level notes and the frame-rate note, written once: they never change.
+{
+  const levels = $("face-quality-levels");
+  if (levels) {
+    for (const q of QUALITIES) {
+      const li = document.createElement("li");
+      const b = document.createElement("strong");
+      b.textContent = q.label;
+      li.append(b, ` - ${q.note}`);
+      levels.append(li);
+    }
+  }
+  const fpsNote = $("face-fps-note");
+  if (fpsNote) fpsNote.textContent = FRAME_RATE_NOTE;
 }
 
 function setFaceTuning(next, said) {

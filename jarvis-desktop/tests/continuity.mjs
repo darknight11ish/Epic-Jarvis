@@ -139,6 +139,25 @@ await check("face settings: slow-down only, and anything unreadable is the defau
   assert.equal(tuning.strideFor("60", 144), 2);
   assert.equal(tuning.strideFor("auto", 144), 1);
   assert.equal(tuning.strideFor("120", 60), 1);
+  // The pick rule: 90 is 72 on a 144 Hz screen, 60 on a 120 Hz one.
+  assert.equal(tuning.strideFor("90", 144), 2);
+  assert.equal(tuning.strideFor("90", 120), 2);
+  assert.equal(tuning.normaliseFaceTuning({ frameRate: "90" }).frameRate, "90");
+  assert.equal(tuning.normaliseFaceTuning({ frameRate: 30 }).frameRate, "30");
+  assert.equal(tuning.normaliseFaceTuning({ frameRate: "75" }).frameRate, "auto");
+});
+
+await check("the quality levels and frame rates use the phone's words (FaceBudget.kt)", async () => {
+  const kt = read("../jarvis-client/app/src/main/java/com/jarvis/client/face/FaceBudget.kt");
+  const phone = [...kt.matchAll(/\n    (?:LOW|MEDIUM|HIGH|MAX)\(\s*"(\w+)", "([^"]+)",[^\n]*\n\s*"([^"]+)",/g)]
+    .map((m) => [m[1], m[2], m[3]]);
+  assert.equal(phone.length, 4, "could not read QualityTier's entries from FaceBudget.kt");
+  assert.deepEqual(tuning.QUALITIES.map((q) => [q.id, q.label, q.note]), phone);
+  const rates = [...kt.matchAll(/\n    (?:AUTO|FPS_\d+|MAX)\("(\w+)", "(\w+)", [0-9.]+f\)/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(tuning.FRAME_RATES.map((f) => [f.id, f.label]), rates);
+  const note = /const val NOTE = "([^"]+)" \+\s*"([^"]+)"/.exec(kt);
+  assert.ok(note, "could not read FrameRateTarget.NOTE");
+  assert.equal(tuning.FRAME_RATE_NOTE, note[1] + note[2]);
 });
 
 /* ── In the windows ──────────────────────────────────────────────────────── */

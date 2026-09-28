@@ -48,6 +48,15 @@ abstract class CritterFace(
     /** Where a pose's sleeping Zs rise from: [asleep, x, y] (see [CritterPose.overlay]). */
     protected abstract fun overlayOf(p: FloatArray, yaw: Float, pitch: Float): FloatArray
 
+    /**
+     * Whether one of its idle happenings (a stretch, a scratch, an ear
+     * turning) is playing at clock [t] in [state] - its pose's `busy`, the
+     * desktop's `busy(state, t)`, checked against it by CritterPoseTest. Only
+     * the frame pacer asks ([FaceHost.restFps]): at rest an animal is drawn
+     * 30 or 60 times a second, and at the full rate while one plays.
+     */
+    abstract fun busyAt(state: FaceState, t: Float): Boolean
+
     /** What the host remembered at the last state changes (see [CritterPose.Hist]). */
     protected fun hist(f: FaceFrame) =
         CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp, prevAmp2 = f.prevAmp2, past = f.past)
@@ -107,7 +116,12 @@ abstract class CritterFace(
 
     /**
      * How much of the phone's full resolution an animal is traced at, before
-     * it is enlarged to fill the face.
+     * it is enlarged to fill the face: the quality level's
+     * [QualityTier.animalTrace] - Lower 0.4, Balanced 0.5, High 0.75, Maximum
+     * 1.0 (the spec's `frame_rate.animals.levels`, 2026-09-28).
+     *
+     * (Before that: High 0.5, Medium 0.4, Low about 0.31, Max 0.75. The
+     * reasoning below is why it is not simply always 1.0.)
      *
      * Why not full resolution, as Nucleus does: measured through Skia (the
      * engine Android draws with), the red panda costs about 4 times Nucleus
@@ -119,15 +133,13 @@ abstract class CritterFace(
      * differs from the sharp one by about 1/255 on average; the shader's own
      * feathered outline hides the steps enlarging would otherwise show.
      *
-     * Tied to the quality tier's own graphics scale, so when Auto adjust
-     * steps down because frames arrive late, the animal gets cheaper too
-     * (High 0.5, Medium 0.4, Low about 0.31). Max, chosen by hand, asks for
-     * sharpness and gets 0.75.
+     * Tied to the quality level, so when Auto adjust steps down because
+     * frames arrive late, the animal gets cheaper too; and Auto may take an
+     * animal up to Maximum - the full resolution - on a phone whose frames
+     * take under a quarter of their time (FrameGovernor), never in battery
+     * saver and never while it is warm.
      */
-    private fun traceScale(): Float {
-        val tier = FaceQuality.current.tier
-        return if (tier == QualityTier.MAX) 0.75f else 0.5f * tier.gpu
-    }
+    private fun traceScale(): Float = FaceQuality.current.tier.animalTrace
 
     /**
      * The small offscreen pictures this animal is traced into, one per size
@@ -214,6 +226,12 @@ abstract class CritterFace(
         shader.setFloatUniform("uPit", f.pitch)
         shader.setFloatUniform("uZoom", 1f)
         shader.setFloatUniform("uTime", f.angle)
+        // No soft shadow on a small face or at Lower (AnimalPace.noShadow):
+        // the animal's square, 4r, is the desktop's canvas, in device pixels.
+        shader.setFloatUniform(
+            "uNoShadow",
+            if (AnimalPace.noShadow(4f * r, FaceQuality.current.tier)) 1f else 0f,
+        )
 
         // Same framing as Nucleus: the desktop's p = 1 is half its canvas,
         // which is 2r here. The animal is drawn over the square 4r a side
@@ -246,6 +264,8 @@ abstract class CritterFace(
         // One pixel of the small picture, for the shader's feathered outline.
         shader.setFloatUniform("uPx", 1f / (2f * r * k))
 
+        // For the Face editor's readout: traced / drawn, the live face only.
+        if (!f.still) FaceQuality.noteTrace(px, kotlin.math.round(side).toInt())
         val node = layerFor(px, f.still)
         node.setPosition(0, 0, px, px)
         val rec = node.beginRecording(px, px)
@@ -338,6 +358,7 @@ object RedPanda : CritterFace("redpanda", "Red Panda", CritterShaders.RED_PANDA)
         CritterPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f), opts = opts(f))
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = CritterPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = CritterPose.overlay(p, yaw, pitch, 1f)
+    override fun busyAt(state: FaceState, t: Float) = CritterPose.busy(state, t)
 }
 
 /** The pygmy owl on its branch, its orb floating beside it. */
@@ -346,6 +367,7 @@ object PygmyOwl : CritterFace("pygmyowl", "Pygmy Owl", CritterShaders.PYGMY_OWL)
         OwlPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f), opts = opts(f))
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = OwlPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = OwlPose.overlay(p, yaw, pitch, 1f)
+    override fun busyAt(state: FaceState, t: Float) = OwlPose.busy(state, t)
 }
 
 /** The sea otter afloat in its pool, a glowing pebble on its chest. */
@@ -354,6 +376,7 @@ object SeaOtter : CritterFace("seaotter", "Sea Otter", CritterShaders.SEA_OTTER)
         OtterPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f), opts = opts(f))
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = OtterPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = OtterPose.overlay(p, yaw, pitch, 1f)
+    override fun busyAt(state: FaceState, t: Float) = OtterPose.busy(state, t)
 }
 
 /**
@@ -365,6 +388,7 @@ object Monkey : CritterFace("monkey", "Monkey", CritterShaders.MONKEY) {
         MonkeyPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f), opts = opts(f))
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = MonkeyPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = MonkeyPose.overlay(p, yaw, pitch, 1f)
+    override fun busyAt(state: FaceState, t: Float) = MonkeyPose.busy(state, t)
 }
 
 /**

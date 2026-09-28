@@ -142,6 +142,10 @@ object MonkeyPose {
     private const val SLOT = 16f
     private const val CHANCE = 0.85f
 
+    /** Whether one of its idle happenings is playing at clock [t] - the desktop's busy(state, t). */
+    fun busy(state: FaceState, t: Float): Boolean =
+        state == FaceState.IDLE && CritterPose.playing(happening(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS))
+
     private fun headTurn(p: FloatArray): FloatArray = mul(ry(-p[HEAD_YAW]), mul(rx(p[HEAD_PITCH]), rz(-p[HEAD_ROLL])))
 
     /** A point in the head's (unscaled) frame, in the body's frame. */

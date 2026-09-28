@@ -497,6 +497,11 @@ select:focus-visible {
   line-height: 1.55;
 }
 
+/* The face's quality levels, one line each (Face on this computer). */
+.face-level-notes { list-style: none; padding: 0; }
+.face-level-notes li { margin: 0 0 2px; }
+.face-level-notes strong { color: var(--text); font-weight: 600; }
+
 /* The shared live region in jarvis-link.js is an off-screen element with this
    class. It has to exist in every window that calls `announce()`, or the
    announcement is visible text in the corner of the page. */

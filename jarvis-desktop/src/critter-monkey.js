@@ -595,5 +595,10 @@
     return overlayAt(P, at, CAM, view);
   }
 
-  C.species.monkey = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay };
+  /** Whether one of its idle happenings is playing at clock t (critter-pose.js playing()). */
+  function busy(state, t) {
+    return state === "idle" && C.util.playing(happening(t, SLOT, 0.5, 5.5, S_EVENT, CHANCE, EVENTS));
+  }
+
+  C.species.monkey = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy };
 })(typeof globalThis !== "undefined" ? globalThis : this);

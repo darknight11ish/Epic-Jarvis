@@ -1,10 +1,12 @@
 package com.jarvis.client
 
 import com.jarvis.client.data.FaceTuning
+import com.jarvis.client.face.AnimalPace
 import com.jarvis.client.face.FaceBudget
 import com.jarvis.client.face.FrameGovernor
 import com.jarvis.client.face.FramePacing
 import com.jarvis.client.face.FrameRateTarget
+import com.jarvis.client.face.Headroom
 import com.jarvis.client.face.QualityTier
 import com.jarvis.client.platform.SmoothMotion
 import org.junit.Assert.assertEquals
@@ -66,7 +68,31 @@ class FaceBudgetTest {
         assertEquals(QualityTier.DEFAULT, QualityTier.byId(null))
         assertEquals(QualityTier.DEFAULT, QualityTier.byId("ultra"))
         assertEquals(FrameRateTarget.AUTO, FrameRateTarget.byId(null))
-        assertEquals(FrameRateTarget.AUTO, FrameRateTarget.byId("90"))
+        assertEquals(FrameRateTarget.AUTO, FrameRateTarget.byId("75"))
+        assertEquals(FrameRateTarget.FPS_90, FrameRateTarget.byId("90"))
+        assertEquals(FrameRateTarget.FPS_30, FrameRateTarget.byId("30"))
+    }
+
+    /**
+     * The owner's words (2026-09-28): Lower, Balanced, High, Maximum - the ids
+     * unchanged so saved settings work - and a one-line cost per level. The
+     * desktop's tests/face-pace.mjs checks face-tuning.js has the same words;
+     * SpecDriftTest checks both against the spec.
+     */
+    @Test
+    fun theLevelsAreNamedAsTheOwnerAsked() {
+        assertEquals(listOf("low", "medium", "high", "max"), QualityTier.entries.map { it.id })
+        assertEquals(listOf("Lower", "Balanced", "High", "Maximum"), QualityTier.entries.map { it.label })
+        assertFalse(QualityTier.entries.any { it.label.contains("saver", ignoreCase = true) })
+        for (q in QualityTier.entries) assertTrue(q.note, q.note.length in 20..110)
+        assertEquals(listOf("auto", "30", "60", "90", "120", "max"), FrameRateTarget.entries.map { it.id })
+        assertTrue(FrameRateTarget.NOTE.contains("90 becomes 72 on a 144 Hz screen"))
+    }
+
+    /** How much of the phone's resolution an animal is traced at: 0.4, 0.5, 0.75, 1. */
+    @Test
+    fun animalsAreTracedSharperAtEachLevel() {
+        assertEquals(listOf(0.4f, 0.5f, 0.75f, 1.0f), QualityTier.entries.map { it.animalTrace })
     }
 
     @Test
@@ -91,6 +117,28 @@ class FaceBudgetTest {
         // 90 / 60 = 1.5, which the kit's Math.round takes up to 2.
         assertEquals(2, FramePacing.strideFor(FrameRateTarget.FPS_60, 90f))
         assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_120, 144f))
+    }
+
+    /**
+     * The spec's pick rule: the nearest whole divisor, but never more than a
+     * fifth faster than the pick. The Frame rate note's own example: 90 is 72
+     * on a 144 Hz screen - and 60, not 120, on a 120 Hz one.
+     */
+    @Test
+    fun aPickedRateLandsOnWholeVsyncsAndNeverFarAboveThePick() {
+        fun fps(t: FrameRateTarget, hz: Float) = hz / FramePacing.strideFor(t, hz)
+        assertEquals(72f, fps(FrameRateTarget.FPS_90, 144f), 0.01f)
+        assertEquals(60f, fps(FrameRateTarget.FPS_90, 120f), 0.01f)
+        assertEquals(90f, fps(FrameRateTarget.FPS_90, 90f), 0.01f)
+        assertEquals(30f, fps(FrameRateTarget.FPS_30, 60f), 0.01f)
+        assertEquals(30f, fps(FrameRateTarget.FPS_30, 120f), 0.01f)
+        assertEquals(72f, fps(FrameRateTarget.FPS_60, 144f), 0.01f)
+        for (hz in listOf(60f, 75f, 90f, 100f, 120f, 144f, 165f, 240f)) {
+            for (t in FrameRateTarget.entries) {
+                val want = if (t.hz > 0f) minOf(t.hz, hz) else hz
+                assertTrue("$t at $hz Hz draws ${fps(t, hz)}", fps(t, hz) <= want * 1.2f + 0.01f)
+            }
+        }
     }
 
     @Test
@@ -255,7 +303,117 @@ class FaceBudgetTest {
         assertEquals(0, g.extraStride)
     }
 
-    /** Auto never picks Max for you, as in the kit (`i < 2`). */
+    // ---------------------------------------------------------- animals ----
+
+    /** Frame rate on Auto: 60 with headroom, 30 without, the full rate while a happening plays. */
+    @Test
+    fun anAnimalRestsBySpecRule() {
+        val A = FrameRateTarget.AUTO
+        assertEquals(60, AnimalPace.restFps(FaceState.IDLE, A, headroom = true, busy = false))
+        assertEquals(30, AnimalPace.restFps(FaceState.IDLE, A, headroom = false, busy = false))
+        assertEquals(0, AnimalPace.restFps(FaceState.IDLE, A, headroom = false, busy = true))
+        assertEquals(60, AnimalPace.restFps(FaceState.APPROVAL, A, headroom = true, busy = true))
+        // A picked rate lifts the rest to it; Max is the panel's own.
+        assertEquals(30, AnimalPace.restFps(FaceState.IDLE, FrameRateTarget.FPS_30, false, false))
+        assertEquals(90, AnimalPace.restFps(FaceState.APPROVAL, FrameRateTarget.FPS_90, false, false))
+        assertEquals(120, AnimalPace.restFps(FaceState.IDLE, FrameRateTarget.FPS_120, false, false))
+        assertEquals(0, AnimalPace.restFps(FaceState.IDLE, FrameRateTarget.MAX, false, false))
+        for (t in FrameRateTarget.entries) {
+            assertEquals(15, AnimalPace.restFps(FaceState.STANDBY, t, true, true))
+            assertEquals(2, AnimalPace.restFps(FaceState.BANKED, t, true, true))
+            for (st in listOf(FaceState.LISTENING, FaceState.THINKING, FaceState.SPEAKING, FaceState.ERROR)) {
+                assertEquals(0, AnimalPace.restFps(st, t, false, false))
+            }
+        }
+    }
+
+    @Test
+    fun headroomWaitsTenFramesAndDoesNotFlap() {
+        val h = Headroom()
+        repeat(9) { h.frame(2f) }
+        assertFalse(h.on)
+        h.frame(2f)
+        assertTrue(h.on)
+        repeat(6) { h.frame(12f) } // under 0.8 x 16.7
+        assertTrue("flapped inside the dead band", h.on)
+        repeat(60) { h.frame(20f) }
+        assertFalse(h.on)
+        repeat(12) { h.frame(10f) } // under 13.3, not under 8.3
+        assertFalse(h.on)
+    }
+
+    @Test
+    fun theAnimalLadderFollowsTheOwnersOrder() {
+        fun show(l: List<AnimalPace.Rung>) = l.joinToString(" ") { "${it.tier.id}@${it.stride}" }
+        assertEquals("max@1 high@1 medium@1 medium@2 low@2", show(AnimalPace.ladder(60f)))
+        assertEquals("max@1 high@1 high@2 medium@2 medium@4 low@4", show(AnimalPace.ladder(120f)))
+        assertEquals("max@1 high@1 high@2 medium@2 medium@4 low@4", show(AnimalPace.ladder(144f)))
+        val l = AnimalPace.ladder(120f)
+        assertEquals(1, AnimalPace.rungOf(l, QualityTier.HIGH, 1))
+        assertEquals(5, AnimalPace.rungOf(l, QualityTier.LOW, 1))
+    }
+
+    /** Overloaded on a 120 Hz panel, an animal steps Max, High, 60, Balanced, 30, Lower. */
+    @Test
+    fun anOverloadedAnimalStepsDownTheLadder() {
+        val g = FrameGovernor()
+        g.reset(QualityTier.MAX)
+        val seen = mutableListOf<String>()
+        var t = 0L
+        repeat(4_000) {
+            t += 8
+            val budget = FramePacing.budgetMs(120f, 1 + g.extraStride)
+            if (g.onFrame(t, budget * 2f, budget, 120f, 1, QualityTier.MAX, animal = true)) {
+                seen += "${g.tier.id}@${1 + g.extraStride}"
+            }
+        }
+        assertEquals(listOf("high@1", "high@2", "medium@2", "medium@4", "low@4"), seen)
+    }
+
+    /** Cheap frames take an animal to Maximum - only under a quarter of the budget. */
+    @Test
+    fun anAnimalClimbsToMaximumOnlyWhenFramesAreVeryCheap() {
+        val g = FrameGovernor()
+        g.run(fromMs = 0, stepMs = 16, frames = 3_000, costMs = 0.3f * 16.667f)
+        assertEquals(QualityTier.HIGH, g.tier)
+        var t = 0L
+        repeat(3_000) { t += 16; g.onFrame(t, 0.3f * 16.667f, 16.667f, 60f, 1, QualityTier.MAX, animal = true) }
+        assertEquals("30% of the budget is not a quarter", QualityTier.HIGH, g.tier)
+        repeat(3_000) { t += 16; g.onFrame(t, 0.2f * 16.667f, 16.667f, 60f, 1, QualityTier.MAX, animal = true) }
+        assertEquals(QualityTier.MAX, g.tier)
+        // Warm (the ceiling is Medium): straight down, whatever the frames cost.
+        g.onFrame(t + 16, 1f, 16.667f, 60f, 1, FaceBudget.ceilingFor(1), animal = true)
+        assertEquals(QualityTier.MEDIUM, g.tier)
+        // A software renderer never climbs past its own top.
+        val sw = FrameGovernor()
+        sw.reset(QualityTier.LOW, extraStride = 1)
+        var u = 0L
+        repeat(5_000) { u += 33; sw.onFrame(u, 0.1f, 33.3f, 60f, 1, FaceBudget.autoCeiling(0, softwareGpu = true), animal = true) }
+        assertEquals(FaceBudget.SOFTWARE_AUTO_TOP, sw.tier)
+    }
+
+    /** Another face after an animal at Maximum goes back to High. */
+    @Test
+    fun maximumIsForAnimalsOnly() {
+        val g = FrameGovernor()
+        g.reset(QualityTier.MAX)
+        g.onFrame(1_000, 1f, 16.667f, 60f, 1, QualityTier.MAX, animal = false)
+        assertEquals(QualityTier.HIGH, g.tier)
+    }
+
+    @Test
+    fun theReadoutSaysFpsMsAndTheAnimalsResolution() {
+        assertEquals(
+            "60 fps · 4.2 ms per frame · animal resolution 810 px (75%)",
+            AnimalPace.readout(59.6f, 4.24f, 810, 1080),
+        )
+        assertEquals("30 fps · 12.0 ms per frame", AnimalPace.readout(30f, 12f, 0, 0))
+        assertTrue(AnimalPace.noShadow(180f, QualityTier.HIGH))
+        assertTrue(AnimalPace.noShadow(900f, QualityTier.LOW))
+        assertFalse(AnimalPace.noShadow(900f, QualityTier.MAX))
+    }
+
+    /** Auto never picks Max for you, as in the kit (`i < 2`) - for a face that is not an animal. */
     @Test
     fun autoNeverClimbsPastHigh() {
         val g = FrameGovernor()
@@ -446,6 +604,8 @@ class FaceBudgetTest {
         assertEquals(SmoothMotion.OFF, FaceBudget.smoothFor(FaceTuning(batterySaver = true), false))
         val manual = FaceTuning(autoAdjust = false)
         assertEquals(SmoothMotion.OFF, FaceBudget.smoothFor(manual.copy(frameRate = FrameRateTarget.FPS_60), false))
+        assertEquals(SmoothMotion.OFF, FaceBudget.smoothFor(manual.copy(frameRate = FrameRateTarget.FPS_30), false))
+        assertEquals(SmoothMotion.AUTO, FaceBudget.smoothFor(manual.copy(frameRate = FrameRateTarget.FPS_90), false))
         assertEquals(SmoothMotion.AUTO, FaceBudget.smoothFor(manual.copy(frameRate = FrameRateTarget.FPS_120), false))
         assertEquals(SmoothMotion.AUTO, FaceBudget.smoothFor(manual.copy(frameRate = FrameRateTarget.AUTO), false))
         assertEquals(SmoothMotion.ALWAYS, FaceBudget.smoothFor(manual.copy(frameRate = FrameRateTarget.MAX), false))

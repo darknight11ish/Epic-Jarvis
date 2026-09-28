@@ -478,7 +478,8 @@
               Auto adjust
               <span class="toggle-detail">
                 Picks quality and frame rate for this computer, and steps down
-                if the face runs slow.
+                if the face runs slow. On a capable graphics chip an animal can
+                go up to Maximum.
               </span>
             </span>
           </label>
@@ -486,13 +487,16 @@
           <div class="field">
             <span class="label" id="face-quality-label">Quality</span>
             <div class="choices" id="face-quality" role="group" aria-labelledby="face-quality-label"></div>
-            <p class="note" id="face-quality-note">High matches the reactor kit. Low is easiest on the graphics card.</p>
+            <p class="note" id="face-quality-note">High matches the reactor kit. Lower is easiest on the graphics chip.</p>
+            <!-- One plain line per level: what it costs (face-tuning.js
+                 QUALITIES, the same words as the phone's Face editor). -->
+            <ul class="note face-level-notes" id="face-quality-levels"></ul>
           </div>
 
           <div class="field">
             <span class="label" id="face-fps-label">Frame rate</span>
             <div class="choices" id="face-fps" role="group" aria-labelledby="face-fps-label"></div>
-            <p class="note">How many times a second the face is drawn. Auto uses the screen's own rate.</p>
+            <p class="note" id="face-fps-note">How many times a second the face is drawn.</p>
           </div>
 
           <div class="field">

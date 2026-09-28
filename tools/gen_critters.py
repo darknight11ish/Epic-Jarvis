@@ -20,7 +20,9 @@ what it returns; the phone's `CritterPoseTest` fails if a Kotlin copy
 disagrees, so the two cannot drift apart quietly. And the same for the
 sleeping Zs drawn over an animal on standby (`zs` in `critter-pose.js`,
 `CritterPose.zs` on the phone): their numbers and their answers go into
-`critter-zs-golden.json`, which the same test reads.
+`critter-zs-golden.json`, which the same test reads. And whether an idle
+happening is playing (`busy` in each pose file), which both apps' frame pacers
+read: `critter-busy-golden.json`.
 
     python3 tools/gen_critters.py          # write all four outputs
     python3 tools/gen_critters.py --check  # exit 1 if any is out of date
@@ -49,6 +51,10 @@ OUT_GOLDEN = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources"
 # The sleeping Zs (critter-pose.js `zs`): its numbers and its answers at
 # fixed moments, which the phone's CritterPoseTest checks its copy against.
 OUT_ZS = OUT_GOLDEN.with_name("critter-zs-golden.json")
+# Whether an idle happening is playing (each pose file's `busy`), which the
+# frame pacer on both apps reads: one line of 0s and 1s per animal, four
+# samples a second over the first 320 seconds and around a day-long clock.
+OUT_BUSY = OUT_GOLDEN.with_name("critter-busy-golden.json")
 
 GLSL_HEAD = """#version 300 es
 precision highp float;
@@ -307,6 +313,26 @@ process.stdout.write(JSON.stringify(out, (k, v) =>
 """
 
 
+# The clocks the busy fixture samples. The 0.013 keeps every sample off the
+# exact edge of a happening, where a 32-bit and a 64-bit clock may disagree.
+BUSY_TIMES = [round(k * 0.25 + 0.013, 3) for k in range(1280)] + \
+             [round(86400 + k * 0.25 + 0.013, 3) for k in range(160)]
+
+BUSY_NODE = r"""
+for (const f of process.argv.slice(1)) require(f);
+const C = globalThis.CritterPose;
+const times = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const out = { happening_s: C.HAPPENING_S, times, busy: {} };
+for (const sp of Object.keys(C.species)) {
+  out.busy[sp] = times.map(t => C.species[sp].busy('idle', t) ? '1' : '0').join('');
+  // Never outside idle.
+  for (const st of ['listening', 'thinking', 'speaking', 'approval', 'standby', 'error', 'banked'])
+    if (times.some(t => C.species[sp].busy(st, t))) throw new Error(sp + ' is busy in ' + st);
+}
+process.stdout.write(JSON.stringify(out, null, 1) + '\n');
+"""
+
+
 def animals():
     """The animals that exist so far, each with its full shader source."""
     head = (CRITTERS / "common_head.sksl").read_text(encoding="utf-8")
@@ -352,7 +378,9 @@ def build():
                          capture_output=True, text=True, check=True)
     zs = subprocess.run(["node", "-e", ZS_NODE, *pose_files], input=json.dumps(zs_cases()),
                         capture_output=True, text=True, check=True)
-    return {OUT_JS: js, OUT_KT: kt, OUT_GOLDEN: res.stdout, OUT_ZS: zs.stdout}
+    busy = subprocess.run(["node", "-e", BUSY_NODE, *pose_files], input=json.dumps(BUSY_TIMES),
+                          capture_output=True, text=True, check=True)
+    return {OUT_JS: js, OUT_KT: kt, OUT_GOLDEN: res.stdout, OUT_ZS: zs.stdout, OUT_BUSY: busy.stdout}
 
 
 def main():

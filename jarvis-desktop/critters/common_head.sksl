@@ -54,6 +54,7 @@ uniform float uPit;
 uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.

@@ -20,21 +20,39 @@
 /** The localStorage key. */
 export const FACE_TUNING_KEY = "jarvis.faceTuning";
 
-/** The kit's tiers, low to max. Names match `faces.html`'s `TIERS`. */
+/**
+ * The quality levels, low to max. The ids match `faces.html`'s `TIERS` and
+ * stay the old ones, so a setting saved before the rename still works; the
+ * words are the spec's (`frame_rate.animals.levels`) and the phone's
+ * (`QualityTier` in FaceBudget.kt) - tests/continuity.mjs holds all three
+ * together. The lowest is "Lower", not "Battery saver": the phone already has
+ * a Battery saver switch. Each note is the one-line cost of that level.
+ */
 export const QUALITIES = [
-  { id: "low", label: "Low" },
-  { id: "medium", label: "Medium" },
-  { id: "high", label: "High" },
-  { id: "max", label: "Max" },
+  { id: "low", label: "Lower",
+    note: "Softest picture and the least work for the graphics chip. Easiest on battery and heat." },
+  { id: "medium", label: "Balanced",
+    note: "A little softer than High, with less work for the graphics chip." },
+  { id: "high", label: "High",
+    note: "Sharp. A fair amount of work for the graphics chip." },
+  { id: "max", label: "Maximum",
+    note: "The sharpest edges. The most work for the graphics chip, and the most battery and heat." },
 ];
 
-/** The kit's frame-rate targets. */
+/** The frame-rate choices (spec `frame_rate.targets`). 30 and 90 joined on 2026-09-28. */
 export const FRAME_RATES = [
   { id: "auto", label: "Auto" },
+  { id: "30", label: "30" },
   { id: "60", label: "60" },
+  { id: "90", label: "90" },
   { id: "120", label: "120" },
   { id: "max", label: "Max" },
 ];
+
+/** The Frame rate row's one-line note - the phone's Face editor says the same. */
+export const FRAME_RATE_NOTE =
+  "How many times a second the face is drawn. Higher is smoother but uses more battery and graphics work. " +
+  "It keeps to whole steps of the screen's rate, so 90 becomes 72 on a 144 Hz screen.";
 
 /**
  * Slow-down only. The phone's reason, copied: some faces pulse their own
@@ -103,12 +121,19 @@ export function saveFaceTuning(value, storage = globalThis.localStorage) {
 }
 
 /**
- * The kit's divisor rule: draw every Nth vsync so frames land on real vsyncs
- * (120 -> 60 -> 40 -> 30) rather than at an uneven rate. `hz` is the display's
- * refresh rate. Auto and Max are the display's own rate on the web.
+ * The divisor rule, with the spec's pick rule (`frame_rate.pick_rule`): draw
+ * every Nth vsync so frames land on real vsyncs, the nearest whole share of
+ * the screen's rate but never more than a fifth faster than what was picked -
+ * 90 is 72 on a 144 Hz screen and 60 on a 120 Hz one. `hz` is the display's
+ * refresh rate. Auto and Max are the display's own rate on the web. The same
+ * sum as face-pace.js's strideNear (which faces.html uses) and the phone's
+ * FramePacing.strideNear; tests/face-pace.mjs checks the first two agree.
  */
 export function strideFor(frameRate, hz) {
   const rate = Number(hz) > 0 ? Number(hz) : 60;
-  const want = frameRate === "60" ? 60 : frameRate === "120" ? 120 : rate;
-  return Math.max(1, Math.round(rate / Math.min(want, rate)));
+  const n = Number(frameRate);
+  const want = Math.min(Number.isFinite(n) && n > 0 ? n : rate, rate);
+  let s = Math.max(1, Math.round(rate / want));
+  if (rate / s > want * 1.2) s++;
+  return s;
 }

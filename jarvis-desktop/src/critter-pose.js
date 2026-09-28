@@ -495,6 +495,23 @@
   const TAIL_LAG = 0.12;
 
   /**
+   * Whether one of the idle happenings is playing: happening()'s answer
+   * [kind, seconds since it started, ...] has started and is not over.
+   * HAPPENING_S is the longest one (the otter's roll: 1.4 + 1.8 + 1.8 s)
+   * and a little over - the spec's frame_rate.animals.happening_s. Only the
+   * frame pacer asks (faces.html, FaceView on the phone): at rest an animal
+   * may be drawn 30 or 60 times a second, and while a stretch or a scratch
+   * plays it is drawn at the screen's full rate, so the big movement is
+   * smooth. Nothing about the pose depends on it.
+   */
+  const HAPPENING_S = 5.5;
+  function playing(ev) { return ev[0] >= 0 && ev[1] >= 0 && ev[1] < HAPPENING_S; }
+  /** The panda's: an idle happening (the same dice its idle pose rolls) is playing at clock t. */
+  function busy(state, t) {
+    return state === "idle" && playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS));
+  }
+
+  /**
    * The pose for ONE state at clock `t`. `amp` is the microphone while
    * listening and Jarvis's own voice while speaking (0..1, already smoothed
    * by the shell). `look` is {x, y, w}: the pointer, -1..1 from the centre,
@@ -1351,16 +1368,17 @@
   }
 
   const api = {
-    KEYS, BLEND_S, hash01, blink, blinkAt, stateTargets, pose, uniforms, mouthOf, overlay, ZS, zs,
+    KEYS, BLEND_S, hash01, blink, blinkAt, stateTargets, pose, uniforms, mouthOf, overlay, ZS, zs, HAPPENING_S,
     // Every animal, by face id. The owl and the otter add themselves. Each
     // has `mouth(P, mouth)` too (the same mouthOf), for a drawing that is not
     // the shader - the flat fallback - to open the same mouth, and
-    // `overlay(P, view)` for where its sleeping Zs rise from.
-    species: { redpanda: { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay } },
+    // `overlay(P, view)` for where its sleeping Zs rise from, and
+    // `busy(state, t)`: whether an idle happening is playing (the frame pacer's).
+    species: { redpanda: { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy } },
     // Shared with the other animals' files, so all three do their sums alike.
     util: { makePose, halfLives, mouthOf, clamp, smooth, ease, rx, ry, rz, mul, apply, add, invRow,
             wave, bump, envAHR, happening, beat, shift, gaze, looks, restingGaze, optsOf, mods, chain,
-            gauss, blinkAt, overlayAt, phaseOf, LOOP, PERIOD, TAU,
+            gauss, blinkAt, overlayAt, phaseOf, LOOP, PERIOD, TAU, playing,
             toward, eyesOpen, eyesClose, WAKE_S, SLEEP_S },
   };
   root.CritterPose = api;

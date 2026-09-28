@@ -89,6 +89,10 @@ object OwlPose {
     // ruffle, wing left, wing right, tilt left, tilt right, slow blink.
     private val EVENTS = floatArrayOf(14f, 12f, 12f, 20f, 20f, 22f)
 
+    /** Whether one of its idle happenings is playing at clock [t] - the desktop's busy(state, t). */
+    fun busy(state: FaceState, t: Float): Boolean =
+        state == FaceState.IDLE && CritterPose.playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS))
+
     // Thinking: the orb circles the head, riding high in front, and comes up
     // the right-hand side first - the desktop's orbit() and its note.
     private const val ORBIT_K = 147f

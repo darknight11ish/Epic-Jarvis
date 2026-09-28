@@ -359,5 +359,10 @@
   }
   const ZZ_AT = [-0.05, 0.36, 0.05];
 
-  C.species.seaotter = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay };
+  /** Whether one of its idle happenings is playing at clock t (critter-pose.js playing()). */
+  function busy(state, t) {
+    return state === "idle" && C.util.playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS));
+  }
+
+  C.species.seaotter = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy };
 })(typeof globalThis !== "undefined" ? globalThis : this);

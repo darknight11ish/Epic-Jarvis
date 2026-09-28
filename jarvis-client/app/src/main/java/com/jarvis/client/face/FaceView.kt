@@ -221,7 +221,8 @@ fun FaceView(
 
     // A new face's first frames include one-off work (a shader compiling, a
     // point cloud being built), which is not what it costs to keep drawing.
-    LaunchedEffect(face.id) { FaceQuality.onFaceChanged() }
+    // An animal may be taken up to Maximum by Auto, and rests by its own rule.
+    LaunchedEffect(face.id) { FaceQuality.onFaceChanged(isAnimal = face is CritterFace) }
 
     // The frame loop is suspended while the app is not at least STARTED.
     //
@@ -288,6 +289,7 @@ fun FaceView(
                     dt, liveState, mic(), if (voiced) voiceNow[0] else speech(), bindings, face,
                     calm || b.calm, b.speed, if (voiced) voiceNow else null,
                     serious = seriousNow, still = stillNow, offline = offlineNow,
+                    pace = FaceQuality.pace,
                 )
             }
 
@@ -299,10 +301,33 @@ fun FaceView(
             com.jarvis.client.platform.GpuProbe.await(GPU_PROBE_WAIT_MS)
                 ?.let { FaceQuality.onGpuProbed(it) }
 
-            // One drawn frame, reported to the Auto adjust governor. A few
-            // float operations; it never measures anything itself.
-            fun report(nowNs: Long, intervalNs: Long, expectedMs: Float, b: ResolvedBudget) {
-                if (!b.governed) return
+            // The Face editor's readout: frames drawn and their cost, published
+            // twice a second (FaceQuality.stats).
+            var statFrames = 0
+            var statMs = 0f
+            var statFrom = 0L
+            fun countStat(nowNs: Long) {
+                statFrames++
+                statMs += drawCost.nanos / 1_000_000f
+                if (statFrom == 0L) {
+                    statFrom = nowNs
+                    return
+                }
+                val span = nowNs - statFrom
+                if (span < 500_000_000L) return
+                FaceQuality.publishStats(statFrames * 1e9f / span, statMs / max(1, statFrames))
+                statFrames = 0
+                statMs = 0f
+                statFrom = nowNs
+            }
+
+            // One drawn frame, for Auto adjust and for headroom - a few float
+            // operations; it never measures anything itself. [effStride]
+            // is the stride actually waited this frame - the resting rate's,
+            // when it is slower than the active one - so its deliberate wait
+            // is not taken for lateness.
+            fun report(nowNs: Long, intervalNs: Long, expectedMs: Float, b: ResolvedBudget, effStride: Int = b.stride) {
+                countStat(nowNs)
                 val periodMs = FramePacing.vsyncPeriodMs(b.panelHz, min(windowMin, prevWindowMin))
                 val budgetMs = periodMs * b.stride
                 // A mesh face draws on its own GL thread, so its lateness shows
@@ -311,31 +336,32 @@ fun FaceView(
                 val costMs = FramePacing.frameCostMs(
                     drawMs = drawCost.nanos / 1_000_000f,
                     intervalMs = intervalMs,
-                    expectedIntervalMs = if (expectedMs > 0f) expectedMs else budgetMs,
+                    expectedIntervalMs = if (expectedMs > 0f) expectedMs else periodMs * max(b.stride, effStride),
                     budgetMs = budgetMs,
                 )
                 FaceQuality.onFrame(nowNs / 1_000_000L, costMs, budgetMs)
             }
 
             while (true) {
-                val fps = Spec.fpsFor(liveState)
-                if (fps in 1..30) {
-                    // Was `1..15`, which left IDLE and APPROVAL (both 30,
-                    // per fpsFor) waking the Choreographer at the display
-                    // rate to decide to do nothing 60-120 times a second,
-                    // across what the spec itself calls nine tenths of
-                    // screen-on time - the exact waste this branch exists to
-                    // avoid for STANDBY and BANKED, just below the line that
-                    // used to stop at them. The screen-off concern that
-                    // keeps STANDBY/BANKED on `delay` rather than
-                    // `withFrameNanos` (see the comment above this loop)
-                    // does not apply here: IDLE and APPROVAL are foreground,
-                    // screen-on states by definition - if the screen goes
-                    // off from either, `repeatOnLifecycle` below STARTED
-                    // suspends this whole loop regardless of which branch
-                    // it is in. Sleeping to the next due instant costs
-                    // nothing in between.
-                    val stepMs = 1000L / fps
+                // The resting rate for what the face shows now (FaceHost.restFps):
+                // 0 for every frame; an animal's by its own rule (AnimalPace),
+                // every other face's by the spec's state_fps.
+                val rest = host.restFps(face, FaceQuality.pace)
+                if (rest in 1..DELAY_MAX_FPS) {
+                    // STANDBY (15) and BANKED (2) only. They sleep on `delay`
+                    // rather than `withFrameNanos` because these are the states
+                    // a phone sits in while pocketed, and `delay` asks nothing
+                    // of the display between frames; `repeatOnLifecycle` stops
+                    // the whole loop once the screen is off anyway.
+                    //
+                    // IDLE and APPROVAL used to be here too (at 30). They are
+                    // on the vsync branch below now, with a stride: a frame
+                    // timed by `delay` lands between vsyncs and is shown on
+                    // whichever comes next, so on a 120 Hz panel "30 a second"
+                    // arrived as uneven gaps of 25 and 33 ms - a visible
+                    // judder on an animal's slow, eased movements. The cost is
+                    // a cheap callback on each skipped vsync while resting.
+                    val stepMs = 1000L / rest
                     // Sleep to the next due instant - or until a tap arrives,
                     // whichever is first. The tap's own frame then draws now
                     // rather than at the end of the step.
@@ -376,8 +402,11 @@ fun FaceView(
                         // panel, every other vsync is skipped here and costs
                         // nothing. `last` is left alone, so the next drawn
                         // frame's dt covers the skipped time - frame skipping,
-                        // not slow motion.
-                        if (b.stride > 1 && last != 0L && vsyncs % b.stride != 0L) return@withFrameNanos
+                        // not slow motion. A resting face strides further, to
+                        // its resting rate on whole vsyncs (the pick rule:
+                        // 30 on 120 Hz is every 4th, 60 on 144 Hz every 2nd).
+                        val eff = if (rest > 0) max(b.stride, FramePacing.strideNear(b.panelHz, rest.toFloat())) else b.stride
+                        if (eff > 1 && last != 0L && vsyncs % eff != 0L) return@withFrameNanos
                         val fresh = last == 0L || !onVsync
                         if (last == 0L) last = now
                         // Measured on the surface that actually matters, rather
@@ -389,12 +418,13 @@ fun FaceView(
                         val dt = (interval / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                         last = now
                         onVsync = true
-                        // Resting states draw at 30 rather than the display rate.
-                        // The accumulated dt is handed to the draw, so motion covers
-                        // the same distance — frame skipping, not slow motion.
+                        // The accumulated dt is handed to the draw, so motion
+                        // covers the same distance - frame skipping, not slow
+                        // motion. (FaceHost.advance paces the resting states
+                        // itself too, with a little slack, so the two agree.)
                         if (step(dt, b)) {
                             frame = host.snapshot()
-                            if (!fresh) report(now, interval, 0f, b)
+                            if (!fresh) report(now, interval, 0f, b, eff)
                         }
                     }
                 }
@@ -546,6 +576,12 @@ private const val STILL_FRAME_STEPS = 38
 
 /** How often FaceView re-reads the panel's refresh rate. Never per frame. */
 private const val PANEL_POLL_MS = 2_000L
+
+/**
+ * Resting rates at or under this sleep on `delay` (standby's 15, banked's 2);
+ * faster ones stride on vsync. See the frame loop.
+ */
+private const val DELAY_MAX_FPS = 15
 
 /**
  * How long a face's frame loop waits, once per process, for GpuProbe's answer
@@ -972,6 +1008,13 @@ private const val OPTION_EASE_S = 1.0f
 /** Seconds the Zs take to fade out when the link drops (or back in) - the desktop's ZS_FADE_S. */
 private const val ZS_FADE_S = 0.5f
 
+/**
+ * How early a resting frame may arrive and still be drawn - the desktop's
+ * dueFrame's 0.002. Without it, a frame a hair short of its step (vsync or
+ * timer jitter) waited a whole extra step, halving the rate now and then.
+ */
+internal const val PACE_SLACK_S = 0.002f
+
 class FaceHost {
 
     private val governor = FlashGovernor()
@@ -1191,6 +1234,12 @@ class FaceHost {
         still: Boolean = false,
         /** Jarvis cannot be reached - see FaceView's `offline`. Fades the Zs out. */
         offline: Boolean = false,
+        /**
+         * How an ANIMAL rests (FaceQuality.pace): with it, an animal's
+         * resting rate is [AnimalPace.restFps] rather than [Spec.fpsFor].
+         * Null - every caller but the live frame loop - keeps the spec's.
+         */
+        pace: RestPace? = null,
     ): Boolean {
         // While Jarvis's voice is actually playing - and for a moment after -
         // a resting or busy face shows SPEAKING whatever the state says: the
@@ -1230,12 +1279,12 @@ class FaceHost {
         val tf = Spec.transformFor(state)
 
         // Frame pacing. The first 600 ms after any change and any live tap run
-        // at full rate so no transition stutters.
-        val fps = Spec.fpsFor(state)
-        val settled = (t - changedAt) > Spec.FULL_RATE_WINDOW_S &&
-            (t - tapStartedAt) > Spec.FULL_RATE_WINDOW_S
-        if (fps > 0 && settled) {
-            if (accum < 1f / fps) return false
+        // at full rate so no transition stutters. PACE_SLACK_S: a frame that
+        // arrives a hair early (vsync or timer jitter) is not put off a whole
+        // extra step - which halved the rate now and then.
+        val fps = restFps(face, pace)
+        if (fps > 0 && settled()) {
+            if (accum < 1f / fps - PACE_SLACK_S) return false
         }
         val dt = accum
         accum = 0f
@@ -1319,6 +1368,25 @@ class FaceHost {
         }
 
         return true
+    }
+
+    /** Past the full-rate window after the last change of state and the last tap. */
+    private fun settled(): Boolean =
+        (t - changedAt) > Spec.FULL_RATE_WINDOW_S && (t - tapStartedAt) > Spec.FULL_RATE_WINDOW_S
+
+    /**
+     * The resting rate for the state on screen now, in frames a second; 0 for
+     * every frame. An animal with a [pace] follows [AnimalPace.restFps] -
+     * busy while one of its idle happenings plays, unless "Still" or calm
+     * motion has taken those away - and every other face [Spec.fpsFor]. Also
+     * 0 during the full-rate window after a change or a tap, so the frame
+     * loop draws those at the display's rate too.
+     */
+    fun restFps(face: Face, pace: RestPace?): Int {
+        if (!settled()) return 0
+        if (pace == null || face !is CritterFace) return Spec.fpsFor(state)
+        val busy = !calm && stillRamp < 0.99f && face.busyAt(state, motionT.toFloat())
+        return AnimalPace.restFps(state, pace.target, pace.headroom, busy)
     }
 
     fun snapshot(): FaceFrame {

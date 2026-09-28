@@ -206,6 +206,9 @@ fun AppearanceScreen(
     // What the face is actually running with right now - what Auto picked, or
     // what battery saver forces. Changes rarely (at most every two seconds).
     val liveBudget by FaceQuality.live.collectAsState()
+    // How the face above is running: fps, ms per frame, and an animal's
+    // resolution (about twice a second, only while a face draws).
+    val faceStats by FaceQuality.stats.collectAsState()
 
     // The picker below draws a still of every face, four of them animals
     // whose shaders are large. Built here, on a background thread, as the
@@ -526,6 +529,7 @@ fun AppearanceScreen(
                             tuning = faceTuning,
                             onTuningChange = onFaceTuningChange,
                             live = liveBudget,
+                            stats = faceStats,
                             phoneBatterySaver = phoneBatterySaver,
                             desktopSyncs = desktopSyncs,
                             onRandomise = { roll("New colours.", onRandomise) },

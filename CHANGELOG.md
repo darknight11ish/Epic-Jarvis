@@ -6,6 +6,25 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Sharper animals, and more frame-rate choices, on both apps.** Quality
+  now reads **Lower, Balanced, High, Maximum**, each with a one-line note on
+  what it costs (your saved choice still works). At Maximum the PC draws an
+  animal at 2x2 samples per pixel and the phone at its full resolution -
+  the edges go from visibly stepped to smooth (measured on the panda: edge
+  error 9.4 -> 3.2 out of 255 on the PC; on the phone High is now 0.75 of
+  full resolution instead of half, 23 -> 13). With Auto adjust on, an
+  animal starts at High and goes up to Maximum by itself only when its
+  frames are very cheap; it steps down Maximum, then 60 fps, then Balanced,
+  then 30 fps, then Lower. Battery saver on the phone still overrides it
+  all. **Frame rate** adds 30 and 90 (on a 144 Hz screen 90 becomes 72).
+  An animal at rest is drawn 60 times a second when there is room (else
+  30), and smoothly at full rate while it stretches or scratches; picking a
+  rate lifts its rest to that. The PC's widget, HUD and floating face now
+  rest too (they drew every frame). Both apps show "fps · ms per frame ·
+  animal resolution" (the Faces window's full-size view; the phone's Face
+  editor). A small face skips its soft shadow. See `docs/CRITTERS.md`,
+  "Resolution and frame rate".
+
 - **A red panda face** - the first animal among Jarvis's faces, on the
   desktop and the phone. It sleeps when Jarvis is on standby, perks its ears
   and tilts its head when listening, gazes into a glowing orb when thinking,

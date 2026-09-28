@@ -659,6 +659,84 @@ window.JARVIS_SPEC = Object.freeze({
         "recommended": "Surface.setFrameRate(frameRate, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS)  (3-arg: API 31; 2-arg: API 30)"
       }
     },
+    "animals": {
+      "auto": {
+        "climb_to_max_below": 0.25,
+        "climb_why": "Auto may go up to Maximum only for an animal, only when its frames take under a quarter of their time budget, and on the phone only when neither Battery saver (the switch or the phone's own) nor heat is holding it back. A level picked by hand stays picked.",
+        "raise_quality_below": 0.55,
+        "raise_rate_below": 0.33,
+        "start": "high",
+        "step_down": [
+          "max>high",
+          "fps>60",
+          "high>medium",
+          "fps>30",
+          "medium>low"
+        ],
+        "step_down_why": "Sharpness goes first only from Maximum; then the frame rate halves to 60 before the picture gets softer, then 30, then the lowest level. Frame-rate steps are whole shares of the screen's rate, never below 30. Stepping back up is the same ladder in reverse, held off for a while after each step down."
+      },
+      "desktop_max_px": 2400,
+      "happening_s": 5.5,
+      "happening_why": "The longest idle happening (the otter's roll: 1.4 + 1.8 + 1.8 s) and a little over. Each pose file says whether one is playing (busy(state, t)), and critter-busy-golden.json holds the phone's copy to the desktop's.",
+      "headroom": {
+        "budget_fps": 60,
+        "min_frames": 10,
+        "off_above": 0.8,
+        "on_below": 0.5,
+        "why": "Headroom: the average frame costs under half of a 60 fps frame's time (8.3 ms); it is lost again above 0.8 of it, so the resting rate does not flap."
+      },
+      "levels": [
+        {
+          "desktop_scale": 0.62,
+          "desktop_supersample": 1,
+          "id": "low",
+          "label": "Lower",
+          "note": "Softest picture and the least work for the graphics chip. Easiest on battery and heat.",
+          "phone_trace": 0.4
+        },
+        {
+          "desktop_scale": 0.8,
+          "desktop_supersample": 1,
+          "id": "medium",
+          "label": "Balanced",
+          "note": "A little softer than High, with less work for the graphics chip.",
+          "phone_trace": 0.5
+        },
+        {
+          "desktop_scale": 1.0,
+          "desktop_supersample": 1,
+          "id": "high",
+          "label": "High",
+          "note": "Sharp. A fair amount of work for the graphics chip.",
+          "phone_trace": 0.75
+        },
+        {
+          "desktop_scale": 1.0,
+          "desktop_supersample": 2,
+          "id": "max",
+          "label": "Maximum",
+          "note": "The sharpest edges. The most work for the graphics chip, and the most battery and heat.",
+          "phone_trace": 1.0
+        }
+      ],
+      "levels_why": "The ids stay low/medium/high/max so settings saved before the rename still work. The lowest is 'Lower', not 'Battery saver': the phone already has a Battery saver switch, which overrides all of this. desktop_scale is the share of the screen's own pixels the animal is traced at, then enlarged; desktop_supersample 2 traces 2x2 samples per screen pixel and averages them down (the audit measured edge error 9.4 -> 3.2 on 255 for the panda at 240 px). phone_trace is the share of the phone's full resolution the animal is traced at before it is enlarged.",
+      "no_shadow_below_px": 200,
+      "no_shadow_why": "The soft shadow is skipped (uNoShadow = 1) when the animal's square is drawn under 200 device pixels, or at Lower: at that size it is a few pixels of shading, and it is about a sixth of the panda's cost.",
+      "note": "Owner, 2026-09-28: 'Sharp animals on capable hardware'. The four animal faces (red panda, pygmy owl, sea otter, monkey) are ray-traced per pixel, so how many pixels they are traced at decides how sharp their edges are and how much graphics work they cost. Both apps read these numbers: the desktop from this file (faces-spec.js), the phone from Kotlin constants that SpecDriftTest holds to it.",
+      "rest_fps": {
+        "auto_happening": 0,
+        "auto_headroom": 60,
+        "auto_no_headroom": 30,
+        "banked": 2,
+        "picked": "the picked rate: 30, 60, 90 or 120; max is the screen's own rate (0)",
+        "standby": 15,
+        "states": [
+          "idle",
+          "approval"
+        ],
+        "why": "An animal at rest still breathes, blinks and looks about, and at 30 frames a second its slow, eased movements can step. With Frame rate on Auto it rests at 60 when the frames are cheap (headroom) and 30 when they are not, and draws every frame while one of its idle happenings (a stretch, a scratch, an ear turning) is playing. Picking 30, 60, 90, 120 or Max sets the resting rate to that. Standby stays 15 and banked 2 whatever is picked. The other faces keep state_fps."
+      }
+    },
     "budget": {
       "downgrade_above": 1.45,
       "rule": "budget_ms = 1000 / (hz / stride)",
@@ -672,6 +750,10 @@ window.JARVIS_SPEC = Object.freeze({
       "rule": "divisor",
       "why": "If a face cannot hold the full rate, drop to a whole divisor (120 -> 60 -> 40 -> 30) rather than chasing an uneven number. Every frame then lands on a real vsync. A locked 60 on a 120Hz panel looks better than a floating 75."
     },
+    "pick_rule": {
+      "rule": "stride = max(1, round(hz / want)); one more if hz / stride > want * 1.2",
+      "why": "A picked rate is drawn on whole shares of the screen's rate, the nearest one, but never more than a fifth faster than what was picked: 90 becomes 72 on a 144 Hz screen and 60 on a 120 Hz one; 60 is 72 on 144 Hz; 30 is 30 on 60, 90, 120 Hz."
+    },
     "state_fps": {
       "banked": 2,
       "idle": 30,
@@ -680,7 +762,9 @@ window.JARVIS_SPEC = Object.freeze({
     "state_fps_why": "Idle, standby and banked are more than nine tenths of screen-on time and every face drew them at the full display rate. The shell accumulates time and skips vsyncs for these states, handing the accumulated dt to the draw so motion covers the same distance. The first 600ms after any state change, and any tap acknowledgement, run at full rate so no transition stutters. Banked at 2fps is just enough to catch a new notch. Active states are untouched.",
     "targets": [
       "auto",
+      "30",
       "60",
+      "90",
       "120",
       "max"
     ],

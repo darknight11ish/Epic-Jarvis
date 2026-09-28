@@ -59,17 +59,39 @@ const val SOLO_DETAIL_FLOOR = 1.9f
  *    screen's own pixel density.
  */
 enum class QualityTier(
+    /** Stored in [com.jarvis.client.data.FaceTuning]; never renamed, so saved settings keep working. */
     val id: String,
+    /** The spec's `frame_rate.animals.levels` label, the same word as the desktop's Settings. */
     val label: String,
     /** The kit's own `detail` for this tier, before the solo floor. */
     val kitDetail: Float,
     val gpu: Float,
     val post: Boolean,
+    /**
+     * The share of the phone's full resolution an ANIMAL is traced at before
+     * it is enlarged (the spec's `phone_trace`) - see CritterFace's
+     * `traceScale`. Maximum is the full resolution.
+     */
+    val animalTrace: Float,
+    /** The level's one-line cost, word for word the desktop's (face-tuning.js QUALITIES). */
+    val note: String,
 ) {
-    LOW("low", "Low", 0.75f, 0.62f, false),
-    MEDIUM("medium", "Medium", 1.0f, 0.80f, true),
-    HIGH("high", "High", 1.4f, 1.0f, true),
-    MAX("max", "Max", 2.0f, 1.0f, true),
+    LOW(
+        "low", "Lower", 0.75f, 0.62f, false, 0.4f,
+        "Softest picture and the least work for the graphics chip. Easiest on battery and heat.",
+    ),
+    MEDIUM(
+        "medium", "Balanced", 1.0f, 0.80f, true, 0.5f,
+        "A little softer than High, with less work for the graphics chip.",
+    ),
+    HIGH(
+        "high", "High", 1.4f, 1.0f, true, 0.75f,
+        "Sharp. A fair amount of work for the graphics chip.",
+    ),
+    MAX(
+        "max", "Maximum", 2.0f, 1.0f, true, 1.0f,
+        "The sharpest edges. The most work for the graphics chip, and the most battery and heat.",
+    ),
     ;
 
     /** What the phone's faces multiply their element counts by. See the class doc. */
@@ -89,8 +111,9 @@ enum class QualityTier(
 }
 
 /**
- * The kit's frame-rate targets: `auto | 60 | 120 | max` (`renderer.frame_rate`
- * in its spec, default auto).
+ * The frame-rate targets: `auto | 30 | 60 | 90 | 120 | max` (the spec's
+ * `frame_rate.targets`, default auto; 30 and 90 joined on 2026-09-28). Each
+ * is drawn on whole vsyncs by [FramePacing.strideNear].
  *
  * On the web "auto" and "max" are the same. On Android they are not, and the
  * kit says so: "max" also ASKS the system for the panel's fastest mode, which
@@ -99,13 +122,19 @@ enum class QualityTier(
  */
 enum class FrameRateTarget(val id: String, val label: String, val hz: Float) {
     AUTO("auto", "Auto", 0f),
+    FPS_30("30", "30", 30f),
     FPS_60("60", "60", 60f),
+    FPS_90("90", "90", 90f),
     FPS_120("120", "120", 120f),
     MAX("max", "Max", 0f),
     ;
 
     companion object {
         val DEFAULT = AUTO
+
+        /** The Frame rate row's one-line note - word for word the desktop's (face-tuning.js FRAME_RATE_NOTE). */
+        const val NOTE = "How many times a second the face is drawn. Higher is smoother but uses more battery and " +
+            "graphics work. It keeps to whole steps of the screen's rate, so 90 becomes 72 on a 144 Hz screen."
 
         fun byId(id: String?): FrameRateTarget = entries.firstOrNull { it.id == id } ?: DEFAULT
     }
@@ -171,14 +200,31 @@ object FramePacing {
 
     /**
      * The kit's `applyTarget`: draw every Nth vsync. Auto and Max take the
-     * panel's own rate; 60 and 120 are capped at what the panel can do, then
-     * rounded to a whole divisor.
+     * panel's own rate; a picked rate is capped at what the panel can do,
+     * then drawn by [strideNear].
      */
     fun strideFor(target: FrameRateTarget, panelHz: Float): Int {
         val hz = sane(panelHz)
-        val want = if (target.hz <= 0f) hz else min(target.hz, hz)
-        return max(1, jsRound(hz / want).toInt())
+        return strideNear(hz, if (target.hz <= 0f) hz else target.hz)
     }
+
+    /**
+     * The spec's `frame_rate.pick_rule`: the nearest whole divisor of the
+     * panel (the kit's `Math.round(hz / want)`), plus one if that would draw
+     * more than a fifth faster than [wantFps] - so 90 is 72 on a 144 Hz
+     * panel and 60 on a 120 Hz one, never 120. The desktop's
+     * `FacePace.strideNear` is the same sum.
+     */
+    fun strideNear(panelHz: Float, wantFps: Float): Int {
+        val hz = sane(panelHz)
+        val want = if (wantFps.isFinite() && wantFps > 0f) min(wantFps, hz) else hz
+        var s = max(1, jsRound(hz / want).toInt())
+        if (hz / s > want * 1.2f + 1e-3f) s++
+        return s
+    }
+
+    /** The largest divisor that still draws at least [fps] a second: a rung of the animals' ladder. */
+    fun strideAtLeast(panelHz: Float, fps: Int): Int = max(1, floor(sane(panelHz) / fps + 1e-3f).toInt())
 
     /** The smallest whole divisor that keeps the face at or under [maxFps]. */
     fun strideAtMost(panelHz: Float, maxFps: Int): Int {
@@ -270,8 +316,16 @@ object FramePacing {
  *    happens again (up to [HOLD_MAX_MS]). A phone that can almost manage High
  *    tries it again now and then instead of bouncing every two seconds.
  *
- * Nothing here allocates, and one call is a handful of float operations, so
- * it cannot make a slow phone slower.
+ * For an ANIMAL ([onFrame]'s `animal`) it walks the spec's own ladder
+ * instead ([AnimalPace.ladder], `frame_rate.animals.auto`): Maximum -> High,
+ * then the frame rate down to 60, then Balanced, then 30, then Lower - and it
+ * may climb to Maximum, but only while frames take under
+ * [AnimalPace.CLIMB_TO_MAX_BELOW] of their budget, and only where the ceiling
+ * allows (heat, a software renderer).
+ *
+ * Nothing here allocates per frame (the animal ladder is built once per panel
+ * rate), and one call is a handful of float operations, so it cannot make a
+ * slow phone slower.
  */
 class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
 
@@ -288,6 +342,12 @@ class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
     private var lastChangeMs = UNSET
     private val blockedUntil = LongArray(QualityTier.entries.size)
     private val holdMs = LongArray(QualityTier.entries.size)
+    // The animal ladder's holds, one per rung (at most six).
+    private val rungBlockedUntil = LongArray(8)
+    private val rungHoldMs = LongArray(8)
+    private var ladderHz = -1f
+    private var ladderBase = -1
+    private var ladder: List<AnimalPace.Rung> = emptyList()
 
     /** Back to the start: [to] at [extraStride] divisor steps, no holds, warm-up again. */
     fun reset(to: QualityTier = startTier, extraStride: Int = 0) {
@@ -295,6 +355,8 @@ class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
         this.extraStride = max(0, extraStride)
         blockedUntil.fill(0L)
         holdMs.fill(0L)
+        rungBlockedUntil.fill(0L)
+        rungHoldMs.fill(0L)
         lastChangeMs = UNSET
         restartWarmup()
     }
@@ -309,6 +371,8 @@ class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
         startedAtMs = UNSET
         blockedUntil.fill(0L)
         holdMs.fill(0L)
+        rungBlockedUntil.fill(0L)
+        rungHoldMs.fill(0L)
     }
 
     /**
@@ -320,6 +384,7 @@ class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
      * @param panelHz the panel's refresh rate, for the divisor rule.
      * @param baseStride the target's own stride, before the governor's.
      * @param ceiling the highest tier allowed right now (heat lowers it).
+     * @param animal the face is an animal: the spec's ladder, up to Maximum.
      * @return true when [tier] or [extraStride] changed.
      */
     fun onFrame(
@@ -329,8 +394,9 @@ class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
         panelHz: Float,
         baseStride: Int = 1,
         ceiling: QualityTier = QualityTier.MAX,
+        animal: Boolean = false,
     ): Boolean {
-        val top = minOf(ceiling, AUTO_TOP)
+        val top = minOf(ceiling, if (animal) ANIMAL_AUTO_TOP else AUTO_TOP)
         if (tier > top) {
             tier = top
             changed(nowMs)
@@ -349,6 +415,8 @@ class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
         avg = if (samples == 0) load else avg * (1f - EMA) + load * EMA
         samples++
         val since = if (lastChangeMs == UNSET) Long.MAX_VALUE else nowMs - lastChangeMs
+
+        if (animal) return animalStep(nowMs, since, panelHz, baseStride, top)
 
         if (avg > SEVERE_LOAD && samples >= SEVERE_MIN_SAMPLES && since >= SEVERE_COOLDOWN_MS) {
             if (tier != QualityTier.LOW) {
@@ -389,6 +457,50 @@ class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
         return false
     }
 
+    /** The animals' ladder, rebuilt only when the panel rate or the base stride changes. */
+    private fun ladderFor(panelHz: Float, baseStride: Int): List<AnimalPace.Rung> {
+        if (panelHz != ladderHz || baseStride != ladderBase) {
+            ladder = AnimalPace.ladder(panelHz, baseStride)
+            ladderHz = panelHz
+            ladderBase = baseStride
+        }
+        return ladder
+    }
+
+    /** One step of the animal ladder (see the class doc). */
+    private fun animalStep(nowMs: Long, since: Long, panelHz: Float, baseStride: Int, top: QualityTier): Boolean {
+        val rungs = ladderFor(panelHz, baseStride)
+        val i = AnimalPace.rungOf(rungs, tier, baseStride + extraStride)
+        val severe = avg > SEVERE_LOAD && samples >= SEVERE_MIN_SAMPLES && since >= SEVERE_COOLDOWN_MS
+        if (!severe && (samples < MIN_SAMPLES || since < COOLDOWN_MS)) return false
+        val j = when {
+            severe -> rungs.size - 1
+            avg > FramePacing.DOWNGRADE_ABOVE -> min(i + 1, rungs.size - 1)
+            i > 0 && rungs[i - 1].tier <= top && nowMs >= rungBlockedUntil[i - 1] -> {
+                val up = rungs[i - 1]
+                val need = when {
+                    up.tier == QualityTier.MAX -> AnimalPace.CLIMB_TO_MAX_BELOW
+                    up.stride < rungs[i].stride -> AnimalPace.RAISE_RATE_BELOW
+                    else -> AnimalPace.RAISE_QUALITY_BELOW
+                }
+                if (avg < need) i - 1 else i
+            }
+            else -> i
+        }
+        if (j == i) return false
+        if (j > i) {
+            // Every rung being left is held off for a while, and longer each time.
+            for (k in i until j) {
+                rungHoldMs[k] = if (rungHoldMs[k] == 0L) HOLD_FIRST_MS else min(rungHoldMs[k] * 2, HOLD_MAX_MS)
+                rungBlockedUntil[k] = nowMs + rungHoldMs[k]
+            }
+        }
+        tier = rungs[j].tier
+        extraStride = max(0, rungs[j].stride - baseStride)
+        changed(nowMs)
+        return true
+    }
+
     private fun stepDownTo(to: QualityTier, nowMs: Long) {
         // Every tier being left is held off for a while, and longer each time.
         for (i in to.ordinal + 1..tier.ordinal) {
@@ -406,8 +518,11 @@ class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
     }
 
     companion object {
-        /** Auto never picks above High, as in the kit. */
+        /** Auto never picks above High for a face that is not an animal, as in the kit. */
         val AUTO_TOP = QualityTier.HIGH
+
+        /** For an animal it may climb to Maximum (see [AnimalPace.CLIMB_TO_MAX_BELOW]). */
+        val ANIMAL_AUTO_TOP = QualityTier.MAX
 
         /** The kit's `costAvg * .9 + cost * .1`. */
         const val EMA = 0.1f
@@ -421,6 +536,142 @@ class FrameGovernor(private val startTier: QualityTier = QualityTier.DEFAULT) {
         const val HOLD_MAX_MS = 120_000L
         private const val MAX_LOAD = 100f
         private const val UNSET = Long.MIN_VALUE
+    }
+}
+
+/**
+ * The animals' own rules - the owner's "sharp animals on capable hardware"
+ * (2026-09-28). Every number is the spec's `frame_rate.animals`, which the
+ * desktop reads straight from the file (face-pace.js) and SpecDriftTest holds
+ * these to. Pure, like the rest of this file except [FaceQuality].
+ */
+object AnimalPace {
+    /** Auto may climb to Maximum only while frames take under this share of their budget. */
+    const val CLIMB_TO_MAX_BELOW = 0.25f
+
+    /** A frame-rate step back up needs the load under this (the kit's 0.55 x 0.6)... */
+    const val RAISE_RATE_BELOW = 0.33f
+
+    /** ...and a quality step back up under this (the kit's upgrade_below). */
+    const val RAISE_QUALITY_BELOW = 0.55f
+
+    /** Resting rates with Frame rate on Auto: 60 with headroom, 30 without. */
+    const val AUTO_REST_HEADROOM = 60
+    const val AUTO_REST_NO_HEADROOM = 30
+
+    /** Headroom: the average frame under ON_BELOW of a 60 fps frame's time, lost above OFF_ABOVE. */
+    const val HEADROOM_BUDGET_FPS = 60
+    const val HEADROOM_ON_BELOW = 0.5f
+    const val HEADROOM_OFF_ABOVE = 0.8f
+    const val HEADROOM_MIN_FRAMES = 10
+
+    /** The soft shadow is skipped when the animal's square is under this many device pixels. */
+    const val NO_SHADOW_BELOW_PX = 200
+
+    /** One step of Auto's ladder: this tier, drawing every [stride]th vsync. */
+    data class Rung(val tier: QualityTier, val stride: Int)
+
+    /**
+     * The resting rate for an animal in [state], in frames a second; 0 for
+     * "every frame the active stride allows". [target] is the Frame rate
+     * choice (AUTO while Auto adjust or Battery saver is on); [headroom]
+     * see [Headroom]; [busy] an idle happening is playing (the pose's busy()).
+     * The other faces keep [Spec.fpsFor].
+     */
+    fun restFps(state: com.jarvis.client.FaceState, target: FrameRateTarget, headroom: Boolean, busy: Boolean): Int =
+        when (state) {
+            com.jarvis.client.FaceState.STANDBY, com.jarvis.client.FaceState.BANKED -> Spec.fpsFor(state)
+            com.jarvis.client.FaceState.IDLE, com.jarvis.client.FaceState.APPROVAL -> when (target) {
+                FrameRateTarget.AUTO -> when {
+                    busy && state == com.jarvis.client.FaceState.IDLE -> 0
+                    headroom -> AUTO_REST_HEADROOM
+                    else -> AUTO_REST_NO_HEADROOM
+                }
+                FrameRateTarget.MAX -> 0
+                else -> target.hz.toInt()
+            }
+            else -> 0
+        }
+
+    /**
+     * Auto's ladder for an animal (`frame_rate.animals.auto.step_down`):
+     * Maximum, High, then High at 60, Balanced at 60, Balanced at 30, Lower at
+     * 30. A rung that changes nothing on this panel (60 on a 60 Hz one) is
+     * left out; no rung goes under [baseStride].
+     */
+    fun ladder(panelHz: Float, baseStride: Int = 1): List<Rung> {
+        val b = max(1, baseStride)
+        val s60 = max(b, FramePacing.strideAtLeast(panelHz, 60))
+        val s30 = max(b, FramePacing.strideAtLeast(panelHz, FramePacing.MIN_FPS))
+        val raw = listOf(
+            Rung(QualityTier.MAX, b), Rung(QualityTier.HIGH, b), Rung(QualityTier.HIGH, s60),
+            Rung(QualityTier.MEDIUM, s60), Rung(QualityTier.MEDIUM, s30), Rung(QualityTier.LOW, s30),
+        )
+        val out = ArrayList<Rung>(raw.size)
+        for (r in raw) if (out.isEmpty() || out.last() != r) out.add(r)
+        return out
+    }
+
+    /** Where [tier] at [stride] sits on [rungs]: exactly, else the first rung no richer. */
+    fun rungOf(rungs: List<Rung>, tier: QualityTier, stride: Int): Int {
+        var i = rungs.indexOfFirst { it.tier == tier && it.stride == stride }
+        if (i < 0) i = rungs.indexOfFirst { it.tier <= tier && it.stride >= stride }
+        return if (i < 0) rungs.size - 1 else i
+    }
+
+    /** Whether to skip the soft shadow: the animal's square under [NO_SHADOW_BELOW_PX], or Lower. */
+    fun noShadow(squarePx: Float, tier: QualityTier): Boolean =
+        tier == QualityTier.LOW || squarePx < NO_SHADOW_BELOW_PX
+
+    /** "60 fps · 4.2 ms per frame · animal resolution 810 px (75%)" - the desktop's FacePace.readout. */
+    fun readout(fps: Float, ms: Float, animalPx: Int, animalOf: Int): String {
+        val msText = String.format(java.util.Locale.ROOT, "%.1f", if (ms.isFinite()) ms else 0f)
+        val base = "${kotlin.math.round(fps).toInt()} fps · $msText ms per frame"
+        if (animalPx <= 0 || animalOf <= 0) return base
+        return "$base · animal resolution $animalPx px (${kotlin.math.round(animalPx * 100f / animalOf).toInt()}%)"
+    }
+}
+
+/**
+ * Whether frames are cheap enough for an animal to rest at 60: the average
+ * frame cost under [AnimalPace.HEADROOM_ON_BELOW] of a 60 fps frame's time,
+ * lost again above [AnimalPace.HEADROOM_OFF_ABOVE] of it, and not decided
+ * before [AnimalPace.HEADROOM_MIN_FRAMES] frames. Pure; not thread-safe
+ * (the frame loop's own).
+ */
+class Headroom {
+    private var avg = 0f
+    private var n = 0
+
+    var on = false
+        private set
+
+    fun frame(costMs: Float): Boolean {
+        if (!costMs.isFinite() || costMs < 0f) return on
+        avg = if (n == 0) costMs else avg * 0.9f + costMs * 0.1f
+        n++
+        val budget = 1000f / AnimalPace.HEADROOM_BUDGET_FPS
+        if (n >= AnimalPace.HEADROOM_MIN_FRAMES) {
+            on = if (on) avg <= AnimalPace.HEADROOM_OFF_ABOVE * budget else avg < AnimalPace.HEADROOM_ON_BELOW * budget
+        }
+        return on
+    }
+
+    fun reset() {
+        avg = 0f
+        n = 0
+        on = false
+    }
+}
+
+/**
+ * How an animal rests right now, for [FaceHost.advance]: the Frame rate
+ * choice that applies and whether there is headroom. Replaced, never
+ * changed, so the frame loop can read it without a lock.
+ */
+data class RestPace(val target: FrameRateTarget, val headroom: Boolean) {
+    companion object {
+        val DEFAULT = RestPace(FrameRateTarget.AUTO, false)
     }
 }
 
@@ -572,7 +823,7 @@ object FaceBudget {
      * Whether to ask the panel for its fastest mode - carried to
      * `DisplayRate.wantsHigh`, which still says no in battery saver, when hot,
      * with the face off screen and in the resting states.
-     *  - Battery saver, or a chosen 60: never ask.
+     *  - Battery saver, or a chosen 30 or 60: never ask.
      *  - Max: ask whenever the face is busy, with no time limit (the kit: "max
      *    also REQUESTS the highest supported mode").
      *  - Auto adjust, Auto, 120: the existing rule.
@@ -580,7 +831,8 @@ object FaceBudget {
     fun smoothFor(t: FaceTuning, phoneSaver: Boolean): SmoothMotion = when {
         saverOn(t, phoneSaver) -> SmoothMotion.OFF
         t.autoAdjust -> SmoothMotion.AUTO
-        t.frameRate == FrameRateTarget.FPS_60 -> SmoothMotion.OFF
+        // 30 and 60 never need more than a 60 Hz panel.
+        t.frameRate == FrameRateTarget.FPS_60 || t.frameRate == FrameRateTarget.FPS_30 -> SmoothMotion.OFF
         t.frameRate == FrameRateTarget.MAX -> SmoothMotion.ALWAYS
         else -> SmoothMotion.AUTO
     }
@@ -604,6 +856,19 @@ object FaceQuality {
     @Volatile private var heat = 0
     @Volatile private var panelHz = 60f
     private var probed = false
+
+    /** The face on screen is an animal (see [onFaceChanged]). */
+    @Volatile
+    var animal = false
+        private set
+
+    // Frames cheap enough for an animal to rest at 60 (frame loop only).
+    private val headroom = Headroom()
+
+    /** How an animal rests right now (see [RestPace]); read by the frame loop. */
+    @Volatile
+    var pace: RestPace = RestPace.DEFAULT
+        private set
 
     /** The GPU probe found a software renderer (an emulator). See [onGpuProbed]. */
     @Volatile
@@ -664,8 +929,17 @@ object FaceQuality {
         recompute()
     }
 
-    /** A different face is on screen: its first frames are not its real cost. */
-    fun onFaceChanged() = governor.restartWarmup()
+    /**
+     * A different face is on screen: its first frames are not its real cost.
+     * An animal may be taken to Maximum by Auto; any other face goes back to
+     * High at most on its next frame (the governor's `top`).
+     */
+    fun onFaceChanged(isAnimal: Boolean = false) {
+        animal = isAnimal
+        governor.restartWarmup()
+        headroom.reset()
+        pace = restPaceFor(current)
+    }
 
     /**
      * One drawn frame, for the governor. Does nothing unless Auto adjust is in
@@ -676,6 +950,10 @@ object FaceQuality {
      */
     fun onFrame(nowMs: Long, costMs: Float, budgetMs: Float) {
         val c = current
+        // Headroom counts every drawn frame, governed or not: Frame rate on
+        // Auto rests an animal at 60 or 30 by it either way.
+        val had = headroom.on
+        if (headroom.frame(costMs) != had) pace = restPaceFor(c)
         if (!c.governed) return
         val changed = governor.onFrame(
             nowMs = nowMs,
@@ -684,14 +962,47 @@ object FaceQuality {
             panelHz = c.panelHz,
             baseStride = FramePacing.strideFor(FrameRateTarget.AUTO, c.panelHz),
             ceiling = FaceBudget.autoCeiling(heat, softwareGpu),
+            animal = animal,
         )
         if (changed) recompute()
+    }
+
+    /** The Frame rate choice that applies to an animal's rest: Auto whenever Auto adjust or Battery saver decides. */
+    private fun restPaceFor(b: ResolvedBudget): RestPace {
+        val target = if (b.governed || b.saver) FrameRateTarget.AUTO else tuning.frameRate
+        val p = pace
+        return if (p.target == target && p.headroom == headroom.on) p else RestPace(target, headroom.on)
+    }
+
+    // The Face editor's readout (fps, ms per frame, the animal's resolution).
+    @Volatile private var tracePx = 0
+    @Volatile private var traceOf = 0
+
+    /** What an animal was last traced at, and the size it fills (CritterFace, main thread). */
+    fun noteTrace(px: Int, of: Int) {
+        tracePx = px
+        traceOf = of
+    }
+
+    private val _stats = MutableStateFlow("")
+
+    /** "60 fps · 4.2 ms per frame · animal resolution 810 px (75%)", about twice a second while a face draws. */
+    val stats: StateFlow<String> = _stats.asStateFlow()
+
+    /** The frame loop's measurement, twice a second: frames drawn a second and the average ms each. */
+    fun publishStats(fps: Float, msPerFrame: Float) {
+        _stats.value = if (animal) {
+            AnimalPace.readout(fps, msPerFrame, tracePx, traceOf)
+        } else {
+            AnimalPace.readout(fps, msPerFrame, 0, 0)
+        }
     }
 
     private fun recompute() {
         val r = FaceBudget.resolve(
             tuning, phoneSaver, heat, governor.tier, governor.extraStride, panelHz, softwareGpu,
         )
+        pace = restPaceFor(r)
         if (r == current) return
         current = r
         _live.value = r

@@ -405,6 +405,24 @@ object CritterPose {
     // stretch, tail flick, scratch, hears left, hears right.
     private val EVENTS = floatArrayOf(12f, 30f, 12f, 23f, 23f)
 
+    /**
+     * How long the longest idle happening lasts, and a little over (the
+     * otter's roll: 1.4 + 1.8 + 1.8 s) - the desktop's HAPPENING_S and the
+     * spec's `frame_rate.animals.happening_s`.
+     */
+    const val HAPPENING_S = 5.5f
+
+    /** Whether [happening]'s answer [ev] has started and is not over - the desktop's playing(). */
+    internal fun playing(ev: FloatArray): Boolean = ev[0] >= 0f && ev[1] >= 0f && ev[1] < HAPPENING_S
+
+    /**
+     * Whether one of the panda's idle happenings is playing at clock [t] - the
+     * desktop's busy(state, t), for the frame pacer only ([FaceHost.restFps]).
+     * The same dice its idle pose rolls.
+     */
+    fun busy(state: FaceState, t: Float): Boolean =
+        state == FaceState.IDLE && playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS))
+
     /** The tail's swing at clock [t] in one state; the tip is asked for an earlier time. */
     private fun tailAt(state: FaceState, t: Float, o: Opts): Float {
         val sw = o.sway

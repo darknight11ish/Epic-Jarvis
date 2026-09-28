@@ -143,11 +143,38 @@ class CritterPoseTest {
         }
     }
 
+    /**
+     * Whether an idle happening is playing - what the frame pacer on both
+     * apps reads to draw a stretch or a scratch at the full rate. The
+     * desktop's busy(state, t), four times a second over 320 s and a day on.
+     */
+    @Test
+    fun `the phone knows when a happening plays, as the desktop does`() {
+        val text = checkNotNull(javaClass.classLoader?.getResourceAsStream("critter-busy-golden.json")) {
+            "critter-busy-golden.json is missing from test resources - run tools/gen_critters.py"
+        }.bufferedReader().readText()
+        val o = Json.parseToJsonElement(text).jsonObject
+        assertEquals(o["happening_s"]!!.jsonPrimitive.float, CritterPose.HAPPENING_S, 0f)
+        val times = o["times"]!!.jsonArray.map { it.jsonPrimitive.float }
+        val busy = o["busy"]!!.jsonObject
+        val phone = mapOf<String, (FaceState, Float) -> Boolean>(
+            "redpanda" to CritterPose::busy, "pygmyowl" to OwlPose::busy,
+            "seaotter" to OtterPose::busy, "monkey" to MonkeyPose::busy,
+        )
+        assertEquals(phone.keys, busy.keys)
+        for ((sp, fn) in phone) {
+            val want = busy[sp]!!.jsonPrimitive.content
+            val got = times.joinToString("") { if (fn(FaceState.IDLE, it)) "1" else "0" }
+            assertEquals("$sp: busy differs from the desktop's", want, got)
+            for (st in FaceState.entries) if (st != FaceState.IDLE) assertTrue("$sp busy in $st", times.none { fn(st, it) })
+        }
+    }
+
     @Test
     fun `each shader declares every uniform its pose sets`() {
         // A uniform set but never declared would throw at draw time, on the
         // phone, in front of the owner. Cheaper to find it here.
-        val host = setOf("uHot", "uCool", "uYaw", "uPit", "uTime", "uZoom", "uCenter", "uR", "uPx")
+        val host = setOf("uHot", "uCool", "uYaw", "uPit", "uTime", "uZoom", "uCenter", "uR", "uPx", "uNoShadow")
         val shaders = mapOf(
             "RED_PANDA" to (CritterShaders.RED_PANDA to CritterPose.uniforms(
                 CritterPose.pose(FaceState.IDLE, FaceState.IDLE, 5f, 1f, 0f),

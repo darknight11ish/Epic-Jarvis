@@ -60,6 +60,7 @@ uniform float uPit;
 uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -727,7 +728,11 @@ float4 critter(float2 p) {
     // Wrapped diffuse: light bleeds past the terminator, the way it does on
     // felt and fur, instead of cutting to black.
     float wrap = clamp((nl + 0.45) / 1.45, 0.0, 1.0);
-    float sh = softShadow(pos + n * 0.01, L);
+    // Skipped when the host says so (uNoShadow): under about 200 device
+    // pixels, or at the Lower level, the shadow is a few pixels of shading
+    // and about a sixth of the cost. A uniform, so every pixel takes the
+    // same branch.
+    float sh = uNoShadow > 0.5 ? 1.0 : softShadow(pos + n * 0.01, L);
     // (No ambient occlusion: measured, it came out exactly 1 - no effect - on
     // 83-97% of each animal, darkened only a thin crease under the panda's
     // chin by a few levels, and cost three more lookups of the animal. The
@@ -853,6 +858,7 @@ uniform float uPit;
 uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -1477,7 +1483,11 @@ float4 critter(float2 p) {
     // Wrapped diffuse: light bleeds past the terminator, the way it does on
     // felt and fur, instead of cutting to black.
     float wrap = clamp((nl + 0.45) / 1.45, 0.0, 1.0);
-    float sh = softShadow(pos + n * 0.01, L);
+    // Skipped when the host says so (uNoShadow): under about 200 device
+    // pixels, or at the Lower level, the shadow is a few pixels of shading
+    // and about a sixth of the cost. A uniform, so every pixel takes the
+    // same branch.
+    float sh = uNoShadow > 0.5 ? 1.0 : softShadow(pos + n * 0.01, L);
     // (No ambient occlusion: measured, it came out exactly 1 - no effect - on
     // 83-97% of each animal, darkened only a thin crease under the panda's
     // chin by a few levels, and cost three more lookups of the animal. The
@@ -1603,6 +1613,7 @@ uniform float uPit;
 uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -2272,7 +2283,11 @@ float4 critter(float2 p) {
     // Wrapped diffuse: light bleeds past the terminator, the way it does on
     // felt and fur, instead of cutting to black.
     float wrap = clamp((nl + 0.45) / 1.45, 0.0, 1.0);
-    float sh = softShadow(pos + n * 0.01, L);
+    // Skipped when the host says so (uNoShadow): under about 200 device
+    // pixels, or at the Lower level, the shadow is a few pixels of shading
+    // and about a sixth of the cost. A uniform, so every pixel takes the
+    // same branch.
+    float sh = uNoShadow > 0.5 ? 1.0 : softShadow(pos + n * 0.01, L);
     // (No ambient occlusion: measured, it came out exactly 1 - no effect - on
     // 83-97% of each animal, darkened only a thin crease under the panda's
     // chin by a few levels, and cost three more lookups of the animal. The
@@ -2398,6 +2413,7 @@ uniform float uPit;
 uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
+uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -3086,7 +3102,11 @@ float4 critter(float2 p) {
     // Wrapped diffuse: light bleeds past the terminator, the way it does on
     // felt and fur, instead of cutting to black.
     float wrap = clamp((nl + 0.45) / 1.45, 0.0, 1.0);
-    float sh = softShadow(pos + n * 0.01, L);
+    // Skipped when the host says so (uNoShadow): under about 200 device
+    // pixels, or at the Lower level, the shadow is a few pixels of shading
+    // and about a sixth of the cost. A uniform, so every pixel takes the
+    // same branch.
+    float sh = uNoShadow > 0.5 ? 1.0 : softShadow(pos + n * 0.01, L);
     // (No ambient occlusion: measured, it came out exactly 1 - no effect - on
     // 83-97% of each animal, darkened only a thin crease under the panda's
     // chin by a few levels, and cost three more lookups of the animal. The
