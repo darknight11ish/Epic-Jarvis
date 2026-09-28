@@ -226,6 +226,11 @@ CLASSIFICATION = {
     # The voice follows the face (2026-09-27): an animal face speaks in its
     # own built-in voice - an on/off switch, the same no-card shape.
     "/api/voice/voices/face": ("ported", "Voice follows the face: with an animal face showing, the built-in voice becomes that animal's (GET /api/voice/voices `face_voice`, the PC's own words and line). An on/off switch, on by default; no card either way; held on a stale link like every change. Desktop: set_voice_face (Settings, Jarvis's voice). Phone: the Voices screen's switch (JarvisRuntime.setVoiceFace)."),
+    # Each animal's own voice (2026-09-28): under "Voice follows the face",
+    # a built-in voice, a pitch and a pace per animal - the same no-card
+    # shape - and "Try it", which plays one fixed line and changes nothing.
+    "/api/voice/voices/face_animal": ("ported", "Each animal's voice: for the red panda, pygmy owl and sea otter, one of the built-in voices, a pitch (3 steps deeper to 4 higher, in half steps) and a pace (GET /api/voice/voices `face_voice.animals`, the PC's own choices and words), and \"Reset to its own voice\". No card either way; held on a stale link like every change. Desktop: set_voice_animal / reset_voice_animal (Settings, Jarvis's voice - a slider for the pitch). Phone: the Voices screen's animal plate (JarvisRuntime.setVoiceAnimal - Deeper/Higher buttons for the pitch)."),
+    "/api/voice/voices/face_animal/try": ("ported", "\"Try it\" for one animal's voice: the PC says one fixed line of its own in that voice and sends the WAV; nothing is changed or kept, so it is not held on a stale link. Desktop: try_voice_animal (Settings, Jarvis's voice). Phone: the Voices screen's Try it (VoiceSession.tryAnimalVoice, played only while nothing else is being said or heard)."),
     "/api/voice/voices/better": ("ported","The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate. Desktop: set_better_voice, offered only with a capable second card. Phone: offered only when a capable second card is there; ON held on a stale link, OFF always goes."),
     # The voice flow (backend/voice-flow.patch, 2026-09-24): built on the
     # backend first, in both apps since 2026-09-25. Its other parts are on

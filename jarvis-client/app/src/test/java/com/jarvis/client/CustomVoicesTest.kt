@@ -384,6 +384,79 @@ class CustomVoicesTest {
     }
 
     @Test
+    fun `each animal's voice - the PC's rows, choices and words, no card`() {
+        for (case in voices["status"]!!.jsonObject.keys) {
+            val fv = requireNotNull(status(case).faceVoice) { "$case: no face_voice" }
+            assertEquals(case, listOf("redpanda", "pygmyowl", "seaotter"), fv.animals.map { it.face })
+            assertEquals(case, 11, fv.choices.voices.size)
+            assertEquals(case, listOf("slower", "normal", "faster"), fv.choices.paces.map { it.id })
+            assertEquals(case, -3.0, fv.choices.pitchMin, 0.0)
+            assertEquals(case, 4.0, fv.choices.pitchMax, 0.0)
+            assertEquals(case, 0.5, fv.choices.pitchStep, 0.0)
+            assertEquals(case, CustomVoices.ANIMALS_TITLE, fv.animalsTitle)
+        }
+        val own = requireNotNull(status("face_showing").faceVoice).animals
+        assertEquals(
+            listOf(Triple("1", 2.0, "normal"), Triple("2", 1.0, "slower"), Triple("4", 3.0, "faster")),
+            own.map { Triple(it.speaker, it.semitones, it.pace) },
+        )
+        assertFalse(own.any { it.changed })
+        assertEquals("Bella, 2 steps higher, at normal pace.", own[0].line)
+        val panda = requireNotNull(status("animal_changed").faceVoice).animals[0]
+        assertEquals("3", panda.speaker)
+        assertEquals(-1.5, panda.semitones, 0.0)
+        assertEquals("faster", panda.pace)
+        assertTrue(panda.changed)
+        assertEquals("Sarah, 1.5 steps deeper, a little faster.", panda.line)
+        assertEquals(
+            "Speaking as the Red Panda: Sarah, a little deeper.",
+            requireNotNull(status("animal_changed").faceVoice).line,
+        )
+        val set = answer("animal_set")
+        assertTrue(set.accepted)
+        assertFalse("no card for an animal's voice", set.pending)
+        assertEquals(
+            "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster.",
+            CustomVoices.answerLine(set),
+        )
+        assertEquals("The Red Panda speaks in its own voice again.", CustomVoices.answerLine(answer("animal_reset")))
+        assertEquals(
+            "The pitch must be from 3 steps deeper to 4 steps higher, in half steps.",
+            CustomVoices.answerLine(answer("animal_bad")),
+        )
+        assertEquals(
+            "Choose the Red Panda, the Pygmy Owl or the Sea Otter.",
+            CustomVoices.answerLine(answer("animal_try_bad")),
+        )
+        // A PC too old to have the rows: the switch alone, no rows.
+        val old = JsonObject(raw("empty") + ("face_voice" to JsonObject(mapOf("enabled" to JsonPrimitive(true)))))
+        assertTrue(requireNotNull(CustomVoices.parse(old)?.faceVoice).animals.isEmpty())
+    }
+
+    @Test
+    fun `each animal's voice - what is sent, and the pitch in words`() {
+        assertEquals(
+            "{\"face\":\"redpanda\",\"speaker\":\"3\",\"semitones\":-1.5,\"pace\":\"faster\"}",
+            CustomVoices.animalBody("redpanda", "3", -1.5, "faster"),
+        )
+        assertEquals("2.0", CustomVoices.halfSteps(2.0))
+        assertEquals("0.5", CustomVoices.halfSteps(0.4999))
+        assertEquals("0.0", CustomVoices.halfSteps(Double.NaN))
+        assertEquals("{\"face\":\"seaotter\",\"reset\":true}", CustomVoices.animalResetBody("seaotter"))
+        assertEquals("{\"face\":\"pygmyowl\"}", CustomVoices.animalTryBody("pygmyowl"))
+        val c = CustomVoices.AnimalChoices()
+        assertEquals(2.5, CustomVoices.nextPitch(2.0, up = true, c)!!, 0.0)
+        assertEquals(-3.0, CustomVoices.nextPitch(-2.5, up = false, c)!!, 0.0)
+        assertNull("no deeper than 3 steps", CustomVoices.nextPitch(-3.0, up = false, c))
+        assertNull("no higher than 4 steps", CustomVoices.nextPitch(4.0, up = true, c))
+        assertEquals(
+            listOf("2 steps higher", "1.5 steps deeper", "Normal pitch", "1 step higher", "0.5 steps higher"),
+            listOf(2.0, -1.5, 0.0, 1.0, 0.5).map { CustomVoices.pitchWords(it) },
+        )
+        assertEquals(listOf("+2", "-1.5", "0"), listOf(2.0, -1.5, -0.0).map { CustomVoices.pitchShort(it) })
+    }
+
+    @Test
     fun `Pocket TTS, if it ever replaces ZipVoice, is named in ZipVoice's place`() {
         assertEquals("Pocket TTS, on your PC's processor", CustomVoices.engineWords("pocket"))
         val s = status("fallback")

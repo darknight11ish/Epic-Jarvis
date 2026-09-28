@@ -610,6 +610,40 @@ class VoiceSession(
     fun clearTranscript() { _transcript.value = null }
 
     /**
+     * "Try it" on the Voices screen: the PC says one fixed line in that
+     * animal's voice as it is now ([JarvisApi.voiceAnimalTry]), and it plays
+     * here - through the same [speaker] as every answer, so a face on screen
+     * moves with it too. Only while nothing else is being heard or said: a
+     * question in progress always wins. Changes nothing on the PC, so it is
+     * not held on a stale link. The words to show, always.
+     */
+    suspend fun tryAnimalVoice(face: String, name: String): String {
+        if (_phase.value != Phase.OFF || current != null) {
+            return "Jarvis is busy talking or listening. Try it again in a moment."
+        }
+        return when (val r = api.voiceAnimalTry(face)) {
+            is ApiResult.Ok -> when (val t = r.value) {
+                is com.jarvis.client.net.CustomVoices.Tried.Refused -> t.why
+                is com.jarvis.client.net.CustomVoices.Tried.Sound -> {
+                    if (_phase.value != Phase.OFF || current != null) {
+                        "Jarvis is busy talking or listening. Try it again in a moment."
+                    } else {
+                        speaker.arm()
+                        speaker.play(t.wav)
+                        "That was the $name."
+                    }
+                }
+            }
+            is ApiResult.Failed -> when (r.error) {
+                com.jarvis.client.net.ApiError.NotFound ->
+                    "Your PC cannot play an animal's voice yet. Run the patch script on the PC first."
+                com.jarvis.client.net.ApiError.BadToken -> "The desktop refused this phone's pairing token."
+                else -> "Could not reach your PC to play it."
+            }
+        }
+    }
+
+    /**
      * Opens the microphone.
      *
      * @param source `push_to_talk` or `wake_word`. The server refuses a

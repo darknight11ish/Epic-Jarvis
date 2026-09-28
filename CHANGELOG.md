@@ -33,6 +33,12 @@ number as the last part - `0.2.57` is a build of 0.2.
   slightly higher pitch. A switch in both apps, on to start, right under
   "Jarvis's built-in voice"; it never asks first. A voice you recorded still
   wins.
+- **Choose each animal's voice.** Under "Voice follows the face", the red
+  panda, owl and otter each get their own row: pick any of the eleven
+  built-in voices, make it deeper or higher, and choose Slower, Normal or
+  Faster. **Try it** plays a short line in that voice; **Reset to its own
+  voice** puts it back. The mouths still move in step with whatever you
+  pick. It never asks first. Needs the patch script run again on the PC.
 
 ## 0.2.0 - 26 September 2026
 

@@ -2065,6 +2065,35 @@ animal's voice stands in, `speaker.note` says so, so choosing a built-in
 voice and hearing no change does not look broken. The animals' voices were
 picked from Kokoro's published descriptions, not listened to.
 
+**Each animal's voice** (added 2026-09-28, the owner's choice "per animal,
+built-in voices"): the `FACE_VOICES` rows are only where each animal
+starts. For each of the three the owner may pick **any of the eleven
+built-in voices** (`speaker.choices`), a **pitch** from 3 steps deeper to 4
+steps higher in half steps (a step is a semitone; below 0 the sound is
+played slower, so it is deeper and longer - Kokoro is asked for faster
+speech first, so the pace still comes out as chosen), and a **pace**
+(Slower / Normal / Faster, still times the owner's own speaking speed).
+`status()` carries every animal's current choice, the lists to choose from
+and all the words (`face_voice.animals`, `animal_choices`, below);
+`POST /api/voice/voices/face_animal` sets one animal, or resets it to its
+own voice. **No card either way**, the switch's own reason; held on a stale
+link like every change. Kept in `<config dir>/voices/state.json`
+(`face_animals`, only for an animal whose choice differs from its own). The
+switch still decides whether any animal voice is used at all: off, every
+face speaks in the owner's single built-in voice, and the per-animal
+choices wait. A recorded voice still wins, and a crisis answer is still
+said in the plain voice. **The mouths keep matching whatever is chosen**:
+the mouth timing (`jmth`) is divided by the same pitch factor the sound is
+played at (docs/LIPSYNC.md). The "One moment." clip and the talk-over
+reference voice follow the choice (both read the voice through
+`jarvis_speech.tts_voice`). **"Try it"**: `POST
+/api/voice/voices/face_animal/try {"face"}` answers a WAV of one fixed line
+the PC says itself ("Hello, it's Jarvis. This is how I sound as the Red
+Panda.") in that animal's voice as it is now - whether or not that face is
+showing or the switch is on - with the `jmth` chunk when the PC makes one.
+It changes and keeps nothing, so it is not held on a stale link; an app
+never sends the words.
+
 **Where the audio goes: nowhere.** The recording is held in the PC's memory
 until the card is answered; approved, it is kept in
 `<config dir>/voices/<id>/` (`clip.wav` - mono, 24 kHz, 16-bit -
@@ -2082,8 +2111,9 @@ any voice print changes.
 All routes: token + origin, like every other write. A client sends
 `X-Jarvis-Client: hud` as always. **Hold on a stale link (rule 4) every
 POST that raises a card** - adding a voice, switching to a custom one,
-better voice ON - and the speed, the built-in voice choice and "Voice
-follows the face" (a change, though each raises none). Deleting a voice, going back to the built-in one and
+better voice ON - and the speed, the built-in voice choice, "Voice
+follows the face" and each animal's voice (a change, though each raises
+none). "Try it" changes nothing and is never held. Deleting a voice, going back to the built-in one and
 better voice OFF only take something away and always go (both apps). Show every `error` and `why` word for word: they are written for the
 owner.
 
@@ -2096,6 +2126,8 @@ owner.
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
 | `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
+| `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl or the Sea Otter", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
+| `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl or the Sea Otter"}`; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window; the phone only while nothing else is being said or heard). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
 Errors from the route itself (not the module): **400** `{"error": "the
@@ -2151,7 +2183,17 @@ request.
                 "speaking": bool,         an animal's voice is the one speaking now
                 "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter",
                 "line": str,              what is happening now, one sentence: show it under the switch
-                "title": "Voice follows the face", "detail": str},   absent on an older PC: show nothing
+                "title": "Voice follows the face", "detail": str,   absent on an older PC: show nothing
+                "animals": [{"face": "redpanda", "name": "Red Panda",   one row each, in this order
+                             "speaker": "1", "voice": "Bella", "semitones": 2.0, "pace": "normal",
+                             "changed": bool,     the owner's choice differs from its own (Reset does something)
+                             "own": {"speaker", "semitones", "pace"},   where it starts
+                             "line": "Bella, 2 steps higher, at normal pace."}, ...],
+                "animals_title": "Each animal's voice", "animals_detail": str,
+                "animal_choices": {"voices": [{"id", "label"}, ... the 11 of speaker.choices],
+                                   "paces": [{"id": "slower", "label": "Slower"}, ...],
+                                   "pitch": {"min": -3.0, "max": 4.0, "step": 0.5}}},
+                                  animals absent on an older PC: show the switch only
  "pending": {"kind": "create" | "switch", "voice": "<id>", "name": str, "expires_in": <seconds>} | null,
  "last": {"kind": "create" | "switch", "voice": "<id>",
           "outcome": "created"|"switched"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",

@@ -491,6 +491,12 @@ permissions = [
   # "Voice follows the face" (an animal face speaks in its own built-in
   # voice): an on/off switch, the same shape - no card either way.
   "allow-set-voice-face",
+  # Each animal's own voice, pitch and pace, and "Reset to its own voice":
+  # the same shape, no card either way. "Try it" plays one fixed line in
+  # that voice and changes nothing.
+  "allow-set-voice-animal",
+  "allow-reset-voice-animal",
+  "allow-try-voice-animal",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",

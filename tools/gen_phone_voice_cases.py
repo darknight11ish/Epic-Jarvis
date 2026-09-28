@@ -15,8 +15,9 @@ Two halves, both the backend's own code run with the outside world replaced:
            real jarvis_voice.enroll().
   voices   Custom voices (section 15). GET /api/voice/voices is
            backend/jarvis_voices.status(); the POST answers are its create(),
-           switch(), delete(), set_better(), set_speed(), set_speaker() and
-           set_face_voice(). The "sounds like you"
+           switch(), delete(), set_better(), set_speed(), set_speaker(),
+           set_face_voice(), set_face_animal() and try_face_animal()'s
+           refusal. The "sounds like you"
            refusal is the real owner_check() against a print the real
            jarvis_voice.enroll() made from the same voice.
 
@@ -554,7 +555,8 @@ def vpost(fn, body, g=None, spawn=run_now, check=not_owner):
     kw = {"gate": g or gate(), "tier_of": ask, "spawn": spawn}
     if fn in (VS.create, VS.switch):
         kw["check"] = check
-    if fn in (VS.delete, VS.set_speed, VS.set_speaker, VS.set_face_voice):
+    if fn in (VS.delete, VS.set_speed, VS.set_speaker, VS.set_face_voice,
+              VS.set_face_animal, VS.try_face_animal):
         return fn(body)
     return fn(body, **kw)
 
@@ -623,6 +625,18 @@ def voices_cases():
         status["face_off"] = scrub(VS.status(), w)
         answers["face_on"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": True})), w)
         answers["face_bad"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": "yes"})), w)
+        # Each animal's own voice, pitch and pace (2026-09-28): at once, no
+        # card either way; "Reset to its own voice"; a pitch out of range;
+        # "Try it" for a face that is not an animal (its WAV answer is
+        # bytes, not JSON, so only its refusal is kept here).
+        answers["animal_set"] = scrub(answer(vpost(VS.set_face_animal, {
+            "face": "redpanda", "speaker": "3", "semitones": -1.5, "pace": "faster"})), w)
+        status["animal_changed"] = scrub(VS.status(), w)
+        answers["animal_reset"] = scrub(answer(vpost(VS.set_face_animal, {
+            "face": "redpanda", "reset": True})), w)
+        answers["animal_bad"] = scrub(answer(vpost(VS.set_face_animal, {
+            "face": "redpanda", "speaker": "3", "semitones": 9, "pace": "normal"})), w)
+        answers["animal_try_bad"] = scrub(answer(vpost(VS.try_face_animal, {"face": "orbit"})), w)
 
     with VoicesWorld(zipvoice=False) as w:
         vpost(VS.create, create_body())

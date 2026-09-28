@@ -427,14 +427,16 @@ def t_finish():
     labels = ["", "m", "ˈ", "u", "n", ",", " ", "b", "i", "."]
     frames = np.array([4, 3, 1, 6, 3, 14, 0, 2, 5, 12])
     raw = _synthetic([frames], rng)
-    for semis in (0.0, 2.0):
+    # 2026-09-28: the owner may pick a DEEPER animal voice too (-3..+4): f
+    # below 1, the sound longer, every time divided by the same f.
+    for semis in (0.0, 2.0, 4.0, -1.5, -3.0):
         f = 2.0 ** (semis / 12)
         y, rm = J.scale_silence(raw[0], 24000, 0.2)
         final = S.pitch_up(y, semis)
         got = J.finish(_fake_job([(labels, frames)]), raw, [rm], final, 24000, f)
         tr = J.unpack(got.split(";")[-1]) if got else None
         check(f"finish() makes the payload when every piece is exactly as long as the timing "
-              f"says (pitch +{semis:g})", got is not None and got.startswith("v1;src=kokoro;100:")
+              f"says (pitch {semis:+g})", got is not None and got.startswith("v1;src=kokoro;100:")
               and tr["n"] == J.frame_count(len(final), 24000))
     before = J.status()["skipped"]
     bad = frames.copy()
@@ -653,7 +655,9 @@ REAL_SENTENCES = [
     "Who's there? Oh, it's you!",
 ]
 VOICES = {"default": (0, 1.0, 0.0), "panda": (1, 1.0, 2.0), "owl": (2, 0.85, 1.0),
-          "otter": (4, 1.15, 3.0)}
+          "otter": (4, 1.15, 3.0),
+          # The deepest an owner may make an animal (2026-09-28), at a quick pace.
+          "deep": (9, 1.15, -3.0)}
 
 
 def _real_paths():
@@ -697,7 +701,7 @@ def t_real_model():
             got = J.speak(eng, t, sid, speed, semis, pitch_up=S.pitch_up, silence_scale=scale,
                           paths=p, wait=5.0)
             made += got is not None and got[2] is not None
-    check(f"real model: every sentence in all four voices got its mouth - the timing "
+    check(f"real model: every sentence in every voice (a deeper one too) got its mouth - the timing "
           f"matched sherpa-onnx to the sample ({made}/{len(VOICES) * len(REAL_SENTENCES)})",
           made == len(VOICES) * len(REAL_SENTENCES), J.status()["last_skip_why"])
 

@@ -900,6 +900,21 @@
             </div>
           </div>
 
+          <!-- Each animal's voice (the owner's choice, 2026-09-28): for the
+               red panda, pygmy owl and sea otter, one row each - a voice
+               from the built-in list, a pitch (deeper or higher), a pace,
+               "Try it" and "Reset to its own voice". The PC's `face_voice`
+               block, choices and words its own (custom-voices.js
+               animalVoicesView); the rows are built by voice-panel.js
+               paintAnimals. No card either way; a change is held on a stale
+               link (voice_training.rs set_voice_animal); Try it changes
+               nothing, so it is not. The phone's Voices screen has the same. -->
+          <div id="cv-animals" hidden>
+            <h3 class="subhead" id="cv-animals-title">Each animal's voice</h3>
+            <p class="note" id="cv-animals-detail"></p>
+            <div id="cv-animals-list"></div>
+          </div>
+
           <h3 class="subhead">Voices</h3>
           <ul class="sc-cards" id="cv-list"></ul>
           <div class="row">

@@ -6958,6 +6958,25 @@ recorded still wins, and your speaking speed still applies on top. The
 animals' voices were picked from Kokoro's published descriptions, **not
 listened to** - change a row in `FACE_VOICES` if one sounds wrong.
 
+**Also new (2026-09-28, the owner's choice): each animal's own voice.**
+Under that switch, for each animal, any of the eleven built-in voices, a
+pitch from 3 steps deeper to 4 steps higher (half steps; a step is a
+semitone) and a pace (Slower / Normal / Faster, still times your speaking
+speed), with **Try it** and **Reset to its own voice** - desktop: Settings
+-> Jarvis's voice, "Each animal's voice"; phone: the Voices screen. `POST
+/api/voice/voices/face_animal` sets or resets one animal (no card either
+way, held on a stale link, kept in `voices/state.json` as `face_animals`);
+`POST /api/voice/voices/face_animal/try` answers a WAV of one fixed line in
+that voice (nothing kept, never any words from the app). Both are routed in
+`voices.patch`, so **run `apply-patches.ps1` again** on the PC; until then
+the apps show the rows but a change answers "your PC does not have this
+yet". A deeper pitch plays the sound slower (`jarvis_speech.pitch_up` with
+a negative number: Kokoro is asked for faster speech first, so the pace
+stays as chosen), and the mouth timing is divided by the same factor, so
+**the mouths match whatever is chosen** - checked with the real Kokoro model
+(`docs/LIPSYNC.md`). `test_voice_upgrades.py` covers the choices, the
+refusals, reset, the deeper pitch, the "One moment." key and Try it.
+
 ## The two candidates
 
 | | today | the candidate | where it comes from |

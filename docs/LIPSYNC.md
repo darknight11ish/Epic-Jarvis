@@ -20,9 +20,12 @@ That list of numbers is the **mouth track**. While the clip plays, each
 face reads the track at the exact point of the sound you are hearing, so the
 mouth cannot drift out of step, even if the computer or phone is busy.
 
-- It works for Jarvis's normal voice, the three animal voices (which are
-  pitched up), and recorded custom voices, because it only looks at the
-  sound itself.
+- It works for Jarvis's normal voice, the three animal voices (pitched up
+  by default, and whatever voice, pitch - deeper or higher - and pace the
+  owner picks for each animal since 2026-09-28), and recorded custom
+  voices, because it only looks at the sound itself. The Kokoro timing
+  below follows the chosen voice, pitch and pace too: see "Each animal's
+  own voice" at the end.
 - **Nothing leaves your device** (rule 1). The track is made from sound
   that is already on your PC or phone, and it stays there.
 - **No sound, no mouth movement.** A typed answer, Quiet mode, or an answer
@@ -474,8 +477,10 @@ no block, and the apps do exactly what the sections above describe.
    `scale_silence`, a line-for-line copy of sherpa-onnx's own
    `GeneratedAudio::ScaleSilence` (a stretch of 0.2 s or more within
    +-0.01 keeps its first 20 %, float32 arithmetic as in C++), which also
-   says where every sample went. The animal pitch rise
-   (`jarvis_speech.pitch_up`) then divides every time by 2^(semitones/12).
+   says where every sample went. The animal's pitch
+   (`jarvis_speech.pitch_up`) then divides every time by f = 2^(semitones/12)
+   - above 1 for a higher voice (shorter), below 1 for a deeper one
+   (longer; since 2026-09-28 the owner may pick -3 to +4 per animal).
 5. **Sounds to mouth shapes** (`build_track`, 100 frames a second, the same
    n as the apps' own analysis): each sound pulls the mouth towards its
    shape with a weight that fades before and after it (Cohen and Massaro's
@@ -589,3 +594,39 @@ also runs the real model in all four voices. The scratch scripts that made
 the numbers above (the 144-sentence exactness run with the seeded copy, the
 comparison, the 48,424-line espeak check) were run in the dev container and
 are not committed.
+
+## Each animal's own voice (2026-09-28)
+
+The owner can now pick, for each animal, any of the eleven built-in voices,
+a pitch from 3 steps deeper to 4 steps higher (half steps) and a pace
+(`JARVIS-API.md` section 15). Nothing about the mouths had to be added for
+it: the timing already follows whatever voice number and speed Kokoro is
+asked for, and every time is divided by the pitch factor f =
+2^(semitones/12). What changed is that f may now be **below 1** (a deeper
+voice is played slower, so it is longer): `jarvis_speech.pitch_up` and
+`jarvis_mouth.speak` both take a negative number, and Kokoro is asked for
+speed / f - faster - so the pace still comes out as chosen.
+
+**Checked with the real Kokoro model** (dev container, one fixed
+three-piece answer, each combination spoken end to end through
+`jarvis_speech.say()`): 11 combinations - three per animal, every pace,
+pitches -3, -2, -1.5, -1, -0.5, 0, +2.5 and +4, voices 0, 3, 5, 6, 7, 8,
+9 and 10, and the owner's own speed at Faster and Slower on top. In
+**11/11** the `jmth` block was made, every piece sherpa-onnx spoke was
+exactly as long as the timing said (0 samples out), the timing's end and
+the final sound's end agreed within **0.94 samples** at worst, and the
+track had exactly one frame per 10 ms of the final sound. With the test
+copy of Kokoro whose random-noise nodes are seeded (see above), the sound
+with the mouth was **the same sound, sample for sample, as the sound
+without it** in 10 of the 11. The eleventh (voice 7, pitch 0, Faster)
+differed in that long run, but run again on its own - twice, and beside
+voice 0 and a +0.5 pitch - it was identical every time (0 samples
+different). Pitch 0 is the one case this change does not touch (no pitch
+factor at all), so the likeliest cause is the two seeded copies falling out
+of step in the long run, not the new code; it is written down rather than
+explained away. With the timing made impossible (a missing
+durations model) the answer was still spoken, with no block - the
+audio-only fallback is unchanged. `test_mouth.py` now also checks
+`finish()` at +4, -1.5 and -3, and its real-model run (with
+`JARVIS_KOKORO_DIR`) includes the deepest voice at a quick pace.
+

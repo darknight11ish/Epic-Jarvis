@@ -419,6 +419,140 @@ await check("voice follows the face: one click, at once; held on a stale link", 
   assert.deepEqual(none, []);
 });
 
+await check("each animal's voice: the PC's rows, choices and words, from every real status", async () => {
+  for (const [name, st] of Object.entries(V)) {
+    const av = CV.animalVoicesView(st);
+    assert.equal(av.show, true, `${name}: no animals`);
+    assert.deepEqual(av.animals.map((a) => a.face), ["redpanda", "pygmyowl", "seaotter"], name);
+    assert.equal(av.voices.length, 11, name);
+    assert.deepEqual(av.paces.map((p) => p.id), ["slower", "normal", "faster"], name);
+    assert.deepEqual(av.pitch, { min: -3, max: 4, step: 0.5 }, name);
+    noRaw([av.title, av.detail, ...av.animals.map((a) => a.line)].join(" "));
+    for (const a of av.animals) assert.match(a.line, /[.!?)]$/, `${name}: "${a.line}" is not a sentence`);
+  }
+  const own = CV.animalVoicesView(V.face_showing).animals;
+  assert.deepEqual(own.map((a) => [a.speaker, a.semitones, a.pace, a.changed]),
+    [["1", 2, "normal", false], ["2", 1, "slower", false], ["4", 3, "faster", false]]);
+  assert.equal(own[0].line, "Bella, 2 steps higher, at normal pace.");
+  const panda = CV.animalVoicesView(V.animal_changed).animals[0];
+  assert.deepEqual([panda.speaker, panda.semitones, panda.pace, panda.changed], ["3", -1.5, "faster", true]);
+  assert.equal(panda.line, "Sarah, 1.5 steps deeper, a little faster.");
+  assert.equal(CV.faceVoiceView(V.animal_changed).line, "Speaking as the Red Panda: Sarah, a little deeper.");
+  assert.equal(CV.animalVoicesView({ voices: [], face_voice: { enabled: true } }).show, false,
+    "an older PC has no animals: nothing shown");
+  assert.equal(CV.voiceReply(P("animal_set"), WHERE).text,
+    "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster.");
+  assert.equal(CV.voiceReply(P("animal_set"), WHERE).waiting, false, "no card");
+  assert.equal(CV.voiceReply(P("animal_reset"), WHERE).text, "The Red Panda speaks in its own voice again.");
+  assert.equal(CV.voiceReply(P("animal_bad"), WHERE).text,
+    "The pitch must be from 3 steps deeper to 4 steps higher, in half steps.");
+  assert.equal(CV.voiceReply(P("animal_try_bad"), WHERE).text,
+    "Choose the Red Panda, the Pygmy Owl or the Sea Otter.");
+  assert.deepEqual([2, -1.5, 0, 1, 0.5].map(CV.pitchWords),
+    ["2 steps higher", "1.5 steps deeper", "Normal pitch", "1 step higher", "0.5 steps higher"]);
+  assert.deepEqual([2, -1.5, 0].map(CV.pitchShort), ["+2", "-1.5", "0"]);
+});
+
+await check("each animal's voice: pick, slide, pace, Try it and Reset - at once, no card", async () => {
+  const page = await open(V.face_showing);
+  const shown = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll("#cv-animals-list .cv-animal")];
+    const r = rows[0];
+    r.querySelector("select").dataset.mark = "kept";
+    return {
+      hidden: document.getElementById("cv-animals").hidden,
+      faces: rows.map((x) => x.dataset.face),
+      name: r.querySelector(".cv-animal-name").textContent,
+      line: r.querySelector(".cv-animal-line").textContent,
+      voice: r.querySelector("select").value,
+      voiceLabel: r.querySelector("select").getAttribute("aria-label"),
+      pitch: r.querySelector("input[type=range]").value,
+      pitchText: r.querySelector("input[type=range]").getAttribute("aria-valuetext"),
+      shown: r.querySelector("output").textContent,
+      pace: r.querySelector('.choices [aria-pressed="true"]').dataset.value,
+      reset: r.querySelector('button[aria-label^="Reset"]').disabled,
+    };
+  });
+  assert.equal(shown.hidden, false);
+  assert.deepEqual(shown.faces, ["redpanda", "pygmyowl", "seaotter"]);
+  assert.equal(shown.name, "Red Panda");
+  assert.equal(shown.line, "Bella, 2 steps higher, at normal pace.");
+  assert.equal(shown.voice, "1");
+  assert.equal(shown.voiceLabel, "Red Panda's voice");
+  assert.equal(shown.pitch, "2");
+  assert.equal(shown.pitchText, "2 steps higher");
+  assert.equal(shown.shown, "+2");
+  assert.equal(shown.pace, "normal");
+  assert.equal(shown.reset, true, "its own voice already: nothing to reset");
+
+  await page.selectOption('.cv-animal[data-face="redpanda"] select', "3");
+  await page.waitForTimeout(250);
+  await page.click('.cv-animal[data-face="pygmyowl"] .choices button[data-value="faster"]');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => {
+    const r = document.querySelector('.cv-animal[data-face="seaotter"] input[type=range]');
+    r.value = "-1.5";
+    r.dispatchEvent(new Event("input"));
+    r.dispatchEvent(new Event("change"));
+  });
+  await page.waitForTimeout(250);
+  const sent = await calls(page, "set_voice_animal");
+  const said = await page.evaluate(() =>
+    document.querySelector('.cv-animal[data-face="redpanda"] .status').textContent);
+  const kept = await page.evaluate(() =>
+    document.querySelector('.cv-animal[data-face="redpanda"] select').dataset.mark);
+  await page.click('.cv-animal[data-face="seaotter"] button[aria-label^="Try"]');
+  await page.waitForTimeout(300);
+  const tried = await calls(page, "try_voice_animal");
+  const trySaid = await page.evaluate(() =>
+    document.querySelector('.cv-animal[data-face="seaotter"] .status').textContent);
+  await page.close();
+  assert.deepEqual(sent, [
+    { face: "redpanda", speaker: "3", semitones: 2, pace: "normal" },
+    { face: "pygmyowl", speaker: "2", semitones: 1, pace: "faster" },
+    { face: "seaotter", speaker: "4", semitones: -1.5, pace: "faster" },
+  ]);
+  assert.equal(said, "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster.");
+  assert.doesNotMatch(said, /approv/i, "no card for an animal's voice");
+  assert.equal(kept, "kept", "a repaint keeps the same controls (and so the keyboard focus)");
+  assert.deepEqual(tried, [{ face: "seaotter" }]);
+  assert.doesNotMatch(trySaid, /try again|could not|not a sound/i, trySaid);
+
+  const changed = await open(V.animal_changed);
+  const canReset = await changed.evaluate(() =>
+    !document.querySelector('.cv-animal[data-face="redpanda"] button[aria-label^="Reset"]').disabled);
+  await changed.click('.cv-animal[data-face="redpanda"] button[aria-label^="Reset"]');
+  await changed.waitForTimeout(250);
+  const reset = await calls(changed, "reset_voice_animal");
+  const resetSaid = await changed.evaluate(() =>
+    document.querySelector('.cv-animal[data-face="redpanda"] .status').textContent);
+  await changed.close();
+  assert.equal(canReset, true);
+  assert.deepEqual(reset, [{ face: "redpanda" }]);
+  assert.equal(resetSaid, "The Red Panda speaks in its own voice again.");
+
+  const stale = await open(V.animal_changed, {}, { link: { stale: true } });
+  const held = await stale.evaluate(() => {
+    const r = document.querySelector('.cv-animal[data-face="redpanda"]');
+    return {
+      voice: r.querySelector("select").disabled,
+      pitch: r.querySelector("input[type=range]").disabled,
+      pace: [...r.querySelectorAll(".choices button")].every((b) => b.disabled),
+      reset: r.querySelector('button[aria-label^="Reset"]').disabled,
+      tryIt: r.querySelector('button[aria-label^="Try"]').disabled,
+    };
+  });
+  await stale.click('.cv-animal[data-face="redpanda"] button[aria-label^="Try"]');
+  await stale.waitForTimeout(250);
+  const staleTry = await calls(stale, "try_voice_animal");
+  const none = await calls(stale, "set_voice_animal");
+  await stale.close();
+  assert.deepEqual(held, { voice: true, pitch: true, pace: true, reset: true, tryIt: false },
+    "changes are held on a stale link; Try it changes nothing, so it is not");
+  assert.deepEqual(staleTry, [{ face: "redpanda" }]);
+  assert.deepEqual(none, []);
+});
+
 await check("the fallback, a waiting card, the last card and the timings are on the page", async () => {
   const page = await open(V.fallback);
   const all = await text(page, "voices");
@@ -466,11 +600,16 @@ await check("CONTROL (Rust): only what raises a card is held on a stale link", a
   assert.match(fnBody(RUST, "pub async fn set_voice_speed("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
   assert.match(fnBody(RUST, "pub async fn set_voice_speaker("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
   assert.match(fnBody(RUST, "pub async fn set_voice_face("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
+  assert.match(fnBody(RUST, "pub async fn set_voice_animal("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
+  assert.match(fnBody(RUST, "pub async fn reset_voice_animal("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
+  assert.doesNotMatch(fnBody(RUST, "pub async fn try_voice_animal("), /stale/, "Try it changes nothing: never held");
+  assert.ok(fnBody(RUST, "pub async fn try_voice_animal(").includes("/api/voice/voices/face_animal/try"));
   assert.doesNotMatch(fnBody(RUST, "pub async fn delete_custom_voice("), /stale/);
   for (const [fn, route] of [["create_custom_voice", "/api/voice/voices/create"], ["set_active_voice", "/api/voice/voices/active"],
     ["delete_custom_voice", "/api/voice/voices/delete"], ["set_better_voice", "/api/voice/voices/better"],
     ["set_voice_speed", "/api/voice/voices/speed"], ["set_voice_speaker", "/api/voice/voices/speaker"],
-    ["set_voice_face", "/api/voice/voices/face"]]) {
+    ["set_voice_face", "/api/voice/voices/face"], ["set_voice_animal", "/api/voice/voices/face_animal"],
+    ["reset_voice_animal", "/api/voice/voices/face_animal"]]) {
     assert.ok(fnBody(RUST, `pub async fn ${fn}(`).includes(`"${route}"`), `${fn} does not post to ${route}`);
   }
   assert.match(fnBody(RUST, "pub async fn get_custom_voices("), /\.headers\(jarvis_headers\(&app\)\?\)/);

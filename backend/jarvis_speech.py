@@ -1832,33 +1832,53 @@ def tts_voice(voices_module=None) -> tuple:
     if V is not None and hasattr(V, "builtin_voice"):
         try:
             sid, speed, semis, _face = V.builtin_voice()
-            return int(sid), float(speed), max(0.0, min(4.0, float(semis)))
+            return int(sid), float(speed), _pitch_range(semis)
         except Exception:
             pass
     return tts_speaker(V), tts_speed(V), 0.0
 
 
 def tts_pitch(voices_module=None) -> float:
-    """How many semitones higher the built-in voice speaks: 0, except while
-    "Voice follows the face" speaks for an animal face (jarvis_voices.
-    builtin_voice()), then that animal's small rise. Never raises."""
+    """How many semitones higher (below 0: deeper) the built-in voice
+    speaks: 0, except while "Voice follows the face" speaks for an animal
+    face (jarvis_voices.builtin_voice()), then that animal's pitch - its own,
+    or the one the owner picked for it. Never raises."""
     V = _voices_mod(voices_module)
     if V is not None and hasattr(V, "builtin_voice"):
         try:
-            return max(0.0, min(4.0, float(V.builtin_voice()[2])))
+            return _pitch_range(V.builtin_voice()[2])
         except Exception:
             pass
     return 0.0
 
 
+#: The pitch the built-in voice may be moved by, in semitones - the range
+#: the owner may pick per animal (jarvis_voices.MIN_SEMITONES/MAX_SEMITONES).
+PITCH_MIN, PITCH_MAX = -3.0, 4.0
+
+
+def _pitch_range(semis) -> float:
+    """`semis` held to PITCH_MIN..PITCH_MAX; anything that is not a finite
+    number is 0 (no change). Never raises."""
+    try:
+        v = float(semis)
+    except (TypeError, ValueError):
+        return 0.0
+    if v != v or v in (float("inf"), float("-inf")):
+        return 0.0
+    return max(PITCH_MIN, min(PITCH_MAX, v))
+
+
 def pitch_up(samples, semitones: float):
     """The sound `semitones` higher, by playing it faster: every frequency
     rises by 2^(semitones/12) and the sound gets shorter by the same factor
-    (which is also what makes a voice sound SMALLER - the cute part). The
-    caller asks Kokoro for slower speech first (kokoro_speak), so the pace
-    comes out as chosen. numpy only, milliseconds. 0, or no numpy, hands the
-    samples back untouched."""
-    if np is None or not semitones or semitones <= 0:
+    (which is also what makes a voice sound SMALLER - the cute part). Below
+    0 it is the other way round: played slower, deeper and longer, by the
+    same rule (f below 1). The caller asks Kokoro for slower (or, deeper,
+    faster) speech first (kokoro_speak), so the pace comes out as chosen,
+    and jarvis_mouth divides its times by the same f. numpy only,
+    milliseconds. 0, or no numpy, hands the samples back untouched."""
+    if np is None or not semitones:
         return samples
     x = np.asarray(samples, dtype=np.float32)
     if len(x) < 2:
@@ -1872,10 +1892,11 @@ def pitch_up(samples, semitones: float):
 def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0.0,
                  mouth: Optional[list] = None):
     """(samples, sample_rate) from Kokoro in the built-in voice, with the
-    animal pitch rise applied - or None. THE one way the built-in voice is
-    made: the spoken answer (_synthesise) and jarvis_voice_flow's two copies
-    of it (the "One moment." clip and the barge-in reference voice) all come
-    through here, so all three sound the same.
+    animal's pitch applied (higher, or below 0 deeper) - or None. THE one
+    way the built-in voice is made: the spoken answer (_synthesise) and
+    jarvis_voice_flow's two copies of it (the "One moment." clip and the
+    barge-in reference voice) all come through here, so all three sound the
+    same - and so does an animal's "Try it" (jarvis_voices.try_face_animal).
 
     `mouth`: a list to receive the mouth shapes (jarvis_mouth.py) - the
     "jmth" payload, or None - when the caller wants them (say() does). The
@@ -1897,7 +1918,7 @@ def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0
         if got:
             mouth.append(got[2])
             return got[0], got[1]
-    f = 2.0 ** (max(0.0, float(semitones or 0.0)) / 12.0)
+    f = 2.0 ** (float(semitones or 0.0) / 12.0)
     audio = engine.generate(text, sid=int(sid), speed=float(speed) / f)
     if audio is None or len(audio.samples) == 0:
         return None

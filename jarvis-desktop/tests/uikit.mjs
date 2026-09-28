@@ -888,7 +888,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_better_voice":
           case "set_voice_speed":
           case "set_voice_speaker":
-          case "set_voice_face": {
+          case "set_voice_face":
+          case "set_voice_animal":
+          case "reset_voice_animal":
+          case "try_voice_animal": {
             const v = window.__vt;
             if (cmd !== "voice_sample_level") v.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
             if (v.fails[cmd]) throw new Error(v.fails[cmd]);
@@ -943,6 +946,14 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(v.speaker));
               case "set_voice_face":
                 return JSON.parse(JSON.stringify(args.enabled ? v.faceOn : v.faceOff));
+              // Each animal's voice (voice_training.rs): the PC's real
+              // answers; "Try it" a tiny silent WAV, as the Rust hands it on.
+              case "set_voice_animal":
+                return JSON.parse(JSON.stringify(v.animalSet));
+              case "reset_voice_animal":
+                return JSON.parse(JSON.stringify(v.animalReset));
+              case "try_voice_animal":
+                return JSON.parse(JSON.stringify(v.animalTry));
               default:
                 return null;
             }
@@ -1878,6 +1889,17 @@ export function speechLog(page) {
     .map((c) => `${c[0]} ${c[1]}`));
 }
 
+/** `seconds` of silence as a 24 kHz mono 16-bit WAV, base64. */
+function silentWav(seconds) {
+  const n = Math.round(24000 * seconds);
+  const b = Buffer.alloc(44 + n * 2);
+  b.write("RIFF", 0); b.writeUInt32LE(36 + n * 2, 4); b.write("WAVE", 8);
+  b.write("fmt ", 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(24000, 24); b.writeUInt32LE(48000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34);
+  b.write("data", 36); b.writeUInt32LE(n * 2, 40);
+  return b.toString("base64");
+}
+
 /** Opens a page with the bridge installed and the given scenario data. */
 export async function open(browser, base, file, data, viewport) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 2 });
@@ -1938,6 +1960,10 @@ export async function open(browser, base, file, data, viewport) {
       speaker: TRAINING.answer(TRAINING.voice_posts.speaker_9),
       faceOn: TRAINING.answer(TRAINING.voice_posts.face_on),
       faceOff: TRAINING.answer(TRAINING.voice_posts.face_off),
+      animalSet: TRAINING.answer(TRAINING.voice_posts.animal_set),
+      animalReset: TRAINING.answer(TRAINING.voice_posts.animal_reset),
+      // A tenth of a second of silence, as the Rust hands a WAV on.
+      animalTry: { ok: true, http: 200, audio: `data:audio/wav;base64,${silentWav(0.1)}` },
       ...(data && data.vt),
     },
   });

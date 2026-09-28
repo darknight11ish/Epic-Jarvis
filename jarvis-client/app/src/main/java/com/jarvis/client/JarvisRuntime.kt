@@ -2029,6 +2029,17 @@ object JarvisRuntime {
         return postCustomVoice(CustomVoices.FACE_PATH, CustomVoices.faceBody(on))
     }
 
+    /**
+     * One animal's own voice, pitch and pace, or "Reset to its own voice" -
+     * [json] is [CustomVoices.animalBody] or [CustomVoices.animalResetBody].
+     * Same shape as [setVoiceFace]: no card either way, held on a stale link
+     * (rule 4). ("Try it" changes nothing: VoiceSession.tryAnimalVoice.)
+     */
+    suspend fun setVoiceAnimal(json: String): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.ANIMAL_PATH, json)
+    }
+
     private val _customVoiceNote = MutableStateFlow<String?>(null)
 
     /** The last thing a Voices request came to, in words, for the screen to show. */

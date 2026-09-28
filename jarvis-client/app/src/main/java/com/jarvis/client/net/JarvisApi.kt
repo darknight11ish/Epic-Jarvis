@@ -1488,6 +1488,49 @@ class JarvisApi(
         postVoice(path, json).map { (code, body) -> CustomVoices.answer(code, body) }
 
     /**
+     * "Try it" for one animal's voice ([CustomVoices.ANIMAL_TRY_PATH]): the
+     * PC says one fixed line of its own in that voice and sends the WAV,
+     * like `/api/voice/say`. A refusal (400/503 with `error`) is the PC's
+     * own sentence; a 404 is a PC too old to have it. Nothing is logged.
+     */
+    suspend fun voiceAnimalTry(face: String): ApiResult<CustomVoices.Tried> =
+        withContext(Dispatchers.IO) {
+            val target = url(CustomVoices.ANIMAL_TRY_PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = CustomVoices.animalTryBody(face).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed()
+                .header("Accept", "audio/wav")
+                .build()
+            runCatching {
+                client.newCall(req).execute().use { resp ->
+                    val type = resp.header("Content-Type").orEmpty()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.isSuccessful && type.startsWith("audio/") -> {
+                            val bytes = resp.body?.bytes()
+                            if (bytes == null || bytes.isEmpty()) {
+                                ApiResult.Ok(CustomVoices.Tried.Refused("Your PC sent no sound."))
+                            } else {
+                                ApiResult.Ok(CustomVoices.Tried.Sound(bytes))
+                            }
+                        }
+                        else -> {
+                            val text = resp.body?.string().orEmpty()
+                            val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                            val why = (obj?.get("error") as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+                            when {
+                                resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                                why.isNotBlank() -> ApiResult.Ok(CustomVoices.Tried.Refused(CustomVoices.sentence(why)))
+                                else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                            }
+                        }
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * A voice POST whose refusals carry the PC's own sentence: (status,
      * body) for any answer with a JSON object in it, so a 400/409/503 with
      * `error` reaches the owner as it was written. A 404 is "this PC has no

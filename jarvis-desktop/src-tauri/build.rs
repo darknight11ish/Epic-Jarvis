@@ -277,6 +277,9 @@ fn main() {
             "set_voice_speed",
             "set_voice_speaker",
             "set_voice_face",
+            "set_voice_animal",
+            "reset_voice_animal",
+            "try_voice_animal",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

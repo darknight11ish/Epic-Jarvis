@@ -977,6 +977,7 @@ function paintVoices() {
   paintSpeed();
   paintSpeaker();
   paintFace();
+  paintAnimals();
 }
 
 /** "How fast Jarvis speaks": the PC's three choices, as radios. */
@@ -1039,6 +1040,218 @@ function paintFace() {
   // Every change sent to the PC is held on a stale link (rule 4).
   sw.disabled = cv.busy || linkStale;
   sw.title = linkStale ? HELD : "";
+}
+
+/* Each animal's voice: one row per animal, built once and then updated in
+   place, so a repaint never takes the keyboard focus off the slider or list
+   the owner is using. A change is sent at once (no card); several quick
+   changes to one animal are folded into the last one. */
+const animals = { rows: new Map(), want: new Map(), sending: false, playing: null };
+
+function animalRow(view, a) {
+  const row = node("div", "cv-animal");
+  row.dataset.face = a.face;
+  const head = node("div", "cv-animal-head");
+  const name = node("span", "cv-animal-name", a.name);
+  const lineEl = node("span", "cv-animal-line");
+  head.append(name, lineEl);
+
+  const voiceField = node("label", "cv-animal-field");
+  const voice = document.createElement("select");
+  voice.setAttribute("aria-label", `${a.name}'s voice`);
+  for (const v of view.voices) {
+    const o = document.createElement("option");
+    o.value = v.id;
+    o.textContent = v.label;
+    voice.append(o);
+  }
+  voiceField.append(node("span", "", "Voice"), voice);
+
+  const pitchField = node("label", "cv-animal-field");
+  const pitch = document.createElement("input");
+  pitch.type = "range";
+  pitch.setAttribute("aria-label", `${a.name}'s pitch`);
+  const shown = node("output", "cv-animal-pitch");
+  pitchField.append(node("span", "", "Pitch"), pitch, shown);
+
+  const pace = node("div", "choices");
+  pace.setAttribute("role", "group");
+  pace.setAttribute("aria-label", `${a.name}'s pace`);
+  for (const pc of view.paces) {
+    const b = node("button", "choice", pc.label);
+    b.type = "button";
+    b.dataset.value = pc.id;
+    pace.append(b);
+  }
+
+  const tryIt = button("Try it", () => tryAnimal(a.face), { ghost: true });
+  tryIt.classList.add("small");
+  tryIt.setAttribute("aria-label", `Try the ${a.name}'s voice`);
+  const reset = button("Reset to its own voice", () => resetAnimal(a.face), { ghost: true });
+  reset.classList.add("small");
+  reset.setAttribute("aria-label", `Reset the ${a.name} to its own voice`);
+
+  const controls = node("div", "cv-animal-controls");
+  controls.append(voiceField, pitchField, pace, tryIt, reset);
+  const status = node("span", "status");
+  status.setAttribute("role", "status");
+  row.append(head, controls, status);
+
+  const r = { row, lineEl, voice, pitch, shown, pace, tryIt, reset, status, name: a.name };
+  const current = () => ({
+    speaker: voice.value,
+    semitones: Number(pitch.value),
+    pace: (pace.querySelector('[aria-pressed="true"]') || {}).dataset?.value || "normal",
+  });
+  voice.addEventListener("change", () => changeAnimal(a.face, current()));
+  pitch.addEventListener("input", () => showPitch(r, Number(pitch.value)));
+  pitch.addEventListener("change", () => changeAnimal(a.face, current()));
+  for (const b of pace.querySelectorAll("button")) {
+    b.addEventListener("click", () => {
+      if (b.getAttribute("aria-pressed") === "true") return;
+      for (const o of pace.querySelectorAll("button")) {
+        o.setAttribute("aria-pressed", String(o === b));
+      }
+      changeAnimal(a.face, current());
+    });
+  }
+  return r;
+}
+
+function showPitch(r, semis) {
+  r.shown.textContent = CV.pitchShort(semis);
+  r.pitch.setAttribute("aria-valuetext", CV.pitchWords(semis));
+}
+
+/** Each animal's voice: the PC's rows, with its own choices and words. */
+function paintAnimals() {
+  const view = CV.animalVoicesView(cv.status);
+  const box = $("cv-animals");
+  if (!box) return;
+  box.hidden = !view.show;
+  if (!view.show) return;
+  $("cv-animals-title").textContent = view.title;
+  const detail = $("cv-animals-detail");
+  detail.hidden = !view.detail;
+  detail.textContent = view.detail;
+  const list = $("cv-animals-list");
+  // The PC's list of voices or paces changed: build the rows again.
+  const sig = JSON.stringify([view.voices, view.paces, view.pitch, view.animals.map((a) => a.face)]);
+  if (list.dataset.sig !== sig) {
+    animals.rows.clear();
+    list.replaceChildren(...view.animals.map((a) => {
+      const r = animalRow(view, a);
+      animals.rows.set(a.face, r);
+      return r.row;
+    }));
+    list.dataset.sig = sig;
+  }
+  for (const a of view.animals) {
+    const r = animals.rows.get(a.face);
+    if (!r) continue;
+    r.lineEl.textContent = a.line;
+    r.pitch.min = String(view.pitch.min);
+    r.pitch.max = String(view.pitch.max);
+    r.pitch.step = String(view.pitch.step);
+    // A change on its way: leave what the owner just set on screen.
+    if (!animals.want.has(a.face) && !(animals.sending && animals.sending === a.face)) {
+      r.voice.value = a.speaker;
+      r.pitch.value = String(a.semitones);
+      showPitch(r, a.semitones);
+      for (const b of r.pace.querySelectorAll("button")) {
+        b.setAttribute("aria-pressed", String(b.dataset.value === a.pace));
+      }
+    }
+    // Every change sent to the PC is held on a stale link (rule 4). Try it
+    // changes nothing, so it is never held.
+    for (const c of [r.voice, r.pitch, ...r.pace.querySelectorAll("button")]) {
+      c.disabled = linkStale;
+      c.title = linkStale ? HELD : "";
+    }
+    r.reset.disabled = linkStale || !a.changed;
+    r.reset.title = linkStale ? HELD : a.changed ? "" : `The ${a.name} already speaks in its own voice.`;
+  }
+}
+
+function changeAnimal(face, choice) {
+  sendAnimal(face, { face, ...choice });
+}
+
+function resetAnimal(face) {
+  sendAnimal(face, { face, reset: true });
+}
+
+/** Sends one animal's change - the newest one, if several came quickly. */
+async function sendAnimal(face, args) {
+  const r = animals.rows.get(face);
+  if (linkStale) {
+    if (r) say(r.status, HELD, "bad");
+    paintAnimals();
+    return;
+  }
+  animals.want.set(face, args);
+  if (animals.sending) return;
+  try {
+    while (animals.want.size) {
+      const [f, a] = animals.want.entries().next().value;
+      animals.want.delete(f);
+      animals.sending = f;
+      const out = (animals.rows.get(f) || {}).status;
+      say(out, "Sending…");
+      try {
+        const reply = a.reset
+          ? await invoke("reset_voice_animal", { face: f })
+          : await invoke("set_voice_animal", {
+            face: f, speaker: a.speaker, semitones: a.semitones, pace: a.pace,
+          });
+        const words = CV.voiceReply(reply, APPROVE_WHERE);
+        say(out, words.text, words.tone);
+        announce(words.text, words.tone === "bad" ? "assertive" : "polite");
+      } catch (error) {
+        say(out, problemWords(error), "bad");
+        announce(out ? out.textContent : problemWords(error), "assertive");
+      }
+    }
+  } finally {
+    animals.sending = false;
+  }
+  await loadVoices();
+}
+
+/** "Try it": the PC says one fixed line in that animal's voice as it is now. */
+async function tryAnimal(face) {
+  const r = animals.rows.get(face);
+  if (!r) return;
+  if (animals.playing) {
+    animals.playing.pause();
+    animals.playing = null;
+  }
+  r.tryIt.disabled = true;
+  say(r.status, "Asking the PC for the sound…");
+  try {
+    // A change still on its way is heard, not the one before it.
+    for (let i = 0; i < 100 && (animals.sending || animals.want.size); i += 1) {
+      await new Promise((ok) => setTimeout(ok, 50));
+    }
+    const reply = await invoke("try_voice_animal", { face });
+    if (!reply || typeof reply.audio !== "string" || !reply.audio.startsWith("data:audio/")) {
+      const words = CV.voiceReply(reply, APPROVE_WHERE);
+      say(r.status, words.tone === "bad" ? words.text : "The PC sent no sound.", "bad");
+      return;
+    }
+    const audio = new Audio(reply.audio);
+    animals.playing = audio;
+    say(r.status, `Playing the ${r.name}'s voice.`, "ok");
+    audio.addEventListener("ended", () => {
+      if (animals.playing === audio) animals.playing = null;
+      say(r.status, "");
+    });
+    await audio.play();
+  } catch (error) {
+    say(r.status, problemWords(error), "bad");
+  } finally {
+    r.tryIt.disabled = false;
+  }
 }
 
 async function setSpeed(speed) {
@@ -1266,6 +1479,7 @@ export function startVoicePanel(opts = {}) {
         paintSpeed();
         paintSpeaker();
         paintFace();
+        paintAnimals();
       }
     }
   });

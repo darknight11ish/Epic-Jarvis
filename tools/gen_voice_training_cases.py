@@ -539,6 +539,21 @@ def voices_cases():
         keep(w, "face_voice_off", VO.status(), statuses)
         keep(w, "face_on", post("/api/voice/voices/face", {"enabled": True}), posts)
         keep(w, "face_bad", post("/api/voice/voices/face", {"enabled": "yes"}), posts)
+        # Each animal's own voice, pitch and pace (2026-09-28): at once, no
+        # card either way; "Reset to its own voice"; a pitch out of range;
+        # "Try it" for a face that is not an animal (its WAV answer is
+        # bytes, not JSON, so only its refusal is kept here).
+        keep(w, "animal_set", post("/api/voice/voices/face_animal",
+                                   {"face": "redpanda", "speaker": "3", "semitones": -1.5,
+                                    "pace": "faster"}), posts)
+        keep(w, "animal_changed", VO.status(), statuses)
+        keep(w, "animal_reset", post("/api/voice/voices/face_animal",
+                                     {"face": "redpanda", "reset": True}), posts)
+        keep(w, "animal_bad", post("/api/voice/voices/face_animal",
+                                   {"face": "redpanda", "speaker": "3", "semitones": 9,
+                                    "pace": "normal"}), posts)
+        keep(w, "animal_try_bad", post("/api/voice/voices/face_animal/try", {"face": "orbit"}),
+             posts)
 
     # A custom voice chosen, but ZipVoice's files are not on this PC: the
     # built-in voice speaks, and says why.

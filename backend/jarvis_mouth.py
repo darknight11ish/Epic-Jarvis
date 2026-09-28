@@ -47,8 +47,9 @@ HOW IT FITS (docs/LIPSYNC.md, "Mouths from Kokoro's own timing"):
      with an exact copy of sherpa-onnx's own ScaleSilence (scale_silence()),
      so it knows where every sample went. The sound is byte-for-byte what
      sherpa-onnx would have made on its own (measured: docs/LIPSYNC.md).
-  5. times / the animal's pitch factor (jarvis_speech.pitch_up plays the
-     sound faster) -> seconds in the final clip.
+  5. times / the animal's pitch factor f = 2^(semitones/12) (jarvis_speech.
+     pitch_up plays the sound faster, or for a deeper voice slower, by f) ->
+     seconds in the final clip.
   6. sounds -> mouth shapes at 100 frames a second (build_track()).
 """
 from __future__ import annotations
@@ -865,13 +866,17 @@ def speak(engine, text: str, sid: int, speed: float, semitones: float, *,
     with the mouth shapes when they can be made - or raises NotHere before
     any sound was made (the caller then speaks exactly as before). `speed`
     is the pace asked for; Kokoro is asked for speed / f and the sound is
-    then raised by `semitones` (pitch_up), as kokoro_speak always did."""
+    then raised - or, below 0, lowered - by `semitones` (pitch_up), as
+    kokoro_speak does."""
     try:
         import sherpa_onnx
         make_config = sherpa_onnx.GenerationConfig
     except Exception:
         raise NotHere("sherpa-onnx has no GenerationConfig")
-    f = 2.0 ** (max(0.0, float(semitones or 0.0)) / 12.0)
+    # The same f pitch_up plays the sound at: above 1 higher and shorter,
+    # below 1 (a deeper animal voice) lower and longer - either way every
+    # time below is divided by it (finish()).
+    f = 2.0 ** (float(semitones or 0.0) / 12.0)
     model_speed = float(speed) / f
     job = begin(text, sid, model_speed, lang, paths)
     if job is None:
