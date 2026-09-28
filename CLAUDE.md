@@ -566,6 +566,11 @@ Decided 2026-09-28, after the app-builder suggestions
   card**; a git worktree keeps changes apart but is not a sandbox for
   running programs.
 - Offline developer docs (Dash/Zeal docsets): queued as milestone 11 (below).
+- **aider is trialled as the coding engine**, locked down: only inside a
+  task's copy, no shell commands, no "yes to everything", no analytics, no
+  cloud model. Kept only if it beats Jarvis's own file blocks (design doc,
+  milestone D2). No second agent framework: one permission model, one
+  scheduler.
 
 ## Every new feature gets its own audit, without being asked
 

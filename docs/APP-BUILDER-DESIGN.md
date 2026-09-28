@@ -76,6 +76,18 @@ can see (B) gets the usual new-feature audit (`CLAUDE.md`).
   A map of the project's files and functions, so a small model sees only
   what matters, is a candidate here (the idea behind Aider's RepoMap and
   RepoMapper; nothing chosen yet).
+- **D2. Trial: aider as the coding engine (queued 2026-09-28).** aider
+  (Aider-AI/aider, formerly paul-gauthier/aider, Apache-2.0) edits code in
+  a git repository and can use the local Ollama model. It includes a project
+  map (RepoMap), which is milestone D's candidate idea. The trial runs it
+  ONLY inside a task's copy, locked down: it doesn't suggest or run shell
+  commands, doesn't use "yes to everything" (which would auto-approve and
+  break rule 4), sends no analytics, uses no cloud model (milestone E's card
+  is the only way to the cloud), and gets the same no-secrets environment as
+  git. Every one of those settings must be checked against aider's own
+  documentation and tested before the trial counts. Its commits stay on the
+  task's branch, so the merge card still decides. It's kept only if it
+  does better than Jarvis's own file blocks on the same small tasks.
 - **E. Cloud help when stuck.** Jarvis counts failed tries on the same
   step (a build error that keeps coming back). After the limit (3 to start;
   the owner may change it), it offers a card: which provider, which files,
@@ -95,6 +107,11 @@ These tools were suggested (Gemini, 2026-09-28) and looked at:
 - **bolt.diy, Dyad:** whole app-builder programs. Jarvis takes only their
   ideas: strict file blocks, and a rules file per project.
 - **Plandex:** AGPL; ideas only.
+- **Microsoft agent-framework, agno:** each brings its own approvals,
+  checkpoints and memory. Jarvis has one permission model (`jarvis_gate`) and
+  one scheduler, and the 8 GB card runs one model at a time.
+- **BuilderIO agent-native:** a TypeScript app framework. The app builder's
+  screen belongs inside Jarvis's own windows, which use no outside libraries.
 - **crawl4ai:** a web crawler. Reading one page is already possible;
   crawling whole sites would be a new way out of the PC, so any use would
   need a card per address.

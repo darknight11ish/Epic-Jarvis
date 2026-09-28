@@ -290,3 +290,12 @@ were not opened, so their names and contents are unverified):
   SQLite file with no outside database, and exposing it to plug-ins (MCP)
   would go against rule 1.
 
+**Round seven** (app building and orchestration, later on 2026-09-28):
+- **aider:** queued as a trial for the app builder's coding engine, locked
+  down (`docs/APP-BUILDER-DESIGN.md`, milestone D2).
+- **microsoft/agent-framework, agno:** not adopted. Each brings its own
+  approvals, checkpoints, memory or task running, and Jarvis keeps ONE
+  permission model (`jarvis_gate` and its cards) and ONE scheduler.
+- **BuilderIO/agent-native:** not adopted. It's a whole TypeScript app
+  framework, and the desktop's code uses no outside libraries.
+
