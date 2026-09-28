@@ -820,6 +820,8 @@ pub fn run() {
             brain::sources::chat_sources,
             brain::history::brain_history_list,
             brain::history::brain_history_open,
+            brain::history::brain_history_search,
+            brain::fact_history::brain_fact_history,
             brain::history::brain_history_delete,
             brain::history::brain_history_settings,
             brain::brain_model,

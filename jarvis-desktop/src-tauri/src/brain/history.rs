@@ -3,11 +3,15 @@
 //!
 //! The PC keeps each conversation, encrypted, when "Keep chat history on
 //! this PC" is on (the default). This window lists them, opens one
-//! read-only, deletes ONE at a time, and changes the two settings. Four
-//! commands, each its own power, like the rest of brain.rs:
+//! read-only, searches what was said, deletes ONE at a time, and changes the
+//! two settings. Five commands, each its own power, like the rest of
+//! brain.rs:
 //!
 //! * [`brain_history_list`] - `GET /api/history`, a page at a time.
 //! * [`brain_history_open`] - `GET /api/history/conversation?id=`.
+//! * [`brain_history_search`] - `GET /api/history/search?q=` (section 71):
+//!   the conversations whose words match, each with a snippet. A read,
+//!   refused while the private lists are hidden, like opening one.
 //! * [`brain_history_delete`] - `POST /api/history/delete`, one id. There is
 //!   no "delete all" here or on the server: irreversible bulk actions stay
 //!   off the API.
@@ -48,6 +52,65 @@ pub(crate) const HISTORY_STILL_HIDDEN: &str = "Your chat history is hidden. Pres
 /// A page of the list: 30 unless asked, never more than the server's 100.
 const DEFAULT_LIMIT: u32 = 30;
 const MAX_LIMIT: u32 = 100;
+
+/// "Search what was said" (JARVIS-API.md section 71): the PC's own limits
+/// (`jarvis_chat_log.SEARCH_MAX_CHARS`, `SEARCH_DEFAULT`, `SEARCH_MAX`).
+/// Nothing longer is sent.
+const SEARCH_MAX_CHARS: usize = 100;
+const SEARCH_DEFAULT: u32 = 20;
+const SEARCH_MAX: u32 = 50;
+
+/// What a PC whose backend cannot search the words yet (no
+/// `brain-reads.patch`) is told. The page then searches titles only, and
+/// says so with this sentence. The phone says the same (`ChatLog.SEARCH_OLD`).
+pub(crate) const SEARCH_UPDATE: &str = "This PC's Jarvis can only search titles. To search \
+     what was said, update it by running apply-patches.ps1 on the PC.";
+
+/// What a search is refused with while the private lists are hidden.
+pub(crate) const SEARCH_STILL_HIDDEN: &str = "Your chat history is hidden. Press Show on \
+     the Brain's History tab and confirm it is you with Windows Hello first.";
+
+/// `GET /api/history/search`'s path for these words, or why not. The words
+/// are tidied (runs of spaces become one) and every byte that is not a
+/// plain letter, digit or `-._~` is percent-encoded, so nothing the owner
+/// types can start a second parameter.
+pub(crate) fn search_path(query: &str, limit: Option<u32>) -> Result<String, String> {
+    let words = query.split_whitespace().collect::<Vec<_>>().join(" ");
+    if words.chars().count() < 2 {
+        return Err("Type at least two letters to search what was said.".to_string());
+    }
+    if words.chars().count() > SEARCH_MAX_CHARS {
+        return Err(format!(
+            "That search is too long. Use up to {SEARCH_MAX_CHARS} characters."
+        ));
+    }
+    let limit = limit.unwrap_or(SEARCH_DEFAULT).clamp(1, SEARCH_MAX);
+    Ok(format!(
+        "/api/history/search?q={}&limit={limit}",
+        commands::encode_path_segment(&words)
+    ))
+}
+
+/// [`brain_history_search`]'s reading of the answer.
+///
+/// * 2xx with `query_ok` and a `conversations` list - passed on as it is.
+/// * 404 or 501 - `{"available": false, "why": SEARCH_UPDATE}`: a backend
+///   without the search, which the page answers by searching titles.
+/// * anything else - the backend's own sentence, or a plain line.
+pub(crate) fn search_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return parsed(body)
+            .filter(|v| {
+                v.get("query_ok").is_some_and(|q| q.is_boolean())
+                    && v.get("conversations").is_some_and(|c| c.is_array())
+            })
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if status == 404 || status == 501 {
+        return Ok(serde_json::json!({ "available": false, "why": SEARCH_UPDATE }));
+    }
+    Err(commands::backend_refusal(status, body))
+}
 
 /// `GET /api/history`'s path for one page. `before` is the `updated` of the
 /// oldest conversation already shown; it is written as the plain number the
@@ -249,6 +312,28 @@ pub async fn brain_history_open(app: AppHandle, id: String) -> Result<serde_json
     conversation_answer(status, &body)
 }
 
+/// "Search what was said" (JARVIS-API.md section 71): the kept
+/// conversations whose words hold every search word, each with a short
+/// snippet. A read. The PC opens each kept turn in memory for this one
+/// search and keeps no index and no record of the words; this command
+/// keeps none either, and nothing here reaches the AI model.
+///
+/// Refused while the private lists are hidden, like opening a transcript:
+/// a snippet is what was said.
+#[tauri::command]
+pub async fn brain_history_search(
+    app: AppHandle,
+    query: String,
+    limit: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let path = search_path(&query, limit)?;
+    if crate::lock::private_hidden(&app) {
+        return Err(SEARCH_STILL_HIDDEN.to_string());
+    }
+    let (status, body) = get(&app, &path).await?;
+    search_answer(status, &body)
+}
+
 /// Deletes ONE conversation. It cannot be undone, and the page asks first.
 /// Held while the event stream is stale, like forgetting a fact
 /// ([`super::brain_memory_forget`]): it acts on a list read from a link
@@ -386,6 +471,53 @@ mod tests {
             "History_enable is not set to ask in jarvis-framework.toml"
         );
         assert_eq!(settings_answer(404, "").unwrap_err(), HISTORY_UPDATE);
+    }
+
+    #[test]
+    fn a_search_is_sent_only_within_the_pcs_limits_and_cannot_add_a_parameter() {
+        assert_eq!(
+            search_path("dentist", None).unwrap(),
+            "/api/history/search?q=dentist&limit=20"
+        );
+        assert_eq!(
+            search_path("  mill   road ", Some(500)).unwrap(),
+            "/api/history/search?q=mill%20road&limit=50"
+        );
+        // Nothing the owner types can start a second parameter or become a space.
+        let odd = search_path("a&limit=100000#x+y=z", Some(3)).unwrap();
+        assert_eq!(
+            odd,
+            "/api/history/search?q=a%26limit%3D100000%23x%2By%3Dz&limit=3"
+        );
+        assert!(search_path("café ☕", None)
+            .unwrap()
+            .contains("caf%C3%A9%20%E2%98%95"));
+        assert!(search_path("a", None).is_err());
+        assert!(search_path("   ", None).is_err());
+        assert!(search_path(&"x".repeat(101), None).is_err());
+        assert!(
+            search_path(&"é".repeat(100), None).is_ok(),
+            "characters, not bytes"
+        );
+    }
+
+    #[test]
+    fn a_search_answer_or_title_only_on_an_older_backend() {
+        let body = r#"{"query_ok": true, "conversations": [{"id": "abcdefgh",
+            "snippet": {"parts": [{"text": "dentist", "hit": true}]}}], "more": false}"#;
+        let got = search_answer(200, body).unwrap();
+        assert_eq!(got["conversations"][0]["id"], "abcdefgh");
+        for status in [404, 501] {
+            let old = search_answer(status, "").unwrap();
+            assert_eq!(old["available"], false);
+            assert_eq!(old["why"], SEARCH_UPDATE);
+        }
+        assert!(search_answer(200, r#"{"conversations": []}"#).is_err());
+        assert_eq!(
+            search_answer(500, r#"{"error": "the history store is locked"}"#).unwrap_err(),
+            "The history store is locked"
+        );
+        assert!(SEARCH_STILL_HIDDEN.contains("Windows Hello"));
     }
 
     #[test]

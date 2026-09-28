@@ -37,6 +37,7 @@ use crate::commands;
 
 pub mod auto_learn;
 pub mod briefing;
+pub mod fact_history;
 pub mod focus;
 pub mod history;
 pub mod profile;
@@ -47,12 +48,11 @@ pub mod sources;
 pub mod used;
 use routes::{first_line, route_for};
 
-/// Reads are small JSON except the graph, which walks several SQLite files and
-/// a skills directory. Two budgets rather than one, so a slow graph cannot be
-/// mistaken for a hung backend and a hung backend is not waited on for a
-/// minute.
+/// Reads are small JSON. The graph (`/api/graph`), which walks several SQLite
+/// files and a skills directory, used to have a longer budget of its own; the
+/// Brain no longer reads it (Galaxy is drawn from the people-and-things list
+/// since 2026-09-28 - privacy finding B1, routes.rs), so one budget is left.
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
-const GRAPH_TIMEOUT: Duration = Duration::from_secs(45);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 
 // ---------------------------------------------------------------------------
@@ -103,12 +103,10 @@ pub async fn brain_read(
         let base = base.clone();
         let headers = headers.clone();
         set.spawn(async move {
-            let budget = if path == "/api/graph" {
-                GRAPH_TIMEOUT
-            } else {
-                READ_TIMEOUT
-            };
-            (section, get_json_status(&base, path, headers, budget).await)
+            (
+                section,
+                get_json_status(&base, path, headers, READ_TIMEOUT).await,
+            )
         });
     }
 

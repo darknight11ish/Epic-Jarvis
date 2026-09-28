@@ -105,6 +105,12 @@ fn main() {
             // one read-only, delete ONE, and the two settings. Brain only.
             "brain_history_list",
             "brain_history_open",
+            // "Search what was said" (JARVIS-API.md section 71): a read,
+            // refused while the private lists are hidden. Brain only.
+            "brain_history_search",
+            // "History of this fact" (section 71): every version of one
+            // fact, hidden like every memory list. Brain only.
+            "brain_fact_history",
             "brain_history_delete",
             "brain_history_settings",
             // Backend supervision — settings window only
