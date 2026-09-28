@@ -373,7 +373,8 @@ def past_hits(store, query: str, *, k: int = PAST_K, now: Optional[float] = None
     return out
 
 
-def _search(store, query: str, *, rerank: bool = False, **kw) -> list:
+def _search(store, query: str, *, rerank: bool = False, said_again: bool = False,
+            **kw) -> list:
     """store.search with the entity layer on (memory wave 3, 2026-09-25):
     "my sister" also finds what is saved about Priya - the alias table
     looked up, the names added to the question, the linked facts a third
@@ -384,7 +385,16 @@ def _search(store, query: str, *, rerank: bool = False, **kw) -> list:
     `rerank` (memory idea 1, 2026-09-26): the chat turn's current facts are
     re-ordered by the small re-ranker when one is loaded (jarvis_memory.py,
     "The re-ranker") - the same facts, a better order. A store from before
-    it does not take the argument: the search without it."""
+    it does not take the argument: the search without it.
+
+    `said_again` (milestone 12, 2026-09-28): facts that tie exactly are put
+    in "said again" order - only while jarvis_memory's switch for it is on
+    (off by default). A store from before it: the search without it."""
+    if rerank and said_again:
+        try:
+            return store.search(query, entities=True, rerank=True, said_again=True, **kw)
+        except TypeError:
+            pass
     if rerank:
         try:
             return store.search(query, entities=True, rerank=True, **kw)
@@ -398,14 +408,14 @@ def _search(store, query: str, *, rerank: bool = False, **kw) -> list:
 
 def recall(store, query: str, k: int, now: Optional[float] = None) -> list:
     """What a chat turn recalls. Exactly store.search(query, k=k,
-    entities=True, rerank=True) for an ordinary question; for a question about the past,
+    entities=True, rerank=True, said_again=True) for an ordinary question; for a question about the past,
     that plus up to min(PAST_K, k) retired facts, labelled. k <= 0 is none
     at all.
 
     Only the current search can raise (as it always could - the caller
     already handles that). Anything going wrong in the past half gives the
     current facts alone: the old behaviour."""
-    hits = _search(store, query, k=k, rerank=True)
+    hits = _search(store, query, k=k, rerank=True, said_again=True)
     if k <= 0:
         return hits
     try:

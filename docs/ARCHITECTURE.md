@@ -997,12 +997,26 @@ fact_repeats  fact_id, said_at, how ("typed" | "voice")   "said again" - NO WORD
   owner's own live words, by automatic learning's own checks (typed or
   strictly checked voice, seen live, no outside text read, every word said
   and no "not" dropped), only after the fact was saved, one row per turn
-  however often the learner re-reads it. Nothing reads the count to decide
-  anything, so it can never make a fact harder to forget, correct or erase;
-  Erase keeps the rows (ids and dates, like the fact's own dates). Shown as
+  however often the learner re-reads it. The count can never make a fact
+  harder to forget, correct or erase, and the only thing that may read it
+  to decide anything is the tie-break below (off by default); Erase keeps
+  the rows (ids and dates, like the fact's own dates). Shown as
   "said again 3 times" in both apps' "Saved automatically" list (the one
   list both apps read from a shipped module; the full memory list is the
   owner's `jarvis_hud` route and does not carry it yet).
+- **"Said again" as a tie-breaker** (milestone 12, 2026-09-28). Chat
+  recall only (`jarvis_past.recall` -> `search(said_again=True)`): after
+  the fusion, the re-ranker and the cut to `k`, facts NEXT TO EACH OTHER
+  that tie exactly - the same RRF score, and the same re-ranker score if it
+  ran - are put in "said again" order, most first. It is a permutation of
+  the final list: no fact added, dropped, hidden or faded, `k` and both
+  floors unchanged, and no fact moves past one that scored differently.
+  Never `find_one()`, corrections or anything that writes; a failure is the
+  old order. **Off by default** (kept only once the PC's self-test shows it
+  helps); `JARVIS_MEMORY_SAID_AGAIN_TIEBREAK=1` turns it on, and
+  `eval_memory.py` measures it on its own "said again" line whatever the
+  setting. Words only, it changed nothing on the golden set (2026-09-28);
+  ties are commoner with meaning search on, so only the PC's run can say.
 - **Real "true from" dates** (idea 4). `add()` sets `valid_from` from the
   owner's own words when they say when something changed ("I moved to Leeds
   in January", told in March -> 1 January; `true_from()`: fixed English

@@ -124,6 +124,16 @@ PIN_CASES = [
     ("f15", "what should I order at the cafe this morning?"),
 ]
 
+#: "Said again" (milestone 12): golden facts the made-up owner has said
+#: again since, and how many times - the kind of thing a person repeats.
+#: Chosen BEFORE the tie-break was measured, and not tuned on its numbers.
+#: Recorded on every store (MemoryStore.said_again, a day apart after the
+#: fact was told); nothing but the tie-break reads them, so every other
+#: number here is the same with or without them. Only facts still in use -
+#: said_again() refuses a replaced one, as it does in Jarvis.
+SAID_AGAIN = {"f11": 3, "f15": 2, "f16": 2, "f20": 1, "f13": 1, "f02": 2,
+              "f29": 1, "f32": 1}
+
 
 # ------------------------------------------------------------- the store --
 
@@ -398,16 +408,21 @@ class StandInReranker:
                 for t in texts]
 
 
-def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False) -> dict:
+def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False,
+           said_again: bool = False) -> dict:
     """Every question once, as chat recall asks it. Returns per-question
     rows. Whether the entity layer is on is M._ENTITY_RECALL, set by the
     caller (jarvis_past.recall asks for it; the flag switches it). Whether
     a re-ranker is loaded is the caller's too (jarvis_memory.set_reranker):
     jarvis_past.recall asks for it whenever one is; `rerank` asks for it on
-    the other questions, as that call does."""
+    the other questions, as that call does. `said_again` asks for the
+    "said again" tie-break the same way (jarvis_past.recall always asks; it
+    only acts while M._SAID_AGAIN_TIEBREAK is on)."""
     rows = []
     ent = _entity_search(st)
     rr = {"rerank": True} if rerank and _takes(st.search, "rerank") else {}
+    if said_again and _takes(st.search, "said_again"):
+        rr["said_again"] = True
     for q in qs:
         # "Don't know" questions through chat recall itself (the memory
         # review's I6): what a chat turn would put in front of the model,
@@ -447,6 +462,7 @@ def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False) -> d
             "labelled": q["type"] != "past" or any(
                 r.get("past") and "no longer true since" in r.get("text", "") for r in res),
             "chars": sum(len(r.get("text", "")) for r in res),
+            "got": [r["id"] for r in res],
         })
     return {r["id"]: r for r in rows}
 
@@ -544,6 +560,27 @@ def _pin_effect(M, P, st, gid: dict, now: float) -> dict:
     return {"available": True, "cases": cases, "limit": M.PROFILE_LIMIT}
 
 
+def _put_said_again(st, facts: list, ids: dict) -> dict:
+    """SAID_AGAIN, recorded through the real MemoryStore.said_again: {golden
+    id: rows written}. Empty on a memory without it."""
+    if not hasattr(st, "said_again"):
+        return {}
+    told = {f["id"]: f["told"] for f in facts}
+    out = {}
+    for g, n in SAID_AGAIN.items():
+        out[g] = sum(bool(st.said_again(ids[g], _day(told[g]) + 86400.0 * (i + 1), "typed"))
+                     for i in range(n))
+    return out
+
+
+def _moved(a: dict, b: dict) -> dict:
+    """Between two _score runs: questions whose facts came back in another
+    order, and whose SET of facts differs (the tie-break must never do that)."""
+    order = sum(a[q]["got"] != b[q]["got"] for q in a)
+    sets = sum(sorted(a[q]["got"]) != sorted(b[q]["got"]) for q in a)
+    return {"questions_reordered": order, "questions_other_facts": sets}
+
+
 def _db_bytes(path: Path) -> int:
     return sum(p.stat().st_size for p in path.parent.glob(path.name + "*") if p.is_file())
 
@@ -599,6 +636,11 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
     has_entities = hasattr(M, "_ENTITY_RECALL")
     entities_configured = bool(getattr(M, "_ENTITY_RECALL", False))
     M._ENTITY_RECALL = False
+    # The "said again" tie-break (milestone 12) likewise: its own line only,
+    # off for every other number, whatever this PC's setting is.
+    has_tiebreak = hasattr(M, "_SAID_AGAIN_TIEBREAK")
+    tiebreak_configured = bool(getattr(M, "_SAID_AGAIN_TIEBREAK", False))
+    M._SAID_AGAIN_TIEBREAK = False
     out = {"levels": [], "floor_sweep": [], "distance_sweep": []}
     for kind in ("neutral", "same_topic"):
         d = scratch / kind
@@ -612,6 +654,7 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
         out["vector_search"] = bool(stat["vector_search"])
         out["memory_module"] = str(Path(M.__file__).resolve())
         ids = _put_golden(M, st, facts)
+        out["said_again_recorded"] = _put_said_again(st, facts, ids)
         gid = {v: k for k, v in ids.items()}
         stream = filler(kind)
         have = 0
@@ -646,6 +689,20 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
                     level["misses_entities"] = sorted(
                         r["id"] for r in rows.values() if r["answerable"] and not r["hit5"])
                     level["entities"]["linked_entities"] = st.status().get("entities")
+                    if has_tiebreak:
+                        # Milestone 12: the same, with "said again" breaking
+                        # exact ties - kept only if this line beats the one
+                        # above on the PC.
+                        M._SAID_AGAIN_TIEBREAK = True
+                        try:
+                            tb = _score(M, P, st, qs, gid, now, said_again=True)
+                            level["said_again"] = _summary(tb)
+                            level["said_again"].update(_moved(rows, tb))
+                            level["misses_said_again"] = sorted(
+                                r["id"] for r in tb.values()
+                                if r["answerable"] and not r["hit5"])
+                        finally:
+                            M._SAID_AGAIN_TIEBREAK = False
                     if rr_model is not None:
                         # Memory idea 1: the same, with the re-ranker on - the
                         # way a chat turn recalls once it has loaded.
@@ -710,6 +767,9 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
                   f"{level['after']['dont_know_facts_avg']}"
                   + (f" -> {ent['dont_know_facts_avg']}" if ent else ""), flush=True)
     M._ENTITY_RECALL = entities_configured
+    if has_tiebreak:
+        M._SAID_AGAIN_TIEBREAK = tiebreak_configured
+    out["said_again_available"] = has_tiebreak
     out["entities_available"] = has_entities
     out["reranker"] = rr_what
     out["reranker_measured"] = rr_model is not None
@@ -918,6 +978,30 @@ def markdown(res: dict) -> str:
                       "gains. Run the self-test on the PC with fastembed to measure that."]
     elif "reranker" in res:
         lines += ["", f"The re-ranker (memory idea 1): not measured - {res['reranker']}."]
+    sa_rows = [lv for lv in res["levels"] if lv.get("said_again") and lv.get("entities")]
+    if sa_rows:
+        lines += [
+            "",
+            "**\"Said again\" as a tie-breaker** (milestone 12, off in Jarvis until this "
+            "helps on the PC): the entity-layer line, without -> with facts that tie "
+            "exactly put in \"said again\" order. Made-up repeats: "
+            + ", ".join(f"{g} x{n}" for g, n in SAID_AGAIN.items())
+            + ". Reordered = questions whose facts came back in another order; other "
+            "facts must be 0 (it only re-orders).",
+            "",
+            "| Filler | Facts | Recall@1 | Recall@5 | MRR | nDCG@5 | Don't know: facts "
+            "per question | Reordered | Other facts |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for lv in sa_rows:
+            a, t = lv["entities"], lv["said_again"]
+            lines.append(
+                f"| {lv['filler'].replace('_', '-')} | {lv['facts']:,} "
+                f"| {a['recall_at_1']}% -> {t['recall_at_1']}% "
+                f"| {a['recall_at_5']}% -> {t['recall_at_5']}% | {a['mrr']} -> {t['mrr']} "
+                f"| {a['ndcg_at_5']} -> {t['ndcg_at_5']} "
+                f"| {a['dont_know_facts_avg']} -> {t['dont_know_facts_avg']} "
+                f"| {t['questions_reordered']} | {t['questions_other_facts']} |")
     if "learner" in res:
         import eval_learner
         lines += eval_learner.markdown(res["learner"])

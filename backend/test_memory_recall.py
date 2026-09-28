@@ -328,7 +328,7 @@ def t_ordinary_questions_are_unchanged():
           P.recall(st, "Where did I live before?", k=0, now=NOW) == [])
     class Boom:
         def search(self, q, k=8, **kw):
-            if set(kw) - {"entities", "rerank"}:
+            if set(kw) - {"entities", "rerank", "said_again"}:
                 raise RuntimeError("the past half broke")
             return [{"id": 1, "text": "Owner lives in York", "current": True}]
     check("if the past half fails, the current facts still come back",

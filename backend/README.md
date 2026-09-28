@@ -11005,11 +11005,35 @@ voice. No words. It counts only your own live words, with the same checks
 as automatic learning (not pasted, not after a tool read outside text, a
 voice turn checked at its strictest, every word said and no "not" left
 out), only after the fact was saved, and once per message however often the
-learner re-reads the conversation. Nothing uses the count to decide
-anything: it cannot make a fact harder to forget, correct or erase. "Erase
+learner re-reads the conversation. The count cannot make a fact harder
+to forget, correct or erase, and nothing uses it to decide anything except
+the tie-break below, which is off. "Erase
 the words" leaves these rows (they hold no words). Shown in the "Saved
 automatically" list in both apps; the full memory list comes from
 `jarvis_hud.py` on your PC and does not show it yet.
+
+**"Said again" as a tie-breaker (milestone 12, 2026-09-28) - built, OFF.**
+When two of the facts a chat turn recalls score exactly the same, the one
+you have said again more often goes first. That is all it does: the same
+facts come back, the same number of them, and a fact never jumps ahead of
+one that scored higher (or that the re-ranker put higher). It never hides
+or fades anything. Only chat recall uses it (`jarvis_past.recall`, which
+calls `search(said_again=True)`); finding a fact to correct, and anything
+that writes, never does. It stays off until the memory self-test on your PC
+shows it helps. `eval_memory.py` always measures it, on its own line ("Said
+again as a tie-breaker"), with a few made-up repeats (`SAID_AGAIN` in the
+file) that change none of the other numbers. Words only, here, it changed
+nothing: 0 questions reordered at every size (the ties it could break
+already had the repeated fact first). To switch it on, if your PC's numbers
+say so - this sets it for your Windows user, then restart Jarvis:
+
+```
+[Environment]::SetEnvironmentVariable('JARVIS_MEMORY_SAID_AGAIN_TIEBREAK', '1', 'User'); Write-Host 'Done. Quit Jarvis from the tray and start it again.'
+```
+
+Tested by `test_memory_tiebreak.py`: off is exactly the old order; on, a
+repeated fact wins a real tie, never passes a higher score or the
+re-ranker's order, and never adds or drops a fact.
 
 ## 4. Real "true from" dates, and older news
 
@@ -11050,6 +11074,7 @@ end.)*
 ```
 python3 backend/test_memory_rerank.py
 python3 backend/test_memory_said_again.py
+python3 backend/test_memory_tiebreak.py
 python3 backend/test_memory_true_from.py
 python3 backend/test_memory_auto_true_from.py   # true_from on /api/memory/auto rows (review I10)
 python3 backend/test_memory_words.py            # both apps' memory words fixture is fresh
