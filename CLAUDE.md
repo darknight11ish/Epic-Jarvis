@@ -525,7 +525,23 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   tail curled round it. **The banana is its orb**: it glows in the state
   colour, as the others' orbs do. A male voice, a touch energetic. It is
   a little more lively than the other three - still smooth and never
-  sporadic.
+  sporadic. Its resting motion targets about 1.5x the panda's.
+- **Sharp animals on capable hardware:** when Jarvis detects a capable
+  graphics chip and the owner has chosen quality over battery saving,
+  every animal draws at full resolution (no soft or jagged edges).
+- **The otter gets more detail:** visible fur texture, and small gentle
+  waves on the water around it.
+- **Sun and moon behind the animals, optional (off by default):** the real
+  sun and moon for the date and time - sunrise and sunset, the moon's
+  phase (full, waxing, waning) and its rising and setting - worked out on
+  the owner's own devices from a town the owner types once on the PC (the
+  phone gets it from the PC). Nothing goes online for it.
+- **Weather in the animals' scene, optional (off by default):** rain, snow
+  or wind. Two sources to choose from in settings: the owner's own Home
+  Assistant (stays on the home network), or Open-Meteo online (free, no
+  key; it receives the rough location, so turning it on raises an
+  approval card, like any new way out of the PC; turning it off is
+  immediate).
 
 ## Every new feature gets its own audit, without being asked
 
