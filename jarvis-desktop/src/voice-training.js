@@ -386,6 +386,8 @@ const SETTING_NAMES = {
   sensitive_memory: "answers that use sensitive saved facts",
   hands_free: "how far \"Hey Jarvis\" is trusted",
   talk_to_type: "talk-to-type",
+  wake_confirm: "the second \"hey Jarvis\" check",
+  voice_id_model: "the voice-ID model",
 };
 
 /** The choices, in the order they are shown, with plain words for each. */
@@ -494,10 +496,54 @@ export const TALK_TO_TYPE = Object.freeze([
   },
 ]);
 
+/**
+ * "Better voice" (the owner's group, 2026-09-28; docs/JARVIS-API.md section
+ * 80). A second "hey Jarvis" detector that must agree with the first. One
+ * detector is the default (today's behaviour); two is the stricter choice
+ * and applies at once; going back to one is the voice card. Two cannot be
+ * chosen while the PC does not have the second detector (the PC's words
+ * say why: `gate.settings.blocked.wake_confirm`).
+ */
+export const WAKE_CONFIRM = Object.freeze([
+  {
+    id: "one",
+    label: "One detector",
+    isDefault: true,
+    detail: "One detector listens for \"hey Jarvis\", as before. Your voice is still checked every time before anything is written down or done.",
+  },
+  {
+    id: "both",
+    label: "Two detectors must agree",
+    detail: "A second, differently built detector (microWakeWord) must also hear \"hey Jarvis\" within a second. Fewer false wake-ups; it may miss you a little more often. Measure it on your PC first (the backend README, \"Better voice\").",
+  },
+]);
+
+/**
+ * Which stronger voice-ID model tells the owner's voice from other people's
+ * (the same day). The measured one is the default and applies at once; the
+ * newer, unmeasured one is the voice card, and cannot be chosen until its
+ * file is on the PC (`gate.settings.blocked.voice_id_model`). Nothing
+ * switches by itself.
+ */
+export const VOICE_ID_MODEL = Object.freeze([
+  {
+    id: "titanet",
+    label: "The stronger one (measured)",
+    recommended: true,
+    detail: "NVIDIA's TitaNet. Its bars were measured on real voices. It tells your voice from other people's. It cannot tell your voice from a recording or a copy of it.",
+  },
+  {
+    id: "resnet221",
+    label: "The newer one (not measured yet)",
+    detail: "WeSpeaker's ResNet221. Not measured on real voices here, so Jarvis cannot say how well it keeps other people out; on computer-made voices it let in far more of them. It is slower, too. It cannot tell your voice from a recording or a copy of it either.",
+  },
+]);
+
 function choiceWords(setting, value) {
   const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY
     : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY
-      : setting === "hands_free" ? HANDS_FREE : setting === "talk_to_type" ? TALK_TO_TYPE : [];
+      : setting === "hands_free" ? HANDS_FREE : setting === "talk_to_type" ? TALK_TO_TYPE
+        : setting === "wake_confirm" ? WAKE_CONFIRM : setting === "voice_id_model" ? VOICE_ID_MODEL : [];
   return list.find((c) => c.id === value) || null;
 }
 
@@ -548,7 +594,8 @@ export function currentSetting(status, setting) {
   if (!view) return "";
   return setting === "strictness" ? view.strictness : setting === "privacy" ? view.privacy
     : setting === "memory" ? view.memory : setting === "sensitive_memory" ? view.sensitiveMemory
-      : setting === "hands_free" ? view.handsFree : setting === "talk_to_type" ? view.talkToType : "";
+      : setting === "hands_free" ? view.handsFree : setting === "talk_to_type" ? view.talkToType
+        : setting === "wake_confirm" ? view.wakeConfirm : setting === "voice_id_model" ? view.voiceIdModel : "";
 }
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule. */
@@ -557,7 +604,25 @@ export function loosens(setting, value) {
     || (setting === "memory" && value === "memory_aloud")
     || (setting === "sensitive_memory" && value === "sensitive_aloud")
     || (setting === "hands_free" && value === "same_as_button")
-    || (setting === "talk_to_type" && value === "on");
+    || (setting === "talk_to_type" && value === "on")
+    || (setting === "wake_confirm" && value === "one")
+    || (setting === "voice_id_model" && value === "resnet221");
+}
+
+/** The choice of each "Better voice" setting that needs something installed. */
+const NEEDS_INSTALL = Object.freeze({ wake_confirm: "both", voice_id_model: "resnet221" });
+
+/**
+ * Why `value` cannot be chosen for `setting` on this PC now - the PC's own
+ * words (`gate.settings.blocked`), as a sentence - or "" when it can. Only
+ * the two "Better voice" choices that need something installed; a choice
+ * that is already on is never blocked (going back is always allowed).
+ */
+export function blockedWhy(status, setting, value) {
+  if (NEEDS_INSTALL[setting] !== value) return "";
+  if (currentSetting(status, setting) === value) return "";
+  const blocked = obj(obj(obj(obj(status).gate).settings).blocked);
+  return sentence(blocked[setting]);
 }
 
 /**
@@ -590,7 +655,17 @@ export function settingsView(status) {
   // `gate.talk_to_type`). "" from a PC that does not have it - not offered.
   const rawTalk = s.talk_to_type !== undefined ? s.talk_to_type : gate.talk_to_type;
   const talkToType = rawTalk === "off" || rawTalk === "on" ? rawTalk : "";
+  // "Better voice" (2026-09-28): "" from a PC that does not have them - not
+  // offered. Any other value is read as the strict one, never the looser.
+  const rawConfirm = s.wake_confirm !== undefined ? s.wake_confirm : gate.wake_confirm;
+  const wakeConfirm = rawConfirm === undefined || rawConfirm === null || rawConfirm === ""
+    ? "" : rawConfirm === "one" ? "one" : "both";
+  const rawModel = s.voice_id_model !== undefined ? s.voice_id_model : gate.voice_id_model;
+  const voiceIdModel = rawModel === undefined || rawModel === null || rawModel === ""
+    ? "" : rawModel === "resnet221" ? "resnet221" : "titanet";
   return {
+    wakeConfirm,
+    voiceIdModel,
     strictness,
     privacy,
     memory,

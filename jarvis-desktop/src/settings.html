@@ -606,6 +606,17 @@
                 it at once.
               </p>
             </div>
+            <!-- "Better voice" (docs/JARVIS-API.md section 80): both apps. -->
+            <div id="vt-wakeconfirm-box" hidden>
+              <h3 class="subhead">Second "hey Jarvis" check</h3>
+              <div class="choices" id="vt-wakeconfirm" role="group" aria-label="Second hey Jarvis check: one detector, or two that must agree"></div>
+              <p class="note" id="vt-wakeconfirm-note"></p>
+            </div>
+            <div id="vt-voiceid-box" hidden>
+              <h3 class="subhead">Voice-ID model</h3>
+              <div class="choices" id="vt-voiceid" role="group" aria-label="Voice-ID model: which model tells your voice from other people's"></div>
+              <p class="note" id="vt-voiceid-note"></p>
+            </div>
             <p class="sc-line" id="vt-setting-waiting" data-tone="warn" hidden></p>
             <p class="note">
               Making it stricter happens at once. Making it looser shows you
@@ -640,6 +651,8 @@
           <p class="sc-line" id="voice-verifier" hidden></p>
           <p class="sc-line" id="voice-stop-word" hidden></p>
           <p class="sc-line" id="voice-turn" hidden></p>
+          <p class="sc-line" id="voice-wake2" hidden></p>
+          <p class="sc-line" id="voice-vad" hidden></p>
         </div>
 
         <!-- A setting of this PC's, not the server's, so it works whether

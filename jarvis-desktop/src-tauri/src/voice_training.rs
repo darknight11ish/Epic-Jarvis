@@ -702,6 +702,15 @@ pub(crate) fn voice_setting(
         // once; ON raises the voice card and is held on a stale link.
         ("talk_to_type", "off") => Ok(("talk_to_type", "off", false)),
         ("talk_to_type", "on") => Ok(("talk_to_type", "on", true)),
+        // "Better voice" (2026-09-28, docs/JARVIS-API.md section 80). Two
+        // "hey Jarvis" detectors that must agree only narrows when Jarvis
+        // wakes, so it applies at once; going back to one raises the voice
+        // card. The newer, unmeasured voice-ID model raises the card; the
+        // measured one applies at once.
+        ("wake_confirm", "both") => Ok(("wake_confirm", "both", false)),
+        ("wake_confirm", "one") => Ok(("wake_confirm", "one", true)),
+        ("voice_id_model", "titanet") => Ok(("voice_id_model", "titanet", false)),
+        ("voice_id_model", "resnet221") => Ok(("voice_id_model", "resnet221", true)),
         _ => Err("That is not one of the voice settings.".to_string()),
     }
 }
@@ -1288,6 +1297,26 @@ mod tests {
             Ok(("talk_to_type", "off", false))
         );
         assert!(voice_setting("talk_to_type", "yes").is_err());
+        // "Better voice" (2026-09-28): both detectors and the measured model
+        // at once; one detector and the unmeasured model are the card.
+        assert_eq!(
+            voice_setting("wake_confirm", "both"),
+            Ok(("wake_confirm", "both", false))
+        );
+        assert_eq!(
+            voice_setting("wake_confirm", "one"),
+            Ok(("wake_confirm", "one", true))
+        );
+        assert_eq!(
+            voice_setting("voice_id_model", "titanet"),
+            Ok(("voice_id_model", "titanet", false))
+        );
+        assert_eq!(
+            voice_setting("voice_id_model", "resnet221"),
+            Ok(("voice_id_model", "resnet221", true))
+        );
+        assert!(voice_setting("voice_id_model", "resnet293").is_err());
+        assert!(voice_setting("wake_confirm", "on").is_err());
     }
 
     #[test]
