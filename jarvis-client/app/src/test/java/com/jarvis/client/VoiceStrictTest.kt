@@ -989,4 +989,94 @@ class VoiceStrictTest {
         assertTrue(block, block.contains("setting = VoiceStrict.HANDS_FREE_SCREEN"))
         assertTrue(block, block.contains("choices = StrictVoice.HANDS_FREE_SCREEN"))
     }
+
+    // ------------------------------------------------------------ Jarvis Live --
+    //
+    // The owner's answers of 2026-09-28 (docs/LIVE-DESIGN.md): under "Only
+    // trust the talk button", Jarvis Live is trusted like the talk button by
+    // default however it started; "Only when I start it with the button" and
+    // "Be as careful as with Hey Jarvis" are stricter and immediate; each
+    // looser choice is the voice card. The fixture carries the PC's real
+    // statuses and answers.
+
+    @Test
+    fun `Jarvis Live - read from the PC's real status, damaged is the strictest`() {
+        assertEquals(VoiceStrict.LIVE_TRUST_FULLY, view("live_default").handsFreeLive)
+        assertEquals(VoiceStrict.LIVE_BUTTON_START_ONLY, view("live_button_start_only").handsFreeLive)
+        assertEquals(VoiceStrict.LIVE_LIKE_WAKE, view("live_caution").handsFreeLive)
+        assertEquals(VoiceStrict.LIVE_LIKE_WAKE, view("live_trusted_denied").handsFreeLive)
+        assertEquals(VoiceStrict.LIVE_TRUST_FULLY, view("live_trusted").handsFreeLive)
+        assertEquals("", VoiceStrict.handsFreeLive(""))
+        assertEquals(VoiceStrict.LIVE_LIKE_WAKE, VoiceStrict.handsFreeLive("loud"))
+    }
+
+    @Test
+    fun `Jarvis Live - stricter is at once, looser asks, and only looser is held on a stale link`() {
+        val fully = view("live_default")
+        val caution = view("live_caution")
+        // The PC's REAL answers: stricter at once, looser a card.
+        assertTrue(answer("live_button_start_only").changed)
+        assertTrue(answer("live_caution").changed)
+        val asked = answer("live_trusted_waiting")
+        assertTrue(asked.accepted && asked.pending)
+        assertEquals(202, asked.code)
+        // Which way is looser depends on where it is now.
+        assertFalse(VoiceStrict.isLoosening(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_BUTTON_START_ONLY, VoiceStrict.LIVE_TRUST_FULLY))
+        assertTrue(VoiceStrict.isLoosening(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_BUTTON_START_ONLY, VoiceStrict.LIVE_LIKE_WAKE))
+        assertTrue(VoiceStrict.isLoosening(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_TRUST_FULLY, VoiceStrict.LIVE_BUTTON_START_ONLY))
+        assertFalse(VoiceStrict.isLoosening(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_LIKE_WAKE, VoiceStrict.LIVE_TRUST_FULLY))
+        assertTrue("unknown now: counted from the strictest",
+            VoiceStrict.isLoosening(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_BUTTON_START_ONLY))
+        assertNull(StrictVoice.blocker(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_LIKE_WAKE, fully, "stale"))
+        assertNull(StrictVoice.blocker(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_BUTTON_START_ONLY, fully, "stale"))
+        assertEquals("stale", StrictVoice.blocker(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_TRUST_FULLY, caution, "stale"))
+        assertEquals(
+            StrictVoice.NOT_ON_THIS_PC,
+            StrictVoice.blocker(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_LIKE_WAKE, fully.copy(handsFreeLive = ""), null),
+        )
+        assertEquals(
+            "{\"mode\":\"hands_free_live\",\"value\":\"live_like_hey_jarvis\"}",
+            VoiceStrict.settingBody(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.LIVE_LIKE_WAKE),
+        )
+        assertTrue(runCatching { VoiceStrict.settingBody(VoiceStrict.HANDS_FREE_LIVE, VoiceStrict.SCREEN_ALOUD) }.isFailure)
+    }
+
+    @Test
+    fun `Jarvis Live - the same words as the desktop's, and the plate only when the PC reports it`() {
+        assertEquals(
+            listOf("Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with Hey Jarvis"),
+            StrictVoice.HANDS_FREE_LIVE.map { it.label },
+        )
+        assertEquals(VoiceStrict.LIVE_ORDER, StrictVoice.HANDS_FREE_LIVE.map { it.value })
+        assertEquals(StrictVoice.LIVE_ONLY_WHEN_STRICT, StrictVoice.plateNote(
+                VoiceStrict.HANDS_FREE_LIVE, view("live_default").copy(handsFree = VoiceStrict.SAME_AS_BUTTON),
+            ),
+        )
+        assertNull(
+            StrictVoice.plateNote(
+                VoiceStrict.HANDS_FREE_LIVE, view("live_default").copy(handsFree = VoiceStrict.BUTTON_ONLY),
+            ))
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        var js: java.io.File? = null
+        var screen: java.io.File? = null
+        while (dir != null && (js == null || screen == null)) {
+            java.io.File(dir, "jarvis-desktop/src/voice-training.js").takeIf { it.isFile }?.let { js = it }
+            java.io.File(dir, "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/VoiceCheckScreen.kt")
+                .takeIf { it.isFile }?.let { screen = it }
+            dir = dir.parentFile
+        }
+        val text = requireNotNull(js).readText().replace("\\\"", "\"")
+        val block = requireNotNull(
+            Regex("""HANDS_FREE_LIVE\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(text),
+        ) { "HANDS_FREE_LIVE not found in voice-training.js" }.groupValues[1]
+        for (c in StrictVoice.HANDS_FREE_LIVE) {
+            assertTrue(c.detail, block.contains(c.detail))
+            assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (default)")}\""))
+        }
+        assertTrue(text.contains(StrictVoice.LIVE_ONLY_WHEN_STRICT))
+        val src = requireNotNull(screen).readText()
+        val at = src.indexOf("if (strict.handsFreeLive.isNotBlank()) {")
+        assertTrue(at >= 0)
+        assertTrue(src.substring(at, at + 400).contains("choices = StrictVoice.HANDS_FREE_LIVE"))
+    }
 }

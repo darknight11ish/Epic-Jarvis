@@ -1128,6 +1128,40 @@ class JarvisApi(
         }
 
     /**
+     * `GET /api/voice/live`: the Jarvis Live session - fixed words and
+     * numbers only, never anything said ([com.jarvis.client.voice.LiveRules]).
+     * A read: never held.
+     */
+    suspend fun liveStatus(): ApiResult<JsonObject> = probe(LIVE_PATH)
+
+    /**
+     * `POST /api/voice/live` with a body made by
+     * [com.jarvis.client.voice.LiveRules] (`startBody`, `stopBody`...). The
+     * code and body come back whole: a 409 carries the PC's own sentence
+     * ("Jarvis Live needs your voice trained first...").
+     */
+    suspend fun liveWrite(json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url(LIVE_PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when (resp.code) {
+                        401, 403 -> ApiResult.Failed(ApiError.BadToken)
+                        404 -> ApiResult.Failed(ApiError.NotFound)
+                        else -> ApiResult.Ok(resp.code to obj)
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/chatbot/status`, for the conversation [id] names or, with
      * none, the latest one still going ([Chatbot.parse]) - and likewise the
      * comparison [compare] names ("Ask several and compare"). A read.
@@ -1898,11 +1932,12 @@ class JarvisApi(
         conversationId: String? = null,
         interrupted: String? = null,
         temporary: Boolean = false,
+        live: Boolean = false,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
-            interrupted = interrupted, temporary = temporary,
+            interrupted = interrupted, temporary = temporary, live = live,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
@@ -1963,6 +1998,12 @@ class JarvisApi(
 
         const val SOURCE_PUSH_TO_TALK = "push_to_talk"
         const val SOURCE_WAKE_WORD = "wake_word"
+
+        /** A Jarvis Live clip (docs/LIVE-DESIGN.md): no wake word, the voice checked first as ever. */
+        const val SOURCE_LIVE = "live"
+
+        /** Jarvis Live's one route: GET the session, POST start/stop/extend/resume/mute/unmute. */
+        const val LIVE_PATH = "/api/voice/live"
 
         /** Interrupting by talking: "should Jarvis stop?", never transcribed (section 17). */
         const val SOURCE_BARGE_IN = "barge_in"

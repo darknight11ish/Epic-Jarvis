@@ -189,8 +189,9 @@ class WakeWordService : Service() {
             val ring = WakeClip.Ring((WakeClip.PREROLL_SECONDS * RATE).toInt())
             var lastCheck = SystemClock.elapsedRealtime()
             while (running) {
-                // The talk button owns the microphone while it records.
-                if (voice.phase.value == VoiceSession.Phase.CAPTURING) {
+                // The talk button owns the microphone while it records, and
+                // Jarvis Live while it is on on this phone (LiveService).
+                if (voice.phase.value == VoiceSession.Phase.CAPTURING || JarvisRuntime.liveOnHere()) {
                     _state.value = WakeListen.Paused
                     delay(200)
                     continue
@@ -203,7 +204,7 @@ class WakeWordService : Service() {
                     _state.value = WakeListen.Listening
                     goForeground(getString(R.string.wake_listening_text))
                     val buf = ShortArray(WakeSpotter.CHUNK)
-                    while (running && voice.phase.value == VoiceSession.Phase.OFF) {
+                    while (running && voice.phase.value == VoiceSession.Phase.OFF && !JarvisRuntime.liveOnHere()) {
                         if (!readFully(rec, buf)) return fail("The microphone stopped.")
                         ring.push(buf)
                         val threshold = WakeRules.threshold(voice.status.value)

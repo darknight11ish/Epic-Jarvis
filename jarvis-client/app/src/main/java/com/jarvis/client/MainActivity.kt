@@ -151,6 +151,9 @@ class MainActivity : FragmentActivity() {
      */
     private val startVoiceRequested = mutableStateOf(false)
 
+    /** The Jarvis Live notification was tapped: its screen. */
+    private val openLiveRequested = mutableStateOf(false)
+
     /** The quick-note field on Home is open - see [readQuickNoteIntent]. */
     private val quickNoteOpen = mutableStateOf(false)
 
@@ -332,6 +335,7 @@ class MainActivity : FragmentActivity() {
         readApprovalIntent(intent)
         readShareIntent(intent)
         readVoiceIntent(intent)
+        readLiveIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
         // Only on a fresh start. A rotation (or a restore after Android
@@ -363,6 +367,7 @@ class MainActivity : FragmentActivity() {
         readApprovalIntent(intent)
         readShareIntent(intent)
         readVoiceIntent(intent)
+        readLiveIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
         readShortcutQuestionIntent(intent)
@@ -410,6 +415,12 @@ class MainActivity : FragmentActivity() {
     private fun readVoiceIntent(intent: Intent?) {
         if (intent?.action != ACTION_START_VOICE) return
         startVoiceRequested.value = true
+    }
+
+    /** The Jarvis Live notification: its screen (behind the app lock, as ever). */
+    private fun readLiveIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_LIVE) return
+        openLiveRequested.value = true
     }
 
     /**
@@ -1078,6 +1089,12 @@ class MainActivity : FragmentActivity() {
             if (!startVoiceRequested.value) return@LaunchedEffect
             startVoiceRequested.value = false
             nav.resetTo(Screen.HOME)
+        }
+
+        LaunchedEffect(openLiveRequested.value) {
+            if (!openLiveRequested.value) return@LaunchedEffect
+            openLiveRequested.value = false
+            nav.go(Screen.LIVE)
         }
 
         // The widget's Note button: Home, with the quick-note field open.
@@ -1874,6 +1891,13 @@ class MainActivity : FragmentActivity() {
                         modifier = root,
                     )
 
+                    Screen.LIVE -> com.jarvis.client.ui.screens.LiveScreen(
+                        onBack = { nav.back() },
+                        // "Show the card": the cards are on Home.
+                        onOpenCards = { nav.resetTo(Screen.HOME) },
+                        modifier = root,
+                    )
+
                     Screen.FAQ -> FaqScreen(
                         onBack = { nav.back() },
                         modifier = root,
@@ -2237,6 +2261,8 @@ class MainActivity : FragmentActivity() {
                                 onOpenBrain = { nav.go(Screen.BRAIN) },
                                 onOpenAppearance = { nav.go(Screen.APPEARANCE) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
+                                // Jarvis Live (ui/screens/LiveScreen.kt).
+                                onOpenLive = { nav.go(Screen.LIVE) },
                                 // "Try again" under a failed question: the same
                                 // words, tag and shared text, asked again.
                                 onRetryQuestion = {
@@ -2671,6 +2697,9 @@ class MainActivity : FragmentActivity() {
 
         /** Fired by the "your morning briefing is ready" notification ([com.jarvis.client.service.ScheduleNotifier]). */
         const val ACTION_OPEN_BRIEFING = "com.jarvis.client.action.OPEN_BRIEFING"
+
+        /** Fired by the Jarvis Live notification ([com.jarvis.client.service.LiveService]). */
+        const val ACTION_OPEN_LIVE = "com.jarvis.client.action.OPEN_LIVE"
     }
 }
 
@@ -2707,6 +2736,15 @@ private val pairingBusy = mutableStateOf(false)
  * app lock is on.
  */
 private val lockSession = LockSession()
+
+/**
+ * Would App lock lock Jarvis now? Jarvis Live on this phone ends then
+ * (JarvisRuntime's Live watcher; docs/LIVE-DESIGN.md): the owner may talk
+ * with the Live screen away from them, but not past the point the app would
+ * ask for the fingerprint or PIN again. Changes nothing.
+ */
+internal fun appLockWouldLock(nowMs: Long, security: com.jarvis.client.data.Security): Boolean =
+    lockSession.wouldLock(nowMs, security)
 
 /** How often, while the app stays open, the once-a-day update check is looked at. */
 private const val UPDATE_RECHECK_MS = 60 * 60 * 1000L
