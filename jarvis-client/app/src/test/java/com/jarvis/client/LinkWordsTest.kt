@@ -77,6 +77,56 @@ class LinkWordsTest {
         assertFalse("ReadinessScreen.kt still says \"Stale\"", checks.contains("\"Stale\""))
     }
 
+    @Test
+    fun `the no-VPN line shows only for a mesh address, a down link and no VPN`() {
+        val ts = "my-pc.tail1234.ts.net"
+        val nord = "http://my-pc.nord:4719"
+        for (host in listOf(ts, nord, "https://100.101.102.103")) {
+            assertEquals(host, LinkWords.VPN_OFF, LinkWords.vpnOffLine(host, LinkState.OFFLINE, vpnUp = false))
+            assertEquals(host, LinkWords.VPN_OFF, LinkWords.vpnOffLine(host, LinkState.RECONNECTING, vpnUp = false))
+        }
+        // A link that is up is never argued with.
+        assertNull(LinkWords.vpnOffLine(ts, LinkState.CONNECTED, vpnUp = false))
+        // A VPN is up, or nothing is known (no network at all): no line.
+        assertNull(LinkWords.vpnOffLine(ts, LinkState.OFFLINE, vpnUp = true))
+        assertNull(LinkWords.vpnOffLine(ts, LinkState.OFFLINE, vpnUp = null))
+        // An address reached without Tailscale or Meshnet (the test
+        // emulator's), or none at all.
+        assertNull(LinkWords.vpnOffLine("localhost:4719", LinkState.OFFLINE, vpnUp = false))
+        assertNull(LinkWords.vpnOffLine("", LinkState.OFFLINE, vpnUp = false))
+        assertFalse(LinkWords.meshAddress("100.128.0.1"))
+        assertFalse(LinkWords.meshAddress("192.168.1.10"))
+        assertFalse(LinkWords.meshAddress("evil.ts.net.example.com"))
+    }
+
+    @Test
+    fun `a network change is a new network, one that came back, or new kinds under the same VPN`() {
+        val wifi = setOf(1)
+        val cell = setOf(0)
+        val start = LinkWords.NetworkSeen(handle = 10L, transports = wifi)
+        // Android's first report, about the network the phone already has.
+        assertFalse(start.changedBy(10L, null))
+        assertFalse(start.changedBy(10L, wifi))
+        // Wi-Fi to mobile data: a new network.
+        assertTrue(start.changedBy(11L, null))
+        // A new network's kinds start fresh, so its own first report of
+        // them is not a second change.
+        val onCell = start.after(11L, null)
+        assertFalse(onCell.changedBy(11L, cell))
+        // Under an always-on VPN the network stays; what it runs over changes.
+        val vpnWifi = LinkWords.NetworkSeen(handle = 20L, transports = setOf(4, 1))
+        assertTrue(vpnWifi.changedBy(20L, setOf(4, 0)))
+        // Lost with nothing in its place, then back under the same number.
+        val lost = start.lostNetwork(10L)
+        assertTrue(lost.lost)
+        assertTrue(lost.changedBy(10L, null))
+        assertFalse(lost.after(10L, null).lost)
+        // Another network's loss changes nothing.
+        assertEquals(start, start.lostNetwork(99L))
+        // No network when the watch started: the first one is a change.
+        assertTrue(LinkWords.NetworkSeen(handle = null, transports = null).changedBy(5L, null))
+    }
+
     /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
     private fun repoFile(rel: String): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile

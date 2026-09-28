@@ -17,6 +17,131 @@ and tests the result.
 
 ---
 
+## Quick start: the shortest way to a first chat
+
+The fewest steps from a fresh Windows 11 PC to typing a question and getting
+an answer, then pairing the phone. Voice, tools and notes are left out - add
+them later from the full sections. Each step names the full section that
+explains it, for when something does not go as written.
+
+In every command, replace `<your backend folder>` with the folder that holds
+`jarvis_hud.py` on your PC (keep the quotes around it).
+
+**On the PC**
+
+1. **Install Git, Python and Ollama** (section 1.1). One line; the programs
+   install into their usual places under Program Files and your user folder:
+
+   ```powershell
+   winget install --id Git.Git -e; winget install --id Python.Python.3.12 -e; winget install --id Ollama.Ollama -e
+   ```
+
+   Then close PowerShell and open a new one.
+
+2. **Get this repository** (section 1.2). It lands in
+   `C:\Users\<you>\Epic-Jarvis`, and PowerShell moves into it:
+
+   ```powershell
+   git clone https://github.com/darknight11ish/Epic-Jarvis.git "$env:USERPROFILE\Epic-Jarvis"; cd "$env:USERPROFILE\Epic-Jarvis"
+   ```
+
+3. **Have your backend folder ready** (section 1.3 - there is no download
+   for it). Then set it up with the one script (section 1.5). It changes
+   only that folder, and saves everything it prints to
+   `<your backend folder>\_jarvis-logs\apply-patches-<date>.txt`:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "<your backend folder>"
+   ```
+
+4. **Get the model** (section 1.7). About 5 GB, downloaded into Ollama's
+   own models folder (`C:\Users\<you>\.ollama\models`). Then quit Ollama from
+   its tray icon and start it again from the Start menu:
+
+   ```powershell
+   [Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); ollama pull qwen3:8b; ollama create jarvis-primary -f backend\jarvis-primary.Modelfile
+   ```
+
+5. **Build the desktop app** (section 2.1). First the build programs (one
+   line, slow), then open a NEW PowerShell window and build it (one line).
+   The installer lands in
+   `C:\Users\<you>\Epic-Jarvis\jarvis-desktop\src-tauri\target\release\bundle\nsis\`:
+
+   ```powershell
+   winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"; winget install --id Rustlang.Rustup -e; winget install --id OpenJS.NodeJS.LTS -e
+   ```
+
+   ```powershell
+   cd "$env:USERPROFILE\Epic-Jarvis\jarvis-desktop"; npm install; npm run tauri build
+   ```
+
+   Double-click the `-setup.exe` in that folder. Windows says it "protected
+   your PC": click **More info**, then **Run anyway** (section 2.2).
+
+6. **Let the desktop app start Jarvis for you** - no PowerShell window to
+   keep open (section 2.5). In Jarvis Desktop: tray icon → **Settings and
+   help…** → **More options** (the closed box near the end) → **Starting
+   Jarvis for you**:
+   - **Program**: press **Find it for me**.
+   - **Arguments**: `<your backend folder>\jarvis_hud.py`
+   - Switch on **Let Jarvis Desktop start and stop Jarvis**, press **Save**,
+     then **Start**.
+
+7. **Your first chat.** Press `Alt+Space` (or tray icon → **Show or hide the
+   Jarvis bar**, if another program took that key), type `hello`, and press
+   Enter. An answer means the whole chain works.
+
+8. **Check everything at once** (section 1.10), from the repository folder.
+   It changes nothing, and saves its result as `preflight.txt` on your
+   Desktop:
+
+   ```powershell
+   cd "$env:USERPROFILE\Epic-Jarvis"; $env:JARVIS_BACKEND = "<your backend folder>"; $env:PYTHONIOENCODING = "utf-8"; py -3 backend\selftest.py --preflight | Tee-Object -FilePath "$env:USERPROFILE\Desktop\preflight.txt"; Write-Host "Saved to $env:USERPROFILE\Desktop\preflight.txt"
+   ```
+
+**The phone** (Part 3). It reaches the PC only through **Tailscale** or
+**NordVPN Meshnet**, at home too. Tailscale is shown here.
+
+9. **Tailscale on both** (section 3.1). On the PC, one line (it installs
+   into Program Files), then open Tailscale from the Start menu and sign in.
+   On the phone, install Tailscale from the Play Store, sign in with the
+   same account, and switch it on:
+
+   ```powershell
+   winget install --id Tailscale.Tailscale -e
+   ```
+
+10. **Let the phone in** (section 3.2). In Jarvis Desktop, Settings →
+    **Connection** → **Let my phone reach this**: type the PC's Tailscale
+    address (it starts with `100.`; the Tailscale app shows it), press
+    **Save**, then in **Starting Jarvis for you** press **Stop** and
+    **Start**. Then one line in PowerShell **opened as administrator**
+    (right-click PowerShell → Run as administrator); it adds one Windows
+    Firewall rule and writes no file:
+
+    ```powershell
+    New-NetFirewallRule -DisplayName "Jarvis backend (private mesh only)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 4719 -RemoteAddress 100.64.0.0/10 -Profile Any
+    ```
+
+11. **Install the app and pair** (section 3.3). Install the APK from the
+    [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest).
+    On the pairing screen, type the PC's Tailscale **name** (it ends in
+    `.ts.net`), then the token from Jarvis Desktop's Settings →
+    **Connection** → **Show the token for my phone**. Spaces do not matter.
+    **Show token** under the box shows what you typed, to check it.
+
+12. **If the phone does not connect**, run step 8's line again: its "Can your
+    phone reach Jarvis?" lines check the phone address, Tailscale on the PC,
+    Jarvis listening for the phone, and the firewall rule, and each says
+    what to do. The phone itself says "Tailscale (or Meshnet) is off on this
+    phone" when that is the problem. Section 3.4 has the rest.
+
+After a restart of the PC, Jarvis starts again when Jarvis Desktop does; to
+have Jarvis Desktop start with Windows, switch on **Start Jarvis Desktop
+when Windows starts** (Settings → More options → Startup and logs).
+
+---
+
 ## What you are installing
 
 Three things, and it is worth knowing which is which, because when something
@@ -857,6 +982,15 @@ The phone says one of these (the desktop app uses the same words):
   phone. If Jarvis is running on the PC, check the bind next (step 3.2).
 - *"This device can't find your PC by its name."* The name is wrong, or
   Tailscale or Meshnet is off on the phone.
+- *"Tailscale (or Meshnet) is off on this phone"*, under the link on Home
+  and on Checks: the phone has no VPN running at all, and both Tailscale
+  and Meshnet run as one. Switch it on in the Tailscale or NordVPN app; the
+  phone reconnects by itself as soon as the network changes.
+
+On the PC, `selftest.py --preflight` (step 1.10) checks the PC's half in
+one go - the phone address, Tailscale or Meshnet on the PC, Jarvis
+listening for the phone, and the firewall rule - under "Can your phone
+reach Jarvis?".
 - *"Your PC didn't accept this app's pairing key."* The key is wrong - or the
   **server has no key at all**: when its banner says `token NONE`, the
   server accepts only callers on the PC itself, so the phone is refused as

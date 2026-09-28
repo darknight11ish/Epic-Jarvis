@@ -50,12 +50,26 @@ class EventService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var watcher: Job? = null
 
+    /** Stops the network watch started in [onCreate]. */
+    private var stopNetworkWatch: (() -> Unit)? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         JarvisRuntime.initialize(this)
         startInForeground(LinkState.RECONNECTING, Activity.IDLE, 0)
+
+        // A change of network (Wi-Fi to mobile data, Tailscale on or off)
+        // replaces the connection at once instead of after ~70 s of silence,
+        // and Home can say when no VPN is up at all (phone walk-through N1,
+        // 2026-09-27). For as long as this service holds the link, and no
+        // longer: stopped in onDestroy.
+        stopNetworkWatch = com.jarvis.client.platform.NetworkWatch.watch(
+            this,
+            onVpn = { JarvisRuntime.noteVpn(it) },
+            onChange = { JarvisRuntime.reconnectForNetworkChange() },
+        )
 
         // The notification carries live state rather than a fixed string. It is
         // the only surface visible while the phone is in a pocket, so "Linked"
@@ -263,6 +277,8 @@ class EventService : Service() {
     override fun onDestroy() {
         watcher?.cancel()
         watcher = null
+        stopNetworkWatch?.invoke()
+        stopNetworkWatch = null
         // Nothing is listening for these any more, and a decision request that
         // outlives the connection that could deliver the answer is a trap.
         //

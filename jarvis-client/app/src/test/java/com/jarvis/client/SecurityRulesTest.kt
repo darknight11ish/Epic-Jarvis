@@ -330,6 +330,15 @@ class SecurityRulesTest {
     }
 
     @Test
+    fun `a pairing token shown in plain letters blocks screenshots whatever the settings`() {
+        assertTrue(SecurityRules.blockScreenCapture(Security(), keyShown = true))
+        assertTrue(SecurityRules.blockScreenCapture(Security(appLock = true), keyShown = true))
+        // Hidden again: back to what the settings say.
+        assertFalse(SecurityRules.blockScreenCapture(Security(), keyShown = false))
+        assertTrue(SecurityRules.blockScreenCapture(Security(privateLists = true), keyShown = false))
+    }
+
+    @Test
     fun theHiddenListsSettingSaysWhatItHidesInTheDesktopsWords() {
         val says = SecurityRules.PRIVATE_HIDES
         for (hid in listOf("deep questions", "timers, reminders and lists", "morning briefing's lines",

@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,6 +82,13 @@ fun PairingScreen(
     onOpenHelp: (() -> Unit)? = null,
     /** Set when a desktop is already paired: leaves this screen and keeps it. */
     onCancel: (() -> Unit)? = null,
+    /**
+     * Told true while the token is shown in plain letters ("Show token"),
+     * and false when it is hidden again or this screen goes: the caller
+     * blocks screenshots and screen recording meanwhile (FLAG_SECURE,
+     * SecurityRules.blockScreenCapture).
+     */
+    onKeyShownChange: (Boolean) -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
@@ -108,6 +116,18 @@ fun PairingScreen(
     // precisely to hold it. The cost of not saving it is that a rotation
     // mid-typing clears the field, which is the right trade for a secret.
     var token by remember { mutableStateOf("") }
+
+    // "Show token" (phone walk-through C8, 2026-09-27): the token is 43
+    // characters typed from the PC's screen, and typing it blind meant one
+    // wrong letter and no way to find it. Hidden by default, `remember` for
+    // the same reason as the token (a rotation hides it again), and nothing
+    // about it is saved anywhere. While it is shown the screen cannot be
+    // captured (onKeyShownChange).
+    var keyShown by remember { mutableStateOf(false) }
+    DisposableEffect(keyShown) {
+        onKeyShownChange(keyShown)
+        onDispose { onKeyShownChange(false) }
+    }
 
     // Set once the token has been handed over, so the field can be emptied
     // without disabling Connect. `hasToken` is read once by the caller and does
@@ -202,7 +222,7 @@ fun PairingScreen(
             // The PC shows the token in groups of four; the spaces are for
             // reading only and are dropped as they are typed (PairingKey).
             onValueChange = { token = PairingKey.clean(it) },
-            password = true,
+            password = !keyShown,
             label = if (hasToken) "Replace token" else "Pairing token",
             placeholder = "On the PC: Settings, Show the token for my phone",
             supportingText = if (hasToken) {
@@ -210,11 +230,20 @@ fun PairingScreen(
             } else {
                 "Kept encrypted on this phone, in Android's secure key storage."
             },
+            // Password keyboard either way, shown or not: no suggestions, and
+            // the keyboard does not learn the token.
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done,
             ),
         )
+        if (token.isNotEmpty() || keyShown) {
+            Quiet(
+                if (keyShown) "Hide token" else "Show token",
+                color = chrome.textMid,
+                modifier = Modifier.align(Alignment.End),
+            ) { keyShown = !keyShown }
+        }
 
         if (notice != null) {
             Spacer(Modifier.height(14.dp))
@@ -244,6 +273,7 @@ fun PairingScreen(
                     // text field on an unlocked phone waiting for a retry.
                     handedOver = handedOver || token.isNotBlank()
                     token = ""
+                    keyShown = false
                 },
             )
 

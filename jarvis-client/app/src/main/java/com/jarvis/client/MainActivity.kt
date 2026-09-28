@@ -601,6 +601,14 @@ class MainActivity : FragmentActivity() {
         var sleepOfferBusy by remember { mutableStateOf(false) }
 
         val tick = permissionTick.intValue
+        // The one-time "Background restart" offer (walk-through C9): while it
+        // waits and Android has not already allowed it. `tick` moves on every
+        // return to the app, so coming back from Android's own dialog with it
+        // allowed takes the line away.
+        val keepAlivePending by JarvisRuntime.settings.keepAliveOfferPending.collectAsState()
+        val keepAliveOfferShown = remember(tick, keepAlivePending) {
+            keepAlivePending && !PlatformReadiness.batteryExempt(this@MainActivity)
+        }
         val chrome by appearance.chrome.collectAsState()
         val followSystem by appearance.followSystem.collectAsState()
         val faceId by appearance.faceId.collectAsState()
@@ -639,6 +647,9 @@ class MainActivity : FragmentActivity() {
         // The lock and fingerprint settings, and the lock clock. `lockTick`
         // is read here so that every change to the clock recomposes.
         val security by JarvisRuntime.settings.security.collectAsState()
+        // True only while the pairing screen shows the typed token in plain
+        // letters. Plain `remember`: never saved, starts hidden.
+        var pairingKeyShown by remember { mutableStateOf(false) }
         val lockVersion = lockTick.intValue
         val locked = remember(lockVersion, security) { lockSession.locked(security) }
         val privateHidden = remember(lockVersion, security) { lockSession.privateHidden(security) }
@@ -649,8 +660,11 @@ class MainActivity : FragmentActivity() {
         // L5). Compose dialogs and popups inherit FLAG_SECURE from this
         // window (their securePolicy defaults to Inherit). Both are undone
         // the moment both settings are off.
-        LaunchedEffect(security.appLock, security.privateLists) {
-            val secure = SecurityRules.blockScreenCapture(security)
+        // And while the pairing token is shown in plain letters on the
+        // pairing screen ("Show token"): set by PairingScreen, and back to
+        // false the moment it is hidden or the screen goes.
+        LaunchedEffect(security.appLock, security.privateLists, pairingKeyShown) {
+            val secure = SecurityRules.blockScreenCapture(security, keyShown = pairingKeyShown)
             setRecentsScreenshotEnabled(!secure)
             if (secure) {
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
@@ -694,6 +708,12 @@ class MainActivity : FragmentActivity() {
 
         val link by JarvisRuntime.link.collectAsState()
         val linkDetail by JarvisRuntime.linkDetail.collectAsState()
+        // "Tailscale (or Meshnet) is off on this phone", under a link that is
+        // down, when Android says no VPN is up and the saved address needs
+        // one (LinkWords.vpnOffLine). A hint only; it decides nothing.
+        val vpnUp by JarvisRuntime.vpnUp.collectAsState()
+        val savedHost by JarvisRuntime.settings.host.collectAsState()
+        val vpnLine = LinkWords.vpnOffLine(savedHost, link, vpnUp)
         val stale by JarvisRuntime.stale.collectAsState()
         val activity by JarvisRuntime.activity.collectAsState()
         val faceState by JarvisRuntime.face.collectAsState()
@@ -1186,6 +1206,7 @@ class MainActivity : FragmentActivity() {
                     BackHandler(onBack = leaveRepair)
                 }
                 PairingScreen(
+                    onKeyShownChange = { pairingKeyShown = it },
                     initialHost = pairingHost,
                     hasToken = JarvisRuntime.tokens.hasToken(),
                     busy = busy,
@@ -1233,6 +1254,11 @@ class MainActivity : FragmentActivity() {
                                     connected = true
                                     busy = false
                                     paired = true
+                                    // The first pairing on this phone queues the
+                                    // one-time "Background restart" offer on Home
+                                    // (walk-through C9). Offered, never asked for
+                                    // by a dialog, and never again after.
+                                    if (!replacing) JarvisRuntime.settings.queueKeepAliveOffer()
                                     repairing = false
                                     pairingHost = JarvisRuntime.settings.host.value
                                     // The stream lives in the service, not here:
@@ -1440,6 +1466,7 @@ class MainActivity : FragmentActivity() {
                                 link = link,
                                 stale = stale,
                                 detail = linkDetail,
+                                vpnLine = vpnLine,
                             ),
                             // The same call as Home's Retry, `force` and all - see
                             // the comment on onReconnect in HomeActions below.
@@ -2010,6 +2037,7 @@ class MainActivity : FragmentActivity() {
                         state = HomeState(
                             link = link,
                             linkDetail = linkDetail,
+                            vpnLine = vpnLine,
                             stale = stale,
                             activity = activity,
                             faceState = faceState,
@@ -2055,6 +2083,8 @@ class MainActivity : FragmentActivity() {
                             pictureBusy = pictureBusy.value,
                             noteTargets = noteTargets,
                             updateLine = updateState.newerLine.takeIf { updateChecks },
+                            keepAliveOffer = PlatformReadiness.BACKGROUND_RESTART_NOT_ALLOWED
+                                .takeIf { keepAliveOfferShown },
                             temporary = temporaryChat,
                             usedIds = usedIds,
                             answerTurnId = answerTurnId,
@@ -2250,6 +2280,11 @@ class MainActivity : FragmentActivity() {
                                 onQuickNoteOpenChange = { open -> quickNoteOpen.value = open },
                                 onOpenUpdate = ::openReleasePage,
                                 onOpenLockSettings = ::openLockSettings,
+                                onKeepLinkAlive = {
+                                    JarvisRuntime.settings.answerKeepAliveOffer()
+                                    requestBatteryExemption()
+                                },
+                                onDismissKeepAlive = { JarvisRuntime.settings.answerKeepAliveOffer() },
                             )
                         },
                         modifier = root,

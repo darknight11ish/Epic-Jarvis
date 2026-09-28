@@ -255,8 +255,15 @@ object SecurityRules {
      * screens: memory, history and answers are on most of them. Off with
      * both off, so nothing changes for an owner who asked for neither. The
      * recent-apps picture is blank under the same rule.
+     *
+     * [keyShown]: the pairing token is shown in plain letters on the pairing
+     * screen ("Show token", phone walk-through C8, 2026-09-27). While it is,
+     * the screen cannot be captured whatever the settings say - the token is
+     * the one secret that opens Jarvis - and the rule falls back to the
+     * settings the moment it is hidden again.
      */
-    fun blockScreenCapture(s: Security): Boolean = s.appLock || s.privateLists
+    fun blockScreenCapture(s: Security, keyShown: Boolean = false): Boolean =
+        s.appLock || s.privateLists || keyShown
 
     /**
      * True when going from [from] to [to] weakens anything. Any one field is
