@@ -440,11 +440,7 @@ fun BrainScreen(
             // Pause/Resume/Stop, new limits, the summary (ChatbotPlate.kt) -
             // the desktop's Brain -> Work, the same card.
             item(key = "chatbot") {
-                ChatbotSection(
-                    canAct = canAct,
-                    privateHidden = privateHidden,
-                    onOpenApprovals = onOpenApprovals,
-                )
+                ChatbotSection(canAct = canAct, privateHidden = privateHidden)
             }
 
             // "Morning briefing" (the owner's decisions of 2026-09-25): the

@@ -233,10 +233,10 @@ await check("Brain, running: state, counts, Pause and Stop, limits, the transcri
   const head = await page.locator("#chatbot .chatbot-head").innerText();
   const buttons = await page.locator("#chatbot .row-actions button").allInnerTexts();
   const form = await page.locator("#chatbot-form").isHidden();
-  const turns = await page.locator("#chatbot .chatbot-turn").evaluateAll((ts) => ts.map((t) => [
+  const turns = await page.locator("#chatbot-log .chatbot-turn").evaluateAll((ts) => ts.map((t) => [
     t.dataset.who, t.classList.contains("chatbot-outside"),
     Boolean(t.querySelector(".history-mark-taint"))]));
-  const text = await page.locator("#chatbot").innerText();
+  const text = await page.locator("#chatbot-card").innerText();
   await page.getByRole("button", { name: "Pause" }).click();
   await page.waitForTimeout(300);
   await page.locator("#chatbot-new-messages").fill("6");
@@ -261,6 +261,23 @@ await check("Brain, running: state, counts, Pause and Stop, limits, the transcri
   ]);
 });
 
+await check("Brain, running: a re-read does not wipe limits being typed, or take the focus", async () => {
+  const page = await workTab({ chatbot: { status: CASES.running } });
+  await page.locator("#chatbot-new-messages").fill("7");
+  await page.locator("#chatbot-new-messages").focus();
+  const before = await page.evaluate(() => window.__chatbot.reads);
+  await page.evaluate(() => window.__emit("jarvis-event",
+    { kind: "activity", id: 9, data: { value: "working", detail: "Talking to Gemini: message 3 of 4." } }));
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => window.__chatbot.reads);
+  const value = await page.locator("#chatbot-new-messages").inputValue();
+  const focused = await page.evaluate(() => document.activeElement && document.activeElement.id);
+  await page.close();
+  assert.ok(after > before, "it did not read again");
+  assert.equal(value, "7");
+  assert.equal(focused, "chatbot-new-messages");
+});
+
 await check("Brain, paused at a captcha: the PC's words, Resume and Stop", async () => {
   const page = await workTab({ chatbot: { status: CASES.paused_captcha } });
   const text = await page.locator("#chatbot").innerText();
@@ -273,7 +290,7 @@ await check("Brain, paused at a captcha: the PC's words, Resume and Stop", async
 
 await check("Brain, stale link: Resume and Change limits wait, Stop does not; Start waits", async () => {
   let page = await workTab({ chatbot: { status: CASES.paused_captcha }, link: { stale: true } });
-  const states = await page.locator("#chatbot button").evaluateAll(
+  const states = await page.locator("#chatbot button, #chatbot-limits button").evaluateAll(
     (bs) => bs.map((b) => [b.textContent, b.disabled]));
   await page.close();
   assert.deepEqual(states, [["Resume", true], ["Stop", false], ["Change limits", true]]);
@@ -290,7 +307,7 @@ await check("Brain, after it ends: the summary stays on screen, marked outside t
   await page.locator("#chatbot-goal").fill("x");
   await page.locator("#chatbot-start").click();
   await page.waitForTimeout(600);
-  const summary = await page.locator("#chatbot .chatbot-summary").evaluate((n) => n.textContent);
+  const summary = await page.locator("#chatbot-log .chatbot-summary").evaluate((n) => n.textContent);
   const ids = await page.evaluate(() => window.__chatbot.ids);
   const form = await page.locator("#chatbot-form").isVisible();
   await page.close();

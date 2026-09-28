@@ -180,7 +180,9 @@ class ChatbotTest {
     fun `an activity line about a conversation starts the watcher, others do not`() {
         assertTrue(Chatbot.isChatbotActivity("Talking to Gemini: message 3 of 5."))
         assertTrue(Chatbot.isChatbotActivity("Waiting while you chat before asking Gemini more."))
+        assertTrue(Chatbot.isChatbotActivity("Continuing chatbot_session..."))
         assertFalse(Chatbot.isChatbotActivity("Thinking..."))
+        assertFalse(Chatbot.isChatbotActivity("Asked the chatbot question in chat"))
         assertFalse(Chatbot.isChatbotActivity(null))
     }
 

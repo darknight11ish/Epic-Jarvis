@@ -468,6 +468,10 @@
               <p class="note">Jarvis asks an AI chatbot about something for you, and writes its own follow-up questions on this PC, within limits you set. One approval card covers the whole conversation. While it does this, Jarvis knows only your goal - not your memory, email, calendar, notes or files.</p>
               <p class="note" id="chatbot-version"></p>
               <div id="chatbot"></div>
+              <!-- Painted only when the conversation or its limits change, so
+                   numbers being typed are not wiped by the 4-second re-read. -->
+              <div id="chatbot-limits" class="chatbot-limits" hidden></div>
+              <div id="chatbot-log"></div>
               <form id="chatbot-form" class="chatbot-form" autocomplete="off" novalidate hidden>
                 <label class="lbl">Chatbot
                   <select id="chatbot-which" class="field"></select>

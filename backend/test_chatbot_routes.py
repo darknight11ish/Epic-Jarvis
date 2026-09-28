@@ -365,6 +365,30 @@ def t_limits():
     check("an ended conversation's limits cannot change: 409", code == 409)
 
 
+def t_a_paused_conversation_nobody_can_resume_is_ended():
+    fresh()
+    bot = CB.FakeChatbot(REPLIES, statuses={1: CB.Status("needs_owner", "captcha")})
+    d = world(bot)
+    sid = start(d)[1]["session"]
+    clock = [1000.0]
+    R._now = lambda: clock[0]
+    try:
+        s = R.handle_get(f"id={sid}", deps=d)[1]["session"]
+        check("paused and held by task control: left alone", s["state"] == "paused")
+        TC.handle_post("/api/task/stop", {})      # forgets the paused task
+        s = R.handle_get(f"id={sid}", deps=d)[1]["session"]
+        check("just let go of: not ended at once (it may be mid-pause)", s["state"] == "paused")
+        clock[0] += R.UNHELD_GRACE + 1
+        s = R.handle_get(f"id={sid}", deps=d)[1]["session"]
+        check("still let go of after the grace: ended, its window closed",
+              s["state"] == "stopped" and bot.closed == 1 and "could no longer be resumed"
+              in s["ended"], (s["state"], s["ended"]))
+        check("... and a new conversation may start", R.handle_get("", deps=d)[1]["session"]
+              is None)
+    finally:
+        R._now = __import__("time").monotonic
+
+
 # ==========================================================================
 #   5. install()
 # ==========================================================================

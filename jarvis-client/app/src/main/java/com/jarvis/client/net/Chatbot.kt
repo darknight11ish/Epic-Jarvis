@@ -353,8 +353,10 @@ object Chatbot {
     /** Whether an activity line may be a conversation's ("Talking to Gemini: message 3 of 5."). */
     fun isChatbotActivity(detail: String?): Boolean {
         val d = detail ?: return false
+        // The core's own lines (jarvis_chatbot.run), and jarvis_task_control's
+        // when a Resume card was approved ("Continuing chatbot_session...").
         return d.startsWith("Talking to ") || d.startsWith("Waiting while you chat before asking ") ||
-            d.startsWith("Carry on the conversation with ") || d.contains("chatbot")
+            d.startsWith("Continuing chatbot_session")
     }
 
     private val ID = Regex("^chat_[0-9a-f]{12}$")

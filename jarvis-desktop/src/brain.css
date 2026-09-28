@@ -1316,6 +1316,9 @@ body {
 
 .chatbot-limits {
   margin-top: 10px;
+}
+
+.chatbot-limits > div {
   display: flex;
   flex-direction: column;
   gap: 6px;

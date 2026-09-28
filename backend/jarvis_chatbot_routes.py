@@ -50,6 +50,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import time
 from typing import Callable, Optional
 from urllib.parse import parse_qs, urlsplit
 
@@ -118,6 +119,19 @@ _LOCK = threading.Lock()
 #: session id -> {"waiting": bool, "said": str}: the last limits change.
 _LIMITS: dict = {}
 
+#: A paused conversation that jarvis_task_control no longer holds (Stop on the
+#: task, or its hour ran out) can never be resumed. jarvis_chatbot ends one
+#: only when a NEW conversation is planned, so until then both apps showed
+#: "Paused" and a Resume that could only fail, the phone kept its
+#: notification up, and a chatbot window would stay open. Each read ends one
+#: here - after this many seconds, because a conversation that has just
+#: paused is handed to jarvis_task_control a moment AFTER its state says
+#: paused, and must not be ended in that gap.
+UNHELD_GRACE = 10.0
+#: session id -> when a read first saw it paused and not held.
+_UNHELD: dict = {}
+_now = time.monotonic
+
 
 def _sentence(text: str) -> str:
     """The core's reasons are lower-case fragments ("the goal cannot be
@@ -140,8 +154,40 @@ def _limits_view(session_id: str) -> dict:
     return {"waiting": bool(got.get("waiting")), "said": str(got.get("said") or "")}
 
 
+def _end_forgotten(deps) -> None:
+    """End a paused conversation jarvis_task_control has let go of (see
+    UNHELD_GRACE). Stopping only ever makes Jarvis do less."""
+    try:
+        import jarvis_task_control as tc
+        p = tc.paused()
+    except Exception:
+        return
+    held = str(p.get("id")) if isinstance(p, dict) else ""
+    with CB._LOCK:
+        paused = [s for s in CB._SESSIONS.values() if s.state == "paused" and s.task_id]
+    now = _now()
+    seen = set()
+    for s in paused:
+        if s.task_id == held:
+            continue
+        seen.add(s.id)
+        with _LOCK:
+            first = _UNHELD.setdefault(s.id, now)
+        if now - first >= UNHELD_GRACE:
+            try:
+                CB._end_now(s, "stopped", "The paused conversation was stopped: it could no "
+                                          "longer be resumed.", deps or CB.DEPS)
+            except Exception:
+                pass
+    with _LOCK:
+        for k in [k for k in _UNHELD if k not in seen]:
+            _UNHELD.pop(k, None)
+
+
 def handle_get(query: str = "", *, deps=None) -> tuple:
-    """GET /api/chatbot/status. A read: no card, never changes anything."""
+    """GET /api/chatbot/status. A read: no card; the one thing it may change
+    is ending a paused conversation that can no longer be resumed."""
+    _end_forgotten(deps)
     q = parse_qs(str(query or ""))
     raw = (q.get("id") or [""])[0]
     sid = ""
@@ -329,3 +375,4 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 def _reset_for_tests() -> None:
     with _LOCK:
         _LIMITS.clear()
+        _UNHELD.clear()

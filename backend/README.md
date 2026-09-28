@@ -13856,7 +13856,12 @@ of 5" as a quiet notification with a Stop button.
 - `backend/jarvis_chatbot_routes.py` (new, shipped whole): `GET
   /api/chatbot/status`, `POST /api/chatbot/start`, `/stop` and `/limits`,
   and `WORDS` - the sentences both apps show. It only turns HTTP into
-  `jarvis_chatbot` calls; no rule lives here.
+  `jarvis_chatbot` calls; no rule lives here. One fix the feature audit
+  asked for: a read ends a paused conversation that can no longer be
+  resumed (its task was stopped, or its hour ran out), after 10 seconds'
+  grace - the core only did that when a NEW conversation was planned, so
+  both apps showed "Paused" with a Resume that could only fail, and the
+  phone's notification stayed up.
 - `backend/chatbot.patch` (new, last in the list): one `install()` block in
   `jarvis_hud.py`, after answer-sources.patch's.
 - `backend/jarvis_chatbot.py`: its notes now point at the routes; no

@@ -39,7 +39,8 @@ import kotlinx.coroutines.launch
  * No conversation going: the form - which chatbot, the goal (marked "these
  * words will be sent"), the most messages and minutes within the version's
  * caps, never-send words - and Start, which asks the PC for ONE approval card
- * (answered in the Inbox like any other; nothing is sent before a yes).
+ * (it shows like any other: the "Open the card" line on every screen but
+ * Home, and a notification; nothing is sent before a yes).
  * One going: its state in the PC's words, the counts, Pause / Resume / Stop,
  * Change limits (a NEW card), the chatbot's question about the owner if it
  * asked one (never answered by Jarvis), and the transcript - the chatbot's
@@ -56,7 +57,6 @@ import kotlinx.coroutines.launch
 internal fun ChatbotSection(
     canAct: Boolean,
     privateHidden: Boolean = false,
-    onOpenApprovals: ((cardId: String?) -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -229,7 +229,6 @@ internal fun ChatbotSection(
                                     }
                                 }
                             },
-                            onOpenApprovals = onOpenApprovals,
                         )
                     }
                 }
@@ -418,7 +417,6 @@ private fun FormPart(
     onMinutes: (String) -> Unit,
     onNever: (String) -> Unit,
     onStart: () -> Unit,
-    onOpenApprovals: ((cardId: String?) -> Unit)?,
 ) {
     val chrome = LocalChrome.current
     Text(Chatbot.CHATBOT_LABEL, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
@@ -465,16 +463,11 @@ private fun FormPart(
         label = Chatbot.NEVER_LABEL,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Quiet(
-            if (busy) "Asking…" else Chatbot.START,
-            enabled = canAct && !busy && v.anyBuilt,
-            onClick = onStart,
-        )
-        if (onOpenApprovals != null) {
-            Quiet("Open the Inbox", enabled = !busy, onClick = { onOpenApprovals(null) })
-        }
-    }
+    Quiet(
+        if (busy) "Asking…" else Chatbot.START,
+        enabled = canAct && !busy && v.anyBuilt,
+        onClick = onStart,
+    )
     Text(Chatbot.START_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
     Text(Chatbot.SIGN_IN_PC, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
 }

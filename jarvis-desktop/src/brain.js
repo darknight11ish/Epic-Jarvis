@@ -352,6 +352,8 @@ const dom = {
   focusStart: $("focus-start"),
   focusReport: $("focus-report"),
   chatbot: $("chatbot"),
+  chatbotLimits: $("chatbot-limits"),
+  chatbotLog: $("chatbot-log"),
   chatbotVersion: $("chatbot-version"),
   chatbotForm: $("chatbot-form"),
   chatbotWhich: $("chatbot-which"),
@@ -1649,6 +1651,8 @@ async function revealPrivate() {
 // read the lists again - Rust decides whether they come back hidden.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   const reread = async () => {
+    // The chatbot card's goal and conversation are hidden with the lists too.
+    cb.at = 0;
     await load(VIEW_SECTIONS.memory, { quiet: true });
     render(state.view);
   };
@@ -3943,7 +3947,7 @@ if (dom.focusStart) {
    ========================================================================== */
 
 const cb = { view: null, error: "", loading: false, again: false, at: 0, id: "", gone: false,
-  timer: null, filled: false };
+  timer: null, filled: false, starting: false, limitsKey: "", logKey: "", limitsInFlight: false };
 const CHATBOT_READ_MS = 15000;
 
 async function loadChatbot() {
@@ -4010,6 +4014,7 @@ async function chatbotStart() {
     messages: dom.chatbotMessages ? dom.chatbotMessages.value : "",
     minutes: dom.chatbotMinutes ? dom.chatbotMinutes.value : "",
   };
+  if (cb.starting) return;
   const problem = chatbotFormProblem(v, form);
   if (problem) {
     toast(problem, "bad");
@@ -4018,6 +4023,12 @@ async function chatbotStart() {
   if (!linkWords(currentLink()).canAct) {
     toast(STALE_TITLE, "bad");
     return;
+  }
+  // One start at a time: a double press must not ask the PC twice.
+  cb.starting = true;
+  if (dom.chatbotStart) {
+    dom.chatbotStart.dataset.busy = "true";
+    syncLiveButton(dom.chatbotStart);
   }
   try {
     const out = await invoke("chatbot_start", {
@@ -4032,8 +4043,12 @@ async function chatbotStart() {
     if (dom.chatbotGoal) dom.chatbotGoal.value = "";
   } catch (error) {
     toast(asSentence(errorText(error)), "bad");
+  } finally {
+    cb.starting = false;
   }
   await loadChatbot();
+  // paintChatbotForm sets busy again only when nothing is built.
+  if (dom.chatbotStart && cb.view && cb.view.available) paintChatbotForm(cb.view, cb.view.session);
 }
 
 function chatbotTurn(t, name) {
@@ -4072,7 +4087,7 @@ function chatbotSummary(s) {
 }
 
 function chatbotLimitsRow(v, s) {
-  const wrap = el("div", "chatbot-limits");
+  const wrap = el("div", "");
   const row = el("div", "row");
   const field = (label, value, max, id) => {
     const lab = el("label", "lbl", label);
@@ -4104,22 +4119,77 @@ function chatbotLimitsRow(v, s) {
       toast(`Most messages: 1 to ${v.tier.turnsMax}; most minutes: 1 to ${v.tier.minutesMax}.`, "bad");
       return;
     }
-    await chatbotAct("chatbot_limits", {
-      id: s.id, maxMessages: m, maxMinutes: n,
-      // While the words are hidden the box shows none: keep the PC's list.
-      neverSend: s.hidden ? null : neverWords(never.value),
-    });
+    cb.limitsInFlight = true;
+    try {
+      await chatbotAct("chatbot_limits", {
+        id: s.id, maxMessages: m, maxMinutes: n,
+        // While the words are hidden the box shows none: keep the PC's list.
+        neverSend: s.hidden ? null : neverWords(never.value),
+      });
+    } finally {
+      cb.limitsInFlight = false;
+    }
   }, { live: true });
   go.id = "chatbot-limits-go";
-  if (v.limits.waiting) {
-    go.dataset.busy = "true";
-    syncLiveButton(go);
-  }
   wrap.append(go);
   wrap.append(el("p", "note", CHATBOT.limits_note));
-  if (v.limits.waiting) wrap.append(el("p", "note", "A card for new limits is waiting for your answer."));
-  else if (v.limits.said) wrap.append(el("p", "note", v.limits.said));
+  wrap.append(el("p", "note chatbot-limits-said"));
   return wrap;
+}
+
+/**
+ * The limits row: rebuilt only when the conversation, its limits or what may
+ * be shown change - never by the 4-second re-read, which would wipe numbers
+ * being typed and take the focus away. Its last line is updated each time.
+ */
+function paintChatbotLimits(v, s) {
+  const box = dom.chatbotLimits;
+  if (!box) return;
+  const show = Boolean(s && (s.state === "running" || s.state === "paused"));
+  box.hidden = !show;
+  if (!show) {
+    box.replaceChildren();
+    cb.limitsKey = "";
+    return;
+  }
+  const key = JSON.stringify([s.id, s.max, s.maxMinutes, s.never, s.hidden, v.tier.turnsMax,
+    v.tier.minutesMax]);
+  if (key !== cb.limitsKey) {
+    box.replaceChildren(chatbotLimitsRow(v, s));
+    cb.limitsKey = key;
+  }
+  // Greyed while a card for new limits waits; its own click greys it while
+  // the request is on its way (button()), and that is left alone here.
+  const go = box.querySelector("#chatbot-limits-go");
+  if (go && !cb.limitsInFlight) {
+    go.dataset.busy = v.limits.waiting ? "true" : "false";
+    syncLiveButton(go);
+  }
+  const said = box.querySelector(".chatbot-limits-said");
+  if (said) {
+    said.textContent = v.limits.waiting ? "A card for new limits is waiting for your answer."
+      : v.limits.said;
+  }
+}
+
+/** The summary and the transcript: rebuilt only when they change. */
+function paintChatbotLog(s) {
+  const box = dom.chatbotLog;
+  if (!box) return;
+  const shown = s && !s.hidden ? s : null;
+  const key = shown ? JSON.stringify([shown.id, shown.summary, shown.transcript]) : "";
+  if (key === cb.logKey) return;
+  cb.logKey = key;
+  const out = [];
+  if (shown && shown.summary) out.push(chatbotSummary(shown));
+  if (shown && shown.transcript.length) {
+    const tr = el("div", "chatbot-transcript");
+    tr.append(el("h3", "subhead", CHATBOT.transcript_title));
+    tr.append(el("p", "note", CHATBOT.outside_note));
+    for (const t of shown.transcript) tr.append(chatbotTurn(t, shown.name));
+    out.push(tr);
+  }
+  box.replaceChildren(...out);
 }
 
 function paintChatbot() {
@@ -4135,11 +4205,15 @@ function paintChatbot() {
     }
     box.replaceChildren(line);
     if (dom.chatbotForm) dom.chatbotForm.hidden = true;
+    paintChatbotLimits(null, null);
+    paintChatbotLog(null);
     return;
   }
   if (!v.available) {
     box.replaceChildren(el("p", "empty", v.why || CHATBOT.missing));
     if (dom.chatbotForm) dom.chatbotForm.hidden = true;
+    paintChatbotLimits(null, null);
+    paintChatbotLog(null);
     return;
   }
   const s = v.session;
@@ -4177,20 +4251,13 @@ function paintChatbot() {
       if (a === "stop") actions.append(button(CHATBOT.stop, () => chatbotAct("chatbot_stop", { id: s.id }), { danger: true }));
     }
     if (actions.childElementCount) now.append(actions);
-    if (s.state === "running" || s.state === "paused") now.append(chatbotLimitsRow(v, s));
-    if (s.summary && !s.hidden) now.append(chatbotSummary(s));
-    if (s.transcript.length) {
-      const tr = el("div", "chatbot-transcript");
-      tr.append(el("h3", "subhead", CHATBOT.transcript_title));
-      tr.append(el("p", "note", CHATBOT.outside_note));
-      for (const t of s.transcript) tr.append(chatbotTurn(t, s.name));
-      now.append(tr);
-    }
     out.push(now);
   } else if (v.anyBuilt) {
     out.push(el("p", "empty", "No conversation yet."));
   }
   box.replaceChildren(...out);
+  paintChatbotLimits(v, s);
+  paintChatbotLog(s);
   paintChatbotForm(v, s);
   const live = Boolean(s && s.live);
   if (live && !cb.timer) {
