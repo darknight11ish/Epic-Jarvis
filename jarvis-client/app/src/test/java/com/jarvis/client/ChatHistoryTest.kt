@@ -310,4 +310,24 @@ class ChatHistoryTest {
         assertTrue(ChatHistory.validConversationId("A-b_9".repeat(2)))
         assertTrue(ChatHistory.validConversationId("x".repeat(64)))
     }
+
+    @Test
+    fun `cloud_yes rides only when the owner said yes to CloudOffer - never as false`() {
+        val yes = Json.parseToJsonElement(
+            ChatHistory.requestBody(emptyList(), ChatHistory.asking("hi"), cloudYes = true),
+        ).jsonObject
+        assertEquals(JsonPrimitive(true), yes["cloud_yes"])
+        // Same rule `temporary` already follows: an ordinary question must
+        // be indistinguishable from one asked before this field existed,
+        // not merely "false" - a backend that treats presence itself as a
+        // signal (as some do for optional booleans) must see nothing at all.
+        val ordinary = Json.parseToJsonElement(
+            ChatHistory.requestBody(emptyList(), ChatHistory.asking("hi")),
+        ).jsonObject
+        assertTrue(ordinary["cloud_yes"] == null)
+        val explicitFalse = Json.parseToJsonElement(
+            ChatHistory.requestBody(emptyList(), ChatHistory.asking("hi"), cloudYes = false),
+        ).jsonObject
+        assertTrue(explicitFalse["cloud_yes"] == null)
+    }
 }

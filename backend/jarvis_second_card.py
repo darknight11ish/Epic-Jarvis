@@ -162,6 +162,183 @@ see the main card, or it may put the everyday model on the second one. This
 module cannot and does not change another program's settings; it detects
 (best effort) and hands the owner one PowerShell line (`pin_command`).
 
+A THIRD CARD (2026-09-28, docs/GPU-SUPPORT-RESEARCH-2026-09-27.md). That
+research read this file's own _detect() and found it picks exactly ONE
+"second" candidate from however many capable extra cards are actually
+plugged in, and throws the rest away with "capable, but the {second.name}
+has more memory" - a real, capable third card sat right there and was
+discarded, not merely untested. Its recommendation #1 was to fix the DATA
+MODEL first, on its own, with NO behaviour change on a 1- or 2-card PC,
+before building anything a third card could actually run - because every
+call site below (_wanted, _feature_active, _reconcile, lane_for,
+_combined_rows, status() itself) reads the SINGULAR det["second"] /
+det["_second"], and jarvis_agent.choose_lane() trusts lane_for()'s answer to
+route the model's own tool calls, so a change here that got the shape wrong
+could silently send a turn to the wrong card, or to a card that isn't
+running anything. That is exactly the risk this module's own approval-card
+discipline exists to avoid on the SWITCH side; the detection side deserves
+the same care.
+
+**What is built here (2026-09-28):** _detect() now ALSO keeps every
+capable non-primary card, not just the biggest, as det["_lanes"] - a
+plain list of jarvis_compute Device objects (its own dataclass name for a
+graphics card), best-memory-first (the same
+sort _detect() already used to pick "second"; "second" is unchanged,
+it is still _lanes[0] when the list is non-empty). extra_lanes(det)
+turns _lanes[1:] into the same plain-dict shape status() already uses for
+"second" (uuid/index/name/total_mb/compute_cap), so a THIRD capable card
+is now visible to Python callers as data, not just as a "why" sentence on
+an "unused" row in det["cards"] (which already said, correctly, why it was
+not picked - that part of the design was already right and needed no
+change). `_lanes` and `extra_lanes()` are internal (leading underscore on
+the dict key; the function is not called from status() or any route) - the
+GET /api/second-card JSON is BYTE-FOR-BYTE UNCHANGED, so both apps and
+every existing test keep working exactly as before, on a PC with any
+number of cards, capable or not.
+
+**What is deliberately NOT built here, and why doing it now would be
+reckless rather than merely incomplete:** a third card cannot yet run a
+lane of its own. _wanted(), _feature_active(), _reconcile(), lane_for(),
+_LANE (the one lane-process singleton) and describe_on() (the approval
+card's own words) all still read the singular det["_second"] exactly as
+they did before this change - none of them was touched, on purpose, so
+none of the routing jarvis_agent.choose_lane() depends on could possibly
+have moved. Making a third card actually RUN something needs, at minimum:
+a second _LaneProcess-shaped singleton (or the two rewritten as a
+dict-by-card), a real approval-card decision for "which feature goes on
+which card" (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 is
+explicit that this must be a genuine per-card choice on the card, never a
+"biggest card wins" default - the same "no approve-all" rule every other
+switch here already follows), and a matching UI in both apps (there is
+none today; each app renders exactly one "second card" row). None of that
+exists yet. Building it without a real third card to measure against, in
+the same pass as this data-model change, risked exactly the kind of
+sweeping, hard-to-verify rewrite this module's own tests are built to
+catch early - so it is left for a dedicated follow-up pass instead, on top
+of the shape _lanes now provides. "Combined" (COMBINED_MODEL, above) stays
+two-card-only for the same reason MODEL-TOPOLOGY.md already gives for the
+pair itself: real speed for splitting a model across even two cards is
+still unmeasured, because the second card is not installed; adding a third
+untested unknown on top of a first untested unknown is not a design
+decision this module should make silently. _combined_rows() keeps reading
+only the "primary" and "second" roles from det["cards"], so a third
+capable card is automatically left out of "combined" too, without any new
+code - it simply is not one of those two rows.
+
+jarvis_hardware.py's preset system (lane_plan(), "chat_card"/"lane_card")
+is a separate two-slot design and is UNCHANGED here for the same reason:
+docs/HARDWARE-PROFILES.md's own presets ("Fastest answers"/"Smartest
+answers"/"Most features") were designed and tested around exactly one
+extra lane card, and generalising presets to three cards is its own,
+separate decision this file does not make.
+
+A THIRD CARD'S OWN LANE (2026-09-28). The follow-up pass the section above
+promised: a third capable card (det["_third"], the same Device as
+extra_lanes(det)'s first entry) can now be given ONE of the five features
+above, so it runs alongside the second card's own lane - never instead of
+it, and never a default (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section
+1.3: which card runs which feature must always be a real, named choice).
+
+    THE SWITCH. One new field in second-card.json, "third_feature": either
+    null (the third card does nothing - the "no default winner" rule holds
+    even with a genuinely capable card sitting right there) or one of
+    FEATURE_IDS (that feature's model calls go to the third card's own
+    lane instead of the second's). Only ONE feature at a time can be
+    moved there - there is only one third lane - so this is a single
+    pointer, not the per-feature {"lane": ...} dict
+    docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 sketched for an
+    arbitrary number of lanes: with exactly two lanes total (second and
+    third), a pointer says the same thing with far less wire-format churn,
+    and "features": {id: bool} - which both apps and every existing test
+    already read - is untouched. If a FOURTH card is ever a real prospect,
+    that is the moment to move to the fuller per-feature shape; building it
+    now, for a lane nobody can measure yet, would be exactly the kind of
+    speculative generality this project's own "measure before you build"
+    rule (the memory re-ranker, "combined" itself) already warns against.
+
+    Assigning a feature to the third card does NOT turn that feature on by
+    itself - request_change(feature, True) (the existing switch) still
+    does that, exactly as before. The assignment only says WHERE an
+    already-on feature's calls go; _request_change_third refuses to
+    assign a feature that is not on yet, in words, rather than silently
+    turning it on as a side effect of a card about something else.
+
+    WHY ITS OWN ACTION (second_card_third_assign, not second_card_enable).
+    The task that asked for this named the reason precisely: the research
+    doc requires the approval card to NAME the physical card, which means
+    its wording (describe_third_assign) and its "what asks first" line
+    are genuinely different from second_card_enable's own ("nothing
+    leaves this PC" - true, but it does not say WHICH card, which is the
+    one thing this decision is actually about). Reusing second_card_enable
+    would also mean turning the third card on or off could never be
+    loosened or audited separately from the second card's own switch - the
+    same reason BROWSER_ACTION and COMBINED_ACTION already have their own
+    lines rather than borrowing this one's.
+
+    THE LANE PROCESS: A THIRD, LITERAL _LaneProcess, NOT A DICT. _LANE and
+    _COMBINED_LANE are two hardcoded singletons; the tempting "more
+    correct" shape is a dict keyed by role (or by card uuid), so a fourth
+    card would be "add one more key" instead of "add one more singleton
+    and mirror every call site again". That was seriously considered here
+    and deliberately NOT done, for a reason specific to this module rather
+    than a general dislike of dicts: _LaneProcess itself already carries NO
+    assumption about being "the second" or "the combined" one - every
+    method (ensure/hold/stop/pids, the card claim/release in _start) is
+    already written generically, parameterised by whatever uuid/port/log
+    role it is given. The cost of one more literal instance (_THIRD_LANE)
+    is therefore exactly the cost of one more dict entry would have been -
+    a handful of new orchestration functions (_reconcile_third,
+    mirroring _reconcile; a "third" branch in status(), sleep(), shutdown()
+    and main_pin()) - MINUS the risk of touching _LANE's and
+    _COMBINED_LANE's own already-well-tested call sites to thread a lookup
+    through them. Given how safety-critical this module's routing is (the
+    task that asked for this said so plainly), the lower-risk, purely
+    additive path was chosen on purpose. If a genuine fourth card is ever
+    on the table, THAT pass should build the dict - informed by whether
+    the third card's own design (one pointer, one action, one lane) turned
+    out to generalise cleanly, rather than guessing now for a card nobody
+    has ordered.
+
+    THE PORT AND THE LOG, EACH THEIR OWN. _LANE and _COMBINED_LANE already
+    share one port (_port(), from [second_card] port) safely, because the
+    two are mutually exclusive by design (never running at once - see
+    "combined" above) - only one of them is ever actually listening on it.
+    The third lane is NOT mutually exclusive with the second's: a feature
+    on the third card and a feature on the second card are meant to run at
+    the SAME TIME, on different physical cards. It therefore needs its own
+    port ([second_card] third_port, default 11436, never MAIN_OLLAMA_PORT
+    or _port()'s own value) and its own log file
+    (second-card-third-ollama.log) - sharing either would either fail to
+    bind, or interleave two processes' output into one unreadable file.
+
+    WHERE THE THIRD CARD'S MEMORY BUDGET COMES FROM. _feature_model() grew
+    one optional `card` parameter (default: det["_second"], exactly as
+    before - every existing caller is unaffected) so the third lane's own
+    memory/model plan is sized from det["_third"]'s OWN total_mb, never
+    borrowed from the second card's. A third card of a different size gets
+    its own correct answer, the same arithmetic _long_context_plan()
+    already does for the second.
+
+    WHAT IS DELIBERATELY UNCHANGED. _detect()'s per-row "cards[]" role and
+    "why" text for a third capable card are UNTOUCHED for the case
+    test_second_card.py's reshape-pass fixture actually covers (still
+    "unused, capable, but the {second.name} has more memory" when the
+    chosen card genuinely has more) - without an assignment, a third card
+    really is unused. Fixed in this pass, not part of the reshape's own
+    promise: the sentence used to say "has more memory" even when the two
+    cards TIE, which is false (2026-09-28 hardware-detection audit,
+    finding #2) - it now says "has the same amount of memory and was
+    already picked" for that case instead. The fuller, up-to-date story
+    (capable, assigned to X, or not assigned) lives in status()'s new
+    "third" key instead, which is purely additive - every existing key in
+    GET /api/second-card is untouched. "Combined" stays exactly as it was:
+    _combined_rows() still reads only "primary"/"second" from cards[], so
+    a third card is automatically left out of it, without any new code.
+    Presets (_detect_preset) stay two-slot: det["_third"] is always None
+    under a chosen preset, so third-card assignment simply does nothing
+    there, in words, the same way every other third-card check already
+    reads "no capable third card".
+
 Standard library only. Never logs or returns a token or key.
 """
 from __future__ import annotations
@@ -214,8 +391,20 @@ ACTION = "second_card_enable"
 #: notice (second-card.patch's _RISK line: "outbound"), instead of
 #: borrowing second_card_enable's "nothing leaves this PC".
 BROWSER_ACTION = "second_card_browser_enable"
+#: Moving one of the five features onto a THIRD capable card (see the
+#: module docstring's "A THIRD CARD'S OWN LANE" section). Its own action,
+#: not ACTION: the approval card it raises names a SPECIFIC physical
+#: card, which docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 says
+#: must always be a real, named choice, and its "what asks first" wording
+#: is genuinely different from ACTION's own ("nothing leaves this PC" -
+#: true, but not the point of this particular card).
+THIRD_ACTION = "second_card_third_assign"
 HOST = "127.0.0.1"
 DEFAULT_PORT = 11435
+#: The third lane's own port (module docstring: it can run at the SAME
+#: TIME as the second card's lane, so it cannot share _port()'s value the
+#: way _COMBINED_LANE safely does).
+DEFAULT_THIRD_PORT = 11436
 MAIN_OLLAMA_PORT = 11434
 
 #: Turing. See the module docstring and MODEL-TOPOLOGY.md.
@@ -612,8 +801,15 @@ def _state_path() -> Path:
     return _config_dir() / "second-card.json"
 
 
-def _log_path() -> Path:
-    return _config_dir() / "second-card-ollama.log"
+def _log_path(role: str = "second") -> Path:
+    """second-card-ollama.log for the feature lane and for "combined" (role
+    "second" or "combined") - the two never run at once (module docstring),
+    so sharing one file was always safe. A third lane CAN run at the same
+    time as the feature lane, so role "third" gets its own file - sharing
+    would interleave two processes' output into one unreadable log."""
+    name = "second-card-ollama.log" if role in ("second", "combined") \
+        else f"second-card-{role}-ollama.log"
+    return _config_dir() / name
 
 
 def _port() -> int:
@@ -622,6 +818,19 @@ def _port() -> int:
     except (TypeError, ValueError):
         return DEFAULT_PORT
     return p if 1024 <= p <= 65535 and p != MAIN_OLLAMA_PORT else DEFAULT_PORT
+
+
+def _third_port() -> int:
+    """The third lane's own port - never MAIN_OLLAMA_PORT or _port()'s own
+    value (module docstring: the two lanes can run at once, so they cannot
+    share a port the way _LANE and _COMBINED_LANE safely do)."""
+    try:
+        p = int(_cfg("third_port", DEFAULT_THIRD_PORT))
+    except (TypeError, ValueError):
+        return DEFAULT_THIRD_PORT
+    if not (1024 <= p <= 65535) or p in (MAIN_OLLAMA_PORT, _port()):
+        return DEFAULT_THIRD_PORT
+    return p
 
 
 def _keep_alive() -> str:
@@ -675,17 +884,22 @@ SUGGEST_DEFAULT = True
 
 def _read_switches() -> dict:
     """{"master": bool, "combined": bool, "features": {id: bool},
-    "suggest": {"struggle": bool, "correction": bool}}. "combined" is the
-    third mode's own switch - a sibling of "master", not one of "features"
-    (it does not compose with them: see the module docstring). "suggest" is
-    neither: it never starts or stops anything by itself, it only says
-    whether jarvis_second_card may OFFER "combined" on its own (see below).
-    A missing or broken file is everything off, and "suggest" both ON - the
-    safe reading either way: nothing starts without a person's yes, and a
-    missing file offering nothing is the wrong direction to fail an offer
-    in, so the two defaults are opposite on purpose."""
+    "suggest": {"struggle": bool, "correction": bool},
+    "third_feature": Optional[str]}. "combined" is the third mode's own
+    switch - a sibling of "master", not one of "features" (it does not
+    compose with them: see the module docstring). "suggest" is neither: it
+    never starts or stops anything by itself, it only says whether
+    jarvis_second_card may OFFER "combined" on its own (see below).
+    "third_feature" (2026-09-28) is which of FEATURE_IDS, if any, is moved
+    onto a third capable card - None (the default) means the third card
+    does nothing, even if one is plugged in (module docstring's "A THIRD
+    CARD'S OWN LANE"). A missing or broken file is everything off (and
+    third_feature None), and "suggest" both ON - the safe reading either
+    way: nothing starts without a person's yes, and a missing file
+    offering nothing is the wrong direction to fail an offer in, so the two
+    defaults are opposite on purpose."""
     out = {"master": False, "combined": False, "features": {f: False for f in FEATURE_IDS},
-           "suggest": {s: SUGGEST_DEFAULT for s in SUGGEST_SIGNALS}}
+           "suggest": {s: SUGGEST_DEFAULT for s in SUGGEST_SIGNALS}, "third_feature": None}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -703,20 +917,25 @@ def _read_switches() -> dict:
         for s in SUGGEST_SIGNALS:
             if s in sug:
                 out["suggest"][s] = sug[s] is True
+    tf = raw.get("third_feature")
+    if isinstance(tf, str) and tf in FEATURE_IDS:
+        out["third_feature"] = tf
     return out
 
 
 def _write_state(cur: dict) -> Optional[str]:
     """The one write to second-card.json, called with the whole state
-    (master/combined/features/suggest) so a write of one never drops
-    another - `_write_switch` and `_write_suggest` both build `cur` from
-    `_read_switches()` first. None on success, else the error in words."""
+    (master/combined/features/suggest/third_feature) so a write of one
+    never drops another - `_write_switch`, `_write_suggest` and
+    `_write_third` all build `cur` from `_read_switches()` first. None on
+    success, else the error in words."""
     p = _state_path()
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".json.tmp")
         tmp.write_text(json.dumps({"master": cur["master"], "combined": cur["combined"],
                                    "features": cur["features"], "suggest": cur["suggest"],
+                                   "third_feature": cur.get("third_feature"),
                                    "set_at": int(time.time())}, indent=1),
                        encoding="utf-8")
         tmp.replace(p)
@@ -733,6 +952,16 @@ def _write_switch(feature: str, enabled: bool) -> Optional[str]:
             cur[feature] = bool(enabled)
         else:
             cur["features"][feature] = bool(enabled)
+        return _write_state(cur)
+
+
+def _write_third(feature: Optional[str]) -> Optional[str]:
+    """Sets which feature (if any) is moved onto the third card. None on
+    success, else the error in words. `feature` outside FEATURE_IDS is
+    written as unassigned (None) - the safe direction."""
+    with _STATE_LOCK:
+        cur = _read_switches()
+        cur["third_feature"] = feature if feature in FEATURE_IDS else None
         return _write_state(cur)
 
 
@@ -801,7 +1030,37 @@ def detect(fresh: bool = False) -> dict:
     except Exception as exc:
         return {"capable": False, "why": f"the graphics cards could not be read "
                                          f"({type(exc).__name__})",
-                "primary": None, "second": None, "cards": [], "_second": None}
+                "primary": None, "second": None, "cards": [], "_second": None,
+                "_lanes": [], "_third": None}
+
+
+def _card_summary(card) -> dict:
+    """The plain-dict shape det["second"] already uses, for one Device - shared
+    by _detect() (so "second" is built from the same code as extra_lanes())
+    and by extra_lanes() below. Never None: callers only pass a real card."""
+    return {"uuid": card.uuid, "index": card.index, "name": card.name,
+            "total_mb": card.total_mb, "compute_cap": card.compute_cap}
+
+
+def extra_lanes(det: dict) -> list:
+    """Every capable non-primary card BEYOND the one already running as
+    "second" today - a third card, and a fourth, if they are ever plugged
+    in - as det["second"]'s own plain-dict shape. [] on a 1- or 2-card PC,
+    or under a chosen hardware preset (which is a separate, two-slot design -
+    see the module docstring's "A THIRD CARD" section).
+
+    This is READ-ONLY, forward-looking data: nothing here can be turned on
+    yet, on this PC or any other - there is no switch, no approval action
+    and no lane process for a third card today. Nothing in this module or
+    any other calls this function yet; it exists so a later, dedicated pass
+    that DOES build a third card's own lane has a real list of candidates to
+    start from, instead of redoing _detect()'s own card-reading work. Never
+    raises; a bad `det` (missing or malformed "_lanes") reads as []."""
+    try:
+        lanes = det.get("_lanes") or []
+        return [_card_summary(c) for c in lanes[1:]]
+    except Exception:
+        return []
 
 
 def _detect(fresh: bool) -> dict:
@@ -810,7 +1069,8 @@ def _detect(fresh: bool) -> dict:
         return {"capable": False,
                 "why": ("no NVIDIA graphics card could be read (nvidia-smi is missing "
                         "or did not answer)"),
-                "primary": None, "second": None, "cards": [], "_second": None}
+                "primary": None, "second": None, "cards": [], "_second": None,
+                "_lanes": [], "_third": None}
     prim, rule = _primary(cards)
     rows, candidates, reasons = [], [], []
     for c in sorted(cards, key=lambda d: d.index):
@@ -821,9 +1081,17 @@ def _detect(fresh: bool) -> dict:
             candidates.append(c)
         else:
             reasons.append((c, r))
-    second = None
-    if candidates:
-        second = sorted(candidates, key=lambda d: (-d.total_mb, d.index))[0]
+    # Every capable non-primary card, best memory first - the same sort this
+    # line always used to pick "second" alone. "second" is unchanged: it is
+    # still lanes[0]. Keeping the WHOLE list (not just [0]) is the one real
+    # change docs/GPU-SUPPORT-RESEARCH-2026-09-27.md's recommendation #1
+    # asked for - see the module docstring's "A THIRD CARD" section. A
+    # second (or third, ...) capable card that is not "second" still gets
+    # its row in `rows` below, with the SAME "unused" role and "why" text as
+    # before this change - nothing about what is SHOWN today has moved,
+    # only what is kept internally for a card beyond the first two.
+    lanes = sorted(candidates, key=lambda d: (-d.total_mb, d.index))
+    second = lanes[0] if lanes else None
     for c in sorted(cards, key=lambda d: d.index):
         if c is prim:
             role, why = "primary", f"everyday chat runs here: {rule}"
@@ -833,27 +1101,36 @@ def _detect(fresh: bool) -> dict:
                 why += (" (a monitor is plugged into it, which uses some of its memory; "
                         "plug the monitors into the main card)")
         elif c in candidates:
-            role, why = "unused", f"capable, but the {second.name} has more memory"
+            if c.total_mb < second.total_mb:
+                role, why = "unused", f"capable, but the {second.name} has more memory"
+            else:
+                role, why = ("unused", f"capable, but the {second.name} has the same "
+                             f"amount of memory and was already picked")
         else:
             role, why = "unused", next(r for (x, r) in reasons if x is c)
         rows.append({"index": c.index, "uuid": c.uuid or None, "name": c.name,
                      "total_mb": c.total_mb, "free_mb": c.free_mb,
                      "compute_cap": c.compute_cap, "display_active": c.display_active,
                      "role": role, "why": why})
+    # The third card's own lane candidate (module docstring: "A THIRD
+    # CARD'S OWN LANE") - lanes[1], the same object extra_lanes(det)'s first
+    # entry describes, kept here too so _reconcile_third/lane_for never have
+    # to re-derive it from _lanes themselves. None whenever there is no
+    # second capable extra card (fewer than 3 capable cards total).
+    third = lanes[1] if len(lanes) > 1 else None
     p = {"uuid": prim.uuid or None, "index": prim.index, "name": prim.name}
     if second is not None:
-        s = {"uuid": second.uuid, "index": second.index, "name": second.name,
-             "total_mb": second.total_mb, "compute_cap": second.compute_cap}
+        s = _card_summary(second)
         why = (f"the {second.name} ({_gb(second.total_mb)}) can take the second-card "
                f"features; everyday chat stays on the {prim.name}")
         return {"capable": True, "why": why, "primary": p, "second": s, "cards": rows,
-                "_second": second}
+                "_second": second, "_lanes": lanes, "_third": third}
     if len(cards) == 1:
         why = f"only one graphics card found (the {prim.name})"
     else:
         why = "; ".join(r for (_, r) in reasons)
     return {"capable": False, "why": why, "primary": p, "second": None, "cards": rows,
-            "_second": None}
+            "_second": None, "_lanes": lanes, "_third": third}
 
 
 def _detect_preset(plan: dict, fresh: bool) -> dict:
@@ -915,9 +1192,21 @@ def _detect_preset(plan: dict, fresh: bool) -> dict:
                      "total_mb": c.total_mb, "free_mb": c.free_mb,
                      "compute_cap": c.compute_cap, "display_active": c.display_active,
                      "role": role, "why": why_c})
+    # A preset has exactly one lane slot (lane_card) - see the module
+    # docstring's "A THIRD CARD" section for why that stays a separate,
+    # two-slot design rather than growing a third slot here. `_lanes`
+    # mirrors `_second` for shape-consistency with the non-preset path
+    # above: [] when there is no lane card (or the lanes run inside the
+    # everyday Ollama, main=True), else the one lane card, so
+    # extra_lanes(det) is always safe to call and always answers [] under
+    # a chosen preset today.
+    lane_active = (not main) and capable and lane_dev is not None
     return {"capable": capable, "why": why, "primary": p, "second": s if capable else None,
             "cards": rows, "_second": None if main else lane_dev, "_main": main and capable,
-            "_plan": plan, "unsupported": unsupported}
+            "_plan": plan, "unsupported": unsupported,
+            "_lanes": [lane_dev] if lane_active else [],
+            # A preset has no third slot either - see the comment above.
+            "_third": None}
 
 
 def _long_context_plan(total_mb: int) -> tuple:
@@ -930,18 +1219,27 @@ def _vision_gib(num_ctx: int) -> float:
     return round(VISION_WEIGHTS_GIB + kv + RUNTIME_GIB, 2)
 
 
-def _feature_model(feature: str, det: dict) -> tuple:
-    """(model, num_ctx, memory_gib) - all None without a capable card."""
+def _feature_model(feature: str, det: dict, card=None) -> tuple:
+    """(model, num_ctx, memory_gib) - all None without a capable card.
+
+    `card` (2026-09-28): a specific jarvis_compute Device to size the plan
+    from, instead of det["_second"] - used by the third card's own lane
+    (_reconcile_third, describe_third_assign, status()'s "third" row) so
+    its model/context/memory numbers come from THAT card's own total_mb,
+    never borrowed from the second card's. Every existing caller omits it
+    and gets exactly det["_second"]'s numbers, unchanged. Presets ignore
+    it (a preset's own plan already names one lane; there is no third
+    slot to size - module docstring)."""
     plan = det.get("_plan")
     if plan is not None:
         if not det.get("capable"):
             return None, None, None
         lane = plan.get("pictures") if feature == "vision" else plan.get("long")
         return tuple(lane) if lane else (None, None, None)
-    second = det.get("_second")
-    if second is None:
+    target = card if card is not None else det.get("_second")
+    if target is None:
         return None, None, None
-    model, ctx, gib = _long_context_plan(second.total_mb)
+    model, ctx, gib = _long_context_plan(target.total_mb)
     if feature == "vision":
         return VISION_MODEL, ctx, _vision_gib(ctx)
     return model, ctx, gib
@@ -1126,7 +1424,7 @@ class _LaneProcess:
     START_SECONDS = 30.0
     RETRY_SECONDS = 60.0
 
-    def __init__(self) -> None:
+    def __init__(self, role: str = "second") -> None:
         self.lock = threading.RLock()
         self.state = "off"
         self.why = "nothing on the second card is switched on"
@@ -1140,6 +1438,11 @@ class _LaneProcess:
         self.claimed = ()          # the card id(s) whose claim this lane holds
         self.fit = None            # LLAMA_ARG_FIT_TARGET under a preset, else None
         self.spread = False        # OLLAMA_SCHED_SPREAD=1 ("combined": every id, not one)
+        #: "second", "combined" or "third" - which log file (_log_path)
+        #: and, for "third", which port default this instance uses. The
+        #: class itself carries no other assumption about which lane it is
+        #: (module docstring's "THE LANE PROCESS" section).
+        self.role = role
 
     def url(self) -> str:
         return f"http://{HOST}:{self.port}"
@@ -1152,9 +1455,13 @@ class _LaneProcess:
             return False
 
     def ensure(self, uuid, card: str, num_ctx: int, fit: Optional[str] = None,
-               spread: bool = False) -> None:
+               spread: bool = False, port: Optional[int] = None) -> None:
+        """`port`: the caller's own port, when it must not share _LANE's/
+        _COMBINED_LANE's (the third lane - module docstring's "THE PORT AND
+        THE LOG" section). None (every existing caller) means _port(),
+        exactly as before this parameter was added."""
         with self.lock:
-            port = _port()
+            port = port if port is not None else _port()
             same = (self.uuid == uuid and self.num_ctx == num_ctx and self.port == port
                     and self.fit == fit and self.spread == spread)
             if self.state in ("running", "starting") and same and self.alive():
@@ -1164,7 +1471,7 @@ class _LaneProcess:
                 self._clear()
                 self._drop_card()
                 self._fail(f"the second Ollama stopped by itself (exit code {code}); "
-                           f"Jarvis will try again in a minute. Its log: {_log_path()}")
+                           f"Jarvis will try again in a minute. Its log: {_log_path(self.role)}")
                 return
             if self.state == "failed" and same and \
                     time.monotonic() - self.failed_at < self.RETRY_SECONDS:
@@ -1250,8 +1557,8 @@ class _LaneProcess:
         kwargs: dict = {"env": env, "stdin": subprocess.DEVNULL}
         log = None
         try:
-            _log_path().parent.mkdir(parents=True, exist_ok=True)
-            log = open(_log_path(), "wb")
+            _log_path(self.role).parent.mkdir(parents=True, exist_ok=True)
+            log = open(_log_path(self.role), "wb")
             kwargs["stdout"] = log
             kwargs["stderr"] = subprocess.STDOUT
         except OSError:
@@ -1292,7 +1599,7 @@ class _LaneProcess:
                     self._clear()
                     self._drop_card()
                     return self._fail(f"the second Ollama stopped straight away (exit code "
-                                      f"{code}). Its log: {_log_path()}")
+                                      f"{code}). Its log: {_log_path(self.role)}")
             if _version_at(self.port) is not None:
                 with self.lock:
                     if gen == self.gen and self.state == "starting":
@@ -1305,7 +1612,7 @@ class _LaneProcess:
             if gen == self.gen and self.state == "starting":
                 self._stop_proc()
                 self._fail(f"the second Ollama did not answer within "
-                           f"{self.START_SECONDS:.0f} seconds. Its log: {_log_path()}")
+                           f"{self.START_SECONDS:.0f} seconds. Its log: {_log_path(self.role)}")
 
     def _stop_proc(self) -> None:
         p, self.proc = self.proc, None
@@ -1417,19 +1724,52 @@ def _win_parents() -> dict:
     return out
 
 
-_LANE = _LaneProcess()
-_COMBINED_LANE = _LaneProcess()
+_LANE = _LaneProcess("second")
+_COMBINED_LANE = _LaneProcess("combined")
+#: The third card's own lane (module docstring's "A THIRD CARD'S OWN LANE").
+#: A literal third instance, not a dict - see the docstring's "THE LANE
+#: PROCESS" section for why that is the deliberate, documented choice.
+_THIRD_LANE = _LaneProcess("third")
+
+
+def _on_third(feature: str, sw: dict, det: dict) -> bool:
+    """Is `feature` moved onto a third card RIGHT NOW (a capable third card
+    is here, this is not a preset, and the switch points at it)? Module
+    docstring's "A THIRD CARD'S OWN LANE" section."""
+    return bool(det.get("_third") is not None and not det.get("_main")
+                and sw.get("third_feature") == feature)
 
 
 def _wanted(sw: dict, det: dict) -> bool:
+    # A feature moved onto the third card does not need the SECOND card's
+    # own lane - if every active feature has been moved there, starting
+    # the second lane too would hold the second card open for nothing
+    # (2026-09-28).
     return bool(not sw.get("combined") and sw["master"] and det.get("capable")
-                and any(_feature_active(f, sw, det) for f in FEATURE_IDS))
+                and any(_feature_active(f, sw, det) and not _on_third(f, sw, det)
+                        for f in FEATURE_IDS))
 
 
 def _feature_active(feature: str, sw: dict, det: dict) -> bool:
     return bool(det.get("capable") and sw["master"] and sw["features"].get(feature)
                 and feature not in (det.get("unsupported") or {})
                 and all(sw["features"].get(d) for d in _BY_ID[feature]["needs"]))
+
+
+def _idle_why(sw: dict, det: dict) -> str:
+    """Why the second lane is off, when nothing wants it - in words. Says
+    "moved to the third card" rather than "nothing switched on" when that
+    is the real reason (2026-09-28): a feature can be genuinely on and
+    still leave the second lane idle."""
+    if not det.get("capable"):
+        return f"no capable second card: {det.get('why')}"
+    if not sw["master"]:
+        return "the second-card switch is off"
+    moved = [f for f in FEATURE_IDS if _feature_active(f, sw, det) and _on_third(f, sw, det)]
+    if moved:
+        names = ", ".join(f"\"{_BY_ID[f]['name']}\"" for f in moved)
+        return f"{names} {'is' if len(moved) == 1 else 'are'} moved to the third card"
+    return "nothing on the second card is switched on"
 
 
 def _reconcile(sw: dict, det: dict) -> None:
@@ -1471,16 +1811,9 @@ def _reconcile(sw: dict, det: dict) -> None:
                     return
             _LANE.ensure(second.uuid, second.name, ctx, fit)
         elif _LANE.state != "off" or _LANE.proc is not None:
-            if not det.get("capable"):
-                why = f"no capable second card: {det.get('why')}"
-            elif not sw["master"]:
-                why = "the second-card switch is off"
-            else:
-                why = "nothing on the second card is switched on"
-            _LANE.stop(why)
+            _LANE.stop(_idle_why(sw, det))
         else:
-            _LANE.why = ("nothing on the second card is switched on"
-                         if det.get("capable") else f"no capable second card: {det.get('why')}")
+            _LANE.why = _idle_why(sw, det)
     except Exception as exc:
         _LANE.state, _LANE.why = "failed", f"unexpected error ({type(exc).__name__})"
 
@@ -1545,6 +1878,53 @@ def _reconcile_combined(sw: dict, det: dict) -> None:
         lane.state, lane.why = "failed", f"unexpected error ({type(exc).__name__})"
 
 
+def _reconcile_third(sw: dict, det: dict) -> None:
+    """Start the third card's own copy of Ollama if a feature is assigned
+    to it, stop it otherwise - the mirror of _reconcile, for _THIRD_LANE
+    (module docstring's "A THIRD CARD'S OWN LANE" section). Its own
+    function, not a loop over _LANE/_THIRD_LANE, for the same reason
+    _reconcile_combined is its own function: there is no preset/_main case
+    for a third card (presets stay two-slot - det["_third"] is always None
+    then), and no "needs" chain beyond the assigned feature's own."""
+    try:
+        if _still_asleep():
+            if _THIRD_LANE.state != "off" or _THIRD_LANE.proc is not None:
+                _THIRD_LANE.stop(_ASLEEP["why"])
+            else:
+                _THIRD_LANE.why = _ASLEEP["why"]
+            return
+        third = det.get("_third")
+        feature = sw.get("third_feature")
+        if third is None or not feature or feature not in _BY_ID:
+            why = ("no capable third graphics card" if third is None
+                   else "no feature is assigned to the third card")
+            if _THIRD_LANE.state != "off" or _THIRD_LANE.proc is not None:
+                _THIRD_LANE.stop(why)
+            else:
+                _THIRD_LANE.why = why
+            return
+        if not _feature_active(feature, sw, det):
+            why = f"\"{_BY_ID[feature]['name']}\" is off"
+            if _THIRD_LANE.state != "off" or _THIRD_LANE.proc is not None:
+                _THIRD_LANE.stop(why)
+            else:
+                _THIRD_LANE.why = why
+            return
+        _, ctx, _ = _feature_model(feature, det, card=third)
+        ours = (_THIRD_LANE.state in ("starting", "running") and _THIRD_LANE.uuid == third.uuid
+                and _THIRD_LANE.alive())
+        if not ours:
+            # The big model may be on this very card too - the same check
+            # _reconcile makes for the second card's own lane.
+            held = big_model_holds(third.uuid, third.name)
+            if held:
+                _THIRD_LANE.hold(held)
+                return
+        _THIRD_LANE.ensure(third.uuid, third.name, ctx, port=_third_port())
+    except Exception as exc:
+        _THIRD_LANE.state, _THIRD_LANE.why = "failed", f"unexpected error ({type(exc).__name__})"
+
+
 # --------------------------------------------------------------------------
 #   Standby: the second card is freed too
 # --------------------------------------------------------------------------
@@ -1569,18 +1949,22 @@ _BACKGROUND = frozenset({"learning"})
 
 
 def sleep(why: str = "Jarvis is on standby") -> dict:
-    """Stop the second Ollama and keep it stopped until it is really needed
-    or Jarvis leaves standby. {"stopped": bool, "sentence": str}. Never raises."""
+    """Stop the second Ollama (and the third's, and the combined's) and keep
+    them stopped until they are really needed or Jarvis leaves standby.
+    {"stopped": bool, "sentence": str}. Never raises."""
     try:
         with _ASLEEP_LOCK:
             _ASLEEP.update(on=True, why=f"asleep: {why}")
         running = _LANE.state != "off" or _LANE.proc is not None
         running_combined = _COMBINED_LANE.state != "off" or _COMBINED_LANE.proc is not None
+        running_third = _THIRD_LANE.state != "off" or _THIRD_LANE.proc is not None
         if running:
             _LANE.stop(_ASLEEP["why"])
         if running_combined:
             _COMBINED_LANE.stop(_ASLEEP["why"])
-        stopped = running or running_combined
+        if running_third:
+            _THIRD_LANE.stop(_ASLEEP["why"])
+        stopped = running or running_combined or running_third
         _audit("second_card.sleep", {"stopped": stopped})
         return {"stopped": stopped,
                 "sentence": "The second graphics card was freed too." if stopped else ""}
@@ -1636,6 +2020,16 @@ def combined_lane_state() -> str:
         return "unknown"
 
 
+def third_lane_state() -> str:
+    """"off", "starting", "running" or "failed": the third card's own
+    Ollama's state as last seen. Reads only; starts and stops nothing -
+    lane_state()'s own shape, for the third lane."""
+    try:
+        return str(_THIRD_LANE.state)
+    except Exception:
+        return "unknown"
+
+
 def shutdown() -> None:
     """Stops the second Ollama(s) if this module started them. At process
     exit."""
@@ -1645,6 +2039,10 @@ def shutdown() -> None:
         pass
     try:
         _COMBINED_LANE.stop("Jarvis is shutting down")
+    except Exception:
+        pass
+    try:
+        _THIRD_LANE.stop("Jarvis is shutting down")
     except Exception:
         pass
 
@@ -1675,9 +2073,25 @@ def lane_for(feature: str) -> Optional[Lane]:
             wake()              # the owner is using it: wake on demand
         det = detect()
         _reconcile(sw, det)
+        _reconcile_third(sw, det)
         if not det.get("capable") or feature in (det.get("unsupported") or {}):
             return None
-        model, ctx, _ = _feature_model(feature, det)
+        third = det.get("_third")
+        on_third = third is not None and not det.get("_main") and sw.get("third_feature") == feature
+        model, ctx, _ = _feature_model(feature, det, card=third if on_third else None)
+        if on_third:
+            # Moved onto the third card (2026-09-28) - runs alongside the
+            # second card's own lane, not instead of it.
+            if _THIRD_LANE.state != "running":
+                return None
+            if not model or _model_installed_on(model, _THIRD_LANE.url()) is not True:
+                return None
+            url = _THIRD_LANE.url()
+            if not _is_loopback_url(url):
+                return None
+            return Lane(url=url, model=model, num_ctx=int(ctx),
+                        why=f"{_BY_ID[feature]['name']}: {model} on the {third.name} "
+                            f"(your third graphics card)")
         if det.get("_main"):
             # A chosen preset with the lanes inside the everyday Ollama.
             url = _main_ollama_url()
@@ -1882,8 +2296,9 @@ def _main_pin(det: dict) -> tuple:
     # as the "everyday Ollama" this check is looking for - excluding only
     # `_LANE`'s pids meant a running combined lane was reported as if it
     # were the everyday one crowding the second card (bug audit 2026-09-27,
-    # backend finding #7).
-    ours = _LANE.pids() | _COMBINED_LANE.pids()
+    # backend finding #7). `_THIRD_LANE`'s own process runs on the third
+    # card the SAME way, for the same reason (2026-09-28).
+    ours = _LANE.pids() | _COMBINED_LANE.pids() | _THIRD_LANE.pids()
     text = _smi_apps()
     if text:
         for line in text.splitlines():
@@ -1997,9 +2412,10 @@ def status() -> dict:
     det = detect()
     _reconcile(sw, det)
     _reconcile_combined(sw, det)
+    _reconcile_third(sw, det)
     lane_state, lane_why = _LANE.state, _LANE.why
     with _PENDING_LOCK:
-        pending = [f for f in ("master", "combined") + FEATURE_IDS
+        pending = [f for f in ("master", "combined", "third") + FEATURE_IDS
                    if f in _PENDING and not _PENDING[f].get("withdrawn")]
         last = dict(_LAST_ANY) or None
     feats = [_feature_row(f, sw, det, lane_state, lane_why, pending) for f in FEATURES]
@@ -2029,6 +2445,11 @@ def status() -> dict:
         # apps show it as its own row, next to "features", in the same
         # Hardware screen.
         "combined": _combined_status(sw, det, pending),
+        # A third capable card, and which of the five features (if any) is
+        # moved onto it (2026-09-28) - see the module docstring's "A THIRD
+        # CARD'S OWN LANE" section. Purely additive: every key above is
+        # unchanged from before this was built.
+        "third": _third_status(sw, det, pending),
         # "When to suggest the bigger model" (2026-09-27): the two switches
         # that decide whether Jarvis may OFFER "combined" on its own - never
         # what it may do without asking. Same screen, folded into this same
@@ -2080,6 +2501,59 @@ def _combined_status(sw: dict, det: dict, pending: list) -> dict:
             "conflict": conflict, "active": active,
             "available": bool(active and running and installed is True),
             "model": model, "context": ctx, "memory_gib": gib, "why": why}
+
+
+def _third_status(sw: dict, det: dict, pending: list) -> dict:
+    """status()'s "third" key (2026-09-28): a capable third card, if any,
+    and which of the five features (if any) the owner has moved onto it -
+    never a default (module docstring's "A THIRD CARD'S OWN LANE" section,
+    docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3). Purely additive:
+    nothing else in status() reads or depends on this key."""
+    third = det.get("_third")
+    capable = third is not None and not det.get("_main")
+    card = _card_summary(third) if capable else None
+    assigned = sw.get("third_feature")
+    lane = _THIRD_LANE
+    running = lane.state == "running"
+    model = ctx = gib = installed = None
+    if not capable:
+        why = "No capable third graphics card is plugged in right now."
+        if assigned:
+            why = (f"\"{_BY_ID[assigned]['name']}\" was moved here, but there is no capable "
+                   f"third card right now: {det.get('why') or 'no capable third card.'} Your "
+                   f"choice is kept.")
+    elif not assigned:
+        why = (f"Not running anything. Assign one of the switches above to the {third.name} "
+               f"to use it.")
+        if "third" in pending:
+            why = "A card to move a feature here is waiting for your answer."
+    else:
+        f = _BY_ID[assigned]
+        active = _feature_active(assigned, sw, det)
+        model, ctx, gib = _feature_model(assigned, det, card=third)
+        installed = _model_installed_on(model, lane.url()) if running else None
+        if not active:
+            why = f"\"{f['name']}\" is assigned here, but it is off. Turn it on above to use it."
+        elif not running:
+            why = f"On. The third copy of Ollama is {lane.state}: {lane.why}"
+        elif installed is None:
+            why = f"On, but Jarvis could not ask Ollama whether {model} is installed."
+        elif installed is False:
+            why = (f"On, but {model} is not installed yet. Install it (Brain, Models, or "
+                   f"'ollama pull {model}' in a terminal) and it starts working.")
+        else:
+            why = (f"Working: {model} on the {third.name}, with room for {ctx:,} tokens - at "
+                   f"the same time as the second card's own lane.")
+    return {"capable": capable, "card": card, "assigned": assigned,
+            # Which switches could be moved here right now - already ON,
+            # so assigning them never turns anything on as a side effect
+            # (module docstring: the assignment card only ever says WHERE).
+            "assignable": [f for f in FEATURE_IDS
+                           if sw["master"] and sw["features"].get(f)],
+            "pending": "third" in pending,
+            "lane": {"state": lane.state, "why": lane.why},
+            "model": model, "context": ctx, "memory_gib": gib, "model_installed": installed,
+            "why": why}
 
 
 def _picture_text() -> dict:
@@ -2277,6 +2751,176 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
         f"the {p.get('name', 'main card')}.")
 
 
+def describe_third_assign(feature: str, det: dict) -> str:
+    """The approval card for moving `feature` onto the third card. Every
+    word from here, same as describe_on - what refusing costs is on it
+    (AP-4), and which physical card this is about, in words
+    (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3)."""
+    f = _BY_ID[feature]
+    third = det["_third"]
+    tcard = f"the {third.name} ({_gb(third.total_mb)}, id {third.uuid})"
+    scard = (det.get("second") or {}).get("name", "the second card")
+    model, ctx, gib = _feature_model(feature, det, card=third)
+    mem = f"about {gib:.1f} GB of the card's {_gb(third.total_mb)}" if gib else "an unknown amount"
+    installed = _model_installed_on(model, _THIRD_LANE.url()) \
+        if _THIRD_LANE.state == "running" else _model_installed_on(model, _main_ollama_url())
+    inst = ""
+    if installed is False:
+        inst = (f"\n\n{model} is not installed yet. The move happens, but the feature "
+                f"waits until it is installed.")
+    return (
+        f"Move \"{f['name']}\" to your third graphics card?\n\n"
+        f"What it does: {_what(f, det)}\n\n"
+        f"Which card: {tcard} - instead of {scard}, where it runs today.\n"
+        f"Which model: {model}, with room for {ctx:,} tokens - {mem}.\n\n"
+        f"Jarvis starts a fourth copy of Ollama that uses only that card and listens on "
+        f"{HOST}:{_third_port()} - this PC only, not your network or the internet. Nothing "
+        f"leaves this PC. It runs AT THE SAME TIME as the second card's own copy: the two "
+        f"cards work independently, one feature on each.{inst}\n\n"
+        "If you did not just ask for this, say no.\n\n"
+        f"If you say no: nothing changes. \"{f['name']}\" keeps working the way it does "
+        f"today, on {scard}.")
+
+
+def _decide_third(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
+    """_decide's shape, for moving `feature` onto the third card. Its own
+    function, not a branch in _decide: there is no "needs" chain to
+    re-check (the feature's own switch is checked instead), and the card
+    names a different action (THIRD_ACTION) with its own wording."""
+    det = detect()
+    third = det.get("_third")
+    if third is None:
+        return _finish("third", pid, "refused", "there is no capable third graphics card")
+    cur = _read_switches()
+    if not cur["master"] or not cur["features"].get(feature):
+        return _finish("third", pid, "refused",
+                       f"\"{_BY_ID[feature]['name']}\" is not on")
+    text = describe_third_assign(feature, det)
+    model, ctx, gib = _feature_model(feature, det, card=third)
+    detail = {"text": text, "what": f"move a second-card feature to the third graphics card: "
+                                    f"{feature}",
+              "feature": feature, "card": third.name, "card_id": third.uuid, "model": model,
+              "memory_gib": gib, "listens_on": f"{HOST}:{_third_port()}", "leaves_this_pc": False}
+    try:
+        v = gate(THIRD_ACTION, detail, text)
+    except Exception as exc:
+        return _finish("third", pid, "refused",
+                       f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    rid = getattr(v, "request_id", None)
+    if vtier != "ask":
+        return _finish("third", pid, "refused",
+                       f"the gate answered at tier {vtier!r}, which is not a person saying yes",
+                       rid)
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _finish("third", pid, outcome, "", rid)
+        return _finish("third", pid, "refused", str(getattr(v, "reason", "refused")), rid)
+    with _PENDING_LOCK:
+        withdrawn = pid in _WITHDRAWN
+    if withdrawn:
+        return _finish("third", pid, "withdrawn",
+                       "you changed it while the card was waiting", rid)
+    cur2 = _read_switches()
+    if not cur2["master"] or not cur2["features"].get(feature):
+        return _finish("third", pid, "refused",
+                       f"\"{_BY_ID[feature]['name']}\" was turned off while the card waited", rid)
+    det2 = detect(fresh=True)
+    if det2.get("_third") is None:
+        return _finish("third", pid, "refused", "the third card is not there any more", rid)
+    err = _write_third(feature)
+    if err:
+        return _finish("third", pid, "failed", err, rid)
+    _finish("third", pid, "enabled", "", rid)
+    _reconcile_third(_read_switches(), detect())
+
+
+def _request_change_third(assign: Optional[str], gate: Callable, tier_of: Callable,
+                          spawn: Callable) -> tuple:
+    """request_change's shape, for feature == "third": which of the five
+    features (if any) runs on a third capable card, alongside the second
+    card's own lane - never instead of it, and never both at once for the
+    SAME feature (there is nowhere for it to run twice). UNASSIGNING
+    (assign=None) is at once, no card, like every other OFF direction
+    here. ASSIGNING is one approval card (THIRD_ACTION) that names the
+    physical card - never a default (module docstring's "A THIRD CARD'S
+    OWN LANE" section)."""
+    if assign is None:
+        # Withdraws any pending card FIRST, unconditionally - the same order
+        # request_change's own OFF path uses, and for the same reason: a
+        # card can be waiting while second-card.json still says None (the
+        # state is only written once the card is actually approved), so
+        # checking "already unassigned" before withdrawing would miss
+        # exactly the case (AP-5) this exists to catch.
+        with _PENDING_LOCK:
+            if "third" in _PENDING:
+                _PENDING["third"]["withdrawn"] = True
+                _WITHDRAWN.add(_PENDING["third"]["id"])
+        err = _write_third(None)
+        if err:
+            return 500, {"error": err}
+        _audit("second_card.off", {"feature": "third"})
+        _reconcile_third(_read_switches(), detect())
+        return 200, {"ok": True, "assigned": None, "pending": False,
+                     "message": "The third card is not running anything."}
+    if assign not in _BY_ID:
+        return 400, {"error": f"there is no second-card feature called {str(assign)[:40]!r}"}
+    label = f"\"{_BY_ID[assign]['name']}\""
+    sw = _read_switches()
+    if sw.get("third_feature") == assign:
+        return 200, {"ok": True, "assigned": assign, "pending": False,
+                     "message": f"{label} is already on the third card."}
+    if not sw["master"] or not sw["features"].get(assign):
+        return 400, {"error": f"Turn {label} on first (the switch above), then move it to "
+                              f"the third card."}
+    with _PENDING_LOCK:
+        p = _PENDING.get("third")
+        if p is not None and not p.get("withdrawn"):
+            return 409, {"error": "a card to change the third card's feature is already "
+                                  "waiting - approve or deny that one"}
+    det = detect(fresh=True)
+    third = det.get("_third")
+    if third is None:
+        return 503, {"error": "there is no capable third graphics card right now."}
+    held = big_model_holds(third.uuid, third.name)
+    if held:
+        return 409, {"error": f"Not now: {held}."}
+    try:
+        tier = tier_of(THIRD_ACTION)
+    except Exception as exc:
+        tier = f"unreadable ({type(exc).__name__})"
+    if tier != "ask":
+        return 503, {"error": (f"{THIRD_ACTION} is tier {tier!r} in jarvis-framework.toml; "
+                               f"moving a feature to the third card needs a person to say "
+                               f"yes, so it must be 'ask'")}
+    pid = _uuid.uuid4().hex
+    with _PENDING_LOCK:
+        p = _PENDING.get("third")
+        if p is not None and not p.get("withdrawn"):
+            return 409, {"error": "a card to change the third card's feature is already waiting"}
+        _PENDING["third"] = {"id": pid, "since": time.time(), "withdrawn": False}
+    _audit("second_card.asked", {"feature": "third", "assign": assign})
+
+    def work() -> None:
+        try:
+            _decide_third(assign, pid, gate, tier_of)
+        except Exception:
+            _finish("third", pid, "failed", "unexpected error")
+
+    try:
+        spawn(work)
+    except Exception:
+        _finish("third", pid, "failed", "could not start")
+        return 503, {"error": "could not raise the approval card"}
+    return 200, {"ok": True, "assigned": sw.get("third_feature"), "pending": True,
+                 "message": ("Approve the card on your PC or phone to move it. "
+                             "Nothing changes until you do.")}
+
+
 #: pid -> (backoff fingerprint, conversation_id) for a "combined" card THIS
 #: MODULE raised as a suggestion (maybe_suggest_combined), not one the owner
 #: raised from Settings. Set right when the pid is made (before the card is
@@ -2325,6 +2969,7 @@ def _finish(feature: str, pid: str, outcome: str, reason: str = "",
         _LAST[feature] = {"outcome": outcome, "reason": reason[:200]}
         label = ("The second graphics card" if feature == "master"
                  else f"\"{COMBINED_NAME}\"" if feature == "combined"
+                 else "the third graphics card's assignment" if feature == "third"
                  else f"\"{_BY_ID[feature]['name']}\"" if feature in _BY_ID else feature)
         _LAST_ANY.clear()
         _LAST_ANY.update(feature=feature, outcome=outcome,
@@ -2769,18 +3414,26 @@ def _maybe_suggest_combined(conversation_id, gate=None, tier_of=None, spawn=None
             pass
 
 
-def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = None,
+def request_change(feature: str, enabled: bool = False, *, assign: Optional[str] = None,
+                   gate: Optional[Callable] = None,
                    tier_of: Optional[Callable[[str], str]] = None,
                    spawn: Optional[Callable] = None) -> tuple:
     """POST /api/second-card. Returns (http code, body). `feature` may be
     "master", "combined" (the third mode, mutually exclusive with the rest
-    - see _request_change_combined) or one of FEATURE_IDS.
+    - see _request_change_combined), "third" (which of FEATURE_IDS, if
+    any, runs on a third capable card alongside the second's own lane -
+    see _request_change_third; `assign` is read instead of `enabled`) or
+    one of FEATURE_IDS.
 
     OFF: at once, no card. ON: one approval card, and this returns straight
     away - `pending: true` means a card is up, NOT that it is on."""
     gate = gate or _gate
     tier_of = tier_of or _tier
     spawn = spawn or _spawn
+    if feature == "third":
+        if assign is not None and not isinstance(assign, str):
+            return 400, {"error": "\"assign\" must be a feature id or null"}
+        return _request_change_third(assign, gate, tier_of, spawn)
     if feature == "combined":
         if not isinstance(enabled, bool):
             return 400, {"error": "\"enabled\" must be true or false"}
@@ -2872,14 +3525,19 @@ def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = No
 
 
 def handle_post(body) -> tuple:
-    """The route's body: {"feature": "...", "enabled": true|false}."""
+    """The route's body: {"feature": "...", "enabled": true|false} - or,
+    for the third card, {"feature": "third", "assign": "<feature id>" or
+    null}."""
     if not isinstance(body, dict):
         return 400, {"error": "send {\"feature\": \"...\", \"enabled\": true or false}"}
-    return request_change(str(body.get("feature") or ""), body.get("enabled"))
+    feature = str(body.get("feature") or "")
+    if feature == "third":
+        return request_change(feature, assign=body.get("assign"))
+    return request_change(feature, body.get("enabled"))
 
 
 def _reset_for_tests() -> None:
-    global _LANE, _COMBINED_LANE
+    global _LANE, _COMBINED_LANE, _THIRD_LANE
     with _PENDING_LOCK:
         _PENDING.clear()
         _LAST.clear()
@@ -2893,12 +3551,17 @@ def _reset_for_tests() -> None:
         _LANE.stop("reset")
     except Exception:
         pass
-    _LANE = _LaneProcess()
+    _LANE = _LaneProcess("second")
     try:
         _COMBINED_LANE.stop("reset")
     except Exception:
         pass
-    _COMBINED_LANE = _LaneProcess()
+    _COMBINED_LANE = _LaneProcess("combined")
+    try:
+        _THIRD_LANE.stop("reset")
+    except Exception:
+        pass
+    _THIRD_LANE = _LaneProcess("third")
 
 
 if __name__ == "__main__":

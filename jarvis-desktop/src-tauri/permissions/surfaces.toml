@@ -336,6 +336,11 @@ permissions = [
   "allow-get-backend-capabilities",
   "allow-get-second-card",
   "allow-set-second-card",
+  # Moving one of the second card's own features onto a third, capable
+  # graphics card (2026-09-28) - its own command, since the wire shape
+  # differs ("assign", not "enabled"); the GET side rides along in
+  # allow-get-second-card's own poll (status()'s new "third" key).
+  "allow-set-third-card",
   # "When to suggest the bigger model": the two settings that decide
   # whether Jarvis may OFFER "One bigger model on both cards" on its own
   # (2026-09-27). No card either way - it only changes whether Jarvis
@@ -722,6 +727,25 @@ permissions = [
   "allow-brain-schedule-add-todo",
   "allow-brain-schedule-add-standby",
   "allow-brain-schedule-clear-list",
+]
+
+# Goals (backend/goals.patch, JARVIS-API.md section 59; the owner's "build it
+# now", 2026-09-27): reading the list is a read - the words taken out in Rust
+# while the private lists are hidden, same as Coming up. A new draft, marking
+# a step done or not, and Stop tracking raise no card - a draft is content,
+# not action, and the other two are immediate, like a to-do item. Accepting
+# a draft is the one place this can raise a card, and it is the backend's
+# own, through jarvis_schedule.py's existing mechanism - never a card this
+# app raises itself. Every write held while the event stream is stale.
+[[set]]
+identifier = "brain-goals"
+description = "Read Goals, add one draft goal, accept a draft (the backend raises its own one weekly-check-in approval card), mark one step done or not, and stop tracking a goal - no card except through accepting, and every change held on a stale link."
+permissions = [
+  "allow-brain-goals",
+  "allow-brain-goals-create",
+  "allow-brain-goals-accept",
+  "allow-brain-goals-step",
+  "allow-brain-goals-stop",
 ]
 
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a

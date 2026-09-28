@@ -569,13 +569,17 @@ and `inject_memory` is false. The same happens, with a sentence of its own,
 when `OLLAMA_URL` is not this PC. Apps show the error as they show any
 other; nothing new to handle.
 
-**`offer` in `X-Jarvis-Route`** (the router, 2026-09-24): a cloud lane that
-could have answered this turn, named but NOT used - gate `"offer"`, `where`
-`"local"`. The router sends a turn to a cloud lane only when the owner said
-yes for that one question (`jarvis_router.choose(owner_said_yes=True)`), and
-never for a turn a privacy gate kept local; those carry no `offer` at all.
-No app sends that yes yet - asking is built with "model advice" - so today
-no answer goes to a cloud lane on its own. Apps that do not know `offer`
+**`offer` in `X-Jarvis-Route`** (the router, 2026-09-24; the "yes" button,
+2026-09-27): a cloud lane that could have answered this turn, named but NOT
+used - gate `"offer"`, `where` `"local"`. The router sends a turn to a
+cloud lane only when the owner said yes for that one question
+(`jarvis_router.choose(owner_said_yes=True)`), and never for a turn a
+privacy gate kept local; those carry no `offer` at all. Both apps show
+"Try the cloud model" under an answer whose route carries `gate: "offer"`
+and a non-empty `offer`, right beside "Not now" - one tap, one question,
+never a standing choice (§18.1, `cloud_yes`; `backend/cloud-say-yes.patch`).
+Pressing it resends the exact same question with `cloud_yes: true`; nothing
+else from the conversation goes with it. Apps that do not know `offer`
 read the turn as local, which it is.
 
 **`second_card` in `X-Jarvis-Route`** (`second-card.patch`, 2026-09-24): on a
@@ -1091,7 +1095,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§28). `started` (2026-09-25) is when the server process started, in epoch seconds (§29). The desktop falls back to `/api/status` for anything an older server leaves out. |
 | `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Brain screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
 | `/api/graph` | GET | `routes.rs:15` | **no — by rule** | The memory graph stays off the phone. Gets its own longer timeout (`brain.rs:97`). |
-| `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |
+| `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. A failed read falls back to the phone's own last successful one, cached on disk and clearly marked as old - see the note below the table. |
 | `/api/compute` | GET | `routes.rs:18` | via `probe` | GPU/VRAM plan. Shape undocumented — see below. |
 | `/api/skills` | GET | `routes.rs:19` | via `probe` | |
 | `/api/jobs` | GET | `routes.rs:20` | `JarvisApi.kt:286` | List key: `jobs`. |
@@ -1153,6 +1157,41 @@ since 2026-09-23 (Brain → Model → Models, `brain.js` `modelSpeed`, a
 line-for-line port); before that it ignored the block. Both apps can also
 **install** a model there now - a typed name, one approval card, no
 catalogue.
+
+**The desktop's Brain → Model, when `/api/models` cannot be read at all**
+(`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`; `models-cache.js`, `brain.js`
+`renderModels`) - client-side behaviour, no wire change: the desktop keeps
+its own last successful read of this route in `localStorage`
+(`jarvis.brain.modelsCache`), holding only `current`, `previous` and
+`installed[].{ref,size,family}` - never `speed` or `offload`, which are
+stripped before the write, not merely hidden after. When the live read
+then fails with Jarvis not reachable at all (`read: "failed"`, not
+`"absent"`), the pane shows that cache instead of going blank, with a
+plain banner naming the real time it is from and hiding the model-in-use
+highlight, the on/off-graphics-card note and the recent-speed lines - all
+of which are facts about what Ollama is doing right now, not about a file
+on disk, and would read as live if shown stale. A backend that genuinely
+has no `/api/models` (`read: "absent"`, a 404/503) is shown as that fact,
+never as the stale cache. A machine that has never once completed a live
+read, with nothing cached either, is told plainly that there is nothing to
+show yet, rather than being told a read "failed".
+
+**Android caches its own last successful `/api/models` read on disk** the
+same way (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`, no wire change -
+client-only). Every live success writes the offline-safe subset (`current`,
+`previous`, `installed`) to `ModelsCacheStore`, dropping `offload` and
+`speed` for the same reason the desktop does. When a live read fails, Brain
+-> Model falls back to that cache and says so plainly - "Can't reach
+Jarvis - showing what it last saw, <age>" - with Use, Install and Roll back
+dimmed the same way they already dim while the link is down or stale (rule
+4). No prior cache at all reads "There's nothing to show yet - open this
+once while Jarvis is running on your PC." The cache is written only as a
+side effect of an ordinary live read succeeding, never fetched specially -
+it is not a live disk read (the phone has no access to the PC's disk) and
+not a browsable catalogue: it only ever replays what the phone already
+showed live once (CLAUDE.md: "do not build the model catalogue... on the
+phone"). See `net/ModelsCache.kt` (`CachedModels`, `ModelsView`,
+`modelsView()`) and `data/ModelsCacheStore.kt`.
 
 **`/api/graph` gains `sources.documents_not_ours`** (`documents-owned.patch`):
 true means a `documents` table made by another program (most likely
@@ -1588,7 +1627,7 @@ deciding whether pictures can be sent. `tools/check_parity.py` records
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/second-card` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_second_card.py` is missing | Token + origin. Card names and hardware ids (`GPU-...`); never a token. Re-read it after a card is decided - there is no event for it. |
-| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first"); **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. |
+| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}`, or (2026-09-28) `{"feature": "third", "assign": "<feature id>" \| null}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first"); **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. `feature: "third"` (2026-09-28) is its own shape, its own answers and its own action (`second_card_third_assign`) - see the section below. |
 
 **`status()`** - the real output of each case is in
 `jarvis-desktop/tests/fixtures/second-card-cases.json` (`one_card`,
@@ -1647,6 +1686,106 @@ in words, what is missing. A switch whose card has gone stays `enabled` with
 the owner's everyday Ollama on the main card; show it with a copy button and
 `pin_note` above it, on the desktop. The phone shows `pin_note` only (the
 command is run on the PC).
+
+**A third graphics card - the data-model reshape only (added 2026-09-28,
+`docs/GPU-SUPPORT-RESEARCH-2026-09-27.md`).** That research found `_detect()`
+picked exactly one "second" candidate from however many capable extra cards
+were actually plugged in, and threw the rest away - a real, capable third
+card was already detected and already discarded, silently. Its
+recommendation #1 was to fix that shape first, on its own, with no change to
+this route's JSON at all: **`GET /api/second-card`'s answer above is
+BYTE-FOR-BYTE UNCHANGED by this work**, on a PC with any number of cards.
+What changed is internal only: `jarvis_second_card.detect()` now also keeps
+every capable non-primary card (not just the best one) as an internal list,
+and a new internal function, `extra_lanes(det)`, turns every card beyond
+the one already running as "second" into `second`'s own plain-dict shape -
+so a third capable card is visible to Python callers as data, in the same
+shape the route already uses, rather than only as a "why" sentence on an
+"unused" row in `cards[]` (which already correctly explained why it was not
+picked, and still does, word for word). Neither this route, nor either
+app, nor `jarvis_agent.choose_lane()`'s routing of the model's own tool
+calls, changed in any way - **a third card cannot run anything yet.**
+Building that (its own lane process, a real per-card approval decision, and
+a UI row in both apps - none of which exist today) is a separate, larger
+piece of work, deliberately left for a dedicated follow-up rather than
+built in the same pass as this shape change; see the "A THIRD CARD" section
+of `jarvis_second_card.py`'s own module docstring for the full reasoning.
+`jarvis_hardware.py`'s preset system (`lane_plan()`) is unchanged too - it
+stays a two-slot design (`chat_card`/`lane_card`) on purpose; only the
+non-preset detection path (`_detect()`) got the reshape. `"combined"`
+(below) is unaffected either way: it already only ever reads the
+`"primary"` and `"second"` rows of `cards[]`, so a third capable card was
+already left out of it, without any code change.
+
+**A third graphics card's own lane (added 2026-09-28).** The follow-up
+piece the reshape above deliberately left for later: a genuinely capable
+third card can now be given ONE of the five features above, so it runs
+ALONGSIDE the second card's own lane - never instead of it, and never
+picked for the owner. `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md` §1.3 is
+explicit that which card runs which feature must always be a real, named
+choice; this is built exactly that way, as its own approval card that
+names the physical card.
+
+*The switch.* One new field, `third_feature`, in `jarvis_second_card.py`'s
+own switches file - `null` (the default, even with a capable third card
+sitting right there: "no default winner") or one of the five feature ids.
+It only ever says WHERE an already-on feature's model calls go; the
+feature's own switch (above) still says WHETHER it is on at all, unchanged.
+There is only one third lane, so only one feature at a time can be moved
+there.
+
+*The route.* Still `POST /api/second-card`, with a body shaped
+differently for this one case: `{"feature": "third", "assign": "<feature
+id>" | null}` (never `"enabled"` - `assign` replaces it for this feature
+value only). `assign: null` unassigns at once, no card, like every OFF
+here. A real feature id raises one approval card (`second_card_third_assign`,
+tier `ask`) that names the third card, its model and its memory, and says
+this runs AT THE SAME TIME as the second card's own lane - `describe_third_assign()`
+in `jarvis_second_card.py` is the whole card, word for word. **400** the
+feature is not on yet ("Turn ... on first"), an unknown feature id, or
+`assign` is neither a string nor `null`; **409** a card for it already
+waits; **503** no capable third card right now, or the action's tier is
+not `ask`. Reusing `second_card_enable`'s own action was considered and
+rejected on purpose: this decision is fundamentally about WHICH physical
+card, which `second_card_enable`'s own wording ("nothing leaves this PC")
+never says, and giving it a separate action lets the "What asks first"
+page (§ below) and the risk table describe it on its own terms - the same
+reasoning `second_card_browser_enable` and `second_card_combined_enable`
+already followed for their own, differently-shaped decisions.
+
+*`GET /api/second-card`'s new `"third"` key* (purely additive - every
+existing key is unchanged): `{"capable": bool, "card": {"uuid", "index",
+"name", "total_mb", "compute_cap"} | null, "assigned": "<feature id>" |
+null, "assignable": [feature ids currently on and eligible to be moved],
+"pending": bool, "lane": {"state", "why"}, "model", "context", "memory_gib",
+"model_installed", "why"}` - the same "row" shape and plain-English `why`
+style `"combined"` already uses, so both apps' UI code can reuse the exact
+same rendering pattern.
+
+*The lane process.* A third, literal `_LaneProcess` (`_THIRD_LANE`) -
+mirroring `_LANE` and `_COMBINED_LANE`, not a new dict-keyed structure.
+Considered and explained in `jarvis_second_card.py`'s own module docstring
+("THE LANE PROCESS" section): the class already carries no assumption
+about which lane it is, so one more literal instance costs the same as a
+dict entry would, without touching either existing singleton's own
+call sites in a module this safety-critical. It has its own port
+(`[second_card] third_port` in `jarvis-framework.toml`, default 11436)
+and its own log file (`second-card-third-ollama.log`), because - unlike
+`_LANE`/`_COMBINED_LANE`, which are mutually exclusive and safely share
+one port - the third lane runs at the SAME TIME as the second card's own
+lane. `jarvis_agent.choose_lane()` and every other existing caller of
+`lane_for()` are UNTOUCHED: `lane_for(feature)` itself now checks the new
+assignment internally and returns a `Lane` pointed at whichever process is
+actually running that feature, exactly as before from every caller's own
+point of view.
+
+*What stays exactly as it was.* Presets (`jarvis_hardware.py`) stay
+two-slot - a third card does nothing under a chosen preset, in words
+("no capable third graphics card"). `"combined"` stays two-card-only,
+unaffected by any of this. `cards[]`'s own per-row text for an unassigned
+capable third card is unchanged too (still "unused ... has more memory") -
+the fuller, current story lives in the new `"third"` key instead, so
+nothing that existed before this needed to change.
 
 **"One bigger model on both cards" (added 2026-09-27).** A third mode,
 alongside the five features above and alongside a chosen hardware preset's
@@ -2971,6 +3110,17 @@ On the request:
   the mode is on, and never `false`. Taken off with the other three before
   any model sees the request. Sent only to a PC whose `/api/version`
   reports `capabilities.temporary_chat`.
+- `cloud_yes` (2026-09-27, `backend/cloud-say-yes.patch`): the owner's yes
+  to "Try the cloud model" for THIS one question - the app's answer to a
+  `gate: "offer"` route on the answer just before it (§4, "`offer` in
+  `X-Jarvis-Route`"). Only JSON `true` counts, and both apps send it only
+  when the owner actually pressed the button, never `false`; it is passed
+  into `jarvis_router.choose(owner_said_yes=...)`, so it can only ever turn
+  THIS question's own gate 6 from "offer" into "escalate" - every earlier
+  gate (private, tainted, a picture, no lane, no budget) already ran on
+  this question's own merits before the offer was ever made. A PC without
+  the patch sees nothing different: `cloud_yes` is simply an unused key on
+  its request body.
 
 On each `role: "user"` message:
 
@@ -8748,7 +8898,7 @@ at - "turn off my calendar" and "turn on the special mode" are not real
 settings and go to the model, same as "ask, don't guess"
 (`docs/CUTTING-EDGE-2026-09-26-round2-tools.md`'s principle, reused here).
 
-Ten settings are covered - the ones that already sit behind a single
+Eleven settings are covered - the ones that already sit behind a single
 proven `handle_*`/`request_*` entry point this file can call exactly as
 the REST route does, never a copy of its logic:
 
@@ -8761,6 +8911,7 @@ the REST route does, never a copy of its logic:
 | Lights, plugs and fans without a card | "turn on/off lights without asking" | `jarvis_asks_first.handle_lights()` (§33) |
 | "Ask before every web search" | "turn on/off asking before every web search" | `jarvis_search.request_ask_every_time()` (§23) |
 | Smartwatch notifications | "turn on/off smartwatch notifications" | `jarvis_watch_notify.request()` (§39) |
+| Reading phone notifications | "turn on/off phone notifications" | `jarvis_phone_notifications.request()` (§61) |
 | Morning briefing senders shown | "turn on/off senders in my briefing" | `jarvis_briefing.handle_senders()` (§22) |
 | "What asks first" - loosen/stricter | "stop asking before my calendar" / "ask me before my calendar" | `jarvis_asks_first.handle_tier()` (§32) |
 | Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§43) |
@@ -8839,3 +8990,432 @@ second version of any of it.
   before it: tested in the dev container only, against a real Windows
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
+
+## 59. Goals: a plan the owner edits, one card per acting step (added 2026-09-27)
+
+The owner's "build it now" (2026-09-27, after the Jarvis evaluation;
+`docs/creativity-2026-09-25/future.md` idea 3, the feasibility audit's
+I63/I64). The owner says "I want to get the garage insulated before
+winter." and writes - or asks Jarvis, in an ordinary chat message, to
+suggest - a short plan: a handful of named steps, each with a rough date.
+That draft is edited and accepted here. From then on the goal sits on
+Coming up, and once a week Jarvis quietly checks whether the next step is
+still on track and says so. **Nothing here ever acts.** When a step needs
+real action (search for installers, draft an email, add a calendar
+entry), the owner asks Jarvis for that in an ordinary chat message, and
+THAT tool use goes through the exact same per-action approval card any
+chat turn already goes through - this feature adds no new way to act, and
+no new gate logic. `backend/jarvis_goals.py` (shipped whole, `goals.patch`
+adds the routes).
+
+**Not the same thing as "the plan card"** (the feasibility audit's I61;
+CLAUDE.md's "the plan card is allowed later, only after the multi-step
+safety tests pass"). That is a BATCHING mechanism: one yes that would run
+several safe steps at once, gated behind the multi-step tool-calling
+safety tests (`tools/tool_eval`) because batching approvals is close to
+"approves in bulk". Goals never batches anything - every acting step is
+its own separate card, exactly like ordinary chat tool use today - so it
+does not touch that gate and was never waiting on it.
+
+| Route | Method | Body | Answers |
+|---|---|---|---|
+| `/api/goals` | GET | - | `{"ok", "goals": [<goal>, ...], "limits": {"text", "steps", "goals", "by"}}` |
+| `/api/goals` | POST | `{"text", "plan"?}` | `{"ok", "goal"}` - a new DRAFT. `plan`, if given, is the owner's own steps (or something they asked Jarvis to suggest first, in ordinary chat, and pasted in); omitted, the draft's one step is the goal's own words. **No approval card**: a draft is content, not action, exactly like an email draft (§40). |
+| `/api/goals/<id>` | GET | - | `{"ok", "goal"}`; 404 `{"ok": false, "error": "no such goal"}` |
+| `/api/goals/<id>/accept` | POST | `{"plan"?}` | The owner's edited plan (or the draft as it stood) is kept, and the goal becomes `active`. Sets up a weekly check-in through `jarvis_schedule.py`'s existing `schedule_repeat` mechanism (§21) - **the SAME one card a repeating reminder or the morning briefing already raises**, approving nothing that acts. `{"ok", "goal"}` with `goal.checkin` (the scheduler's own job view, `"state": "waiting"` until the card is answered). |
+| `/api/goals/<id>/step` | POST | `{"index", "done"}` | Marks one step done or not. **No card** - the same shape as ticking off a to-do item. |
+| `/api/goals/<id>/stop` | POST | - | Stops tracking the goal and deletes its check-in job. **No card, immediate** - the same rule every "stop tracking this" control in this project follows. |
+
+A goal: `{"id", "text", "plan": [{"step", "by", "done"}, ...], "status":
+"draft"|"active"|"done"|"stopped", "created", "changed"}`. `by` is a
+free-text rough label ("before winter", "by Friday", or "") - never a
+strict calendar date, since the goal is a nudge, not a scheduler entry of
+its own. At most 7 steps (`MAX_STEPS`), kept short on purpose: the
+creativity doc's own named risk is nagging, and an 8B model is weak at
+long plans. At most 20 open goals (draft + active) at once.
+
+**The weekly check-in calls no model and no tool.** It only looks at the
+goal's own already-stored plan and picks the first step not yet marked
+done, so the nudge is entirely deterministic and cheap - never a read of
+anything new, never learned as a fact, never counted as an offer (the
+back-off, §22, is not involved: this is the owner's own already-accepted
+repeat firing on schedule, not something asked for the first time). The
+nudge is the check-in job's own `note` (§21's job shape), shown under it in
+both apps' Coming up, exactly like any other job's note.
+
+**Rule 1 (local-first).** `jarvis_goals.py` makes no network call of any
+kind - no model, no cloud, nothing. A goal's words never leave the PC
+through anything in this module. Drafting the first plan with Jarvis's
+help happens through ordinary chat (`/api/chat`, already shipped, already
+safe), which the owner then pastes into `POST /api/goals`'s `plan` -
+deliberately not a call this module makes itself, since the real way this
+backend talks to a local model takes its network calls from `jarvis_hud.py`
+(not in this repository, `docs/ARCHITECTURE.md` §9), and guessing at that
+integration rather than verifying it would be exactly the mistake
+CLAUDE.md's "do not claim more than the evidence supports" section exists
+to prevent.
+
+**Rule 4 (no auto-approve, no approve-all).** Accepting a goal approves
+NOTHING that acts - it only starts a repeating check-in, which is data,
+not action. Every acting step still needs its own separate card, raised by
+the ordinary chat/tool path, never by this feature.
+
+**Both apps' UI is built.** The phone: Brain, "Goals", right beside "Coming
+up" (`net/Goals.kt`, `ui/screens/GoalsPlate.kt`) - it reuses
+`net/Schedule.kt`'s own job parser to read the check-in job `accept`'s
+answer carries, and `Schedule.actionsOf` gives that row no Pause/Delete of
+its own, since only Stop tracking, on the goal itself, can take the
+check-in down cleanly. The desktop: Brain -> Work -> Goals, beside Coming
+up (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
+goals.rs`) - it reads its own limits back from `GET /api/goals` rather
+than hard-coding them, and redacts a goal's and a step's own words under
+the same "Windows Hello for memory lists and chat history" gate Coming up
+already uses. Both apps find the weekly check-in's live state (waiting for
+the card, paused, its next-run note) by reading the SAME Coming up list
+the job already appears on (kind `goal_checkin`, `owner_listed=True`,
+unchanged from the backend's own default) - the ONLY place that state can
+still be read once a screen's own copy of one `accept` answer is gone,
+since no Goals route hands it out again; neither app invents a second
+source of truth for one job's state. `tools/check_parity.py` is clean.
+
+## 60. "One card, several steps" - the plan card (added 2026-09-28, SWITCHED OFF)
+
+The owner's own words, 2026-09-28: "add the ability for jarvis to request a
+multi-step process that it does on its own, and it sends me a detailed
+approval card that I only give to approve once." This is the feasibility
+audit's I61, "the plan card" (`docs/FEASIBILITY-AUDIT-2026-09-26.md` line
+67) - the owner already decided, 2026-09-27, that it is "allowed later,
+only after the multi-step safety tests pass." `backend/jarvis_plan.py`
+(shipped whole, `plan-gate.patch` teaches `jarvis_gate.py` its two new
+action names) is that mechanism, fully built and tested - **and switched
+off**, on purpose, until a real run of `tools/tool_eval/ollama_tool_eval.py`
+on the owner's own PC clears the bar. See that module's own docstring for
+the full reasoning; this section is the route-level contract once it is
+wired in.
+
+**Not the same mechanism as `jarvis_ui_control.py`/`jarvis_android_control.py`/
+`jarvis_browser_control.py`'s own "one card, several steps".** Those three
+run every enumerated step once their one card is approved, including a
+step the model flagged `heavy` - the right shape for a single-domain tool.
+`jarvis_plan.py` is stricter, because a plan step can be ANY tool: **a
+risky step, or a step whose arguments came from an earlier step's real
+result, always gets its OWN separate card mid-run**, on the strength of
+the model's own real tool-calling gate - never the one card that started
+the plan. Only the steps neither of those applies to run on that one card
+alone.
+
+The four conditions this mechanism enforces (I61's own Rules/Security
+notes):
+1. Every step is shown, in full, on the one card - `describe()`, never a
+   vaguer summary.
+2. A step whose arguments are filled in from an EARLIER step's real result
+   is asked again, individually, with the real value - it could not be
+   shown truthfully on the first card.
+3. A risky step always gets its own card, whatever the rest of the plan
+   looks like.
+4. The plan grants nothing for later: once it ends - finished, stopped,
+   paused, or a risky step's own card was denied - continuing needs a
+   brand new proposal and a brand new decision on a fresh one card, never
+   an automatic resume.
+And: **a plan can only come from the owner's own words** - it is refused
+outright, before anything is shown, if the turn read outside text (an
+email, a file, a web page). A planted instruction is exactly what a
+plausible-sounding multi-step plan would be a good way to hide.
+
+**The safety gate, measured, not promised.** `jarvis_plan.enabled(model)`
+reads `tools/tool_eval/tool_eval_results.json` - the file
+`ollama_tool_eval.py` writes after a real run against the owner's own
+model - and says yes only once that run's own numbers, for this model,
+clear TWO bars: the multi-step suite passes at least 90% of its cases, AND
+the injection suite carried ZERO planted instructions into a tool call, of
+any it tried. No file, a stale one, or numbers under the bar: `enabled()`
+says exactly why, in one sentence - the same "measured before switched on"
+rule the memory re-ranker already follows (`docs/MEMORY-SCOREBOARD.md`).
+Nothing about this feature can be turned on by a setting, a card, or an
+app - only a real, run, passing result unlocks it.
+
+**What is built:**
+- `jarvis_plan.py`: `propose()` (validates and shapes a plan, refuses on
+  outside text or anything malformed), `describe()` (the one card's full
+  text), `run()` (executes it: safe steps run once; a risky or
+  result-filled step's own `gate_check` is consulted, blocking, before it
+  runs; a denial anywhere stops the whole plan there; `checkpoint`/
+  `announce` hooks match `jarvis_ui_control.py`'s own, so a caller wires
+  pause/stop and the live-progress line the exact same way), `enabled()`
+  (the safety gate above). `backend/test_plan.py`, 72 checks.
+- `plan-gate.patch`: two append-only hunks against `jarvis_gate.py` -
+  `run_plan`'s own risk classification (classified by its own worst case,
+  `("no", "outbound", ...)`, the same reasoning as `control_computer`'s
+  entry, even though every risky step inside still asks on ITS OWN
+  action's entry) and a tier line, `"propose_plan": "auto", "run_plan":
+  "run_plan"` (proposing and describing a plan reads and sends nothing, so
+  it is `auto`, the same reason `jarvis_ui_control_plan` is; `run_plan`
+  itself must stay `ask` - refusing to let it become anything else is
+  `jarvis_plan.py`'s own job, not this line's).
+- `jarvis_card_words.TITLES["run_plan"]` = "run the safe steps of an
+  approved plan" - so a card for it reads in plain words like any other.
+
+**Wired in, 2026-09-28 (still switched off - see below).**
+`propose_plan` is now a real, model-callable tool in `jarvis_agent.py`'s
+`TOOLS` table - one tool, not two: its `gate_lookup_name` resolves to
+`run_plan` (the action the real card is raised under), the same way
+`control_computer`'s model-facing name differs from its own gate key. In
+order:
+- `_one_call` refuses a `propose_plan` call OUTRIGHT, before `prepare()`
+  ever runs - the same point `send_email`/`draft_email` are refused
+  outright - via `_propose_plan_refusal(watch)`: first `jarvis_plan.
+  enabled(model)` (so the feature genuinely cannot be reached at all until
+  that says yes, whatever a tier says), then the same signals
+  `note_needs_a_person()` already treats as "not really the owner's own
+  words right now" (`watch.tainted`, `.read`, `.provenance`,
+  `.app_context`), folded into the one `tainted` flag `jarvis_plan.
+  propose()` itself checks.
+- `Tool.prepare` calls `jarvis_plan.propose()` and `describe()` (a
+  `Refused` it raises propagates out as an ordinary tool-result error, the
+  same generic path every other tool's malformed-arguments case already
+  uses); `Tool.execute` calls `jarvis_plan.run()`.
+- **`run_step`/`gate_check` (`_plan_step_dispatch`)**: each step goes
+  through the SAME `check_call()` schema check, `Tool.prepare()`, the real
+  `jarvis_gate.action_for_tool()` lookup and the real `checker()` call a
+  direct model call to that tool already goes through - never a shortcut.
+  This closes a real gap rather than assuming one away: `jarvis_plan.run()`
+  only calls the `gate_check` it is given for a step the MODEL itself
+  flagged `risky` or `from_step` - a step it did not flag goes straight to
+  `run_step`, with no separate gate_check call at all. Trusting that flag
+  alone would let a step the model happened to call "safe" run an
+  "ask"-tier tool with nobody really asked. So the real check lives in one
+  place both `gate_check` and `run_step` call, cached by the step's own
+  identity - whichever of the two `jarvis_plan.run()` calls first for a
+  given step is the one that actually asks (or is silently auto-approved,
+  for a genuinely auto-tier tool); the other reads the same cached verdict
+  back rather than asking twice for the same step. Send an email, save a
+  draft, and set a timer/reminder/to-do item cannot be named in a step -
+  each has its own turn-shaped pre-gate check (rule 1's lane check, a
+  "problem" state, or no real `Tool.execute()` at all for the schedule
+  tools) that this dispatcher does not reproduce; a step naming one is
+  refused with a plain reason instead.
+- **Deliberately NOT added to `_TASK_MODULES`** (Pause/Resume): that
+  mechanism's generic Resume path calls `module.run(plan, approved=True,
+  announce=..., checkpoint=...)` with no way to supply `run_step`/
+  `gate_check`, which `jarvis_plan.run()` requires - and `jarvis_plan.py`'s
+  own condition 4 already requires "never an automatic resume" regardless.
+  "Stop everything" still reaches a running plan, through the plain
+  `watch.stopped()` check every tool already has, threaded to
+  `jarvis_plan.run()`'s own `checkpoint` and to a step's own `checkpoint`
+  when that step's tool is one of the three that take one.
+- Card-count (`CARDS_PER_TURN`) and card-length (`_GATE_DETAIL_LIMIT`)
+  limits apply per step, exactly as they do for a direct call - a plan
+  cannot use its own steps to get around either. A step naming a plug-in
+  (`outside_program`) tool is refused, never run through the bridge's own
+  separate verdict-checking shape.
+- Deliberately simplified, and left that way rather than guessed at
+  further: a step to `home_control` gets no "lights without a card"
+  bypass even when the owner's own setting would give one to a direct
+  call - always the real gate instead, which is stricter than necessary,
+  never a bypass.
+- `propose_plan` joins the `NEEDS_A_PERSON` set (this session's own belt
+  the same three multi-step tools already wear) and the `control` tool
+  group for the short tool list (not a new group of its own - a new
+  group's name would add to `more_tools`' own description and enum on
+  every turn, already near its own 300-token budget; a group's members
+  cost nothing extra there, and it fits: like the other three, it is a
+  more involved, multi-step way of acting, never a plain read or write).
+- Verified: `backend/test_agent_plan_wiring.py` (new) - the tool is
+  invisible/refused while `jarvis_plan.enabled()` says no (the shipped
+  default, today); a tainted turn refuses outright before `prepare()`
+  runs; a safe step runs with no card of its own; a risky step raises its
+  own separate card mid-run even inside an approved plan; a step whose
+  real tier needs a person, even when the model marked it NOT risky, still
+  gets asked (the gap above); a denial anywhere stops the whole run; a
+  step naming send_email/draft_email/a schedule tool/a plug-in tool is
+  refused rather than run through a shortcut. `backend/test_plan.py` (72
+  checks, unchanged) and the existing `test_agent.py`/`test_tool_text.py`/
+  `test_short_tool_list.py` suites all still pass.
+
+**Not yet built:** a UI in either app. Once switched on, a plan's card is
+shown exactly like any other approval card already is - `describe()`'s
+text is plain enough that no new card SHAPE is needed, only the ordinary
+approval flow already both apps have.
+
+## 61. Reading phone notifications (phone, added 2026-09-28)
+
+The owner's decision, `CLAUDE.md`, 2026-09-26 (queued after the four
+cutting-edge groups and the security audit; built 2026-09-28): "reading
+phone notifications is added as an option. The safe version only: off by
+default, turning it on raises an approval card, turning it off is
+immediate; only apps the owner chooses (never banking); one-time codes
+hidden before anything reaches the model; treated as outside text - never
+makes Jarvis act and is never saved as a fact; shown or summarised only
+when the owner asks; nothing leaves the owner's own devices. Never text
+messages (SMS), and Jarvis never replies or sends."
+
+**Phone-only, like the smartwatch setting it copies the shape of** (§8's
+"one-sided on purpose" table has the reason): a Windows desktop has no
+comparable OS surface - "which app posted a notification, and what did it
+say" is an Android concept with no PC equivalent this project has any
+reason to invent one for.
+
+### 61.1 The PC-decided master switch - the ONLY part on the backend
+
+`backend/jarvis_phone_notifications.py` (shipped whole,
+`phone-notifications.patch` teaches `jarvis_gate.py` the one new action
+name), copied deliberately from `jarvis_watch_notify.py`'s own shape: off
+by default, ON is one approval card, OFF is instant, decided on the PC
+like every switch of this shape even though only the phone ever acts on
+it (`docs/ARCHITECTURE.md` §3, "A second door to the same gates").
+
+| Route | Method | Body | Notes |
+|---|---|---|---|
+| `/api/notifications/phone` | GET | - | `{"enabled", "waiting", "last", "why"}` - the same shape `GET /api/notifications/watch` already answers. |
+| `/api/notifications/phone` | POST | `{"enabled": bool}` | ON: 202 `{"waiting": true, ...}` while the approval card (action `phone_notifications_read`, tier `ask`) is up - nothing changes until a person approves it. OFF: 200 at once, and withdraws a waiting ON card. |
+
+**This module never sees a notification's own text, ever.** It is a plain
+on/off switch and nothing else - the same division `jarvis_watch_notify.py`
+draws for the smartwatch setting. Turning it OFF does not revoke Android's
+own "Notification access" grant (only Android's own Settings screen can);
+it tells the phone to stop reading notifications and stop offering them to
+Jarvis, at once. `jarvis_settings_registry.py` gives it the usual second
+door too - "open phone notifications" / "turn on/off phone notifications"
+by voice or chat, calling this exact function, never a new one
+(`set_phone_notifications`, `BoolSetting("phone_notifications", ...)`).
+
+### 61.2 Android's own "Notification access" - explained before it is ever opened
+
+`NotificationListenerService` is unusually broad: once the owner grants it
+(`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS` - a special, OS-level
+access screen, NOT a runtime permission dialog), the app COULD be offered
+every notification on the phone, from every app. `PhoneNotificationsPlate.kt`
+says this in plain words, with the current granted/not-granted state
+(`NotificationManagerCompat.getEnabledListenerPackages`, re-read on
+resume) and the button that opens that screen, BEFORE the owner is ever
+sent there - the same pattern `FloatingAvatarPlate.kt` already follows for
+"draw over other apps".
+
+Granting it changes nothing by itself: Jarvis's own switch (61.1, off by
+default) and the per-app allow list (61.3, empty by default) both still
+have to say yes before a single notification is stored.
+
+### 61.3 The per-app allow list - empty by default, banking and SMS blocked outright
+
+`data/NotificationAllowList.kt` (pure logic, unit-tested in
+`NotificationAllowListTest.kt`) and its Android-backed half,
+`data/NotificationAllowListStore.kt` (per-device `SharedPreferences`,
+never synced - the same rule every other per-device setting in this app
+already follows). Empty until the owner adds an app, from the list
+Android itself reports as installed (`PackageManager.getInstalledApplic
+ations`) - never a name typed by hand, never a network lookup.
+
+**Banking apps are blocked outright, not just discouraged in words** -
+the stricter of the two choices the task allowed, because a real (if
+imperfect) signal exists for both halves of the check:
+- Android's own Play Store category for the app (`ApplicationInfo
+  .category == CATEGORY_FINANCE`, set by the app's own developer); or
+- a short, curated list of well-known banking, brokerage and payment
+  package-name substrings (`chase`, `paypal`, `coinbase`, `robinhood`,
+  `wellsfargo`, ...; `NotificationAllowList.BANKING_SUBSTRINGS` has the
+  rest), for a sideloaded APK or an older build with no category set.
+
+**Said plainly, because it would be dishonest not to:** this is a
+heuristic, not a guarantee. A bank whose category is unset AND whose
+package name matches nothing on the list is not caught here; the card and
+the allow-list screen both say plainly that Jarvis cannot always tell,
+and ask the owner not to add one regardless.
+
+**SMS/Messages is blocked by what the phone itself says its default SMS
+app is, not by a name guess:** `Telephony.Sms.getDefaultSmsPackage` names
+whichever package currently sends and receives text messages on this
+phone - whatever it is called, OEM rebrand or third-party app included.
+(Fixed 2026-09-28: the original build called `RoleManager
+.getRoleHolders(ROLE_SMS)` for this, which turned out to be hidden from
+the public SDK stub the app actually compiles against - a real CI compile
+failure caught it, not a review. `Telephony.Sms.getDefaultSmsPackage` is
+the public, working equivalent; it needs the `<queries>` element for
+`android.provider.Telephony.SMS_DELIVER` that `AndroidManifest.xml` now
+has, the same Android 11+ package-visibility reason the app-picker's own
+`<queries>` entry exists.) `NotificationAllowList.KNOWN_SMS_PACKAGES` is
+kept only as a second, static line of defence for a phone where that call
+answers nothing. Even a
+package that somehow reached the list some other way is dropped a second
+time, in `PhoneNotificationListenerService` itself, by the same check -
+CLAUDE.md's "even if the owner tries to add the Messages app" is met at
+both the add step and the read step, not only one of them.
+
+### 61.4 The listener, the redaction, and the local store
+
+`service/PhoneNotificationListenerService.kt`
+(`android.service.notification.NotificationListenerService`, bound only by
+the system - `BIND_NOTIFICATION_LISTENER_SERVICE`, `exported="false"`).
+For every notification posted, in order (cheapest checks first, so an app
+that fails an early one never has its text even read out):
+
+1. `JarvisRuntime.phoneNotificationsAllowed()` - the cached answer from
+   61.1's switch. OFF: nothing else in this list runs.
+2. SMS check (61.3's second layer).
+3. The per-app allow list (61.3) - only a chosen app's notification survives.
+4. `data/NotificationRedactor.kt` - **applied to the title and the text
+   before anything is stored, always** (CLAUDE.md's "one-time codes hidden
+   before anything reaches the model" - applied here to storage itself,
+   stricter than literally asked, since a code that never reaches disk
+   cannot leak from a lost phone or a backup either).
+
+**The redaction heuristic, and its real limits** (unit-tested in
+`NotificationRedactorTest.kt`; the class's own doc has the full list):
+catches a plain 4-8 digit run near an English trigger word ("code",
+"otp", "verification", "passcode", "2fa", ...), the common "NNN NNN" /
+"NNN-NNN" six-digit grouping with or without one, and a bare 4-8 digit
+notification (Google's "G-123456" shape included) even with no trigger
+word at all. Does NOT catch: a non-digit code, a trigger word in another
+language, a bare digit run with no trigger word buried in a longer
+sentence, or a code split some other way. Deliberately over-redacts
+(a year or reference number near the word "code") rather than
+under-redacts - the real failure this exists to prevent.
+
+Redacted notifications are kept in `data/CapturedNotifications.kt` - a
+private, per-device `SharedPreferences` file, capped at 200 rows and 7
+days, NEVER sent anywhere on its own. `android:allowBackup="false"` on
+this whole app already keeps it out of any phone backup.
+
+### 61.5 Reading one into a chat - no new backend plumbing, on purpose
+
+**"Shown or summarised only when the owner asks"** is met by reusing the
+EXACT mechanism the Share sheet and the desktop's clipboard hotkey already
+use (§18, `ChatSession.send`'s `shared` parameter): a "Notifications"
+button beside "Photo" in the composer (shown only once something has
+actually been captured) puts `CapturedNotifications.sharedText()` into the
+same held chip `sharedLine` already shows, with the same Dismiss. The
+owner still presses Send themselves - attaching never sends on its own.
+
+Because that text goes in as its own message with no `provenance` tag at
+all (the same shape a Share-sheet message already has), the backend's
+EXISTING outside-text rule - only `typed` and `voice` are the owner's own
+words (§18, "What the PC does with the tags in the answering loop") -
+already marks the conversation as having read outside text, on its own,
+with no new backend code: never learned as a fact, never makes Jarvis act,
+exactly as CLAUDE.md requires. No new route, no new tag, no new taint
+mechanism - the same one every other outside-text source already uses.
+Jarvis never reads a captured notification any other way: there is no
+tool call, no background job, and no route that returns one without the
+owner's own tap.
+
+### 61.6 Never
+
+- Never sends, replies to, or dismisses a notification - the service has
+  no code path that calls back into `NotificationManager` at all.
+- Never learns a fact from one - outside text is never learned (§5).
+- Never acts on one - reading it into a chat only lets the model SEE it;
+  every action Jarvis might then suggest still goes through the exact same
+  approval card any other action would.
+- Never leaves the owner's own devices unprompted - captured notifications
+  sit on the phone until the owner's own tap sends them, over the same
+  paired link every other chat message already uses.
+
+### 61.7 Tests
+
+`backend/test_phone_notifications.py` (the switch: default off, the card,
+OFF is instant, the routes, the patch applies and reverses - the same
+shape `test_watch_notify.py` already proves). `jarvis-client`'s
+`NotificationRedactorTest.kt` and `NotificationAllowListTest.kt` (pure
+logic, no Android framework, no device needed) prove the redaction
+heuristic's documented behaviour and the banking/SMS refusal - Kotlin
+compilation itself is confirmed only once CI runs (no local Android build,
+`CLAUDE.md`, "How the Android apps get built").

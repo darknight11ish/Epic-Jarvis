@@ -5,14 +5,17 @@ import android.os.SystemClock
 import android.util.Log
 import com.jarvis.client.data.AppearanceStore
 import com.jarvis.client.data.ClientSettings
+import com.jarvis.client.data.ModelsCacheStore
 import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.ActivityEvent
 import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.ApiError
+import com.jarvis.client.net.CachedModels
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.onOk
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
 import com.jarvis.client.net.GateHistoryItem
@@ -23,7 +26,6 @@ import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.net.EventStream
 import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
-import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.Hardware
@@ -343,14 +345,42 @@ object JarvisRuntime {
     }
 
     /**
-     * `/api/models`, or null when this backend does not offer the capability
-     * or has not been asked yet. Switching between models the desktop already
-     * has was allowed onto the phone on 2026-09-18, and installing a typed
-     * model name on 2026-09-20 (CLAUDE.md) - both only ever ASK, through an
-     * approval card. Browsing what could be installed is still off the phone.
+     * `/api/models`, or null when this backend does not offer the capability,
+     * has not been asked yet, or the most recent read failed. Switching
+     * between models the desktop already has was allowed onto the phone on
+     * 2026-09-18, and installing a typed model name on 2026-09-20
+     * (CLAUDE.md) - both only ever ASK, through an approval card. Browsing
+     * what could be installed is still off the phone.
+     *
+     * Null on a failure - rather than the previous session's last good
+     * value staying put in silence - since [refreshModels]'s 2026-09-28
+     * cache addition: [modelsCache] is what a failed read falls back to
+     * now, WITH a visible "last saw this at…" label
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`), so there is no longer a
+     * reason for this flow to also carry an unlabelled stale answer. This
+     * has no other reader today ([modelsView] combines this with
+     * [modelsCache] for `BrainScreen.kt`'s `ModelsPlate`), so nothing else
+     * depended on the old behaviour.
      */
     private val _models = MutableStateFlow<ModelsInfo?>(null)
     val models: StateFlow<ModelsInfo?> = _models.asStateFlow()
+
+    private lateinit var modelsCacheStore: ModelsCacheStore
+
+    private val _modelsCache = MutableStateFlow<CachedModels?>(null)
+
+    /**
+     * The phone's own last successful `GET /api/models` read, held on disk
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`) so Brain -> Model has
+     * something to show, clearly marked as old, whenever [refreshModels]
+     * fails - including on a cold start, before any read this run has
+     * succeeded at all. Loaded once at [initialize] and refreshed only as
+     * a side effect of a live read succeeding; never re-read specially,
+     * per the design doc's section 4 ("do not sync or refresh the cache on
+     * demand"). See [com.jarvis.client.net.ModelsView] for how the screen
+     * turns this, plus [models], into what it actually draws.
+     */
+    val modelsCache: StateFlow<CachedModels?> = _modelsCache.asStateFlow()
 
     /**
      * `/api/second-card`: what the PC found, and the second-card switches
@@ -543,6 +573,7 @@ object JarvisRuntime {
         // bug cannot come back the next time something is inserted here.
         val clientSettings = ClientSettings(app)
         val tokenStore = TokenStore(app)
+        val modelsStore = ModelsCacheStore(app)
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
         // A temporary chat only on a PC that says it has one (docs/JARVIS-API.md
         // section 18.1): read from the last handshake, when it is asked.
@@ -614,6 +645,12 @@ object JarvisRuntime {
         tokens = tokenStore
         api = jarvisApi
         appearance = AppearanceStore(app)
+        modelsCacheStore = modelsStore
+        // Read once, at startup - so a cold start with Jarvis off has
+        // something to paint at once instead of a blank screen while the
+        // first live read times out. Never re-read after this except as a
+        // side effect of a live read succeeding, in refreshModels().
+        _modelsCache.value = modelsStore.load()
         updates = UpdateChecker(clientSettings)
         chat = chatSession
         voice = voiceSession
@@ -1204,13 +1241,34 @@ object JarvisRuntime {
     /**
      * Re-reads the model list, on a backend that has one. On any other it is
      * cleared, so the picker hides rather than showing a stale list.
+     *
+     * A live success also writes [modelsCache] to disk
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`), so the next cold start -
+     * or the very next failure - has something to replay. A failure clears
+     * [models] rather than leaving the last good answer sitting there
+     * unlabelled: `BrainScreen.kt`'s `ModelsPlate` reads [models] together
+     * with [modelsCache] through [com.jarvis.client.net.modelsView], and
+     * that function's whole contract is that a null [models] means "fall
+     * back to the cache, and say plainly it is old" - a stale value left in
+     * [models] itself would draw as though it were still live. The on-disk
+     * cache is never touched by a failure either way: only a fresh success
+     * is ever worth keeping, never re-read specially, per the design doc's
+     * "never fetched specially" rule.
      */
     suspend fun refreshModels() {
         if (version.value?.can("models") != true) {
             _models.value = null
             return
         }
-        api.models().onOk { _models.value = it }
+        when (val result = api.models()) {
+            is ApiResult.Ok -> {
+                _models.value = result.value
+                val cached = CachedModels.from(result.value, System.currentTimeMillis())
+                modelsCacheStore.save(cached)
+                _modelsCache.value = cached
+            }
+            is ApiResult.Failed -> _models.value = null
+        }
     }
 
     /**
@@ -1384,6 +1442,21 @@ object JarvisRuntime {
         val result = api.setSecondCard(feature, enabled)
         // The card should appear in this phone's approvals too.
         if (enabled && result is ApiResult.Ok) refreshPending()
+        refreshSecondCard()
+        return SecondCard.replyLine(result)
+    }
+
+    /**
+     * Moving one of the second card's own switches onto a third, capable
+     * graphics card, or moving it back off (2026-09-28). `assign` a feature
+     * id raises one approval card (the card should appear in this phone's
+     * approvals too, the same as [setSecondCard]'s own ON); `assign = null`
+     * unassigns at once.
+     */
+    suspend fun setThirdCard(assign: String?): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setThirdCard(assign)
+        if (assign != null && result is ApiResult.Ok) refreshPending()
         refreshSecondCard()
         return SecondCard.replyLine(result)
     }
@@ -3112,6 +3185,58 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * Read by [com.jarvis.client.service.PhoneNotificationListenerService]
+     * to decide whether to store anything at all - the cached last-known
+     * answer from the PC ([ClientSettings.phoneNotifications]), or false
+     * (read nothing - the safe direction) if [settings] has not been set
+     * up yet.
+     */
+    fun phoneNotificationsAllowed(): Boolean =
+        if (::settings.isInitialized) settings.phoneNotifications.value else false
+
+    // -------------------------------------------- reading phone notifications ----
+    // docs/JARVIS-API.md §61; see [com.jarvis.client.net.PhoneNotifications]
+    // and ui/screens/PhoneNotificationsPlate.kt. OFF by default, ON is one
+    // approval card. Every successful read or write updates
+    // [ClientSettings]'s cache, which the listener service reads - the only
+    // reason this route is read at all off the settings screen.
+
+    /**
+     * `GET /api/notifications/phone`. Updates the cache on success; leaves
+     * it alone on failure (a stale cache is never worse than no cache, and
+     * an app briefly offline should not stop reading notifications it was
+     * already allowed to read).
+     */
+    suspend fun phoneNotificationsSettings(): ApiResult<JsonObject> {
+        val r = api.phoneNotificationsSettings()
+        if (r is ApiResult.Ok) {
+            com.jarvis.client.net.PhoneNotifications.enabled(r.value)?.let { settings.setPhoneNotifications(it) }
+        }
+        return r
+    }
+
+    /**
+     * The switch. ON is held on a stale link (rule 4) and raises an
+     * approval card on the PC; OFF is never held. @return the sentence to
+     * show under the switch.
+     */
+    suspend fun setPhoneNotifications(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setPhoneNotifications(on) }) {
+            is ApiResult.Ok -> {
+                // Only a real Done (not Waiting) means the PC actually
+                // changed it - an ON that is still waiting for its card
+                // must not flip the cache early.
+                if (r.value is com.jarvis.client.net.DesktopWrite.Outcome.Done) {
+                    settings.setPhoneNotifications(on)
+                }
+                com.jarvis.client.net.PhoneNotifications.said(on, r.value)
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
     // ----------------------------------------------- automatic learning ----
     // docs/JARVIS-API.md section 19 (2026-09-24) - see
     // [com.jarvis.client.net.AutoLearn] and ui/screens/AutoLearnPlate.kt.
@@ -3410,6 +3535,130 @@ object JarvisRuntime {
             }
             is ApiResult.Failed -> false to ("Not set up. " + describe(r.error))
         }
+    }
+
+    /**
+     * ONE scheduler job by id - the same read a notification uses to get its
+     * words ([com.jarvis.client.net.Schedule.parseOne]). Goals uses this to
+     * re-check its own weekly check-in while its card might still be
+     * waiting: Goals has no route of its own that hands that state out
+     * again once the [acceptGoal] answer that first carried it is gone (see
+     * [com.jarvis.client.net.Goals]'s own doc comment). A read: never held.
+     */
+    suspend fun scheduleJob(id: String): com.jarvis.client.net.Schedule.Job? {
+        if (!com.jarvis.client.net.Schedule.validId(id)) return null
+        return when (val r = api.scheduleJob(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+            is ApiResult.Failed -> null
+        }
+    }
+
+    // -------------------------------------------------------------- Goals ----
+    // "Goals: a plan the owner edits, one card per acting step" (the
+    // owner's "build it now", 2026-09-27) - see [com.jarvis.client.net.Goals]
+    // and ui/screens/GoalsPlate.kt.
+
+    private val _goalsTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one after every change made from this phone, so Brain's
+     * "Goals" reads itself again - the same shape as [sharedTick]: there is
+     * no push event for a goal changing, so the other app's own edit shows
+     * on the next read, Refresh.
+     */
+    val goalsTick: StateFlow<Int> = _goalsTick.asStateFlow()
+
+    /** `GET /api/goals`. A read: never held. */
+    suspend fun goals(): ApiResult<JsonObject> = api.goals()
+
+    /**
+     * A new draft, in the owner's own words - with their own plan once they
+     * have typed one (or asked Jarvis to suggest one first, in ordinary
+     * chat, and pasted it in). No card: a draft is content, not action,
+     * exactly like an email draft. Held on a stale link (rule 4), like
+     * every change. @return whether it was started, the new goal if so, and
+     * the sentence to show.
+     */
+    suspend fun createGoal(
+        text: String,
+        plan: List<com.jarvis.client.net.Goals.Step>? = null,
+    ): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        val result = when (val r = api.goalsWrite(com.jarvis.client.net.Goals.PATH,
+            com.jarvis.client.net.Goals.createBody(text, plan))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.createdSaid(r.value)
+            is ApiResult.Failed -> Triple(false, null, "Not started. " + describe(r.error))
+        }
+        if (result.first) _goalsTick.update { n -> n + 1 }
+        return result
+    }
+
+    /**
+     * Keeps the owner's edited plan (or the draft exactly as it stood) and
+     * starts the weekly check-in - the PC's ONE approval card, the same
+     * mechanism a repeating reminder already raises. Held on a stale link;
+     * the freshly-raised card is read into [pending] at once, rather than
+     * waiting for the next `pending` event, so the Approvals list shows it
+     * without a delay. @return whether it was accepted, the accepted goal
+     * with its check-in job if so, and the sentence to show.
+     */
+    suspend fun acceptGoal(
+        id: String,
+        plan: List<com.jarvis.client.net.Goals.Step>? = null,
+    ): Triple<Boolean, com.jarvis.client.net.Goals.Accepted?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
+        val result = when (val r = api.goalsWrite("/api/goals/$id/accept",
+            com.jarvis.client.net.Goals.acceptBody(plan))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.acceptedSaid(r.value)
+            is ApiResult.Failed -> Triple(false, null, "Not accepted. " + describe(r.error))
+        }
+        if (result.first) {
+            _goalsTick.update { n -> n + 1 }
+            refreshPending()
+        }
+        return result
+    }
+
+    /**
+     * Marks one step of an active goal done or not - no card, the same
+     * shape as ticking off a to-do item. Held on a stale link. @return
+     * whether it changed, the updated goal if so, and the sentence to show.
+     */
+    suspend fun setGoalStep(
+        id: String,
+        index: Int,
+        done: Boolean,
+    ): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
+        val result = when (val r = api.goalsWrite("/api/goals/$id/step",
+            com.jarvis.client.net.Goals.stepBody(index, done))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value)
+            is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
+        }
+        if (result.first) _goalsTick.update { n -> n + 1 }
+        return result
+    }
+
+    /**
+     * Stops tracking a goal and deletes its check-in job. No card,
+     * immediate - the same rule every "stop tracking this" control in this
+     * project follows - and no confirm dialog: the backend's own design
+     * requires stopping to be one tap. Held on a stale link, like every
+     * change. @return whether it stopped, the stopped goal if so, and the
+     * sentence to show.
+     */
+    suspend fun stopGoal(id: String): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
+        val result = when (val r = api.goalsWrite("/api/goals/$id/stop",
+            com.jarvis.client.net.Goals.STOP_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value, doneWord = "Stopped.")
+            is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
+        }
+        if (result.first) _goalsTick.update { n -> n + 1 }
+        return result
     }
 
     private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?, eventId: String? = null) {

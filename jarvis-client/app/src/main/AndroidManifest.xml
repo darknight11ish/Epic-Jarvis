@@ -5,6 +5,39 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Reading phone notifications (data/NotificationAllowListStore.kt
+         `installedApps()`): without this, Android 11+'s package-visibility
+         rules would quietly filter `PackageManager.getInstalledApplications`
+         down to almost nothing, so the "add an app" picker would show few
+         or none of the apps actually on the phone - not a security
+         boundary this app needs to ask around, since the owner is choosing
+         from apps already on their own device, by name, the same as they
+         could in their own phone's Settings -> Apps list. Declaring every
+         app with an ordinary home-screen icon as queryable is the
+         documented, minimal way to do that: it does NOT grant
+         QUERY_ALL_PACKAGES (which needs a Play Store declaration this
+         non-commercial, sideloaded app has no path to make), and it grants
+         no capability beyond seeing that a package with a launcher icon
+         exists and its label - nothing this app could not already learn a
+         different way once "Notification access" (§61) is granted, since
+         that already hands over every posted notification's package name
+         regardless of this element. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- Telephony.Sms.getDefaultSmsPackage (§61's SMS exclusion,
+             NotificationAllowListStore.kt / PhoneNotificationListenerService
+             .kt): Android 11+ package visibility hides which app answers
+             this without declaring the intent action its own contract is
+             built on, even though no special runtime permission is needed
+             to ask the question itself. -->
+        <intent>
+            <action android:name="android.provider.Telephony.SMS_DELIVER" />
+        </intent>
+    </queries>
+
     <!-- "Also on my phone" (2026-09-26): the owner's tap hands an alarm to the
          phone's own Clock app (AlarmClock.ACTION_SET_ALARM), which needs this
          install-time permission. The Clock app shows its own screen and the
@@ -210,6 +243,28 @@
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- Reading phone notifications (CLAUDE.md, 2026-09-26; built
+             2026-09-28; service/PhoneNotificationListenerService.kt). This
+             declaration alone grants nothing - the owner still has to turn
+             it on by hand, in Android's own "Notification access" screen
+             (Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS), which
+             PhoneNotificationsPlate.kt explains in plain words first, the
+             same pattern as SYSTEM_ALERT_WINDOW above. Bound is the whole
+             point of BIND_NOTIFICATION_LISTENER_SERVICE: only the system
+             may connect to it, exported="false" narrows that further so no
+             other app can even try. Jarvis's OWN switch
+             (phone_notifications_read, off by default) and its own per-app
+             allow list (empty by default) still gate everything this
+             service actually stores, on top of this OS-level grant. -->
+        <service
+            android:name=".service.PhoneNotificationListenerService"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
 

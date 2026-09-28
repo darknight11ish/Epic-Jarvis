@@ -1,6 +1,6 @@
 # The documents, and which ones are current
 
-There are about sixty documents here. **Five of them are the ones to read**;
+There are about ninety documents here. **Five of them are the ones to read**;
 the rest are the history of how Jarvis got here: audits, research, and notes
 that one working session left for another. Nothing has been moved or
 deleted, so every old link still works. This page says which is which.
@@ -31,6 +31,9 @@ Also current, for one area each:
 | [APPEARANCE-API.md](APPEARANCE-API.md) | The one address the face and colour picker uses. |
 | [UFO-SAFETY-DESIGN.md](UFO-SAFETY-DESIGN.md) | Why controlling Windows apps is done the careful way it is. |
 | [PEERS.md](PEERS.md), [COMPARISON.md](COMPARISON.md) | What other assistant projects built, and what Jarvis took from them. |
+| [MEMORY-SCOREBOARD.md](MEMORY-SCOREBOARD.md) | The memory/learning self-test numbers, updated after every change - not a one-day snapshot. |
+| [GRAPHENEOS.md](GRAPHENEOS.md) | What to check before moving the phone to GrapheneOS. Nothing needed building yet. |
+| [designs/](designs/) | Draft designs not built yet (an MCP bridge, a skills system), each in its own subfolder with the draft's own README. |
 
 ## Audits and research (dated - true on the day written)
 
@@ -40,9 +43,23 @@ what changed when.
 
 | Date | Document | About |
 |---|---|---|
-| 2026-09-28 | [AUDIT-2026-09-28-AFTER-CHANGES.md](AUDIT-2026-09-28-AFTER-CHANGES.md) and [audit-2026-09-28/](audit-2026-09-28/) | Twelve audits of all five unmerged branches together: bugs, both apps, security, merge clashes, owner decisions, play tests, speed, docs, tools, unfinished work. |
-| 2026-09-28 | [UPDATE-AND-CHECK-2026-09-28.md](UPDATE-AND-CHECK-2026-09-28.md) | How to put the new work on the PC and phone, and a checklist that it works. |
-| 2026-09-28 | [GEMINI-AUDIT-2026-09-28.md](GEMINI-AUDIT-2026-09-28.md) | The outside (Gemini) audit package for everything since 2026-09-20, with its prompt. |
+| 2026-09-28 | [HARDWARE-DETECTION-AUDIT-2026-09-28.md](HARDWARE-DETECTION-AUDIT-2026-09-28.md) | How well Jarvis detects hardware (graphics cards, Windows Hello, the phone's mic/notifications/battery, RAM and disk), adapts to it, and tells the owner why - every mechanism, not only GPUs. One small wording bug found. |
+| 2026-09-27 | [BACKGROUND-WORK-AUDIT-2026-09-27.md](BACKGROUND-WORK-AUDIT-2026-09-27.md) | Everything Jarvis does unattended - the scheduler, standby, briefing, "tell me when", focus, backups, initiative - checked and tested for real. |
+| 2026-09-27 | [GPU-SUPPORT-RESEARCH-2026-09-27.md](GPU-SUPPORT-RESEARCH-2026-09-27.md) | What a third graphics card, and AMD/Intel GPUs, would actually need - sized, not guessed. |
+| 2026-09-27 | [OFFLINE-MODELS-DESIGN-2026-09-27.md](OFFLINE-MODELS-DESIGN-2026-09-27.md) | Design for viewing installed models in both apps without a running backend. |
+| 2026-09-27 | [JARVIS-EVALUATION-2026-09-27.md](JARVIS-EVALUATION-2026-09-27.md) | Are the five core rules too strict, how Jarvis compares to Muse, and whether it actually flows as an assistant - three research passes, synthesized. Two questions for the owner. |
+| 2026-09-27 | [BUG-AUDIT-2026-09-27-backend.md](BUG-AUDIT-2026-09-27-backend.md), [-desktop-js](BUG-AUDIT-2026-09-27-desktop-js.md), [-desktop-rust](BUG-AUDIT-2026-09-27-desktop-rust.md), [-phone](BUG-AUDIT-2026-09-27-phone.md), [-cross-cutting](BUG-AUDIT-2026-09-27-cross-cutting.md) | The full bug audit, a team of agents, five reports. Every finding was fixed. |
+| 2026-09-27 | [QUALITY-AUDIT-2026-09-27.md](QUALITY-AUDIT-2026-09-27.md), [SECURITY-PRIVACY-DEPS-AUDIT-2026-09-27.md](SECURITY-PRIVACY-DEPS-AUDIT-2026-09-27.md), [SETUP-SETTINGS-RECOVERY-AUDIT-2026-09-27.md](SETUP-SETTINGS-RECOVERY-AUDIT-2026-09-27.md) and [handoff-2026-09-27/](handoff-2026-09-27/) | The three combined audit passes the owner asked for (quality; security/privacy/dependencies; setup/settings/recovery). |
+| 2026-09-27 | [EASE-OF-USE-AUDIT-2026-09-27.md](EASE-OF-USE-AUDIT-2026-09-27.md) and [ease-audit-2026-09-27/](ease-audit-2026-09-27/) | How easy Jarvis is to set up, use, understand and customize, for someone new to it. |
+| 2026-09-27 | [OWNER-QUESTIONS-2026-09-27.md](OWNER-QUESTIONS-2026-09-27.md) | Short multiple-choice questions for the owner from the audits above. Answered - see CLAUDE.md's decision log. |
+| 2026-09-27 | [MEMORY-REVIEW-2026-09-27.md](MEMORY-REVIEW-2026-09-27.md) | A second reviewer's check of the memory/learning self-test claims and bugs. |
+| 2026-09-27 | [PERSONA-MODES-CHECK-2026-09-27.md](PERSONA-MODES-CHECK-2026-09-27.md) | Whether the older `[persona]` modes still fit, next to the character block. A look, not a build. |
+| 2026-09-26 | [FEASIBILITY-AUDIT-2026-09-26.md](FEASIBILITY-AUDIT-2026-09-26.md) (plan: [FEASIBILITY-AUDIT-PLAN-2026-09-26.md](FEASIBILITY-AUDIT-PLAN-2026-09-26.md)) and [feasibility-2026-09-26/](feasibility-2026-09-26/) | Seven reviewers rank all 155 ideas from the cutting-edge research below. |
+| 2026-09-26 | [CUTTING-EDGE-2026-09-26-capabilities.md](CUTTING-EDGE-2026-09-26-capabilities.md), [-engine](CUTTING-EDGE-2026-09-26-engine.md), [-voice-vision](CUTTING-EDGE-2026-09-26-voice-vision.md) | Cutting-edge research, round 1: what Jarvis could do, its engine, voice and vision. |
+| 2026-09-26 | [CUTTING-EDGE-2026-09-26-round2-experience.md](CUTTING-EDGE-2026-09-26-round2-experience.md), [-personality](CUTTING-EDGE-2026-09-26-round2-personality.md), [-trust](CUTTING-EDGE-2026-09-26-round2-trust.md) | Cutting-edge research, round 2. |
+| 2026-09-26 | [CUTTING-EDGE-2026-09-26-round3-home.md](CUTTING-EDGE-2026-09-26-round3-home.md), [-knowledge](CUTTING-EDGE-2026-09-26-round3-knowledge.md), [-routines](CUTTING-EDGE-2026-09-26-round3-routines.md) | Cutting-edge research, round 3. |
+| 2026-09-26 | [CUTTING-EDGE-2026-09-26-round4-character.md](CUTTING-EDGE-2026-09-26-round4-character.md), [-growth](CUTTING-EDGE-2026-09-26-round4-growth.md), [-wellbeing](CUTTING-EDGE-2026-09-26-round4-wellbeing.md) | Cutting-edge research, round 4. |
+| 2026-09-26 | [UI-AUDIT-2026-09-26.md](UI-AUDIT-2026-09-26.md) and [ui-audit-2026-09-26/](ui-audit-2026-09-26/) | "Spice it up without overwhelming": a chair's report over six team reports, and a picture page. |
 | 2026-09-26 | [BUG-AUDIT-2026-09-26-backend.md](BUG-AUDIT-2026-09-26-backend.md), [-desktop](BUG-AUDIT-2026-09-26-desktop.md), [-phone](BUG-AUDIT-2026-09-26-phone.md) | Bug hunts in each part. |
 | 2026-09-26 | [APPROVALS-AUDIT-2026-09-26.md](APPROVALS-AUDIT-2026-09-26.md) | What asks first, and what could stop asking. |
 | 2026-09-26 | [PROFESSIONALISM-AUDIT-2026-09-26.md](PROFESSIONALISM-AUDIT-2026-09-26.md) | Packaging, versions, READMEs, wording. |

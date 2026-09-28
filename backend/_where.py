@@ -200,6 +200,17 @@ SHIPPED = (
     # card showing the full diff before anything reaches the app; runs nothing
     # (docs/APP-BUILDER-DESIGN.md, milestone A - no patch, no tool yet)
     "jarvis_app_workspace.py",
+    # "Goals with one card per step" (the owner's "build it now",
+    # 2026-09-27; goals.patch): a goal's own plan and weekly check-in.
+    "jarvis_goals.py",
+    # "One card, several steps" (the owner's own words, 2026-09-28;
+    # plan-gate.patch): SWITCHED OFF until tools/tool_eval clears the bar.
+    "jarvis_plan.py",
+    # Reading phone notifications (2026-09-26 decision, built 2026-09-28;
+    # phone-notifications.patch): off by default, ON is one approval card,
+    # OFF is instant; never sees a notification's own text - that lives on
+    # the phone.
+    "jarvis_phone_notifications.py",
 )
 
 

@@ -81,6 +81,7 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "folders" to 9,
     "backup" to 10,
     "watch-notify" to 11,
+    "phone-notify" to 12,
 )
 
 @Composable
@@ -113,6 +114,15 @@ fun SettingsScreen(
     overlayGranted: Boolean = false,
     onRequestOverlay: () -> Unit = {},
     onOpenBubbleSettings: () -> Unit = {},
+    /**
+     * "Reading phone notifications" (docs/JARVIS-API.md §61): whether
+     * Android's own "Notification access" is currently granted
+     * (`NotificationManagerCompat.getEnabledListenerPackages`, re-read on
+     * resume - the same `tick` pattern [overlayGranted] already uses), and
+     * the button that opens that OS screen.
+     */
+    notificationAccessGranted: Boolean = false,
+    onOpenNotificationAccess: () -> Unit = {},
     /**
      * "Open <a settings section>" by voice or chat
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
@@ -254,6 +264,13 @@ fun SettingsScreen(
             item(key = "folders") { FoldersSection() }
             item(key = "backup") { BackupSection() }
             item(key = "watch-notify") { WatchNotifySection(canAct = canAct) }
+            item(key = "phone-notify") {
+                PhoneNotificationsSection(
+                    canAct = canAct,
+                    notificationAccessGranted = notificationAccessGranted,
+                    onOpenNotificationAccess = onOpenNotificationAccess,
+                )
+            }
 
             item(key = "tail") { Gap(24) }
         }

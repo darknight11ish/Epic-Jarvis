@@ -246,12 +246,14 @@ HARD_LIMITS = frozenset({
     LOOSEN_ACTION, "stop_asking_before_every_web_search", "learning_enable",
     "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
+    "second_card_third_assign",
     "big_model_enable", "custom_voice",
     "better_voice_enable", "download_model", "switch_model", "models_create",
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
     "app_merge_change",
+    "run_plan", "phone_notifications_read",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -262,11 +264,11 @@ MUST_ASK = frozenset({
     "home_control", "web_research", "research_authenticated", "write_notes_after_outside_text",
     "search_the_web", "stop_asking_before_every_web_search", "schedule_repeat",
     "models_create", "second_card_enable", "second_card_browser_enable",
-    "second_card_combined_enable", "big_model_enable",
+    "second_card_combined_enable", "second_card_third_assign", "big_model_enable",
     "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
-    "restore_backup", "check_tool_updates",
+    "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -287,19 +289,20 @@ GROUPS = (
                       "control_browser", "post_to_external_service", "open_public_tunnel",
                       "news_read", "page_read"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
-                                "fixed:plugin_start", "fixed:plugin_use",
+                                "run_plan", "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage",
                                 "app_merge_change"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       "second_card_enable", "second_card_browser_enable",
-                                      "second_card_combined_enable", "big_model_enable"]),
+                                      "second_card_combined_enable", "second_card_third_assign",
+                                      "big_model_enable"]),
     ("Jarvis's own settings, memory and voice", [
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
         "memory_manage", "user_profile_manage", "custom_voice", "better_voice_enable",
-        "watch_notifications_enable", "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION,
-        "restore_backup", "check_tool_updates"]),
+        "watch_notifications_enable", "phone_notifications_read", "modify_own_code",
+        LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
 )
 

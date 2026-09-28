@@ -401,6 +401,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -528,6 +537,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -639,6 +657,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -1183,6 +1210,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -1310,6 +1346,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -1421,6 +1466,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -1965,6 +2019,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -2092,6 +2155,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -2203,6 +2275,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",
@@ -2756,6 +2837,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -2883,6 +2973,15 @@
        "title": "Run one bigger model across both graphics cards"
       },
       {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -2994,6 +3093,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let your notifications show on a smartwatch too"
+      },
+      {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
       },
       {
        "action": "modify_own_code",

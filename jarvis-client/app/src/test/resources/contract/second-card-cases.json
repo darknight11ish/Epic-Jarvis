@@ -130,7 +130,7 @@
       ],
       "lane": {
         "state": "off",
-        "why": "nothing on the second card is switched on"
+        "why": "the second-card switch is off"
       },
       "last": null,
       "main_ollama_pinned": false,
@@ -162,6 +162,22 @@
           }
         ],
         "title": "When to suggest the bigger model"
+      },
+      "third": {
+        "assignable": [],
+        "assigned": null,
+        "capable": false,
+        "card": null,
+        "context": null,
+        "lane": {
+          "state": "off",
+          "why": "no capable third graphics card"
+        },
+        "memory_gib": null,
+        "model": null,
+        "model_installed": null,
+        "pending": false,
+        "why": "No capable third graphics card is plugged in right now."
       }
     },
     "capable_pending": {
@@ -327,6 +343,22 @@
           }
         ],
         "title": "When to suggest the bigger model"
+      },
+      "third": {
+        "assignable": [],
+        "assigned": null,
+        "capable": false,
+        "card": null,
+        "context": null,
+        "lane": {
+          "state": "off",
+          "why": "no capable third graphics card"
+        },
+        "memory_gib": null,
+        "model": null,
+        "model_installed": null,
+        "pending": false,
+        "why": "No capable third graphics card is plugged in right now."
       }
     },
     "card_missing_but_enabled": {
@@ -473,6 +505,25 @@
           }
         ],
         "title": "When to suggest the bigger model"
+      },
+      "third": {
+        "assignable": [
+          "long_context",
+          "vision"
+        ],
+        "assigned": null,
+        "capable": false,
+        "card": null,
+        "context": null,
+        "lane": {
+          "state": "off",
+          "why": "no capable third graphics card"
+        },
+        "memory_gib": null,
+        "model": null,
+        "model_installed": null,
+        "pending": false,
+        "why": "No capable third graphics card is plugged in right now."
       }
     },
     "combined_running": {
@@ -604,7 +655,7 @@
       ],
       "lane": {
         "state": "off",
-        "why": "nothing on the second card is switched on"
+        "why": "the second-card switch is off"
       },
       "last": null,
       "main_ollama_pinned": true,
@@ -636,6 +687,22 @@
           }
         ],
         "title": "When to suggest the bigger model"
+      },
+      "third": {
+        "assignable": [],
+        "assigned": null,
+        "capable": false,
+        "card": null,
+        "context": null,
+        "lane": {
+          "state": "off",
+          "why": "no capable third graphics card"
+        },
+        "memory_gib": null,
+        "model": null,
+        "model_installed": null,
+        "pending": false,
+        "why": "No capable third graphics card is plugged in right now."
       }
     },
     "not_capable_old_card": {
@@ -793,6 +860,22 @@
           }
         ],
         "title": "When to suggest the bigger model"
+      },
+      "third": {
+        "assignable": [],
+        "assigned": null,
+        "capable": false,
+        "card": null,
+        "context": null,
+        "lane": {
+          "state": "off",
+          "why": "no capable third graphics card"
+        },
+        "memory_gib": null,
+        "model": null,
+        "model_installed": null,
+        "pending": false,
+        "why": "No capable third graphics card is plugged in right now."
       }
     },
     "one_card": {
@@ -939,6 +1022,22 @@
           }
         ],
         "title": "When to suggest the bigger model"
+      },
+      "third": {
+        "assignable": [],
+        "assigned": null,
+        "capable": false,
+        "card": null,
+        "context": null,
+        "lane": {
+          "state": "off",
+          "why": "no capable third graphics card"
+        },
+        "memory_gib": null,
+        "model": null,
+        "model_installed": null,
+        "pending": false,
+        "why": "No capable third graphics card is plugged in right now."
       }
     },
     "one_card_reads_words": {
@@ -1085,6 +1184,22 @@
           }
         ],
         "title": "When to suggest the bigger model"
+      },
+      "third": {
+        "assignable": [],
+        "assigned": null,
+        "capable": false,
+        "card": null,
+        "context": null,
+        "lane": {
+          "state": "off",
+          "why": "no capable third graphics card"
+        },
+        "memory_gib": null,
+        "model": null,
+        "model_installed": null,
+        "pending": false,
+        "why": "No capable third graphics card is plugged in right now."
       }
     },
     "running_long_context": {
@@ -1248,6 +1363,24 @@
           }
         ],
         "title": "When to suggest the bigger model"
+      },
+      "third": {
+        "assignable": [
+          "long_context"
+        ],
+        "assigned": null,
+        "capable": false,
+        "card": null,
+        "context": null,
+        "lane": {
+          "state": "off",
+          "why": "no capable third graphics card"
+        },
+        "memory_gib": null,
+        "model": null,
+        "model_installed": null,
+        "pending": false,
+        "why": "No capable third graphics card is plugged in right now."
       }
     }
   }

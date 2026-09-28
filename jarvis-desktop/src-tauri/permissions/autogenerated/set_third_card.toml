@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-third-card"
+description = "Enables the set_third_card command without any pre-configured scope."
+commands.allow = ["set_third_card"]
+
+[[permission]]
+identifier = "deny-set-third-card"
+description = "Denies the set_third_card command without any pre-configured scope."
+commands.deny = ["set_third_card"]

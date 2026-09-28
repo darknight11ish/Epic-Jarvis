@@ -242,6 +242,16 @@ object ChatHistory {
         conversationId: String? = null,
         interrupted: String? = null,
         temporary: Boolean = false,
+        /**
+         * `true` only when the owner just said yes to [CloudOffer]'s "Try
+         * the cloud model" for THIS one question
+         * ([ChatSession.tryCloudForLast]) - never sent as `false`, like
+         * [temporary]. `cloud_yes` is the real field name
+         * `backend/cloud-say-yes.patch` reads, verified against the
+         * owner's real `jarvis_hud.py` (2026-09-27) - see [CloudOffer]'s
+         * own doc.
+         */
+        cloudYes: Boolean = false,
     ): String =
         buildJsonObject {
             put("messages", messages(window, asking, picture, interrupted))
@@ -253,6 +263,7 @@ object ChatHistory {
             }
             put("device", DEVICE)
             if (temporary) put(TemporaryChat.FIELD, true)
+            if (cloudYes) put("cloud_yes", true)
         }.toString()
 
     private fun userTurn(u: UserTurn): JsonObject = buildJsonObject {

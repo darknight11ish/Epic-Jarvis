@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.data.CheckMethod
@@ -707,6 +708,11 @@ class MainActivity : FragmentActivity() {
         val inboxRead by JarvisRuntime.inboxRead.collectAsState()
         val brain by JarvisRuntime.brain.collectAsState()
         val models by JarvisRuntime.models.collectAsState()
+        // The phone's own last successful `GET /api/models` read, held on
+        // disk so Brain -> Model has something to show, clearly marked as
+        // old, when [models] above is null because the live read failed
+        // (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md).
+        val modelsCache by JarvisRuntime.modelsCache.collectAsState()
         val activityDetail by JarvisRuntime.activityDetail.collectAsState()
         var modelBusy by remember { mutableStateOf(false) }
         // The second graphics card: what the PC last said, which switch has a
@@ -771,6 +777,11 @@ class MainActivity : FragmentActivity() {
         // The crisis help line (jarvis_wellbeing.py, 2026-09-27): whether
         // the answer on screen is shown as a calm, plain panel.
         val crisisAnswer by chat.crisis.collectAsState()
+        // "A cloud model could give this one a second look."
+        // (jarvis_router.choose()'s gate "offer", docs/JARVIS-API.md,
+        // "`offer` in `X-Jarvis-Route`") - the lane named on the answer on
+        // screen's route, or null.
+        val cloudOffer by chat.cloudOffer.collectAsState()
         // "Open <a settings section>" by voice or chat
         // (jarvis_settings_registry.py, docs/JARVIS-API.md section 58.1):
         // jump to Settings, at the section the answer named. Pure
@@ -1640,6 +1651,7 @@ class MainActivity : FragmentActivity() {
                             notice = notice,
                             onDismissNotice = { JarvisRuntime.clearNotice() },
                             models = models,
+                            modelsCache = modelsCache,
                             modelBusy = modelBusy,
                             onSwitchModel = { ref ->
                                 if (!modelBusy) {
@@ -1707,6 +1719,24 @@ class MainActivity : FragmentActivity() {
                                     scope.launch {
                                         try {
                                             secondCardNotice = JarvisRuntime.setSecondCard(feature, enabled)
+                                        } finally {
+                                            secondCardBusy = null
+                                        }
+                                    }
+                                }
+                            },
+                            // A third graphics card (2026-09-28): moving a
+                            // switch onto it, or off. Marked busy the same
+                            // way as onSetSecondCard, under SecondCard.THIRD
+                            // rather than a feature id - there is no single
+                            // switch this request is about.
+                            onSetThirdCard = { assign ->
+                                if (secondCardBusy == null) {
+                                    secondCardBusy = SecondCard.THIRD
+                                    secondCardNotice = null
+                                    scope.launch {
+                                        try {
+                                            secondCardNotice = JarvisRuntime.setThirdCard(assign)
                                         } finally {
                                             secondCardBusy = null
                                         }
@@ -1839,6 +1869,11 @@ class MainActivity : FragmentActivity() {
                         },
                         onRequestOverlay = ::requestOverlayPermission,
                         onOpenBubbleSettings = ::openBubbleSettings,
+                        notificationAccessGranted = remember(tick) {
+                            NotificationManagerCompat.getEnabledListenerPackages(this@MainActivity)
+                                .contains(packageName)
+                        },
+                        onOpenNotificationAccess = ::openNotificationAccessSettings,
                     )
 
                     Screen.APPEARANCE -> AppearanceScreen(
@@ -1967,6 +2002,15 @@ class MainActivity : FragmentActivity() {
                             // reading the words in a picture (2026-09-26), as
                             // the PC last reported it. The send asks again first.
                             pictureOffered = SecondCard.picturesTaken(secondCard),
+                            // Reading phone notifications (2026-09-28): only
+                            // offered once the setting is on AND something
+                            // has actually been captured - a button that
+                            // would attach nothing is not an offer.
+                            notificationsAttachable = remember(tick) {
+                                JarvisRuntime.phoneNotificationsAllowed() &&
+                                    com.jarvis.client.data.CapturedNotifications(this@MainActivity)
+                                        .sharedText() != null
+                            },
                             pictureLine = picture.value?.let {
                                 ChatPicture.attachedLine(it, wordsOnly = !SecondCard.visionAvailable(secondCard))
                             },
@@ -1978,6 +2022,7 @@ class MainActivity : FragmentActivity() {
                             usedIds = usedIds,
                             answerTurnId = answerTurnId,
                             crisisAnswer = crisisAnswer,
+                            cloudOffer = cloudOffer,
                             memoryHidden = privateHidden,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
@@ -2063,6 +2108,15 @@ class MainActivity : FragmentActivity() {
                                     )
                                 },
                                 onRemovePicture = { picture.value = null },
+                                // Fills the SAME shared-text chip the Share
+                                // sheet already uses - the owner still
+                                // presses Send. Never sent, learned, or read
+                                // by anything until they do.
+                                onAttachNotifications = {
+                                    com.jarvis.client.data.CapturedNotifications(this@MainActivity)
+                                        .sharedText()
+                                        ?.let { sharedHeld = Provenance.joinShared(sharedHeld, it) }
+                                },
                                 onInterrupt = { chat.cancel() },
                                 onNewConversation = { chat.newConversation() },
                                 // A temporary chat: no card and no hold - it only
@@ -2160,6 +2214,14 @@ class MainActivity : FragmentActivity() {
                                 onMarkAnswer = { turnId, mark ->
                                     JarvisRuntime.markAnswerDetached(turnId, mark)
                                 },
+                                // "Try the cloud model": a genuinely new
+                                // turn, the same shape as onSend below, so
+                                // it runs on this composable's own scope
+                                // rather than the runtime's - a rotation
+                                // mid-answer already cancels an ordinary
+                                // question the same way.
+                                onTryCloud = { scope.launch { chat.tryCloudForLast() } },
+                                onDismissCloudOffer = { chat.dismissCloudOffer() },
                                 // backend/note-capture.patch. The runtime reports
                                 // how it ended, in the desktop's own words.
                                 onFileNote = { target, text ->
@@ -2494,6 +2556,23 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * Android's own "Notification access" screen
+     * (`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS`), for "reading
+     * phone notifications". `PhoneNotificationsPlate.kt`'s own explanation
+     * of what this OS-level access actually grants is shown BEFORE this is
+     * ever called, always - it is unusually broad (every notification, on
+     * every app, once granted), unlike an ordinary runtime permission
+     * dialog, and there is no direct way to grant it: only this screen,
+     * only the owner's own tap. `notificationAccessGranted` keeps reading
+     * the real answer either way, the same pattern `overlayGranted` above
+     * already follows.
+     */
+    private fun openNotificationAccessSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
     }
 
     /**

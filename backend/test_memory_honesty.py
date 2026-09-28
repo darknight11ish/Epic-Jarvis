@@ -347,10 +347,17 @@ def t_every_caller_goes_through_the_check():
     # jarvis_intake.propose(jarvis_extract, ...) hands the module on and calls
     # extract.propose (checked below). jarvis_feedback's local `propose` is
     # jarvis_extract.propose_retire - it writes one card and asks no model.
+    # jarvis_plan.propose (2026-09-28, wired into jarvis_agent.py's
+    # propose_plan tool) is a DIFFERENT propose() entirely - it only builds
+    # a Plan object from steps the model already supplied in its own tool
+    # call; it never touches OLLAMA_URL, sends a conversation anywhere, or
+    # calls a model at all, so it has no model-address check to reach
+    # (confirmed by reading jarvis_plan.py's own propose(), not assumed just
+    # because the name happens to match).
     fb = (HERE / "jarvis_feedback.py").read_text(encoding="utf-8")
     fb_is_retire = 'propose = getattr(extract, "propose_retire", None)' in fb
     bad = [c for c in calls
-           if c[1] not in ("jarvis_extract.", "X.", "extract.", "jarvis_intake.")
+           if c[1] not in ("jarvis_extract.", "X.", "extract.", "jarvis_intake.", "jarvis_plan.")
            and not (c[0] == "jarvis_feedback.py" and c[1] == "" and fb_is_retire)]
     check("every call reaches propose() through the jarvis_extract module",
           not bad, repr(bad))

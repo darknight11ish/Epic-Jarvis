@@ -1,0 +1,30 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2557,16 +2557,27 @@
+         if ROUTING and body.get("auto", True):
+             budget = jarvis_router.Budget.load()
+             tainted = _history_tainted(messages, body)
+             decision = jarvis_router.choose(
+                 query,
+                 local_model=local_model,
+                 # While Jarvis injects memory itself we cannot escalate safely:
+                 # it would attach your facts to a free-tier cloud request.
+                 lanes=[] if jarvis_side_memory else lanes,
+                 has_image=bool(body.get("has_image")),
+                 conversation_tainted=tainted,
+                 budget=budget,
++                # cloud-say-yes.patch: the owner's yes for THIS ONE
++                # question - the app's "Try the cloud model" button, shown
++                # only after choose() itself already offered a lane with
++                # gate "offer" (docs/JARVIS-API.md, "`offer` in
++                # `X-Jarvis-Route`"). Absent or false reads exactly as
++                # before this patch. Every gate above still runs first, in
++                # the same order, so a yes can never pull a private,
++                # tainted or picture turn out - it only ever turns gate 6
++                # from "offer" into "escalate" for a question that had
++                # already cleared every other gate on its own merits.
++                owner_said_yes=bool(body.get("cloud_yes")),
+             )
+             if jarvis_side_memory and decision.gate == "unavailable":
+                 decision.reason = "escalation off while Jarvis injects memory itself"
+                 decision.gate = "privacy"

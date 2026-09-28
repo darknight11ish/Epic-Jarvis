@@ -78,6 +78,14 @@ const section = (page) => page.evaluate(() => {
     suggestRows: [...document.querySelectorAll("#sc-suggest-signals input[type=checkbox]")]
       .map((input) => ({ id: input.dataset.signal, checked: input.checked,
                          text: input.closest("label").innerText })),
+    thirdSectionHidden: $("sc-third-section").hidden,
+    thirdFound: $("sc-third-found").innerText,
+    thirdSelectOptions: [...($("sc-third-select")?.options || [])].map((o) => o.value),
+    thirdSelectValue: $("sc-third-select")?.value ?? null,
+    thirdSelectDisabled: $("sc-third-select")?.disabled ?? null,
+    thirdMoveDisabled: $("sc-third-move")?.disabled ?? null,
+    thirdText: $("sc-third")?.innerText ?? "",
+    thirdStatus: $("sc-third-status").innerText,
   };
 });
 const suggestRow = (s, id) => s.suggestRows.find((r) => r.id === id);
@@ -154,6 +162,7 @@ await check("a capable card, all off: only the main switch can be turned on, and
 await check("each feature says its model, whether it is installed, the exact name to install, and its memory", async () => {
   const page = await open({ status: SC.capable_off });
   const s = await section(page);
+  const switchesHtml = await page.$eval("#sc-switches", (el) => el.innerHTML);
   await page.close();
   const vision = row(s, "vision").text;
   assert.match(vision, /Model: qwen2\.5vl:7b, not installed yet\./);
@@ -167,9 +176,12 @@ await check("each feature says its model, whether it is installed, the exact nam
   const browserText = row(s, "browser_control").text;
   assert.match(browserText, /Needs Longer conversations on first\./);
   assert.equal((browserText.match(/Needs/g) || []).length, 1, "the same need is said twice");
-  // No catalogue: nothing on the page offers models to choose from.
-  const html = await (await open({ status: SC.capable_off })).content();
-  assert.doesNotMatch(html, /<select[^>]*sc-/, "a model picker appeared");
+  // No catalogue: nothing in the switches themselves offers a MODEL to
+  // choose from - scoped to #sc-switches, not the whole page, since the
+  // third card's own <select> (2026-09-28) picks a FEATURE, never a
+  // model, and legitimately lives in the same "sc-" naming convention
+  // every element on this page already uses (#sc-third-section, below).
+  assert.doesNotMatch(switchesHtml, /<select/, "a model picker appeared");
 });
 
 await check("the pin command: exactly the backend's line, read-only, with Copy and what it does", async () => {
@@ -226,6 +238,99 @@ await check("a card already waiting: that switch says so, and the others stay us
   assert.equal(row(s, "vision").disabled, false, "Pictures cannot be asked for while another card waits");
   assert.equal(row(s, "browser_control").disabled, true);
   assert.match(row(s, "browser_control").text, /Needs Longer conversations on first/);
+});
+
+/* ── A third graphics card (2026-09-28) ───────────────────────────────────
+ * jarvis_second_card.py's own status()["third"]: purely additive, so none
+ * of the fixture's six named cases carry it - each check below clones a
+ * real case and adds a "third" object in the exact shape the backend
+ * really answers (checked against tools/gen_second_card_cases.py's own
+ * output for backend/test_second_card.py). */
+
+const withThird = (base, third) => ({ ...JSON.parse(JSON.stringify(base)), third });
+
+const THIRD_CARD = { uuid: "GPU-3rd", index: 2, name: "NVIDIA GeForce RTX 2080 Ti",
+  total_mb: 11264, compute_cap: 7.5 };
+
+await check("no capable third card: the section stays hidden", async () => {
+  const page = await open({ status: withThird(SC.capable_off,
+    { capable: false, card: null, assigned: null, assignable: [], pending: false,
+      lane: { state: "off", why: "no capable third graphics card" },
+      model: null, context: null, memory_gib: null, model_installed: null,
+      why: "No capable third graphics card is plugged in right now." }) });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.thirdSectionHidden, true);
+});
+
+await check("a capable third card, nothing assigned: shown, 'Not used', no default winner", async () => {
+  const page = await open({ status: withThird(SC.capable_off,
+    { capable: true, card: THIRD_CARD, assigned: null, assignable: [], pending: false,
+      lane: { state: "off", why: "no feature is assigned to the third card" },
+      model: null, context: null, memory_gib: null, model_installed: null,
+      why: "Not running anything. Assign one of the switches above to the "
+          + "NVIDIA GeForce RTX 2080 Ti to use it." }) });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.thirdSectionHidden, false);
+  assert.match(s.thirdFound, /NVIDIA GeForce RTX 2080 Ti \(11 GB\)/);
+  assert.deepEqual(s.thirdSelectOptions, [""], "an option was offered with nothing turned on");
+  assert.equal(s.thirdSelectValue, "");
+  assert.equal(s.thirdSelectDisabled, false);
+  assert.match(s.thirdText, /Not running anything\. Assign/);
+});
+
+await check("only switches that are actually on can be moved here", async () => {
+  const status = withThird(SC.capable_off,
+    { capable: true, card: THIRD_CARD, assigned: null,
+      assignable: ["long_context", "vision"], pending: false,
+      lane: { state: "off", why: "no feature is assigned to the third card" },
+      model: null, context: null, memory_gib: null, model_installed: null,
+      why: "Not running anything. Assign one of the switches above to the "
+          + "NVIDIA GeForce RTX 2080 Ti to use it." });
+  const page = await open({ status });
+  const s = await section(page);
+  await page.close();
+  assert.deepEqual(s.thirdSelectOptions.sort(), ["", "long_context", "vision"].sort());
+  assert.ok(!s.thirdSelectOptions.includes("browser_control"),
+    "an off switch was offered as an assignable option");
+});
+
+await check("moving a switch here sends assign, and waits for its own card", async () => {
+  const status = withThird(SC.capable_off,
+    { capable: true, card: THIRD_CARD, assigned: null,
+      assignable: ["long_context"], pending: false,
+      lane: { state: "off", why: "no feature is assigned to the third card" },
+      model: null, context: null, memory_gib: null, model_installed: null, why: "Not running anything." });
+  const page = await open({ status });
+  await page.locator("#sc-third-select").selectOption("long_context");
+  await page.locator("#sc-third-move").click();
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  await page.close();
+  assert.deepEqual(s.changes, [{ assign: "long_context" }]);
+  assert.match(s.thirdStatus, /Waiting for your approval/);
+  assert.equal(s.thirdSelectDisabled, true);
+});
+
+await check("moving it back off (assign: null) is at once, no card", async () => {
+  const status = withThird(SC.capable_off,
+    { capable: true, card: THIRD_CARD, assigned: "vision",
+      assignable: ["vision"], pending: false,
+      lane: { state: "running", why: "running on 127.0.0.1:11436 (this PC only)" },
+      model: "qwen2.5vl:7b", context: 16384, memory_gib: 7.15, model_installed: true,
+      why: "Working: qwen2.5vl:7b on the NVIDIA GeForce RTX 2080 Ti, with room for "
+          + "16,384 tokens - at the same time as the second card's own lane." });
+  const page = await open({ status });
+  const before = await section(page);
+  assert.equal(before.thirdSelectValue, "vision");
+  await page.locator("#sc-third-select").selectOption("");
+  await page.locator("#sc-third-move").click();
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  await page.close();
+  assert.deepEqual(s.changes, [{ assign: null }]);
+  assert.match(s.thirdStatus, /not running anything/i);
 });
 
 await check("when the approval queue changes, the page re-reads and shows what the card decided", async () => {
@@ -614,7 +719,8 @@ await check("CONTROL: ON is held on a stale link before anything is sent; OFF ne
 await check("CONTROL: only the settings window may read or change the second card", async () => {
   const toml = read("src-tauri/permissions/surfaces.toml");
   const sets = toml.split("[[set]]").slice(1);
-  for (const perm of ["allow-get-second-card", "allow-set-second-card", "allow-set-second-card-suggest"]) {
+  for (const perm of ["allow-get-second-card", "allow-set-second-card", "allow-set-second-card-suggest",
+                      "allow-set-third-card"]) {
     const holders = sets.filter((s) => s.includes(`"${perm}"`))
       .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
     assert.deepEqual(holders, ["settings-surface"], `${perm} is held by ${holders}`);
@@ -627,12 +733,27 @@ await check("CONTROL: only the settings window may read or change the second car
   }
   const build = read("src-tauri/build.rs");
   const lib = read("src-tauri/src/lib.rs");
-  for (const cmd of ["get_second_card", "set_second_card", "set_second_card_suggest"]) {
+  for (const cmd of ["get_second_card", "set_second_card", "set_second_card_suggest", "set_third_card"]) {
     assert.ok(build.includes(`"${cmd}"`), `${cmd} is not in build.rs, so no window can call it`);
     assert.ok(lib.includes(`commands::${cmd},`), `${cmd} is not registered`);
     const gen = read(`src-tauri/permissions/autogenerated/${cmd}.toml`);
     assert.match(gen, new RegExp(`commands.allow = \\["${cmd}"\\]`));
   }
+});
+
+await check("CONTROL: moving a feature to the third card posts {feature: \"third\", assign}, held on a stale link", async () => {
+  const rust = read("src-tauri/src/commands.rs");
+  const body = fnBody(rust, "pub async fn set_third_card(");
+  assert.match(body, /"feature": "third", "assign": assign/);
+  assert.match(body, /format!\("\{base\}\{SECOND_CARD_PATH\}"\)/, "does not post to /api/second-card");
+  const hold = body.indexOf("if assign.is_some() && app.state::<crate::stream::StreamState>().link().stale {");
+  const post = body.indexOf(".post(");
+  assert.ok(hold > -1, "set_third_card has no stale-link hold");
+  assert.ok(hold < post, "the stale-link hold comes after the POST");
+  // One direction only: the hold is conditioned on assigning, never on unassigning.
+  assert.doesNotMatch(body, /if assign\.is_none\(\)[^\n]*stale/);
+  assert.match(body, /jarvis_headers\(&app\)/);
+  assert.doesNotMatch(body, /println!|eprintln!|log::|tracing::|dbg!/, "set_third_card logs");
 });
 
 await check("CONTROL: 'suggest the bigger model' is held on a stale link, and posts to /api/second-card/suggest", async () => {
@@ -676,7 +797,7 @@ await check("CONTROL: the route line passes second_card on, and nothing more", a
   const list = /for key in \[([\s\S]*?)\]/.exec(fn);
   assert.ok(list, "no `for key in [...]` string list in route_line_from_header");
   const keys = [...list[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings"]);
+  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings", "offer"]);
 });
 
 await browser.close();

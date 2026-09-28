@@ -633,6 +633,56 @@ $PATCHES = @(
     # tool loop already makes - for the local model only. Needs nothing new
     # copied in: jarvis_agent.py is already in this list.
     'rules-first-relay.patch'
+    # The owner's yes for one question, to the cloud lane
+    # jarvis_router.choose() already offers but never uses on its own
+    # (docs/ARCHITECTURE.md "Cloud / API keys", "the owner chose 'ask each
+    # time'"). One line added to the ALREADY-EXISTING choose() call this
+    # repository had never patched before 2026-09-27 - real, verified
+    # against the owner's own file by hand, not a stand-in, because no
+    # earlier patch's hunk touches this call at all (see the patch's own
+    # comment for why that matters). Every privacy gate above it in
+    # choose() still runs first and in the same order; this can only ever
+    # turn an "offer" into an "escalate" for a question that had already
+    # cleared every other gate on its own.
+    'cloud-say-yes.patch'
+    # "Goals with one card per step" (the owner's "build it now",
+    # 2026-09-27, after the Jarvis evaluation; design:
+    # docs/creativity-2026-09-25/future.md idea 3). One try/except block,
+    # append-only, right after answer-sources.patch's own new route block -
+    # jarvis_goals.py is a brand-new whole module, so this adds a route the
+    # same way news.patch and tool-updates.patch each did. Never batches an
+    # approval: every acting step still gets its own separate card through
+    # ordinary chat tool use, exactly as today - this is NOT the "plan
+    # card" (docs/FEASIBILITY-AUDIT-2026-09-26.md I61) still gated behind
+    # the multi-step safety tests; see jarvis_goals.py's own docstring for
+    # why the two are different and why this one was never waiting on that.
+    'goals.patch'
+    # "One card, several steps" (feasibility I61, "the plan card"; the
+    # owner's own words, 2026-09-28). Two small hunks against jarvis_gate.py
+    # only: a risk entry for run_plan and a tier line for propose_plan/
+    # run_plan, both append-only next to their own kind's existing entries
+    # (control_computer's own risk line; draft_email's own tier line).
+    # jarvis_plan.py itself is SWITCHED OFF until tools/tool_eval's real
+    # results clear the bar - see that module's own docstring - so this
+    # patch alone changes nothing the model can reach yet; it only teaches
+    # the gate the two new action names for when it is turned on.
+    'plan-gate.patch'
+    # Reading phone notifications (the owner's decision, 2026-09-26; built
+    # 2026-09-28, CLAUDE.md): GET and POST /api/notifications/phone - OFF by
+    # default (Jarvis never reads a phone notification), ON is one approval
+    # card (phone_notifications_read), OFF is instant. Three hunks: its
+    # jarvis_gate.py "acts only on tier ask" line (context is backup.patch's
+    # own restore_backup line, so it goes after it) and its jarvis_gate.py
+    # _RISK entry (context is plan-gate.patch's own run_plan entry, so it
+    # goes after it); and its jarvis_hud.py install() block (context is
+    # goals.patch's own block, so it goes after it - last, like every new
+    # patch touching that block). Needs jarvis_phone_notifications.py copied
+    # in; without it, or on any error, the banner says so and the route is
+    # not there. Everything else (which apps, the one-time-code redaction,
+    # never SMS, the allow list) lives entirely on the phone
+    # (jarvis-client/), proved by that app's own tests - this patch and its
+    # module never see a notification's text.
+    'phone-notifications.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -768,6 +818,12 @@ $SHIPPED = @(
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
     # --- the app builder's workspace (2026-09-28, docs/APP-BUILDER-DESIGN.md milestone A) ---
     'jarvis_app_workspace.py'    # app projects, a separate copy per task, one card with the full diff before a merge; runs nothing; no patch or tool yet
+    # --- "Goals with one card per step" (goals.patch) ---
+    'jarvis_goals.py'            # goals.patch: a goal's own plan and weekly check-in; accepting raises one card, like a repeating reminder; every acting step still asks through ordinary chat
+    # --- "One card, several steps" (plan-gate.patch) ---
+    'jarvis_plan.py'             # plan-gate.patch: the plan card's own module - SWITCHED OFF until tools/tool_eval's real results clear the bar; see its own docstring
+    # --- reading phone notifications (2026-09-28, phone-notifications.patch) ---
+    'jarvis_phone_notifications.py'  # off by default; ON is one approval card, phone_notifications_read; OFF is instant; never sees a notification's own text
 )
 
 # The settings file. Installed only where none exists; never overwritten.

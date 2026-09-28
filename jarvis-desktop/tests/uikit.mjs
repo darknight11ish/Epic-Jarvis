@@ -450,7 +450,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus,
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
   folders }) {
   const listeners = {};
   window.__calls = [];
@@ -839,6 +839,30 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             st.pending = st.pending.filter((p) => p !== args.feature);
             const label = args.feature === "master" ? "The second graphics card" : `"${row ? row.name : args.feature}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
+          }
+          // commands.rs set_third_card (2026-09-28): moving one of the
+          // second card's own features onto a third graphics card, or
+          // moving it back off. What jarvis_second_card._request_change_third
+          // does to status()'s "third" key: assigning puts "third" in
+          // `pending` (a card is up, nothing moved yet); unassigning clears
+          // it and `third.assigned` at once.
+          case "set_third_card": {
+            const sc = window.__secondCard;
+            sc.changes.push({ assign: args.assign ?? null });
+            if (sc.setFails) throw new Error(sc.setFails);
+            const st = sc.status;
+            const third = st.third || {};
+            if (args.assign) {
+              if (!st.pending.includes("third")) st.pending.push("third");
+              third.pending = true;
+              return { ok: true, assigned: third.assigned || null, pending: true,
+                       message: "Approve the card on your PC or phone to move it. Nothing changes until you do." };
+            }
+            third.assigned = null;
+            third.pending = false;
+            st.pending = st.pending.filter((p) => p !== "third");
+            return { ok: true, assigned: null, pending: false,
+                     message: "The third card is not running anything." };
           }
           // "When to suggest the bigger model" - no card either way, so this
           // just flips the one signal in the same status object.
@@ -1373,6 +1397,111 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { ok: true, waiting: true, job,
                      said: "It repeats, so it waits for your yes on the card." };
           }
+          // brain/goals.rs (Goals). `window.__goals` is null - a PC without
+          // this feature yet, which Rust answers {available: false} for -
+          // unless the scenario names `goals: {goals}`. Accepting pushes its
+          // check-in job onto the SAME `window.__schedule.jobs` Coming up
+          // reads (creating it, empty, if the scenario named no `schedule` -
+          // exactly as the real backend keeps both on the one scheduler),
+          // waiting, like any other repeat set up on the PC; stopping
+          // removes it again. Words are taken out while the private lists
+          // are hidden, same as brain_schedule above.
+          case "brain_goals": {
+            const g = window.__goals;
+            if (!g) {
+              return { available: false, why: "Your PC's Jarvis does not have Goals yet - " +
+                "run apply-patches.ps1 on the PC." };
+            }
+            g.reads += 1;
+            if (g.fails) throw new Error(g.fails);
+            const out = JSON.parse(JSON.stringify({ available: true, goals: g.goals,
+              limits: { text: 300, steps: 7, goals: 20, by: 40 } }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              for (const gl of out.goals) {
+                gl.text = "";
+                gl.plan = gl.plan.map((s) => ({ ...s, step: "", by: "" }));
+                gl.hidden = true;
+              }
+              out.hidden = true;
+            }
+            return out;
+          }
+          case "brain_goals_create": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const text = String(args.text || "").trim();
+            if (!text) return { ok: false, error: "a goal needs some words" };
+            if (text.length > 300) {
+              return { ok: false, error: "a goal is longer than 300 characters - say it more briefly" };
+            }
+            const open = g.goals.filter((x) => x.status === "draft" || x.status === "active").length;
+            if (open >= 20) {
+              return { ok: false, error: "there are already 20 goals - stop tracking one before adding another" };
+            }
+            const plan = Array.isArray(args.plan) && args.plan.length
+              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              : [{ step: text, by: "", done: false }];
+            const goal = { id: "g" + g.goals.length.toString(16).padStart(10, "0"), text, plan,
+              status: "draft", created: Date.now() / 1000, changed: Date.now() / 1000 };
+            g.goals.unshift(goal);
+            return { ok: true, goal };
+          }
+          case "brain_goals_accept": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const goal = g.goals.find((x) => x.id === args.id);
+            if (!goal) return { ok: false, error: "no such goal" };
+            if (goal.status !== "draft") return { ok: false, error: "that goal is not waiting to be accepted" };
+            const plan = Array.isArray(args.plan) && args.plan.length
+              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              : goal.plan;
+            if (!plan.length) return { ok: false, error: "a plan needs at least one step" };
+            if (plan.length > 7) {
+              return { ok: false, error: "a plan can have at most 7 steps - keep the big ones and drop the rest" };
+            }
+            goal.plan = plan;
+            goal.status = "active";
+            goal.changed = Date.now() / 1000;
+            if (!window.__schedule) window.__schedule = { jobs: [], todo: [], reads: 0, fails: null };
+            const job = { id: "s" + (0xd000000000 + window.__schedule.jobs.length).toString(16),
+              kind: "goal_checkin", text: goal.text, state: "waiting", repeats: true,
+              repeat: "every Monday at 09:00" };
+            window.__schedule.jobs.push(job);
+            g.checkinByGoal = g.checkinByGoal || {};
+            g.checkinByGoal[goal.id] = job.id;
+            return { ok: true, goal: { ...goal, checkin: job } };
+          }
+          case "brain_goals_step": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const goal = g.goals.find((x) => x.id === args.id);
+            if (!goal) return { ok: false, error: "no such goal" };
+            const i = args.index;
+            if (typeof i !== "number" || i < 0 || i >= goal.plan.length) {
+              return { ok: false, error: "that is not one of this goal's steps" };
+            }
+            goal.plan[i].done = Boolean(args.done);
+            goal.changed = Date.now() / 1000;
+            return { ok: true, goal: { ...goal } };
+          }
+          case "brain_goals_stop": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const goal = g.goals.find((x) => x.id === args.id);
+            if (!goal) return { ok: false, error: "no such goal" };
+            goal.status = "stopped";
+            goal.changed = Date.now() / 1000;
+            const jobId = (g.checkinByGoal || {})[goal.id];
+            if (jobId && window.__schedule) {
+              window.__schedule.jobs = window.__schedule.jobs.filter((j) => j.id !== jobId);
+            }
+            return { ok: true, goal: { ...goal } };
+          }
           // brain/briefing.rs (the morning briefing). `window.__briefing` is
           // null - a PC without it, which Rust answers {available: false}
           // for - unless the scenario names `briefing: {...}`. Lines are
@@ -1816,6 +1945,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__schedule = schedule ? JSON.parse(JSON.stringify({
     jobs: [], todo: [], reads: 0, fails: null, ...schedule })) : null;
   window.__scheduleCalls = [];
+  window.__goals = goals ? JSON.parse(JSON.stringify({
+    goals: [], reads: 0, fails: null, checkinByGoal: {}, ...goals })) : null;
+  window.__goalsCalls = [];
   window.__focus = focus ? JSON.parse(JSON.stringify({ reads: 0, ...focus })) : null;
   window.__focusCalls = [];
   window.__briefing = briefing ? JSON.parse(JSON.stringify({

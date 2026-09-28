@@ -115,6 +115,7 @@ TOOL_NAMES = {
     "todo_add": "Adding to the to-do list",
     "todo_done": "Ticking off the to-do list",
     "coming_up": "Coming up (timers, alarms, reminders)",
+    "propose_plan": "Running a short plan of its own tools (one card, several steps)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as

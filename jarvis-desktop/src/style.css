@@ -1409,6 +1409,17 @@ html[data-state="error"] .pulse {
 
 .answer-mark-note { color: var(--text-faint); }
 
+/* "A cloud model could give this one a second look." (jarvis_router gate
+   "offer"): quiet, like the mark above it - one tap, one question, never
+   a standing choice. */
+.answer-cloud-offer {
+  margin-top: 10px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.answer-cloud-offer-label { margin: 0 0 4px; }
+.answer-cloud-offer-micro { margin: 4px 0 0; color: var(--text-faint); }
+
 /* Temporary chat (2026-09-25): a marker for the whole chat - the strip at
    the top of the stack, and a dashed edge round the bar - so it is never
    the toggle's colour alone that says so. */

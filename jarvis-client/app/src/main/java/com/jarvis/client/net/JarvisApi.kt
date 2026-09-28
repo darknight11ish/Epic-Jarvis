@@ -573,6 +573,21 @@ class JarvisApi(
     suspend fun setWatchNotify(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(WatchNotify.PATH, WatchNotify.enabledBody(on))
 
+    // ------------------------------------------------- reading phone notifications ----
+    // docs/JARVIS-API.md §61; see [PhoneNotifications] for the shapes and
+    // words. This switch is decided on the PC, the same as every other one
+    // here, even though only this phone ever acts on it (ARCHITECTURE §8).
+
+    /** `GET /api/notifications/phone`: `{"enabled", "waiting", "last", "why"}`. */
+    suspend fun phoneNotificationsSettings(): ApiResult<JsonObject> = probe(PhoneNotifications.PATH)
+
+    /**
+     * The switch. ON answers 202 waiting while its approval card is up; OFF
+     * is immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setPhoneNotifications(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(PhoneNotifications.PATH, PhoneNotifications.enabledBody(on))
+
     /**
      * [probe], except that a 503 keeps its body: `ApiError.Server(503, body)`
      * instead of [ApiError.NotAvailable], so the PC's own `error` ("automatic
@@ -749,6 +764,46 @@ class JarvisApi(
                         ApiResult.Failed(ApiError.BadToken)
                     } else {
                         ApiResult.Ok(Schedule.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/goals`: every goal, draft or active or stopped ([Goals.parse]).
+     * A 404 or 501 is a PC without Goals ([Goals.missing]). A read.
+     */
+    suspend fun goals(): ApiResult<JsonObject> = probe(Goals.PATH)
+
+    /** `GET /api/goals/<id>`: one goal ([Goals.parseOne]). A read. */
+    suspend fun goal(id: String): ApiResult<JsonObject> {
+        if (!Goals.validId(id)) return ApiResult.Failed(ApiError.Malformed("not a goal id"))
+        return probe("${Goals.PATH}/$id")
+    }
+
+    /**
+     * `POST /api/goals` (a new draft), `.../accept`, `.../step` or
+     * `.../stop`. The status and body come back whole ([Goals.Reply]), like
+     * [scheduleWrite]: a 404 that says "no such goal" and a 404 from a PC
+     * without Goals at all must read differently ([Goals.createdSaid] /
+     * [Goals.acceptedSaid] / [Goals.changedSaid]).
+     */
+    suspend fun goalsWrite(path: String, json: String): ApiResult<Goals.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Goals.Reply(resp.code, obj))
                     }
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
@@ -943,6 +998,31 @@ class JarvisApi(
                 noAddress(),
             )
             val body = SecondCard.postBody(feature, enabled)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    SecondCard.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * Moving one of the second card's own switches onto a third, capable
+     * graphics card, or moving it back off (2026-09-28). Assigning a
+     * feature id raises one approval card and changes nothing until it is
+     * approved; `assign = null` unassigns at once. See
+     * [SecondCard.classifyPost] for which answers come back as sentences.
+     */
+    suspend fun setThirdCard(assign: String?): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(SecondCard.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = SecondCard.postThirdBody(assign)
                 .toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
@@ -1810,11 +1890,13 @@ class JarvisApi(
         conversationId: String? = null,
         interrupted: String? = null,
         temporary: Boolean = false,
+        /** See [ChatHistory.requestBody]'s own doc on this same parameter. */
+        cloudYes: Boolean = false,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
-            interrupted = interrupted, temporary = temporary,
+            interrupted = interrupted, temporary = temporary, cloudYes = cloudYes,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
