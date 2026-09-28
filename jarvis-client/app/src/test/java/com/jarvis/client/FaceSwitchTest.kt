@@ -333,6 +333,52 @@ class FaceSwitchTest {
         assertTrue(f.past.isNullOrEmpty())
     }
 
+    /** The red panda's pose for [f], as CritterFaces works it out. */
+    private fun pandaPose(f: FaceFrame) = CritterPose.pose(
+        f.state, f.prevState, f.hitchPhase, f.t, f.amp,
+        hist = CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp, prevAmp2 = f.prevAmp2, past = f.past),
+    )
+
+    /** The same moment, for a face that had been in [f]'s state for ever. */
+    private fun settledPose(f: FaceFrame) = CritterPose.pose(f.state, f.state, 1e9f, f.t, f.amp)
+
+    @Test
+    fun `opening straight into waiting on you plays no arrival`() {
+        for (viaEffect in listOf(false, true)) {
+            val host = FaceHost()
+            val a = FakeAnimal()
+            // FaceView's LaunchedEffect(state) may reach the host before its first frame.
+            if (viaEffect) host.onStateChange(FaceState.APPROVAL)
+            runIn(host, a, FaceState.APPROVAL, 0.3f)
+            val f = host.snapshot()
+            assertEquals(FaceState.APPROVAL, f.state)
+            assertEquals("not a change from idle", FaceState.APPROVAL, f.prevState)
+            assertTrue("no arrival: ${f.hitchPhase}", f.hitchPhase > CritterPose.ARRIVE_S)
+            assertTrue(f.past.isNullOrEmpty())
+            assertEquals(settledPose(f).toList(), pandaPose(f).toList())
+            // A later change is a change as always.
+            runIn(host, a, FaceState.IDLE, 0.3f)
+            assertEquals(FaceState.APPROVAL, host.snapshot().prevState)
+            assertTrue(host.snapshot().hitchPhase < 0.5f)
+        }
+    }
+
+    @Test
+    fun `opening straight into standby is asleep from the first frame`() {
+        for (viaEffect in listOf(false, true)) {
+            val host = FaceHost()
+            val a = FakeAnimal()
+            if (viaEffect) host.onStateChange(FaceState.STANDBY)
+            host.advance(1f / 60f, FaceState.STANDBY, null, null, Bindings.DEFAULTS, a, pace = pace)
+            val first = host.snapshot()
+            assertEquals(FaceState.STANDBY, first.prevState)
+            assertEquals("no falling asleep: already asleep", settledPose(first).toList(), pandaPose(first).toList())
+            runIn(host, a, FaceState.STANDBY, 1f)
+            val f = host.snapshot()
+            assertEquals(settledPose(f).toList(), pandaPose(f).toList())
+        }
+    }
+
     @Test
     fun `a face switched to while waiting on you plays no arrival for it`() {
         val host = FaceHost()

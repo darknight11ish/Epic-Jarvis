@@ -1277,8 +1277,15 @@ class FaceHost {
 
     private var accum = 0f
 
+    // A state has been worn: the first one given is adopted, not changed to.
+    private var begun = false
+
     fun onStateChange(next: FaceState) {
         if (next == state) return
+        if (!begun) {
+            adopt(next)
+            return
+        }
         prevState2 = prevState
         prevGap = t - changedAt
         prevAmp2 = prevAmp
@@ -1296,6 +1303,25 @@ class FaceHost {
         colEase = 0f
         if (next == FaceState.APPROVAL) clockStartedAt = t
         governor.reset()
+    }
+
+    /**
+     * The first state this host is given, worn as it is - the desktop's
+     * fresh face memory (faces.html, st = prev = the state). The host starts
+     * in IDLE only as a placeholder, so opening straight into waiting on you
+     * or standby is not a change from idle: no settling from idle, no
+     * arrival reaction, no falling asleep - asleep from the first frame.
+     */
+    private fun adopt(next: FaceState) {
+        begun = true
+        state = next
+        prevState = next
+        prevState2 = next
+        rateTarget = Spec.transformFor(next).rate
+        rate = rateTarget
+        colFrom = null
+        colEase = 1f
+        if (next == FaceState.APPROVAL) clockStartedAt = t
     }
 
     fun onTap(at: Offset, width: Float) {
@@ -1508,6 +1534,7 @@ class FaceHost {
             wanted
         }
         if (shown != state) onStateChange(shown)
+        begun = true
         // Gestures on the phrase ends: decided as the voice is first heard in
         // a speaking stretch - however the state changed (here, or the
         // composable's onStateChange).
