@@ -649,6 +649,42 @@ recommended (its "L, do the S-sized reshape first" advice).
   third capable NVIDIA card in the PC is detected and correctly explained
   ("capable, but the [other] card has more memory") but does nothing.
 
+Built 2026-09-28, the owner's "view the models... without having Jarvis up
+and running" request - **Brain → Model remembers its last list on both
+apps** (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`), a client-side cache
+only, no new backend route:
+
+- Each app keeps its own last successful `GET /api/models` read on disk -
+  the desktop in `localStorage` (`models-cache.js`), the phone in
+  `ModelsCacheStore` (`net/ModelsCache.kt`) - holding only what is honestly
+  still true once written: the installed list, each model's size and
+  family, and the last-known current/previous model. `speed` and `offload`
+  are stripped before the write, never merely hidden after, since those are
+  facts about what Ollama is doing right now, not about a file on disk.
+- When a live read then fails outright, Brain → Model shows that cache
+  instead of going blank, with a plain, clearly-labelled banner naming the
+  real time it is from and hiding the live-only lines (the model-in-use
+  highlight, on/off-card note, recent-speed lines) rather than showing them
+  stale. A backend that explicitly has no models module is shown as that
+  fact, never as the cache. A device that has never once read successfully,
+  with nothing cached either, says plainly there is nothing to show yet.
+  Use/Install/Roll back stay visible but dimmed by the same live-link
+  greying both apps already had (rule 4) - no new visual state invented.
+- **This is not a model catalogue**, on either app: it only ever replays
+  what that same device already showed live at some point, never anything
+  fetched specially for the offline case, and never anything the phone
+  could browse (the standing "no model catalogue on the phone" rule).
+- Built as two worktree agents that, like the Goals feature before them,
+  each turned out to have branched from `origin/main` rather than this
+  branch - caught and reconciled by hand rather than trusting a plain
+  `git merge` (which would have pulled in unrelated main-only history).
+  Verified: the desktop's `tests/models-cache.mjs` (new) plus the existing
+  `.mjs` suite for files it touched; the phone's `ModelsCacheTest.kt`
+  (new) - Kotlin compilation itself is unverified here (no local Android
+  build; the "How the Android apps get built" section above), so it is
+  confirmed only once CI runs. `tools/check_parity.py`: no undecided drift
+  (no route changed either way).
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

@@ -5,11 +5,13 @@ import android.os.SystemClock
 import android.util.Log
 import com.jarvis.client.data.AppearanceStore
 import com.jarvis.client.data.ClientSettings
+import com.jarvis.client.data.ModelsCacheStore
 import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.ActivityEvent
 import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.ApiError
+import com.jarvis.client.net.CachedModels
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ApiResult
@@ -23,7 +25,6 @@ import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.net.EventStream
 import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
-import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.Hardware
@@ -343,14 +344,42 @@ object JarvisRuntime {
     }
 
     /**
-     * `/api/models`, or null when this backend does not offer the capability
-     * or has not been asked yet. Switching between models the desktop already
-     * has was allowed onto the phone on 2026-09-18, and installing a typed
-     * model name on 2026-09-20 (CLAUDE.md) - both only ever ASK, through an
-     * approval card. Browsing what could be installed is still off the phone.
+     * `/api/models`, or null when this backend does not offer the capability,
+     * has not been asked yet, or the most recent read failed. Switching
+     * between models the desktop already has was allowed onto the phone on
+     * 2026-09-18, and installing a typed model name on 2026-09-20
+     * (CLAUDE.md) - both only ever ASK, through an approval card. Browsing
+     * what could be installed is still off the phone.
+     *
+     * Null on a failure - rather than the previous session's last good
+     * value staying put in silence - since [refreshModels]'s 2026-09-28
+     * cache addition: [modelsCache] is what a failed read falls back to
+     * now, WITH a visible "last saw this at…" label
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`), so there is no longer a
+     * reason for this flow to also carry an unlabelled stale answer. This
+     * has no other reader today ([modelsView] combines this with
+     * [modelsCache] for `BrainScreen.kt`'s `ModelsPlate`), so nothing else
+     * depended on the old behaviour.
      */
     private val _models = MutableStateFlow<ModelsInfo?>(null)
     val models: StateFlow<ModelsInfo?> = _models.asStateFlow()
+
+    private lateinit var modelsCacheStore: ModelsCacheStore
+
+    private val _modelsCache = MutableStateFlow<CachedModels?>(null)
+
+    /**
+     * The phone's own last successful `GET /api/models` read, held on disk
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`) so Brain -> Model has
+     * something to show, clearly marked as old, whenever [refreshModels]
+     * fails - including on a cold start, before any read this run has
+     * succeeded at all. Loaded once at [initialize] and refreshed only as
+     * a side effect of a live read succeeding; never re-read specially,
+     * per the design doc's section 4 ("do not sync or refresh the cache on
+     * demand"). See [com.jarvis.client.net.ModelsView] for how the screen
+     * turns this, plus [models], into what it actually draws.
+     */
+    val modelsCache: StateFlow<CachedModels?> = _modelsCache.asStateFlow()
 
     /**
      * `/api/second-card`: what the PC found, and the second-card switches
@@ -543,6 +572,7 @@ object JarvisRuntime {
         // bug cannot come back the next time something is inserted here.
         val clientSettings = ClientSettings(app)
         val tokenStore = TokenStore(app)
+        val modelsStore = ModelsCacheStore(app)
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
         // A temporary chat only on a PC that says it has one (docs/JARVIS-API.md
         // section 18.1): read from the last handshake, when it is asked.
@@ -614,6 +644,12 @@ object JarvisRuntime {
         tokens = tokenStore
         api = jarvisApi
         appearance = AppearanceStore(app)
+        modelsCacheStore = modelsStore
+        // Read once, at startup - so a cold start with Jarvis off has
+        // something to paint at once instead of a blank screen while the
+        // first live read times out. Never re-read after this except as a
+        // side effect of a live read succeeding, in refreshModels().
+        _modelsCache.value = modelsStore.load()
         updates = UpdateChecker(clientSettings)
         chat = chatSession
         voice = voiceSession
@@ -1204,13 +1240,34 @@ object JarvisRuntime {
     /**
      * Re-reads the model list, on a backend that has one. On any other it is
      * cleared, so the picker hides rather than showing a stale list.
+     *
+     * A live success also writes [modelsCache] to disk
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`), so the next cold start -
+     * or the very next failure - has something to replay. A failure clears
+     * [models] rather than leaving the last good answer sitting there
+     * unlabelled: `BrainScreen.kt`'s `ModelsPlate` reads [models] together
+     * with [modelsCache] through [com.jarvis.client.net.modelsView], and
+     * that function's whole contract is that a null [models] means "fall
+     * back to the cache, and say plainly it is old" - a stale value left in
+     * [models] itself would draw as though it were still live. The on-disk
+     * cache is never touched by a failure either way: only a fresh success
+     * is ever worth keeping, never re-read specially, per the design doc's
+     * "never fetched specially" rule.
      */
     suspend fun refreshModels() {
         if (version.value?.can("models") != true) {
             _models.value = null
             return
         }
-        api.models().onOk { _models.value = it }
+        when (val result = api.models()) {
+            is ApiResult.Ok -> {
+                _models.value = result.value
+                val cached = CachedModels.from(result.value, System.currentTimeMillis())
+                modelsCacheStore.save(cached)
+                _modelsCache.value = cached
+            }
+            is ApiResult.Failed -> _models.value = null
+        }
     }
 
     /**

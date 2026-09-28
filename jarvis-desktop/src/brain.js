@@ -240,6 +240,7 @@ import {
   RUNNING as DEEP_RUNNING,
   runningCount,
 } from "./deep.js";
+import { loadModelsCache, saveModelsCache } from "./models-cache.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -414,6 +415,26 @@ const state = {
 
 /** Whether the four views behind "Advanced" are on the rail right now. */
 let advancedOpen = false;
+
+/**
+ * Seeds the Model pane from disk before the first live read comes back
+ * (or fails), so a cold start with Jarvis not running has something to
+ * paint at once instead of a blank pane while the request times out
+ * (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md). `state.readAt.models` is set
+ * to when the cache was actually read, not to now, so the "as of" wording
+ * in `renderModels` is honest from the very first paint.
+ *
+ * If the first live read of "models" then succeeds, `load()` overwrites
+ * both in the ordinary way. If it fails, `load()`'s existing "keep the last
+ * good read, mark it stale" logic (`state.failed`) takes over unchanged -
+ * this cache is just that "last good read" surviving a restart.
+ */
+(function seedModelsFromDisk() {
+  const cached = loadModelsCache();
+  if (!cached) return;
+  state.data.models = { available: true, ...cached.models };
+  state.readAt.models = cached.at;
+})();
 
 /* ==========================================================================
    Plumbing
@@ -642,6 +663,13 @@ async function load(sections, { quiet = false } = {}) {
         // read that asks for it - which may be the Faculties view's, not
         // the Memory tab's. Noted here so it is not lost either way.
         if (section === "memory_pending" && value) noteSleepOffer(value.setup);
+        // Every good models read is written to disk (never on a failed or
+        // "absent" one - `value.available` covers both), so the Model pane
+        // has something honest to show after a restart, not only within
+        // this window's lifetime. See models-cache.js for what is kept.
+        if (section === "models" && value && value.available !== false) {
+          saveModelsCache(value, now);
+        }
         if (failedRead) {
           state.failed[section] = { why: String(value.error || "no reason given"), at: now };
         } else {
@@ -878,10 +906,60 @@ function renderCounts() {
    Faculties
    ========================================================================== */
 
+/** Shown when there is no data at all - never a good read this session,
+ *  and nothing cached from an earlier one either. Not "Could not read
+ *  this": that would read as a fault on a machine that has simply never
+ *  once been connected to Jarvis while it was running. */
+const MODELS_NEVER_CONNECTED =
+  "There's nothing to show yet — open this once while Jarvis is running on your PC.";
+
+/** The offline banner's "as of" time, in the same short form the rest of
+ *  the window uses for a moment in the past (not a duration - the owner
+ *  asked for a real time here, not "3h ago", since it may be days old). */
+function asOfWords(atMs) {
+  if (!atMs) return "an earlier connection";
+  try {
+    return new Date(atMs).toLocaleString(undefined, {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "an earlier connection";
+  }
+}
+
 function renderModels() {
-  const body = state.data.models || {};
-  const why = unavailable("models");
-  if (why) return rows(dom.models, [], null, whyNode("models"));
+  const live = sectionState("models");
+  const body = state.data.models;
+  // A body of `{available: false, ...}` (never read, or read but failed
+  // with nothing older to show, or an explicit "this backend does not have
+  // it") counts the same as no body at all here: none of them are data to
+  // draw the pane from. Checking `body` alone would treat a failed read's
+  // own `{available: false}` shape as "there is something to show" - it
+  // very nearly did.
+  const haveGoodData = Boolean(body) && body.available !== false;
+
+  if (!haveGoodData) {
+    // The backend itself says it has no models module (a 404/503, not "no
+    // answer at all") - a fact about this machine, not a stale read, so the
+    // cache (if load() kept one) is not shown in its place.
+    if (live.kind === "absent") return rows(dom.models, [], null, whyNode("models"));
+    // 'reading' or 'failed', and there is nothing to fall back to - not
+    // even a disk cache: never a good read, this session or any earlier
+    // one on this PC. Saying "could not read" would blame a fault where
+    // there has simply never once been a connection.
+    const node = el("p", "empty", live.kind === "reading" ? "Reading…" : MODELS_NEVER_CONNECTED);
+    if (live.kind === "failed") node.append(" ", retryButton("models"));
+    return rows(dom.models, [], null, node);
+  }
+
+  // The most recent read failed and this is the last one that worked -
+  // whether that was earlier this session or, via models-cache.js, from
+  // before the app last restarted. Either way it must never be painted as
+  // if it were live: rule 4, and the design doc's whole point.
+  const stale = live.kind === "stale";
 
   const current = body.current || body.active || "";
   const previous = body.previous || "";
@@ -898,7 +976,12 @@ function renderModels() {
     items,
     (m) => {
       const ref = String(m.ref || m.name || m.model || "");
+      // Which model is current is honestly cacheable, but only labelled as
+      // of the cache's own time, never drawn as "this is running now" -
+      // that claim needs a live read (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md
+      // section 5). The quieter note below the list carries it while stale.
       const isCurrent = ref && ref === current;
+      const showAsLiveCurrent = isCurrent && !stale;
       const actions = [];
       if (ref && !isCurrent) {
         actions.push(
@@ -909,8 +992,8 @@ function renderModels() {
         );
       }
       return row({
-        tag: isCurrent ? "active" : "installed",
-        state: isCurrent ? "present" : "",
+        tag: showAsLiveCurrent ? "active" : "installed",
+        state: showAsLiveCurrent ? "present" : "",
         title: ref || "(unnamed)",
         meta: [
           m.size ? bytes(m.size) : "",
@@ -923,29 +1006,58 @@ function renderModels() {
     "No models reported."
   );
 
-  // Is the model actually ON the graphics card? Nothing else anywhere says.
-  // llama.cpp spills layers to the CPU silently and Ollama still reports the
-  // model as loaded and healthy, so the only symptom is that everything got
-  // slow - and the owner blames Jarvis rather than the fit.
-  //
-  // Prepended after `rows()` rather than composed before it, because `rows()`
-  // calls replaceChildren on whatever it is given, and the rollback button
-  // below appends to the same element.
-  const off = body.offload || {};
-  if (off.status === "cpu" || off.status === "partial") {
+  if (stale) {
+    // The one clearly-labelled sentence this whole feature is for: what is
+    // shown below is old, roughly how old, and what is deliberately not
+    // shown because only a running Jarvis could know it.
     dom.models.prepend(
-      el("p", "banner", String(off.note || "The model is not on the graphics card."))
+      el(
+        "p",
+        "banner models-offline",
+        `Jarvis isn't running right now, so this list is from the last time it was: ` +
+          `${asOfWords(state.readAt.models)}. Sizes and names are probably still right. ` +
+          `What's actually loaded right now isn't shown, since only a running Jarvis knows that.`
+      )
     );
+    if (current) {
+      dom.models.append(
+        el("p", "note", `As of that last connection, ${current} was the one in use.`)
+      );
+    }
   }
 
-  // How fast answers have been (speed-record.patch). docs/JARVIS-API.md says
-  // show exactly three things: one line for the current model, the backend's
-  // own note only when it got slower, and its own old-vs-new sentence beside
-  // the rollback button. The phone does the same (ApiModels.kt ModelSpeed);
-  // this window ignored the block entirely.
-  const speed = modelSpeed(body.speed, current);
-  if (speed.line) dom.models.append(el("p", "model-speed", speed.line));
-  if (speed.slowdown) dom.models.append(el("p", "banner", speed.slowdown));
+  // Is the model actually ON the graphics card, and how fast have answers
+  // been? Both are live measurements of what Ollama is doing right now, not
+  // facts about a file on disk - shown stale they would read as "this is
+  // happening now" and be wrong, so they are skipped outright while stale
+  // rather than guessed at (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md section
+  // 5). `speed` is also never written to the disk cache in the first place
+  // (models-cache.js), so there would be nothing to show here even for a
+  // read this window never actually saw fail.
+  const speed = stale ? { line: "", slowdown: "", lastSwitch: "" } : modelSpeed(body.speed, current);
+  if (!stale) {
+    // llama.cpp spills layers to the CPU silently and Ollama still reports
+    // the model as loaded and healthy, so the only symptom is that
+    // everything got slow - and the owner blames Jarvis rather than the fit.
+    //
+    // Prepended after `rows()` rather than composed before it, because
+    // `rows()` calls replaceChildren on whatever it is given, and the
+    // rollback button below appends to the same element.
+    const off = body.offload || {};
+    if (off.status === "cpu" || off.status === "partial") {
+      dom.models.prepend(
+        el("p", "banner", String(off.note || "The model is not on the graphics card."))
+      );
+    }
+
+    // How fast answers have been (speed-record.patch). docs/JARVIS-API.md
+    // says show exactly three things: one line for the current model, the
+    // backend's own note only when it got slower, and its own old-vs-new
+    // sentence beside the rollback button. The phone does the same
+    // (ApiModels.kt ModelSpeed); this window ignored the block entirely.
+    if (speed.line) dom.models.append(el("p", "model-speed", speed.line));
+    if (speed.slowdown) dom.models.append(el("p", "banner", speed.slowdown));
+  }
 
   if (previous && previous !== current) {
     if (speed.lastSwitch) dom.models.append(el("p", "model-speed", speed.lastSwitch));

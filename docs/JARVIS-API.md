@@ -1074,7 +1074,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§28). `started` (2026-09-25) is when the server process started, in epoch seconds (§29). The desktop falls back to `/api/status` for anything an older server leaves out. |
 | `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Brain screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
 | `/api/graph` | GET | `routes.rs:15` | **no — by rule** | The memory graph stays off the phone. Gets its own longer timeout (`brain.rs:97`). |
-| `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |
+| `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. A failed read falls back to the phone's own last successful one, cached on disk and clearly marked as old - see the note below the table. |
 | `/api/compute` | GET | `routes.rs:18` | via `probe` | GPU/VRAM plan. Shape undocumented — see below. |
 | `/api/skills` | GET | `routes.rs:19` | via `probe` | |
 | `/api/jobs` | GET | `routes.rs:20` | `JarvisApi.kt:286` | List key: `jobs`. |
@@ -1128,6 +1128,41 @@ since 2026-09-23 (Brain → Model → Models, `brain.js` `modelSpeed`, a
 line-for-line port); before that it ignored the block. Both apps can also
 **install** a model there now - a typed name, one approval card, no
 catalogue.
+
+**The desktop's Brain → Model, when `/api/models` cannot be read at all**
+(`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`; `models-cache.js`, `brain.js`
+`renderModels`) - client-side behaviour, no wire change: the desktop keeps
+its own last successful read of this route in `localStorage`
+(`jarvis.brain.modelsCache`), holding only `current`, `previous` and
+`installed[].{ref,size,family}` - never `speed` or `offload`, which are
+stripped before the write, not merely hidden after. When the live read
+then fails with Jarvis not reachable at all (`read: "failed"`, not
+`"absent"`), the pane shows that cache instead of going blank, with a
+plain banner naming the real time it is from and hiding the model-in-use
+highlight, the on/off-graphics-card note and the recent-speed lines - all
+of which are facts about what Ollama is doing right now, not about a file
+on disk, and would read as live if shown stale. A backend that genuinely
+has no `/api/models` (`read: "absent"`, a 404/503) is shown as that fact,
+never as the stale cache. A machine that has never once completed a live
+read, with nothing cached either, is told plainly that there is nothing to
+show yet, rather than being told a read "failed".
+
+**Android caches its own last successful `/api/models` read on disk** the
+same way (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`, no wire change -
+client-only). Every live success writes the offline-safe subset (`current`,
+`previous`, `installed`) to `ModelsCacheStore`, dropping `offload` and
+`speed` for the same reason the desktop does. When a live read fails, Brain
+-> Model falls back to that cache and says so plainly - "Can't reach
+Jarvis - showing what it last saw, <age>" - with Use, Install and Roll back
+dimmed the same way they already dim while the link is down or stale (rule
+4). No prior cache at all reads "There's nothing to show yet - open this
+once while Jarvis is running on your PC." The cache is written only as a
+side effect of an ordinary live read succeeding, never fetched specially -
+it is not a live disk read (the phone has no access to the PC's disk) and
+not a browsable catalogue: it only ever replays what the phone already
+showed live once (CLAUDE.md: "do not build the model catalogue... on the
+phone"). See `net/ModelsCache.kt` (`CachedModels`, `ModelsView`,
+`modelsView()`) and `data/ModelsCacheStore.kt`.
 
 **`/api/graph` gains `sources.documents_not_ours`** (`documents-owned.patch`):
 true means a `documents` table made by another program (most likely

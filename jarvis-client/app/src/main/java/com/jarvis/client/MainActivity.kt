@@ -707,6 +707,11 @@ class MainActivity : FragmentActivity() {
         val inboxRead by JarvisRuntime.inboxRead.collectAsState()
         val brain by JarvisRuntime.brain.collectAsState()
         val models by JarvisRuntime.models.collectAsState()
+        // The phone's own last successful `GET /api/models` read, held on
+        // disk so Brain -> Model has something to show, clearly marked as
+        // old, when [models] above is null because the live read failed
+        // (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md).
+        val modelsCache by JarvisRuntime.modelsCache.collectAsState()
         val activityDetail by JarvisRuntime.activityDetail.collectAsState()
         var modelBusy by remember { mutableStateOf(false) }
         // The second graphics card: what the PC last said, which switch has a
@@ -1641,6 +1646,7 @@ class MainActivity : FragmentActivity() {
                             notice = notice,
                             onDismissNotice = { JarvisRuntime.clearNotice() },
                             models = models,
+                            modelsCache = modelsCache,
                             modelBusy = modelBusy,
                             onSwitchModel = { ref ->
                                 if (!modelBusy) {
