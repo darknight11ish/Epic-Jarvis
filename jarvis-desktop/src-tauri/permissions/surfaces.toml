@@ -717,6 +717,25 @@ permissions = [
   "allow-brain-schedule-clear-list",
 ]
 
+# Goals (backend/goals.patch, JARVIS-API.md section 59; the owner's "build it
+# now", 2026-09-27): reading the list is a read - the words taken out in Rust
+# while the private lists are hidden, same as Coming up. A new draft, marking
+# a step done or not, and Stop tracking raise no card - a draft is content,
+# not action, and the other two are immediate, like a to-do item. Accepting
+# a draft is the one place this can raise a card, and it is the backend's
+# own, through jarvis_schedule.py's existing mechanism - never a card this
+# app raises itself. Every write held while the event stream is stale.
+[[set]]
+identifier = "brain-goals"
+description = "Read Goals, add one draft goal, accept a draft (the backend raises its own one weekly-check-in approval card), mark one step done or not, and stop tracking a goal - no card except through accepting, and every change held on a stale link."
+permissions = [
+  "allow-brain-goals",
+  "allow-brain-goals-create",
+  "allow-brain-goals-accept",
+  "allow-brain-goals-step",
+  "allow-brain-goals-stop",
+]
+
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
 # timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
 # is a read. ONE thing per call to the running session - pause, resume, +10

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-goals-step"
+description = "Enables the brain_goals_step command without any pre-configured scope."
+commands.allow = ["brain_goals_step"]
+
+[[permission]]
+identifier = "deny-brain-goals-step"
+description = "Denies the brain_goals_step command without any pre-configured scope."
+commands.deny = ["brain_goals_step"]

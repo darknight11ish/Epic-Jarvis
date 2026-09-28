@@ -1224,6 +1224,98 @@ body {
   flex-wrap: wrap;
 }
 
+/* Goals (goals.js): one block per goal - a title and status tag, its steps,
+   then either the draft editor or the check-in note and Stop tracking. */
+.goal-block {
+  padding: 10px 0;
+  border-top: var(--stroke-hair) solid var(--border);
+}
+
+.goal-block:first-child {
+  border-top: none;
+}
+
+.goal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.goal-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.goal-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.goal-step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.goal-step-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.goal-step-label input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.goal-step-text {
+  overflow-wrap: anywhere;
+}
+
+.goal-step-by {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.goal-editor-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.goal-editor-row .field {
+  min-width: 0;
+}
+
+.goal-editor-row .goal-step-field {
+  flex: 1;
+}
+
+.goal-editor-row .goal-by-field {
+  flex: 0 0 140px;
+}
+
+.goal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.goal-note {
+  margin: 2px 0 0;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
 /* Focus session (focus.js): the countdown, tinted while the owner is off
    target - the same warn colour the widget's countdown uses. */
 .focus-form {

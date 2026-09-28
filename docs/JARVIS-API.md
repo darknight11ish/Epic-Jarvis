@@ -8867,19 +8867,23 @@ NOTHING that acts - it only starts a repeating check-in, which is data,
 not action. Every acting step still needs its own separate card, raised by
 the ordinary chat/tool path, never by this feature.
 
-**The phone's UI is built:** Brain, "Goals", right beside "Coming up"
-(`net/Goals.kt`, `ui/screens/GoalsPlate.kt`). It reuses `net/Schedule.kt`'s
-own job parser to read the check-in job `accept`'s answer carries, and its
-weekly check-in row is left showing on Coming up too (kind `goal_checkin`,
-`owner_listed=True`, unchanged from the backend's own default) - the ONLY
-place that job's live "waiting" state can still be read once this screen's
-own copy of one `accept` answer is gone, since no Goals route hands it out
-again. `Schedule.actionsOf` gives that row no Pause/Delete of its own for
-the same reason: only Stop tracking, on the goal itself, can take the
-check-in down cleanly. Not yet built: the desktop's own UI (Brain -> Work,
-beside Coming up, is the natural place, matching the morning briefing and
-the to-do list). `tools/check_parity.py` carries `/api/goals` as
-`desktop-todo` until then.
+**Both apps' UI is built.** The phone: Brain, "Goals", right beside "Coming
+up" (`net/Goals.kt`, `ui/screens/GoalsPlate.kt`) - it reuses
+`net/Schedule.kt`'s own job parser to read the check-in job `accept`'s
+answer carries, and `Schedule.actionsOf` gives that row no Pause/Delete of
+its own, since only Stop tracking, on the goal itself, can take the
+check-in down cleanly. The desktop: Brain -> Work -> Goals, beside Coming
+up (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
+goals.rs`) - it reads its own limits back from `GET /api/goals` rather
+than hard-coding them, and redacts a goal's and a step's own words under
+the same "Windows Hello for memory lists and chat history" gate Coming up
+already uses. Both apps find the weekly check-in's live state (waiting for
+the card, paused, its next-run note) by reading the SAME Coming up list
+the job already appears on (kind `goal_checkin`, `owner_listed=True`,
+unchanged from the backend's own default) - the ONLY place that state can
+still be read once a screen's own copy of one `accept` answer is gone,
+since no Goals route hands it out again; neither app invents a second
+source of truth for one job's state. `tools/check_parity.py` is clean.
 
 ## 60. "One card, several steps" - the plan card (added 2026-09-28, SWITCHED OFF)
 

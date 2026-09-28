@@ -3472,7 +3472,7 @@ object JarvisRuntime {
     ): Triple<Boolean, com.jarvis.client.net.Goals.Accepted?, String> {
         actionBlocker()?.let { return Triple(false, null, it) }
         if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
-        val result = when (val r = api.goalsWrite("${com.jarvis.client.net.Goals.PATH}/$id/accept",
+        val result = when (val r = api.goalsWrite("/api/goals/$id/accept",
             com.jarvis.client.net.Goals.acceptBody(plan))) {
             is ApiResult.Ok -> com.jarvis.client.net.Goals.acceptedSaid(r.value)
             is ApiResult.Failed -> Triple(false, null, "Not accepted. " + describe(r.error))
@@ -3496,7 +3496,7 @@ object JarvisRuntime {
     ): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
         actionBlocker()?.let { return Triple(false, null, it) }
         if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
-        val result = when (val r = api.goalsWrite("${com.jarvis.client.net.Goals.PATH}/$id/step",
+        val result = when (val r = api.goalsWrite("/api/goals/$id/step",
             com.jarvis.client.net.Goals.stepBody(index, done))) {
             is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value)
             is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
@@ -3516,7 +3516,7 @@ object JarvisRuntime {
     suspend fun stopGoal(id: String): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
         actionBlocker()?.let { return Triple(false, null, it) }
         if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
-        val result = when (val r = api.goalsWrite("${com.jarvis.client.net.Goals.PATH}/$id/stop",
+        val result = when (val r = api.goalsWrite("/api/goals/$id/stop",
             com.jarvis.client.net.Goals.STOP_BODY)) {
             is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value, doneWord = "Stopped.")
             is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))

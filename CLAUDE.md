@@ -528,9 +528,11 @@ the feasibility audit's I63/I64; `docs/JARVIS-API.md` §59).
   Jarvis (in ordinary chat) to suggest a short plan, edits and accepts it.
   Accepting sets up a weekly, model-free check-in - the same ONE
   `schedule_repeat` card a repeating reminder already raises, approving
-  nothing that acts. Every acting step (search installers, draft an email)
-  is asked for in ordinary chat and goes through the exact same per-action
-  card chat already uses - Goals adds no new way to act, ever.
+  nothing that acts. Ticking a step off, and Stop tracking, need no card
+  and are immediate, like a to-do item. Every acting step (search
+  installers, draft an email) is asked for in ordinary chat and goes
+  through the exact same per-action card chat already uses - Goals adds no
+  new way to act, ever.
 - **This is NOT "the plan card"** (feasibility I61, gated behind the
   multi-step safety tests that have not run yet) - a mix-up this session's
   own evaluation made once before catching it. The plan card batches
@@ -543,18 +545,22 @@ the feasibility audit's I63/I64; `docs/JARVIS-API.md` §59).
   exactly what "do not claim more than the evidence supports" (above)
   warns against. Drafting a plan happens in ordinary chat instead, already
   built and already safe.
-- Backend (`backend/jarvis_goals.py`, `goals.patch`, `test_goals.py`, 57
-  checks) and the **phone's UI** (`net/Goals.kt`, `ui/screens/GoalsPlate.kt`,
-  Brain -> Goals, beside Coming up) are built. The weekly check-in's row is
-  left showing on Coming up too (its scheduler kind keeps `owner_listed=True`,
-  the backend's own default) - the only place its live "waiting" state can
-  still be read once the phone's own copy of one `accept` answer is gone,
-  since no Goals route hands that state out again; Coming up itself offers
-  it no Pause/Delete (`Schedule.actionsOf`), since only Stop tracking, on
-  the goal, can take the check-in down cleanly. `tools/check_parity.py`
-  carries `/api/goals` as `desktop-todo` until the desktop side is built -
-  Brain -> Work, beside Coming up, is the natural place there too, matching
-  the briefing and the to-do list.
+- **Where the weekly check-in shows**: the backend registers it
+  `owner_listed=True`, its own default, so it already appears on Coming
+  up like any other repeating job (a reminder, the morning briefing).
+  Neither app's Goals section carves out a private channel for it - each
+  reads that SAME list for the check-in's live state (waiting for the
+  card, paused, its next-run note), rather than inventing a second source
+  of truth for one job; Coming up itself offers it no Pause/Delete
+  (`Schedule.actionsOf` on the phone), since only Stop tracking, on the
+  goal, can take the check-in down cleanly. Consistent with how the
+  briefing's and the standby schedule's own jobs already work.
+- **All three surfaces are built**: backend (`backend/jarvis_goals.py`,
+  `goals.patch`, `test_goals.py`, 57 checks), the phone
+  (`net/Goals.kt`, `ui/screens/GoalsPlate.kt`, Brain -> Goals), and the
+  desktop (`jarvis-desktop/src/goals.js`, `brain.js`,
+  `src-tauri/src/brain/goals.rs`, Brain -> Work -> Goals) - each beside its
+  own app's "Coming up". `tools/check_parity.py` is clean.
 
 Built 2026-09-28, the owner's own words: "add the ability for jarvis to
 request a multi-step process that it does on its own, and it sends me a

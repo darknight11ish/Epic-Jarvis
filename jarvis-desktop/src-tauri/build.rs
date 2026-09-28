@@ -357,6 +357,17 @@ fn main() {
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",
+            // Goals (backend/goals.patch, JARVIS-API.md section 59): a
+            // read, one new draft, accepting it (the backend's own one
+            // approval card, through jarvis_schedule.py, never a card of
+            // this app's own making), one step done or not, and Stop
+            // tracking. No card raised here directly; every write held on
+            // a stale link. Brain only.
+            "brain_goals",
+            "brain_goals_create",
+            "brain_goals_accept",
+            "brain_goals_step",
+            "brain_goals_stop",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on

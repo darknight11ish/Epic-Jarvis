@@ -257,6 +257,14 @@ CLASSIFICATION = {
     "/api/backup/list": ("deliberate", "The kept backup files, by name and date - PC-only, the same reason as the folder above: a phone has nothing to do with a list of files on the PC's disk. ARCHITECTURE.md section 8."),
     "/api/backup/restore/preview": ("deliberate", "Decrypts a backup to show counts and a date, PC-only - the backup file is on the PC's disk, and the recovery code is typed there. ARCHITECTURE.md section 8."),
     "/api/backup/restore": ("deliberate", "Restoring replaces memory, chat history, settings and notes with an older backup: PC-only, ONE approval card that always needs Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from any other device too, whatever the gate's own risk table says). ARCHITECTURE.md section 8."),
+    # Goals: a plan the owner edits, one card per acting step (the owner's
+    # "build it now", 2026-09-27; JARVIS-API.md section 59; backend
+    # jarvis_goals.py). Both apps: the desktop's Brain -> Work -> Goals
+    # (brain/goals.rs) and the phone's Brain -> Goals (net/Goals.kt).
+    "/api/goals": ("ported", "The list of goals, plus the PC's own limits (steps per plan, open goals, text lengths). A read. Desktop: Brain -> Work -> Goals (brain/goals.rs brain_goals). Phone: net/Goals.kt."),
+    "/api/goals/{id}/accept": ("ported", "The owner's edited plan (or the draft as it stood) is kept, and the goal becomes active. The ONE place this feature can raise a card - the backend's own weekly-check-in `schedule_repeat` card (the same one a repeating reminder or the morning briefing already raises), approving nothing that acts. Held on a stale link (brain_goals_accept)."),
+    "/api/goals/{id}/step": ("ported", "Marks one step done or not - no card, the same shape as ticking off a to-do item. Held on a stale link (brain_goals_step)."),
+    "/api/goals/{id}/stop": ("ported", "Stops tracking the goal and deletes its check-in job on the PC - no card, immediate, the same rule every \"stop tracking this\" control in this project follows. Held on a stale link (brain_goals_stop)."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 
@@ -266,7 +274,6 @@ STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 # "desktop-todo"  - the desktop should have it too, and nobody has built it
 PHONE_ONLY = {
     "/api/notifications/watch": ("phone-only", "The smartwatch notification setting (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). A smartwatch pairs with a phone, never a Windows PC; the setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or writes it (docs/ARCHITECTURE.md §8)."),
-    "/api/goals": ("desktop-todo", "Goals: a plan the owner edits, one card per acting step (the owner's \"build it now\", 2026-09-27; backend/jarvis_goals.py; docs/JARVIS-API.md section 59). GET/POST /api/goals and the id-in-path routes it lists (.../accept, .../step, .../stop - built with a dynamic id, so this text-matching tool sees only the base path) are all shipped on the backend and ported to the phone (net/Goals.kt, ui/screens/GoalsPlate.kt). The desktop half was queued, not yet built as of this phone work - CLAUDE.md's own decision log says so. Reclassify as \"ported\" once jarvis-desktop calls it too."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 
