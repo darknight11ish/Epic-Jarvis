@@ -4001,7 +4001,7 @@
        "fixed": false,
        "id": "calendar_read",
        "lockdown": true,
-       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "switch": {
         "asks": true,
@@ -4016,7 +4016,7 @@
        "fixed": false,
        "id": "email_read",
        "lockdown": true,
-       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "switch": {
         "asks": true,
@@ -4045,7 +4045,7 @@
        "fixed": false,
        "id": "home_read",
        "lockdown": true,
-       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "switch": {
         "asks": true,

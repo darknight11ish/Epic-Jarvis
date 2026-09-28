@@ -257,7 +257,8 @@ export function switchView(row, view, live) {
     disabled = true;
   } else if (checked) {
     if (!s.canLoosen) {
-      lines.push(NOT_HERE);
+      // Lockdown says why on the row itself (its note); otherwise, not the PC.
+      if (!row.lockdown) lines.push(NOT_HERE);
       disabled = true;
     } else if (view.waiting) {
       lines.push(ONE_AT_A_TIME);

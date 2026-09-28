@@ -494,7 +494,7 @@ def _row(action: str, *, here: bool) -> dict:
             row["switch"] = {"asks": tier == "ask", "loose": LOOSE[action],
                              "can_loosen": bool(here) and not lockdown_on()}
         row["note"] = NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE
-        if tier == "ask" and not here:
+        if tier == "ask" and not here and not row.get("lockdown"):
             row["note"] += " " + PHONE_LOOSEN
         for old, new in OLDER_NAMES.items():
             had = _file_tiers().get(old) if new == action else None

@@ -142,6 +142,9 @@ await check("Lockdown: ON at once, never held; OFF only from the PC, live, one c
   assert.equal(cal.lockdown, true);
   assert.ok(cal.note.includes(LOCKDOWN_ROW_NOTE));
   assert.equal(switchView(cal, pcOn, true).disabled, true, "nothing loosens while it is on");
+  assert.ok(!switchView(cal, pcOn, true).lines.includes(NOT_HERE), "Lockdown, not 'not the PC'");
+  const phoneCal = readAsksFirst(C.phone_lockdown_on).groups[0].rows.find((r) => r.action === "calendar_read");
+  assert.ok(!phoneCal.note.includes(PHONE_LOOSEN), "no 'use the PC to loosen' while Lockdown is on");
   assert.equal(lockdownView(null, true).show, false, "an older PC: nothing shown");
 });
 
