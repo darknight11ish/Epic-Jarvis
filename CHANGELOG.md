@@ -6,6 +6,23 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Chat with customer support for me.** Jarvis can chat with a company's
+  customer support for you - Groupon first - in your name, in a browser
+  window you can see on the PC. Fill in the company, what you want done and
+  the details Jarvis may give (each one exactly as written) on either app's
+  Brain; ONE approval card shows all of it and the company's terms risk
+  (your real account could be closed). You open the chat on the help page
+  yourself; Jarvis writes from there. **Every offer - a refund, a credit, a
+  cancellation - gets its own card**, and nothing is accepted before you
+  approve it; the app offers Decline, Say something else and Take over,
+  never Accept. "Are you a bot?", identity checks (card digits, security
+  questions, codes) and a detail not on the card are handed to you - Jarvis
+  never claims to be a person and never sends a password, card number or ID
+  number. The chat is kept in your encrypted chat history; Export on the PC
+  saves a plain text copy. Not yet tried on Groupon's real site: run the
+  read-only check first (backend/README.md, "Chat with customer support for
+  me").
+
 - **Forget a time frame.** Say or type "forget what you learned last
   week" or "delete my chats from 1 to 15 September", or open it yourself:
   the desktop's Brain -> History, or the phone's Brain. Jarvis lists every
