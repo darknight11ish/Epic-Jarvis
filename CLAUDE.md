@@ -559,6 +559,15 @@ The `jarvis-client` APK is published to the rolling `client-latest` release,
 but only when the emulator smoke job passes. `jarvis-android` no longer
 publishes a release at all - see the top-level `README.md` for why.
 
+## Editing a backend `.patch`: record its old version first
+
+After changing any `backend/*.patch`, run `python3 tools/build_patch_history.py`
+before committing (its docstring says why). **This container's clone is
+shallow**, and there the tool refuses to run and `test_patch_history.py`
+quietly skips the checks that need history - so it passes here and fails in
+CI. Run `git fetch --unshallow origin` first. (Shipped once, 2026-09-28:
+`voices.patch` changed, CI's backend job went red.)
+
 ## Checking the Rust without waiting for CI
 
 `cargo clippy` fails in the dev container: the product is a Windows app, the
