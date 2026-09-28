@@ -289,6 +289,13 @@ class ChatSession(
          * a card is waiting, and then how it ended (voice/CardVoice.kt).
          */
         onStatus: ((String) -> Unit)? = null,
+        /**
+         * Jarvis Live: this spoken question was said in a Live conversation
+         * (`live: true` on it - ChatHistory.messages). An answer that is only
+         * the side-talk marker ("[not for me]") is then shown as "(not for
+         * Jarvis)" and not kept in the conversation.
+         */
+        live: Boolean = false,
     ): String? {
         cancel()
         _reply.value = ""
@@ -331,7 +338,7 @@ class ChatSession(
         val interrupted = cutOff.take(SystemClock.elapsedRealtime())
         val c = api.chatCall(
             asking, earlier, picture, conversationId,
-            interrupted = interrupted, temporary = asTemporary,
+            interrupted = interrupted, temporary = asTemporary, live = live,
         )
         if (c == null) {
             // No address to send to: none saved, or a saved one off the
@@ -687,6 +694,14 @@ class ChatSession(
         // on `earlier`: a call that finished in the meantime has already
         // added its own pair, and this one goes after it.
         val answer = mine
+        // Jarvis Live's side talk: shown as "(not for Jarvis)", never kept.
+        if (live && com.jarvis.client.voice.LiveRules.isSideTalk(answer)) {
+            // Only while no newer question has started.
+            if (call == null) {
+                _reply.value = com.jarvis.client.voice.LiveRules.SEEN.getValue("not_for_me")
+            }
+            return mine
+        }
         if (answer != null && answer.isNotBlank() && !cutShort && conversation == askedIn) {
             _history.update { ChatHistory.commit(it, asking, answer) }
         }

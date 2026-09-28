@@ -103,11 +103,13 @@ object PrivateAloud {
      * (the owner's decision of 2026-09-27: web search, weather and home
      * status - weather is read with `home_read`, or answered with no tool
      * at all) - and `read_screen`, an answer about the screen (the owner's
-     * answer of 2026-09-28; a read the PC records, not a model tool). Exact
-     * names, as the `step` event carries them. The desktop's
+     * answer of 2026-09-28; a read the PC records, not a model tool) - and
+     * `read_camera`, an answer about what the camera sees in Jarvis Live (the
+     * owner's answer of 2026-09-28; off until the 12 GB card passes the photo
+     * test). Exact names, as the `step` event carries them. The desktop's
      * `READ_ALOUD_TOOLS` (private-speech.js).
      */
-    val READ_ALOUD_TOOLS: Set<String> = setOf("home_read", "read_screen", "web_search")
+    val READ_ALOUD_TOOLS: Set<String> = setOf("home_read", "read_camera", "read_screen", "web_search")
 
     /**
      * What the phone knows about tools at one moment: how many `step`
@@ -153,11 +155,19 @@ object PrivateAloud {
     /** The read an answer about the screen records (jarvis_screen.SCREEN_TOOL). */
     const val SCREEN_READ = "read_screen"
 
-    /** A `step` event says the screen was read: a tool run named exactly [SCREEN_READ]. The desktop's `isScreenRead`. */
+    /** The read an answer about the camera records (jarvis_live.CAMERA_TOOL). */
+    const val CAMERA_READ = "read_camera"
+
+    /**
+     * A `step` event says the screen - or, in Jarvis Live, the camera - was
+     * read: a tool run named exactly [SCREEN_READ] or [CAMERA_READ]. Both keep
+     * to the same rule (the owner's answer of 2026-09-28: camera answers are
+     * read aloud like screen answers). The desktop's `isScreenRead`.
+     */
     fun isScreenRead(data: JsonElement?): Boolean {
         if (!isToolRun(data)) return false
         val tool = ((data as? JsonObject)?.get("tool") as? JsonPrimitive)?.takeIf { it.isString }?.content
-        return tool == SCREEN_READ
+        return tool == SCREEN_READ || tool == CAMERA_READ
     }
 
     /**

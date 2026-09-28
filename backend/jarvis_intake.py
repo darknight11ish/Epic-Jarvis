@@ -238,6 +238,10 @@ def owner_turns(messages: Iterable, origin: str) -> list[dict]:
         # health words.
         if wellbeing_skip(text):
             continue
+        # Side talk in Jarvis Live (the owner's answer of 2026-09-28): words
+        # the model said were not meant for Jarvis - never learned from.
+        if live_side_talk(text):
+            continue
         out.append({"role": "user", "content": text})
     return out
 
@@ -256,6 +260,17 @@ def schedule_command(text) -> bool:
     try:
         import jarvis_schedule
         return jarvis_schedule.was_command(text)
+    except Exception:
+        return False
+
+
+def live_side_talk(text) -> bool:
+    """Were these words side talk in Jarvis Live (jarvis_live.was_side_talk:
+    the model answered the side-talk marker)? False when jarvis_live.py is
+    not there."""
+    try:
+        import jarvis_live
+        return bool(jarvis_live.was_side_talk(text))
     except Exception:
         return False
 

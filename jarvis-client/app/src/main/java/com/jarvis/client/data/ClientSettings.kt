@@ -86,6 +86,25 @@ class ClientSettings(context: Context) {
         _heardSound.value = value
     }
 
+    private val _liveInterrupt = MutableStateFlow(
+        if (prefs.getString(KEY_LIVE_INTERRUPT, "") == "tap") "tap" else "voice",
+    )
+
+    /**
+     * "Interrupting Jarvis in Live" on this phone (voice.LiveRules): "voice"
+     * (the default - talking over Jarvis stops it for the owner's voice) or
+     * "tap" (only the Stop talking button does; the microphone is closed
+     * while Jarvis talks). This phone's own choice, like the PC's; it
+     * changes only how this phone listens, never what is trusted.
+     */
+    val liveInterrupt: StateFlow<String> = _liveInterrupt.asStateFlow()
+
+    fun setLiveInterrupt(value: String) {
+        val v = if (value == "tap") "tap" else "voice"
+        prefs.edit { putString(KEY_LIVE_INTERRUPT, v) }
+        _liveInterrupt.value = v
+    }
+
     private val _keepAliveOfferPending = MutableStateFlow(prefs.getBoolean(KEY_KEEP_ALIVE_PENDING, false))
 
     /**
@@ -228,6 +247,7 @@ class ClientSettings(context: Context) {
         const val KEY_BARGE_IN = "barge_in"
         const val KEY_ONE_MOMENT = "one_moment"
         const val KEY_HEARD_SOUND = "heard_sound"
+        const val KEY_LIVE_INTERRUPT = "live_interrupt"
         const val KEY_WATCH_NOTIFICATIONS = "watch_notifications"
         const val KEY_KEEP_ALIVE_OFFERED = "keep_alive_offered"
         const val KEY_KEEP_ALIVE_PENDING = "keep_alive_pending"

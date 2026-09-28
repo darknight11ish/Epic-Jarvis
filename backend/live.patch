@@ -1,0 +1,22 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3295,6 +3295,19 @@
+     except Exception as exc:
+         print(f"  chatbot    NOT ON ({type(exc).__name__}) - Talk to a chatbot for me is off")
+         print("             until jarvis_chatbot_routes.py is back: run apply-patches.ps1 again")
++    # live.patch (Jarvis Live, the owner's decision and answers of 2026-09-28;
++    # docs/LIVE-DESIGN.md, JARVIS-API section 63): GET /api/voice/live and
++    # POST /api/voice/live (start, stop, extend, resume - no card: the owner's
++    # own act). The clips themselves go to /api/voice/utterance?source=live,
++    # which jarvis_speech.py answers. Wrapped round Handler here, before
++    # anything listens, like chatbot above; every rule is in jarvis_live.py.
++    try:
++        import jarvis_live
++        print(jarvis_live.install(Handler, origin_ok=_origin_ok,
++                                  token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  live       NOT ON ({type(exc).__name__}) - Jarvis Live is off")
++        print("             until jarvis_live.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

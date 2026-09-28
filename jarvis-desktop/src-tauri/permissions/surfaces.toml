@@ -745,6 +745,25 @@ permissions = [
 # stop are not (they only make Jarvis do less). Starting one is its own set,
 # the Brain's alone: the widget shows and steers a session, it does not start
 # one.
+# Jarvis Live (live.rs; docs/LIVE-DESIGN.md; the owner's answers of
+# 2026-09-28): a back-and-forth voice conversation on this PC. Start needs no
+# card (the owner's own act) but is held on a stale link and while App lock
+# would ask; Stop and Mute only make Jarvis hear less and are never held. The
+# microphone itself is voice.rs's and only a server on this PC hears it. The
+# Jarvis bar holds the whole set; the always-on-top badge holds it too, so
+# the owner can always end Live from the sign that says it is on.
+[[set]]
+identifier = "live"
+description = "Jarvis Live: read the session (fixed words and minutes, never what was said), start it (no card; held on a stale link and under App lock), stop it, more time, carry on, mute or unmute, and keep the microphone closed while a card is shown or an answer is spoken under \"Interrupt by tap only\"."
+permissions = [
+  "allow-live-status",
+  "allow-live-start",
+  "allow-live-stop",
+  "allow-live-act",
+  "allow-live-mute",
+  "allow-live-hold",
+]
+
 [[set]]
 identifier = "focus"
 description = "Read the focus session (a countdown, booleans and counts - never what was in front) and do ONE thing to it: pause, resume, +10 minutes, stop, or lock on where the owner lands. No card; resume, extend and lock are held on a stale link."

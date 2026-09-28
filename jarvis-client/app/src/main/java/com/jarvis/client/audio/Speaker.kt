@@ -159,6 +159,19 @@ class Speaker(private val context: Context) {
     fun arm() {
         cancelled = false
         paused = false
+        ducked = false
+    }
+
+    /**
+     * Jarvis Live: another voice while Jarvis talks LOWERS it while the PC
+     * checks whose voice it was (voice.LiveRules.barge) - it stops only for
+     * the owner. Cleared by [arm] and [duck] (false).
+     */
+    @Volatile private var ducked = false
+
+    fun duck(on: Boolean) {
+        ducked = on
+        runCatching { track?.setVolume(if (on) com.jarvis.client.voice.LiveRules.DUCK_VOLUME else 1f) }
     }
 
     /** Holds the reply where it is (see [paused]). */
@@ -261,6 +274,7 @@ class Speaker(private val context: Context) {
 
         try {
             out.play()
+            if (ducked) runCatching { out.setVolume(com.jarvis.client.voice.LiveRules.DUCK_VOLUME) }
             var i = 0
             val chunk = 1024
             while (i < pcm.size && !cancelled) {

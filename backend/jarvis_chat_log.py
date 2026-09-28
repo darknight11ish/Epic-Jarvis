@@ -537,7 +537,8 @@ class ChatLog:
         as "voice"; otherwise as "voice_unverified". Only a hash is kept.
 
         `source` is how the clip started: "push_to_talk" (the talk button)
-        or "wake_word" ("hey Jarvis"), kept with the voice check's facts so
+        or "wake_word" ("hey Jarvis") or, since 2026-09-28, "live" (Jarvis
+        Live, jarvis_live.py), kept with the voice check's facts so
         automatic learning can honour the owner's "hands-free" voice setting
         (jarvis_auto_learn.check_voice). "" when the speech route did not
         say - which that check treats as hands-free."""

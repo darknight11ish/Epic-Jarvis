@@ -614,27 +614,57 @@ HANDS_FREE = (SAME_AS_BUTTON, BUTTON_ONLY)
 SCREEN_ON_SCREEN = "screen_on_screen"
 SCREEN_ALOUD = "screen_aloud"
 HANDS_FREE_SCREEN = (SCREEN_ON_SCREEN, SCREEN_ALOUD)
+#: Jarvis LIVE (docs/LIVE-DESIGN.md: a conversation the owner starts and
+#: stops, `source=live`) while the owner chose `button_only` above. The
+#: owner's answers of 2026-09-28: "under 'Only trust the talk button', a
+#: Live session is trusted like the talk button by default", "a Live session
+#: started by voice is trusted the same as one started with the button, by
+#: default", and this setting has THREE choices:
+#:   live_trust_fully        "Trust Live fully" - the default
+#:   live_button_start_only  "Only when I start it with the button" - a
+#:                           session started by voice ("Hey Jarvis, let's
+#:                           talk") gets the "Hey Jarvis" caution
+#:   live_like_hey_jarvis    "Be as careful as with Hey Jarvis" - always
+#: A STRICTER choice is immediate; a LOOSER one raises one approval card.
+#: The default is the loosest (like `memory` and `hands_free`), and a damaged
+#: value falls back to the strictest. Under `same_as_button` this setting
+#: changes nothing: every voice turn is trusted like the talk button already.
+LIVE_TRUST_FULLY = "live_trust_fully"
+LIVE_BUTTON_START_ONLY = "live_button_start_only"
+LIVE_LIKE_WAKE = "live_like_hey_jarvis"
+HANDS_FREE_LIVE = (LIVE_TRUST_FULLY, LIVE_BUTTON_START_ONLY, LIVE_LIKE_WAKE)
 #: The one source the talk button sends (jarvis_speech.hear's `source`).
 PUSH_TO_TALK = "push_to_talk"
+#: The source a Jarvis Live clip is sent with (jarvis_speech.SOURCE_LIVE),
+#: and what it is trusted as when the session was started with a button;
+#: LIVE_VOICE_STARTED when it was started by voice (jarvis_live.trust_source).
+LIVE = "live"
+LIVE_VOICE_STARTED = "live_voice"
 #: The default of each setting. For strictness, privacy, sensitive_memory
 #: and hands_free_screen it is the strict value, also used for a missing,
-#: unreadable or unknown one. For memory and hands_free the default is the
-#: owner's looser choice; an unknown VALUE (a damaged file) still falls back
-#: to the strict one - see settings().
+#: unreadable or unknown one. For memory, hands_free and hands_free_live the
+#: default is the owner's looser choice; an unknown VALUE (a damaged file)
+#: still falls back to the strict one - see settings().
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
             "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN,
-            "hands_free": SAME_AS_BUTTON, "hands_free_screen": SCREEN_ON_SCREEN}
+            "hands_free": SAME_AS_BUTTON, "hands_free_screen": SCREEN_ON_SCREEN,
+            "hands_free_live": LIVE_TRUST_FULLY}
 _CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
             "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE,
-            "hands_free_screen": HANDS_FREE_SCREEN}
+            "hands_free_screen": HANDS_FREE_SCREEN, "hands_free_live": HANDS_FREE_LIVE}
 #: The LOOSER value of each: choosing it needs an approval card.
 LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
           "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON,
-          "hands_free_screen": SCREEN_ALOUD}
+          "hands_free_screen": SCREEN_ALOUD, "hands_free_live": LIVE_TRUST_FULLY}
+#: Settings with MORE than two choices, strictest first: choosing a value
+#: further along than the current one loosens it (a card); nearer the
+#: start tightens it (at once). LOOSER above names the loosest.
+_ORDER = {"hands_free_live": (LIVE_LIKE_WAKE, LIVE_BUTTON_START_ONLY, LIVE_TRUST_FULLY)}
 #: The settings whose DEFAULT is the looser value, and the strict value each
 #: falls back to when the file is unreadable or holds a value that is not
 #: one of its choices. Only a file that never had the key gets the default.
-_STRICT_WHEN_DAMAGED = {"memory": MEMORY_ON_SCREEN, "hands_free": BUTTON_ONLY}
+_STRICT_WHEN_DAMAGED = {"memory": MEMORY_ON_SCREEN, "hands_free": BUTTON_ONLY,
+                        "hands_free_live": LIVE_LIKE_WAKE}
 _SETTINGS_LOCK = threading.Lock()
 
 #: The least speech a COMMAND must have, in seconds (the VAD's span, which
@@ -654,10 +684,12 @@ def settings_path() -> Path:
 
 def settings() -> dict:
     """{"strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-    "hands_free_screen", "changed"}. The strict value for anything missing, unreadable or
-    unknown - except that a file with no "memory" or no "hands_free" in it
-    (every file written before 2026-09-24, and no file at all) gets the
-    owner's default for it: MEMORY_ALOUD, SAME_AS_BUTTON. The one rule
+    "hands_free_screen", "hands_free_live", "changed"}. The strict value for
+    anything missing, unreadable or unknown - except that a file with no
+    "memory", no "hands_free" or no "hands_free_live" in it (every file
+    written before 2026-09-24 or 2026-09-28, and no file at all) gets the
+    owner's default for it: MEMORY_ALOUD, SAME_AS_BUTTON,
+    LIVE_TRUST_FULLY. The one rule
     applied on every read as well as every write: private answers may be
     read aloud only while the check is very strict."""
     out = {**DEFAULTS, "changed": 0.0}
@@ -688,7 +720,20 @@ def settings() -> dict:
 
 def is_loosening(key: str, value: str) -> bool:
     """Whether setting `key` to `value` would loosen what is set now."""
-    return key in LOOSER and value == LOOSER[key] and settings().get(key) != value
+    return _loosens(key, value, settings().get(key))
+
+
+def _loosens(key: str, value: str, current) -> bool:
+    """Would `value` loosen `key` from `current`? For a two-choice setting:
+    it is the looser value and not already set. For one with an order
+    (_ORDER): it is further along than the current one."""
+    order = _ORDER.get(key)
+    if order:
+        if value not in order:
+            return False
+        at = order.index(current) if current in order else 0
+        return order.index(value) > at
+    return key in LOOSER and value == LOOSER[key] and current != value
 
 
 def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
@@ -706,7 +751,7 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
         raise ValueError(f"{key} must be one of: " + ", ".join(_CHOICES[key]))
     with _SETTINGS_LOCK:
         cur = settings()
-        if value == LOOSER[key] and cur[key] != value and not approved:
+        if _loosens(key, value, cur[key]) and not approved:
             raise ValueError("making the voice check looser needs an approval card")
         if key == "privacy" and value == VOICE_IS_ENOUGH and cur["strictness"] != VERY_STRICT:
             raise ValueError("private answers can only be read aloud while the voice "
@@ -714,7 +759,8 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
         new = {"strictness": cur["strictness"], "privacy": cur["privacy"],
                "memory": cur["memory"], "sensitive_memory": cur["sensitive_memory"],
                "hands_free": cur["hands_free"],
-               "hands_free_screen": cur["hands_free_screen"], key: value}
+               "hands_free_screen": cur["hands_free_screen"],
+               "hands_free_live": cur["hands_free_live"], key: value}
         if new["strictness"] != VERY_STRICT:
             new["privacy"] = PRIVATE_ON_SCREEN
         new["changed"] = time.time()
@@ -1909,10 +1955,27 @@ def hands_free_trusted(source) -> bool:
 
     The talk button (`push_to_talk`): always. Anything else - `wake_word`,
     and a source that is missing or not known (fail closed) - only while
-    the owner keeps the default, `same_as_button`."""
-    if str(source or "").strip().lower() == PUSH_TO_TALK:
+    the owner keeps the default, `same_as_button`.
+
+    Jarvis LIVE (the owner's answers of 2026-09-28): under `button_only`, a
+    Live turn is trusted like the talk button by the default
+    `live_trust_fully`, however Live was started. `live_button_start_only`
+    trusts it only when Live was started with a button (`live`); a session
+    started by voice (`live_voice`, jarvis_live.trust_source) then gets the
+    "hey Jarvis" caution. `live_like_hey_jarvis` gives every Live turn that
+    caution. Under `same_as_button`, trusted as every turn is."""
+    src = str(source or "").strip().lower()
+    if src == PUSH_TO_TALK:
         return True
-    return settings()["hands_free"] == SAME_AS_BUTTON
+    s = settings()
+    if s["hands_free"] == SAME_AS_BUTTON:
+        return True
+    live = s["hands_free_live"]
+    if src == LIVE:
+        return live in (LIVE_TRUST_FULLY, LIVE_BUTTON_START_ONLY)
+    if src == LIVE_VOICE_STARTED:
+        return live == LIVE_TRUST_FULLY
+    return False
 
 
 def screen_aloud(source) -> bool:
@@ -2066,11 +2129,15 @@ def status() -> dict:
         # Since 2026-09-28: answers about the screen after "hey Jarvis",
         # under "only trust the talk button".
         "hands_free_screen": s["hands_free_screen"],
+        # Since 2026-09-28: how far a Jarvis Live turn is trusted under
+        # "only trust the talk button".
+        "hands_free_live": s["hands_free_live"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
             "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
             "hands_free": s["hands_free"],
             "hands_free_screen": s["hands_free_screen"],
+            "hands_free_live": s["hands_free_live"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],
@@ -2078,7 +2145,8 @@ def status() -> dict:
                         "memory": list(MEMORY),
                         "sensitive_memory": list(SENSITIVE_MEMORY),
                         "hands_free": list(HANDS_FREE),
-                        "hands_free_screen": list(HANDS_FREE_SCREEN)},
+                        "hands_free_screen": list(HANDS_FREE_SCREEN),
+                        "hands_free_live": list(HANDS_FREE_LIVE)},
             "defaults": dict(DEFAULTS),
         },
         "models": {

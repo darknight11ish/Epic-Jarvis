@@ -703,7 +703,39 @@ pub(crate) fn voice_setting(
             Ok(("hands_free_screen", "screen_on_screen", false))
         }
         ("hands_free_screen", "screen_aloud") => Ok(("hands_free_screen", "screen_aloud", true)),
+        // Jarvis Live under "Only trust the talk button" (the owner's
+        // answers, 2026-09-28): three choices, strictest last. The strictest
+        // is never a loosening; the other two MAY be (from a stricter one) -
+        // `live_trust_loosens` decides when the choice now is known.
+        ("hands_free_live", "live_like_hey_jarvis") => {
+            Ok(("hands_free_live", "live_like_hey_jarvis", false))
+        }
+        ("hands_free_live", "live_button_start_only") => {
+            Ok(("hands_free_live", "live_button_start_only", true))
+        }
+        ("hands_free_live", "live_trust_fully") => {
+            Ok(("hands_free_live", "live_trust_fully", true))
+        }
         _ => Err("That is not one of the voice settings.".to_string()),
+    }
+}
+
+/// The Live trust choices, loosest first (backend jarvis_voice `_ORDER`).
+const LIVE_TRUST_ORDER: [&str; 3] = [
+    "live_trust_fully",
+    "live_button_start_only",
+    "live_like_hey_jarvis",
+];
+
+/// Whether moving Live's trust from `current` to `value` loosens it. An
+/// unknown `current` counts as the strictest, so a looser-looking choice is
+/// held on a stale link rather than let through.
+pub(crate) fn live_trust_loosens(value: &str, current: Option<&str>) -> bool {
+    let rank = |v: &str| LIVE_TRUST_ORDER.iter().position(|c| *c == v);
+    match (rank(value), current.and_then(rank)) {
+        (Some(v), Some(c)) => v < c,
+        (Some(v), None) => v < LIVE_TRUST_ORDER.len() - 1,
+        _ => true,
     }
 }
 
@@ -715,8 +747,12 @@ pub async fn set_voice_setting(
     app: AppHandle,
     setting: String,
     value: String,
+    current: Option<String>,
 ) -> Result<Value, String> {
-    let (setting, value, loosening) = voice_setting(setting.trim(), value.trim())?;
+    let (setting, value, mut loosening) = voice_setting(setting.trim(), value.trim())?;
+    if setting == "hands_free_live" {
+        loosening = live_trust_loosens(value, current.as_deref().map(str::trim));
+    }
     if loosening && stale(&app) {
         return Err(HELD_STALE.to_string());
     }
@@ -1265,6 +1301,38 @@ mod tests {
         assert!(voice_setting("hands_free_screen", "same_as_button").is_err());
         assert!(voice_setting("hands_free", "screen_aloud").is_err());
         assert!(voice_setting("mode", "broad").is_err());
+        // Jarvis Live's three choices: the strictest never loosens.
+        assert_eq!(
+            voice_setting("hands_free_live", "live_like_hey_jarvis"),
+            Ok(("hands_free_live", "live_like_hey_jarvis", false))
+        );
+        assert!(voice_setting("hands_free_live", "screen_aloud").is_err());
+        assert!(voice_setting("hands_free_screen", "live_trust_fully").is_err());
+        assert!(live_trust_loosens(
+            "live_trust_fully",
+            Some("live_button_start_only")
+        ));
+        assert!(live_trust_loosens(
+            "live_button_start_only",
+            Some("live_like_hey_jarvis")
+        ));
+        assert!(!live_trust_loosens(
+            "live_button_start_only",
+            Some("live_trust_fully")
+        ));
+        assert!(!live_trust_loosens(
+            "live_like_hey_jarvis",
+            Some("live_trust_fully")
+        ));
+        assert!(!live_trust_loosens(
+            "live_trust_fully",
+            Some("live_trust_fully")
+        ));
+        assert!(
+            live_trust_loosens("live_button_start_only", None),
+            "unknown: held"
+        );
+        assert!(!live_trust_loosens("live_like_hey_jarvis", None));
     }
 
     #[test]

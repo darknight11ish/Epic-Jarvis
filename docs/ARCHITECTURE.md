@@ -1116,7 +1116,14 @@ sensitive and private answers stay on screen (the speech route records how
 each clip started, `source`, with the transcript) - and so do its answers
 about the screen, unless the owner turned on the voice setting
 `hands_free_screen` (owner, 2026-09-28; one approval card to turn it on,
-off at once; JARVIS-API §16 and §62.7).
+off at once; JARVIS-API §16 and §62.7). A Jarvis Live turn (`source=live`,
+JARVIS-API §63) is trusted like the talk button by default however Live
+was started; the voice setting `hands_free_live` gives it the "Hey Jarvis"
+caution when Live was started by voice, or always (owner, 2026-09-28; a
+stricter choice at once, a looser one a card). A Live turn the model marked
+as side talk (`[not for me]`) is never learned from and never counted
+(`jarvis_intake.owner_turns`, `jarvis_agent`), and after a crisis turn no
+Live turn feeds any counter.
 
 **Jarvis's own words are never the owner's.** Since 2026-09-25 an app sends
 the last sentence of a spoken answer the owner cut off (`interrupted` on the
@@ -1335,9 +1342,9 @@ are architectural rather than configuration:
 
 ## 8. The clients
 
-**Desktop** (`jarvis-desktop/`): Tauri 2, eight windows (quickbar, widget,
-HUD, Brain, Faces, onboarding, Settings, the floating face - one capability
-file each in `src-tauri/capabilities/`), per-window ACL capabilities. The Rust commands are the real API — buttons are a courtesy, and
+**Desktop** (`jarvis-desktop/`): Tauri 2, nine windows (quickbar, widget,
+HUD, Brain, Faces, onboarding, Settings, the floating face, the Jarvis Live
+badge - one capability file each in `src-tauri/capabilities/`), per-window ACL capabilities. The Rust commands are the real API — buttons are a courtesy, and
 any window holding the capability can call them, so a check that lives only in
 the webview is not a check. `decide_approval` consults link staleness in Rust
 for exactly that reason.
@@ -1566,6 +1573,8 @@ backend routes, in both directions; the rest are listed here only.
 | Signing in to the other chatbot websites (ChatGPT, Claude, Copilot, Perplexity, DeepSeek, Grok, Le Chat, Meta AI) and their self-checks: `py -3 jarvis_chatbot_<site>.py sign-in` / `check`, 2026-09-28 | **PC only**, the same reason as Gemini's: each website's window, and its browser profile holding that site's sign-in cookie, are on the PC, and the owner signs in to each spare account there, by hand - a phone cannot sign a PC's browser in, and Jarvis never types or keeps a password. Both apps still see which are set up, through the same "Chatbot conversations" row. |
 | Saving a chatbot API key (`py -3 jarvis_chatbot_api.py key <service>`) and choosing "a second AI on this PC" (`local_model` under `[chatbot]` in `jarvis-framework.toml`), 2026-09-28 | A key is entered on the PC only, like the web-search keys: sending it from the phone would send it somewhere other than its own service (rule 3). Neither app has a screen for entering a key or choosing the local model; once either is done on the PC, both apps' chatbot screens can start a conversation with it (`/api/chatbot/*`), and both apps see whether a key is saved, in "What Jarvis can reach" ("Chatbot conversations with a key (API)"). The local model is a settings-file line, as the other second-card settings are. |
 | Setting an API chatbot's monthly money limit, or correcting its price (`py -3 jarvis_chatbot_api.py limit <service> <dollars>`, `price <service> <in> <out>`, `spent`), 2026-09-28 | Set on the PC only, the same place a key is added, as the owner decided ("a monthly amount per service, set on the PC"). Raising a limit or lowering a price is a loosening - more money can leave - and a person typing at the PC's own command line is how every other loosening of this feature is done (a key, the model line); there is no route for either, so no app, and nothing that holds the pairing token, can raise one. Both apps READ it: the chooser shows "About $X of $Y left this month for <company> (prices are estimates you can correct on the PC)" under each API service with a limit, and the approval card (written on the PC) says the same. Lowering is on the PC too, to keep ONE place for the numbers. |
+| Jarvis Live's always-on-top badge, its tray row, and ending Live when Windows locks (and pausing it when the lock cannot be read) | The badge is the PC's always-visible Live sign (docs/LIVE-DESIGN.md); the phone's sign is its Live screen and an ongoing notification (the row in the phone table). Windows' lock is a PC thing; on the phone, App lock and the screen do that job. |
+| Jarvis Live noticing "another program is using the microphone" (Windows' own record) and muting itself | The PC's way of noticing a call (the owner's answer, 2026-09-28). The phone notices a call from Android's audio mode instead (the phone row). When Windows' record cannot be read, the PC's sign says "Jarvis can't tell when you're on a call - use Mute". |
 
 **On the phone, kept off the desktop:**
 
@@ -1581,6 +1590,9 @@ backend routes, in both directions; the rest are listed here only.
 | **Refusing a home-network desktop address up front** ("...this phone can only reach your PC by its Tailscale name ... or its NordVPN Meshnet name ...", `PhoneAddress.kt`; 2026-09-27) | Written with the change (§2, "Which addresses the phone can use"). It makes the phone's own judgment agree with Android's per-app list of names that may get plain http:// (`network_security_config.xml`), which Android enforces through OkHttp on every request. Windows has no such per-app list, and the desktop's requests to Jarvis are made by its Rust code (`reqwest`), which has none either - an address the shared rule accepts is one the desktop can actually use (usually Jarvis on the same PC) - so it keeps the shared own-networks rule alone, with the shared sentence. Both apps still apply that rule, from the one table (`tools/gen_own_network_cases.py`). |
 | **Setup helps from the phone play test** (2026-09-28; walk-through N1, C8, C9): reconnecting at once when the phone's network changes, the "Tailscale (or Meshnet) is off on this phone" line, **Show token** on the pairing screen, and the one-time "Background restart" offer after the first pairing | Each fixes something only the phone has. The desktop normally talks to Jarvis on the same PC (`127.0.0.1`), so it has no network to change and no VPN to need; a token is normally never typed on the PC at all (Jarvis makes one and the desktop reads it from Windows Credential Manager), so its own masked Token box, for choosing your own token, got no Show button - a possible follow-up, not built; and Windows does not close a desktop program to save battery. No route is involved, so `tools/check_parity.py` has nothing to check. The PC's half of "can the phone reach Jarvis?" is the preflight check `phone` (`backend/selftest.py`), which the desktop's owner runs. |
 | **"Findings" (Brain → Findings, `BrainScreen.kt`'s `Probed("Findings", brain.initiative, ...)`, "What Jarvis noticed on its own")** | Written down 2026-09-27, on the ease-of-use audit's parity check (#17). `GET /api/initiative` is read on both apps - the desktop's HUD window polls it too (`jarvis_hud.html`) - but only as transient cards the owner dismisses while the HUD happens to be open; the desktop's Brain window has no section that keeps them. The phone's Brain gives the same feed a persistent, browsable place instead, with the honest empty state from `initiativeNote()` ("Jarvis doesn't watch anything on its own yet") for when the initiative engine's check list is still empty. Nothing here is phone-only data; it is a phone-only place to read it back. |
+| Jarvis Live's ongoing notification (End, Mute; kept on the phone) and the screen kept on while the Live screen shows | The phone's always-visible Live sign when the owner leaves the app; the PC's is the badge (the row in the desktop table). A PC screen does not sleep under a conversation the way a phone's does. |
+| Jarvis Live noticing a phone or video call from Android's audio mode, and saying "I've lost the link to your PC." in the phone's own offline voice | Calls happen on the phone; the PC uses Windows' microphone record instead (the desktop row). The link line is the phone's because the PC's voice cannot reach it when the link is down; on the PC the sign says "Paused: link lost". |
+| Jarvis Live's camera (built switched OFF, hidden in both apps until the 12 GB card passes the photo test) | The owner's answers of 2026-09-28: the phone's camera only - a PC webcam mostly sees the owner's face and room (docs/LIVE-DESIGN.md section 5). Taking the picture on the phone is not built yet; only the gate is. |
 
 **The picture-in-picture idea landed on both apps, on 2026-09-27, by two
 different sessions working at the same time - not one shared mechanism,

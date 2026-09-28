@@ -147,10 +147,11 @@ class InterruptFlow {
      * stale. PAUSE means: pause the reply and have that clip checked.
      */
     @Synchronized
-    fun onset(now: Long, id: Long, allowed: Boolean): VoiceFlow.Action {
+    fun onset(now: Long, id: Long, allowed: Boolean, graceMs: Long = VoiceFlow.GRACE_MS): VoiceFlow.Action {
         val started = replyStartedAt
         if (!allowed || pausedAt != null || started == null) return VoiceFlow.Action.NONE
-        if (now - started < VoiceFlow.GRACE_MS) return VoiceFlow.Action.NONE
+        // Jarvis Live passes 0: talking over the first three seconds reaches it too.
+        if (now - started < graceMs) return VoiceFlow.Action.NONE
         pausedAt = now
         asked = id
         return VoiceFlow.Action.PAUSE

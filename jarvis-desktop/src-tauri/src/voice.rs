@@ -132,6 +132,7 @@
 //! before trusting it blind.
 
 use std::io::Cursor;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -369,6 +370,33 @@ struct HeardRaw {
     /// is read as `false`.
     #[serde(default)]
     screen_aloud: bool,
+    /// Jarvis Live (since 2026-09-28, backend/jarvis_live.py): "" for a clip
+    /// that has nothing to do with Live; for a `source=live` clip the
+    /// session after it ("on", "paused", "off", "ended"); "started" when the
+    /// owner's words started it.
+    #[serde(default)]
+    live: String,
+    /// Why Live is paused ("card", "other_voices"), when it is.
+    #[serde(default)]
+    live_pause: String,
+    /// "other_voices" after a few clips in a row that were not the owner's.
+    #[serde(default)]
+    live_hint: String,
+    /// A FIXED line for the bar to say now ("Say a bit more, so I can tell
+    /// it's you."...) - never anything heard.
+    #[serde(default)]
+    live_say: String,
+    /// Why the owner's words ended Live ("bye").
+    #[serde(default)]
+    live_ended: String,
+    /// A too-short Live clip, checked without words: "owner" (probably the
+    /// owner - say a bit more) or "other" (counted as another voice).
+    #[serde(default)]
+    live_short: String,
+    /// "Hey Jarvis" here while Live is on the OTHER device: which one
+    /// ("phone"), so the bar offers to move Live here. Nothing was answered.
+    #[serde(default)]
+    live_elsewhere: String,
 }
 
 fn default_true() -> bool {
@@ -414,6 +442,15 @@ pub struct HeardReply {
     /// Answers about the screen may be read aloud (private-speech.js).
     /// `false` when the PC did not say.
     pub screen_aloud: bool,
+    /// Jarvis Live: the session after this clip (see `HeardRaw::live`), and
+    /// what live-rules.js reads to decide what the bar does next.
+    pub live: String,
+    pub live_pause: String,
+    pub live_hint: String,
+    pub live_say: String,
+    pub live_ended: String,
+    pub live_short: String,
+    pub live_elsewhere: String,
 }
 
 impl HeardReply {
@@ -438,6 +475,13 @@ impl HeardReply {
             memory_aloud: false,
             sensitive_aloud: false,
             screen_aloud: false,
+            live: String::new(),
+            live_pause: String::new(),
+            live_hint: String::new(),
+            live_say: String::new(),
+            live_ended: String::new(),
+            live_short: String::new(),
+            live_elsewhere: String::new(),
         }
     }
 }
@@ -462,6 +506,13 @@ impl From<HeardRaw> for HeardReply {
             memory_aloud: raw.memory_aloud,
             sensitive_aloud: raw.sensitive_aloud,
             screen_aloud: raw.screen_aloud,
+            live: raw.live,
+            live_pause: raw.live_pause,
+            live_hint: raw.live_hint,
+            live_say: raw.live_say,
+            live_ended: raw.live_ended,
+            live_short: raw.live_short,
+            live_elsewhere: raw.live_elsewhere,
         }
     }
 }
@@ -1052,6 +1103,226 @@ pub(crate) fn wake_audio_refusal(base: &str) -> Option<String> {
     ))
 }
 
+// ---------------------------------------------------------------------------
+// Jarvis Live (live.rs; docs/LIVE-DESIGN.md): the same listener, held open
+// ---------------------------------------------------------------------------
+
+/// While Jarvis Live is on on THIS PC, the listener sends every sentence as
+/// `source=live` - no "hey Jarvis" needed, and the PC still checks the voice
+/// before any words exist. Set by live.rs only.
+pub(crate) static LIVE_MODE: AtomicBool = AtomicBool::new(false);
+/// "Hey Jarvis" listening was on when Live took the microphone, or was
+/// switched on during Live: it comes back when Live ends.
+static WAKE_WAS_ON: AtomicBool = AtomicBool::new(false);
+/// Whether Smart Turn may be asked, read when Live opened the microphone -
+/// so a microphone closed for a pause and opened again asks the same.
+static LIVE_USE_TURN: AtomicBool = AtomicBool::new(false);
+
+/// In Live, a sentence Smart Turn calls unfinished may pause this long (the
+/// voice play test, 2026-09-28: 2 s cut people off mid-thought).
+pub(crate) const LIVE_TURN_MAX_PAUSE: Duration = Duration::from_millis(3000);
+
+/// Whether a Live sentence must be dropped instead of sent: the PC paused
+/// Live for a card raised in this session (or cannot read the queue), the
+/// bar is showing a card, or the event stream is stale (rule 4). Cards are
+/// decided by tapping only - a spoken "yes" is not even heard. A card left
+/// waiting from BEFORE Live does not hold it (the voice play test, C8).
+pub(crate) fn live_held(card_paused: bool, stale: bool) -> bool {
+    card_paused || stale
+}
+
+/// [`pause_step`] in Live: the same rule, but a pause inside a sentence
+/// Smart Turn called unfinished may last [`LIVE_TURN_MAX_PAUSE`].
+pub(crate) fn live_pause_step(
+    silence: Duration,
+    voiced: Duration,
+    elapsed: Duration,
+    asked: bool,
+    use_model: bool,
+) -> PauseStep {
+    let step = pause_step(silence, voiced, elapsed, asked, use_model);
+    if step == PauseStep::Cut
+        && use_model
+        && voiced >= VAD_MIN_SPEECH
+        && elapsed < VAD_MAX_UTTERANCE
+        && silence < LIVE_TURN_MAX_PAUSE
+    {
+        return PauseStep::Listen;
+    }
+    step
+}
+
+/// Why Live's audio may NOT go to `base` - the same rule as "hey Jarvis":
+/// every sentence said in the room goes to the server before any voice is
+/// checked, so only to a server on this PC.
+pub(crate) fn live_audio_refusal(base: &str) -> Option<String> {
+    if is_loopback_base(base) {
+        return None;
+    }
+    Some(format!(
+        "Jarvis Live on this PC only works with the Jarvis server on this PC. It is \
+         set to {base}, and every sentence said in the room would be sent there."
+    ))
+}
+
+/// Takes the listener off the microphone, if one is open. True if one was.
+fn take_listener(app: &AppHandle) -> bool {
+    let taken = app
+        .state::<AutoListenState>()
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
+    match taken {
+        Some(active) => {
+            let _ = active.stop_tx.send(());
+            true
+        }
+        None => false,
+    }
+}
+
+fn listener_open(app: &AppHandle) -> bool {
+    app.state::<AutoListenState>()
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .is_some()
+}
+
+/// Opens the microphone for Jarvis Live. Live owns it while it runs: a
+/// "hey Jarvis" listener already open is closed first (and comes back when
+/// Live ends). Needs no "hey Jarvis" switch and no card: Live is the owner's
+/// own act (docs/LIVE-DESIGN.md section 2). Audio goes only to a server on
+/// this PC.
+pub(crate) async fn open_for_live(app: &AppHandle) -> Result<ListenInfo, String> {
+    let base = jarvis_base(app);
+    if let Some(why) = live_audio_refusal(&base) {
+        return Err(why);
+    }
+    if take_listener(app) {
+        WAKE_WAS_ON.store(true, Ordering::SeqCst);
+    }
+    let use_turn = turn_ready(app).await;
+    LIVE_USE_TURN.store(use_turn, Ordering::SeqCst);
+    LIVE_MODE.store(true, Ordering::SeqCst);
+    match open_live_listener(app) {
+        Ok(info) => Ok(info),
+        Err(why) => {
+            LIVE_MODE.store(false, Ordering::SeqCst);
+            Err(why)
+        }
+    }
+}
+
+fn open_live_listener(app: &AppHandle) -> Result<ListenInfo, String> {
+    open_listener(
+        app,
+        &app.state::<AutoListenState>(),
+        &app.state::<VoiceCaptureState>(),
+        &app.state::<crate::voice_training::SampleState>(),
+        LIVE_USE_TURN.load(Ordering::SeqCst),
+    )
+}
+
+/// Live is paused (a card, a stale link, Mute, a call, the lock): the
+/// microphone is CLOSED - not just ignored - so Windows' own microphone
+/// sign goes off too. Live stays on; [`resume_for_live`] opens it again.
+pub(crate) fn suspend_for_live(app: &AppHandle) {
+    if LIVE_MODE.load(Ordering::SeqCst) {
+        take_listener(app);
+    }
+}
+
+/// Live listens again after a pause.
+pub(crate) fn resume_for_live(app: &AppHandle) -> Result<(), String> {
+    if !LIVE_MODE.load(Ordering::SeqCst) || listener_open(app) {
+        return Ok(());
+    }
+    open_live_listener(app).map(|_| ())
+}
+
+/// Live ended: its microphone closes, and "hey Jarvis" listening comes back
+/// if it was on - only if the PC's wake word is still on; never by raising
+/// a card.
+pub(crate) async fn close_for_live(app: &AppHandle) {
+    LIVE_MODE.store(false, Ordering::SeqCst);
+    take_listener(app);
+    if WAKE_WAS_ON.swap(false, Ordering::SeqCst) {
+        let back = wake_ready_now(app).await;
+        let reopened = match back {
+            Some(use_turn) => open_listener(
+                app,
+                &app.state::<AutoListenState>(),
+                &app.state::<VoiceCaptureState>(),
+                &app.state::<crate::voice_training::SampleState>(),
+                use_turn,
+            )
+            .is_ok(),
+            None => false,
+        };
+        if !reopened {
+            // The bar's "hey Jarvis" button goes off, and says why once.
+            let _ = app.emit(
+                VOICE_HEARD,
+                HeardReply::unavailable(
+                    "Jarvis Live ended, and \"hey Jarvis\" listening could not start again. \
+                     Turn it on again with the button next to the microphone."
+                        .to_string(),
+                ),
+            );
+        }
+    }
+}
+
+/// Is the PC's wake word on and hearable right now? `Some(use_turn)` when
+/// it is. Never asks for it to be turned on.
+async fn wake_ready_now(app: &AppHandle) -> Option<bool> {
+    let base = jarvis_base(app);
+    if wake_audio_refusal(&base).is_some() {
+        return None;
+    }
+    let client = jarvis_client(Some(WAKE_CHECK_TIMEOUT)).ok()?;
+    let status: serde_json::Value = client
+        .get(format!("{base}/api/voice/status"))
+        .headers(jarvis_headers(app).ok()?)
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    match wake_readiness(&status) {
+        WakeReadiness::Ready => Some(turn_usable(&status)),
+        _ => None,
+    }
+}
+
+/// Whether Smart Turn may be asked where a sentence ends - read from
+/// `/api/voice/status`; `false` (the fixed pause) when it cannot be read.
+async fn turn_ready(app: &AppHandle) -> bool {
+    let base = jarvis_base(app);
+    let Ok(client) = jarvis_client(Some(WAKE_CHECK_TIMEOUT)) else {
+        return false;
+    };
+    let Ok(headers) = jarvis_headers(app) else {
+        return false;
+    };
+    let Ok(response) = client
+        .get(format!("{base}/api/voice/status"))
+        .headers(headers)
+        .send()
+        .await
+    else {
+        return false;
+    };
+    response
+        .json::<serde_json::Value>()
+        .await
+        .map(|status| turn_usable(&status))
+        .unwrap_or(false)
+}
+
 /// What `/api/voice/status` says about starting wake-word listening here.
 #[derive(Debug, PartialEq)]
 pub(crate) enum WakeReadiness {
@@ -1401,6 +1672,20 @@ pub async fn start_automatic_listening(
     manual: State<'_, VoiceCaptureState>,
     training: State<'_, crate::voice_training::SampleState>,
 ) -> Result<ListenInfo, String> {
+    if LIVE_MODE.load(Ordering::SeqCst) {
+        // Jarvis Live has the microphone: "hey Jarvis" comes back on its own
+        // when Live ends (if the PC's wake word is on then).
+        WAKE_WAS_ON.store(true, Ordering::SeqCst);
+        return Ok(ListenInfo {
+            echo_cancelling: false,
+            microphone: default_microphone_name(),
+            note: Some(
+                "Jarvis Live is using the microphone now. Listening for \"hey Jarvis\" \
+                 starts when Live ends."
+                    .to_string(),
+            ),
+        });
+    }
     {
         let auto_busy = state.0.lock().map_err(poisoned)?.is_some();
         let manual_busy = manual.0.lock().map_err(poisoned)?.is_some();
@@ -1413,8 +1698,19 @@ pub async fn start_automatic_listening(
     }
 
     let use_turn = ensure_wake_ready(&app).await?;
+    open_listener(&app, &state, &manual, &training, use_turn)
+}
 
-    // Checked again: the server round trip above is an await, and the
+/// Opens the microphone and starts the listening loop - for "hey Jarvis"
+/// (after `ensure_wake_ready`) or for Jarvis Live (`open_for_live`).
+fn open_listener(
+    app: &AppHandle,
+    state: &AutoListenState,
+    manual: &VoiceCaptureState,
+    training: &crate::voice_training::SampleState,
+    use_turn: bool,
+) -> Result<ListenInfo, String> {
+    // Checked again: the server round trip before this is an await, and the
     // other mode may have taken the microphone meanwhile. Settings' recorder
     // is asked before this lock is taken, and it stops this listener before
     // taking its own: neither holds its lock while asking the other.
@@ -1429,7 +1725,7 @@ pub async fn start_automatic_listening(
 
     let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
     let microphone = default_microphone_name();
-    if let Some(handle) = start_echo_cancelled(&app, &samples, use_turn) {
+    if let Some(handle) = start_echo_cancelled(app, &samples, use_turn) {
         *guard = Some(handle);
         return Ok(ListenInfo {
             echo_cancelling: true,
@@ -1440,6 +1736,7 @@ pub async fn start_automatic_listening(
     let (ready_tx, ready_rx) = mpsc::channel();
     let (stop_tx, stop_rx) = mpsc::channel();
 
+    let app = app.clone();
     let join = spawn_capture_thread(
         Arc::clone(&samples),
         ready_tx,
@@ -1622,7 +1919,12 @@ fn run_vad_loop(
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
                 }
-                let mut should_cut = match pause_step(
+                let step_rule = if LIVE_MODE.load(Ordering::SeqCst) {
+                    live_pause_step
+                } else {
+                    pause_step
+                };
+                let mut should_cut = match step_rule(
                     silence_elapsed,
                     voiced_so_far,
                     speech_elapsed,
@@ -1694,6 +1996,20 @@ fn run_vad_loop(
                         stop_listening_because(app, why);
                         return VadEnd::Refused;
                     }
+                    // Jarvis Live (live.rs): no "hey Jarvis" between turns -
+                    // but held while a card waits, on a stale link, or while
+                    // the PC paused it. A held sentence is dropped HERE and
+                    // never sent, so a spoken "yes" cannot even reach the PC.
+                    let live = LIVE_MODE.load(Ordering::SeqCst);
+                    if live {
+                        let link = app.state::<crate::stream::StreamState>().link();
+                        if live_held(crate::live::card_paused(), link.stale) {
+                            buf.clear();
+                            read_to = 0;
+                            phase = VadPhase::Silence;
+                            continue;
+                        }
+                    }
                     let clip: Vec<i16> = buf[*started_at_index..buf.len()].to_vec();
                     // How long since speech was last heard, sent as
                     // `waited_ms` (the Smart Turn pause included).
@@ -1730,10 +2046,23 @@ fn run_vad_loop(
                         &base,
                         spec,
                         &clip,
-                        "wake_word",
+                        if live { "live" } else { "wake_word" },
                         Some(waited),
                     ));
                     match heard {
+                        Ok(reply) if live => {
+                            // Every Live reply goes to the bar - a refusal
+                            // too (the hint, the short line, the end): it
+                            // decides with live-rules.js. The owner's words
+                            // over a reply stop it, as "hey Jarvis" does.
+                            let heard =
+                                reply.is_owner && reply.available && !reply.text.trim().is_empty();
+                            if heard {
+                                let _ = app.emit(VOICE_SPEECH_STARTED, ());
+                            }
+                            crate::live::heard_note(&app, heard, reply.live_short == "owner");
+                            let _ = app.emit(VOICE_HEARD, reply);
+                        }
                         Ok(reply) if !reply.available => {
                             // The server cannot do this at all right now
                             // (switched off, no model): the frontend says so
@@ -1746,10 +2075,26 @@ fn run_vad_loop(
                             // that, and nothing is sent to the chat.
                             let _ = app.emit(VOICE_SPEECH_STARTED, ());
                         }
+                        Ok(reply) if reply.live == "started" => {
+                            // "Hey Jarvis, let's talk": the PC started Jarvis
+                            // Live here. Under App lock it is ended again at
+                            // once and nothing is said (live.rs `adopt`).
+                            if !crate::lock::app_locked(&app) {
+                                let _ = app.emit(VOICE_SPEECH_STARTED, ());
+                                let _ = app.emit(VOICE_HEARD, reply);
+                            }
+                            crate::live::adopt(&app);
+                        }
                         Ok(reply) if reply.wake_heard => {
                             // Barge-in: "hey Jarvis" stops a reply that is
                             // still being spoken.
                             let _ = app.emit(VOICE_SPEECH_STARTED, ());
+                            let _ = app.emit(VOICE_HEARD, reply);
+                        }
+                        Ok(reply) if !reply.live_elsewhere.is_empty() => {
+                            // "Hey Jarvis" here while Jarvis Live is on the
+                            // other device: nothing was answered, and the
+                            // bar offers to move Live here.
                             let _ = app.emit(VOICE_HEARD, reply);
                         }
                         Ok(_) => {
@@ -1757,7 +2102,7 @@ fn run_vad_loop(
                             // server kept nothing; neither does this.
                         }
                         Err(reason) => {
-                            eprintln!("[voice] wake-word utterance not sent: {reason}");
+                            eprintln!("[voice] utterance not sent: {reason}");
                         }
                     }
                     continue;
@@ -1775,6 +2120,12 @@ fn run_vad_loop(
 /// flight to finish.
 #[tauri::command]
 pub fn stop_automatic_listening(state: State<AutoListenState>) -> Result<(), String> {
+    if LIVE_MODE.load(Ordering::SeqCst) {
+        // Jarvis Live owns the microphone: only "hey Jarvis" coming back
+        // after Live is cancelled.
+        WAKE_WAS_ON.store(false, Ordering::SeqCst);
+        return Ok(());
+    }
     if let Some(active) = state.0.lock().map_err(poisoned)?.take() {
         let _ = active.stop_tx.send(());
     }
@@ -1795,6 +2146,10 @@ pub(crate) fn stop_listening_because(app: &AppHandle, why: String) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .take();
+    if LIVE_MODE.load(Ordering::SeqCst) {
+        // The microphone is gone: Jarvis Live cannot carry on either.
+        crate::live::listener_stopped(app);
+    }
     if let Some(active) = taken {
         let _ = active.stop_tx.send(());
         let _ = app.emit(VOICE_HEARD, HeardReply::unavailable(why));

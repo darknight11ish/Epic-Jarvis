@@ -56,7 +56,13 @@ the owner voice check before any words exist, Silero VAD, Smart Turn v3.2,
 Parakeet speech-to-text (sherpa-onnx), Kokoro v0.19 text-to-speech (11
 voices, `speaker` setting), custom voices (ZipVoice on the processor, F5 on
 the second card; Pocket TTS built, off), speaking from the first comma,
-spoken-style answers, "stop" and barge-in, "One moment", "I heard you".
+spoken-style answers, "stop" and barge-in, "One moment", "I heard you". **Jarvis Live** (2026-09-28,
+`jarvis_live.py`, JARVIS-API §63, `docs/LIVE-DESIGN.md`): a back-and-forth
+conversation started and ended by the owner, both apps (badge and tray on the
+PC, Live screen and notification on the phone), the voice check on every
+clip, cards pause it, Mute, calls pause it, side talk ignored, tap buttons,
+the `hands_free_live` setting; the camera is built OFF until the 12 GB card
+passes `jarvis_live_photo_test.py`.
 Details: `backend/jarvis_speech.py`, `jarvis_voices.py`, `docs/WAKE-WORD.md`.
 
 **Everyday tools** - timers, alarms, reminders, to-do lists, one shared

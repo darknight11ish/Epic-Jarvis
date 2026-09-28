@@ -95,6 +95,8 @@ const ID_APPROVALS: &str = "approvals";
 const ID_WAITING: &str = "waiting";
 const ID_MUTE: &str = "mute";
 const ID_STOP_EVERYTHING: &str = "stop-everything";
+/// Jarvis Live (live.rs): start or end the voice conversation on this PC.
+const ID_LIVE: &str = "jarvis-live";
 const ID_POWER_ACTIVE: &str = "power-active";
 const ID_POWER_QUIET: &str = "power-quiet";
 const ID_POWER_STANDBY: &str = "power-standby";
@@ -125,6 +127,8 @@ struct Rows {
     approvals: MenuItem<tauri::Wry>,
     waiting: MenuItem<tauri::Wry>,
     mute: MenuItem<tauri::Wry>,
+    /// "Start Jarvis Live" / "End Jarvis Live".
+    live: MenuItem<tauri::Wry>,
     backend: MenuItem<tauri::Wry>,
     /// Shown only while a newer version is known to exist.
     update: MenuItem<tauri::Wry>,
@@ -240,6 +244,10 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         accel(app, "stop_everything").as_deref(),
     )?;
 
+    // Jarvis Live: never greyed - starting is refused with a reason (a stale
+    // link, App lock, no voice print), and ending always works.
+    let live = MenuItem::with_id(app, ID_LIVE, live_label(), true, None::<&str>)?;
+
     // One row that is status and action at once: it says what the backend is
     // and, when there is something to do about it, does it.
     let backend_state = backend_row(app);
@@ -324,6 +332,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &waiting,
             &mute,
             &stop_everything,
+            &live,
             &PredefinedMenuItem::separator(app)?,
             // Windows, everyday ones first — the two with hotkeys are the two
             // reached most often, and a hotkey printed beside a row is how the
@@ -358,6 +367,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             approvals,
             waiting,
             mute,
+            live,
             backend,
             update,
         });
@@ -935,8 +945,37 @@ fn backend_row(app: &AppHandle) -> (String, bool) {
     }
 }
 
+/// The Live row's words: what clicking it does.
+fn live_label() -> &'static str {
+    if crate::live::on_here() {
+        "End Jarvis Live"
+    } else {
+        "Start Jarvis Live"
+    }
+}
+
+/// Jarvis Live started or ended here: the row and the tooltip follow.
+pub fn live_changed(app: &AppHandle) {
+    if let Some(rows) = app
+        .state::<TrayHandles>()
+        .inner
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+    {
+        let _ = rows.live.set_text(live_label());
+    }
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let link = app.state::<crate::stream::StreamState>().link();
+        let _ = tray.set_tooltip(Some(tooltip(app, &link)));
+    }
+}
+
 fn tooltip(app: &AppHandle, link: &LinkState) -> String {
     let mut parts = vec![activity_label(link)];
+    if crate::live::on_here() {
+        parts.push("Jarvis Live is on".to_string());
+    }
     // Not while stale: power, approvals and the brief would be last-known
     // facts presented as current ones - the phone drops the same extras.
     if link.connected && !link.stale {
@@ -1098,6 +1137,9 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
 
         // Speech first, then the PC; a notification says what was stopped.
         ID_STOP_EVERYTHING => commands::stop_everything_now(app),
+
+        // Start or end Jarvis Live on this PC (live.rs).
+        ID_LIVE => crate::live::toggle_from_tray(app),
 
         ID_SHOW_HUD => {
             if let Err(err) = windows::show_hud(app) {

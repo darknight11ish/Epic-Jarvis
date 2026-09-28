@@ -119,6 +119,7 @@ import com.jarvis.client.ui.parts.FormattedAnswer
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.HelpIcon
 import com.jarvis.client.ui.parts.InboxIcon
+import com.jarvis.client.ui.parts.LiveIcon
 import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.MindIcon
 import com.jarvis.client.ui.parts.Notice
@@ -505,6 +506,8 @@ data class HomeActions(
      * caller saves it and hands it back as [HomeState.faceFraction].
      */
     val onFaceFractionCommitted: (Float) -> Unit = {},
+    /** Jarvis Live: open its screen (ui/screens/LiveScreen.kt), where it starts and ends. */
+    val onOpenLive: () -> Unit = {},
     /**
      * The owner tapped Right or Wrong on the answer [turnId]. The runtime
      * works out whether that sets, changes or takes back the mark, and sends
@@ -1361,6 +1364,12 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                 label = if (state.attention.pending > 0) "Inbox · ${state.attention.pending}" else "Inbox",
                 color = if (state.attention.pending > 0) chrome.warnInk else chrome.textMid,
                 onClick = actions.onOpenInbox,
+                modifier = Modifier.weight(1f),
+            )
+            NavItem(
+                icon = { LiveIcon(chrome.textMid) },
+                label = "Live",
+                onClick = actions.onOpenLive,
                 modifier = Modifier.weight(1f),
             )
             NavItem(

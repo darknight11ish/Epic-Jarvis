@@ -458,8 +458,14 @@ def t_the_patch():
     if not git:
         return check("SKIP - git is not installed", True)
     order = _stack.order()
-    check("chatbot-routes.patch is in apply-patches.ps1's list, last",
-          order and order[-1] == "chatbot-routes.patch", order[-3:])
+    # Last until live.patch (2026-09-28), which anchors on THIS patch's
+    # install block and so follows it.
+    after = [n for n in order[order.index("chatbot-routes.patch") + 1:]] \
+        if "chatbot-routes.patch" in order else []
+    check("chatbot-routes.patch is in apply-patches.ps1's list, followed only by patches "
+          "that anchor on it (live.patch)",
+          bool(order) and "chatbot-routes.patch" in order and after in ([], ["live.patch"]),
+          order[-3:])
     if "chatbot-routes.patch" not in order:
         return
     text, log = _stack.stand_in("jarvis_hud.py", order[:order.index("chatbot-routes.patch")])

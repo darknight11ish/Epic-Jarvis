@@ -424,6 +424,21 @@ class LockSession {
     /** Whether Mind's private lists should be hidden now. */
     fun privateHidden(s: Security): Boolean = s.privateLists && !privateShown
 
+    /**
+     * Whether App lock WOULD lock Jarvis now, were it brought back in sight:
+     * locked already, or out of sight for "Lock again after" or longer (a
+     * fingerprint or PIN check under way does not count). Asks nothing and
+     * changes nothing. Jarvis Live on this phone ends then.
+     */
+    fun wouldLock(nowMs: Long, s: Security): Boolean {
+        if (!s.appLock) return false
+        if (!unlocked) return true
+        if (checking) return false
+        val from = awayFrom ?: return false
+        val away = nowMs - from
+        return away < 0 || away >= s.relockAfter.ms
+    }
+
     /** Jarvis went out of sight (not a rotation - the activity checks that). */
     fun left(nowMs: Long) {
         inSight = false

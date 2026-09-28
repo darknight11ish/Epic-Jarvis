@@ -2297,3 +2297,52 @@ html[data-state="approval"] .pulse {
   border-radius: var(--radius-chip);
   padding: 1px 7px;
 }
+
+/* -- Jarvis Live (live-rules.js): the sign in the bar ------------------- */
+.jarvis-live {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+.jarvis-live[hidden] {
+  display: none;
+}
+.jarvis-live-sign {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text);
+}
+.jarvis-live-sign span[role="status"] {
+  color: var(--text-muted);
+}
+.jarvis-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bad);
+  align-self: center;
+}
+.jarvis-live[data-muted="true"] .jarvis-live-dot,
+.jarvis-live[data-ended="true"] .jarvis-live-dot {
+  background: var(--text-faint);
+}
+.jarvis-live-actions,
+.jarvis-live-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.jarvis-live-chips[hidden],
+.jarvis-live-actions button[hidden] {
+  display: none;
+}
+#jarvis-live-toggle[aria-pressed="true"] {
+  color: var(--bad);
+}

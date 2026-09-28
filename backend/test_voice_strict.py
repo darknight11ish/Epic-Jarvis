@@ -638,11 +638,11 @@ def t_hands_free_setting():
 
 
 SCREEN_CARD = (
-    "Let Jarvis read answers about your screen aloud after \"Hey Jarvis\", even while "
-    "\"Only trust the talk button\" is chosen?\n\n"
-    "Anyone near the speaker will hear what Jarvis says about your screen. A recording "
-    "or a copy of your voice played near the microphone while Jarvis is watching your "
-    "screen could hear it too.\n\n"
+    "Let Jarvis read answers about your screen or the camera aloud after \"Hey Jarvis\", "
+    "even while \"Only trust the talk button\" is chosen?\n\n"
+    "Anyone near the speaker will hear what Jarvis says about your screen or what the "
+    "camera sees. A recording or a copy of your voice played near the microphone while "
+    "Jarvis is looking could hear it too.\n\n"
     "If you did not just do this, say no.\n\n"
     "If you say no: nothing changes - those answers stay on your screen.")
 
@@ -752,6 +752,144 @@ def t_hands_free_screen_setting():
         check("gate.hands_free_screen is the PC's setting",
               gate_state["hands_free_screen"] == "screen_on_screen"
               and gate_state["settings"]["hands_free_screen"] == "screen_on_screen", gate_state)
+
+
+LIVE_CARD_FULLY = (
+    "Trust what you say in Jarvis Live like the talk button, however Live was started, even "
+    "while \"Only trust the talk button\" is chosen?\n\n"
+    "During Jarvis Live the microphone stays open. A recording or a copy of your voice "
+    "played near it could pass the voice check, and would then be trusted like you "
+    "pressing the talk button: Jarvis could remember things from it, or read memory and "
+    "private answers aloud.\n\n"
+    "If you did not just do this, say no.\n\n"
+    "If you say no: nothing changes.")
+LIVE_CARD_BUTTON = (
+    "Trust what you say in Jarvis Live like the talk button when you start Live with the "
+    "button, even while \"Only trust the talk button\" is chosen?\n\n"
+    "During Jarvis Live the microphone stays open. A recording or a copy of your voice "
+    "played near it could pass the voice check, and would then be trusted like you "
+    "pressing the talk button. A Live started by \"Hey Jarvis, let's talk\" keeps the "
+    "extra caution.\n\n"
+    "If you did not just do this, say no.\n\n"
+    "If you say no: nothing changes.")
+
+
+def t_hands_free_live_setting():
+    """The owner's answers of 2026-09-28 (docs/LIVE-DESIGN.md): under "only
+    trust the talk button", a Jarvis Live turn is trusted like the talk
+    button BY DEFAULT however Live was started, with THREE choices -
+    "Trust Live fully" (default), "Only when I start it with the button",
+    "Be as careful as with Hey Jarvis". A stricter choice is immediate; a
+    looser one is the voice card. A damaged value is the strictest. Under
+    "same as the talk button" it changes nothing."""
+    FULLY, BUTTON, WAKE = "live_trust_fully", "live_button_start_only", "live_like_hey_jarvis"
+    with Temp():
+        check("no settings file: live_trust_fully (the owner's default)",
+              V.settings()["hands_free_live"] == FULLY)
+        check("under the default hands-free choice, a Live turn is trusted either way",
+              V.hands_free_trusted("live") and V.hands_free_trusted("live_voice"))
+        V.settings_path().write_text(json.dumps({"strictness": "very_strict",
+                                                 "hands_free": "button_only"}))
+        check("a file from before this setting: live_trust_fully",
+              V.settings()["hands_free_live"] == FULLY)
+        check("button_only: a Live turn is STILL trusted like the talk button, however it "
+              "started", V.hands_free_trusted("live") and V.hands_free_trusted("LIVE ")
+              and V.hands_free_trusted("live_voice"))
+        check("...while hey Jarvis and an unknown source are not",
+              not V.hands_free_trusted("wake_word") and not V.hands_free_trusted("carrier_pigeon")
+              and not V.hands_free_trusted(""))
+        check("...and its screen answers are read aloud (the trust decides)",
+              V.screen_aloud("live") and not V.screen_aloud("wake_word"))
+        for bad in ("trust_everything", None, 1, True, "live_same_as_button"):
+            V.settings_path().write_text(json.dumps({"hands_free": "button_only",
+                                                     "hands_free_live": bad}))
+            check(f"a damaged value ({bad!r}): the strictest (fail closed)",
+                  V.settings()["hands_free_live"] == WAKE
+                  and not V.hands_free_trusted("live"))
+        V.settings_path().write_text("{not json", encoding="utf-8")
+        check("an unreadable file: the strictest, and hands-free button_only",
+              V.settings()["hands_free_live"] == WAKE and not V.hands_free_trusted("live"))
+        V.settings_path().unlink()
+        st = V.status()
+        check("status: hands_free_live at the top, in settings, choices and defaults",
+              st["hands_free_live"] == FULLY
+              and st["settings"]["hands_free_live"] == FULLY
+              and st["settings"]["choices"]["hands_free_live"] == [FULLY, BUTTON, WAKE]
+              and st["settings"]["defaults"]["hands_free_live"] == FULLY, st)
+        V.set_setting("hands_free", "button_only")
+        check("is_loosening: nothing is looser than the default",
+              not V.is_loosening("hands_free_live", FULLY)
+              and not V.is_loosening("hands_free_live", BUTTON)
+              and not V.is_loosening("hands_free_live", WAKE))
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_live", BUTTON)
+        check("'Only when I start it with the button' (stricter): immediate, no card",
+              code == 200 and out["changed"] and not gate.calls
+              and V.settings()["hands_free_live"] == BUTTON
+              and out["settings"]["hands_free_live"] == BUTTON, (code, out))
+        check("...a button start is trusted, a voice start is not",
+              V.hands_free_trusted("live") and not V.hands_free_trusted("live_voice"))
+        code, out, gate = _setting("hands_free_live", WAKE)
+        check("'Be as careful as with Hey Jarvis' (stricter still): immediate, no card",
+              code == 200 and not gate.calls and V.settings()["hands_free_live"] == WAKE)
+        check("...every Live turn gets the hey Jarvis caution",
+              not V.hands_free_trusted("live") and not V.hands_free_trusted("live_voice")
+              and not V.screen_aloud("live"))
+        check("...the talk button is untouched", V.hands_free_trusted("push_to_talk"))
+        check("is_loosening: both looser choices loosen from the strictest",
+              V.is_loosening("hands_free_live", BUTTON) and V.is_loosening("hands_free_live",
+                                                                             FULLY))
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_live", BUTTON, Verdict(False, outcome="denied"))
+        check("strictest -> 'only with the button' raises ONE card; denied: nothing changes",
+              code == 202 and len(gate.calls) == 1 and V.settings()["hands_free_live"] == WAKE,
+              (code, out))
+        check("the card: the agreed words", gate.calls and gate.calls[0][2] == LIVE_CARD_BUTTON,
+              gate.calls)
+        check("the card names the setting and the value",
+              gate.calls and gate.calls[0][1]["setting"] == "hands_free_live"
+              and gate.calls[0][1]["to"] == BUTTON, gate.calls)
+        E._reset_for_tests()
+        _setting("hands_free_live", FULLY, Verdict(False, outcome="timed_out"))
+        check("timed out: nothing changes", V.settings()["hands_free_live"] == WAKE)
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_live", FULLY, Verdict(True))
+        check("strictest -> 'Trust Live fully' approved: trusted again, with its own words",
+              V.settings()["hands_free_live"] == FULLY and V.hands_free_trusted("live_voice")
+              and gate.calls and gate.calls[0][2] == LIVE_CARD_FULLY, (code, out))
+        check("...and the other settings are kept",
+              V.settings()["hands_free"] == "button_only"
+              and V.settings()["hands_free_screen"] == "screen_on_screen"
+              and V.settings()["memory"] == "memory_aloud")
+        V.set_setting("hands_free_live", BUTTON)
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free_live", FULLY, Verdict(True))
+        check("'only with the button' -> 'Trust Live fully' is a loosening too: a card",
+              len(gate.calls) == 1 and V.settings()["hands_free_live"] == FULLY)
+        V.set_setting("hands_free_live", WAKE)
+        for looser in (BUTTON, FULLY):
+            try:
+                V.set_setting("hands_free_live", looser)
+                ok = False
+            except ValueError:
+                ok = True
+            check(f"set_setting refuses to loosen it to {looser} without approval", ok)
+        V.set_setting("hands_free", "same_as_button", approved=True)
+        check("under 'same as the talk button' the caution changes nothing",
+              V.hands_free_trusted("live") and V.hands_free_trusted("live_voice"))
+        E._reset_for_tests()
+        with mock.patch.object(V, "_CHOICES", {k: c for k, c in V._CHOICES.items()
+                                               if k != "hands_free_live"}):
+            code, out, gate = _setting("hands_free_live", WAKE)
+        check("a voice module older than the setting: 503 in words, no card",
+              code == 503 and "too old" in out["error"] and not gate.calls, (code, out))
+        gate_state = S._strict_state({"strictness": "very_strict", "hands_free": "button_only"})
+        check("an older PC's status: hands_free_live is \"\" (the apps do not offer it)",
+              gate_state["hands_free_live"] == "", gate_state)
+        gate_state = S._strict_state(V.status())
+        check("gate.hands_free_live is the PC's setting",
+              gate_state["hands_free_live"] == WAKE
+              and gate_state["settings"]["hands_free_live"] == WAKE, gate_state)
 
 
 def t_nothing_private_aloud_without_a_real_check():
@@ -1578,7 +1716,7 @@ if __name__ == "__main__":
                t_training_in_rounds, t_rounds_make_subprints_and_add_adds,
                t_repeat_counters, t_measure_and_someone_else, t_minimum_command_length,
                t_private_fields_on_the_reply, t_hands_free_on_the_reply,
-               t_screen_aloud_on_the_reply, t_no_audio_is_written,
+               t_screen_aloud_on_the_reply, t_hands_free_live_setting, t_no_audio_is_written,
                t_real_models):
         print(f"\n--- {fn.__name__} ---")
         try:

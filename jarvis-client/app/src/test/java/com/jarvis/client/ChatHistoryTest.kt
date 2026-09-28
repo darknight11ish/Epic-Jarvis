@@ -310,4 +310,27 @@ class ChatHistoryTest {
         assertTrue(ChatHistory.validConversationId("A-b_9".repeat(2)))
         assertTrue(ChatHistory.validConversationId("x".repeat(64)))
     }
+
+    // ------------------------------------------------------ Jarvis Live ---
+
+    @Test
+    fun `a question said in Jarvis Live is marked live - the newest spoken one only`() {
+        val window = build("earlier" to "answer")
+        val spoken = listOf(ChatHistory.UserTurn("what's the weather", Provenance.VOICE))
+        val live = ChatHistory.messages(window, spoken, live = true)
+        val newest = live.last().jsonObject
+        assertEquals(JsonPrimitive(true), newest["live"])
+        assertEquals(JsonPrimitive(Provenance.VOICE), newest["provenance"])
+        // Never on the history.
+        assertTrue(live.dropLast(1).none { (it as JsonObject).containsKey("live") })
+        // Not on a typed question, even in Live (a tap button, the text box).
+        val typed = ChatHistory.messages(window, listOf(ChatHistory.UserTurn("Yes", Provenance.TYPED)), live = true)
+        assertTrue(!typed.last().jsonObject.containsKey("live"))
+        // And not at all outside Live.
+        assertTrue(!ChatHistory.messages(window, spoken).last().jsonObject.containsKey("live"))
+        // The cut-off note rides with it, as before.
+        val cut = ChatHistory.messages(window, spoken, interrupted = "It is sunny", live = true).last().jsonObject
+        assertEquals(JsonPrimitive("It is sunny"), cut["interrupted"])
+        assertEquals(JsonPrimitive(true), cut["live"])
+    }
 }

@@ -45,8 +45,9 @@ def check(name, ok, detail=""):
 
 
 def t_the_list_is_real_and_only_reads():
-    check("the list is web_search, home_read and read_screen, nothing else",
-          sorted(G.READ_ALOUD_TOOLS) == ["home_read", "read_screen", "web_search"],
+    check("the list is web_search, home_read, read_screen and read_camera, nothing else",
+          sorted(G.READ_ALOUD_TOOLS) == ["home_read", "read_camera", "read_screen",
+                                         "web_search"],
           G.READ_ALOUD_TOOLS)
     for name in G.READ_ALOUD_TOOLS:
         if name in G.RECORDED_READS:
@@ -59,6 +60,18 @@ def t_the_list_is_real_and_only_reads():
           jarvis_screen.SCREEN_TOOL == "read_screen" and "read_screen" in G.RECORDED_READS)
     check("... and it is not a tool the model can call (nothing on the screen starts a look)",
           "read_screen" not in jarvis_agent.TOOLS)
+    # read_camera: the read a Jarvis Live camera question records (the
+    # owner's answer of 2026-09-28, docs/LIVE-DESIGN.md) - not a model tool
+    # either, and on the step event's list so it reaches the apps by name.
+    import jarvis_live
+    check("read_camera is jarvis_live's own name for a camera read",
+          jarvis_live.CAMERA_TOOL == "read_camera" and "read_camera" in G.RECORDED_READS)
+    check("... not a tool the model can call (nothing the camera sees starts a look)",
+          "read_camera" not in jarvis_agent.TOOLS)
+    check("... and on jarvis_agent.STEP_READS, like read_screen",
+          {"read_screen", "read_camera"} <= set(jarvis_agent.STEP_READS))
+    check("a camera read is governed by the screen's rule (is_screen_read)",
+          G.is_screen_read({"phase": "tool_finished", "tool": "read_camera", "ok": True}))
     check("RECORDED_READS names nothing that is not on the list",
           set(G.RECORDED_READS) <= set(G.READ_ALOUD_TOOLS), G.RECORDED_READS)
     for private in ("email_check", "calendar_read", "notes_search", "memory_search",
@@ -143,7 +156,7 @@ def t_the_table_says_what_the_owner_said():
               name in rows and rows[name]["read"] is read, rows.get(name))
     older = [c for c in table["cases"] if "no screen_aloud field" in c["name"]]
     check("the older-PC rows really leave the field out (so both apps' 'missing = false' "
-          "is tested)", len(older) == 2 and all("screen_aloud" not in c["heard"] for c in older),
+          "is tested)", len(older) == 3 and all("screen_aloud" not in c["heard"] for c in older),
           older)
     check("every other row says screen_aloud",
           all("screen_aloud" in c["heard"] for c in table["cases"] if c not in older))

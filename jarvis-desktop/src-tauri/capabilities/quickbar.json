@@ -22,6 +22,7 @@
     "memory-used",
     "chat-sources",
     "attention-surface",
-    "voice"
+    "voice",
+    "live"
   ]
 }

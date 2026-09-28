@@ -237,6 +237,12 @@ SHIPPED = (
     # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
     # chatbot-routes.patch already installs the routes that reach it.
     "jarvis_chatbot_compare.py",
+    # Jarvis Live (2026-09-28): the session and the rules jarvis_speech
+    # follows for `source=live`; GET/POST /api/voice/live (live.patch)
+    "jarvis_live.py",
+    # ... and the camera's photo test, run once when the second card is in
+    # (no patch: the owner runs it by hand)
+    "jarvis_live_photo_test.py",
 )
 
 

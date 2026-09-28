@@ -114,10 +114,13 @@ export function isToolRun(data) {
  * owner's decision of 2026-09-27: web search, weather and home status -
  * weather is read with `home_read`, or answered with no tool at all) - and
  * `read_screen`, an answer about the screen (the owner's answer of
- * 2026-09-28; a read the PC records, not a model tool). Exact names, as the
- * `step` event carries them. The phone's `PrivateAloud.READ_ALOUD_TOOLS`.
+ * 2026-09-28; a read the PC records, not a model tool) - and `read_camera`,
+ * an answer about what the phone's camera sees in Jarvis Live (the owner's
+ * answer of 2026-09-28; off until the 12 GB card passes the photo test).
+ * Exact names, as the `step` event carries them. The phone's
+ * `PrivateAloud.READ_ALOUD_TOOLS`.
  */
-export const READ_ALOUD_TOOLS = Object.freeze(["home_read", "read_screen", "web_search"]);
+export const READ_ALOUD_TOOLS = Object.freeze(["home_read", "read_camera", "read_screen", "web_search"]);
 
 /** A tool ran, and its answer stays on screen: its name is not on
  *  `READ_ALOUD_TOOLS`, or it has none. The phone's `isPrivateToolRun`. */
@@ -130,10 +133,15 @@ export function isPrivateToolRun(data) {
 /** The read an answer about the screen records (jarvis_screen.SCREEN_TOOL). */
 export const SCREEN_READ = "read_screen";
 
-/** A `step` event says the screen was read: a tool run named exactly
- *  `read_screen`. The phone's `PrivateAloud.isScreenRead`. */
+/** The read an answer about the camera records (jarvis_live.CAMERA_TOOL). */
+export const CAMERA_READ = "read_camera";
+
+/** A `step` event says the screen - or, in Jarvis Live, the camera - was
+ *  read: a tool run named exactly `read_screen` or `read_camera`. Both keep
+ *  to the same rule (the owner's answer of 2026-09-28: camera answers are
+ *  read aloud like screen answers). The phone's `PrivateAloud.isScreenRead`. */
 export function isScreenRead(data) {
-  return isToolRun(data) && data.tool === SCREEN_READ;
+  return isToolRun(data) && (data.tool === SCREEN_READ || data.tool === CAMERA_READ);
 }
 
 /**

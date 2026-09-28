@@ -141,6 +141,7 @@ on a throwaway copy instead.
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Two more small hunks (the owner, 2026-09-28) hand a crisis turn's `turn_id` to `jarvis_agent.note_crisis_turn` - right after `feedback.patch` makes the id, on `wellbeing.patch`'s flag, and again after `run_local_turn` on its own crisis check - so a "wrong" mark on a crisis answer is never counted. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `projects.patch` | `jarvis_hud.py` | **Projects, build steps 1 and 2** (the owner's decision of 2026-09-28, `docs/PROJECTS-DESIGN.md`). One hunk, like every install()-shaped patch: `jarvis_projects.install(Handler, ...)` at start-up, answering `GET`/`POST /api/projects` and its benchmarks (`docs/JARVIS-API.md` §61). Its context is `answer-sources.patch`'s own install block, so it goes after it - last, like every new patch. **When the continuation branch merges:** `goals.patch` there anchors on the very same lines, so whichever lands second is re-anchored on the other's block. Needs `jarvis_projects.py`; without it, or on any error, the banner says so and the routes are not there. See "Projects", at the very end. |
 | `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py`, `jarvis_chatbot_gemini.py` and the other website adapters (`jarvis_chatbot_web.py` and a site file each), shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window" and "... more chatbot websites, the same open way", at the very end. |
+| `live.patch` | `jarvis_hud.py` | **Jarvis Live: talking back and forth** (the owner's decision and answers of 2026-09-28, `docs/LIVE-DESIGN.md`). One call at start-up, `jarvis_live.install(Handler, ...)`, answers `GET`/`POST /api/voice/live` (JARVIS-API section 63): start (no card; refused until your voice is trained), stop, more time, carry on, mute. Last in the list; its context is `chatbot-routes.patch`'s install block. Needs `jarvis_live.py` - without it, or on any error, the banner says so. See "Jarvis Live", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -14930,3 +14931,83 @@ no log line, output, session view or the money file.
   empty answer near the end of the month. An empty one ends the
   conversation with plain words.
 - Not tried against any real service.
+
+# Jarvis Live: talking back and forth, `jarvis_live.py` (2026-09-28)
+
+Owner's decision (CLAUDE.md, "Jarvis Live") and answers, designed in
+`docs/LIVE-DESIGN.md` (which lists what was built and what changed from the
+design). Built on the backend and in both apps (`docs/JARVIS-API.md` section
+63). **Nothing here has run on your PC or phone yet.**
+
+## In plain words
+
+- Press **Live** (the Jarvis bar's button, the tray row, or Home -> Live on
+  the phone), or say "Hey Jarvis, let's talk". From then on you just talk:
+  no "Hey Jarvis" before each sentence. Every sentence is still checked to
+  be your voice on the PC before any words are made of it.
+- It ends when you press Stop/End, say "Okay Jarvis, that's all for now",
+  after 90 quiet seconds, at the time limit (30 minutes; "give me twenty
+  more minutes" adds time), or on Stop everything. The sign ("Jarvis Live ·
+  24 min left") is on screen the whole time.
+- Cards still need a tap: while a card waits, Jarvis stops listening.
+- **It needs your voice trained first** (Settings -> Voice check), and the
+  better voice model installed - otherwise it says so and does not start.
+- **The camera is built but switched off**, and stays hidden, until the
+  12 GB card is in and passes the photo test below.
+
+## What to do on the PC
+
+Run `apply-patches.ps1` as usual. It copies `jarvis_live.py` and
+`jarvis_live_photo_test.py` and applies `live.patch` (last in the list),
+which installs `/api/voice/live`. Nothing to switch on.
+
+Later, once the 12 GB card is in and running the Pictures lane, run the photo
+test - one line in PowerShell (it needs the 30 test photos in
+`%USERPROFILE%\.openjarvis\live\photo-test-photos`; the crowd photo must be a
+licensed stock photo):
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_live_photo_test.py; Write-Host "The results are in $env:USERPROFILE\.openjarvis\live\photo-test (the newest folder: results.txt)"
+```
+
+It passes at 24 of 30 photos right, a median answer of 3 seconds or less, the
+slowest 6 seconds or less, and never naming a person. It refuses a cloud
+model.
+
+## What changed
+
+- `backend/jarvis_live.py` (new, shipped whole): the session (one device at
+  a time), its limits, pauses, Mute, calls, the phrases' words, side talk,
+  the crisis rule, the camera gate, the route and the `live` event.
+- `backend/jarvis_live_photo_test.py` (new, shipped whole): the photo test.
+- `backend/live.patch` (new, last): installs the route in `jarvis_hud.py`.
+- `backend/jarvis_speech.py`: `source=live` clips (the owner check first, as
+  ever), too-short clips checked without words, the stop word, the phrases,
+  "let's talk", and "Live is on your other device".
+- `backend/rebuilt/jarvis_voice.py`, `jarvis_voice_enroll.py`: the
+  `hands_free_live` setting (three choices; a looser one is the voice card).
+- `backend/jarvis_agent.py`: the Live note to the model, side talk (never
+  counted), `read_camera` in `STEP_READS`, loading the everyday model when
+  Live starts (never on Standby), the crisis note.
+- `backend/jarvis_intake.py`, `jarvis_auto_learn.py`: side talk and Live's
+  trust rule for learning.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: the new files shipped,
+  the patch listed.
+- `tools/gen_live_cases.py` (new): `live-cases.json` for both apps.
+
+## Test it
+
+```
+python3 backend/test_live.py
+python3 backend/test_voice_strict.py
+python3 tools/gen_live_cases.py --check
+```
+
+## Not checked, said plainly
+
+- **Not run on your PC or phone**: turn times, the TV test (how many
+  refusals, none becoming words) and the phone's battery over 30 minutes are
+  not measured (`docs/LIVE-DESIGN.md` build step 5).
+- The phone app is compiled only by GitHub; its screens have not been seen.
+- The camera path is off (`CAMERA_WIRED = False`) and the phone does not
+  take pictures yet.
