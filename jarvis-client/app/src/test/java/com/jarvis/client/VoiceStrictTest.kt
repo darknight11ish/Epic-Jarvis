@@ -868,7 +868,7 @@ class VoiceStrictTest {
     }
 
     @Test
-    fun `better voice - two detectors at once, back to one asks; the newer model asks; greyed until installed`() {
+    fun `better voice - two detectors at once, back to one asks, the newer model asks, greyed until installed`() {
         val real = view("trained_three_rounds")
         assertTrue(VoiceStrict.isLoosening(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_ONE))
         assertFalse(VoiceStrict.isLoosening(VoiceStrict.WAKE_CONFIRM, VoiceStrict.WAKE_BOTH))
