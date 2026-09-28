@@ -50,16 +50,19 @@ class ChatbotTest {
     }
 
     @Test
-    fun `nothing built - Gemini is listed, not built, and nothing can start`() {
-        val v = view("nothing_built")
+    fun `not set up - Gemini is built but not signed in on this PC, and nothing can start`() {
+        val v = view("not_ready")
         assertFalse(v.anyBuilt)
         assertNull(v.session)
-        assertEquals("Not built yet.", v.chatbots.single().note)
+        val bot = v.chatbots.single()
+        assertTrue(bot.made)
+        assertFalse(bot.built)
+        assertTrue(bot.note.contains("never been signed in"))
         assertTrue(Chatbot.versionLine(v).startsWith("Version: the limited version (one graphics card) - "))
-        assertEquals("Gemini is not built yet.", Chatbot.formProblem(v, "gemini_web", "x", "5", "10"))
-        val (ok, said) = Chatbot.said(reply("start_not_built"))
+        assertEquals(bot.note + ".", Chatbot.formProblem(v, "gemini_web", "x", "5", "10"))
+        val (ok, said) = Chatbot.said(reply("start_not_ready"))
         assertFalse(ok)
-        assertEquals("Gemini through its website is not built yet.", said)
+        assertTrue(said.contains("never been signed in"))
     }
 
     @Test

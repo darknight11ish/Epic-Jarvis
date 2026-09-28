@@ -149,8 +149,10 @@ def world(bot=None, gate=approve):
                 activity=lambda s, dt="": None, audit=lambda e, dt: None,
                 clock=clock, sleep=clock.sleep)
     if bot is not None:
+        # The stand-in replaces Gemini's window, so Gemini's own "is the
+        # window signed in?" check does not apply to it.
         CB.register_adapter(dataclasses.replace(SHIPPED_GEMINI, factory=lambda: bot,
-                                                built=True))
+                                                built=True, ready=None))
     return d
 
 
@@ -171,8 +173,9 @@ def t_status():
     gem = [c for c in out["chatbots"] if c["id"] == "gemini_web"]
     check("status: 200, routed, no conversation", code == 200 and out["routed"] is True
           and out["session"] is None)
-    check("Gemini is listed and says it is not built yet",
-          gem and gem[0]["built"] is False and gem[0]["note"] == "Not built yet.")
+    check("Gemini is listed, built, and here not ready, with the one-line fix",
+          gem and gem[0]["built"] is True and gem[0]["ready"] is False
+          and bool(gem[0]["note"]), gem)
     check("the test stand-in is never offered to the owner",
           not any(c["id"] == "fake" for c in out["chatbots"]))
     check("which version runs, in words, with its caps",
@@ -264,8 +267,8 @@ def t_start_refusals_are_plain():
     fresh()
     d = world()
     code, out = start(d)
-    check("Gemini not built: 400, in a sentence", code == 400
-          and out["error"] == "Gemini through its website is not built yet.", out)
+    check("Gemini not ready on this PC: 400, in a sentence", code == 400
+          and isinstance(out.get("error"), str) and out["error"].endswith("."), out)
     check("... and no card", not CARDS)
 
     fresh()
@@ -413,8 +416,8 @@ def t_install():
     fresh()
     line = R.install(H, origin_ok=lambda h: h.origin, token_ok=lambda h: h.token,
                      read_body=lambda h: h._body)
-    check("install says what it turned on", "Talk to a chatbot for me" in line
-          and "no chatbot built yet" in line, line)
+    check("install says what it turned on, naming the chatbots built", "Talk to a chatbot for me" in line
+          and "Gemini" in line, line)
     check("installing twice does not wrap twice", "already on" in R.install(
         H, origin_ok=lambda h: True, token_ok=lambda h: True, read_body=lambda h: b"{}"))
     h = H("/api/chatbot/status?id=")

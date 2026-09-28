@@ -1178,8 +1178,8 @@ def t_shipped_and_listed():
     toml = tomllib.loads((HERE / "rebuilt" / "jarvis-framework.toml").read_text("utf-8"))
     check("the shipped tier is ask", toml["autonomy"]["tiers"].get(CB.ACTION) == "ask")
     api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    check("JARVIS-API.md has the section, and says no real chatbot works yet",
-          "Chatbot conversations" in api and "no real chatbot yet" in api)
+    check("JARVIS-API.md has the section, and says it is not yet tried on the real site",
+          "Chatbot conversations" in api and "not\nyet tried against the real gemini.google.com" in api)
 
 
 def main():

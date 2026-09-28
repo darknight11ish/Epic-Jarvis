@@ -96,8 +96,8 @@ WORDS = {
     "question_title": "The chatbot asked about you",
     "question_note": ("Jarvis never answers questions about you. It is shown here for you to "
                       "decide."),
-    "none_built": ("No chatbot can be reached yet: Gemini's part is still being built. "
-                   "Start waits until it is."),
+    "none_built": ("No chatbot can be reached from this PC yet. The line beside each one "
+                   "says what is missing. Start waits until one can."),
     "sign_in_pc": ("Signing in to the chatbot's account happens on the PC only, in the "
                    "browser window Jarvis uses."),
     "missing": ("Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on "

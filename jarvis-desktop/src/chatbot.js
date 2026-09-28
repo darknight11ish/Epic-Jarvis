@@ -54,7 +54,7 @@ export const WORDS = {
   question_note:
     "Jarvis never answers questions about you. It is shown here for you to decide.",
   none_built:
-    "No chatbot can be reached yet: Gemini's part is still being built. Start waits until it is.",
+    "No chatbot can be reached from this PC yet. The line beside each one says what is missing. Start waits until one can.",
   sign_in_pc:
     "Signing in to the chatbot's account happens on the PC only, in the browser window Jarvis uses.",
   missing: "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on the PC.",
@@ -168,7 +168,10 @@ export function readChatbot(body) {
     id: c.id,
     name: text(c.name) || c.id,
     host: text(c.host),
-    built: c.built === true,
+    // `built` here means "can be used now": built AND set up on this PC
+    // (`ready`, e.g. Gemini's window signed in). `made` is built at all.
+    built: c.built === true && c.ready !== false,
+    made: c.built === true,
     note: text(c.note),
   }));
   const lim = obj(o.limits) || {};
@@ -220,7 +223,10 @@ export function formProblem(view, { chatbot, goal, messages, minutes }) {
   if (!view || !view.available) return WORDS.missing;
   const bot = view.chatbots.find((c) => c.id === chatbot);
   if (!bot) return "Choose a chatbot.";
-  if (!bot.built) return `${bot.name} is not built yet.`;
+  if (!bot.built) {
+    if (bot.made && bot.note) return /[.!?]$/.test(bot.note) ? bot.note : `${bot.note}.`;
+    return `${bot.name} is not built yet.`;
+  }
   if (!String(goal || "").trim()) return "Say what Jarvis should find out.";
   if (String(goal).trim().length > 1000) return "The goal is longer than 1000 characters.";
   if (limitOf(messages, view.tier.turnsMax) === null) {

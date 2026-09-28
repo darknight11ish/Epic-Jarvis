@@ -76,8 +76,8 @@ object Chatbot {
         "Jarvis never answers questions about you. It is shown here for you to " +
             "decide."
     const val NONE_BUILT =
-        "No chatbot can be reached yet: Gemini's part is still being built. " +
-            "Start waits until it is."
+        "No chatbot can be reached from this PC yet. The line beside each one " +
+            "says what is missing. Start waits until one can."
     const val SIGN_IN_PC =
         "Signing in to the chatbot's account happens on the PC only, in the " +
             "browser window Jarvis uses."
@@ -136,8 +136,12 @@ object Chatbot {
         "refused" to "Not started.",
     )
 
+    /**
+     * [built] means "can be used now": built AND set up on the PC (`ready`,
+     * e.g. Gemini's window signed in). [made] is built at all.
+     */
     data class Choice(val id: String, val name: String, val host: String, val built: Boolean,
-                      val note: String)
+                      val note: String, val made: Boolean = built)
 
     data class Tier(
         val id: String,
@@ -196,8 +200,9 @@ object Chatbot {
         val t = body["tier"] as? JsonObject ?: return null
         val chatbots = bots.mapNotNull { it as? JsonObject }.mapNotNull { c ->
             val id = c.text("id") ?: return@mapNotNull null
-            Choice(id, c.text("name") ?: id, c.text("host") ?: "", c.flag("built") == true,
-                c.text("note") ?: "")
+            val made = c.flag("built") == true
+            Choice(id, c.text("name") ?: id, c.text("host") ?: "",
+                made && c.flag("ready") != false, c.text("note") ?: "", made)
         }
         val lim = body["limits"] as? JsonObject
         return View(
@@ -296,7 +301,12 @@ object Chatbot {
     /** What is wrong with the form, in a sentence, or null when it can be sent. */
     fun formProblem(v: View, chatbot: String, goal: String, messages: String, minutes: String): String? {
         val bot = v.chatbots.firstOrNull { it.id == chatbot } ?: return "Choose a chatbot."
-        if (!bot.built) return "${bot.name} is not built yet."
+        if (!bot.built) {
+            if (bot.made && bot.note.isNotEmpty()) {
+                return if (bot.note.last() in ".!?") bot.note else bot.note + "."
+            }
+            return "${bot.name} is not built yet."
+        }
         if (goal.isBlank()) return "Say what Jarvis should find out."
         if (goal.trim().length > MAX_GOAL_CHARS) return "The goal is longer than 1000 characters."
         if (limitOf(messages, v.tier.turnsMax) == null) {

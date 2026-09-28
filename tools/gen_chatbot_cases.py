@@ -18,11 +18,13 @@ jarvis_chatbot.FakeChatbot answering - nothing is written by hand:
 ChatbotTest build against it, and both check their words against `words`
 (jarvis_chatbot_routes.WORDS).
 
-GEMINI IS NOT BUILT. `nothing_built` is the registry exactly as shipped:
-Gemini listed, "Not built yet.", so a start is refused. Every other case
-registers the stand-in UNDER Gemini's own entry (its name, host and card
-wording, `built` switched on) so the answers look the way they will once the
-adapter lands - that is a test double, not a claim that Gemini works.
+GEMINI IS BUILT BUT NOT SET UP. `not_ready` is Gemini as shipped, on a PC
+whose Gemini window has never been signed in (its `ready` check answers
+jarvis_chatbot_gemini.NOT_SIGNED_IN, fixed here so the file does not depend
+on this machine), so a start is refused with that sentence. Every other
+case registers the stand-in UNDER Gemini's own entry (its name, host and
+card wording, ready) so the answers look the way a working one will - that
+is a test double, not a claim that Gemini works.
 
 Session ids are numbered here (chat_000000000001, ...) so the file is the
 same on every run.
@@ -148,7 +150,7 @@ def world(bot=None, *, model=None, gate=None):
                 clock=clock, sleep=clock.sleep)
     if bot is not None:
         CB.register_adapter(dataclasses.replace(_SHIPPED_GEMINI, factory=lambda: bot,
-                                                built=True))
+                                                built=True, ready=None))
     return d
 
 
@@ -173,11 +175,13 @@ def start(d, **extra):
 def cases() -> dict:
     out = {"words": dict(R.WORDS)}
 
-    # The registry as shipped: Gemini listed, not built.
+    # Gemini as shipped, on a PC where its window was never signed in.
     fresh()
+    import jarvis_chatbot_gemini as GW
+    CB.register_adapter(dataclasses.replace(_SHIPPED_GEMINI, ready=lambda: GW.NOT_SIGNED_IN))
     d = world()
-    out["nothing_built"] = status(d)
-    out["start_not_built"] = answer(start(d))
+    out["not_ready"] = status(d)
+    out["start_not_ready"] = answer(start(d))
 
     # A goal the last check refuses: no card.
     fresh()

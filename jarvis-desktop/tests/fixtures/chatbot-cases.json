@@ -7,7 +7,8 @@
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": ""
+        "note": "",
+        "ready": true
       }
     ],
     "limits": {
@@ -113,7 +114,8 @@
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": ""
+        "note": "",
+        "ready": true
       }
     ],
     "limits": {
@@ -163,7 +165,8 @@
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": ""
+        "note": "",
+        "ready": true
       }
     ],
     "limits": {
@@ -213,7 +216,8 @@
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": ""
+        "note": "",
+        "ready": true
       }
     ],
     "limits": {
@@ -351,7 +355,8 @@
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": ""
+        "note": "",
+        "ready": true
       }
     ],
     "limits": {
@@ -379,7 +384,8 @@
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": ""
+        "note": "",
+        "ready": true
       }
     ],
     "limits": {
@@ -415,15 +421,16 @@
     },
     "code": 202
   },
-  "nothing_built": {
+  "not_ready": {
     "available": true,
     "chatbots": [
       {
-        "built": false,
+        "built": true,
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": "Not built yet."
+        "note": "Jarvis's Gemini window has never been signed in. Sign in once, by hand, to the spare Google account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_gemini.py sign-in",
+        "ready": false
       }
     ],
     "limits": {
@@ -451,7 +458,8 @@
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": ""
+        "note": "",
+        "ready": true
       }
     ],
     "limits": {
@@ -534,7 +542,8 @@
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": ""
+        "note": "",
+        "ready": true
       }
     ],
     "limits": {
@@ -618,9 +627,9 @@
     },
     "code": 400
   },
-  "start_not_built": {
+  "start_not_ready": {
     "body": {
-      "error": "Gemini through its website is not built yet.",
+      "error": "Jarvis's Gemini window has never been signed in. Sign in once, by hand, to the spare Google account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_gemini.py sign-in.",
       "ok": false,
       "session": "chat_000000000001"
     },
@@ -665,7 +674,8 @@
         "host": "gemini.google.com",
         "id": "gemini_web",
         "name": "Gemini",
-        "note": ""
+        "note": "",
+        "ready": true
       }
     ],
     "limits": {
@@ -767,7 +777,7 @@
     "minutes_label": "Most minutes",
     "missing": "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on the PC.",
     "never_label": "Words it must never send (optional, separated by commas)",
-    "none_built": "No chatbot can be reached yet: Gemini's part is still being built. Start waits until it is.",
+    "none_built": "No chatbot can be reached from this PC yet. The line beside each one says what is missing. Start waits until one can.",
     "notify_locked": "Jarvis is talking to a chatbot for you.",
     "notify_paused": "Paused: talking to {name}, {used} of {max}",
     "notify_running": "Talking to {name}, {used} of {max}",

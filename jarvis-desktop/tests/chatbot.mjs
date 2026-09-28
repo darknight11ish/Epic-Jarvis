@@ -65,9 +65,9 @@ await check("the words are the PC's and the phone's, word for word", async () =>
 });
 
 await check("every real answer reads: version, conversation, buttons", async () => {
-  const none = readChatbot(CASES.nothing_built);
+  const none = readChatbot(CASES.not_ready);
   assert.equal(none.available, true);
-  assert.equal(none.anyBuilt, false, "Gemini is not built yet, and must not read as built");
+  assert.equal(none.anyBuilt, false, "Gemini is built but not signed in on this PC, and must not read as usable");
   assert.equal(none.session, null);
   assert.match(versionLine(none), /^Version: the limited version \(one graphics card\) - /);
   const asking = readChatbot(CASES.asking).session;
@@ -103,8 +103,9 @@ await check("every real answer reads: version, conversation, buttons", async () 
   assert.equal(limitOf("9", 8), null);
   assert.equal(limitOf("0", 8), null);
   const built = readChatbot(CASES.running);
+  // Built but not set up on this PC: the form says exactly what is missing.
   assert.equal(formProblem(none, { chatbot: "gemini_web", goal: "x", messages: "5", minutes: "10" }),
-    "Gemini is not built yet.");
+    `${CASES.not_ready.chatbots[0].note}.`);
   assert.equal(formProblem(built, { chatbot: "gemini_web", goal: " ", messages: "5", minutes: "10" }),
     "Say what Jarvis should find out.");
   assert.equal(formProblem(built, { chatbot: "gemini_web", goal: "x", messages: "20", minutes: "10" }),
@@ -165,8 +166,8 @@ async function workTab(data = {}) {
   return page;
 }
 
-await check("Brain, nothing built: the form shows, Start is greyed and says why", async () => {
-  const page = await workTab({ chatbot: { status: CASES.nothing_built } });
+await check("Brain, Gemini not set up on this PC: the form shows, Start is greyed and says why", async () => {
+  const page = await workTab({ chatbot: { status: CASES.not_ready } });
   const form = await page.locator("#chatbot-form").isVisible();
   const version = await page.locator("#chatbot-version").innerText();
   const text = await page.locator("#chatbot").innerText();
@@ -179,7 +180,7 @@ await check("Brain, nothing built: the form shows, Start is greyed and says why"
   assert.match(version, /one graphics card/);
   assert.ok(text.includes(WORDS.none_built), text);
   assert.equal(start, true, "Start was offered with nothing built");
-  assert.deepEqual(options, [["Gemini - Not built yet.", true]]);
+  assert.deepEqual(options, [[`Gemini - ${CASES.not_ready.chatbots[0].note}`, true]]);
   assert.deepEqual(errors, []);
 });
 
