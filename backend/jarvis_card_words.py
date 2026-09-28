@@ -72,6 +72,8 @@ TITLES = {
     "web_research": "search GitHub",
     "research_authenticated": "search GitHub signed in as you",
     "search_the_web": "search the web",
+    # jarvis_chatbot.py: ONE card per conversation with an AI chatbot (not routed yet)
+    "chatbot_session": "hold a conversation with an AI chatbot for you",
     "stop_asking_before_every_web_search": "stop asking before every web search",
     # --- notes
     "read_joplin_note": "read a note in Joplin",

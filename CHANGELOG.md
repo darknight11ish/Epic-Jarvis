@@ -6,6 +6,12 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The core of the chatbot driver - not usable yet.** The part of Jarvis
+  that will hold a conversation with an AI chatbot for you (Gemini first)
+  is written and tested on the PC side: one approval card per
+  conversation, a check before every message so nothing private leaves,
+  and stops at any captcha or sign-in page. There is no button for it in
+  either app yet, and the Gemini part is not built.
 - **Fixed (phone): "open help", "connection", "the morning briefing",
   "about" and "Jarvis's voices" opened Settings at the top.** Each now opens
   the phone's own place for it - Help, Checks, Brain or "Jarvis's voice" -

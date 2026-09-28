@@ -13746,3 +13746,84 @@ has the phone-parity row.
   estimated exist; every top-level section is "open"-able. The exact list
   is in `jarvis_settings_registry.py`'s own module header and
   `docs/JARVIS-API.md` section 58.2/58.3.
+
+# Talking to an AI chatbot for you, the core: `jarvis_chatbot.py` (2026-09-28)
+
+Step 1 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`, the owner's
+answers of 2026-09-28; `docs/JARVIS-API.md` section 59). **Not usable
+yet**: no route, no app screen, and no real chatbot - Gemini's adapter is
+listed and says "not built yet". Shipped whole (`apply-patches.ps1` copies
+it; no patch), so the next steps build on code that is already tested.
+
+## In plain words
+
+The owner gives Jarvis a goal. Jarvis sends it to an AI chatbot word for
+word, reads the answer, and asks its own follow-up questions - without
+asking the owner each time - until the goal looks met or a limit the owner
+approved is reached. One approval card per conversation shows the goal,
+the most messages, the longest time and the words that must never be sent.
+The model that writes the follow-ups is given only the goal and the
+conversation - never memory, email, notes, calendar, files or chat history,
+and no tools. Every message is checked just before it would leave the PC;
+one that could leak something private is rewritten once, and if it fails
+again the conversation pauses and asks. A captcha, a sign-in page or an
+"unusual activity" page also pauses and asks: Jarvis never gets past one by
+itself. The chatbot's words are outside text - never learned from, never
+read aloud.
+
+Two versions: with one graphics card, shorter conversations that wait
+while the owner is chatting; with both cards, longer ones on the second
+card's "Longer conversations" lane - off until the owner sets `[chatbot]
+full_version = true` in `jarvis-framework.toml` after measuring the second
+card, and even then only while that lane is running.
+
+## What changed
+
+- `backend/jarvis_chatbot.py` (new): the adapter interface and registry
+  (`FakeChatbot`; a "not built yet" entry for `gemini_web`), the session,
+  `plan`/`describe`/the card/`run`, `last_check`, the driver's clean
+  context and fixed-format move (Ollama `format`), the stops, the summary,
+  `start`/`stop`/`change_limits`/`view` for the routes to come.
+- `backend/jarvis_task_control.py`: a module may word the first line of its
+  Resume card (`RESUME_HEADER`); the chatbot's steps are messages, not
+  things on the screen. Every other module's card is unchanged.
+- `backend/jarvis_stop_all.py`: `answers_running()`, read-only, so the
+  one-card version can wait while a chat answer is being written.
+- `backend/jarvis_card_words.py`, `backend/jarvis_asks_first.py`,
+  `backend/rebuilt/jarvis-framework.toml`: the new gate action
+  `chatbot_session` - its card title, its "What asks first" row (always
+  asks, never loosened), its tier `ask`, and `[chatbot] full_version =
+  false`. The two apps' contract files were regenerated
+  (`tools/gen_card_words_cases.py`, `tools/gen_asks_first_cases.py`).
+- `backend/_where.py`, `scripts/apply-patches.ps1`: shipped.
+- `backend/test_chatbot.py` (new).
+
+## Test it
+
+```
+python3 backend/test_chatbot.py
+python3 backend/run_suites.py
+```
+
+## Not checked, said plainly
+
+- **No real chatbot and no real model.** Every run is against
+  `FakeChatbot` and a stand-in driver model. How well the owner's 8B model
+  actually drives a conversation, and whether its follow-ups trip the last
+  check often, is unmeasured.
+- **The last check is strict on purpose.** It reuses the router's
+  private-topic words, so a goal about money, health, email or files is
+  refused outright ("my bank", "tax", "diagnosis", "files"), and a
+  follow-up that happens to repeat a saved fact's word is blocked. On 50
+  harmless follow-ups against five planted facts it blocked 1 ("Could you
+  check that number again?" - "number" is in a saved phone-number fact).
+- **The transcript lives in memory only** and is lost on a backend
+  restart. Keeping it in the encrypted chat history, tagged as outside
+  text, comes with the routes.
+- The one-card limits (5 messages by default, at most 8; 10 minutes, at
+  most 15) are a first guess; the two-card ones (8/20 messages, 10/30
+  minutes) are the design's.
+- The gate's `_RISK` table has no line for `chatbot_session` yet (it lives
+  in a patch on the owner's PC); an unclassified action is already treated
+  as risky, so Windows Hello is asked. The "What Jarvis can reach" row
+  comes with the Gemini adapter.

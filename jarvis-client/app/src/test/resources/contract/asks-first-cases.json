@@ -367,6 +367,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -1140,6 +1149,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -1913,6 +1931,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"
@@ -2695,6 +2722,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "chatbot_session",
+       "fixed": false,
+       "id": "chatbot_session",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Hold a conversation with an AI chatbot for you"
       }
      ],
      "title": "The internet"

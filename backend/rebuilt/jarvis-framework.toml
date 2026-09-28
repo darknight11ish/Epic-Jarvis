@@ -105,6 +105,14 @@ news_read                 = "auto"
 # Must be "auto", exactly like email_read/home_read above, or a look every
 # 30 minutes would mean a card every 30 minutes.
 page_read                 = "auto"
+# A conversation with an AI chatbot (jarvis_chatbot.py; the owner's
+# decisions of 2026-09-27 and 2026-09-28): ONE approval card per
+# conversation, showing the chatbot, the goal word for word, the most
+# messages, the longest time and the never-send words; a changed limit is a
+# new card. Must stay "ask": anything else and no conversation starts;
+# "never" switches the feature off. Built but not reachable from the apps
+# yet, and no real chatbot is built yet.
+chatbot_session           = "ask"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval
@@ -655,6 +663,17 @@ keep_alive = "30m"
 # attention, and llama.cpp will not load a model that way with it off
 # (docs/HARDWARE-PROFILES.md, section 2.2).
 flash_attention = "auto"
+
+# ------------------------------------------------------------------------
+# 9b2. TALKING TO AN AI CHATBOT FOR YOU (jarvis_chatbot.py)
+# ------------------------------------------------------------------------
+[chatbot]
+# The full version (both graphics cards: longer conversations, the driver
+# model on the second card's "Longer conversations" lane). Leave false until
+# the second card is installed AND measured with this feature; even when
+# true, the full version runs only while that lane is running, and the
+# limited one-card version runs otherwise.
+full_version = false
 
 # ------------------------------------------------------------------------
 # 9c. THE BIG MODEL, SLOW (docs/BIG-MODEL.md)
