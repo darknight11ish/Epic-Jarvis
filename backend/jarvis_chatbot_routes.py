@@ -41,6 +41,34 @@ of 2026-09-28; JARVIS-API section 60.7):
                                       its conversations' ids stops the whole
                                       comparison too.
 
+"Chat with customer support for me" (jarvis_support.py, the owner's
+decisions of 2026-09-28; JARVIS-API section 65) - a separate mode of the
+driver, reached through the same routes file:
+
+    GET  /api/chatbot/status          also carries `support`: the latest
+         (?support=)                  support chat still going, or the one
+                                      named, with its transcript, its
+                                      waiting offer and its summary;
+                                      `companies`; and `support_tier`
+    POST /api/chatbot/support/start   plan() then start(): ONE details card
+                                      (support_chat) listing every detail
+                                      Jarvis may give. A refused plan is a
+                                      400 with the reason, and no card.
+    POST /api/chatbot/support/stop    stop(): never a card
+    POST /api/chatbot/support/takeover  Jarvis stops sending within a few
+                                      seconds; the owner types in the
+                                      window. Never a card.
+    POST /api/chatbot/support/answer  the owner's choice about a waiting
+                                      offer OTHER than accepting: decline,
+                                      say (their own words, through the
+                                      same last check) or takeover.
+                                      Accepting is only ever the offer card
+                                      (support_offer).
+    GET  /api/chatbot/support/export  the transcript as plain text, for the
+         ?id=                         desktop's "Export transcript" (it
+                                      writes the file the owner picks; this
+                                      route writes nothing)
+
 Pause and Resume are the existing /api/task/pause and /api/task/resume
 (Resume is its own card); Stop everything (/api/stop_all) stops a
 conversation too. Every route sits behind the server's own origin and token
@@ -73,6 +101,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import jarvis_chatbot as CB
 import jarvis_chatbot_compare as CMP
+import jarvis_support as SUP
 
 STATUS_ROUTE = "/api/chatbot/status"
 START_ROUTE = "/api/chatbot/start"
@@ -80,7 +109,16 @@ STOP_ROUTE = "/api/chatbot/stop"
 LIMITS_ROUTE = "/api/chatbot/limits"
 COMPARE_START_ROUTE = "/api/chatbot/compare/start"
 COMPARE_STOP_ROUTE = "/api/chatbot/compare/stop"
-POST_ROUTES = (START_ROUTE, STOP_ROUTE, LIMITS_ROUTE, COMPARE_START_ROUTE, COMPARE_STOP_ROUTE)
+SUPPORT_START_ROUTE = "/api/chatbot/support/start"
+SUPPORT_STOP_ROUTE = "/api/chatbot/support/stop"
+SUPPORT_TAKEOVER_ROUTE = "/api/chatbot/support/takeover"
+SUPPORT_ANSWER_ROUTE = "/api/chatbot/support/answer"
+SUPPORT_EXPORT_ROUTE = "/api/chatbot/support/export"
+POST_ROUTES = (START_ROUTE, STOP_ROUTE, LIMITS_ROUTE, COMPARE_START_ROUTE, COMPARE_STOP_ROUTE,
+               SUPPORT_START_ROUTE, SUPPORT_STOP_ROUTE, SUPPORT_TAKEOVER_ROUTE,
+               SUPPORT_ANSWER_ROUTE)
+GET_ROUTES = (STATUS_ROUTE, SUPPORT_EXPORT_ROUTE)
+SUPPORT_BUSY = "A customer-support chat is still going - stop it or let it finish first."
 
 #: What a conversation id looks like (jarvis_chatbot._new_id).
 _ID = re.compile(r"^chat_[0-9a-f]{12}$")
@@ -284,6 +322,13 @@ def handle_get(query: str = "", *, deps=None) -> tuple:
         out["tier"]["compare_min"] = CMP.MIN_AIS
         out["tier"]["compare_max"] = CMP.max_ais(out["tier"].get("id", ""))
     out["compare"] = CMP.view(cid)
+    raw_sup = (q.get("support") or [""])[0]
+    if raw_sup and not SUP.valid_id(raw_sup):
+        return 400, {"error": "that is not a support chat id"}
+    SUP.sweep_forgotten(deps, grace=UNHELD_GRACE, now=_now)
+    out["support"] = SUP.view(raw_sup)
+    out["companies"] = SUP.companies()
+    out["support_tier"] = SUP.tier_view(deps)
     s = out.get("session")
     out["limits"] = _limits_view(s["id"]) if isinstance(s, dict) else {"waiting": False,
                                                                          "said": ""}
@@ -307,6 +352,8 @@ def _start(body: dict, deps, wait: bool) -> tuple:
     if CMP.live():
         return 409, {"ok": False, "error": "A comparison of several chatbots is still running "
                                            "or paused - stop it or let it finish first."}
+    if SUP.live():
+        return 409, {"ok": False, "error": SUPPORT_BUSY}
     s = CB.plan(body.get("chatbot"), body.get("goal"),
                 max_turns=body.get("max_messages"), max_minutes=body.get("max_minutes"),
                 never_send=body.get("never_send"), deps=deps)
@@ -403,6 +450,8 @@ def _compare_start(body: dict, deps, wait: bool) -> tuple:
     if CMP.live():
         return 409, {"ok": False, "error": "Another comparison is still running or paused - "
                                            "stop it or let it finish first."}
+    if SUP.live():
+        return 409, {"ok": False, "error": SUPPORT_BUSY}
     c = CMP.plan(body.get("chatbots"), body.get("goal"),
                  max_turns=body.get("max_messages"), max_minutes=body.get("max_minutes"),
                  never_send=body.get("never_send"), deps=deps)
@@ -422,13 +471,67 @@ def _compare_stop(body: dict, deps) -> tuple:
     return code, out
 
 
+def _support_start(body: dict, deps, wait: bool) -> tuple:
+    why = SUP.tier_problem(deps)
+    if why:
+        return 409, {"ok": False, "error": _sentence(why)}
+    if SUP.live():
+        return 409, {"ok": False, "error": "Another customer-support chat is still going - "
+                                           "stop it or let it finish first."}
+    if _live_session() or CMP.live():
+        return 409, {"ok": False, "error": "A chatbot conversation or comparison is still "
+                                           "going - stop it or let it finish first."}
+    c = SUP.plan(body.get("company"), body.get("goal"), details=body.get("details"),
+                 address=body.get("address"), max_messages=body.get("max_messages"),
+                 max_minutes=body.get("max_minutes"),
+                 max_queue_minutes=body.get("max_queue_minutes"), deps=deps)
+    code, out = SUP.start(c, deps=deps, wait=wait)
+    if "error" in out:
+        out["error"] = _sentence(out["error"])
+    return code, out
+
+
+def _support_id(body: dict) -> Optional[str]:
+    v = str(body.get("id") or "")
+    return v if SUP.valid_id(v) else None
+
+
+def _support_simple(route: str, body: dict, deps) -> tuple:
+    sid = _support_id(body)
+    if not sid:
+        return 400, {"ok": False, "error": "Say which support chat."}
+    if route == SUPPORT_STOP_ROUTE:
+        code, out = SUP.stop(sid, deps=deps)
+    elif route == SUPPORT_TAKEOVER_ROUTE:
+        code, out = SUP.takeover(sid)
+    else:
+        text = body.get("text")
+        if text is not None and not isinstance(text, str):
+            return 400, {"ok": False, "error": "The words must be text."}
+        code, out = SUP.answer(sid, body.get("offer"), str(body.get("choice") or ""),
+                               text or "")
+    if "error" in out:
+        out["error"] = _sentence(out["error"])
+    return code, out
+
+
+def handle_export(query: str = "") -> tuple:
+    """GET /api/chatbot/support/export?id= - the transcript as text. A read:
+    nothing is written here (the desktop saves the file the owner picks)."""
+    q = parse_qs(str(query or ""))
+    sid = (q.get("id") or [""])[0]
+    if not SUP.valid_id(sid):
+        return 400, {"ok": False, "error": "Say which support chat."}
+    return SUP.export(sid)
+
+
 def _thread(fn: Callable) -> None:
     threading.Thread(target=fn, name="jarvis-chatbot-limits", daemon=True).start()
 
 
 def handle_post(route: str, body, *, deps=None, spawn: Optional[Callable] = None,
                 wait: bool = False) -> tuple:
-    """Everything the five POST routes do. Returns (http status, body).
+    """Everything the POST routes do. Returns (http status, body).
     `wait` and `spawn` are for the tests: the route itself asks the card on
     a background thread, because the gate waits for the owner."""
     if not isinstance(body, dict):
@@ -443,6 +546,10 @@ def handle_post(route: str, body, *, deps=None, spawn: Optional[Callable] = None
         return _compare_start(body, deps, wait)
     if route == COMPARE_STOP_ROUTE:
         return _compare_stop(body, deps)
+    if route == SUPPORT_START_ROUTE:
+        return _support_start(body, deps, wait)
+    if route in (SUPPORT_STOP_ROUTE, SUPPORT_TAKEOVER_ROUTE, SUPPORT_ANSWER_ROUTE):
+        return _support_simple(route, body, deps)
     return 404, {"ok": False, "error": "no such route"}
 
 
@@ -473,12 +580,16 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_GET(self):
         parsed = urlsplit(str(getattr(self, "path", "") or ""))
-        if parsed.path.rstrip("/") != STATUS_ROUTE:
+        route = parsed.path.rstrip("/")
+        if route not in GET_ROUTES:
             return get0(self)
         if not _allowed(self):
             return None
         try:
-            code, out = handle_get(parsed.query)
+            if route == SUPPORT_EXPORT_ROUTE:
+                code, out = handle_export(parsed.query)
+            else:
+                code, out = handle_get(parsed.query)
         except Exception as exc:
             code, out = 503, {"available": False, "error": type(exc).__name__}
         return self._send(code, out)
@@ -513,3 +624,4 @@ def _reset_for_tests() -> None:
         _LIMITS.clear()
         _UNHELD.clear()
     CMP._reset_for_tests()
+    SUP._reset_for_tests()

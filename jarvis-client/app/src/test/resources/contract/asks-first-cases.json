@@ -402,6 +402,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
       }
      ],
      "title": "The internet"
@@ -1231,6 +1249,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
       }
      ],
      "title": "The internet"
@@ -2060,6 +2096,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
       }
      ],
      "title": "The internet"
@@ -2898,6 +2952,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
       }
      ],
      "title": "The internet"

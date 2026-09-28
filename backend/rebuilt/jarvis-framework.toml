@@ -113,6 +113,15 @@ page_read                 = "auto"
 # "never" switches the feature off. Built but not reachable from the apps
 # yet, and no real chatbot is built yet.
 chatbot_session           = "ask"
+# A chat with a company's customer support (jarvis_support.py; the owner's
+# decisions of 2026-09-28): ONE card per chat, listing every detail Jarvis
+# may give (support_chat), and ONE card per offer - a refund, a credit, a
+# cancellation, a change - showing the exact reply (support_offer). Both
+# must stay "ask": anything else and no support chat starts; "never"
+# switches the feature off. A file without these lines asks too
+# (unknown_action_tier).
+support_chat              = "ask"
+support_offer             = "ask"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval
