@@ -356,7 +356,7 @@ internal fun SavedAutomaticallySection(
                         // The whole row is one checkbox for TalkBack.
                         val known = eraseChat
                         val named = known?.second
-                        val zone = remember { ZoneId.systemDefault() }
+                        val zone = ZoneId.systemDefault()
                         if (known == null || !known.first || named != null) {
                             Row(
                                 Modifier
@@ -406,7 +406,8 @@ internal fun SavedAutomaticallySection(
                                                 alsoChat,
                                                 chatId = chatNow?.second?.id,
                                                 // The PC said no chat is on record: said so after.
-                                                noChatOnRecord = chatNow?.first == true && chatNow.second == null,
+                                                noChatOnRecord = chatNow != null && chatNow.first &&
+                                                    chatNow.second == null,
                                             )
                                             if (gone) facts = facts?.filterNot { it.id == fact.id }
                                             said = sentence
