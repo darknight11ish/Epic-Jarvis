@@ -762,6 +762,85 @@ only, no new backend route:
   confirmed only once CI runs. `tools/check_parity.py`: no undecided drift
   (no route changed either way).
 
+Built 2026-09-28, the following pass the 2026-09-28 plan-card entry above
+itself asked for: **the plan card is now wired into `jarvis_agent.py`'s
+`TOOLS` table**, as `propose_plan` - the three pieces that entry found and
+confirmed but deliberately left for next, now actually built. **The
+feature is still switched off for everyone, exactly as before**: nothing
+about wiring it in unlocks it - `jarvis_plan.enabled()` still has to read a
+real, run, passing `tools/tool_eval/tool_eval_results.json` before
+`propose_plan` does anything at all, and no such file ships in this
+repository or on the owner's PC yet.
+
+- `propose_plan` is one tool (not two): its `gate_lookup_name` resolves to
+  the gate action `run_plan` (tier `ask`), the same way `control_computer`'s
+  model-facing name already differs from its own gate key. Before
+  `Tool.prepare()` - `jarvis_plan.propose()` - ever runs, `_one_call`
+  refuses outright, at the same point `send_email`/`draft_email` already
+  do: first `jarvis_plan.enabled()`, then the same four signals
+  `note_needs_a_person()` already treats as "not really the owner's own
+  words right now" (read something this turn, the conversation is
+  tainted, the newest message was not typed or said, the app added its
+  own context), folded into the one `tainted` flag `propose()` itself
+  checks.
+- **The real find of this pass**: `jarvis_plan.run()` only asks its given
+  `gate_check` for a step the MODEL itself flagged `risky` or gave a
+  `from_step` - a step it did not flag goes straight to `run_step`, with
+  no separate gate_check call at all. Trusting that self-report alone
+  would have let a step the model happened to call "safe" run an
+  "ask"-tier tool with nobody really asked. So the wiring's own dispatcher
+  (`_plan_step_dispatch`) does the REAL per-tool gate check - the same
+  `check_call()`, `Tool.prepare()`, `jarvis_gate.action_for_tool()` lookup
+  and `checker()` call a direct model call to that tool already goes
+  through - inside BOTH `gate_check` and `run_step`, cached by the step's
+  own identity so the two never ask twice for the same step. A step naming
+  a tool whose real configured tier needs a person, even when the model
+  called it not risky, is refused rather than let through - proven by its
+  own test, not merely reasoned about.
+- send_email, draft_email, the schedule tools (their own `Tool.execute` is
+  a dummy - `_schedule_call` is the real path, not the `Tool` contract at
+  all) and `propose_plan` itself cannot be named by a step: each has its
+  own bespoke, turn-shaped pre-gate check this dispatcher does not
+  reproduce, or would let a plan nest inside itself. A step naming one is
+  refused with a plain reason.
+- **Deliberately NOT registered with Pause/Resume** (`_TASK_MODULES`):
+  that mechanism's generic Resume path calls `module.run(plan,
+  approved=True, announce=..., checkpoint=...)`, with no way to supply the
+  `run_step`/`gate_check` `jarvis_plan.run()` requires - and
+  `jarvis_plan.py`'s own condition 4 ("the plan grants nothing for later")
+  already requires no automatic resume regardless, so nothing is lost.
+  "Stop everything" still reaches a running plan through the plain
+  `watch.stopped()` check every tool already has.
+- `propose_plan` joins `NEEDS_A_PERSON` (the belt the other three
+  multi-step tools already wear: an `auto`/`notify` tier is never good
+  enough for it, whatever a config file says) and the `control` tool
+  group for the short tool list - not a new group of its own, since a new
+  group's name costs `more_tools`' own description tokens on every turn,
+  already near its budget, while a group's *members* cost nothing there.
+- Two tool descriptions had to be trimmed to fit `test_tool_text.py`'s
+  per-tool token budget (300) once `propose_plan`'s own schema was added,
+  and `jarvis_reach.py`'s `TOOL_NAMES` (the "What asks first" page) gained
+  a plain-English row for it - the same audit that follows every feature
+  here, run this time as it was being built rather than only after.
+- Verified: `backend/test_agent_plan_wiring.py` (new, 49 checks) - the
+  tool is invisible/refused while `enabled()` says no, and refused before
+  `propose()` runs on each of the four taint signals separately; a safe
+  step runs with no card of its own; a risky step, and separately a
+  `from_step` one, always get their own card, asked exactly once; a step
+  the model did NOT flag risky but whose real tier needs a person is
+  refused anyway (the gap above, proven, not assumed); a denial anywhere
+  stops the whole run, including a later step that was itself safe; each
+  excluded tool is refused before it ever reaches its own gate; running a
+  step for a real tool goes through that tool's own real `prepare()`.
+  `backend/test_plan.py` (72 checks, unchanged - `jarvis_plan.py` itself
+  was not touched) and the existing `test_agent.py`, `test_tool_text.py`,
+  `test_short_tool_list.py` and `test_reach.py` suites all still pass;
+  `tools/gen_reach_cases.py` was re-run for the new row (a small, additive
+  fixture diff in both apps).
+- **Not yet built either**: a UI in either app - unchanged from the
+  2026-09-28 entry above; once the safety test clears the bar, the card
+  needs no new shape, only the ordinary approval flow both apps have.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

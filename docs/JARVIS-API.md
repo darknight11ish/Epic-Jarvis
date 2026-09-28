@@ -9097,23 +9097,84 @@ app - only a real, run, passing result unlocks it.
 - `jarvis_card_words.TITLES["run_plan"]` = "run the safe steps of an
   approved plan" - so a card for it reads in plain words like any other.
 
-**What is NOT yet built, precisely:** `propose_plan` is not yet a
-model-callable tool in `jarvis_agent.py`'s `TOOLS` table. That needs: a
-`Tool` entry whose `prepare()` calls `jarvis_plan.enabled()` then
-`propose()`; an outright-refusal check mirroring `_send_email_refusal`'s
-own shape, using `_TurnWatch.tainted`/`.read`/`.provenance`/`.app_context`
-(confirmed real and in scope at the exact call site, `jarvis_agent.py`
-around the `tool.prepare(args)` call) so a plan proposed after outside
-text is refused before anything is shown, not just warned about; and a
-`run_step` dispatcher that calls back into `TOOLS[<the step's own tool
-name>]` to actually perform a safe step. That last part is real, available
-work, not a guess - `Tool.prepare`/`.execute`'s contract is exactly what
-`run_step` needs - but it was left for a following pass rather than rushed
-into a file this careful about exactly this kind of mistake, especially
-since the feature is switched off either way until the safety test passes,
-so nothing is lost by finishing the wiring once, correctly, next.
+**Wired in, 2026-09-28 (still switched off - see below).**
+`propose_plan` is now a real, model-callable tool in `jarvis_agent.py`'s
+`TOOLS` table - one tool, not two: its `gate_lookup_name` resolves to
+`run_plan` (the action the real card is raised under), the same way
+`control_computer`'s model-facing name differs from its own gate key. In
+order:
+- `_one_call` refuses a `propose_plan` call OUTRIGHT, before `prepare()`
+  ever runs - the same point `send_email`/`draft_email` are refused
+  outright - via `_propose_plan_refusal(watch)`: first `jarvis_plan.
+  enabled(model)` (so the feature genuinely cannot be reached at all until
+  that says yes, whatever a tier says), then the same signals
+  `note_needs_a_person()` already treats as "not really the owner's own
+  words right now" (`watch.tainted`, `.read`, `.provenance`,
+  `.app_context`), folded into the one `tainted` flag `jarvis_plan.
+  propose()` itself checks.
+- `Tool.prepare` calls `jarvis_plan.propose()` and `describe()` (a
+  `Refused` it raises propagates out as an ordinary tool-result error, the
+  same generic path every other tool's malformed-arguments case already
+  uses); `Tool.execute` calls `jarvis_plan.run()`.
+- **`run_step`/`gate_check` (`_plan_step_dispatch`)**: each step goes
+  through the SAME `check_call()` schema check, `Tool.prepare()`, the real
+  `jarvis_gate.action_for_tool()` lookup and the real `checker()` call a
+  direct model call to that tool already goes through - never a shortcut.
+  This closes a real gap rather than assuming one away: `jarvis_plan.run()`
+  only calls the `gate_check` it is given for a step the MODEL itself
+  flagged `risky` or `from_step` - a step it did not flag goes straight to
+  `run_step`, with no separate gate_check call at all. Trusting that flag
+  alone would let a step the model happened to call "safe" run an
+  "ask"-tier tool with nobody really asked. So the real check lives in one
+  place both `gate_check` and `run_step` call, cached by the step's own
+  identity - whichever of the two `jarvis_plan.run()` calls first for a
+  given step is the one that actually asks (or is silently auto-approved,
+  for a genuinely auto-tier tool); the other reads the same cached verdict
+  back rather than asking twice for the same step. Send an email, save a
+  draft, and set a timer/reminder/to-do item cannot be named in a step -
+  each has its own turn-shaped pre-gate check (rule 1's lane check, a
+  "problem" state, or no real `Tool.execute()` at all for the schedule
+  tools) that this dispatcher does not reproduce; a step naming one is
+  refused with a plain reason instead.
+- **Deliberately NOT added to `_TASK_MODULES`** (Pause/Resume): that
+  mechanism's generic Resume path calls `module.run(plan, approved=True,
+  announce=..., checkpoint=...)` with no way to supply `run_step`/
+  `gate_check`, which `jarvis_plan.run()` requires - and `jarvis_plan.py`'s
+  own condition 4 already requires "never an automatic resume" regardless.
+  "Stop everything" still reaches a running plan, through the plain
+  `watch.stopped()` check every tool already has, threaded to
+  `jarvis_plan.run()`'s own `checkpoint` and to a step's own `checkpoint`
+  when that step's tool is one of the three that take one.
+- Card-count (`CARDS_PER_TURN`) and card-length (`_GATE_DETAIL_LIMIT`)
+  limits apply per step, exactly as they do for a direct call - a plan
+  cannot use its own steps to get around either. A step naming a plug-in
+  (`outside_program`) tool is refused, never run through the bridge's own
+  separate verdict-checking shape.
+- Deliberately simplified, and left that way rather than guessed at
+  further: a step to `home_control` gets no "lights without a card"
+  bypass even when the owner's own setting would give one to a direct
+  call - always the real gate instead, which is stricter than necessary,
+  never a bypass.
+- `propose_plan` joins the `NEEDS_A_PERSON` set (this session's own belt
+  the same three multi-step tools already wear) and the `control` tool
+  group for the short tool list (not a new group of its own - a new
+  group's name would add to `more_tools`' own description and enum on
+  every turn, already near its own 300-token budget; a group's members
+  cost nothing extra there, and it fits: like the other three, it is a
+  more involved, multi-step way of acting, never a plain read or write).
+- Verified: `backend/test_agent_plan_wiring.py` (new) - the tool is
+  invisible/refused while `jarvis_plan.enabled()` says no (the shipped
+  default, today); a tainted turn refuses outright before `prepare()`
+  runs; a safe step runs with no card of its own; a risky step raises its
+  own separate card mid-run even inside an approved plan; a step whose
+  real tier needs a person, even when the model marked it NOT risky, still
+  gets asked (the gap above); a denial anywhere stops the whole run; a
+  step naming send_email/draft_email/a schedule tool/a plug-in tool is
+  refused rather than run through a shortcut. `backend/test_plan.py` (72
+  checks, unchanged) and the existing `test_agent.py`/`test_tool_text.py`/
+  `test_short_tool_list.py` suites all still pass.
 
-**Not yet built either:** a UI in either app. Once wired in as a tool, a
-plan's card is shown exactly like any other approval card already is -
-`describe()`'s text is plain enough that no new card SHAPE is needed, only
-the ordinary approval flow already both apps have.
+**Not yet built:** a UI in either app. Once switched on, a plan's card is
+shown exactly like any other approval card already is - `describe()`'s
+text is plain enough that no new card SHAPE is needed, only the ordinary
+approval flow already both apps have.

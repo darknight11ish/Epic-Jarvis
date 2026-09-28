@@ -892,6 +892,10 @@
      "name": "Making a Joplin note"
     },
     {
+     "id": "propose_plan",
+     "name": "Running a short plan of its own tools (one card, several steps)"
+    },
+    {
      "id": "set_timer",
      "name": "Timers"
     },
