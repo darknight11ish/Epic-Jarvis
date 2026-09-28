@@ -533,6 +533,17 @@ testers, scouts and integration scouts; `.claude/agents/`):
 - **A "listening" sound after a bare "Hey Jarvis"** (owner, 2026-09-28):
   only as part of the existing "I heard you" switch, which stays off by
   default.
+- **Animal faces offer their own voice once** (owner, 2026-09-28): the
+  first time the owner picks an animal face, one line asks "The panda has
+  its own voice. Use it?" (Use it / Keep my voice), remembered per face. A
+  face never changes the voice by itself. Animal voices are Kokoro voices,
+  blends and pitch from Jarvis's own sources only - never a real person's
+  voice - and must pass the "not the owner's voice" check.
+- **Upgrade the voice pack to Kokoro v1.0** (owner, 2026-09-28): the best
+  rated voices, real British pronunciation, and a "Hear it" sample button
+  for every voice in both apps. The saved choice moves from a number to the
+  voice's name, and the owner's current choice carries over. A 350 MB
+  download on the PC, checksum-pinned. Not built yet.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
