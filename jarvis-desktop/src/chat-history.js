@@ -161,6 +161,146 @@ export function userMessage(content, provenance) {
   return tag ? { role: "user", content, provenance: tag } : { role: "user", content };
 }
 
+/* ==========================================================================
+   The chat audit (2026-09-28) and the owner's decisions "Chats, after the
+   chat audit" (CLAUDE.md): "Continue this chat", and a new conversation
+   after 30 quiet minutes. The phone's ChatHistory.kt does the same, and
+   both are held to the worked examples tools/gen_history_cases.py writes
+   (tests/fixtures/history-cases.json).
+   ========================================================================== */
+
+/** A new conversation starts after this long with nothing said. The old one
+ *  stays in History, and "Continue this chat" brings it back. */
+export const IDLE_NEW_MS = 30 * 60 * 1000;
+
+/** Said, quietly, when it happens. */
+export const IDLE_NEW_LINE =
+  "It's been a while, so this is a new conversation. The last one is in History.";
+
+/* The Jarvis bar's words for the chat it is in - the phone's Home says the
+   same (tools/gen_history_cases.py). */
+export const EARLIER_CHATS = "Earlier chats";
+export const EARLIER_CHATS_TITLE = "Your kept chats, in History.";
+export const CONTINUED_TRIMMED =
+  "Older messages were not loaded - Jarvis reads back only the newest ones.";
+export const CONTINUED_TAINTED =
+  "Jarvis read outside text earlier in this chat, so writing notes and some other actions ask " +
+  "you first.";
+export const CONTINUED_NOTHING = "Nothing in this chat can be carried on: no answer of it was kept.";
+export const CONTINUED_TEMPORARY_OFF = "Temporary chat is off: a continued chat is kept.";
+export const CONTINUE_BUSY = "Wait for the answer to finish, then continue the chat.";
+export const CHAT_GONE =
+  "That chat was deleted, so this is a new conversation. Nothing from it is sent to Jarvis again.";
+export const MOVED_HERE = "Carrying on the same chat here.";
+export const ESC_LABEL = "Esc: end chat";
+export const ENDED_SAVED = "Chat ended. Kept chats are in Brain > History.";
+export const NEW_CONVERSATION = "New conversation.";
+
+/** "Carrying on "<title>"." */
+export function continuedLine(title) {
+  return `Carrying on "${String(title || "").trim() || "(no title)"}".`;
+}
+
+/** The most finished pairs the bar's thread shows - the whole conversation
+ *  in practice; only a very long one loses its oldest pairs from view. */
+export const THREAD_MAX = 100;
+
+/** `thread` with one more finished pair on the end, capped at THREAD_MAX.
+ *  Unlike commitExchange, nothing is trimmed to fit the model: this is what
+ *  is shown, not what is sent. */
+export function addToThread(thread, question, answer) {
+  const q = String(question || "");
+  const a = String(answer || "");
+  if (!q.trim() || !a.trim()) return Array.isArray(thread) ? thread : [];
+  return [...(Array.isArray(thread) ? thread : []), { question: q, answer: a }].slice(-THREAD_MAX);
+}
+
+/** The thread's fold: "Earlier in this chat · 3 questions". */
+export function threadSummary(n) {
+  return n === 1 ? "Earlier in this chat · 1 question" : `Earlier in this chat · ${n} questions`;
+}
+
+/** Where the Brain leaves the ids of chats it deleted, for the Jarvis bar:
+ *  the chat it is in, deleted, must stop being sent (the chat audit,
+ *  2026-09-28). Ids only, never a word; read once and dropped. */
+export const CHAT_GONE_KEY = "jarvis.chat.gone";
+
+/** Leave `ids` for the Jarvis bar (a `storage` event reaches it). */
+export function tellChatsGone(ids, storage = globalThis.localStorage) {
+  const list = (Array.isArray(ids) ? ids : [ids]).filter((id) => CONVERSATION_ID.test(String(id)));
+  if (!list.length || !storage) return;
+  try {
+    storage.setItem(CHAT_GONE_KEY, JSON.stringify({ ids: list, at: Date.now() }));
+  } catch {
+    /* no storage: the bar finds out when the PC starts a new History entry */
+  }
+}
+
+/** The ids the Brain left, once, while fresh (a minute). */
+export function takeChatsGone(storage = globalThis.localStorage, freshMs = 60_000) {
+  try {
+    const left = JSON.parse(storage.getItem(CHAT_GONE_KEY) || "null");
+    if (left) storage.removeItem(CHAT_GONE_KEY);
+    if (!left || Date.now() - Number(left.at) >= freshMs || !Array.isArray(left.ids)) return [];
+    return left.ids.filter((id) => typeof id === "string");
+  } catch {
+    return [];
+  }
+}
+
+/** Whether the next question starts a new conversation: there is one going,
+ *  and nothing was said in it for IDLE_NEW_MS. */
+export function idleExpired(lastAtMs, nowMs, hasConversation) {
+  return Boolean(hasConversation) && Number.isFinite(lastAtMs) && lastAtMs > 0
+    && nowMs - lastAtMs >= IDLE_NEW_MS;
+}
+
+const SIDE_TALK_SHOWN = "(not for Jarvis)";
+
+function sideTalk(answer) {
+  const a = String(answer || "").trim().toLowerCase().replace(/\.+$/, "").trim();
+  return a === "[not for me]" || a === SIDE_TALK_SHOWN.toLowerCase();
+}
+
+/**
+ * "Continue this chat": the kept messages of a History conversation, as
+ * this window's `conversation` - each question whose answer was kept, with
+ * that answer, oldest first; a question whose answer was not kept
+ * (`answer_kept: false`), or with no answer after it, is skipped, and so is
+ * a Live side remark. Then only the newest pairs that fit MAX_EXCHANGES and
+ * MAX_CHARS - the limits a live chat keeps to. `trimmed`: older pairs were
+ * left out, and the bar says so. A support or chatbot row is never loaded.
+ * Takes the PC's turns as they come (`answer_kept`) or as history-view.js
+ * reads them (`answerKept`).
+ */
+export function continueWindow(turns) {
+  const pairs = [];
+  let pending = null;
+  for (const t of Array.isArray(turns) ? turns : []) {
+    if (!t || typeof t !== "object") continue;
+    const words = typeof t.text === "string" ? t.text : "";
+    if (t.role === "user") {
+      const notKept = t.answer_kept === false || t.answerKept === false;
+      pending = !notKept && words.trim() ? t : null;
+    } else if (t.role === "assistant") {
+      if (pending && words.trim() && !sideTalk(words)) {
+        const tag = knownProvenance(pending.provenance);
+        pairs.push(tag ? { question: pending.text, answer: words, provenance: tag }
+          : { question: pending.text, answer: words });
+      }
+      pending = null;
+    } else {
+      pending = null;
+    }
+  }
+  let trimmed = false;
+  while (pairs.length && !fits(pairs, MAX_EXCHANGES, MAX_CHARS)) {
+    pairs.shift();
+    trimmed = true;
+  }
+  return { window: pairs, trimmed };
+}
+
 /**
  * The tag on the words in the box, after one thing happened to the box.
  * The quickbar keeps one tag for its box and moves it here, so every rule is

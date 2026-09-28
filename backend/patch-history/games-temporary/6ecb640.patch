@@ -1,0 +1,53 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1071,9 +1071,15 @@
+             # learned from - not even a "Remember:". A jarvis_chat_log.py
+             # older than this (no TEMPORARY_CHAT) would keep it, so it is not
+             # called for one at all.
++            #
++            # games-temporary.patch: both checks now go through
++            # _temporary_chat(body), not body.get("temporary") directly, so a
++            # game or role-play conversation _temporary_chat() detected on
++            # its own is kept out of history and learning too - not only a
++            # chat the app itself marked temporary.
+             try:
+                 import jarvis_chat_log
+-                if (body.get("temporary") is not True
++                if (not _temporary_chat(body)
+                         or getattr(jarvis_chat_log, "TEMPORARY_CHAT", False)):
+                     jarvis_chat_log.record_turn(
+                         body, lane=str(route_header.get("lane") or lane),
+@@ -1081,7 +1087,7 @@
+             except Exception:
+                 pass
+             try:
+-                if MEMORY and not jarvis_side_memory and body.get("temporary") is not True:
++                if MEMORY and not jarvis_side_memory and not _temporary_chat(body):
+                     LEARNER.offer(body.get("messages") or [], origin="owner",
+                                   conversation_id=body.get("conversation_id"))
+             except Exception:
+@@ -1314,7 +1320,23 @@
+ # name (jarvis_events._hud_has), so an app offers the mode only on a PC that
+ # has it.
+ def _temporary_chat(body) -> bool:
+-    return isinstance(body, dict) and body.get("temporary") is True
++    if not isinstance(body, dict):
++        return False
++    if body.get("temporary") is True:
++        return True
++    # games-temporary.patch (the owner's decision, 2026-09-27, CLAUDE.md /
++    # docs/OWNER-QUESTIONS-2026-09-27.md Q19): a game or role-play
++    # conversation is put into this same temporary-chat state automatically
++    # - no card, no setting, it just happens - because a made-up character
++    # or scenario must never be filed as a fact about the owner. Checked on
++    # the owner's own words only (jarvis_intake.game_or_roleplay); without
++    # that module, or on any error, not detected - exactly as before this
++    # patch.
++    try:
++        import jarvis_intake
++        return bool(jarvis_intake.game_or_roleplay(body.get("messages") or []))
++    except Exception:
++        return False
+
+
+ # What the model is told instead of the recalled facts in a temporary chat,

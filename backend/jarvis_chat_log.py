@@ -85,6 +85,17 @@ file's free pages until they are reused, so `secure_delete` is on (freed
 content is overwritten with zeros) and VACUUM runs after a delete, at most
 once an hour.
 
+WHAT KIND OF CONVERSATION (the chat audit, 2026-09-28; JARVIS-API section
+18.2): each conversation has a plain `kind` - chat, live (Jarvis Live),
+support (a customer-support record), chatbot (a conversation with another
+AI) or compare (a comparison) - and a `project`, empty until Projects step 4.
+A history kept before them is given both in place on first use (_migrate).
+A chat that held a crisis turn is titled "A difficult moment", never with
+the owner's words (CRISIS_TITLE). Chatbot and compare records are written
+whole by record_chatbot, the shape of a support record: role "chatbot",
+outside text, never learned from. A support record is never deleted by
+"Delete conversations older than" (sweep): only by the owner, in History.
+
 SEARCHING WHAT WAS SAID (docs/JARVIS-API.md section 71, 2026-09-28)
 ChatLog.search, for the apps' History search box only (GET
 /api/history/search, answered by jarvis_brain_reads.py). Each search opens
@@ -155,6 +166,34 @@ PROVENANCES = ("typed", "voice", "shared", "clipboard", "pasted", "picture_capti
 #: and Jarvis's notes (the details card, offer cards, the reference).
 SUPPORT_PROVENANCES = ("support_company", "support_jarvis", "support_owner", "support_note")
 SUPPORT_MAX_ROWS = 600
+#: The authors of a kept chatbot conversation or comparison's rows
+#: (record_chatbot, role "chatbot" - never "user", so the learner never reads
+#: a word of it): what Jarvis sent the chatbot, the chatbot's reply (outside
+#: text), a note (the goal, how it ended), and the summary this PC wrote from
+#: the replies (outside text too).
+CHATBOT_PROVENANCES = ("chatbot_jarvis", "chatbot_reply", "chatbot_note", "chatbot_summary")
+CHATBOT_MAX_ROWS = 600
+#: What kind of conversation a History row is (the chat audit, 2026-09-28;
+#: the owner's decisions "History marks Live sessions" and "Chats, after the
+#: chat audit"). One column, `conversations.kind`:
+#:   chat     an ordinary chat, typed or spoken (every row kept before this
+#:            column existed, except support records, is one)
+#:   live     a Jarvis Live session (its first message came with `live: true`)
+#:   support  a customer-support chat's record (record_support)
+#:   chatbot  a conversation Jarvis had with another AI chatbot for the owner
+#:   compare  "Ask several and compare": every chatbot's conversation, and the
+#:            summary
+#: Chats brought in from ChatGPT, Claude, Gemini or DeepSeek (JARVIS-API
+#: section 85) are NOT added to History, so there is no "imported" kind.
+KINDS = ("chat", "live", "support", "chatbot", "compare")
+#: The kinds "Continue this chat" may carry on. Support, chatbot and compare
+#: records are read-only: the other side of those was not Jarvis answering
+#: the owner, and re-sending them would hand outside text to the model as if
+#: it were the owner's conversation.
+CONTINUABLE = ("chat", "live")
+#: A conversation that held a crisis turn is kept but titled this, never with
+#: the owner's words (the owner, 2026-09-28, "Chats, after the chat audit").
+CRISIS_TITLE = "A difficult moment"
 DEVICES = ("desktop", "hud", "phone")
 KEEP_DAYS = (0, 30, 90, 365)
 VOICE_WINDOW = 600          # a transcript counts as voice for 10 minutes
@@ -337,6 +376,59 @@ def _earlier_user_messages(messages) -> Optional[int]:
     return users if users or not other else 1
 
 
+#: Said under an opened conversation that cannot be continued, by kind. The
+#: apps show it where "Continue this chat" would be (both apps, the same
+#: words; tools/gen_history_kinds.py copies them into the contract file).
+CONTINUE_WHY = {
+    "support": "A customer-support record can't be continued: it is the company's words "
+               "and what was sent in your name, kept as your record.",
+    "chatbot": "A chat with another AI can't be continued here: its replies are outside "
+               "text, not a conversation with Jarvis.",
+    "compare": "A comparison can't be continued here: its replies are outside text, not a "
+               "conversation with Jarvis.",
+}
+
+
+def _row(cid, title, started, updated, turns, device, voice, outside, kind, project) -> dict:
+    """One History list row, as GET /api/history and the search send it."""
+    return {"id": cid, "title": title,
+            "started": int(started or 0), "updated": int(updated or 0),
+            "turns": int(turns), "device": device or "unknown",
+            "has_voice": bool(voice), "tainted": bool(outside),
+            "kind": kind if kind in KINDS else "chat", "project": project or None}
+
+
+def _title_from(rows) -> str:
+    """A new conversation's title: the first line of the owner's own words
+    (typed or said) when there are some, else of the first message - so a
+    chat that began with shared text is titled with what the owner asked, not
+    with the start of an email (the chat audit, 2026-09-28)."""
+    own = [r[0] for r in rows if r[0].strip() and r[1] in ("typed", "voice", "picture_caption")]
+    first = own[0] if own else next((r[0] for r in rows if r[0].strip()), "")
+    return (first.strip().splitlines() or [""])[0][:TITLE_CHARS]
+
+
+def _crisis_turn(rows, turn) -> bool:
+    """Was this a crisis turn? The answering loop's own flag (`crisis` in
+    what jarvis_agent.run_local_turn returned), or the crisis help line's
+    phrase check (jarvis_wellbeing.crisis, the same one wellbeing.patch
+    runs) on the words just said. Never raises; without jarvis_wellbeing.py
+    only the loop's flag counts."""
+    if isinstance(turn, dict) and turn.get("crisis"):
+        return True
+    try:
+        import jarvis_wellbeing
+    except Exception:
+        return False
+    for text, _prov, _vc in rows:
+        try:
+            if jarvis_wellbeing.crisis(text):
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def _norm(text: str) -> str:
     return " ".join(str(text or "").split())
 
@@ -485,6 +577,7 @@ class ChatLog:
         # _taint only ever holds conversations that are in here.
         self._seen: "OrderedDict" = OrderedDict()   # cid -> True
         self._live_seq = 0
+        self._schema_ok = False       # _migrate has run on this file (kind, project)
 
     # -- settings ---------------------------------------------------------
     def settings(self) -> dict:
@@ -535,7 +628,7 @@ class ChatLog:
         c.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB)")
         c.execute("CREATE TABLE IF NOT EXISTS conversations ("
                   " id TEXT PRIMARY KEY, title BLOB, started REAL, updated REAL,"
-                  " device TEXT)")
+                  " device TEXT, kind TEXT, project TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS turns ("
                   " conversation_id TEXT NOT NULL, idx INTEGER NOT NULL, at REAL,"
                   " role TEXT, provenance TEXT, device TEXT, lane TEXT,"
@@ -543,7 +636,29 @@ class ChatLog:
                   " text BLOB, PRIMARY KEY (conversation_id, idx))")
         c.execute("CREATE INDEX IF NOT EXISTS conversations_updated"
                   " ON conversations (updated)")
+        if not self._schema_ok:
+            self._migrate(c)
         return c
+
+    def _migrate(self, c) -> None:
+        """A history kept before `kind` and `project` existed (the chat audit,
+        2026-09-28): both columns are added once, in place. Every existing
+        row becomes "chat", except a customer-support record (its turns are
+        role "support"), which becomes "support". An older Live session
+        cannot be told from an ordinary chat afterwards - nothing marked it -
+        so it stays "chat". `project` stays empty: no chat belongs to a
+        project until Projects step 4 is built. Plain columns: no key is
+        needed, and no text is opened or rewritten."""
+        cols = {r[1] for r in c.execute("PRAGMA table_info(conversations)")}
+        with c:
+            if "kind" not in cols:
+                c.execute("ALTER TABLE conversations ADD COLUMN kind TEXT")
+            if "project" not in cols:
+                c.execute("ALTER TABLE conversations ADD COLUMN project TEXT")
+            c.execute("UPDATE conversations SET kind='support' WHERE kind IS NULL AND id IN"
+                      " (SELECT DISTINCT conversation_id FROM turns WHERE role='support')")
+            c.execute("UPDATE conversations SET kind='chat' WHERE kind IS NULL")
+        self._schema_ok = True
 
     def _cipher(self):
         """The AES-GCM object, or KeyUnavailable with the reason in words."""
@@ -647,7 +762,13 @@ class ChatLog:
 
     def sweep(self) -> int:
         """Delete conversations whose last turn is older than keep_days.
-        Returns how many."""
+        Returns how many.
+
+        A customer-support chat's record is NOT deleted by this (the owner,
+        2026-09-28: "auto-delete ... asks before removing a support chat"):
+        it is the owner's own record of what a company agreed to, so it goes
+        only when the owner deletes it in History, which asks first. How many
+        were kept back is support_past_keep()."""
         keep = self.settings()["keep_days"]
         if not keep or not self.db_path.exists():
             return 0
@@ -655,11 +776,24 @@ class ChatLog:
         with self._lock, closing(self._connect()) as c:
             with c:
                 ids = [r[0] for r in c.execute(
-                    "SELECT id FROM conversations WHERE updated < ?", (cutoff,))]
+                    "SELECT id FROM conversations WHERE updated < ?"
+                    " AND COALESCE(kind, 'chat') != 'support'", (cutoff,))]
                 self._drop(c, ids)
         if ids:
             self._deleted()
         return len(ids)
+
+    def support_past_keep(self) -> int:
+        """How many customer-support records are older than keep_days - kept
+        by sweep() on purpose, for the owner to delete by hand. 0 when
+        everything is kept anyway."""
+        keep = self.settings()["keep_days"]
+        if not keep or not self.db_path.exists():
+            return 0
+        cutoff = self._clock() - keep * 86400
+        with self._lock, closing(self._connect()) as c:
+            return int(c.execute("SELECT COUNT(*) FROM conversations WHERE updated < ?"
+                                 " AND kind='support'", (cutoff,)).fetchone()[0])
 
     # -- voice ------------------------------------------------------------
     def note_transcript(self, text: str, *, strictness, model, mode,
@@ -910,13 +1044,19 @@ class ChatLog:
         # lookup for automatic learning still matches what the model was
         # actually shown this turn), and only now, right before the words
         # are written to the encrypted database for good.
+        crisis = _crisis_turn(rows, turn)
         rows = [(self._mask_for_storage(text), prov,
                  None if vc is None else json.dumps(vc, sort_keys=True))
                 for text, prov, vc in rows]
         if not rows:
             return {"recorded": False, "why": "no words in the user message"}
+        # Jarvis Live marks each spoken message it sends (`live: true`, the
+        # apps' JARVIS-API section 63): a conversation that starts with one
+        # is a Live session in History.
+        kind = "live" if any(isinstance(m, dict) and m.get("live") is True for m in live) \
+            else "chat"
         return self._write_turn(aead, cid, rows, device, lane, read_outside, answer_kept,
-                                answer, at, now)
+                                answer, at, now, kind=kind, crisis=crisis)
 
     def _live_rows(self, live) -> list:
         """[(words, provenance, voice check facts or None)] for the live
@@ -963,21 +1103,27 @@ class ChatLog:
             return text
 
     def _write_turn(self, aead, cid, rows, device, lane, read_outside, answer_kept,
-                    answer, at, now) -> dict:
+                    answer, at, now, *, kind: str = "chat", crisis: bool = False) -> dict:
         lane = str(lane or "")[:200]
+        kind = kind if kind in KINDS else "chat"
         with self._lock, closing(self._connect()) as c:
             with c:
                 conv = c.execute("SELECT id FROM conversations WHERE id=?", (cid,)).fetchone()
                 nxt = c.execute("SELECT COALESCE(MAX(idx), -1) + 1 FROM turns"
                                 " WHERE conversation_id=?", (cid,)).fetchone()[0]
                 if conv is None:
-                    first = next((r[0] for r in rows if r[0].strip()), "")
-                    title = (first.strip().splitlines() or [""])[0][:TITLE_CHARS]
-                    c.execute("INSERT INTO conversations (id, title, started, updated, device)"
-                              " VALUES (?,?,?,?,?)",
+                    title = CRISIS_TITLE if crisis else _title_from(rows)
+                    c.execute("INSERT INTO conversations (id, title, started, updated, device,"
+                              " kind) VALUES (?,?,?,?,?,?)",
                               (cid, self._seal(aead, title.encode("utf-8"),
-                                               self._aad(cid, "title")), at, now, device))
-                elif rows[0][1] == "shared" and len(rows) > 1:
+                                               self._aad(cid, "title")), at, now, device, kind))
+                elif crisis:
+                    # A crisis turn later in a chat: from now on the chat is
+                    # titled "A difficult moment" - never the owner's words.
+                    c.execute("UPDATE conversations SET title=? WHERE id=?",
+                              (self._seal(aead, CRISIS_TITLE.encode("utf-8"),
+                                          self._aad(cid, "title")), cid))
+                if conv is not None and rows[0][1] == "shared" and len(rows) > 1:
                     # A shared message already recorded with the turn before
                     # (that turn failed, so the app re-sent it next to this one).
                     last = c.execute("SELECT idx, text, provenance FROM turns WHERE"
@@ -1022,17 +1168,45 @@ class ChatLog:
         Encrypted like every other turn; a pasted password or code in any
         row is masked first (_mask_for_storage). Writing the same chat
         again replaces it (a Resume after a pause ends in one record)."""
+        return self._record_whole(cid, title or "Support chat", rows, kind="support",
+                                  role="support", provenances=SUPPORT_PROVENANCES,
+                                  max_rows=SUPPORT_MAX_ROWS)
+
+    # -- a chatbot conversation or comparison (jarvis_chatbot*.py) ----------
+    def record_chatbot(self, cid, title, rows, *, kind: str = "chatbot") -> dict:
+        """Keep a finished conversation Jarvis had with another AI chatbot
+        (kind "chatbot") or a whole comparison (kind "compare") as ONE
+        conversation of its own - the owner's decision of 2026-09-28 ("Chats
+        with other AIs and comparisons are kept in History, encrypted, marked
+        as outside text, never learned from, never read aloud"). Exactly the
+        shape of a support record: every row role "chatbot" (never "user" -
+        the learner reads role "user" only, so no word of it is ever learned
+        from), its author as `provenance` (CHATBOT_PROVENANCES), read_outside
+        true (the chatbot's replies are outside text, so the whole record is
+        tainted), answer_kept false, never in the live-turn registry. Neither
+        app offers "Continue this chat" on it. Writing the same id again
+        replaces it."""
+        kind = kind if kind in ("chatbot", "compare") else "chatbot"
+        return self._record_whole(cid, title or ("Comparison" if kind == "compare"
+                                                 else "Chat with a chatbot"),
+                                  rows, kind=kind, role="chatbot",
+                                  provenances=CHATBOT_PROVENANCES,
+                                  max_rows=CHATBOT_MAX_ROWS)
+
+    def _record_whole(self, cid, title, rows, *, kind, role, provenances, max_rows) -> dict:
+        """record_support and record_chatbot: one finished record, all
+        outside text, written whole (the same id again replaces it)."""
         if not (isinstance(cid, str) and _CID.fullmatch(cid)):
             return {"recorded": False, "why": "not a conversation id"}
         aead, why = self._recording()
         if aead is None:
             return {"recorded": False, "why": why}
         clean = []
-        for r in list(rows or [])[:SUPPORT_MAX_ROWS]:
+        for r in list(rows or [])[:max_rows]:
             if not isinstance(r, dict):
                 continue
             prov = r.get("provenance")
-            prov = prov if prov in SUPPORT_PROVENANCES else "support_note"
+            prov = prov if prov in provenances else f"{role}_note"
             text = self._mask_for_storage(str(r.get("text") or ""))
             try:
                 at = float(r.get("at") or self._clock())
@@ -1043,19 +1217,20 @@ class ChatLog:
         if not clean:
             return {"recorded": False, "why": "nothing was said"}
         now = self._clock()
-        title = str(title or "Support chat")[:TITLE_CHARS]
+        title = str(title)[:TITLE_CHARS]
         with self._lock, closing(self._connect()) as c:
             with c:
                 self._drop(c, [cid])
-                c.execute("INSERT INTO conversations (id, title, started, updated, device)"
-                          " VALUES (?,?,?,?,?)",
+                c.execute("INSERT INTO conversations (id, title, started, updated, device, kind)"
+                          " VALUES (?,?,?,?,?,?)",
                           (cid, self._seal(aead, title.encode("utf-8"),
-                                           self._aad(cid, "title")), clean[0][2], now, "pc"))
+                                           self._aad(cid, "title")), clean[0][2], now, "pc",
+                           kind))
                 for idx, (prov, text, at) in enumerate(clean):
                     c.execute("INSERT INTO turns (conversation_id, idx, at, role, provenance,"
                               " device, lane, read_outside, answer_kept, voice_check, text)"
                               " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                              (cid, idx, at, "support", prov, "pc", "", 1, 0, None,
+                              (cid, idx, at, role, prov, "pc", "", 1, 0, None,
                                self._seal(aead, text.encode("utf-8"), self._aad(cid, idx))))
         return {"recorded": True, "conversation_id": cid, "rows": len(clean)}
 
@@ -1067,7 +1242,9 @@ class ChatLog:
                 "waiting": state()["waiting"], "keep_days": st["keep_days"],
                 "encrypted": True}
 
-    def list(self, limit=LIST_DEFAULT, before=None) -> dict:
+    def list(self, limit=LIST_DEFAULT, before=None, kind=None) -> dict:
+        """One page of the History list, newest first. `kind`: only that
+        kind (KINDS) - "Live only" in both apps; anything else is ignored."""
         self._housekeeping()
         out = self.status()
         out["conversations"] = []
@@ -1088,7 +1265,8 @@ class ChatLog:
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id AND"
                "   t.provenance IN ('voice','voice_unverified')),"
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id AND"
-               "   t.read_outside=1)"
+               "   t.read_outside=1),"
+               " COALESCE(c.kind, 'chat'), c.project"
                " FROM conversations c")
         # Paging by whole seconds (`updated` goes out as one, and comes back
         # as `before`). A page never splits a second: when its last row shares
@@ -1096,27 +1274,33 @@ class ChatLog:
         # `before` can safely mean "strictly older seconds" - nothing is
         # skipped and nothing repeats (chat history audit, 2026-09-24: rows in
         # the boundary's second used to be skipped).
-        where, args = "", []
+        where, args = [], []
         if isinstance(before, (int, float)) and not isinstance(before, bool) \
                 and math.isfinite(before):
-            where = " WHERE c.updated < ?"
+            where.append("c.updated < ?")
             args.append(float(math.floor(before)))
+        kind = kind if kind in KINDS else None
+        if kind is not None:
+            where.append("COALESCE(c.kind, 'chat') = ?")
+            args.append(kind)
+        out["kind"] = kind
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
         with self._lock, closing(self._connect()) as c:
-            rows = c.execute(sql + where + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
+            rows = c.execute(sql + clause + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
                              args + [limit]).fetchall()
             if len(rows) == limit:
                 sec = math.floor(rows[-1][3] or 0)
                 have = {r[0] for r in rows}
-                rest = c.execute(sql + " WHERE c.updated >= ? AND c.updated < ?"
-                                 " ORDER BY c.updated DESC, c.id DESC",
-                                 [float(sec), float(sec + 1)]).fetchall()
+                extra = " AND COALESCE(c.kind, 'chat') = ?" if kind is not None else ""
+                rest = c.execute(sql + " WHERE c.updated >= ? AND c.updated < ?" + extra
+                                 + " ORDER BY c.updated DESC, c.id DESC",
+                                 [float(sec), float(sec + 1)]
+                                 + ([kind] if kind is not None else [])).fetchall()
                 rows += [r for r in rest if r[0] not in have]
-        for cid, title, started, updated, device, n, voice, outside in rows:
-            out["conversations"].append({
-                "id": cid, "title": self._title(aead, cid, title),
-                "started": int(started or 0), "updated": int(updated or 0),
-                "turns": int(n), "device": device or "unknown",
-                "has_voice": bool(voice), "tainted": bool(outside)})
+        for cid, title, started, updated, device, n, voice, outside, rkind, project in rows:
+            out["conversations"].append(_row(
+                cid, self._title(aead, cid, title), started, updated, n, device,
+                bool(voice), bool(outside), rkind, project))
         return out
 
     def _title(self, aead, cid, blob) -> str:
@@ -1127,12 +1311,15 @@ class ChatLog:
 
     def get(self, cid):
         """The whole conversation, or None if there is no such one. Raises
-        KeyUnavailable when it cannot be opened."""
+        KeyUnavailable when it cannot be opened. `kind` says what it is,
+        `continuable` whether the apps may offer "Continue this chat" on it
+        (CONTINUABLE), and `continue_why` why not when they may not."""
         self._housekeeping()
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
         with self._lock, closing(self._connect()) as c:
-            conv = c.execute("SELECT title FROM conversations WHERE id=?", (cid,)).fetchone()
+            conv = c.execute("SELECT title, COALESCE(kind, 'chat'), project, started, updated"
+                             " FROM conversations WHERE id=?", (cid,)).fetchone()
             if conv is None:
                 return None
             rows = c.execute("SELECT idx, at, role, provenance, read_outside, answer_kept,"
@@ -1149,12 +1336,21 @@ class ChatLog:
             if role == "support":
                 # A customer-support chat (record_support): who wrote it.
                 t.update(provenance=prov or "support_note", read_outside=True)
+            elif role == "chatbot":
+                # A chatbot conversation or comparison (record_chatbot): who
+                # wrote it. Outside text as a whole, like a support record.
+                t.update(provenance=prov or "chatbot_note", read_outside=True)
             elif role == "user":
                 t.update(provenance=prov or "unknown", read_outside=bool(outside),
                          answer_kept=bool(kept))
             turns.append(t)
+        kind = conv[1] if conv[1] in KINDS else "chat"
         return {"id": cid, "title": self._title(aead, cid, conv[0]),
-                "tainted": any(bool(r[4]) for r in rows), "turns": turns}
+                "tainted": any(bool(r[4]) for r in rows), "turns": turns,
+                "kind": kind, "project": conv[2] or None,
+                "started": int(conv[3] or 0), "updated": int(conv[4] or 0),
+                "continuable": kind in CONTINUABLE,
+                "continue_why": "" if kind in CONTINUABLE else CONTINUE_WHY[kind]}
 
     def search(self, query, limit=SEARCH_DEFAULT) -> dict:
         """Search what was said in the kept conversations (GET
@@ -1209,7 +1405,8 @@ class ChatLog:
             return out
         with self._lock, closing(self._connect()) as c:
             convs = c.execute(
-                "SELECT c.id, c.title, c.started, c.updated, c.device FROM conversations c"
+                "SELECT c.id, c.title, c.started, c.updated, c.device,"
+                " COALESCE(c.kind, 'chat'), c.project FROM conversations c"
                 " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
                 (SEARCH_SCAN_MAX + 1,)).fetchall()
         if len(convs) > SEARCH_SCAN_MAX:
@@ -1219,7 +1416,8 @@ class ChatLog:
         deadline = time.monotonic() + SEARCH_SECONDS
         found = []
         with closing(self._connect()) as c:
-            for n, (cid, title_blob, started, updated, device) in enumerate(convs):
+            for n, (cid, title_blob, started, updated, device, rkind, project) \
+                    in enumerate(convs):
                 if time.monotonic() > deadline:
                     out["partial"] = True
                     break
@@ -1246,14 +1444,29 @@ class ChatLog:
                     out["more"] = True
                     break
                 snippet, hits = hit
-                found.append({
-                    "id": cid, "title": title,
-                    "started": int(started or 0), "updated": int(updated or 0),
-                    "turns": len(rows), "device": device or "unknown",
-                    "has_voice": voice, "tainted": outside,
-                    "snippet": snippet, "hits": hits})
+                row = _row(cid, title, started, updated, len(rows), device, voice, outside,
+                           rkind, project)
+                row.update(snippet=snippet, hits=hits)
+                found.append(row)
         out["conversations"] = found
         return out
+
+    def brief(self, cid) -> Optional[dict]:
+        """One conversation's title, kind and when it was last added to -
+        no message is opened. For "Erase the words"'s "Also delete the chat
+        it came from" (the chat audit, 2026-09-28), which names the chat
+        before asking. None when there is no such conversation; raises
+        KeyUnavailable when its title cannot be opened."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
+            return None
+        with self._lock, closing(self._connect()) as c:
+            row = c.execute("SELECT title, updated, COALESCE(kind, 'chat') FROM conversations"
+                            " WHERE id=?", (cid,)).fetchone()
+        if row is None:
+            return None
+        aead = self._cipher()
+        return {"id": cid, "title": self._title(aead, cid, row[0]),
+                "updated": int(row[1] or 0), "kind": row[2] if row[2] in KINDS else "chat"}
 
     def tainted_from(self, cid):
         """The number of the first turn that read outside text, or None. Every
@@ -1321,7 +1534,7 @@ class ChatLog:
         with self._lock, closing(self._connect()) as c:
             # A conversation's own first and last message, from its turns
             # (`started`/`updated` are the same moments, kept on the row).
-            sql = ("SELECT c.id, c.title, c.started, c.updated,"
+            sql = ("SELECT c.id, c.title, c.started, c.updated, COALESCE(c.kind, 'chat'),"
                    " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id),"
                    " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id"
                    "   AND t.at >= ? AND t.at < ?),"
@@ -1352,13 +1565,14 @@ class ChatLog:
         except Exception as exc:
             out["why_not"] = f"the chat history could not be opened ({type(exc).__name__})"
             return out
-        for cid, title, started, updated, n, inside, first, last in rows:
+        for cid, title, started, updated, kind, n, inside, first, last in rows:
             first = first if first is not None else started
             last = last if last is not None else updated
             out["items"].append({
                 "id": cid, "title": self._title(aead, cid, title),
                 "started": float(started or first or 0), "updated": float(updated or last or 0),
                 "turns": int(n), "in_frame": int(inside),
+                "kind": kind if kind in KINDS else "chat",
                 "spills": bool((first is not None and first < start)
                                or (last is not None and last >= end))})
         return out
@@ -1377,8 +1591,9 @@ class ChatLog:
                 for cid in cids:
                     if not (isinstance(cid, str) and _CID.fullmatch(cid)):
                         continue
-                    conv = c.execute("SELECT id, title, started, updated, device"
-                                     " FROM conversations WHERE id=?", (cid,)).fetchone()
+                    conv = c.execute("SELECT id, title, started, updated, device, kind,"
+                                     " project FROM conversations WHERE id=?",
+                                     (cid,)).fetchone()
                     if conv is None:
                         continue
                     turns = c.execute(f"SELECT {self._TURN_COLS} FROM turns"
@@ -1418,8 +1633,9 @@ class ChatLog:
         marks = ",".join("?" * 11)
         now_conv = c.execute("SELECT updated FROM conversations WHERE id=?", (cid,)).fetchone()
         if now_conv is None:
-            c.execute("INSERT INTO conversations (id, title, started, updated, device)"
-                      " VALUES (?,?,?,?,?)", conv)
+            conv = tuple(conv) + (None,) * (7 - len(conv))    # held before kind existed
+            c.execute("INSERT INTO conversations (id, title, started, updated, device, kind,"
+                      " project) VALUES (?,?,?,?,?,?,?)", conv[:7])
             for t in turns:
                 c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", t)
             return
@@ -1516,8 +1732,20 @@ def record_support(cid, title, rows) -> dict:
     return _log().record_support(cid, title, rows)
 
 
+def record_chatbot(cid, title, rows, *, kind: str = "chatbot") -> dict:
+    """A finished chatbot conversation or comparison (jarvis_chatbot.py,
+    jarvis_chatbot_compare.py), kept encrypted as its own conversation of
+    kind "chatbot" or "compare" - see ChatLog.record_chatbot."""
+    return _log().record_chatbot(cid, title, rows, kind=kind)
+
+
 def status() -> dict:
     return _log().status()
+
+
+def brief(conversation_id) -> Optional[dict]:
+    """One conversation's title, kind and last change - see ChatLog.brief."""
+    return _log().brief(conversation_id)
 
 
 def overlapping(start: float, end: float, limit: int = 201, only=None) -> dict:
@@ -1634,6 +1862,19 @@ def _decide(pid: str, apply: Callable[[bool], dict], gate: Callable,
         _finish(pid, "enabled")
 
 
+#: Said with every "Delete conversations older than" choice, in both apps'
+#: confirm: customer-support records are never deleted by it.
+SUPPORT_KEPT_NOTE = ("Customer-support chat records are not deleted by this - delete one "
+                     "yourself in History if you want it gone.")
+
+
+def support_kept_words(n: int) -> str:
+    """After a keep_days change, when support records older than it were
+    kept back (ChatLog.sweep)."""
+    return (f" {n} customer-support chat record{' was' if n == 1 else 's were'} older than "
+            "that and kept - delete one yourself in History if you want it gone.")
+
+
 def _keep_words(days: int) -> str:
     return {0: "Conversations are kept until you delete them.",
             30: "Conversations older than 30 days are deleted.",
@@ -1662,12 +1903,17 @@ def request_settings(body, *, gate: Optional[Callable] = None,
         except Exception as exc:
             return 500, {"ok": False, "error": f"could not save the setting ({type(exc).__name__})"}
         _audit("history.keep_days", {"keep_days": value, "deleted": deleted})
+        try:
+            held = log.support_past_keep()
+        except Exception:
+            held = 0
         out = log.status()
-        out.update(ok=True, deleted=deleted,
+        out.update(ok=True, deleted=deleted, support_kept=held,
                    message=_keep_words(value) + (
                        f" {deleted} conversation{'' if deleted == 1 else 's'} "
                        f"{'was' if deleted == 1 else 'were'} deleted now." if deleted
-                       else " None were deleted now."))
+                       else " None were deleted now.") + (support_kept_words(held)
+                                                           if held else ""))
         return 200, out
     if key != "enabled" or not isinstance(value, bool):
         return 400, {"error": 'need {"enabled": true|false} or {"keep_days": 0|30|90|365}'}
@@ -1772,7 +2018,7 @@ def handle_get(path: str, query: str = "") -> tuple:
                 before = b
         except (TypeError, ValueError):
             before = None
-        return 200, log.list(limit=limit, before=before)
+        return 200, log.list(limit=limit, before=before, kind=q.get("kind") or None)
     if path == SEARCH_PATH:
         # "Search what was said" (section 71). The words arrive in ?q=, are
         # used for this one scan and dropped: never logged, never audited,

@@ -1042,7 +1042,15 @@ class JarvisApi(
     // shapes, the words and the rules; these only carry them.
 
     /** `GET /api/history`: the switch and one page of conversations, newest first. */
-    suspend fun history(before: Long? = null): ApiResult<JsonObject> = probe(ChatLog.listPath(before))
+    suspend fun history(before: Long? = null, kind: String? = null): ApiResult<JsonObject> =
+        probe(ChatLog.listPath(before, kind = kind))
+
+    /**
+     * `GET /api/memory/fact-chat?id=` (the chat audit, 2026-09-28): which chat
+     * a fact came from - its title and when - so "Also delete the chat it
+     * came from" names it first. A read; it deletes nothing.
+     */
+    suspend fun factChat(path: String): ApiResult<JsonObject> = probe(path)
 
     /** `GET /api/history/conversation`: one conversation, read-only. 404 when it is gone. */
     suspend fun historyConversation(id: String): ApiResult<JsonObject> = probe(ChatLog.conversationPath(id))

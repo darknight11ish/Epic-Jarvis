@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -1071,9 +1071,15 @@
+@@ -1071,17 +1071,29 @@
              # learned from - not even a "Remember:". A jarvis_chat_log.py
              # older than this (no TEMPORARY_CHAT) would keep it, so it is not
              # called for one at all.
@@ -9,15 +9,22 @@
 +            # _temporary_chat(body), not body.get("temporary") directly, so a
 +            # game or role-play conversation _temporary_chat() detected on
 +            # its own is kept out of history and learning too - not only a
-+            # chat the app itself marked temporary.
++            # chat the app itself marked temporary. jarvis_chat_log decides
++            # "temporary" from the body's own flag alone, so a game the app
++            # did not mark is handed over WITH the flag, on a copy (the body
++            # itself stays as it arrived): without it a game's turns were
++            # written to chat history (the chat audit, 2026-09-28,
++            # reproduced against the real jarvis_chat_log.py).
              try:
                  import jarvis_chat_log
 -                if (body.get("temporary") is not True
 +                if (not _temporary_chat(body)
                          or getattr(jarvis_chat_log, "TEMPORARY_CHAT", False)):
                      jarvis_chat_log.record_turn(
-                         body, lane=str(route_header.get("lane") or lane),
-@@ -1081,7 +1087,7 @@
+-                        body, lane=str(route_header.get("lane") or lane),
++                        (dict(body, temporary=True) if _temporary_chat(body) else body),
++                        lane=str(route_header.get("lane") or lane),
+                         turn=_history["turn"], at=_history["at"])
              except Exception:
                  pass
              try:
@@ -26,7 +33,7 @@
                      LEARNER.offer(body.get("messages") or [], origin="owner",
                                    conversation_id=body.get("conversation_id"))
              except Exception:
-@@ -1314,7 +1320,23 @@
+@@ -1314,7 +1326,23 @@
  # name (jarvis_events._hud_has), so an app offers the mode only on a PC that
  # has it.
  def _temporary_chat(body) -> bool:

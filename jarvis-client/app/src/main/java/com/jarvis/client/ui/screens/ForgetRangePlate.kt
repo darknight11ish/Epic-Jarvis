@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,10 +75,15 @@ internal fun ForgetRangeSection(
     var readError by remember { mutableStateOf<String?>(null) }
     var preview by remember { mutableStateOf<ForgetRange.Preview?>(null) }
     var ticked by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var choice by remember { mutableStateOf("last_week") }
-    var from by remember { mutableStateOf("") }
-    var to by remember { mutableStateOf("") }
-    var kinds by remember { mutableStateOf(setOf("facts", "chats")) }
+    // Saveable (the chat audit, 2026-09-28, phone B3): this plate sits in
+    // Brain's scrolling list, and plain `remember` lost the typed days when it
+    // scrolled away or the phone turned. The ticks are not kept that way: a
+    // list read afresh starts from the PC's own list.
+    var choice by rememberSaveable { mutableStateOf("last_week") }
+    var from by rememberSaveable { mutableStateOf("") }
+    var to by rememberSaveable { mutableStateOf("") }
+    // A set of strings is Serializable, so a Bundle can hold it.
+    var kinds by rememberSaveable { mutableStateOf(setOf("facts", "chats")) }
     var askedSeen by remember { mutableStateOf("") }
     var askedSaid by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -95,11 +101,16 @@ internal fun ForgetRangeSection(
                 if (reply.code in 200..299) {
                     // What the owner unticked stays unticked when the list is
                     // read again (after a card, an Undo, "the list changed");
-                    // anything new is ticked.
-                    val unticked = preview?.let { ForgetRange.allTicked(it) - ticked }.orEmpty()
+                    // anything new is ticked - except a customer-support
+                    // record, which stays as the owner left it: one they
+                    // ticked stays ticked (the chat audit, 2026-09-28).
+                    val had = preview?.let { ForgetRange.allTicked(it) }
+                    val unticked = had?.let { it - ticked }.orEmpty()
+                    val tickedExtra = had?.let { ticked - it }.orEmpty()
                     val p = ForgetRange.parsePreview(reply.body)
                     preview = p
-                    ticked = ForgetRange.allTicked(p) - unticked
+                    val listed = p.chats.map { "chat:${it.id}" }.toSet()
+                    ticked = ForgetRange.allTicked(p) - unticked + tickedExtra.filter { it in listed }
                     said = null
                 } else {
                     preview = null
@@ -315,7 +326,14 @@ private fun ListPart(
             style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         for (c in p.chats) {
             val key = "chat:${c.id}"
-            CheckRow(c.title, c.label, key in ticked, warn = ForgetRange.w("spills").takeIf { c.spills }) { on ->
+            // What kind of chat, when it is not an ordinary one; a support
+            // record starts unticked and says so (the owner, 2026-09-28).
+            val under = listOfNotNull(ForgetRange.chatKindTag(c.kind), c.label.ifEmpty { null }).joinToString(" · ")
+            val warn = listOfNotNull(
+                ForgetRange.w("support").takeIf { c.kind == "support" },
+                ForgetRange.w("spills").takeIf { c.spills },
+            ).joinToString(" ").ifEmpty { null }
+            CheckRow(c.title, under, key in ticked, warn = warn) { on ->
                 onTick(key, on)
             }
         }

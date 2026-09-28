@@ -103,6 +103,8 @@ const ID_POWER_STANDBY: &str = "power-standby";
 const ID_BACKEND: &str = "backend";
 const ID_SHOW_HUD: &str = "show-hud";
 const ID_SHOW_BRAIN: &str = "show-brain";
+/// "Chat history…" (the chat audit, 2026-09-28): the Brain, on History.
+const ID_CHAT_HISTORY: &str = "chat-history";
 const ID_SHOW_FACES: &str = "show-faces";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
@@ -265,6 +267,8 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let show_hud = MenuItem::with_id(app, ID_SHOW_HUD, "Show the HUD window", true, None::<&str>)?;
     let show_brain = MenuItem::with_id(app, ID_SHOW_BRAIN, "Open the Brain", true, None::<&str>)?;
+    let chat_history =
+        MenuItem::with_id(app, ID_CHAT_HISTORY, "Chat history…", true, None::<&str>)?;
     let show_faces = MenuItem::with_id(app, ID_SHOW_FACES, "Faces…", true, None::<&str>)?;
     let toggle_spotlight = MenuItem::with_id(
         app,
@@ -349,6 +353,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &toggle_floating,
             &show_hud,
             &show_brain,
+            &chat_history,
             &show_faces,
             &PredefinedMenuItem::separator(app)?,
             // The machinery. `backend` and `reconnect` were three groups apart
@@ -1260,6 +1265,13 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             if let Err(err) = windows::show_brain(app) {
                 eprintln!("[jarvis] tray: the Brain would not open: {err}");
                 commands::notify(app, "Jarvis", &format!("Brain unavailable: {err}"));
+            }
+        }
+
+        ID_CHAT_HISTORY => {
+            if let Err(err) = windows::show_brain_at(app, "history") {
+                eprintln!("[jarvis] tray: chat history would not open: {err}");
+                commands::notify(app, "Jarvis", &format!("Chat history unavailable: {err}"));
             }
         }
 

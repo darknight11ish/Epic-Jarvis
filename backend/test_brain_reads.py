@@ -438,6 +438,42 @@ def t_conversation_facts():
     check("jarvis_brain_reads answers it", code == 200 and out["count"] == 2, (code, out))
 
 
+def t_fact_chat():
+    """"Which chat did this fact come from?" (the chat audit, 2026-09-28):
+    "Erase the words" names the chat before offering to delete it too, and
+    says so when none is on record. A read."""
+    st = store("fact-chat")
+    w = World("fact-chat-log")
+    try:
+        w.say("My passport is in the top drawer", cid="conv-passport-1", answer="Noted.")
+        a = st.add("Owner's passport is in the top drawer", source="auto",
+                   meta={"auto": True, "conversation_id": "conv-passport-1"})
+        b = st.add("Owner likes green tea", source="extracted", meta={"proposal_id": 3})
+        c = st.add("Owner's bike is red", source="auto",
+                   meta={"auto": True, "conversation_id": "conv-deleted-2"})
+        code, out = B.handle_get(B.FACT_CHAT_PATH, f"id={a}")
+        conv = out.get("conversation") or {}
+        check("a fact learned in a kept chat names it: its title, kind and when",
+              code == 200 and conv.get("id") == "conv-passport-1"
+              and conv.get("title") == "My passport is in the top drawer"
+              and conv.get("kind") == "chat" and conv.get("updated", 0) > 0, (code, out))
+        code, out = B.handle_get(B.FACT_CHAT_PATH, f"id={b}")
+        check("a fact with no chat on record: conversation null",
+              code == 200 and out["conversation"] is None, out)
+        code, out = B.handle_get(B.FACT_CHAT_PATH, f"id={c}")
+        check("a chat no longer kept: conversation null too",
+              code == 200 and out["conversation"] is None, out)
+        code, out = B.handle_get(B.FACT_CHAT_PATH, "id=999999")
+        check("no such fact: 404", code == 404, (code, out))
+        for bad in ("", "id=", "id=x", "id=-1", "id=1.5", "id=1&id=2x"):
+            code, out = B.handle_get(B.FACT_CHAT_PATH, bad)
+            check(f"{bad!r}: 400 or the first id only", code in (400, 200), (code, out))
+        code, out = B.handle_get(B.FACT_CHAT_PATH, "id=x")
+        check("not a number: 400 in words", code == 400 and "fact id" in out["error"])
+    finally:
+        w.done()
+
+
 def _rows(st):
     from contextlib import closing
     with closing(st._connect()) as c:

@@ -59,6 +59,7 @@ const state = {
   error: "",
   said: "",
   reading: false,
+  readAt: 0,
 };
 
 /** Buttons and fields that send a change: greyed while the link cannot be confirmed. */
@@ -193,10 +194,17 @@ export async function showProjects() {
   try {
     await readListNow();
     if (state.open) await readProjectNow(state.open);
+    if (!state.error) state.readAt = Date.now();
   } finally {
     state.reading = false;
   }
   paint();
+}
+
+/** When the list was last read without an error - the Brain's status line
+ *  (it said "reading…" for ever before; the chat audit, 2026-09-28). */
+export function readAtMs() {
+  return state.readAt || 0;
 }
 
 /* ── Changing ─────────────────────────────────────────────────────────── */

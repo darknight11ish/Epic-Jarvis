@@ -365,6 +365,13 @@
         <section class="primer" id="primer" aria-label="What you can do here">
           <h2 class="sr-only">What you can do here</h2>
           <div id="sayable-list"></div>
+          <!-- "Earlier chats" (the chat audit, 2026-09-28): the Brain's
+               History, where "Continue this chat" carries one on here; and,
+               after Esc ended a chat, where it went (main.js closeCard). -->
+          <p class="primer-chats">
+            <button class="text-button" type="button" id="earlier-chats-primer">Earlier chats</button>
+            <span class="chat-ended-note" id="chat-ended-note" hidden></span>
+          </p>
           <ul class="primer-list">
             <!-- Only the note apps the PC says are set up are shown (main.js
                  syncNotePrimer). Until it answers, none are - and the last
@@ -630,6 +637,7 @@
                    only once there is one, and not while an answer is
                    arriving. Esc clears it too, with the card. -->
               <button class="text-button" type="button" id="new-conversation" hidden>New conversation</button>
+              <button class="text-button" type="button" id="earlier-chats">Earlier chats</button>
               <button class="text-button" type="button" id="stop" title="Stop generating" hidden>Stop</button>
             </div>
           </header>
@@ -641,9 +649,16 @@
               completed answer to fold away, and it clears when the window is
               dismissed rather than surviving into the next time it opens.
             -->
+            <!-- The one quiet line about the chat itself: a new conversation
+                 after 30 quiet minutes, a chat carried on from History, a
+                 chat deleted elsewhere (main.js showChatNote). -->
+            <p class="chat-note" id="chat-note" hidden></p>
+            <!-- Since the chat audit (2026-09-28): the whole conversation so
+                 far, not only the last answer - "Earlier in this chat · 3
+                 questions", folded, scrolling inside itself. -->
             <details class="previous-answer" id="previous-answer" hidden>
               <summary id="previous-answer-summary"></summary>
-              <article class="markdown" id="previous-answer-body"></article>
+              <article class="markdown thread" id="previous-answer-body"></article>
             </details>
             <!--
               No `aria-live` here, deliberately. `paint()` reassigns this
@@ -718,7 +733,10 @@
                  `#primer`, which is visible BEFORE the first answer rather
                  than only after it. `Esc` stays: it is the one key whose
                  meaning changes with the card open (stop, then dismiss). -->
-            <span class="keys"><kbd>Esc</kbd> dismiss</span>
+            <!-- Esc ends the chat (it is kept in History when history is on);
+                 said so since the chat audit, 2026-09-28 - it used to say
+                 "dismiss" and the chat went without a word. -->
+            <span class="keys" title="Esc: end chat"><kbd>Esc</kbd> end chat</span>
           </footer>
         </section>
       </div>

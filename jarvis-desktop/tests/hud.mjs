@@ -129,6 +129,9 @@ async function openHud(browser, status, pageOptions = {}) {
           case "summon_push_to_talk":
             if (mode === "fail") throw new Error("not allowed on window");
             return null;
+          case "hud_open_bar":
+            if (mode === "fail") throw new Error("not allowed on window");
+            return null;
           case "hud_get": {
             const r = await origFetch(backend + args.path, { headers: shellHeaders });
             return { status: r.status, contentType: r.headers.get("Content-Type") || "",
@@ -244,9 +247,20 @@ async function openHud(browser, status, pageOptions = {}) {
   return { page, problems, chats, marks, memoryReads, memoryWrites, direct };
 }
 
+/**
+ * The page's own chat, driven by script. Since the chat audit (2026-09-28)
+ * the shell hides the HUD's box and Send (hud_bootstrap.js oneChatBox: the
+ * PC has one chat box, the Jarvis bar), so there is nothing to click - but
+ * the vendored page's chat code is still there, and still goes through the
+ * shell (audit M2), which is what these checks are about.
+ */
 async function send(page, text) {
-  await page.fill("#input", text);
-  await page.click("#send");
+  await page.evaluate((t) => {
+    const box = document.getElementById("input");
+    box.value = t;
+    box.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    window.send();
+  }, text);
   await page.waitForTimeout(800);
   return page.evaluate(() => [...document.querySelectorAll("#log > *")].map((el) => ({
     who: el.querySelector(".who")?.textContent,
@@ -266,6 +280,37 @@ await check("the HUD's main script runs under Tauri's header CSP", async () => {
   assert.equal(ran.charset, "UTF-8");
   assert.equal(ran.setView, "function", "the main <script> never ran");
   assert.deepEqual(problems, []);
+});
+
+// One chat box on the PC (the owner's decision of 2026-09-28, "Chats, after
+// the chat audit"): with the shell, the HUD's box and Send are hidden and a
+// button opens the Jarvis bar ready to type - it sends nothing itself.
+await check("with the shell, the HUD's chat box opens the Jarvis bar instead", async () => {
+  const { page, problems, chats } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const before = await page.evaluate(() => ({
+    input: document.getElementById("input").hidden,
+    send: document.getElementById("send").hidden,
+    button: document.getElementById("hud-open-bar")?.textContent || "",
+  }));
+  await page.click("#hud-open-bar");
+  await page.waitForTimeout(200);
+  const invoked = await page.evaluate(() => window.__invokes.map((c) => c[0]));
+  await page.close();
+  assert.ok(before.input && before.send, `the HUD's own box is still shown: ${JSON.stringify(before)}`);
+  assert.equal(before.button, "Open the Jarvis bar");
+  assert.ok(invoked.includes("hud_open_bar"), JSON.stringify(invoked));
+  assert.equal(chats.length, 0, "opening the bar sent something");
+  assert.deepEqual(problems, []);
+});
+
+await check("in a plain browser (no shell) the HUD keeps its own box", async () => {
+  const { page } = await openHud(browser, { jarvis: false, ollama: true, proxy: false, noShell: true });
+  const shown = await page.evaluate(() => ({
+    input: document.getElementById("input").hidden,
+    button: Boolean(document.getElementById("hud-open-bar")),
+  }));
+  await page.close();
+  assert.deepEqual(shown, { input: false, button: false });
 });
 
 await check("with Ollama up and no OpenJarvis, Send reaches /api/chat and shows the reply", async () => {
@@ -292,8 +337,8 @@ await check("HUD turns carry a conversation id, device hud, and where the words 
     box.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true }));
     box.value = "pasted here";
     box.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
+    window.send();
   });
-  await page.click("#send");
   await page.waitForTimeout(800);
   await send(page, "typed again");
   await page.close();
@@ -772,12 +817,16 @@ await check("the HUD holds the mic's command and its reads, chat and mark - and 
   const toml = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
   const set = toml.slice(toml.indexOf('identifier = "hud-voice"'));
   const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1);
-  assert.deepEqual(perms.match(/allow-[a-z-]+/g), ["allow-summon-push-to-talk"]);
+  // The mic's command, and (the chat audit, 2026-09-28) the chat box's: both
+  // only show the Jarvis bar.
+  assert.deepEqual(perms.match(/allow-[a-z-]+/g), ["allow-summon-push-to-talk", "allow-hud-open-bar"]);
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "voice.rs"), "utf8");
-  const body = rust.slice(rust.indexOf("pub fn summon_push_to_talk"));
-  const fn = body.slice(0, body.indexOf("\n}\n") + 3);
-  assert.doesNotMatch(fn, /start_voice_capture|open_input_stream|cpal|start_automatic_listening/,
-    "summon_push_to_talk must not open the microphone");
+  for (const name of ["summon_push_to_talk", "hud_open_bar"]) {
+    const body = rust.slice(rust.indexOf(`pub fn ${name}`));
+    const fn = body.slice(0, body.indexOf("\n}\n") + 3);
+    assert.doesNotMatch(fn, /start_voice_capture|open_input_stream|cpal|start_automatic_listening|stream_chat|post\(/,
+      `${name} must not open the microphone or send anything`);
+  }
 });
 
 await check("a HUD reply is read aloud only with a voice on this computer", async () => {

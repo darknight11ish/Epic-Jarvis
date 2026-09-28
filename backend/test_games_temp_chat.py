@@ -274,6 +274,58 @@ def t_a_detected_game_is_never_kept_or_learned_from():
           len(recorded2) == 1 and offered2 == [ordinary], (offered2, recorded2))
 
 
+def t_a_detected_game_is_not_in_the_real_chat_history():
+    """The chat audit (2026-09-28) reproduced this against the REAL
+    jarvis_chat_log.py: the stub above only counted record_turn calls, and
+    record_turn decides "temporary" from the body's own flag - so a game the
+    app did not mark WAS written to chat history. Now the finally block hands
+    it over with the flag, and the real ChatLog keeps nothing."""
+    src = _hud()
+    if src is None:
+        return
+    require_shipped("jarvis_chat_log.py")
+    import jarvis_chat_log as CL
+    if CL.AESGCM is None:
+        return check("SKIP - the cryptography package is not installed", True)
+    fn = _temporary_chat_fn(src)
+    snippet = _finally_snippet(src)
+    d = Path(tempfile.mkdtemp(prefix="jarvis-games-real-log-"))
+    log = CL.ChatLog(d / "h.db", d / "h.json", lambda: b"k" * 32)
+    CL.use(log)
+    try:
+        def run(body):
+            env = {"_activity": lambda *a: None, "MEMORY": True, "jarvis_side_memory": False,
+                   "LEARNER": types.SimpleNamespace(offer=lambda m, origin="unknown", **kw: None),
+                   "_temporary_chat": fn, "body": body, "route_header": {"lane": "q"},
+                   "lane": "q",
+                   "_history": {"turn": {"answer": "The dragon roars.", "finish_reason": "stop"},
+                                "at": 1.0}}
+            exec(snippet, env)
+        game = {"messages": mk("let's roleplay, you're a knight"),
+                "conversation_id": "conv-game-real-1", "device": "phone"}
+        run(game)
+        game2 = {"messages": mk("let's roleplay, you're a knight",
+                                "I attack the dragon with my sword"),
+                 "conversation_id": "conv-game-real-1", "device": "phone"}
+        run(game2)
+        listed = log.list()["conversations"]
+        check("a detected game's turns are NOT in the real chat history",
+              listed == [], listed)
+        check("the body as it arrived is left alone (no flag written into it)",
+              "temporary" not in game2)
+        seen = log.live_turn("conv-game-real-1", "I attack the dragon with my sword")
+        check("the game's turn is in the live-turn registry as \"temporary\" - never learned",
+              seen is not None and seen.get("provenance") == "temporary", seen)
+        run({"messages": mk("what is the weather"), "conversation_id": "conv-plain-real-2",
+             "device": "phone"})
+        listed = log.list()["conversations"]
+        check("an ordinary chat is still kept",
+              [c["id"] for c in listed] == ["conv-plain-real-2"], listed)
+    finally:
+        CL.use(None)
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def t_listed_and_applies():
     import _where
     order = _stack.order()

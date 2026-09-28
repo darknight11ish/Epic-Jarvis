@@ -78,7 +78,7 @@ WORDS = {
     "coding_on_pc": "A coding project's folder is chosen on your PC. Make coding projects there.",
     "set_on_pc": "Set on your PC",
     "instructions": "How Jarvis should work on this",
-    "instructions_under": "In your own words. Jarvis reads this in this project's chats.",
+    "instructions_under": "In your own words. Saved for later: Jarvis does not read this in chats yet.",
     "notes": "Project notes",
     "notes_under": "Short lines to keep in mind for this project, one per line.",
     "save": "Save",

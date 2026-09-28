@@ -36,6 +36,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -334,6 +336,20 @@ data class HomeState(
      */
     val conversationTurns: Int = 0,
     /**
+     * The finished questions and answers of this conversation above the one
+     * on screen, oldest first (the owner's decision, 2026-09-28: the whole
+     * conversation as a scrollable thread) - see
+     * [com.jarvis.client.net.ChatSession.thread]. Memory only.
+     */
+    val thread: List<com.jarvis.client.net.ChatHistory.Exchange> = emptyList(),
+    /**
+     * One quiet line about the chat itself, or null - a new conversation
+     * after 30 quiet minutes, a chat carried on, the chat deleted elsewhere,
+     * a temporary chat started or ended, "New conversation" - read out by
+     * TalkBack ([com.jarvis.client.net.ChatSession.chatNote]).
+     */
+    val chatNote: String? = null,
+    /**
      * What the answer on its way is waiting on, in words - "Waiting for your
      * approval…" while a card is up on the desktop - or null. Shown in place
      * of "…". See [com.jarvis.client.net.ChatSession.waiting].
@@ -530,6 +546,10 @@ data class HomeActions(
      * screen. Touches nothing the desktop has learned.
      */
     val onNewConversation: () -> Unit = {},
+    /** "Earlier chats": History, where "Continue this chat" carries one on here. */
+    val onEarlierChats: () -> Unit = {},
+    /** The line about the chat itself, dismissed. */
+    val onDismissChatNote: () -> Unit = {},
     /**
      * File the owner's own words in Logseq ("logseq"), Joplin ("joplin") or
      * Obsidian ("obsidian") through the desktop -
@@ -1151,6 +1171,7 @@ private fun ConversationList(
                 onMark = actions.onMarkAnswer,
                 conversationTurns = state.conversationTurns,
                 onNewConversation = actions.onNewConversation,
+                thread = state.thread,
                 waiting = state.chatWaiting,
                 note = state.answerNote,
                 crisis = state.crisisAnswer,
@@ -2208,6 +2229,7 @@ private fun Reply(
     onMark: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
     conversationTurns: Int = 0,
     onNewConversation: () -> Unit = {},
+    thread: List<com.jarvis.client.net.ChatHistory.Exchange> = emptyList(),
     waiting: String? = null,
     note: String? = null,
     used: UsedAnswer? = null,
@@ -2226,11 +2248,20 @@ private fun Reply(
     val context = LocalContext.current
     val text = reply()
     AnimatedVisibility(
-        visible = text.isNotBlank() || streaming || question != null,
+        visible = text.isNotBlank() || streaming || question != null || thread.isNotEmpty(),
         enter = fadeIn(motion.enter()),
         exit = fadeOut(motion.micro()),
     ) {
         Plate {
+            // The conversation so far, above the question on screen (the
+            // owner's decision, 2026-09-28): folded, and scrolling inside
+            // itself so a long chat never pushes the answer off Home. Open
+            // at once for a chat carried on from History, where nothing new
+            // has been asked yet. Shown only - never read aloud, never kept.
+            if (thread.isNotEmpty()) {
+                ThreadFold(thread, startOpen = question == null)
+                if (question != null || streaming || text.isNotBlank()) Gap(12)
+            }
             if (question != null) {
                 Kicker("You")
                 Gap(4)
@@ -2411,6 +2442,45 @@ private fun Reply(
     }
 }
 
+/**
+ * "Earlier in this chat · 3 questions": every finished question and answer
+ * of this conversation above the one on screen, oldest first (the chat
+ * audit, 2026-09-28 - Home used to show only the last exchange). The
+ * desktop's Jarvis bar folds the same thread under the same words
+ * ([com.jarvis.client.net.ChatHistory.threadSummary]).
+ */
+@Composable
+private fun ThreadFold(thread: List<com.jarvis.client.net.ChatHistory.Exchange>, startOpen: Boolean) {
+    val chrome = LocalChrome.current
+    var open by remember { mutableStateOf(startOpen) }
+    Quiet(
+        com.jarvis.client.net.ChatHistory.threadSummary(thread.size),
+        color = chrome.textMid,
+        onClick = { open = !open },
+    )
+    if (!open) return
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = 360.dp)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        thread.forEachIndexed { index, pair ->
+            if (index > 0) Gap(12)
+            Kicker("You")
+            Gap(2)
+            Text(pair.question, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            Gap(6)
+            Kicker("Jarvis")
+            Gap(2)
+            pair.answer.split(PARAGRAPH_BREAK).forEachIndexed { i, paragraph ->
+                if (i > 0) Gap(6)
+                FormattedAnswer(paragraph, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+            }
+        }
+    }
+}
+
 /** What "Used 2 memories" under the answer needs - see [UsedFactsList]. */
 @Immutable
 internal data class UsedAnswer(
@@ -2569,12 +2639,28 @@ private fun Composer(
             .background(chrome.surface1)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-    // A temporary chat: the marker for the whole chat, and the way in and out.
+    // The one quiet line about the chat itself (the chat audit, 2026-09-28):
+    // read out by TalkBack as it appears, dismissed by a tap.
+    state.chatNote?.let { line ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                line,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+                modifier = Modifier.weight(1f).liveStatus(),
+            )
+            Quiet("Dismiss", color = chrome.textLo, onClick = actions.onDismissChatNote)
+        }
+    }
+    // A temporary chat: the marker for the whole chat, and the way in and
+    // out - and "Earlier chats", the way to History (the owner's decision,
+    // 2026-09-28).
     TemporaryChatStrip(
         on = state.temporary,
         empty = state.lastUserText == null && state.conversationTurns == 0,
         enabled = !state.streaming,
         onToggle = actions.onToggleTemporary,
+        onEarlierChats = actions.onEarlierChats,
     )
     VoiceStrips(state, actions)
     // A picture waiting to go with the next question. Dismiss drops it.

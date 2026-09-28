@@ -26,6 +26,122 @@
  * @module history-view
  */
 import { isSideTalk, SEEN } from "./live-rules.js";
+import { renderAnswer } from "./deep.js";
+
+/* ==========================================================================
+   The chat audit (2026-09-28; docs/studio-2026-09-28/chat-audit-*.md) and
+   the owner's decisions "History marks Live sessions" and "Chats, after the
+   chat audit" (CLAUDE.md). The words below are the phone's too, word for
+   word: tools/gen_history_cases.py writes them, with worked examples, into
+   tests/fixtures/history-cases.json, and tests/history.mjs holds this file
+   to it.
+   ========================================================================== */
+
+/** What kind of conversation a row is (the PC's `kind`). "chat" has no tag;
+ *  a Live session's length is its own line (liveLine). */
+export const KIND_TAG = Object.freeze({
+  chat: "", live: "Live", support: "Support chat",
+  chatbot: "Chat with an AI", compare: "Comparison",
+});
+export const KIND_TITLE = Object.freeze({
+  chat: "",
+  live: "A Jarvis Live session: its words and times, never the sound.",
+  support: "The record of a customer-support chat Jarvis had for you. Read-only.",
+  chatbot: "A conversation Jarvis had with another AI for you. Its replies are outside text: " +
+    "never learned from, never read aloud. Read-only.",
+  compare: "Several AIs asked the same question, and the summary. Their replies are outside " +
+    "text: never learned from, never read aloud. Read-only.",
+});
+export const KINDS = Object.freeze(["chat", "live", "support", "chatbot", "compare"]);
+/** The kinds "Continue this chat" may carry on (jarvis_chat_log.CONTINUABLE). */
+export const CONTINUABLE = Object.freeze(["chat", "live"]);
+
+/** The filter over the list: "" is every kind. */
+export const FILTER_LABEL = "Show";
+export const FILTERS = Object.freeze([
+  ["", "All chats"], ["live", "Live only"], ["support", "Support chats"],
+  ["chatbot", "Chats with other AIs"], ["compare", "Comparisons"],
+]);
+export const FILTER_NONE = "No conversations of that kind are kept.";
+
+/** Who wrote each line of a kept chatbot conversation or comparison. */
+export const CHATBOT_WHO = Object.freeze({
+  chatbot_jarvis: "Sent by Jarvis",
+  chatbot_reply: "The other AI (outside text)",
+  chatbot_note: "Note",
+  chatbot_summary: "Summary (outside text)",
+});
+
+export const CONTINUE = "Continue this chat";
+export const CONTINUE_TITLE = "Carry on this conversation in the Jarvis bar.";
+/** Why a kind cannot be continued - jarvis_chat_log.CONTINUE_WHY. The PC
+ *  sends its own sentence (`continue_why`); this is for an older PC. */
+export const CONTINUE_WHY = Object.freeze({
+  support: "A customer-support record can't be continued: it is the company's words and what " +
+    "was sent in your name, kept as your record.",
+  chatbot: "A chat with another AI can't be continued here: its replies are outside text, not a " +
+    "conversation with Jarvis.",
+  compare: "A comparison can't be continued here: its replies are outside text, not a " +
+    "conversation with Jarvis.",
+});
+export const COPY = "Copy";
+export const COPY_TITLE = "Copy this answer.";
+export const COPIED = "Copied.";
+export const FORGET_RANGE_LINK = "Forget a time frame…";
+export const FORGET_RANGE_LINK_TITLE = "Forget what Jarvis learned, and delete chats, from some days.";
+export const DELETE_SUPPORT =
+  "This is the record of a customer-support chat - what the company said and what was sent in " +
+  "your name. Delete it anyway?";
+export const KEEP_SUPPORT_NOTE =
+  "Customer-support chat records are not deleted by this - delete one yourself in History if " +
+  "you want it gone.";
+export const NO_TITLE = "(no title)";
+
+/** "1 message", "12 messages" - the same word in both apps (never "turns"). */
+export function messagesWords(n) {
+  const count = Number.isInteger(n) && n > 0 ? n : 0;
+  return count === 1 ? "1 message" : `${count} messages`;
+}
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function parts(ms, utc) {
+  const d = new Date(ms);
+  return utc
+    ? { y: d.getUTCFullYear(), m: d.getUTCMonth(), day: d.getUTCDate(), wd: d.getUTCDay(),
+      h: d.getUTCHours(), min: d.getUTCMinutes() }
+    : { y: d.getFullYear(), m: d.getMonth(), day: d.getDate(), wd: d.getDay(),
+      h: d.getHours(), min: d.getMinutes() };
+}
+
+/**
+ * When, the phone's way ("Today 14:05", "Yesterday 09:12", "Sat 12 Sep
+ * 18:30", and for another year "Fri 3 Jan 2025"), in this PC's time zone -
+ * `utc` for the worked examples only. Both apps, word for word.
+ */
+export function whenLine(epochSeconds, nowMs = Date.now(), { utc = false } = {}) {
+  const t = num(epochSeconds);
+  if (t === null || t <= 0) return "";
+  const at = parts(t * 1000, utc);
+  const now = parts(nowMs, utc);
+  const yest = parts(nowMs - 86400000, utc);
+  const clock = `${String(at.h).padStart(2, "0")}:${String(at.min).padStart(2, "0")}`;
+  const same = (a, b) => a.y === b.y && a.m === b.m && a.day === b.day;
+  if (same(at, now)) return `Today ${clock}`;
+  if (same(at, yest)) return `Yesterday ${clock}`;
+  const day = `${DAY_NAMES[at.wd]} ${at.day} ${MONTH_NAMES[at.m]}`;
+  return at.y === now.y ? `${day} ${clock}` : `${day} ${at.y}`;
+}
+
+/** A Live session's line: "Live · 12 min · Today 14:05". */
+export function liveLine(started, updated, nowMs = Date.now(), opts = {}) {
+  const a = num(started);
+  const b = num(updated);
+  const secs = a !== null && b !== null ? Math.max(0, b - a) : 0;
+  const length = secs < 60 ? "under 1 min" : `${Math.round(secs / 60)} min`;
+  return `Live · ${length} · ${whenLine(a ?? b, nowMs, opts)}`;
+}
 
 /** Section 5's words. The phone says the same (JARVIS-API.md section 18). */
 export const SWITCH_LABEL = "Keep chat history on this PC";
@@ -104,9 +220,12 @@ export const NOT_KEPT_LINE =
 
 /** Said with Delete, in both apps (ease-of-use audit 2026-09-27, #7), when
  *  there is nothing to offer: the chat taught no fact still in use, or this
- *  PC cannot list them. The phone's ChatLog.DELETE_KEEPS_FACTS. */
+ *  PC cannot list them. The phone's ChatLog.DELETE_KEEPS_FACTS. Since the
+ *  chat audit (2026-09-28) it points to "Forget a time frame", not to
+ *  forgetting "one by one". */
 export const DELETE_KEEPS_FACTS =
-  "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain.";
+  "Deleting a chat does not forget facts Jarvis learned from it. To forget what Jarvis learned " +
+  "over some days, use Forget a time frame.";
 
 /* ── Deleting a chat offers to forget the facts it taught (2026-09-28) ──
  * JARVIS-API.md section 79; the phone's ChatLog, word for word. The list
@@ -262,20 +381,39 @@ export function readHistory(answer) {
         device: text(c.device),
         hasVoice: c.has_voice === true,
         tainted: c.tainted === true,
+        kind: readKind(c.kind),
+        project: text(c.project) || null,
       })),
   };
+}
+
+/** A row's kind; anything the PC did not send (an older PC) is a chat. */
+export function readKind(kind) {
+  return KINDS.includes(kind) ? kind : "chat";
 }
 
 /** `GET /api/history/conversation`'s answer, read. */
 export function readConversation(answer) {
   const a = answer && typeof answer === "object" ? answer : {};
   const turns = Array.isArray(a.turns) ? a.turns : [];
+  const kind = readKind(a.kind);
+  // An older PC sends no `continuable`: what it kept is a chat, unless a
+  // row says it is a support or chatbot record.
+  const others = turns.some((t) => t && (t.role === "support" || t.role === "chatbot"));
+  const continuable = typeof a.continuable === "boolean"
+    ? a.continuable : CONTINUABLE.includes(kind) && !others;
   return {
     id: text(a.id),
     title: text(a.title).trim(),
     tainted: a.tainted === true,
+    kind,
+    started: num(a.started),
+    updated: num(a.updated),
+    continuable,
+    continueWhy: continuable ? "" : text(a.continue_why).trim() || CONTINUE_WHY[kind] || CONTINUE_WHY.support,
     turns: turns
-      .filter((t) => t && (t.role === "user" || t.role === "assistant" || t.role === "support"))
+      .filter((t) => t && (t.role === "user" || t.role === "assistant" || t.role === "support"
+        || t.role === "chatbot"))
       .map((t) => ({
         role: t.role,
         // Jarvis Live's side-talk marker, in a chat kept before side remarks
@@ -285,7 +423,8 @@ export function readConversation(answer) {
         at: num(t.at),
         // Only user turns carry one. Missing on a user turn is "unknown".
         provenance: t.role === "user" ? text(t.provenance) || "unknown"
-          : t.role === "support" ? text(t.provenance) || "support_note" : "",
+          : t.role === "support" ? text(t.provenance) || "support_note"
+            : t.role === "chatbot" ? text(t.provenance) || "chatbot_note" : "",
         readOutside: t.read_outside === true,
         // Only the PC's "false" says so; an older PC sends nothing.
         answerKept: t.answer_kept !== false,
@@ -309,7 +448,9 @@ export function olderThan(rows) {
 }
 
 /** When, in plain words: "just now", "5 min ago", "3 h ago", or the date
- *  with its weekday ("Tue 22 Sept 2026"), so "Tuesday's chat" can be found. */
+ *  with its weekday ("Tue 22 Sept 2026"). The Brain's memory lists still use
+ *  it; History itself uses the phone's whenLine since the chat audit
+ *  (2026-09-28), so a chat's date and time read the same in both apps. */
 export function whenWords(epochSeconds, nowMs = Date.now()) {
   const t = num(epochSeconds);
   if (t === null || t <= 0) return "";
@@ -323,11 +464,12 @@ export function whenWords(epochSeconds, nowMs = Date.now()) {
   return `${day} ${date}`;
 }
 
-/** One row's meta line: when it was last added to, and how many turns. */
-export function rowMeta(c, nowMs = Date.now()) {
-  const parts = [whenWords(c.updated ?? c.started, nowMs)];
-  parts.push(`${c.turns} ${c.turns === 1 ? "turn" : "turns"}`);
-  return parts.filter(Boolean).join(" · ");
+/** One row's meta line: when it was last added to, and how many messages -
+ *  a Live session's length and start first ("Live · 12 min · Today 14:05"). */
+export function rowMeta(c, nowMs = Date.now(), opts = {}) {
+  const lead = c.kind === "live" ? liveLine(c.started, c.updated, nowMs, opts)
+    : whenLine(c.updated ?? c.started, nowMs, opts);
+  return [lead, messagesWords(c.turns)].filter(Boolean).join(" · ");
 }
 
 /**
@@ -546,10 +688,18 @@ function markedText(el, s, matches, current) {
 
 /**
  * Draws one conversation, read-only, into `box`. `helpers.el` is brain.js's
- * text-only element builder. `find`, when given, is `{matches, current}`
- * from findMatches(): those places are marked, the current one apart.
+ * text-only element builder; `helpers.onCopy(text, button)`, when given,
+ * puts a Copy on each of Jarvis's answers. `find`, when given, is
+ * `{matches, current}` from findMatches(): those places are marked, the
+ * current one apart.
+ *
+ * Jarvis's answers (and a chatbot record's lines) are drawn from their
+ * markdown with the bar's own renderer (markdown.js: everything escaped
+ * first, links made plain words - deep.js renderAnswer), so History shows
+ * what the bar showed, not "**" and "#". While "Find in this chat" has
+ * words in it, the words are shown plain, with the matches marked.
  */
-export function renderTranscript(box, conv, { el }, find = null) {
+export function renderTranscript(box, conv, { el, onCopy = null }, find = null) {
   box.replaceChildren();
   if (conv.tainted) box.append(el("p", "history-taint-note", TAINT_TITLE));
   if (!conv.turns.length) {
@@ -564,22 +714,42 @@ export function renderTranscript(box, conv, { el }, find = null) {
     item.dataset.role = t.role;
     const head = el("div", "history-turn-head");
     const support = t.role === "support";
+    const chatbot = t.role === "chatbot";
     head.append(el("span", "history-who", support
       ? SUPPORT_WHO[t.provenance] || SUPPORT_WHO.support_note
-      : t.role === "user" ? "You" : "Jarvis"));
-    const when = whenWords(t.at);
+      : chatbot ? CHATBOT_WHO[t.provenance] || CHATBOT_WHO.chatbot_note
+        : t.role === "user" ? "You" : "Jarvis"));
+    const when = whenLine(t.at);
     if (when) head.append(el("span", "history-when", when));
     const from = t.role === "user" ? provenanceWords(t.provenance) : "";
     if (from) head.append(el("span", "history-from", from));
     // A support chat's record is outside text as a whole (its taint note
-    // says so above); only the company's own lines carry the mark.
-    if (t.readOutside && (!support || t.provenance === "support_company")) {
+    // says so above); only the company's own lines carry the mark - and a
+    // chatbot record's replies and summary.
+    const marked = support ? t.provenance === "support_company"
+      : chatbot ? t.provenance === "chatbot_reply" || t.provenance === "chatbot_summary" : true;
+    if (t.readOutside && marked) {
       const mark = el("span", "history-mark history-mark-taint", "read outside text");
       mark.title = TAINT_TITLE;
       head.append(mark);
     }
+    const answer = t.role === "assistant";
+    if (answer && typeof onCopy === "function" && text(t.text).trim()) {
+      const copy = el("button", "btn ghost small history-copy", COPY);
+      copy.type = "button";
+      copy.title = COPY_TITLE;
+      copy.addEventListener("click", () => onCopy(text(t.text), copy));
+      head.append(copy);
+    }
     item.append(head);
-    item.append(markedText(el, text(t.text), matches.filter((m) => m.turn === index), current));
+    const mine = matches.filter((m) => m.turn === index);
+    if ((answer || chatbot) && !mine.length && !(find && find.needle)) {
+      const body = el("div", "history-text history-md");
+      renderAnswer(body, text(t.text));
+      item.append(body);
+    } else {
+      item.append(markedText(el, text(t.text), mine, current));
+    }
     if (t.role === "user" && t.answerKept === false) {
       item.append(el("p", "history-not-kept", NOT_KEPT_LINE));
     }

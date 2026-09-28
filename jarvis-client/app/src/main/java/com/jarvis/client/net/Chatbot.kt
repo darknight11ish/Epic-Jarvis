@@ -77,7 +77,9 @@ object Chatbot {
         "The chatbot's words are outside text: shown here, never learned from, " +
             "never read aloud."
     const val SUMMARY_TITLE = "What Jarvis found"
-    const val SUMMARY_NOTE = "Written on this PC from the chatbot's words, so it is outside text too."
+    const val SUMMARY_NOTE =
+        "Written on this PC from the chatbot's words, so it is outside text too. Once it ends, th" +
+            "e conversation and this summary are kept in History, marked as outside text."
     const val CLAIM_SOURCED = "it gave a source (not checked by Jarvis)"
     const val CLAIM_UNSOURCED = "no source given"
     const val OPEN_TITLE = "Still open"
@@ -95,8 +97,8 @@ object Chatbot {
         "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on " +
             "the PC."
     const val GONE =
-        "That conversation is gone: Jarvis on the PC restarted, and conversations are " +
-            "kept in memory only."
+        "That conversation is no longer in memory: Jarvis on the PC restarted. A conversation " +
+            "that finished is kept in History."
     const val HIDDEN = "The goal and the conversation are hidden until you confirm it is you."
     const val VERSION = "Version"
     const val NOTIFY_RUNNING = "Talking to {name}, {used} of {max}"
@@ -114,7 +116,8 @@ object Chatbot {
     const val COMPARE_TITLE = "Comparing chatbots"
     const val COMPARE_SUMMARY_TITLE = "Where they agree and disagree"
     const val COMPARE_SUMMARY_NOTE =
-        "Written on this PC from the chatbots' words, so it is outside text too."
+        "Written on this PC from the chatbots' words, so it is outside text too. Once it ends, ev" +
+            "ery conversation and this summary are kept in History, marked as outside text."
     const val AGREE_TITLE = "They agree"
     const val DISAGREE_TITLE = "They disagree"
     const val SOURCES_TITLE = "Sources each gave (not checked by Jarvis)"
@@ -125,8 +128,8 @@ object Chatbot {
     const val COMPARE_NOT_ENOUGH =
         "Fewer than two chatbots can be reached from this PC, so there is nothing to compare yet."
     const val COMPARE_GONE =
-        "That comparison is gone: Jarvis on the PC restarted, and comparisons are kept in " +
-            "memory only."
+        "That comparison is no longer in memory: Jarvis on the PC restarted. A comparison " +
+            "that finished is kept in History."
     const val NOTIFY_COMPARE_RUNNING = "Comparing {count} chatbots: asking {name}, {at} of {count}"
     const val NOTIFY_COMPARE_WAITING = "Waiting for your yes to ask {count} chatbots"
     const val NOTIFY_COMPARE_PAUSED = "Paused: comparing {count} chatbots"

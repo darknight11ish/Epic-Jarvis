@@ -137,6 +137,9 @@ except Exception:  # pragma: no cover - shipped beside it on the PC
 #   Knobs (docs/LIVE-DESIGN.md section 2 and 3)
 # --------------------------------------------------------------------------
 
+#: A conversation id, as the chat route takes one (JARVIS-API section 18.1).
+_CID = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
 #: The devices a session can be on - jarvis_speech's `mic` names.
 DEVICES = ("phone", "desktop")
 #: How long, by default and at most ahead of now, in minutes (the same
@@ -652,6 +655,11 @@ class Live:
         # review, 2026-09-28).
         self.last_loop_tick = 0.0
         self.crisis_at = 0.0
+        # The chat this session's words are kept in (the app's own
+        # conversation id, sent with Start). "Move it here" on the other
+        # device takes it over, so the session stays ONE chat in History
+        # (the chat audit, 2026-09-28). An opaque id - never a word.
+        self.conversation_id = ""
         self.session = 0             # numbered, so an app can tell a new session
         self.turns = 0                # clips that became words - a number only
         self.refused_row = 0
@@ -692,11 +700,17 @@ class Live:
             return ""
 
     # -- start / stop / extend / resume / mute ----------------------------------------
-    def start(self, device, minutes=None, by: str = "button") -> dict:
+    def start(self, device, minutes=None, by: str = "button",
+              conversation_id=None) -> dict:
         """No card: the owner's own act. Ends a session on the other device.
         Refused without a real voice check (voice_ready). On standby it starts
         and says "Waking up" - the first question wakes the model, as any
-        question does; nothing here loads it then."""
+        question does; nothing here loads it then. `conversation_id`: the
+        app's chat for this session (8-64 letters, digits, - or _; anything
+        else is none), shown in status() while it is on, so "Move it here"
+        carries on the same chat."""
+        cid = conversation_id if isinstance(conversation_id, str) \
+            and _CID.fullmatch(conversation_id) else ""
         dev = _norm_device(device)
         if not dev:
             return {"ok": False, "error": "say which device: phone or desktop"}
@@ -731,6 +745,7 @@ class Live:
             self.crisis_at = 0.0
             self.muted, self.muted_why = False, ""
             self.started_by = by
+            self.conversation_id = cid
             self.refused_row, self.near_row, self.refused_since = 0, 0, 0.0
             self.turns = 0
             self.awake_seen = not standby
@@ -847,19 +862,28 @@ class Live:
             self._emit()
         return {"ok": True, "status": self.status()}
 
-    def note_active(self, device=None) -> dict:
+    def note_active(self, device=None, conversation_id=None) -> dict:
         """The owner typed, or tapped a quick answer, in Live on `device` (B4
         of the review, 2026-09-28): that is the conversation going on too,
         so the quiet clock starts again - as a spoken sentence does. Nothing
         else changes, and nothing typed comes here (the words go to the chat
         route as usual). Not held on a stale link: it can only keep open a
-        session the owner started, never start or widen anything."""
+        session the owner started, never start or widen anything.
+
+        `conversation_id` (the chat audit, 2026-09-28): a session started by
+        voice ("Hey Jarvis, let's talk") has no chat of its own yet; the app
+        it is on names its chat here, once, so "Move it here" can carry it
+        on. A session that already has one keeps it."""
         dev = _norm_device(device)
+        cid = conversation_id if isinstance(conversation_id, str) \
+            and _CID.fullmatch(conversation_id) else ""
         with self._lock:
             if not self._on() or (dev and dev != self.device):
                 return {"ok": False, "error": "Jarvis Live is not on."}
             if self.pause not in CARD_PAUSES and not self.muted:
                 self.active_at = max(self.active_at, self.clock())
+            if cid and not self.conversation_id:
+                self.conversation_id = cid
         return {"ok": True, "status": self.status()}
 
     # -- the check, once a second ----------------------------------------------------
@@ -1133,6 +1157,9 @@ class Live:
                 "muted_why": self.muted_why if on and self.muted else None,
                 "muted_words": (MUTE_WORDS.get(self.muted_why) if on and self.muted else None),
                 "started_by": self.started_by if on else None,
+                # The chat this session is kept in, while it is on - "Move it
+                # here" takes it over (JARVIS-API section 63.1).
+                "conversation_id": (self.conversation_id or None) if on else None,
                 # When it started, by the PC's clock - the same clock an
                 # approval card's `created` is on, so an app can tell a card
                 # raised in THIS session from one that was already waiting
@@ -1324,7 +1351,8 @@ def handle_post(body) -> tuple:
     if do == "start":
         by = str(body.get("by") or "button").strip().lower()
         out = ENGINE.start(body.get("device"), body.get("minutes"),
-                           by=by if by in APP_STARTS else "button")
+                           by=by if by in APP_STARTS else "button",
+                           conversation_id=body.get("conversation_id"))
         return (200 if out.get("ok") else 409 if out.get("needs") else 400), out
     if do == "stop":
         why = str(body.get("why") or "owner").strip().lower()
@@ -1342,7 +1370,7 @@ def handle_post(body) -> tuple:
                           why=why if why in MUTE_WHYS else "owner")
         return (200 if out.get("ok") else 409), out
     if do == "active":
-        out = ENGINE.note_active(body.get("device"))
+        out = ENGINE.note_active(body.get("device"), body.get("conversation_id"))
         return (200 if out.get("ok") else 409), out
     return 400, {"ok": False,
                  "error": "do must be start, stop, extend, resume, mute, unmute or active"}

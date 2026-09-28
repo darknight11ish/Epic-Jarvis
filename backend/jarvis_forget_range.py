@@ -140,6 +140,15 @@ WORDS = {
     "undo": "Undo",
     "undo_left": "{minutes} min left to undo",
     "spills": "Also has messages from outside these days - the whole chat is deleted.",
+    # The owner, 2026-09-28 ("Chats, after the chat audit"): "Forget a time
+    # frame" asks before removing a customer-support chat's record. The
+    # simplest honest way: it is listed like every chat, but NOT ticked to
+    # start with - it goes only if the owner ticks it, and the card names it.
+    "support": "A customer-support chat record - kept unless you tick it.",
+    "kind_live": "Live",
+    "kind_support": "Support chat",
+    "kind_chatbot": "Chat with an AI",
+    "kind_compare": "Comparison",
     "erase_note": ("Facts are forgotten, as Forget does: they stop being used and stay in the "
                    "history. To wipe a fact's words for good, use Erase the words on that "
                    "fact."),
@@ -420,10 +429,13 @@ def _chat_label(c: dict, year: int) -> str:
 
 
 def _chat_item(c: dict, year: int) -> dict:
+    kind = c.get("kind") or "chat"
     return {"id": c["id"], "title": c["title"] or "(no title)", "started": int(c["started"]),
             "updated": int(c["updated"]), "turns": int(c["turns"]),
             "in_frame": int(c["in_frame"]), "spills": bool(c["spills"]),
-            "label": _chat_label(c, year)}
+            "label": _chat_label(c, year), "kind": kind,
+            # A support record starts unticked in both apps (WORDS["support"]).
+            "ticked": kind != "support"}
 
 
 def _pinned(mem) -> set:
@@ -500,6 +512,9 @@ def card_text(frame: Frame, facts: list, chats: list) -> str:
                      " from this PC:")
         for i, c in enumerate(chats, 1):
             lines.append(f"{i}. \"{c['title']}\" - {c['label']}")
+            if c.get("kind") == "support":
+                lines.append("   This is a customer-support chat's record - you ticked it, "
+                             "so it is deleted too.")
             if c.get("spills"):
                 lines.append("   It also has messages from outside these days: the whole chat "
                              "is deleted.")

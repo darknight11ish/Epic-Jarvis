@@ -59,6 +59,12 @@ object TemporaryChat {
     /** A "Remember: ..." in a temporary chat (the route's `remember_off`). */
     const val REMEMBER_OFF = "Remember: is off in a temporary chat."
 
+    /** A game or role-play the PC put in a temporary chat by itself (games-temporary.patch;
+     *  the owner's decision of 2026-09-27): said under the answer, both apps (the chat
+     *  audit, 2026-09-28 - it used to say nothing). */
+    const val GAME =
+        "This looks like a game or role-play, so it's a temporary chat: nothing is kept or learned."
+
     /** The `/api/chat` body's flag: present, and true, only for a temporary chat. */
     const val FIELD = "temporary"
 
@@ -69,8 +75,13 @@ object TemporaryChat {
      * `"remember_off": true`. Empty for an ordinary question.
      */
     fun notes(sentTemporary: Boolean, header: String?): List<String> {
-        if (!sentTemporary) return emptyList()
         val route = MemoryUsed.route(header)
+        if (!sentTemporary) {
+            // The PC made it temporary although the phone did not ask: only a
+            // detected game or role-play does that.
+            if (route?.flag("temporary") != true) return emptyList()
+            return listOfNotNull(GAME, if (route?.flag("remember_off") == true) REMEMBER_OFF else null)
+        }
         return listOfNotNull(
             if (route?.flag("temporary") == true) null else NOT_CONFIRMED,
             if (route?.flag("remember_off") == true) REMEMBER_OFF else null,

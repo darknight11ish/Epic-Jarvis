@@ -401,8 +401,38 @@ if (K) {
     assert.equal((await page.textContent("#jarvis-live-move")).trim(), "Move it here");
     await page.click("#jarvis-live-move");
     const calls = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "live_start"));
-    assert.deepEqual(calls[0][1], { by: "button" });
+    // No session chat named by the phone here: a fresh chat id goes with
+    // Start (the chat audit, 2026-09-28), so the phone can hand it back.
+    assert.equal(calls[0][1].by, "button");
+    assert.match(String(calls[0][1].conversationId), /^[A-Za-z0-9_-]{8,64}$/);
     assert.equal((await chats(page)).length, 0);
+    await page.close();
+  });
+
+  await check("Move it here carries on the phone's own chat: its id goes with Start, and its kept words come back (the chat audit)", async () => {
+    const PHONE_CID = "conv-phone-live-0001";
+    const page = await K.open(browser, base, "index.html", {
+      chatReplies: [],
+      history: { transcripts: { [PHONE_CID]: { id: PHONE_CID, kind: "live", title: "Planning the weekend",
+        tainted: false, turns: [
+          { role: "user", text: "what shall we do on Saturday", provenance: "voice", answer_kept: true },
+          { role: "assistant", text: "A walk by the river, then lunch." },
+        ] } } },
+    });
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }),
+      { ...S.phone_on, conversation_id: PHONE_CID });
+    await page.waitForTimeout(50);
+    await page.click("#jarvis-live-move");
+    const calls = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "live_start"));
+    assert.deepEqual(calls[0][1], { by: "button", conversationId: PHONE_CID });
+    // The PC answers that Live is on here now, in that same chat.
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }),
+      { ...S.desktop_on, conversation_id: PHONE_CID });
+    await page.waitForTimeout(200);
+    const opened = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "chat_continue_open"));
+    assert.deepEqual(opened.map((c) => c[1]), [{ id: PHONE_CID }]);
+    assert.equal((await page.textContent("#chat-note")).trim(), "Carrying on the same chat here.");
+    assert.match(await page.textContent("#previous-answer-body"), /A walk by the river/);
     await page.close();
   });
 
@@ -490,7 +520,10 @@ if (K) {
     assert.equal(await page.isHidden("#jarvis-live-end"), true);
     const acts = await page.evaluate(() =>
       (window.__calls || []).filter((c) => c[0] === "live_act").map((c) => c[1]));
-    assert.deepEqual(acts[0], { action: "extend", minutes: 20 });
+    // Live on here with no chat named yet (started by voice, the tray or the
+    // phone before this build) first names this bar's chat ("active"); then
+    // the click asks for 20 more minutes.
+    assert.deepEqual(acts.find((a) => a.action === "extend"), { action: "extend", minutes: 20 });
     await page.close();
   });
 

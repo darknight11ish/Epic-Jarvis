@@ -6278,11 +6278,40 @@ stand-in of `jarvis_hud.py` built from the whole patch stack, never to the
 real file, and nothing here has run on the owner's PC or against a real
 Credential Manager.
 
+**Since the chat audit (2026-09-28; docs/JARVIS-API.md section 18.6)** -
+all in `jarvis_chat_log.py`, shipped whole, so no patch changed for it:
+
+- Each conversation has a **kind** (`chat`, `live`, `support`, `chatbot`,
+  `compare`) and an empty `project` column, added in place to a history
+  kept before them. `GET /api/history?kind=` lists one kind; an opened
+  conversation says whether "Continue this chat" may carry it on
+  (`continuable`, `continue_why`).
+- A finished chatbot conversation and a comparison are kept whole
+  (`record_chatbot`, from `jarvis_chatbot.py` and
+  `jarvis_chatbot_compare.py`), every row role `chatbot` - never `user`, so
+  the learner reads none of it - outside text, read-only. Test suites never
+  write into your real History (`_where.py` sets `JARVIS_SUITE_RUNNING`).
+- A chat with a crisis turn is titled "A difficult moment"; a chat that
+  began with shared text is titled with what you asked.
+- "Delete conversations older than" never deletes a customer-support record
+  and says how many it kept.
+- `brief()`: one chat's title and when, for "Erase the words", which now
+  names the chat it would also delete (`GET /api/memory/fact-chat`,
+  `jarvis_brain_reads.py`).
+- `jarvis_live.py`: the Live session carries its chat's `conversation_id`,
+  so "Move it here" carries on the same chat.
+- `jarvis_forget_range.py`: a support record is listed unticked.
+- `games-temporary.patch` now really keeps a game or role-play out of
+  History (it handed `record_turn` the request without the temporary flag),
+  and `temporary-chat.patch` takes Jarvis Live's `live` mark off before any
+  model sees a message (`test_games_temp_chat.py`, `test_temporary_chat.py`,
+  `test_chat_kinds.py`).
+
 **Test.** From the repository folder, with `JARVIS_BACKEND` set to your
 backend folder:
 
 ```powershell
-$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_chat_log.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_chat_log.py; py -3 backend\test_chat_kinds.py
 ```
 
 ## auto-learn.patch - Jarvis learns automatically, from your own words only
@@ -6458,7 +6487,7 @@ fact's words; left alone) and a `documents` table that is not Jarvis's.
 - The conversation the fact was learned from, in chat history, still has
   the words UNLESS you also checked "Also delete the chat it came from"
   (2026-09-27) - otherwise delete it yourself in History (Brain, History on
-  the PC; Mind, Chat history on the phone). Either way, a fact with no
+  the PC; Brain, Chat history on the phone). Either way, a fact with no
   conversation_id on record (it never had one, or an earlier erase already
   stripped it) has nothing for the flag to delete.
 - Windows backups, System Restore points and the drive's own free space are
@@ -9204,7 +9233,7 @@ asleep. It holds only what Jarvis can already read on this PC:
 When it arrives, both apps say only **"Jarvis: your morning briefing is
 ready."** - on the lock screen and in the Windows toast, whatever your
 privacy settings. The briefing itself is in the app: the desktop's Brain,
-Work tab, and the phone's Mind. "Hide memory lists and chat history" (and
+Work tab, and the phone's Brain. "Hide memory lists and chat history" (and
 the desktop's Windows Hello setting) hides its lines and keeps the counts.
 It is read aloud only when you ask, and then under your private-answers
 voice setting, like a calendar answer.

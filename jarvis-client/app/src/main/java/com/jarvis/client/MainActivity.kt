@@ -953,6 +953,10 @@ class MainActivity : FragmentActivity() {
         // The conversation the next question carries (ChatHistory). Only its
         // size is shown; memory only, like the question itself.
         val conversation by chat.history.collectAsState()
+        // What Home shows of the conversation (the whole thread, the chat
+        // audit 2026-09-28), and its one quiet line. Memory only.
+        val thread by chat.thread.collectAsState()
+        val chatNote by chat.chatNote.collectAsState()
         // What a turn is waiting on ("Waiting for your approval…"), and the
         // one line under a finished answer (cut short / from a cloud model).
         val chatWaiting by chat.waiting.collectAsState()
@@ -2122,6 +2126,23 @@ class MainActivity : FragmentActivity() {
                         privateHidden = privateHidden,
                         onShowPrivate = ::showPrivateLists,
                         showPrivateBusy = ownerCheckBusy.value,
+                        // "Continue this chat" (the owner's decision,
+                        // 2026-09-28): Home carries it on, and says so.
+                        onContinue = { id ->
+                            JarvisRuntime.continueChat(id).also { why ->
+                                if (why == null) {
+                                    nav.resetTo(Screen.HOME)
+                                }
+                            }
+                        },
+                        // "Forget a time frame…" at the top of History: the
+                        // Brain's plate, as "forget what you learned last
+                        // week" opens it (OpenPlace).
+                        onOpenForgetRange = {
+                            pendingSection = "forget-range"
+                            pendingSectionScreen = Screen.BRAIN.name
+                            nav.go(Screen.BRAIN)
+                        },
                         modifier = root,
                     )
 
@@ -2343,6 +2364,9 @@ class MainActivity : FragmentActivity() {
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                             conversationTurns = conversation.size,
+                            // The pairs above the one on screen.
+                            thread = com.jarvis.client.net.ChatHistory.threadBefore(thread, lastQuestion, streaming),
+                            chatNote = chatNote,
                             chatWaiting = chatWaiting,
                             answerNote = answerNote,
                             quickNoteOpen = quickNoteOpen.value,
@@ -2453,7 +2477,10 @@ class MainActivity : FragmentActivity() {
                                 onRemovePicture = { picture.value = null },
                                 onFindDateInPicture = ::findDateInPicture,
                                 onInterrupt = { chat.cancel() },
-                                onNewConversation = { chat.newConversation() },
+                                // Said on Home, and read out by TalkBack (the chat audit).
+                                onNewConversation = { chat.newConversationSaid() },
+                                onEarlierChats = { nav.go(Screen.HISTORY) },
+                                onDismissChatNote = { chat.dismissChatNote() },
                                 // A temporary chat: no card and no hold - it only
                                 // makes Jarvis stricter. A PC without it says so.
                                 onToggleTemporary = {

@@ -6,6 +6,42 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Chats: carry one on, see the whole thing, find it again.** Open any chat
+  or Jarvis Live session in History and press **Continue this chat**: the
+  Jarvis bar (PC) or Home (phone) picks it up where it stopped - the same
+  chat, its newest kept messages, and its "read outside text" mark. The chat
+  you are in now shows every earlier question and answer in a scrolling
+  "Earlier in this chat" list, not just the last one. **Earlier chats** on
+  Home and in the Jarvis bar (and "Chat history…" in the PC's tray) opens
+  History. After 30 quiet minutes the next question starts a new chat, and a
+  line says so. History marks each chat's kind - a Live session shows its
+  length ("Live · 12 min · Today 14:05"), and "Show" can list Live sessions
+  only, support chats, chats with other AIs or comparisons. **Chats Jarvis
+  had with other AIs, and comparisons, are now kept in History** (encrypted,
+  marked as outside text, never learned from or read aloud). A chat with a
+  crisis moment is kept under the title "A difficult moment". Support chat
+  records are never removed by "Delete conversations older than", start
+  unticked in "Forget a time frame", and Delete asks once more. History: the
+  list first (phone), dates with times and Today / Yesterday in both apps,
+  answers without stray `**` and `#`, Copy on old answers, and "Forget a
+  time frame…" at the top. The HUD window's own chat box now opens the
+  Jarvis bar, so the PC has one chat box. Not yet tried on a real phone.
+
+- **Fixed: chats that were not what they seemed** (the chat audit). Game and
+  role-play chats were being kept in History although they are temporary -
+  they are not any more, and both apps now say "This looks like a game or
+  role-play, so it's a temporary chat". Deleting the chat you were in (from
+  History, "Erase the words" with its chat, or "Forget a time frame") left
+  its words going to Jarvis and brought it back under a new title - now a
+  new chat starts and says why. "Move it here" in Jarvis Live on the phone
+  carried on the wrong chat. "Erase the words" now names the chat it would
+  also delete, and says plainly when there was none. Projects no longer
+  promise that Jarvis reads a project's instructions in chats (it does not
+  yet). The Brain's History and Projects status line no longer sits on
+  "reading…". The phone's "Forget a time frame" and chatbot forms keep what
+  you typed when you scroll or turn the phone; the phone now says when a
+  temporary chat starts or ends, and "New conversation".
+
 - **Solve it here: a captcha handed to your phone.** When a chatbot website
   or a customer-support chat that Jarvis is using stops at a captcha, a
   sign-in page or an "unusual activity" page, your phone now says so ("Gemini

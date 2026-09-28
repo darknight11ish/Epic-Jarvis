@@ -1299,7 +1299,15 @@ reads from on its own. Three things about it are invariants:
 - **Encrypted or not kept.** Every piece of text is AES-256-GCM with a key
   in Windows Credential Manager (`Jarvis Backend/chat history key`). No
   key, no `cryptography` package, or a key that does not open the file:
-  nothing is recorded and the apps say why. There is no plain-text path.
+  nothing is recorded and the apps say why. There is no plain-text path -
+  **with one named exception**, the owner's of 2026-09-28 ("Chats, after the
+  chat audit": "Support chats: export stays"): a customer-support chat's
+  "Export transcript" (docs/JARVIS-API.md §65.5, desktop only), the owner's
+  own record of what a company agreed to. It is written only by the owner's
+  tap, to a folder they pick with the Windows "Save as" dialog, never to the
+  clipboard, and the button and the file both say plainly that the file is
+  not encrypted. Nothing else of the chat history ever leaves it in plain
+  text.
 - **The PC records the live turn, with where its words came from.** Only
   the newest user message of each request (and shared text sent just
   before it), tagged typed / voice / shared / pasted / clipboard /
@@ -1324,7 +1332,47 @@ reads from on its own. Three things about it are invariants:
   minutes to Undo.
 - **A temporary chat is never kept** (2026-09-25): nothing of it reaches
   `chat-history.db`, whether history is on or off (§5, "A temporary chat
-  uses and makes no memory").
+  uses and makes no memory"). Since 2026-09-27 a game or role-play the PC
+  spots is a temporary chat by itself; since the chat audit (2026-09-28) it
+  is really never kept (`games-temporary.patch` used to hand `record_turn`
+  the body without the flag) and both apps say so under the answer.
+- **Every conversation has a kind** (the chat audit, 2026-09-28; the
+  owner's decisions "Chats, after the chat audit" and "History marks Live
+  sessions"; docs/JARVIS-API.md §18.6): `chat`, `live`, `support`,
+  `chatbot` or `compare`, one column set when it is first written, plus an
+  empty `project` column for Projects step 4. What each kind means for the
+  rules:
+  - `chatbot` and `compare` - a conversation Jarvis had with another AI,
+    and "Ask several and compare" - are **kept** since 2026-09-28 (they were
+    memory-only), in the same encrypted store, as ONE record each, every row
+    role `chatbot`: never `user`, so the learner never reads a word of it;
+    outside text as a whole; never read aloud (History is on-screen only);
+    read-only.
+  - `support` records are never removed without the owner's own tap on
+    that record: "Delete conversations older than" keeps them (and says
+    so), "Forget a time frame" lists them unticked, and Delete asks once
+    more, naming what it is.
+  - A conversation that held a **crisis** turn is kept, titled "A difficult
+    moment", never with the owner's words (the crisis turn itself is never
+    learned from or counted, §38 of the API).
+  - Main's "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek"
+    (§85) does not add those chats to History - it only proposes facts - so
+    there is no `imported` kind.
+- **"Continue this chat" re-sends kept words only by the owner's tap**
+  (2026-09-28). It does not make History a memory: nothing kept is ever put
+  in front of the model on its own. Only the owner, from an opened chat or
+  Live session, carries it on - the SAME conversation id, so its "read
+  outside text" mark carries over (the PC decides that from its own
+  record) - and only the newest kept questions and answers that fit a chat's
+  own re-send limit go back, each with the tag it was kept under; a
+  question whose answer was not kept, a Live side remark, and a
+  `support`/`chatbot`/`compare` row never do. A temporary chat is never in
+  History, so it can never be continued. Jarvis Live's "Move it here" is
+  the same, for the one Live chat moving between devices (the PC's Live
+  status names its conversation id).
+- **A conversation ends after 30 quiet minutes** (2026-09-28), in both apps:
+  the next question starts a new one, with one quiet line saying so; the
+  old one stays in History. Never in the middle of Jarvis Live.
 - **Searching your own old chats is a client-side filter, not a search
   feature.** 2026-09-26 said plainly that "searching past chat words waits"
   - that decision was about a NEW capability: a backend index or route over
@@ -1740,7 +1788,8 @@ backend routes, in both directions; the rest are listed here only.
 | Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
 | On the Hardware screen: the memory bars, the "Details" arithmetic, Copy for the one PowerShell line, and the "exactly what is made" Modelfile (desktop Settings, Hardware and models) | The phone shows the cards (names and memory), what runs now, the three setups in the PC's words, their steps, Measure, and the line itself to read (the phone's Brain, Hardware - the design's section 4.6 asks for that much and no more). The line runs on the PC, so Copy belongs there; the bars and the arithmetic are the design's "Details", which a phone screen does not need to choose a setup. Every route is on both apps (JARVIS-API §20). |
 | The Faces window's "Portable output" (`faces.html`) | Code for building a client (the look spec as JSON, Kotlin, TypeScript). It is a developer's tool, and the phone already ships its own copy of the spec. |
-| A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). |
+| A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). **Since the chat audit (2026-09-28) the HUD's own chat box is hidden in the desktop app and "Open the Jarvis bar" stands in its place** (`hud_bootstrap.js`, `voice.rs` `hud_open_bar` - it opens a window and sends nothing): the owner's decision "the PC has one chat box". The page served on its own in a browser keeps its box. |
+| "Chat history…" in the tray, and the Jarvis bar's "Esc: end chat" with "Chat ended. Kept chats are in Brain > History." (the chat audit, 2026-09-28) | A tray menu and an Esc key are the PC's. The phone's way to History is "Earlier chats" on Home (next to Temporary chat), which the bar has too; the phone's chat ends on New conversation, a temporary chat, Live, 30 quiet minutes or the app's process ending - it has no Esc. |
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily or Brave key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |
 | "Accounts" (Settings -> Accounts, `save_account_secret`/`forget_account_secret`; ease-of-use audit row 15, 2026-09-27, JARVIS-API §44) | Same reasoning as the web search key row above, for the IMAP username and password, the private calendar link, and the Home Assistant token: each is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3), and CLAUDE.md's standing rule keeps deep config editing off the phone besides. The desktop writes each straight into Credential Manager on the PC - never over HTTP, no backend route takes one. An environment variable the owner already set still wins (`jarvis_token_store.resolve_secret`); this only adds a second place to set one, never a second source that could disagree once one is chosen. |

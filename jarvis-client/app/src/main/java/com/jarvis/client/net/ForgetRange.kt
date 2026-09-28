@@ -51,7 +51,11 @@ object ForgetRange {
         "forget" to "Forget these",
         "from" to "From",
         "kind_chats" to "Chats",
+        "kind_chatbot" to "Chat with an AI",
+        "kind_compare" to "Comparison",
         "kind_facts" to "What Jarvis learned",
+        "kind_live" to "Live",
+        "kind_support" to "Support chat",
         "kinds" to "What to look for",
         "locked" to "Unlock Jarvis to see this list.",
         "missing" to "Your PC's Jarvis cannot forget a time frame yet - run apply-patches.ps1 on the PC.",
@@ -60,6 +64,7 @@ object ForgetRange {
         "show" to "Show the list",
         "spills" to "Also has messages from outside these days - the whole chat is deleted.",
         "stale" to "The connection to Jarvis is catching up, so nothing can be sent until it does.",
+        "support" to "A customer-support chat record - kept unless you tick it.",
         "title" to "Forget a time frame",
         "to" to "To",
         "under" to "Choose some days. Jarvis lists what it learned and your chats from then - untick anything you want to keep, then tap Forget these. Nothing is removed until you approve the card, and for 10 minutes one tap on Undo puts it all back.",
@@ -114,7 +119,24 @@ object ForgetRange {
 
     data class Fact(val id: Long, val text: String, val label: String, val pinned: Boolean, val betweenUs: Boolean)
 
-    data class Chat(val id: String, val title: String, val label: String, val spills: Boolean)
+    /**
+     * One chat in the list. [kind]: what kind of chat (the chat audit,
+     * 2026-09-28); [startsTicked] false for a customer-support record, which
+     * goes only when the owner ticks it (the owner: "Forget a time frame"
+     * asks before removing a support chat).
+     */
+    data class Chat(
+        val id: String,
+        val title: String,
+        val label: String,
+        val spills: Boolean,
+        val kind: String = "chat",
+        val startsTicked: Boolean = true,
+    )
+
+    /** The tag beside a chat of a kind that is not an ordinary chat, or null. */
+    fun chatKindTag(kind: String): String? =
+        if (kind == "chat") null else WORDS["kind_$kind"]
 
     data class Preview(
         val available: Boolean,
@@ -202,7 +224,12 @@ object ForgetRange {
         }
         val chats = o.list("chats").mapNotNull { x ->
             val id = x.text("id") ?: return@mapNotNull null
-            Chat(id, x.text("title").orEmpty(), x.text("label").orEmpty(), x.flag("spills"))
+            val kind = x.text("kind")?.takeIf { it in ChatLog.KINDS } ?: "chat"
+            // A support record starts unticked even from a PC that sent no
+            // `ticked`; an ordinary chat starts ticked unless the PC says not.
+            val ticked = (x["ticked"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull != false &&
+                kind != "support"
+            Chat(id, x.text("title").orEmpty(), x.text("label").orEmpty(), x.flag("spills"), kind, ticked)
         }
         return Preview(
             available = true,
@@ -241,9 +268,11 @@ object ForgetRange {
         return "$PREVIEW_PATH?from=$from&to=$to&kinds=$kq"
     }
 
-    /** Every item ticked: "fact:<id>" and "chat:<id>" - how a fresh list starts. */
+    /** Every item ticked: "fact:<id>" and "chat:<id>" - how a fresh list starts - except a
+     *  customer-support chat's record, which goes only when the owner ticks it. */
     fun allTicked(p: Preview): Set<String> =
-        p.facts.map { "fact:${it.id}" }.toSet() + p.chats.map { "chat:${it.id}" }.toSet()
+        p.facts.map { "fact:${it.id}" }.toSet() +
+            p.chats.filter { it.startsTicked }.map { "chat:${it.id}" }.toSet()
 
     fun tickedCount(p: Preview, ticked: Set<String>): Int =
         p.facts.count { "fact:${it.id}" in ticked } + p.chats.count { "chat:${it.id}" in ticked }
@@ -291,6 +320,29 @@ object ForgetRange {
 
     private fun sentence(s: String): String =
         s.replaceFirstChar { it.uppercase() }.let { if (it.isEmpty() || it.last() in ".!?") it else "$it." }
+
+    /**
+     * The chat ids a "forget" body names (`{"facts": [...], "chats": [...]}`,
+     * [forgetBody]) - kept by the runtime until the card is decided, so Home
+     * can leave a chat that went (the chat audit, 2026-09-28). Ids only.
+     */
+    fun chatsIn(json: String): List<String> = runCatching {
+        ((JarvisJson.parseToJsonElement(json) as? JsonObject)?.get("chats") as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+            .orEmpty()
+    }.getOrDefault(emptyList())
+
+    /**
+     * From a status read ([parseStatus]): null while a card is still waiting
+     * (or the answer was not a status), else how the last one ended -
+     * `last.outcome` ("done" when approved and carried out).
+     */
+    fun decided(reply: Reply): String? {
+        if (reply.code !in 200..299) return null
+        val s = parseStatus(reply.body)
+        if (!s.available || s.waiting) return null
+        return s.last?.outcome?.takeIf { it.isNotEmpty() }
+    }
 
     /** Reads a "forget" or "undo" answer: the PC's own sentence either way. */
     fun said(reply: Reply, done: String): Outcome {

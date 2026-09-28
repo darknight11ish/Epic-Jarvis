@@ -160,6 +160,39 @@ class ChatSession(
      */
     @Volatile private var conversationId: String = ChatHistory.newConversationId()
 
+    /**
+     * When the last answer of this conversation finished (wall clock, ms), for
+     * "a new conversation starts after 30 quiet minutes" (the owner's
+     * decision, 2026-09-28; [ChatHistory.idleExpired]). 0: none yet.
+     */
+    @Volatile private var lastTurnAt = 0L
+
+    private val _thread = MutableStateFlow<List<ChatHistory.Exchange>>(emptyList())
+
+    /**
+     * What Home SHOWS of this conversation (the owner's decision, 2026-09-28:
+     * the whole conversation as a scrollable thread): every finished pair,
+     * oldest first - not trimmed to the model's re-send window like
+     * [history], only capped ([ChatHistory.THREAD_MAX]). Memory only; emptied
+     * wherever [history] starts afresh.
+     */
+    val thread: StateFlow<List<ChatHistory.Exchange>> = _thread.asStateFlow()
+
+    private val _chatNote = MutableStateFlow<String?>(null)
+
+    /**
+     * One quiet line about the chat itself, or null (the chat audit,
+     * 2026-09-28): a new conversation after 30 quiet minutes, a chat carried
+     * on from History ("Continue this chat") or from Live's "Move it here",
+     * the chat Home was in deleted elsewhere. The desktop's Jarvis bar shows
+     * the same words (tools/gen_history_cases.py). Words only; memory only.
+     */
+    val chatNote: StateFlow<String?> = _chatNote.asStateFlow()
+
+    /** The conversation id the next question goes with - for Jarvis Live,
+     *  which names its chat to the PC so "Move it here" carries it on. */
+    fun conversationIdNow(): String = conversationId
+
     @Volatile private var call: Call? = null
 
     private val _temporary = MutableStateFlow(false)
@@ -235,7 +268,21 @@ class ChatSession(
         if (on && !canTemporary()) return TemporaryChat.UNAVAILABLE
         newConversation()
         _temporary.value = on
-        return if (on) TemporaryChat.STARTED else TemporaryChat.ENDED
+        // Said on Home too (the chat audit, 2026-09-28, phone B5: the phone
+        // dropped this sentence, and the chat on screen went without a word).
+        return (if (on) TemporaryChat.STARTED else TemporaryChat.ENDED).also { _chatNote.value = it }
+    }
+
+    /** "New conversation", pressed by the owner: [newConversation], and Home
+     *  says so (read out by TalkBack - the chat audit, 2026-09-28). */
+    fun newConversationSaid() {
+        newConversation()
+        _chatNote.value = ChatHistory.NEW_CONVERSATION
+    }
+
+    /** The owner dismissed the line about the chat. */
+    fun dismissChatNote() {
+        _chatNote.value = null
     }
 
     /**
@@ -298,6 +345,19 @@ class ChatSession(
         live: Boolean = false,
     ): String? {
         cancel()
+        // A new conversation after 30 quiet minutes (the owner's decision,
+        // 2026-09-28) - never in the middle of Jarvis Live, which ends itself
+        // when it goes quiet. The old one stays in History; "Continue this
+        // chat" brings it back. Said once, quietly, above the new question.
+        _chatNote.value = null
+        if (!live && ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(), _history.value.isNotEmpty())) {
+            conversation++
+            conversationId = ChatHistory.newConversationId()
+            _history.value = emptyList()
+            _thread.value = emptyList()
+            lastTurnAt = 0L
+            _chatNote.value = ChatHistory.IDLE_NEW_LINE
+        }
         _reply.value = ""
         _error.value = null
         _problem.value = null
@@ -709,6 +769,8 @@ class ChatSession(
         }
         if (answer != null && answer.isNotBlank() && !cutShort && conversation == askedIn) {
             _history.update { ChatHistory.commit(it, asking, answer) }
+            _thread.update { ChatHistory.addToThread(it, asking, answer) }
+            lastTurnAt = System.currentTimeMillis()
         }
         return mine
     }
@@ -735,8 +797,11 @@ class ChatSession(
     fun newConversation() {
         conversation++
         conversationId = ChatHistory.newConversationId()
+        lastTurnAt = 0L
+        _chatNote.value = null
         cancel()
         _history.value = emptyList()
+        _thread.value = emptyList()
         _reply.value = ""
         _question.value = null
         _turnId.value = null
@@ -748,6 +813,43 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+    }
+
+    /**
+     * "Continue this chat" (from History) and Jarvis Live's "Move it here"
+     * (the owner's decisions, 2026-09-28): Home carries on a kept
+     * conversation - the SAME conversation id, so the PC files what follows
+     * with it and its "read outside text" mark carries over (the PC decides
+     * that from its own record) - with [window] as the conversation so far
+     * ([ChatHistory.continueWindow]: the newest kept messages that fit).
+     * What was on screen goes, as with [newConversation]; [note] is said in
+     * its place. False for an id the PC could never have made.
+     */
+    fun continueFrom(id: String, window: List<ChatHistory.Exchange>, note: String?): Boolean {
+        if (!ChatHistory.validConversationId(id)) return false
+        newConversation()
+        conversationId = id
+        _history.value = window
+        _thread.value = window
+        lastTurnAt = System.currentTimeMillis()
+        _chatNote.value = note
+        return true
+    }
+
+    /**
+     * Chats deleted elsewhere - Delete in History, "Erase the words" with
+     * its chat, "Forget a time frame" approved, deleting a chat and the facts
+     * it taught (section 79). When Home is IN one of them, its old words
+     * must stop going to the model and the PC must not bring the chat back
+     * under a new title (the chat audit, 2026-09-28, phone B2): a new
+     * conversation, and Home says why. True when that happened.
+     */
+    fun chatsGone(ids: Collection<String>): Boolean {
+        if (conversationId !in ids) return false
+        val had = _history.value.isNotEmpty() || _question.value != null
+        newConversation()
+        if (had) _chatNote.value = ChatHistory.CHAT_GONE
+        return had
     }
 
     /**

@@ -61,7 +61,9 @@ export const WORDS = {
   outside_note:
     "The chatbot's words are outside text: shown here, never learned from, never read aloud.",
   summary_title: "What Jarvis found",
-  summary_note: "Written on this PC from the chatbot's words, so it is outside text too.",
+  summary_note:
+    "Written on this PC from the chatbot's words, so it is outside text too. Once it ends, th" +
+    "e conversation and this summary are kept in History, marked as outside text.",
   claim_sourced: "it gave a source (not checked by Jarvis)",
   claim_unsourced: "no source given",
   open_title: "Still open",
@@ -74,7 +76,7 @@ export const WORDS = {
     "Signing in to the chatbot's account happens on the PC only, in the browser window Jarvis uses.",
   missing: "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on the PC.",
   gone:
-    "That conversation is gone: Jarvis on the PC restarted, and conversations are kept in memory only.",
+    "That conversation is no longer in memory: Jarvis on the PC restarted. A conversation that finished is kept in History.",
   hidden: "The goal and the conversation are hidden until you confirm it is you.",
   version: "Version",
   notify_running: "Talking to {name}, {used} of {max}",
@@ -92,7 +94,8 @@ export const WORDS = {
   compare_title: "Comparing chatbots",
   compare_summary_title: "Where they agree and disagree",
   compare_summary_note:
-    "Written on this PC from the chatbots' words, so it is outside text too.",
+    "Written on this PC from the chatbots' words, so it is outside text too. Once it ends, ev" +
+    "ery conversation and this summary are kept in History, marked as outside text.",
   agree_title: "They agree",
   disagree_title: "They disagree",
   sources_title: "Sources each gave (not checked by Jarvis)",
@@ -103,7 +106,7 @@ export const WORDS = {
   compare_not_enough:
     "Fewer than two chatbots can be reached from this PC, so there is nothing to compare yet.",
   compare_gone:
-    "That comparison is gone: Jarvis on the PC restarted, and comparisons are kept in memory only.",
+    "That comparison is no longer in memory: Jarvis on the PC restarted. A comparison that finished is kept in History.",
   notify_compare_running: "Comparing {count} chatbots: asking {name}, {at} of {count}",
   notify_compare_waiting: "Waiting for your yes to ask {count} chatbots",
   notify_compare_paused: "Paused: comparing {count} chatbots",

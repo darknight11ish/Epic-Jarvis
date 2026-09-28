@@ -159,10 +159,29 @@ import {
 } from "./plain-errors.js";
 import {
   boxTagAfter,
+  CHAT_GONE,
+  CHAT_GONE_KEY,
   commitExchange,
+  CONTINUE_BUSY,
+  CONTINUED_NOTHING,
+  CONTINUED_TAINTED,
+  CONTINUED_TEMPORARY_OFF,
+  CONTINUED_TRIMMED,
+  continuedLine,
+  continueWindow,
+  EARLIER_CHATS,
+  EARLIER_CHATS_TITLE,
+  ENDED_SAVED,
   historyMessages,
+  IDLE_NEW_LINE,
+  idleExpired,
+  MOVED_HERE,
+  NEW_CONVERSATION,
   newConversationId,
   sentProvenance,
+  takeChatsGone,
+  addToThread,
+  threadSummary,
   userMessage,
 } from "./chat-history.js";
 import { fileNote, loadTargets, notSetUp, noTargetsLine, targetName } from "./note-capture.js";
@@ -374,6 +393,12 @@ const dom = {
   copy: $("copy"),
   stop: $("stop"),
   newConversation: $("new-conversation"),
+  // "Earlier chats" (the chat audit, 2026-09-28): the Brain's History, from
+  // the card and from the primer; and the quiet line about the chat itself.
+  earlierChats: $("earlier-chats"),
+  earlierChatsPrimer: $("earlier-chats-primer"),
+  chatNote: $("chat-note"),
+  chatEndedNote: $("chat-ended-note"),
   services: $("services"),
 
   previousAnswer: $("previous-answer"),
@@ -418,12 +443,25 @@ const state = {
    */
   conversation: [],
   /**
+   * What the bar SHOWS of the conversation (the owner's decision,
+   * 2026-09-28: "the whole current conversation as a scrollable thread"):
+   * every finished `{ question, answer }` pair of this conversation, oldest
+   * first - not trimmed to the model's re-send window like `conversation`,
+   * only capped (chat-history.js THREAD_MAX). This window's memory only;
+   * emptied wherever `conversation` starts afresh.
+   */
+  thread: [],
+  /**
    * The id every request of this conversation carries as `conversation_id`
    * (JARVIS-API.md section 18), so the PC's History keeps one entry per
    * conversation. A new one at start, on "New conversation" and on Esc -
    * wherever `conversation` above is emptied (closeCard).
    */
   conversationId: newConversationId(),
+  /** When the last answer of this conversation finished (ms) - a new
+   *  conversation starts after 30 quiet minutes (chat-history.js
+   *  IDLE_NEW_MS; the owner's decision, 2026-09-28). 0: none yet. */
+  lastTurnAt: 0,
   /**
    * Where the words now in the box came from: "typed", "clipboard" (the
    * clipboard hotkey's prefill, until it is edited) or "pasted" (a paste or
@@ -566,8 +604,11 @@ const temporaryChat = createTemporaryToggle({
   check: () => (IS_TAURI ? invokeStrict("temporary_chat_available") : Promise.resolve(false)),
   restart: () => {
     state.turnQuestion = null;
+    // The toggle has already flipped: the chat that ends here was the other kind.
+    const wasTemporary = !temporaryChat.on;
+    closeCard({ wasTemporary });
     state.conversation = [];
-    closeCard();
+    state.thread = [];
     focusInput();
   },
   busy: () => Boolean(state.inFlight || state.abort),
@@ -591,6 +632,11 @@ const answerMemory = createAnswerMemory({
   confirm: (question) => window.confirm(question),
   announce,
   onChange: () => syncWindowHeight(),
+  // "Erase the words" with its chat, when that chat is the one this bar is
+  // in: a new conversation, said (the chat audit, 2026-09-28).
+  onChatDeleted: (id) => {
+    if (id === state.conversationId && state.conversation.length) startFreshQuietly(CHAT_GONE);
+  },
   // "Where this came from" (feasibility I42/I132): the notes, wiki pages,
   // web results and files this answer actually read, plus the quote check.
   sources: {
@@ -622,6 +668,10 @@ const live = {
   flashUntil: 0,
   chips: [],
   elsewhere: "",
+  /** The fresh chat id this bar started Live with, and the other device's
+   *  chat for "Move it here" - read once, by liveAdoptChat. */
+  pendingCid: "",
+  moveCid: "",
   elsewhereTimer: null,
   // When it ended, as the PC counted it: {at: this PC's ms, ago: seconds}.
   endedBase: null,
@@ -828,7 +878,7 @@ function syncPrimer() {
 }
 
 /** Collapses the card and clears everything it was showing. */
-function closeCard() {
+function closeCard({ wasTemporary = temporaryChat.on } = {}) {
   dom.card.hidden = true;
   dom.answer.innerHTML = "";
   dom.answer.classList.remove("wellbeing-crisis");
@@ -842,12 +892,26 @@ function closeCard() {
   // up here, has always meant "done with this", and a question asked next
   // time the window opens should not silently follow on from one that is no
   // longer on screen. Hiding on focus loss does not come here.
+  const hadChat = state.conversation.length > 0;
   state.conversation = [];
+  state.thread = [];
   // A conversation forgotten here is a finished one on the PC too: the next
   // question starts a new entry in History (JARVIS-API.md section 18).
   state.conversationId = newConversationId();
+  state.lastTurnAt = 0;
   state.turnQuestion = null;
   state.turnProvenance = null;
+  hideChatNote();
+  // Where it went, said the next time the bar is opened, until a question
+  // is asked (the chat audit, 2026-09-28: Esc used to end a chat without a
+  // word). A temporary chat was never kept, so it says nothing.
+  // A second Esc with no chat left leaves the line as it is. Turning a
+  // temporary chat on says the same of the chat it ended, which was kept
+  // (the chat audit, desktop C11: it used to go without a word).
+  if (dom.chatEndedNote && hadChat) {
+    dom.chatEndedNote.hidden = wasTemporary;
+    dom.chatEndedNote.textContent = wasTemporary ? "" : ENDED_SAVED;
+  }
   paintedBlocks = 0;
   spokenUpTo = 0;
   stopSpeaking();
@@ -866,13 +930,128 @@ function closeCard() {
  * time it is (re)populated — a follow-up you asked on purpose should not have
  * the last answer thrust back open in front of it.
  */
-function renderPreviousAnswer() {
-  const prev = state.previousAnswer;
-  dom.previousAnswer.hidden = !prev;
-  if (!prev) return;
-  dom.previousAnswer.open = false;
-  dom.previousAnswerSummary.textContent = truncateForSummary(prev.prompt);
-  dom.previousAnswerBody.innerHTML = renderMarkdown(prev.buffer);
+function renderPreviousAnswer({ open = false } = {}) {
+  // The whole conversation so far, not only the last answer (the owner's
+  // decision, 2026-09-28: "the whole current conversation as a scrollable
+  // thread"): every finished question and answer before the one on screen,
+  // oldest first. The words are escaped; each answer goes through the same
+  // markdown renderer as the card (escaped first). Nothing new is kept:
+  // this is `state.conversation`, which the bar already holds in memory.
+  const pairs = threadPairs();
+  dom.previousAnswer.hidden = !pairs.length;
+  if (!pairs.length) {
+    dom.previousAnswerBody.replaceChildren();
+    return;
+  }
+  dom.previousAnswer.open = open;
+  dom.previousAnswerSummary.textContent = threadSummary(pairs.length);
+  dom.previousAnswerBody.innerHTML = pairs.map((p) =>
+    `<section class="thread-turn"><p class="thread-q"><span class="thread-who">You:</span> ${
+      escapeHtml(truncateForSummary(p.question, 400))}</p><div class="thread-a">${
+      renderMarkdown(p.answer)}</div></section>`).join("");
+}
+
+/** The finished turns before the one on screen: all of `thread`, less the
+ *  last pair when it is the answer the card is showing. */
+function threadPairs() {
+  const pairs = state.thread.slice();
+  const last = pairs[pairs.length - 1];
+  if (last && !state.inFlight && state.phase === "done" && state.lastPrompt
+      && last.question === state.lastPrompt && state.buffer.trim()) {
+    pairs.pop();
+  }
+  return pairs;
+}
+
+/** The one quiet line about the chat itself: a new conversation after a
+ *  while, a chat carried on, a chat deleted. Said to a screen reader too. */
+function showChatNote(line) {
+  if (!dom.chatNote || !line) return;
+  dom.chatNote.textContent = line;
+  dom.chatNote.hidden = false;
+  announce(line);
+}
+
+function hideChatNote() {
+  if (!dom.chatNote) return;
+  dom.chatNote.hidden = true;
+  dom.chatNote.textContent = "";
+}
+
+/** A new conversation without clearing what is on screen - after 30 quiet
+ *  minutes, or when the chat this bar was in was deleted. */
+function startFreshQuietly(line) {
+  state.conversation = [];
+  state.thread = [];
+  state.conversationId = newConversationId();
+  state.lastTurnAt = 0;
+  state.previousAnswer = null;
+  renderPreviousAnswer();
+  syncNewConversation();
+  showChatNote(line);
+}
+
+/**
+ * "Continue this chat" (from the Brain's History) and "Move it here" (Jarvis
+ * Live): this bar carries on a kept conversation - the SAME conversation id,
+ * so the PC files the new turns with it and its "read outside text" mark
+ * carries over (the PC decides that from its own record); the newest kept
+ * messages that fit a chat's re-send limit, skipping any whose answer was
+ * not kept (chat-history.js continueWindow). A support, chatbot or
+ * comparison record is refused by Rust (chat_continue_open). A temporary
+ * chat is never kept, so it can never be continued; turning to a kept chat
+ * turns Temporary off first.
+ */
+async function continueChat(id, { moved = false } = {}) {
+  if (state.inFlight || state.abort) {
+    openCard("Busy");
+    showChatNote(CONTINUE_BUSY);
+    return;
+  }
+  let conv;
+  try {
+    conv = await invokeStrict("chat_continue_open", { id });
+  } catch (error) {
+    if (moved) {
+      // "Move it here" with nothing in History to read back (history off, a
+      // list hidden, or no answer kept yet): the session's chat is still the
+      // one carried on here - the same id, so the PC files what follows with
+      // it - just with no earlier words re-sent.
+      conv = { turns: [], tainted: false };
+    } else {
+      openCard("Not continued");
+      showChatNote(String((error && error.message) || error));
+      return;
+    }
+  }
+  const { window: kept, trimmed } = continueWindow(conv && conv.turns);
+  let tempOff = false;
+  if (temporaryChat.on) {
+    await temporaryChat.toggle();
+    tempOff = !temporaryChat.on;
+  }
+  closeCard();
+  state.conversation = kept;
+  state.thread = kept.slice();
+  state.conversationId = id;
+  state.lastTurnAt = Date.now();
+  if (dom.chatEndedNote) dom.chatEndedNote.hidden = true;
+  openCard(moved ? "Jarvis Live" : "Continuing a chat");
+  const lines = [moved ? MOVED_HERE : continuedLine(conv && conv.title)];
+  if (!kept.length && !moved) lines.push(CONTINUED_NOTHING);
+  if (trimmed) lines.push(CONTINUED_TRIMMED);
+  if (conv && conv.tainted === true) lines.push(CONTINUED_TAINTED);
+  if (tempOff) lines.push(CONTINUED_TEMPORARY_OFF);
+  renderPreviousAnswer({ open: true });
+  showChatNote(lines.join(" "));
+  syncNewConversation();
+  syncWindowHeight();
+  focusInput();
+}
+
+/** "Earlier chats": the Brain, on History (plain_errors.rs open_fix_place). */
+function openEarlierChats() {
+  invoke("open_fix_place", { place: "history" });
 }
 
 /** A one-line label for the scrollback summary — long prompts wrap the card. */
@@ -2736,6 +2915,14 @@ async function send(promptText, provenance = "typed", { live: isLive = false } =
   // `finishStream`, which is the single funnel every ending passes through.
   if (state.abort || state.inFlight) return;
   state.inFlight = message;
+  hideChatNote();
+  if (dom.chatEndedNote) dom.chatEndedNote.hidden = true;
+  // A new conversation after 30 quiet minutes (the owner's decision,
+  // 2026-09-28) - never in the middle of Jarvis Live, which has its own
+  // quiet rule. The old one stays in History; Continue brings it back.
+  if (!liveOnHere() && idleExpired(state.lastTurnAt, Date.now(), state.conversation.length > 0)) {
+    startFreshQuietly(IDLE_NEW_LINE);
+  }
   // Jarvis Live: a spoken turn is marked, and its tap buttons go.
   liveBeforeSend(isLive, provenance);
 
@@ -3003,6 +3190,8 @@ function finishStream(phase, statusText) {
       state.buffer,
       state.turnProvenance
     );
+    state.thread = addToThread(state.thread, question, state.buffer);
+    state.lastTurnAt = Date.now();
   }
 
   // Stopped at the length limit: kept (it is what Jarvis said), but the
@@ -3100,10 +3289,33 @@ function newConversation() {
   abortStream();
   state.turnQuestion = null;
   state.conversation = [];
+  state.thread = [];
   closeCard();
-  announce("New conversation. Your next question starts fresh.");
+  announce(`${NEW_CONVERSATION} Your next question starts fresh.`);
   focusInput();
 }
+
+/* "Continue this chat", and a chat deleted elsewhere (the chat audit,
+   2026-09-28). The Brain names a chat to carry on (brain_continue_chat ->
+   the `continue-chat` event, the id only); a chat the Brain deleted - by
+   Delete, "Erase the words" with its chat, or "Forget a time frame" - is
+   left under CHAT_GONE_KEY: if it is the one this bar is in, its old turns
+   must stop being sent, so a new conversation starts and the bar says so. */
+listen("continue-chat", (event) => {
+  const id = event && typeof event.payload === "string" ? event.payload : "";
+  if (id) continueChat(id);
+});
+
+function chatsGoneElsewhere() {
+  const gone = takeChatsGone();
+  if (gone.includes(state.conversationId) && state.conversation.length) {
+    startFreshQuietly(CHAT_GONE);
+  }
+}
+window.addEventListener("storage", (e) => {
+  if (e.key === CHAT_GONE_KEY && e.newValue) chatsGoneElsewhere();
+});
+window.addEventListener("focus", chatsGoneElsewhere);
 
 /* ==========================================================================
    Voice: push-to-talk in, a spoken reply out
@@ -4283,6 +4495,13 @@ document.addEventListener("keydown", (event) => {
 dom.stop.addEventListener("click", abortStream);
 
 if (dom.newConversation) dom.newConversation.addEventListener("click", newConversation);
+for (const b of [dom.earlierChats, dom.earlierChatsPrimer]) {
+  if (b) {
+    b.textContent = EARLIER_CHATS;
+    b.title = EARLIER_CHATS_TITLE;
+    b.addEventListener("click", openEarlierChats);
+  }
+}
 if (dom.temporary) dom.temporary.addEventListener("click", () => temporaryChat.toggle());
 
 dom.copy.addEventListener("click", async () => {
@@ -4771,7 +4990,10 @@ async function toggleLive() {
     } else {
       live.elsewhere = "";
       live.notice = "";
-      await invokeStrict("live_start", { by: "button" });
+      // A new Live session is a new chat: its id goes with Start, so the
+      // PC can name it to the other device for "Move it here".
+      live.pendingCid = newConversationId();
+      await invokeStrict("live_start", { by: "button", conversationId: live.pendingCid });
     }
   } catch (error) {
     liveRefused(String((error && error.message) || error));
@@ -5112,11 +5334,41 @@ function playLiveEndTone() {
 /** A new Live session here (not "Resume Live"): one Live session is one
  *  chat (docs/LIVE-DESIGN.md section 3.7), so the next question starts a
  *  new conversation. What is on screen stays until then. */
-function liveNewSession() {
+function liveNewSession(cid = newConversationId()) {
   state.conversation = [];
-  state.conversationId = newConversationId();
+  state.thread = [];
+  state.conversationId = cid;
+  state.lastTurnAt = 0;
+  state.previousAnswer = null;
+  renderPreviousAnswer();
   syncNewConversation();
   live.explaining = !liveExplained();
+}
+
+/**
+ * Live came on here: which chat it is (the chat audit, 2026-09-28). The
+ * session carries its chat's id (JARVIS-API.md section 63.1):
+ * - the fresh id this bar started it with - a new chat;
+ * - the other device's chat, after "Move it here" - carried on here, the
+ *   same conversation (it used to start a new one on the PC, and the
+ *   phone carried on the WRONG chat);
+ * - none (started by voice or from the tray) - a new chat, named to the PC.
+ */
+function liveAdoptChat(s) {
+  const cid = typeof s.conversation_id === "string" ? s.conversation_id : "";
+  const mine = live.pendingCid;
+  const moved = live.moveCid;
+  live.pendingCid = "";
+  live.moveCid = "";
+  if (live.resuming) return;
+  if (cid && cid === mine) {
+    liveNewSession(cid);
+  } else if (cid && (cid === moved || cid !== state.conversationId)) {
+    continueChat(cid, { moved: true });
+  } else if (!cid) {
+    liveNewSession();
+    invoke("live_act", { action: "active", conversationId: state.conversationId });
+  }
 }
 
 function liveTake(p) {
@@ -5139,7 +5391,7 @@ function liveTake(p) {
     live.elsewhere = "";
     live.notice = "";
     if (!wasHere || (before && before.session !== s.session)) {
-      if (!live.resuming) liveNewSession();
+      liveAdoptChat(s);
       live.resuming = false;
     }
     // Live began (or carried on) with a card of this session on screen: held too.
@@ -5188,7 +5440,7 @@ listen("live-heard", (event) => {
 function liveResume() {
   live.resuming = true;
   live.elsewhere = "";
-  liveDo("live_start", { by: "button" });
+  liveDo("live_start", { by: "button", conversationId: state.conversationId });
 }
 
 if (dom.liveToggle) {
@@ -5208,7 +5460,14 @@ if (dom.liveToggle) {
   });
   dom.liveMove.addEventListener("click", () => {
     live.elsewhere = "";
-    liveDo("live_start", { by: "button" });
+    // "Move it here": the same chat carries on (the chat audit, 2026-09-28)
+    // - the other device's conversation id goes with Start, and this bar
+    // takes that chat over when Live comes on here (liveAdoptChat).
+    const theirs = live.status && typeof live.status.conversation_id === "string"
+      ? live.status.conversation_id : "";
+    live.moveCid = theirs;
+    if (!theirs) live.pendingCid = newConversationId();
+    liveDo("live_start", { by: "button", conversationId: theirs || live.pendingCid });
   });
   dom.liveFix.addEventListener("click", () => {
     try {
