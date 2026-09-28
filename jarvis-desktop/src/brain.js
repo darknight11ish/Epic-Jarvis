@@ -76,9 +76,26 @@ import {
   tagOf,
   titleOf,
   todoItems,
+  WAITING,
   WENT_OFF_ACTIONS,
   wentOffMeta,
 } from "./coming-up.js";
+import {
+  ACCEPT_LABEL,
+  ADD_STEP_LABEL,
+  BY_PLACEHOLDER,
+  checkinJobFor,
+  checkinLines,
+  EMPTY_GOALS,
+  GOALS_MISSING,
+  openCount,
+  planIsValid,
+  readGoals,
+  REMOVE_STEP_LABEL,
+  statusLabel,
+  STEP_PLACEHOLDER,
+  STOP_LABEL,
+} from "./goals.js";
 import {
   BUILDING as BRIEFING_BUILDING,
   EMPTY as BRIEFING_EMPTY,
@@ -351,6 +368,10 @@ const dom = {
   standbyEnd: $("standby-end"),
   standbyAdd: $("standby-add"),
   standbyIsSet: $("standby-is-set"),
+  goalsList: $("goals-list"),
+  goalsNewForm: $("goals-new-form"),
+  goalsNewText: $("goals-new-text"),
+  goalsNewAdd: $("goals-new-add"),
   briefing: $("briefing"),
   briefingNow: $("briefing-now"),
   briefingMissed: $("briefing-missed"),
@@ -716,6 +737,7 @@ function render(name) {
     case "work":
       renderFocus();
       renderComingUp();
+      renderGoals();
       renderBriefing();
       renderJobs();
       renderUndo();
@@ -3913,7 +3935,13 @@ async function loadComingUp() {
     await loadComingUp();
     return;
   }
-  if (state.view === "work") paintComingUp();
+  if (state.view === "work") {
+    paintComingUp();
+    // A goal's weekly check-in lives on this very list (goals.js's own
+    // module doc says why) - repaint it too, so its "waiting"/"paused"/next
+    // note stays in step with Coming up rather than needing its own read.
+    paintGoals();
+  }
 }
 
 async function scheduleAct(job, action) {
@@ -4172,6 +4200,282 @@ if (dom.standbyAdd) {
   syncLiveButton(dom.standbyAdd);
 }
 
+/* ==========================================================================
+   Goals - a plan the owner edits, one card per acting step (the owner's
+   "build it now", 2026-09-27; JARVIS-API.md section 59; goals.js).
+
+   Read through its own command (brain/goals.rs), not brain_read - the words
+   are taken out while the private lists are hidden, same as Coming up. A new
+   draft and marking a step raise no card; Stop tracking is one tap,
+   immediate, no confirm. Accepting a draft is the only place this can raise
+   a card, and it is the backend's own weekly-check-in card, never one this
+   window invents - see goals.js's own module doc for why that check-in's
+   live state is read from the very same Coming up list rather than a second
+   source of truth.
+   ========================================================================== */
+
+const gl = { view: null, error: "", loading: false, again: false, at: 0 };
+const GOALS_READ_MS = 20000;
+
+/** goal id -> its working plan while it is still a draft, edited but not yet
+ *  sent to Accept. Cleared once accepted (or the goal is gone). */
+const draftPlans = new Map();
+
+/** goal id -> the id of the weekly check-in job accept() handed back for
+ *  it, so a later read can find that SAME job even if its text ever
+ *  changed - a reload of the app still falls back to matching by text
+ *  (goals.js checkinJobFor). */
+const checkinJobIds = new Map();
+
+async function loadGoals() {
+  if (!IS_TAURI) return;
+  if (gl.loading) {
+    gl.again = true;
+    return;
+  }
+  gl.loading = true;
+  try {
+    gl.view = readGoals(await invoke("brain_goals"));
+    gl.error = "";
+  } catch (error) {
+    gl.error = errorText(error);
+  } finally {
+    gl.loading = false;
+    gl.at = Date.now();
+  }
+  if (gl.again) {
+    gl.again = false;
+    await loadGoals();
+    return;
+  }
+  if (state.view === "work") paintGoals();
+}
+
+/** The working copy of a draft's plan - made once, from what the PC sent,
+ *  then edited in place so typing does not get wiped by the next read. */
+function workingPlan(goal) {
+  if (!draftPlans.has(goal.id)) draftPlans.set(goal.id, goal.plan.map((s) => ({ ...s })));
+  return draftPlans.get(goal.id);
+}
+
+async function createGoal() {
+  const input = dom.goalsNewText;
+  const words = input ? input.value.trim() : "";
+  if (!words) return;
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_goals_create", { text: words });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else {
+      toast("Added as a draft.", "ok");
+      input.value = "";
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+}
+
+async function acceptGoal(goal) {
+  const limits = gl.view ? gl.view.limits : undefined;
+  const plan = workingPlan(goal);
+  if (!planIsValid(plan, limits)) {
+    toast("Add at least one step, each with some words, none of them too long.", "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_goals_accept", { id: goal.id, plan });
+    if (out && out.ok === false) {
+      toast(String(out.error || "Refused."), "bad");
+    } else {
+      toast("Accepted - Jarvis will check in once a week.", "ok");
+      draftPlans.delete(goal.id);
+      if (out && out.goal && out.goal.checkin && out.goal.checkin.id) {
+        checkinJobIds.set(goal.id, out.goal.checkin.id);
+      }
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+  // The new job is on Coming up's own list, not this read - fetch it too,
+  // straight away, so the check-in's state shows without a second visit.
+  await loadComingUp();
+}
+
+async function goalStep(goal, index, done) {
+  try {
+    const out = await invoke("brain_goals_step", { id: goal.id, index, done });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+}
+
+async function stopGoal(goal) {
+  try {
+    const out = await invoke("brain_goals_stop", { id: goal.id });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else toast("Stopped tracking.", "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  checkinJobIds.delete(goal.id);
+  await loadGoals();
+  await loadComingUp();
+}
+
+function goalStepEditorRow(plan, index) {
+  const line = el("div", "goal-editor-row");
+  const step = el("input", "field goal-step-field");
+  step.type = "text";
+  step.maxLength = (gl.view && gl.view.limits.text) || 300;
+  step.value = plan[index].step;
+  step.placeholder = STEP_PLACEHOLDER;
+  step.setAttribute("aria-label", STEP_PLACEHOLDER);
+  step.addEventListener("input", () => {
+    plan[index].step = step.value;
+  });
+  const by = el("input", "field goal-by-field");
+  by.type = "text";
+  by.maxLength = (gl.view && gl.view.limits.by) || 40;
+  by.value = plan[index].by;
+  by.placeholder = BY_PLACEHOLDER;
+  by.setAttribute("aria-label", BY_PLACEHOLDER);
+  by.addEventListener("input", () => {
+    plan[index].by = by.value;
+  });
+  line.append(step, by, button(REMOVE_STEP_LABEL, () => {
+    plan.splice(index, 1);
+    paintGoals();
+  }, { danger: true }));
+  return line;
+}
+
+function draftGoalBlock(goal) {
+  const plan = workingPlan(goal);
+  const block = el("div", "goal-block");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
+  head.append(el("span", "row-tag", statusLabel(goal.status)));
+  block.append(head);
+  const steps = el("div", "goal-steps");
+  plan.forEach((_, i) => steps.append(goalStepEditorRow(plan, i)));
+  block.append(steps);
+  const maxSteps = (gl.view && gl.view.limits.steps) || 7;
+  const actions = el("div", "goal-actions");
+  actions.append(button(ADD_STEP_LABEL, () => {
+    if (plan.length >= maxSteps) {
+      toast(`A plan can have at most ${maxSteps} steps - keep the big ones and drop the rest.`, "bad");
+      return;
+    }
+    plan.push({ step: "", by: "", done: false });
+    paintGoals();
+  }));
+  actions.append(button(ACCEPT_LABEL, () => acceptGoal(goal), { live: true }));
+  block.append(actions);
+  return block;
+}
+
+function goalStepRow(goal, step, index) {
+  const line = el("div", "goal-step");
+  const label = el("label", "goal-step-label");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = step.done;
+  const active = goal.status === "active";
+  box.disabled = !active;
+  if (active) {
+    liveButtons.add(box);
+    syncLiveButton(box);
+  }
+  box.addEventListener("change", async () => {
+    const want = box.checked;
+    box.disabled = true;
+    await goalStep(goal, index, want);
+  });
+  label.append(box, el("span", "goal-step-text", step.step));
+  line.append(label);
+  if (step.by) line.append(el("span", "goal-step-by", step.by));
+  return line;
+}
+
+function activeGoalBlock(goal, jobs) {
+  const block = el("div", "goal-block");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
+  const tag = el("span", "row-tag", statusLabel(goal.status));
+  if (goal.status === "active") tag.dataset.state = "running";
+  head.append(tag);
+  block.append(head);
+  const steps = el("div", "goal-steps");
+  goal.plan.forEach((s, i) => steps.append(goalStepRow(goal, s, i)));
+  block.append(steps);
+  if (goal.status === "active") {
+    const job = checkinJobFor(goal, jobs, checkinJobIds.get(goal.id));
+    if (job) checkinJobIds.set(goal.id, job.id);
+    for (const line of checkinLines(job, WAITING)) block.append(el("p", "goal-note", line));
+    block.append(button(STOP_LABEL, () => stopGoal(goal), { live: true, danger: true }));
+  }
+  return block;
+}
+
+function paintGoals() {
+  const box = dom.goalsList;
+  if (!box) return;
+  const v = gl.view;
+  if (!v) {
+    const line = el("p", "empty", gl.error ? `Could not read Goals: ${gl.error}` : "Reading…");
+    if (gl.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadGoals));
+    }
+    box.replaceChildren(line);
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || GOALS_MISSING));
+    if (dom.goalsNewForm) dom.goalsNewForm.hidden = true;
+    return;
+  }
+  const full = openCount(v) >= v.limits.goals;
+  if (dom.goalsNewForm) dom.goalsNewForm.hidden = full;
+  if (!v.goals.length) {
+    box.replaceChildren(el("p", "empty", EMPTY_GOALS));
+  } else {
+    const jobs = (upL.view && upL.view.jobs) || [];
+    box.replaceChildren(...v.goals.map((g) =>
+      (g.status === "draft" ? draftGoalBlock(g) : activeGoalBlock(g, jobs))));
+  }
+  // The rows above already carry no words while the private lists are
+  // hidden (Rust blanked them, same as Coming up) - this only adds the
+  // "Show" prompt underneath, exactly as paintComingUp does.
+  if (v.hidden) box.append(hiddenNode(0, "words"));
+  if (full) {
+    box.append(el("p", "empty", `${v.limits.goals} goals are already open - stop tracking one before adding another.`));
+  }
+}
+
+function renderGoals() {
+  paintGoals();
+  if (IS_TAURI && !gl.loading && Date.now() - gl.at > GOALS_READ_MS) loadGoals();
+}
+
+if (dom.goalsNewForm) {
+  dom.goalsNewForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createGoal();
+  });
+}
+if (dom.goalsNewAdd) {
+  liveButtons.add(dom.goalsNewAdd);
+  syncLiveButton(dom.goalsNewAdd);
+}
+
 // Private answers turned on or off, or a Show ran out: read it again - Rust
 // decides whether the words come back.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
@@ -4181,6 +4485,13 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   };
   TAURI.event.listen("security-changed", rereadSchedule);
   TAURI.event.listen("private-hidden", rereadSchedule);
+  // Goals hides its words the same way (brain/goals.rs redact_goals).
+  const rereadGoals = () => {
+    gl.at = 0;
+    if (state.view === "work") loadGoals();
+  };
+  TAURI.event.listen("security-changed", rereadGoals);
+  TAURI.event.listen("private-hidden", rereadGoals);
   // The deep questions are hidden with the lists too (commands.rs get_deep).
   const rereadDeep = () => {
     deep.at = 0;
@@ -5974,6 +6285,10 @@ onEvent((frame) => {
       brief.at = 0;
       if (state.view === "work") loadBriefing();
     }
+    // A goal's weekly check-in was approved, paused or changed (`{id, kind:
+    // "goal_checkin", state}`): Goals reads its state from the very same
+    // Coming up list (goals.js's own module doc says why), so loadComingUp()
+    // above already reads the job again - it repaints Goals itself once done.
   }
 
   const refreshes = {

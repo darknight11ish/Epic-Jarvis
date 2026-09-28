@@ -487,6 +487,38 @@ here rather than patched blind:
   without the owner's go-ahead given how carefully this project already
   treats crisis handling.
 
+Built 2026-09-27, the owner's "build it now" after the Jarvis evaluation
+flagged it as the biggest real gap against Meta's Muse still on the table -
+**Goals: a plan the owner edits, one card per acting step**
+(`docs/creativity-2026-09-25/future.md` idea 3; the feasibility audit's
+I63/I64; `docs/JARVIS-API.md` §59; `backend/jarvis_goals.py`):
+
+- The owner says "insulate the garage before winter", writes or asks
+  Jarvis (in ordinary chat) to suggest a short plan, edits and accepts it.
+  Accepting sets up a weekly, model-free check-in - the same ONE
+  `schedule_repeat` card a repeating reminder already raises, approving
+  nothing that acts. Ticking a step off, and Stop tracking, need no card
+  and are immediate, like a to-do item. Every acting step (search
+  installers, draft an email) is asked for in ordinary chat and goes
+  through the exact same per-action card chat already uses - Goals adds no
+  new way to act, ever.
+- **This is NOT "the plan card"** (feasibility I61, gated behind the
+  multi-step safety tests that have not run yet) - Goals never batches an
+  approval, so it never touched that gate.
+- **Where the weekly check-in shows**: the backend registers it
+  `owner_listed=True`, its own default, so it already appears on Coming
+  up like any other repeating job (a reminder, the morning briefing). The
+  desktop's Goals section does not carve out a private channel for it -
+  it reads that SAME list for the check-in's live state (waiting for the
+  card, paused, its next-run note), rather than inventing a second source
+  of truth for one job. Consistent with how the briefing's and the standby
+  schedule's own jobs already work.
+- Desktop built: Brain -> Work -> Goals, beside Coming up
+  (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
+  goals.rs`). The phone is queued next - `tools/check_parity.py` marks the
+  four routes `todo`, not `deliberate`: there is no reason to leave Goals
+  off the phone, nobody has built it there yet.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

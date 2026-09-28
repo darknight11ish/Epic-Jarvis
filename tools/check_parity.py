@@ -257,6 +257,17 @@ CLASSIFICATION = {
     "/api/backup/list": ("deliberate", "The kept backup files, by name and date - PC-only, the same reason as the folder above: a phone has nothing to do with a list of files on the PC's disk. ARCHITECTURE.md section 8."),
     "/api/backup/restore/preview": ("deliberate", "Decrypts a backup to show counts and a date, PC-only - the backup file is on the PC's disk, and the recovery code is typed there. ARCHITECTURE.md section 8."),
     "/api/backup/restore": ("deliberate", "Restoring replaces memory, chat history, settings and notes with an older backup: PC-only, ONE approval card that always needs Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from any other device too, whatever the gate's own risk table says). ARCHITECTURE.md section 8."),
+    # Goals: a plan the owner edits, one card per acting step (the owner's
+    # "build it now", 2026-09-27; JARVIS-API.md section 59; backend
+    # jarvis_goals.py). Desktop only so far - the Brain's Work tab, Goals
+    # (brain/goals.rs; the words taken out while the private lists are
+    # hidden, same as Coming up). The phone side is queued next; these are
+    # "todo", not "deliberate" - there is no reason to leave it off the
+    # phone, nobody has built it there yet.
+    "/api/goals": ("todo", "The list of goals, plus the PC's own limits (steps per plan, open goals, text lengths). A read. Desktop: Brain -> Work -> Goals (brain/goals.rs brain_goals)."),
+    "/api/goals/{id}/accept": ("todo", "The owner's edited plan (or the draft as it stood) is kept, and the goal becomes active. The ONE place this feature can raise a card - the backend's own weekly-check-in `schedule_repeat` card (the same one a repeating reminder or the morning briefing already raises), approving nothing that acts. Held on a stale link (brain_goals_accept)."),
+    "/api/goals/{id}/step": ("todo", "Marks one step done or not - no card, the same shape as ticking off a to-do item. Held on a stale link (brain_goals_step)."),
+    "/api/goals/{id}/stop": ("todo", "Stops tracking the goal and deletes its check-in job on the PC - no card, immediate, the same rule every \"stop tracking this\" control in this project follows. Held on a stale link (brain_goals_stop)."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 
