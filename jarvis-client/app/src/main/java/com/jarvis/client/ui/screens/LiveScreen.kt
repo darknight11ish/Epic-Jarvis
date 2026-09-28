@@ -196,7 +196,10 @@ fun LiveScreen(
                 Gap(12)
                 if (sign.move || move.isNotEmpty()) {
                     // Live is on the PC: say so, and one tap moves it here -
-                    // the same chat carries on there (the review's C3).
+                    // the same chat carries on here: the PC's status names
+                    // the session's chat, and Home takes it over (the review's
+                    // C3; the chat audit, 2026-09-28, which found the phone
+                    // carrying on whatever chat Home was in instead).
                     if (!sign.move) {
                         Text(LiveRules.moveWords(move), style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
                         Gap(8)
@@ -205,7 +208,7 @@ fun LiveScreen(
                         "Move it here",
                         modifier = Modifier.fillMaxWidth(),
                         busy = busy,
-                        onClick = { act { JarvisRuntime.liveStart(resume = true); null } },
+                        onClick = { act { JarvisRuntime.liveStart(move = true); null } },
                     )
                 } else if (!on) {
                     Primary(

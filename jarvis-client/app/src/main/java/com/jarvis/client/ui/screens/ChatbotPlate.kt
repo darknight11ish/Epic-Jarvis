@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,19 +80,25 @@ internal fun ChatbotSection(
     var missing by remember { mutableStateOf(false) }
     var gone by remember { mutableStateOf(false) }
     var readError by remember { mutableStateOf<String?>(null) }
-    var which by remember { mutableStateOf("") }
-    var goal by remember { mutableStateOf("") }
-    var messages by remember { mutableStateOf("") }
-    var minutes by remember { mutableStateOf("") }
-    var never by remember { mutableStateOf("") }
-    var newMessages by remember { mutableStateOf("") }
-    var newMinutes by remember { mutableStateOf("") }
-    var newNever by remember { mutableStateOf("") }
-    var limitsFor by remember { mutableStateOf("") }
+    // The form is saveable (the chat audit, 2026-09-28, phone B3): this plate
+    // sits in Brain's scrolling list, and plain `remember` lost what was
+    // typed when it scrolled away or the phone turned. The goal is words the
+    // owner is about to send to an outside chatbot anyway (never memory,
+    // email or files - rule 1), so keeping them in the screen's saved state
+    // hides nothing new; Android keeps that state only for this screen.
+    var which by rememberSaveable { mutableStateOf("") }
+    var goal by rememberSaveable { mutableStateOf("") }
+    var messages by rememberSaveable { mutableStateOf("") }
+    var minutes by rememberSaveable { mutableStateOf("") }
+    var never by rememberSaveable { mutableStateOf("") }
+    var newMessages by rememberSaveable { mutableStateOf("") }
+    var newMinutes by rememberSaveable { mutableStateOf("") }
+    var newNever by rememberSaveable { mutableStateOf("") }
+    var limitsFor by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
-    var several by remember { mutableStateOf(false) }
-    var picked by remember { mutableStateOf(setOf<String>()) }
+    var several by rememberSaveable { mutableStateOf(false) }
+    var picked by rememberSaveable { mutableStateOf(setOf<String>()) }
     var compareGone by remember { mutableStateOf(false) }
     // Which one this plate started or saw going last, so that one's end
     // stays on screen when both a conversation and a comparison have ended.

@@ -180,6 +180,7 @@ import {
   newConversationId,
   sentProvenance,
   takeChatsGone,
+  addToThread,
   threadSummary,
   userMessage,
 } from "./chat-history.js";
@@ -442,6 +443,15 @@ const state = {
    */
   conversation: [],
   /**
+   * What the bar SHOWS of the conversation (the owner's decision,
+   * 2026-09-28: "the whole current conversation as a scrollable thread"):
+   * every finished `{ question, answer }` pair of this conversation, oldest
+   * first - not trimmed to the model's re-send window like `conversation`,
+   * only capped (chat-history.js THREAD_MAX). This window's memory only;
+   * emptied wherever `conversation` starts afresh.
+   */
+  thread: [],
+  /**
    * The id every request of this conversation carries as `conversation_id`
    * (JARVIS-API.md section 18), so the PC's History keeps one entry per
    * conversation. A new one at start, on "New conversation" and on Esc -
@@ -595,6 +605,7 @@ const temporaryChat = createTemporaryToggle({
   restart: () => {
     state.turnQuestion = null;
     state.conversation = [];
+    state.thread = [];
     closeCard();
     focusInput();
   },
@@ -881,6 +892,7 @@ function closeCard() {
   // longer on screen. Hiding on focus loss does not come here.
   const hadChat = state.conversation.length > 0;
   state.conversation = [];
+  state.thread = [];
   // A conversation forgotten here is a finished one on the PC too: the next
   // question starts a new entry in History (JARVIS-API.md section 18).
   state.conversationId = newConversationId();
@@ -934,10 +946,10 @@ function renderPreviousAnswer({ open = false } = {}) {
       renderMarkdown(p.answer)}</div></section>`).join("");
 }
 
-/** The finished turns before the one on screen: all of `conversation`,
- *  less the last pair when it is the answer the card is showing. */
+/** The finished turns before the one on screen: all of `thread`, less the
+ *  last pair when it is the answer the card is showing. */
 function threadPairs() {
-  const pairs = state.conversation.slice();
+  const pairs = state.thread.slice();
   const last = pairs[pairs.length - 1];
   if (last && !state.inFlight && state.phase === "done" && state.lastPrompt
       && last.question === state.lastPrompt && state.buffer.trim()) {
@@ -965,6 +977,7 @@ function hideChatNote() {
  *  minutes, or when the chat this bar was in was deleted. */
 function startFreshQuietly(line) {
   state.conversation = [];
+  state.thread = [];
   state.conversationId = newConversationId();
   state.lastTurnAt = 0;
   state.previousAnswer = null;
@@ -994,9 +1007,17 @@ async function continueChat(id, { moved = false } = {}) {
   try {
     conv = await invokeStrict("chat_continue_open", { id });
   } catch (error) {
-    openCard("Not continued");
-    showChatNote(String((error && error.message) || error));
-    return;
+    if (moved) {
+      // "Move it here" with nothing in History to read back (history off, a
+      // list hidden, or no answer kept yet): the session's chat is still the
+      // one carried on here - the same id, so the PC files what follows with
+      // it - just with no earlier words re-sent.
+      conv = { turns: [], tainted: false };
+    } else {
+      openCard("Not continued");
+      showChatNote(String((error && error.message) || error));
+      return;
+    }
   }
   const { window: kept, trimmed } = continueWindow(conv && conv.turns);
   let tempOff = false;
@@ -1006,12 +1027,13 @@ async function continueChat(id, { moved = false } = {}) {
   }
   closeCard();
   state.conversation = kept;
+  state.thread = kept.slice();
   state.conversationId = id;
   state.lastTurnAt = Date.now();
   if (dom.chatEndedNote) dom.chatEndedNote.hidden = true;
   openCard(moved ? "Jarvis Live" : "Continuing a chat");
   const lines = [moved ? MOVED_HERE : continuedLine(conv && conv.title)];
-  if (!kept.length) lines.push(CONTINUED_NOTHING);
+  if (!kept.length && !moved) lines.push(CONTINUED_NOTHING);
   if (trimmed) lines.push(CONTINUED_TRIMMED);
   if (conv && conv.tainted === true) lines.push(CONTINUED_TAINTED);
   if (tempOff) lines.push(CONTINUED_TEMPORARY_OFF);
@@ -3163,6 +3185,7 @@ function finishStream(phase, statusText) {
       state.buffer,
       state.turnProvenance
     );
+    state.thread = addToThread(state.thread, question, state.buffer);
     state.lastTurnAt = Date.now();
   }
 
@@ -3261,6 +3284,7 @@ function newConversation() {
   abortStream();
   state.turnQuestion = null;
   state.conversation = [];
+  state.thread = [];
   closeCard();
   announce(`${NEW_CONVERSATION} Your next question starts fresh.`);
   focusInput();
@@ -5307,6 +5331,7 @@ function playLiveEndTone() {
  *  new conversation. What is on screen stays until then. */
 function liveNewSession(cid = newConversationId()) {
   state.conversation = [];
+  state.thread = [];
   state.conversationId = cid;
   state.lastTurnAt = 0;
   state.previousAnswer = null;

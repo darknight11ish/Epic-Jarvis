@@ -201,6 +201,20 @@ export function continuedLine(title) {
   return `Carrying on "${String(title || "").trim() || "(no title)"}".`;
 }
 
+/** The most finished pairs the bar's thread shows - the whole conversation
+ *  in practice; only a very long one loses its oldest pairs from view. */
+export const THREAD_MAX = 100;
+
+/** `thread` with one more finished pair on the end, capped at THREAD_MAX.
+ *  Unlike commitExchange, nothing is trimmed to fit the model: this is what
+ *  is shown, not what is sent. */
+export function addToThread(thread, question, answer) {
+  const q = String(question || "");
+  const a = String(answer || "");
+  if (!q.trim() || !a.trim()) return Array.isArray(thread) ? thread : [];
+  return [...(Array.isArray(thread) ? thread : []), { question: q, answer: a }].slice(-THREAD_MAX);
+}
+
 /** The thread's fold: "Earlier in this chat · 3 questions". */
 export function threadSummary(n) {
   return n === 1 ? "Earlier in this chat · 1 question" : `Earlier in this chat · ${n} questions`;

@@ -89,10 +89,8 @@
     "hud_open_bar": "Open the Jarvis bar",
     "game_temporary": "This looks like a game or role-play, so it's a temporary chat: nothing is kept or learned.",
     "project_chats_later": "Saved for later: Jarvis does not read this in chats yet.",
-    "chatbot_kept": "Kept in History when it ends (Brain > History), marked as outside text. Nothing of it is learned or read aloud.",
     "erase_chat_named": "Also delete the chat it came from: \"{title}\" ({when})?",
-    "erased_no_chat": "Erased. No chat was on record for this fact, so no chat was deleted.",
-    "erased_chat_gone": "Erased. The chat it came from was already deleted."
+    "erased_no_chat": "Erased. No chat was on record for this fact, so no chat was deleted."
   },
   "kinds": [
     "chat",

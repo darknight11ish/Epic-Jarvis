@@ -204,13 +204,20 @@ async function readPreviewNow() {
     return;
   }
   // What the owner unticked stays unticked when the list is read again
-  // (after a card, an Undo, or "the list changed"); anything new is ticked.
-  const unticked = state.preview && state.preview.available
-    ? [...allTicked(state.preview)].filter((k) => !state.ticked.has(k)) : [];
+  // (after a card, an Undo, or "the list changed"); anything new is ticked -
+  // except a customer-support record, which stays as the owner left it: a
+  // support chat they ticked stays ticked (the chat audit, 2026-09-28).
+  const had = state.preview && state.preview.available ? allTicked(state.preview) : null;
+  const unticked = had ? [...had].filter((k) => !state.ticked.has(k)) : [];
+  const tickedExtra = had ? [...state.ticked].filter((k) => !had.has(k)) : [];
   try {
     state.preview = readPreview(await invoke("forget_range_read", previewArgs()));
     state.ticked = state.preview.available ? allTicked(state.preview) : new Set();
     for (const k of unticked) state.ticked.delete(k);
+    if (state.preview.available) {
+      const listed = new Set(state.preview.chats.map((x) => `chat:${x.id}`));
+      for (const k of tickedExtra) if (listed.has(k)) state.ticked.add(k);
+    }
     say("");
   } catch (error) {
     state.preview = null;

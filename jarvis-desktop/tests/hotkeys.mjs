@@ -161,7 +161,7 @@ await check("Jarvis Live's key is off until picked, can be picked, and turned of
   const liveRs = read("src-tauri/src/live.rs");
   const toggle = liveRs.slice(liveRs.indexOf("pub fn toggle(app: &AppHandle"));
   assert.match(toggle.slice(0, 900), /stop\(&app, "owner"\)/);
-  assert.match(toggle.slice(0, 900), /start\(&app, Some\(by\)\)/);
+  assert.match(toggle.slice(0, 900), /start\(&app, Some\(by\), None\)/);
 });
 
 await check("Win is shown as Win, not Super", async () => {

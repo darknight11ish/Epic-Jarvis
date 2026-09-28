@@ -1873,13 +1873,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "brain_history_list": {
             const h = window.__history;
-            h.reads.push({ before: args.before, limit: args.limit });
+            h.reads.push(args.kind ? { before: args.before, limit: args.limit, kind: args.kind }
+              : { before: args.before, limit: args.limit });
             if (h.listFails) throw new Error(h.listFails);
             if (h.missing) {
               return { available: false, why: "This PC's Jarvis does not keep chat history yet. " +
                 "Update the backend by running apply-patches.ps1, then open this again." };
             }
-            const all = [...h.conversations].sort((a, b) => b.updated - a.updated);
+            // `kind` narrows the list, as GET /api/history?kind= does.
+            const all = [...h.conversations]
+              .filter((c) => !args.kind || (c.kind || "chat") === args.kind)
+              .sort((a, b) => b.updated - a.updated);
             const older = args.before == null ? all : all.filter((c) => c.updated < args.before);
             const page = older.slice(0, args.limit || 30);
             const out = JSON.parse(JSON.stringify({ ...h.status, conversations: page }));
@@ -1905,6 +1909,46 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 "or it was older than the keep setting.");
             }
             return JSON.parse(JSON.stringify(t));
+          }
+          // "Continue this chat" (the chat audit, 2026-09-28): the Brain
+          // names the chat (brain/history.rs brain_continue_chat, the id
+          // only); the bar reads it itself (chat_continue_open) - refused,
+          // as Rust refuses, for a record that is not a chat or a Live
+          // session, and while the private lists are hidden.
+          case "brain_continue_chat": {
+            const h = window.__history;
+            h.continued = h.continued || [];
+            h.continued.push(args.id);
+            return null;
+          }
+          case "chat_continue_open": {
+            const h = window.__history;
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              throw new Error("Your chat history is hidden. Press Show on the Brain's History tab " +
+                "and confirm it is you with Windows Hello first.");
+            }
+            const t = h.transcripts[args.id];
+            if (!t) {
+              throw new Error("That conversation is no longer kept on this PC. It was deleted, " +
+                "or it was older than the keep setting.");
+            }
+            if (!["chat", "live", undefined].includes(t.kind)) {
+              throw new Error("That conversation can't be continued: it is a record of a chat " +
+                "with someone other than Jarvis.");
+            }
+            return JSON.parse(JSON.stringify(t));
+          }
+          // "Which chat did this fact come from?" (GET /api/memory/fact-chat):
+          // `factChat` maps a fact id to its chat ({id, title, updated, kind})
+          // or null; a fact not in it is from a PC that cannot say.
+          case "brain_fact_chat": {
+            const h = window.__history;
+            h.factChatReads = h.factChatReads || [];
+            h.factChatReads.push(args.id);
+            const map = h.factChat || null;
+            if (!map || !(String(args.id) in map)) return { available: false };
+            return { id: args.id, conversation: map[String(args.id)] };
           }
           // brain/history.rs brain_history_search, over the stubbed
           // transcripts, the way jarvis_chat_log.ChatLog.search answers:

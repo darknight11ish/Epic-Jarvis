@@ -30,6 +30,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -40,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatLog
+import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.Pill
@@ -57,7 +61,17 @@ import java.time.ZoneId
 
 /**
  * Chat history on the PC ([ChatLog], docs/JARVIS-API.md section 18) - the
- * phone's History screen, opened from Mind.
+ * phone's History screen, opened from Brain and from Home's "Earlier chats".
+ *
+ * Since the chat audit (2026-09-28; the owner's decisions "Chats, after the
+ * chat audit" and "History marks Live sessions"): the list comes first and
+ * the two settings sit under "History settings" at the end; each row says
+ * what kind of conversation it is (a Live session its length and start, a
+ * support chat, a chat with another AI, a comparison) and "Show" narrows the
+ * list to one kind; "Forget a time frame…" is at the top; an opened
+ * conversation can be carried on ("Continue this chat", [onContinue]) when
+ * it is a chat or a Live session, says why not otherwise, shows Jarvis's
+ * answers without their markdown marks, and has Copy on each answer.
  *
  * - The switch, "Keep chat history on this PC". Turning it ON raises an
  *   approval card on the PC and reads "Waiting for your approval" while
@@ -83,9 +97,10 @@ import java.time.ZoneId
  * is left. The phone keeps no history of its own.
  *
  * "Hide memory lists and chat history" (Security) hides the list and any open conversation
- * until Show is confirmed, the same as Mind's memory lists. The settings
+ * until Show is confirmed, the same as Brain's memory lists. The settings
  * stay visible: they say nothing about what was said.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HistoryScreen(
     /** The link is up and fresh. Only turning the switch ON waits for it. */
@@ -94,11 +109,20 @@ fun HistoryScreen(
     privateHidden: Boolean = false,
     onShowPrivate: () -> Unit = {},
     showPrivateBusy: Boolean = false,
+    /** "Continue this chat": null when Home carried it on, or why not in words. */
+    onContinue: suspend (String) -> String? = { null },
+    /** "Forget a time frame…": the Brain's plate. */
+    onOpenForgetRange: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var reads by remember { mutableIntStateOf(0) }
+    // "Show": one kind of conversation, or "" for every kind (the owner's
+    // decision, 2026-09-28: History can be filtered to Live sessions only).
+    var kind by rememberSaveable { mutableStateOf("") }
+    // "History settings", folded until opened: the list comes first.
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var status by remember { mutableStateOf<ChatLog.Status?>(null) }
     var rows by remember { mutableStateOf<List<ChatLog.Summary>?>(null) }
     var mayHaveOlder by remember { mutableStateOf(false) }
@@ -164,8 +188,8 @@ fun HistoryScreen(
             reads += 1
         }
     }
-    LaunchedEffect(reads) {
-        when (val r = JarvisRuntime.history()) {
+    LaunchedEffect(reads, kind) {
+        when (val r = JarvisRuntime.history(kind = kind.ifEmpty { null })) {
             is ApiResult.Ok -> {
                 val page = ChatLog.page(r.value)
                 status = page.status
@@ -199,6 +223,7 @@ fun HistoryScreen(
                 Conversation(
                     id = open,
                     initialFind = findFirst,
+                    onContinue = onContinue,
                     modifier = Modifier.weight(1f),
                     onDeleted = { id, sentence ->
                         rows = rows?.filterNot { it.id == id }
@@ -216,10 +241,199 @@ fun HistoryScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            if (privateHidden) {
+                item(key = "hidden") {
+                    HiddenSection("Conversations", busy = showPrivateBusy, onShow = onShowPrivate)
+                }
+            } else {
+                val shown = rows
+                val err = readError
+                // One letter, or a PC without the word search: the box
+                // narrows `shown` by title, for display only - paging ("Load
+                // older") still works from the full, unfiltered list. Two
+                // letters or more: the PC's results replace the list.
+                val visible = if (shown != null && !wordSearch) ChatLog.filtered(shown, search) else null
+                item(key = "list-head") {
+                    Column(Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Kicker("Conversations")
+                            // At the top of History, not only deep in Brain
+                            // (the chat audit, 2026-09-28).
+                            Quiet(ChatLog.FORGET_RANGE_LINK, color = chrome.textMid, onClick = onOpenForgetRange)
+                        }
+                        Gap(4)
+                        // "Show": every kind, Live only, support chats, chats
+                        // with other AIs, comparisons.
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            ChatLog.FILTERS.forEach { (value, words) ->
+                                Quiet(
+                                    if (value == kind) "• $words" else words,
+                                    color = if (value == kind) chrome.textHi else chrome.textMid,
+                                    modifier = Modifier.semantics {
+                                        contentDescription = ChatLog.FILTER_LABEL + ": " + words +
+                                            if (value == kind) ", chosen" else ""
+                                    },
+                                    onClick = {
+                                        if (value != kind) {
+                                            kind = value
+                                            rows = null
+                                            mayHaveOlder = false
+                                            search = ""
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        Gap(6)
+                        if (shown != null && shown.isNotEmpty()) {
+                            TextInput(
+                                value = search,
+                                onValueChange = { search = it },
+                                placeholder = ChatLog.SEARCH_PLACEHOLDER,
+                                // Its name for TalkBack (the chat audit: it had none).
+                                modifier = Modifier.semantics { contentDescription = ChatLog.SEARCH_LABEL },
+                            )
+                            Gap(8)
+                        }
+                        when {
+                            shown == null -> Text(
+                                if (err != null) "Couldn't read your chat history: $err" else "Reading…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (err != null) chrome.warnInk else chrome.textLo,
+                            )
+                            shown.isEmpty() -> Text(
+                                if (kind.isNotEmpty()) ChatLog.FILTER_NONE else ChatLog.EMPTY,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid,
+                            )
+                            // One letter, or an older PC: titles of the loaded
+                            // rows only - said so, and that "Load older" may
+                            // bring in more (the desktop's words).
+                            visible != null && visible.isEmpty() -> Text(
+                                if (mayHaveOlder) ChatLog.NO_MATCH_MORE else ChatLog.NO_MATCH,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid,
+                            )
+                        }
+                        if (oldPc && search.isNotBlank()) {
+                            Text(ChatLog.SEARCH_OLD, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                        }
+                        if (wordSearch) {
+                            Text(ChatLog.SEARCH_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                            Gap(4)
+                            val f = found
+                            val e = searchError
+                            Text(
+                                when {
+                                    e != null -> "Couldn't search: $e"
+                                    searching || f == null -> ChatLog.SEARCHING
+                                    !f.queryOk -> f.why ?: ChatLog.SEARCH_NONE
+                                    f.found.isEmpty() -> f.whyNot ?: ChatLog.SEARCH_NONE
+                                    f.found.size == 1 -> "1 conversation matches."
+                                    else -> "${f.found.size} conversations match."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (e != null) chrome.warnInk else chrome.textMid,
+                                modifier = Modifier.liveStatus(),
+                            )
+                        }
+                        if (shown != null && err != null) {
+                            Text(
+                                "Couldn't read it again: $err",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.warnInk,
+                            )
+                        }
+                        listSaid?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textMid,
+                                modifier = Modifier.liveStatus(),
+                            )
+                        }
+                    }
+                }
+                if (wordSearch && !searching) {
+                    val f = found
+                    if (f != null && f.queryOk) {
+                        items(f.found, key = { "f-" + it.row.id }) { hit ->
+                            FoundRow(hit, onOpen = {
+                                findFirst = search.trim()
+                                openId = hit.row.id
+                            })
+                        }
+                        ChatLog.searchMoreLine(f)?.let { more ->
+                            item(key = "search-more") {
+                                Text(more, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                            }
+                        }
+                    }
+                }
+                if (visible != null) {
+                    items(visible, key = { "c-" + it.id }) { row ->
+                        ConversationRow(row, onOpen = {
+                            findFirst = ""
+                            openId = row.id
+                        })
+                    }
+                    if (mayHaveOlder && shown != null && shown.isNotEmpty()) {
+                        item(key = "older") {
+                            Quiet(
+                                if (loadingOlder) "Loading…" else "Load older",
+                                enabled = !loadingOlder,
+                                onClick = {
+                                    val before = ChatLog.olderThan(shown)
+                                    if (before == null) {
+                                        mayHaveOlder = false
+                                    } else {
+                                        loadingOlder = true
+                                        scope.launch {
+                                            try {
+                                                when (val r = JarvisRuntime.history(before, kind.ifEmpty { null })) {
+                                                    is ApiResult.Ok -> {
+                                                        val page = ChatLog.page(r.value)
+                                                        val had = rows.orEmpty()
+                                                        val next = ChatLog.append(had, page.conversations)
+                                                        rows = next
+                                                        // No progress means no more to load.
+                                                        mayHaveOlder = page.mayHaveOlder && next.size > had.size
+                                                        readError = null
+                                                    }
+                                                    is ApiResult.Failed -> readError =
+                                                        ChatLog.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
+                                                }
+                                            } finally {
+                                                loadingOlder = false
+                                            }
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // "History settings": after the list (the chat audit, 2026-09-28 -
+            // History used to open on its settings), and shown even while the
+            // list is hidden: they say nothing about what was said.
             item(key = "settings") {
                 val switch = ChatLog.switchState(status, cardInQueue)
-                Section("Chat history") {
-                    Plate {
+                Section(ChatLog.HISTORY_SETTINGS) {
+                    Quiet(
+                        if (settingsOpen) "Hide" else "Show",
+                        color = chrome.textMid,
+                        onClick = { settingsOpen = !settingsOpen },
+                    )
+                    if (settingsOpen) Plate {
                         SwitchRow(
                             title = ChatLog.SWITCH,
                             detail = ChatLog.UNDER,
@@ -300,7 +514,7 @@ fun HistoryScreen(
                         keepToConfirm?.let { days ->
                             Gap(6)
                             Text(
-                                ChatLog.keepConfirm(days),
+                                ChatLog.keepConfirm(days) + " " + ChatLog.KEEP_SUPPORT_NOTE,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = chrome.warnInk,
                             )
@@ -325,147 +539,6 @@ fun HistoryScreen(
                 }
             }
 
-            if (privateHidden) {
-                item(key = "hidden") {
-                    HiddenSection("Conversations", busy = showPrivateBusy, onShow = onShowPrivate)
-                }
-            } else {
-                val shown = rows
-                val err = readError
-                // One letter, or a PC without the word search: the box
-                // narrows `shown` by title, for display only - paging ("Load
-                // older") still works from the full, unfiltered list. Two
-                // letters or more: the PC's results replace the list.
-                val visible = if (shown != null && !wordSearch) ChatLog.filtered(shown, search) else null
-                item(key = "list-head") {
-                    Column(Modifier.fillMaxWidth()) {
-                        Kicker("Conversations")
-                        Gap(6)
-                        if (shown != null && shown.isNotEmpty()) {
-                            TextInput(
-                                value = search,
-                                onValueChange = { search = it },
-                                placeholder = ChatLog.SEARCH_PLACEHOLDER,
-                            )
-                            Gap(8)
-                        }
-                        when {
-                            shown == null -> Text(
-                                if (err != null) "Couldn't read your chat history: $err" else "Reading…",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (err != null) chrome.warnInk else chrome.textLo,
-                            )
-                            shown.isEmpty() -> Text(
-                                ChatLog.EMPTY,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = chrome.textMid,
-                            )
-                            visible != null && visible.isEmpty() -> Text(
-                                ChatLog.NO_MATCH,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = chrome.textMid,
-                            )
-                        }
-                        if (oldPc && search.isNotBlank()) {
-                            Text(ChatLog.SEARCH_OLD, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
-                        }
-                        if (wordSearch) {
-                            Text(ChatLog.SEARCH_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
-                            Gap(4)
-                            val f = found
-                            val e = searchError
-                            Text(
-                                when {
-                                    e != null -> "Couldn't search: $e"
-                                    searching || f == null -> ChatLog.SEARCHING
-                                    !f.queryOk -> f.why ?: ChatLog.SEARCH_NONE
-                                    f.found.isEmpty() -> f.whyNot ?: ChatLog.SEARCH_NONE
-                                    f.found.size == 1 -> "1 conversation matches."
-                                    else -> "${f.found.size} conversations match."
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (e != null) chrome.warnInk else chrome.textMid,
-                                modifier = Modifier.liveStatus(),
-                            )
-                        }
-                        if (shown != null && err != null) {
-                            Text(
-                                "Couldn't read it again: $err",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = chrome.warnInk,
-                            )
-                        }
-                        listSaid?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = chrome.textMid,
-                                modifier = Modifier.liveStatus(),
-                            )
-                        }
-                    }
-                }
-                if (wordSearch && !searching) {
-                    val f = found
-                    if (f != null && f.queryOk) {
-                        items(f.found, key = { "f-" + it.row.id }) { hit ->
-                            FoundRow(hit, onOpen = {
-                                findFirst = search.trim()
-                                openId = hit.row.id
-                            })
-                        }
-                        ChatLog.searchMoreLine(f)?.let { more ->
-                            item(key = "search-more") {
-                                Text(more, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
-                            }
-                        }
-                    }
-                }
-                if (visible != null) {
-                    items(visible, key = { "c-" + it.id }) { row ->
-                        ConversationRow(row, onOpen = {
-                            findFirst = ""
-                            openId = row.id
-                        })
-                    }
-                    if (mayHaveOlder && shown != null && shown.isNotEmpty()) {
-                        item(key = "older") {
-                            Quiet(
-                                if (loadingOlder) "Loading…" else "Load older",
-                                enabled = !loadingOlder,
-                                onClick = {
-                                    val before = ChatLog.olderThan(shown)
-                                    if (before == null) {
-                                        mayHaveOlder = false
-                                    } else {
-                                        loadingOlder = true
-                                        scope.launch {
-                                            try {
-                                                when (val r = JarvisRuntime.history(before)) {
-                                                    is ApiResult.Ok -> {
-                                                        val page = ChatLog.page(r.value)
-                                                        val had = rows.orEmpty()
-                                                        val next = ChatLog.append(had, page.conversations)
-                                                        rows = next
-                                                        // No progress means no more to load.
-                                                        mayHaveOlder = page.mayHaveOlder && next.size > had.size
-                                                        readError = null
-                                                    }
-                                                    is ApiResult.Failed -> readError =
-                                                        ChatLog.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
-                                                }
-                                            } finally {
-                                                loadingOlder = false
-                                            }
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
             item(key = "tail") { Gap(24) }
         }
     }
@@ -485,13 +558,27 @@ private fun ConversationRow(row: ChatLog.Summary, onOpen: () -> Unit) {
             style = MaterialTheme.typography.labelSmall,
             color = chrome.textLo,
         )
-        if (row.hasVoice || row.tainted) {
-            Gap(4)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (row.hasVoice) Pill(ChatLog.VOICE_MARK)
-                if (row.tainted) Pill(ChatLog.TAINT_MARK, color = chrome.warnInk)
-            }
+        RowMarks(row)
+    }
+}
+
+/**
+ * A row's marks in words: what kind of conversation it is (a Live session
+ * says so in its line instead - "Live · 12 min · Today 14:05"), said aloud,
+ * read outside text.
+ */
+@Composable
+private fun RowMarks(row: ChatLog.Summary) {
+    val chrome = LocalChrome.current
+    val tag = ChatLog.KIND_TAG[row.kind].orEmpty().takeIf { row.kind != "live" && it.isNotEmpty() }
+    if (tag == null && !row.hasVoice && !row.tainted) return
+    Gap(4)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (tag != null) {
+            Pill(tag, modifier = Modifier.semantics { contentDescription = ChatLog.KIND_TITLE[row.kind].orEmpty() })
         }
+        if (row.hasVoice) Pill(ChatLog.VOICE_MARK)
+        if (row.tainted) Pill(ChatLog.TAINT_MARK, color = chrome.warnInk)
     }
 }
 
@@ -530,13 +617,7 @@ private fun FoundRow(hit: ChatLog.Found, onOpen: () -> Unit) {
         )
         Gap(4)
         Text(snippet, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-        if (hit.row.hasVoice || hit.row.tainted) {
-            Gap(4)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (hit.row.hasVoice) Pill(ChatLog.VOICE_MARK)
-                if (hit.row.tainted) Pill(ChatLog.TAINT_MARK, color = chrome.warnInk)
-            }
-        }
+        RowMarks(hit.row)
     }
 }
 
@@ -556,11 +637,16 @@ private fun FoundRow(hit: ChatLog.Found, onOpen: () -> Unit) {
 private fun Conversation(
     id: String,
     initialFind: String,
+    onContinue: suspend (String) -> String?,
     modifier: Modifier,
     onDeleted: (id: String, sentence: String) -> Unit,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // "Continue this chat": busy while Home takes it over; why not, if not.
+    var continuing by remember(id) { mutableStateOf(false) }
+    var continueSaid by remember(id) { mutableStateOf<String?>(null) }
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
     var loaded by remember(id) { mutableStateOf<ChatLog.Transcript?>(null) }
@@ -621,6 +707,46 @@ private fun Conversation(
                     Gap(4)
                     Text(ChatLog.TAINT_LINE, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
                 }
+                // What kind of record it is, when it is not an ordinary chat.
+                if (t != null && t.kind != "chat") {
+                    Gap(4)
+                    Text(ChatLog.KIND_TITLE[t.kind].orEmpty(), style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid)
+                }
+                // "Continue this chat" (the owner's decision, 2026-09-28): Home
+                // carries it on - the same conversation, the newest kept
+                // messages that fit, its outside-text mark carried over. A
+                // support record, a chat with another AI or a comparison says
+                // why it cannot be.
+                if (t != null) {
+                    Gap(6)
+                    if (t.continuable) {
+                        Quiet(
+                            if (continuing) "Opening on Home…" else ChatLog.CONTINUE,
+                            color = chrome.textHi,
+                            enabled = !continuing,
+                            modifier = Modifier.semantics { contentDescription = ChatLog.CONTINUE_TITLE },
+                            onClick = {
+                                continuing = true
+                                continueSaid = null
+                                scope.launch {
+                                    try {
+                                        continueSaid = onContinue(id)
+                                    } finally {
+                                        continuing = false
+                                    }
+                                }
+                            },
+                        )
+                    } else {
+                        Text(t.continueWhy.orEmpty(), style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textMid)
+                    }
+                    continueSaid?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk,
+                            modifier = Modifier.liveStatus())
+                    }
+                }
                 Gap(6)
                 if (confirm) {
                     val t = taught
@@ -632,6 +758,9 @@ private fun Conversation(
                             color = chrome.textMid,
                         )
                         facts.isEmpty() -> Text(
+                            // A customer-support record asks once more, saying
+                            // what it is (the owner, 2026-09-28).
+                            (if (loaded?.kind == "support") ChatLog.DELETE_SUPPORT + " " else "") +
                             if ((t?.hiddenCount ?: 0) > 0) {
                                 "Delete this conversation from your PC? This cannot be undone. " +
                                     ChatLog.chatFactsHiddenLine(t?.hiddenCount ?: 0)
@@ -751,13 +880,28 @@ private fun Conversation(
             // A customer-support chat's record (role "support"): who wrote
             // each line, and the company's own lines marked outside text.
             val support = turn.role == "support"
+            // A kept chat with another AI or a comparison (role "chatbot",
+            // the chat audit 2026-09-28): who wrote each line, and the other
+            // AI's replies and the summary marked outside text.
+            val chatbot = turn.role == "chatbot"
+            val answer = turn.role == "assistant"
             Column(Modifier.fillMaxWidth()) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Kicker(if (support) ChatLog.supportWho(turn.provenance) else if (mine) "You" else "Jarvis")
+                    Kicker(
+                        when {
+                            support -> ChatLog.supportWho(turn.provenance)
+                            chatbot -> ChatLog.chatbotWho(turn.provenance)
+                            mine -> "You"
+                            else -> "Jarvis"
+                        },
+                    )
                     if (support && turn.provenance == "support_company") {
+                        Pill("outside text", color = chrome.warnInk)
+                    }
+                    if (chatbot && (turn.provenance == "chatbot_reply" || turn.provenance == "chatbot_summary")) {
                         Pill("outside text", color = chrome.warnInk)
                     }
                     if (mine) {
@@ -770,7 +914,14 @@ private fun Conversation(
                 val now = matches.getOrNull(current)
                 Text(
                     if (here.isEmpty()) {
-                        AnnotatedString(turn.text)
+                        // Jarvis's answers (and a chatbot record's lines)
+                        // without their markdown marks - no "**" or "#" (the
+                        // chat audit, 2026-09-28). While "Find in this chat"
+                        // has words, the words are shown exactly as kept, so
+                        // the marks land on the right letters.
+                        AnnotatedString(
+                            if ((answer || chatbot) && find.isBlank()) ChatLog.plainAnswer(turn.text) else turn.text,
+                        )
                     } else {
                         buildAnnotatedString {
                             append(turn.text)
@@ -794,6 +945,16 @@ private fun Conversation(
                         color = chrome.textLo,
                     )
                 }
+                // Copy on an old answer (the chat audit, 2026-09-28): the
+                // same private copy as Home's (no preview in Android's toast).
+                if (answer && turn.text.isNotBlank()) {
+                    Quiet(
+                        ChatLog.COPY,
+                        color = chrome.textMid,
+                        modifier = Modifier.semantics { contentDescription = ChatLog.COPY_TITLE },
+                        onClick = { PrivateClipboard.copy(context, turn.text) },
+                    )
+                }
             }
         }
         item(key = "tail") { Gap(24) }
@@ -801,21 +962,20 @@ private fun Conversation(
 }
 
 /**
- * Mind's way in: one plate that opens History. Hidden like the memory lists
- * when "Hide memory lists and chat history" is on - what was said in a chat is at least as
- * private as what Jarvis remembers.
+ * Brain's way in: one plate that opens History. While "Hide memory lists and
+ * chat history" is on, History itself hides its list and any open
+ * conversation until Show is confirmed; its settings stay reachable (the
+ * chat audit, 2026-09-28, phone C9: hiding the whole way in hid them too,
+ * against History's own rule), so this plate is never hidden - it shows no
+ * words of any chat.
  */
 @Composable
 internal fun HistoryEntrySection(
     onOpen: () -> Unit,
-    privateHidden: Boolean,
-    showPrivateBusy: Boolean,
-    onShowPrivate: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") privateHidden: Boolean,
+    @Suppress("UNUSED_PARAMETER") showPrivateBusy: Boolean,
+    @Suppress("UNUSED_PARAMETER") onShowPrivate: () -> Unit,
 ) {
-    if (privateHidden) {
-        HiddenSection("Chat history", busy = showPrivateBusy, onShow = onShowPrivate)
-        return
-    }
     val chrome = LocalChrome.current
     Section("Chat history") {
         Plate {

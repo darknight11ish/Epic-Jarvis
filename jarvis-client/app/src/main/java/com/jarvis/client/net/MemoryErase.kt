@@ -96,9 +96,13 @@ object MemoryErase {
     /** What the PC answered, kept whole: the status and the JSON body, if any. */
     data class Reply(val code: Int, val body: JsonObject?)
 
+    /** The PC deleted the chat the fact came from, too. */
+    fun chatDeleted(reply: Reply): Boolean = reply.code in 200..299 && reply.body?.flag("chat_deleted") == true
+
     /**
      * Whether the words are gone now (so the row leaves the list), and the
-     * sentence to show.
+     * sentence to show. [askedChat]: the chat was asked about (or the PC said
+     * none is on record) - a bare "Erased." would then hide that no chat went.
      */
     fun said(reply: Reply, askedChat: Boolean = false): Pair<Boolean, String> {
         val b = reply.body

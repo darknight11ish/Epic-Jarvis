@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiError
@@ -224,6 +226,16 @@ internal fun SavedAutomaticallySection(
     // a checkbox on the erase confirm, reset to unchecked each time a new
     // fact's confirm opens.
     var alsoDeleteChat by remember { mutableStateOf(false) }
+    // Which chat the fact being erased came from (GET /api/memory/fact-chat,
+    // the chat audit 2026-09-28): the checkbox names it; with none on record
+    // there is nothing to offer; a PC that cannot say asks as before.
+    // Null while it is being read.
+    var eraseChat by remember { mutableStateOf<Pair<Boolean, com.jarvis.client.net.ChatLog.FactChat?>?>(null) }
+    LaunchedEffect(confirmEraseId) {
+        eraseChat = null
+        val id = confirmEraseId ?: return@LaunchedEffect
+        eraseChat = JarvisRuntime.factChat(id)
+    }
     var busyId by remember { mutableStateOf<Long?>(null) }
     // Which of the four the busy row is doing, for its label.
     var erasing by remember { mutableStateOf(false) }
@@ -338,11 +350,41 @@ internal fun SavedAutomaticallySection(
                             color = chrome.warnInk)
                         // "Also delete the chat it came from" (the owner's
                         // decision, 2026-09-27): off by default, on this one
-                        // fact's confirm only.
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = alsoDeleteChat, onCheckedChange = { alsoDeleteChat = it })
-                            Text(MemoryErase.ALSO_CHAT_LABEL, style = MaterialTheme.typography.bodySmall,
-                                color = chrome.textMid)
+                        // fact's confirm only. Since the chat audit
+                        // (2026-09-28) it names the chat - its title and
+                        // when - and is not offered when none is on record.
+                        // The whole row is one checkbox for TalkBack.
+                        val known = eraseChat
+                        val named = known?.second
+                        val zone = remember { ZoneId.systemDefault() }
+                        if (known == null || !known.first || named != null) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .toggleable(
+                                        value = alsoDeleteChat,
+                                        role = Role.Checkbox,
+                                        onValueChange = { alsoDeleteChat = it },
+                                    ),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = alsoDeleteChat, onCheckedChange = null)
+                                Text(
+                                    if (named != null) {
+                                        MemoryErase.chatNamed(
+                                            named.title,
+                                            named.updated?.let {
+                                                com.jarvis.client.net.ChatLog.whenLine(it, zone, LocalDate.now(zone))
+                                            },
+                                        )
+                                    } else {
+                                        MemoryErase.ALSO_CHAT_LABEL
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = chrome.textMid,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Quiet(
@@ -354,11 +396,18 @@ internal fun SavedAutomaticallySection(
                                     busyId = fact.id
                                     erasing = true
                                     said = null
-                                    val alsoChat = alsoDeleteChat
+                                    val chatNow = eraseChat
+                                    val alsoChat = alsoDeleteChat &&
+                                        (chatNow == null || !chatNow.first || chatNow.second != null)
                                     scope.launch {
                                         try {
-                                            val (gone, sentence) =
-                                                JarvisRuntime.eraseAutoFact(fact.id, alsoChat)
+                                            val (gone, sentence) = JarvisRuntime.eraseAutoFact(
+                                                fact.id,
+                                                alsoChat,
+                                                chatId = chatNow?.second?.id,
+                                                // The PC said no chat is on record: said so after.
+                                                noChatOnRecord = chatNow?.first == true && chatNow.second == null,
+                                            )
                                             if (gone) facts = facts?.filterNot { it.id == fact.id }
                                             said = sentence
                                         } finally {

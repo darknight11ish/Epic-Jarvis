@@ -302,6 +302,35 @@ object ChatHistory {
 
     fun continuedLine(title: String?): String = "Carrying on \"${title?.trim()?.ifEmpty { null } ?: "(no title)"}\"."
 
+    /** The most finished pairs Home's thread shows (chat-history.js THREAD_MAX). */
+    const val THREAD_MAX = 100
+
+    /**
+     * [thread] with one more finished pair on the end, capped at
+     * [THREAD_MAX]. Unlike [commit], nothing is trimmed to fit the model:
+     * this is what Home SHOWS of the conversation (the owner's decision,
+     * 2026-09-28: "the whole current conversation as a scrollable thread"),
+     * not what is re-sent.
+     */
+    fun addToThread(thread: List<Exchange>, asked: List<UserTurn>, answer: String): List<Exchange> {
+        val kept = asked.filter { it.text.isNotBlank() }
+        if (kept.isEmpty() || answer.isBlank()) return thread
+        return (thread + Exchange(kept, answer)).takeLast(THREAD_MAX)
+    }
+
+    /**
+     * The finished pairs above the one on screen: all of [thread], less its
+     * last pair when that is the question Home is showing with its answer.
+     * A pair joins the thread only once its answer has finished, so while
+     * [streaming] the question on screen is not in it yet. (The answer's
+     * words are not compared: reading them here would redraw Home on every
+     * streamed word.)
+     */
+    fun threadBefore(thread: List<Exchange>, question: String?, streaming: Boolean): List<Exchange> {
+        val last = thread.lastOrNull() ?: return thread
+        return if (!streaming && question != null && last.question == question) thread.dropLast(1) else thread
+    }
+
     fun threadSummary(n: Int): String =
         if (n == 1) "Earlier in this chat · 1 question" else "Earlier in this chat · $n questions"
 

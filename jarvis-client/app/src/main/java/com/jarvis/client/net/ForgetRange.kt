@@ -321,6 +321,29 @@ object ForgetRange {
     private fun sentence(s: String): String =
         s.replaceFirstChar { it.uppercase() }.let { if (it.isEmpty() || it.last() in ".!?") it else "$it." }
 
+    /**
+     * The chat ids a "forget" body names (`{"facts": [...], "chats": [...]}`,
+     * [forgetBody]) - kept by the runtime until the card is decided, so Home
+     * can leave a chat that went (the chat audit, 2026-09-28). Ids only.
+     */
+    fun chatsIn(json: String): List<String> = runCatching {
+        ((JarvisJson.parseToJsonElement(json) as? JsonObject)?.get("chats") as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+            .orEmpty()
+    }.getOrDefault(emptyList())
+
+    /**
+     * From a status read ([parseStatus]): null while a card is still waiting
+     * (or the answer was not a status), else how the last one ended -
+     * `last.outcome` ("done" when approved and carried out).
+     */
+    fun decided(reply: Reply): String? {
+        if (reply.code !in 200..299) return null
+        val s = parseStatus(reply.body)
+        if (!s.available || s.waiting) return null
+        return s.last?.outcome?.takeIf { it.isNotEmpty() }
+    }
+
     /** Reads a "forget" or "undo" answer: the PC's own sentence either way. */
     fun said(reply: Reply, done: String): Outcome {
         val b = reply.body
