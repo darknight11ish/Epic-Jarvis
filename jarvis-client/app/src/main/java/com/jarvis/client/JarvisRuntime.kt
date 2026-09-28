@@ -29,6 +29,7 @@ import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.Hardware
+import com.jarvis.client.net.PcHelp
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
@@ -432,6 +433,15 @@ object JarvisRuntime {
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
 
+    /**
+     * Lockdown is on (backend jarvis_asks_first.py, 2026-09-28): every way out
+     * of the PC asks first, or has stopped. From `/api/version`'s
+     * `capabilities.lockdown` at every handshake, then the `lockdown` event.
+     * False from a PC without it. Home says so while it is true.
+     */
+    private val _lockdown = MutableStateFlow(false)
+    val lockdown: StateFlow<Boolean> = _lockdown.asStateFlow()
+
     private val _pending = MutableStateFlow<List<PendingItem>>(emptyList())
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
 
@@ -525,6 +535,7 @@ object JarvisRuntime {
     private var watchdog: Job? = null
     private var faceJob: Job? = null
     private var widgetJob: Job? = null
+    private var boardJob: Job? = null
 
     /** The forced restart in flight, so two taps on Reconnect do not stack. */
     private var restartJob: Job? = null
@@ -713,6 +724,16 @@ object JarvisRuntime {
                 QuickLinkWidget().updateAll(app)
             }
         }
+        // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
+        // so read again from the PC - when the link comes or goes stale, when
+        // a timer or reminder changes, when the saved widgets change here, or
+        // when a slot is given another widget. Never on a clock of its own
+        // beyond the launcher's half-hourly update.
+        boardJob?.cancel()
+        boardJob = scope.launch {
+            combine(_link, _stale, _scheduleTick, _widgetsTick, settings.homeWidgets) { _, _, _, _, _ -> }
+                .collect { com.jarvis.client.widget.JarvisBoardWidgets.updateAll(app) }
+        }
     }
 
     /** True once there is somewhere to talk to and something to talk with. */
@@ -730,6 +751,9 @@ object JarvisRuntime {
         when (result) {
             is ApiResult.Ok -> {
                 _version.value = result.value
+                _lockdown.value = com.jarvis.client.net.AsksFirst.lockdownFrom(
+                    result.value.detail("lockdown"),
+                ) ?: false
                 _notice.value = null
                 // A new handshake may be a different (or upgraded) server:
                 // ask it about the appearance route afresh.
@@ -1178,6 +1202,14 @@ object JarvisRuntime {
             // words). The list on Mind reads itself again; a job that went
             // off is read by id and shown as a notification.
             com.jarvis.client.net.Schedule.EVENT -> onScheduleEvent(event.data, event.id)
+            // "Ring my phone" (2026-09-28): `{"id", "state", "at", "until",
+            // "seconds"}` and no words. Rings on the alarm channel, never for
+            // a stale or replayed event (net/FindPhone.kt).
+            com.jarvis.client.net.FindPhone.EVENT -> onRingPhone(event.data)
+            // Lockdown turned on or off (`{"on": bool}`, 2026-09-28): Home's
+            // line follows it; "What asks first" reads itself again when shown.
+            "lockdown" -> com.jarvis.client.net.AsksFirst.lockdownFrom(event.data as? JsonObject)
+                ?.let { _lockdown.value = it }
             // A focus session started, changed (locked on, a drift began or
             // ended, paused...) or ended (`{"state"}` only, or a callout's
             // number - a doorbell, never what was in front). Mind's "Focus
@@ -1545,6 +1577,15 @@ object JarvisRuntime {
         return BigModel.replyLine(result)
     }
 
+    // --------------------------------------------------------- PC help ----
+
+    /**
+     * Reads `/api/pc/help` once ([PcHelp]). Nothing is kept here: the answer
+     * can name programs on the PC, so the screen that asked holds it and
+     * drops it when it closes. A read, so not held on a stale link.
+     */
+    suspend fun pcHelp(): PcHelp.Read = PcHelp.readOf(api.pcHelp())
+
     // --------------------------------------------------------- hardware ----
 
     /** Re-reads `/api/hardware`. Reads only; a failed read is said in words. */
@@ -1650,6 +1691,87 @@ object JarvisRuntime {
                 }
         }
     }
+
+    /**
+     * Lockdown ON (2026-09-28) - the desktop's `set_asks_first` with the
+     * action "lockdown" and `ask: true`. Never held on a stale link: it only
+     * makes Jarvis ask more. The phone never turns it off.
+     * @return the sentence to show.
+     */
+    suspend fun turnOnLockdown(): String {
+        val r = api.lockdownOn()
+        return when (r) {
+            is ApiResult.Ok -> {
+                if (r.value is com.jarvis.client.net.DesktopWrite.Outcome.Done) _lockdown.value = true
+                com.jarvis.client.net.AsksFirst.said(r.value)
+            }
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.AsksFirst.missing(r.error)) {
+                    com.jarvis.client.net.AsksFirst.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * "Playing on your PC" (2026-09-28): `GET /api/media`, the PC's own
+     * sentence ("Paused: ..."), or null when it could not be read. A read:
+     * never held. What is playing is only shown - never saved or sent on.
+     */
+    suspend fun pcMedia(): String? = when (val r = api.pcMedia()) {
+        is ApiResult.Ok -> com.jarvis.client.net.PcMedia.said(r.value)
+        is ApiResult.Failed ->
+            if (com.jarvis.client.net.PcMedia.missing(r.error)) com.jarvis.client.net.PcMedia.MISSING
+            else null
+    }
+
+    /**
+     * ONE media button: play, pause, next or previous on the PC. No card (the
+     * owner's decision of 2026-09-27), but held on a stale link (rule 4), like
+     * every change. @return the PC's own sentence, or why not.
+     */
+    suspend fun pcMediaControl(action: String): String {
+        actionBlocker()?.let { return it }
+        return when (val r = api.pcMediaControl(action)) {
+            is ApiResult.Ok -> com.jarvis.client.net.PcMedia.said(r.value) ?: "Done."
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.PcMedia.missing(r.error)) com.jarvis.client.net.PcMedia.MISSING
+                else noticeFor(r.error)
+        }
+    }
+
+    /**
+     * The 10-minute timer tile (Quick Settings tiles, docs/JARVIS-API.md
+     * section 81.2): ONE plain timer, `POST /api/schedule/add {"kind":
+     * "timer", "seconds": 600}` - no card (a plain timer needs none), held on
+     * a stale link (rule 4) like every change. @return whether it was set,
+     * and the sentence to show.
+     */
+    suspend fun addTileTimer(): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.data.QuickTiles.timerBody()
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> {
+                val (ok, words) = com.jarvis.client.net.Schedule.said(r.value)
+                if (ok) {
+                    _scheduleTick.update { n -> n + 1 }
+                    true to com.jarvis.client.data.QuickTiles.TIMER_SET
+                } else {
+                    false to words
+                }
+            }
+            is ApiResult.Failed -> false to ("Not set. " + describe(r.error))
+        }
+    }
+
+    /**
+     * Runs [block] on the runtime's own long-lived scope rather than a
+     * caller's. For a Quick Settings tile: Android may unbind the tile (and
+     * cancel its own scope) the moment the panel closes, which would cut a
+     * request off half way.
+     */
+    fun launchDetached(block: suspend () -> Unit): Job = scope.launch { block() }
 
     /**
      * "Lights, plugs and fans without a card" - the desktop's
@@ -3438,6 +3560,73 @@ object JarvisRuntime {
         }
     }
 
+    // --------------------------------------------------------- Widgets ----
+    // "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
+    // version; docs/JARVIS-API.md section 86) - see
+    // [com.jarvis.client.net.JarvisWidgets], ui/screens/WidgetsPlate.kt and
+    // widget/JarvisBoardWidget.kt. The PC keeps the widgets; this phone keeps
+    // only which one each home-screen slot shows.
+
+    private val _widgetsTick = MutableStateFlow(0)
+
+    /** Goes up when a widget is added or deleted here, so the list and the home screen redraw. */
+    val widgetsTick: StateFlow<Int> = _widgetsTick.asStateFlow()
+
+    /** `GET /api/widgets`. A read. */
+    suspend fun widgets(): ApiResult<JsonObject> = api.widgets()
+
+    /** `GET /api/widgets/show?id=`: one widget, filled in now. A read. */
+    suspend fun widgetShow(id: String): ApiResult<JsonObject> = api.widgetShow(id)
+
+    /**
+     * A PREVIEW from the owner's typed words - the PC's model makes a small
+     * checked description; nothing is added. Not held on a stale link (it
+     * adds nothing), like "Photo to reminder". @return whether a preview was
+     * made, and the sentence to show.
+     */
+    suspend fun widgetDraft(words: String): Pair<Boolean, String> {
+        val body = com.jarvis.client.net.JarvisWidgets.draftBody(words)
+            ?: return false to com.jarvis.client.net.JarvisWidgets.NO_WORDS
+        return widgetPost(com.jarvis.client.net.JarvisWidgets.DRAFT_PATH, body, "Not made. ")
+    }
+
+    /** Keep ONE preview, exactly as shown. No card. Held on a stale link. */
+    suspend fun widgetAdd(draft: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (!com.jarvis.client.net.JarvisWidgets.validDraft(draft)) return false to "That preview has expired."
+        return widgetPost(
+            com.jarvis.client.net.JarvisWidgets.ADD_PATH,
+            com.jarvis.client.net.JarvisWidgets.idBody("draft", draft), "Not added. ",
+        )
+    }
+
+    /** Drop ONE preview. Not held: it only drops. */
+    suspend fun widgetDiscard(draft: String): Pair<Boolean, String> {
+        if (!com.jarvis.client.net.JarvisWidgets.validDraft(draft)) return true to "Discarded."
+        return widgetPost(
+            com.jarvis.client.net.JarvisWidgets.DISCARD_PATH,
+            com.jarvis.client.net.JarvisWidgets.idBody("draft", draft), "Not discarded. ",
+        )
+    }
+
+    /** Delete ONE widget, at once. Held on a stale link, like Coming up's Delete. */
+    suspend fun widgetDelete(id: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (!com.jarvis.client.net.JarvisWidgets.validId(id)) return false to "That widget is not there any more."
+        return widgetPost(
+            com.jarvis.client.net.JarvisWidgets.DELETE_PATH,
+            com.jarvis.client.net.JarvisWidgets.idBody("id", id), "Not deleted. ",
+        )
+    }
+
+    private suspend fun widgetPost(path: String, body: String, failed: String): Pair<Boolean, String> =
+        when (val r = api.widgetPost(path, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.JarvisWidgets.said(r.value.first, r.value.second).also {
+                _widgetsTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to (failed + describe(r.error))
+        }
+
     // ------------------------------------------------------- Coming up ----
     // Timers, alarms, reminders and the to-do list (the owner's decisions of
     // 2026-09-25) - see [com.jarvis.client.net.Schedule] and
@@ -3454,6 +3643,46 @@ object JarvisRuntime {
 
     /** The jobs already shown as notifications, by id and when they went off. */
     private val scheduleShown = LinkedHashSet<String>()
+
+    /** The "ring my phone" ids already rung here - a replayed event never rings twice. */
+    private val ringsHeard = LinkedHashSet<String>()
+
+    /**
+     * "Ring my phone" (backend jarvis_find_phone.py, 2026-09-28): ring on the
+     * alarm channel, even on silent, with Stop, for at most
+     * [com.jarvis.client.net.FindPhone.MAX_SECONDS] - only for a fresh event
+     * this phone has not rung for before ([com.jarvis.client.net.FindPhone]).
+     * A stop from the PC takes that one ringing notification away. Nothing is
+     * sent back: it only rings.
+     */
+    private fun onRingPhone(data: kotlinx.serialization.json.JsonElement?) {
+        val ring = com.jarvis.client.net.FindPhone.parse(data as? JsonObject) ?: return
+        val context = appContext ?: return
+        val tag = com.jarvis.client.net.FindPhone.tag(ring.id)
+        if (ring.stop) {
+            runCatching { com.jarvis.client.service.ScheduleNotifier.stopRinging(context, tag) }
+            return
+        }
+        // Written at once: a restart must not replay this event and ring again.
+        flushResumePoint()
+        val fresh = synchronized(ringsHeard) {
+            if (ringsHeard.size > 100) ringsHeard.clear()
+            ringsHeard.add(ring.id)
+        }
+        if (!fresh) return
+        if (!com.jarvis.client.net.FindPhone.shouldRing(ring, System.currentTimeMillis() / 1000.0)) {
+            Log.i(TAG, "a ring_phone event arrived late, so the phone did not ring")
+            return
+        }
+        com.jarvis.client.service.ScheduleNotifier.post(
+            context, ring.id, com.jarvis.client.net.FindPhone.EVENT,
+            com.jarvis.client.net.FindPhone.TITLE, com.jarvis.client.net.FindPhone.TEXT,
+            com.jarvis.client.net.FindPhone.LOCK_SCREEN,
+            ring = true,
+            key = tag,
+            timeoutMs = com.jarvis.client.net.FindPhone.ringMillis(ring),
+        )
+    }
 
     /** `GET /api/schedule`. A read: never held. */
     suspend fun schedule(): ApiResult<JsonObject> = api.schedule()
@@ -3525,6 +3754,40 @@ object JarvisRuntime {
      * link, like every change. @return whether the PC took it, and the
      * sentence to show.
      */
+    /**
+     * "Photo to reminder" (JARVIS-API.md section 83): the PC reads the dates
+     * in one picture - already shrunk, in memory only - and PROPOSES a
+     * reminder. Sets nothing up, so it is not held on a stale link. The
+     * words that come back are outside text: shown, never sent on, never
+     * saved by this app.
+     */
+    suspend fun scanPhotoForDate(dataUri: String): com.jarvis.client.net.PhotoReminder.Outcome {
+        val body = com.jarvis.client.net.PhotoReminder.scanBody(dataUri)
+            ?: return com.jarvis.client.net.PhotoReminder.Outcome.Failed(
+                com.jarvis.client.net.PhotoReminder.NOT_A_PICTURE,
+            )
+        return when (val r = api.photoScan(body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.PhotoReminder.parse(r.value.first, r.value.second)
+            is ApiResult.Failed -> com.jarvis.client.net.PhotoReminder.Outcome.Failed(describe(r.error))
+        }
+    }
+
+    /**
+     * The owner's tap on "Add a Jarvis reminder": ONE one-off reminder, no
+     * card, the date and time read on the PC's clock. Held on a stale link.
+     */
+    suspend fun addPhotoReminder(what: String, date: String, time: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.PhotoReminder.reminderBody(what, date, time)
+            ?: return false to (com.jarvis.client.net.PhotoReminder.problem(what, date, time) ?: "Not set up.")
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not set up. " + describe(r.error))
+        }
+    }
+
     suspend fun addStandbySchedule(start: String, end: String): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         val body = com.jarvis.client.net.Schedule.standbyBody(start, end)
@@ -3661,6 +3924,25 @@ object JarvisRuntime {
         return result
     }
 
+    /**
+     * One Today card (backend jarvis_today.py, 2026-09-28): the owner's own
+     * [text], shown from [at] ("HH:MM") on [days] (0 = Monday). The PC sets it
+     * up at once, with no card - the desktop's `brain_schedule_add_today`.
+     * Held on a stale link, like every change. @return whether the PC took
+     * it, and the sentence to show.
+     */
+    suspend fun addTodayCard(text: String, at: String, days: Set<Int>): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val (body, why) = com.jarvis.client.net.Today.addBody(text, at, days)
+        if (body == null) return false to (why ?: com.jarvis.client.net.Today.NO_WORDS)
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not added. " + describe(r.error))
+        }
+    }
+
     private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?, eventId: String? = null) {
         _scheduleTick.update { it + 1 }
         val obj = data as? JsonObject
@@ -3687,6 +3969,12 @@ object JarvisRuntime {
         // and an urgent one rings until seen.
         com.jarvis.client.net.Schedule.matchedFrom(obj)?.let { (id, urgent) ->
             onTellMeMatched(id, urgent, eventId)
+            return
+        }
+        // A "tell me when" cannot look (2026-09-28): told once per problem by
+        // the PC; an ordinary notification, never ringing.
+        com.jarvis.client.net.Schedule.brokenFrom(obj)?.let { id ->
+            onTellMeBroken(id, eventId)
             return
         }
         val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(obj) ?: return
@@ -3761,6 +4049,40 @@ object JarvisRuntime {
             com.jarvis.client.service.ScheduleNotifier.post(
                 context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_LOCK_SCREEN,
                 ring = com.jarvis.client.net.Schedule.rings(kind, urgent),
+                key = key,
+            )
+        }
+    }
+
+    /**
+     * A "tell me when" cannot look (backend jarvis_tellme.py, 2026-09-28):
+     * read its `broken` notice by id and show it - an ordinary notification,
+     * never ringing, an urgent watch included (only a real match rings).
+     * While App lock or "Hide memory lists and chat history" is on, only the
+     * generic words. Once per telling, even when a reconnect replays the event.
+     */
+    private fun onTellMeBroken(id: String, eventId: String? = null) {
+        val context = appContext ?: return
+        val kind = com.jarvis.client.net.Schedule.TELLME
+        flushResumePoint()
+        val arrived = System.currentTimeMillis()
+        scope.launch {
+            val job = when (val r = api.scheduleJob(id)) {
+                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+                is ApiResult.Failed -> null
+            }
+            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.brokenAt, eventId, arrived, "#broken@")
+            val fresh = synchronized(scheduleShown) {
+                if (scheduleShown.size > 500) scheduleShown.clear()
+                scheduleShown.add(key)
+            }
+            if (!fresh) return@launch
+            val security = settings.security.value
+            val locked = security.appLock || security.privateLists
+            val (title, text) = com.jarvis.client.net.Schedule.brokenNotification(job, locked)
+            com.jarvis.client.service.ScheduleNotifier.post(
+                context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_BROKEN_LOCK_SCREEN,
+                ring = false,
                 key = key,
             )
         }
@@ -4049,6 +4371,17 @@ object JarvisRuntime {
     suspend fun historyConversation(id: String): ApiResult<JsonObject> = api.historyConversation(id)
 
     /**
+     * "Search what was said" (docs/JARVIS-API.md section 71): a read, never
+     * held. The words go to the PC for this one search and are not kept -
+     * not here, not there. Null when there is nothing worth sending (fewer
+     * than two letters, or too long): the screen then filters titles.
+     */
+    suspend fun historySearch(query: String): ApiResult<JsonObject>? {
+        val path = com.jarvis.client.net.ChatLog.searchPath(query) ?: return null
+        return api.historySearch(path)
+    }
+
+    /**
      * The chat history switch - the same shape as [setLearning]. ON is held
      * on a stale link (rule 4) and raises an approval card on the PC; OFF is
      * never held - it only stops something. @return the sentence to show.
@@ -4086,6 +4419,23 @@ object JarvisRuntime {
      * over a link that cannot be confirmed live. One already gone counts as
      * deleted. @return whether it is gone now, and the sentence to show.
      */
+    /**
+     * "Facts this chat taught" (docs/JARVIS-API.md section 79): a read, never
+     * held - it changes nothing. History, and so this, is not shown while
+     * "Hide memory lists and chat history" hides the lists. An older PC
+     * (404/501), no link, or anything odd is `available = false`: Delete then
+     * asks exactly as it always did. Forgetting a ticked fact is
+     * [forgetAutoFact], one fact per call.
+     */
+    suspend fun chatFacts(conversationId: String): com.jarvis.client.net.ChatLog.Taught {
+        val none = com.jarvis.client.net.ChatLog.Taught(available = false, facts = emptyList())
+        val path = com.jarvis.client.net.ChatLog.factsPath(conversationId) ?: return none
+        return when (val r = api.conversationFacts(path)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.taught(r.value)
+            is ApiResult.Failed -> none
+        }
+    }
+
     suspend fun deleteHistory(id: String): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         return when (val r = api.deleteHistory(id)) {
@@ -4282,14 +4632,24 @@ object JarvisRuntime {
      * connection this queue is.
      */
     suspend fun setSleepTime(enabled: Boolean? = null, remind: Boolean? = null): ApiResult<Unit> {
-        if (_stale.value || _link.value != LinkState.CONNECTED) {
+        // Turning the overnight tidy OFF only makes Jarvis ask less (no more
+        // nightly cards), so, like "Not now", it is not held on a stale link
+        // (2026-09-28; the desktop's brain_memory_sleep_time agrees). It
+        // still needs the PC to be reachable at all.
+        val offOnly = enabled == false && remind == null
+        if (!offOnly && (_stale.value || _link.value != LinkState.CONNECTED)) {
             val blocker = "Not connected to the desktop, so this decision cannot be delivered."
             _notice.value = blocker
             return ApiResult.Failed(ApiError.Unreachable(blocker))
         }
         val result = api.setSleepTime(enabled, remind)
         when (result) {
-            is ApiResult.Ok -> refreshBrain()
+            is ApiResult.Ok -> {
+                // What turning the overnight tidy on says (2026-09-28): it
+                // only asks, with review cards - the desktop's toast.
+                if (enabled == true) _notice.value = com.jarvis.client.net.MemoryWords.OVERNIGHT_ON_SAID
+                refreshBrain()
+            }
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
         return result

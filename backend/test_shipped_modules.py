@@ -57,6 +57,16 @@ OWNER_ONLY = {
                     "the owner's PC has it is unverified",
 }
 
+# A shipped file that imports a test-plumbing module ONLY when it is run from
+# this repository, inside a try with a fallback for when it sits beside
+# jarvis_hud.py. (file, module) -> why. Checked below: the import really is
+# inside a try that catches ImportError.
+REPO_ONLY_IMPORTS = {
+    ("import_history.py", "_where"): "the command line, run from this repository, finds "
+                                     "the backend through _where.py; shipped beside "
+                                     "jarvis_hud.py it uses its own folder instead",
+}
+
 # Third-party packages: import name -> pip name. Each must appear in
 # requirements.txt, either as a requirement or in its "NOT installed" notes.
 THIRD_PARTY = {
@@ -77,6 +87,8 @@ THIRD_PARTY = {
     "winrt": "winrt-Windows.Media.Control",
     "espeakng_loader": "espeakng-loader",
     "onnx": "onnx",
+    # "Better voice" (2026-09-28): the optional second "hey Jarvis" detector
+    "pymicro_wakeword": "pymicro-wakeword",
 }
 
 # Packages in requirements.txt that no shipped module imports BY NAME,
@@ -100,9 +112,10 @@ NOT_SHIPPED = {
     "_config_diff.py": "run by apply-patches.ps1 from this repository",
     "run_suites.py": "CI's test runner",
     "selftest.py": "run from this repository against the backend",
-    "import_history.py": "run from this repository against the backend",
     "eval_memory.py": "the memory self-test, run from this repository on a scratch store",
     "eval_learner.py": "the memory self-test's learner half, run by eval_memory.py",
+    "eval_tidy.py": "the memory self-test's \"where did I put\" and overnight-tidy half, "
+                    "run by eval_memory.py",
     "grade-peers.py": "a research tool, not part of the backend",
     "_ollama_wire.py": "test fixture: Ollama's real /v1 stream format, for the chat tests",
     "_voice_test.py": "test plumbing: a stand-in speaker model for the voice suites",
@@ -256,6 +269,8 @@ def t_every_import_is_accounted_for():
         for n in sorted(names):
             if n in std or n in SHIPPED_MODS or n in OWNER_ONLY:
                 continue
+            if (who, n) in REPO_ONLY_IMPORTS:
+                continue
             if n in THIRD_PARTY:
                 if THIRD_PARTY[n].lower() not in reqs:
                     unknown.append(f"{n} (imported by {who}) is a package missing from requirements.txt")
@@ -271,6 +286,22 @@ def t_every_import_is_accounted_for():
           f"not shipped: {[t for t in tools if t not in SHIPPED_MODS]}")
     check("the check can see jarvis_agent.py's guarded tool imports at all",
           {"jarvis_research", "jarvis_home", "jarvis_calendar"} <= set(tools), f"{tools}")
+
+
+def t_repo_only_imports_are_guarded():
+    for (who, mod), why in REPO_ONLY_IMPORTS.items():
+        tree = ast.parse((HERE / who).read_text(encoding="utf-8"))
+        guarded = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Try):
+                continue
+            catches = any(isinstance(h.type, ast.Name) and h.type.id in ("ImportError",
+                                                                          "Exception")
+                          for h in node.handlers)
+            names = {m for s in node.body for m in imports_of_source(ast.unparse(s))}
+            guarded = guarded or (catches and mod in names)
+        check(f"{who} imports {mod} only inside a try that catches ImportError ({why})",
+              guarded)
 
 
 def t_the_exemptions_are_real():
@@ -435,7 +466,8 @@ def t_the_packages_are_pinned_with_hashes():
 
 if __name__ == "__main__":
     for fn in (t_the_two_lists_are_one_list, t_every_entry_exists, t_every_module_here_is_shipped,
-               t_every_import_is_accounted_for, t_the_exemptions_are_real,
+               t_every_import_is_accounted_for, t_repo_only_imports_are_guarded,
+               t_the_exemptions_are_real,
                t_no_patch_edits_a_shipped_file, t_the_settings_file_search_matches_the_backend,
                t_the_settings_diff_reports_what_differs, t_check_backend_knows_what_will_be_copied_in,
                t_the_packages_are_pinned_with_hashes):

@@ -28,9 +28,12 @@
     "brain-deep",
     "brain-schedule",
     "brain-goals",
+    "photo-reminder",
+    "brain-history-import",
     "brain-briefing",
     "brain-history",
     "focus",
-    "focus-start"
+    "focus-start",
+    "brain-widgets"
   ]
 }

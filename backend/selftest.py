@@ -1876,9 +1876,63 @@ def pf_credentials(live: Live) -> list:
                    "there)")]
 
 
+def llama_config_files(env) -> list:
+    """[(where, Path)] for the llama.cpp settings files that exist. The
+    research audit (docs/RESEARCH-AUDIT-2026-09-28.md section 6, read in
+    llama.cpp's source, not tried on the PC): Ollama's engine reads
+    %PROGRAMDATA%\\llama.cpp\\config.ini, then %APPDATA%\\llama.cpp\\config.ini,
+    before its environment and its own flags - a place a setting can come
+    from that nothing in Jarvis shows."""
+    out = []
+    for var in ("PROGRAMDATA", "APPDATA"):
+        base = (env.get(var) or "").strip()
+        if base:
+            p = Path(base) / "llama.cpp" / "config.ini"
+            if p.is_file():
+                out.append((f"%{var}%\\llama.cpp\\config.ini", p))
+    return out
+
+
+def config_ini_names(path: Path) -> list:
+    """The names of the settings in a config.ini - never their values."""
+    names = []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return names
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line[0] in "#;[":
+            continue
+        name = line.split("=", 1)[0].strip()
+        if name and "=" in line and name not in names:
+            names.append(name[:60])
+    return names[:12]
+
+
+@preflight_check("engine_config", "Is a hidden llama.cpp settings file changing the engine?")
+def pf_engine_config(live: Live) -> list:
+    env = live.env
+    if not (env.get("PROGRAMDATA") or env.get("APPDATA")):
+        return [(SKIP, "the llama.cpp settings files, because this is not Windows")]
+    found = llama_config_files(env)
+    if not found:
+        return [(PASS, "no llama.cpp config.ini is changing the AI engine behind Jarvis's back")]
+    rows = []
+    for where, path in found:
+        names = config_ini_names(path)
+        rows.append((WARN, f"{where} exists, and Ollama's engine reads settings from it",
+                     ("It sets: " + ", ".join(names) + ". " if names else "")
+                     + "These apply to every model on top of Jarvis's own settings, and "
+                     "nothing in Jarvis shows them. If you did not put it there on purpose, "
+                     "rename it with one line in PowerShell, then quit and restart Ollama: "
+                     f"Rename-Item -Path \"{path}\" -NewName 'config.ini.off'"))
+    return rows
+
+
 # ---------------------------------------------------------------- running
 
-_SHOW = {PASS: "PASS", FAIL: "FAIL", WARN: "WARN", SKIP: "skip"}
+_SHOW ={PASS: "PASS", FAIL: "FAIL", WARN: "WARN", SKIP: "skip"}
 
 
 def run_preflight(live: Live, *, only=None, out=print) -> tuple:

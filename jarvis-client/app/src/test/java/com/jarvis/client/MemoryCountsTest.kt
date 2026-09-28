@@ -38,7 +38,7 @@ class MemoryCountsTest {
                 "Embedding" to "hash (matches words only until the real embedding model has downloaded)",
                 "Search by meaning" to "off - facts are found by keyword",
                 "Waiting to be indexed" to "3",
-                "Overnight tidying" to "off (not built yet)",
+                "Overnight tidying" to "off",
             ),
             rows,
         )
@@ -58,7 +58,7 @@ class MemoryCountsTest {
                 "Facts in use" to "40",
                 "No longer used" to "0",
                 "Embedding" to "bge-small",
-                "Overnight tidying" to "switched on, but not built yet - nothing runs",
+                "Overnight tidying" to "on - once a day Jarvis may ask about facts that look out of date (review cards only)",
             ),
             rows,
         )

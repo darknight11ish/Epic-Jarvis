@@ -120,7 +120,7 @@ fun BrainScreen(
      */
     onKeepBothMemory: (id: Long) -> Unit = {},
     /**
-     * The daily overnight-tidy card ("not built yet"), or null to show none.
+     * The daily overnight-tidy card, or null to show none.
      *
      * Passed in already decided rather than read fresh from `brain.memory`
      * every recomposition: the server marks the day's offer as made the
@@ -425,6 +425,27 @@ fun BrainScreen(
             // Brain → Live. Reads JarvisRuntime directly.
             item(key = "steps") { StepsSection() }
 
+            // "Today" (the owner's choice of 2026-09-28): the owner's own
+            // cards shown at a time on chosen days, and the parts of the
+            // latest briefing made today (TodayPlate.kt) - the desktop's
+            // Brain -> Work -> Today, just above Coming up. Nothing new is read.
+            item(key = "today") {
+                TodaySection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
+            // "Widgets" (the owner's choice of 2026-09-28, the SAFE version):
+            // widgets described in the owner's words, previewed before Add,
+            // and which one each home-screen "Jarvis widget" shows
+            // (WidgetsPlate.kt) - the desktop's Brain -> Work -> Widgets.
+            item(key = "widgets") {
+                WidgetsSection(canAct = canAct, privateHidden = privateHidden)
+            }
+
             // "Coming up" (the owner's decisions of 2026-09-25): timers,
             // alarms, reminders and the to-do list, each with its own
             // buttons (ComingUpPlate.kt) - the desktop's Brain -> Work ->
@@ -648,6 +669,13 @@ fun BrainScreen(
             // (HardwarePlate.kt), so this is its only line.
             item(key = "hardware") {
                 HardwareSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
+            }
+
+            // "PC help" (docs/JARVIS-API.md section 84): five plain answers
+            // about the PC, read-only, asked only on "Check now"
+            // (PcHelpPlate.kt), so this is its only line.
+            item(key = "pc-help") {
+                PcHelpSection()
             }
 
             // backend/second-card.patch. Right under Model, because a feature
@@ -1724,7 +1752,7 @@ private fun SleepOfferCard(
     val canWrite = !busy && canAct
     Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Text(
-            offer.str("title") ?: "Overnight memory tidying - not built yet",
+            offer.str("title") ?: "Overnight memory tidying",
             style = MaterialTheme.typography.titleSmall,
             color = chrome.textHi,
         )

@@ -786,6 +786,13 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
         out["learner"] = eval_learner.run(M, scratch, model=learner_model, ollama=ollama)
     except Exception as exc:
         out["learner"] = {"available": False, "why": f"{type(exc).__name__}: {exc}"}
+    # "Where did I put ...?" and the overnight tidy's "Which is true now?"
+    # (2026-09-28): eval_tidy.py says what it checks.
+    try:
+        import eval_tidy
+        out["tidy"] = eval_tidy.run(M, scratch, model=learner_model, ollama=ollama)
+    except Exception as exc:
+        out["tidy"] = {"available": False, "why": f"{type(exc).__name__}: {exc}"}
     return out
 
 
@@ -1005,6 +1012,13 @@ def markdown(res: dict) -> str:
     if "learner" in res:
         import eval_learner
         lines += eval_learner.markdown(res["learner"])
+    if "tidy" in res:
+        import eval_tidy
+        if res["tidy"].get("available") is False:
+            lines += ["", f"\"Where did I put ...?\" and the tidy: not measured - "
+                      f"{res['tidy'].get('why')}"]
+        else:
+            lines += eval_tidy.markdown(res["tidy"])
     ch = res["word_floor_choice"]
     lines += [
         "",
@@ -1131,6 +1145,13 @@ def compare(old: dict, new: dict) -> tuple:
         worse = worse or how == "WORSE"
         lines.append(f"| learner | - | {kind}: cases wrong ({ln[kind]['total']} now) | {a} | {b} "
                      f"| {how} |")
+    try:
+        import eval_tidy
+        for name, a, b, how, gate in eval_tidy.compared(old.get("tidy"), new.get("tidy")):
+            worse = worse or (how == "WORSE" and gate)
+            lines.append(f"| tidy | - | {name} | {a} | {b} | {how} |")
+    except Exception:
+        pass
     head = ["", "**Against an earlier run** (--against): the same numbers, earlier -> now. "
             "Timings are not compared. A worse recall@5, \"replaced came back\", \"time: "
             "wrong version\" or learner kind fails the run.", "",

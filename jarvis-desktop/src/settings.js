@@ -61,11 +61,13 @@ import {
   isTrained as voiceIsTrained,
   lastTrainingLine,
   printLines as voicePrintLines,
+  speechDetectorLine,
   stopWordLine,
   summaryLine as voiceSummaryLine,
   talkLine as voiceTalkLine,
   turnLine as voiceTurnLine,
   verifierLine as voiceVerifierLine,
+  wakeConfirmLine,
   wakeInfo,
 } from "./voice-settings.js";
 import { paintVoicePanel, startVoicePanel } from "./voice-panel.js";
@@ -2709,6 +2711,8 @@ const vc = {
   verifier: $("voice-verifier"),
   stopWord: $("voice-stop-word"),
   turn: $("voice-turn"),
+  wake2: $("voice-wake2"),
+  vad: $("voice-vad"),
   wakeOff: $("voice-wake-off"),
   wakeOn: $("voice-wake-on"),
   wakeOnNote: $("voice-wake-on-note"),
@@ -2779,6 +2783,8 @@ function vcPaint(status) {
   vcLine(vc.verifier, voiceVerifierLine(status));
   vcLine(vc.stopWord, stopWordLine(status));
   vcLine(vc.turn, voiceTurnLine(status));
+  vcLine(vc.wake2, wakeConfirmLine(status));
+  vcLine(vc.vad, speechDetectorLine(status));
 
   const gate = status.gate || {};
   vcWaiting = wake.state === "waiting" || (gate.training || {}).pending === true;

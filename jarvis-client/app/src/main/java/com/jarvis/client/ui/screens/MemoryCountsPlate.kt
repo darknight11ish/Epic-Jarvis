@@ -54,6 +54,7 @@ internal fun MemoryCountsSection(
     var rows by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
     var readError by remember { mutableStateOf<String?>(null) }
     var learning by remember { mutableStateOf<Boolean?>(null) }
+    var tidyOn by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val queue by JarvisRuntime.pending.collectAsState()
@@ -68,6 +69,7 @@ internal fun MemoryCountsSection(
         when (val r = JarvisRuntime.memoryStatus()) {
             is ApiResult.Ok -> {
                 rows = MemoryCounts.fields(r.value)
+                tidyOn = MemoryCounts.tidyOn(r.value)
                 readError = null
             }
             is ApiResult.Failed -> readError = JarvisRuntime.noticeFor(r.error)
@@ -95,6 +97,28 @@ internal fun MemoryCountsSection(
             if (shown != null && err != null) {
                 Text("Couldn't read it again: $err", style = MaterialTheme.typography.labelSmall,
                     color = chrome.warnInk)
+            }
+            if (tidyOn) {
+                // The overnight tidy (2026-09-28): once on, off is one tap, at
+                // once - it only makes Jarvis ask less, so it is not held on a
+                // stale link (JarvisRuntime.setSleepTime). Turning it ON stays
+                // the daily offer's Enable.
+                Quiet(
+                    com.jarvis.client.net.MemoryWords.OVERNIGHT_TURN_OFF,
+                    enabled = !busy,
+                    onClick = {
+                        busy = true
+                        scope.launch {
+                            val r = JarvisRuntime.setSleepTime(enabled = false)
+                            if (r is ApiResult.Ok) {
+                                said = com.jarvis.client.net.MemoryWords.OVERNIGHT_OFF_SAID
+                                tidyOn = false
+                            }
+                            busy = false
+                            reads += 1
+                        }
+                    },
+                )
             }
             Gap(6)
             Text(

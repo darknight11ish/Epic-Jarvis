@@ -308,7 +308,9 @@
               computer, which ignores anything that does not start with
               "hey Jarvis". Windows dictation
               is not used, because it sends your voice to a company's
-              servers to turn it into text.
+              servers to turn it into text. To have Jarvis type what you say
+              into another program instead, turn on Talk-to-type in Voice
+              below, then hold Alt+Shift+T and speak.
             </p>
           </details>
 
@@ -591,6 +593,30 @@
               <div class="choices" id="vt-handsfree" role="group" aria-label="Hands-free: how far a question started with Hey Jarvis is trusted"></div>
               <p class="note" id="vt-handsfree-note"></p>
             </div>
+            <!-- Talk-to-type on this PC (talk_type.rs; docs/JARVIS-API.md
+                 section 72). This PC only: it types into this PC's programs,
+                 so the phone has no such switch (ARCHITECTURE section 8). -->
+            <div id="vt-talktype-box" hidden>
+              <h3 class="subhead">Talk-to-type (this PC only)</h3>
+              <div class="choices" id="vt-talktype" role="group" aria-label="Talk-to-type: hold a key, speak, and Jarvis types what you said"></div>
+              <p class="note" id="vt-talktype-note"></p>
+              <p class="note">
+                It cannot share the microphone with "hey Jarvis" listening:
+                turn that off in the Jarvis bar first. Stop everything ends
+                it at once.
+              </p>
+            </div>
+            <!-- "Better voice" (docs/JARVIS-API.md section 80): both apps. -->
+            <div id="vt-wakeconfirm-box" hidden>
+              <h3 class="subhead">Second "hey Jarvis" check</h3>
+              <div class="choices" id="vt-wakeconfirm" role="group" aria-label="Second hey Jarvis check: one detector, or two that must agree"></div>
+              <p class="note" id="vt-wakeconfirm-note"></p>
+            </div>
+            <div id="vt-voiceid-box" hidden>
+              <h3 class="subhead">Voice-ID model</h3>
+              <div class="choices" id="vt-voiceid" role="group" aria-label="Voice-ID model: which model tells your voice from other people's"></div>
+              <p class="note" id="vt-voiceid-note"></p>
+            </div>
             <p class="sc-line" id="vt-setting-waiting" data-tone="warn" hidden></p>
             <p class="note">
               Making it stricter happens at once. Making it looser shows you
@@ -625,6 +651,8 @@
           <p class="sc-line" id="voice-verifier" hidden></p>
           <p class="sc-line" id="voice-stop-word" hidden></p>
           <p class="sc-line" id="voice-turn" hidden></p>
+          <p class="sc-line" id="voice-wake2" hidden></p>
+          <p class="sc-line" id="voice-vad" hidden></p>
         </div>
 
         <!-- A setting of this PC's, not the server's, so it works whether
@@ -1154,6 +1182,25 @@
             keep their own switches, in the next section.
           </p>
         </div>
+
+        <!-- "PC help" (pc-help.js, GET /api/pc/help, JARVIS-API section 84):
+             five plain answers about this PC, read-only. Asked only when
+             "Check now" is pressed. Outside #hw-body, so it works even when
+             the cards could not be read. -->
+        <div id="pc-help">
+          <h3 class="subhead">PC help</h3>
+          <p class="note">
+            Why is your PC slow, how full are your drives, what is using the
+            graphics card, how hot it is, and when did the PC last restart.
+            Jarvis only reads; it changes nothing. You can also just ask
+            Jarvis, like "why is my PC slow?".
+          </p>
+          <div class="row">
+            <button class="btn ghost small" id="pc-help-check" type="button">Check now</button>
+            <span class="status" id="pc-help-status" role="status"></span>
+          </div>
+          <ul class="pc-help-list" id="pc-help-list"></ul>
+        </div>
       </section>
 
       <!-- ── Second graphics card ─────────────────────────────────────────
@@ -1637,6 +1684,7 @@
         <p class="note">Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. "Ask me first" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.</p>
         <p class="state" id="af-state" role="status">Asking Jarvis…</p>
         <div id="af-body" hidden>
+          <div class="af-lockdown" id="af-lockdown" role="group" aria-label="Lockdown" hidden></div>
           <div id="af-groups"></div>
           <span class="status" id="af-status" role="status"></span>
         </div>
@@ -1775,6 +1823,7 @@
 
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
+    <script type="module" src="pc-help.js"></script>
     <script type="module" src="briefing-settings.js"></script>
     <script type="module" src="web-search-settings.js"></script>
     <script type="module" src="account-secrets-settings.js"></script>

@@ -478,19 +478,35 @@ def complexity(query: str) -> float:
     return round(min(score, 1.0), 3)
 
 
+def lockdown_on() -> bool:
+    """Is Lockdown on (jarvis_asks_first.py, 2026-09-28)? False without that
+    module - the feature is not there. Its own reading fails closed (a
+    damaged file reads as on); anything else going wrong here reads as ON
+    too: a cloud lane is never the answer to "could not tell"."""
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
+
+
 def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
            has_image: bool = False, conversation_tainted: bool = False,
            budget: Optional[Budget] = None, tainted: Optional[bool] = None,
            owner_said_yes: bool = False, **_extra) -> Decision:
     """Which lane answers this turn.
 
-    Eight gates, in this order, and the order is the policy. Each one can only
+    Nine gates, in this order, and the order is the policy. Each one can only
     send the answer DOWNWARD toward local - none of them can escalate past a
     gate that already refused.
 
      -1. the local model is itself  -> gate "cloud_model": refused, and
          one of Ollama's cloud models    run_local_turn sends it nothing
       0. no cloud lanes offered      -> local
+     0b. Lockdown is on              -> local, unconditionally, no offer
       1. the conversation is tainted -> local, unconditionally
      1b. the turn carries a picture  -> local, unconditionally
       2. private content matched     -> local
@@ -578,6 +594,13 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         # this string to rewrite the reason when Jarvis is injecting memory
         # itself. A different name left that branch dead.
         return local_decision("unavailable", "no cloud lane was offered")
+    # Gate 0b (2026-09-28, jarvis_asks_first.py's Lockdown): every way out of
+    # this PC asks first or stops - and a cloud model is one. No lane, and no
+    # offer to ask about one either: Lockdown means "not now", not "ask me".
+    if lockdown_on():
+        return local_decision(
+            "lockdown",
+            "Lockdown is on, so nothing goes to a cloud AI model")
     if conversation_tainted:
         return local_decision(
             "taint",

@@ -989,6 +989,656 @@ def voice_measure(out: Out, work: Path, *, listen: bool, vram: Optional[Vram] = 
 
 
 # --------------------------------------------------------------------------
+#   "Better voice" (the owner's group of 2026-09-28): three more parts, each
+#   run only when asked for (--wake2, --vad, --voice-id), each measuring on
+#   this PC before anything is chosen. Like the rest of this file, none of
+#   them changes a setting; each ends in a verdict by rules fixed here first.
+# --------------------------------------------------------------------------
+
+#: The second "hey Jarvis" detector (microWakeWord), as a CONFIRMATION of
+#: today's: is "both must agree" worth switching on?
+TURN_ON = "turn on both detectors"
+KEEP_ONE = "keep one detector"
+WAKE2_RULES = {
+    "min_owner_clips": 10,
+    "min_room_minutes": 60.0,
+    # "Both" may miss at most this share MORE of your own recordings than
+    # today's detector alone (1 in 10).
+    "max_extra_miss_share": 0.1,
+    # A clear win in the room: at most half of today's false wake-ups
+    # (today's must have woken at least once).
+    "room_win_ratio": 0.5,
+}
+WAKE2_RULE_WORDS = (
+    "At least 10 of your own \"hey Jarvis\" recordings, and at least 60 minutes of the room.",
+    "Your recordings: with both detectors, at most 1 in 10 more of them are missed than with "
+    "today's detector alone.",
+    "The room: with both, at most half as many false wake-ups as today's alone (and today's "
+    "must have woken by mistake at least once, or there is nothing to win).",
+    "The 110 built-in-voice sentences: with both, no more wake-ups on the sentences without "
+    "\"hey Jarvis\" than today's alone.",
+)
+
+
+def cluster_times(times, gap: float = 2.0) -> list:
+    """Separate events from a list of moments (seconds): a moment more than
+    `gap` after the last event starts a new one - the 2-second wait a
+    listener makes after waking."""
+    out: list = []
+    for t in sorted(float(x) for x in times):
+        if not out or t - out[-1] > gap:
+            out.append(t)
+    return out
+
+
+def matched_events(first: list, second_times: list, window: float) -> list:
+    """The events in `first` that have a moment of `second_times` within
+    `window` seconds - "both heard it"."""
+    return [t for t in first if any(abs(t - s) <= window for s in second_times)]
+
+
+def wake2_verdict(m: dict, rules: dict = WAKE2_RULES) -> tuple:
+    """(TURN_ON or KEEP_ONE, [reason, ...]) from wake2_measure()'s dict.
+    Anything not met - or not measurable - keeps one detector."""
+    if not m.get("second_ok"):
+        return KEEP_ONE, [f"The second detector could not be measured: "
+                          f"{m.get('second_why') or 'unknown'}."]
+    why = []
+    own = m.get("owner") or {}
+    room = m.get("room") or {}
+    kok = m.get("kokoro") or {}
+    n = int(own.get("clips", 0))
+    if n < rules["min_owner_clips"]:
+        why.append(f"Only {n} of your own recordings (at least {rules['min_owner_clips']} "
+                   f"are needed).")
+    else:
+        extra = int(own.get("first", 0)) - int(own.get("both", 0))
+        allowed = math.floor(n * rules["max_extra_miss_share"])
+        if extra > allowed:
+            why.append(f"With both detectors, {extra} more of your {n} recordings were missed "
+                       f"than with today's alone (at most {allowed} allowed).")
+    minutes = float(room.get("minutes", 0.0))
+    if minutes < rules["min_room_minutes"]:
+        why.append(f"Only {minutes:.0f} minutes of the room (at least "
+                   f"{rules['min_room_minutes']:.0f} are needed).")
+    else:
+        first_w, both_w = int(room.get("first_wakes", 0)), int(room.get("both_wakes", 0))
+        if first_w < 1:
+            why.append("Today's detector never woke by mistake in the room, so a second one "
+                       "has nothing to win there.")
+        elif both_w > first_w * rules["room_win_ratio"]:
+            why.append(f"In the room, both together woke by mistake {both_w} times; today's "
+                       f"alone {first_w} - not a clear win (at most half is needed).")
+    if kok.get("other", 0):
+        if int(kok.get("both_other", 0)) > int(kok.get("first_other", 0)):
+            why.append(f"On the built-in voices' other sentences, both woke {kok.get('both_other')} "
+                       f"times; today's alone {kok.get('first_other')}.")
+    else:
+        why.append("The built-in voices' sentences could not be made (Kokoro is not "
+                   "installed), so that test did not run.")
+    return (KEEP_ONE, why) if why else (TURN_ON, ["Every rule was met."])
+
+
+def _stream_first(W, models, ver, samples, rate) -> list:
+    """Moments (seconds) where today's detector would wake in a long
+    recording - with the owner's own verifier deciding, as in hear(), when
+    there is one."""
+    scores, windows = W._clip_steps(models, samples, rate)
+    scores = [float(s) for s in scores]
+    for i in range(min(W.WARMUP_SCORES, len(scores))):
+        scores[i] = 0.0
+    thr = float(W.threshold())
+    hits = []
+    if ver is None:
+        hits = [i for i, s in enumerate(scores) if s >= thr]
+    else:
+        gated = [i for i, s in enumerate(scores) if s >= W.VERIFIER_GATE]
+        if gated:
+            p = ver.probabilities(np.stack([windows[i] for i in gated]))
+            hits = [i for i, v in zip(gated, p) if float(v) >= ver.threshold]
+    step = W.CHUNK / float(W.SAMPLE_RATE)
+    return [max(0.0, (i + 1) * step - W.LEAD_IN_SECONDS) for i in hits]
+
+
+def wake2_measure(out: Out, *, record: Optional[int], room_minutes: Optional[int]) -> dict:
+    import jarvis_microwake as M
+    import jarvis_wakeword as W
+    m: dict = {"second_ok": False}
+    ok, why = wake_files_ok(W)
+    if not ok:
+        m["second_why"] = f"today's detector is not set up right: {why}"
+        return m
+    st = M.status()
+    if not st["available"]:
+        m["second_why"] = st["why"]
+        return m
+    cur = W._load()
+    if cur is None:
+        m["second_why"] = W.status()["why"] or "today's detector did not load"
+        return m
+    ver = W.load_verifier("")
+    m.update(second_ok=True, second_version=st["version"], agree_seconds=M.AGREE_SECONDS,
+             verifier=ver is not None)
+    win = M.AGREE_SECONDS
+
+    def clip(x, rate) -> dict:
+        a = W.spot(x, rate)
+        b = M.spot(x, rate)
+        return {"first": bool(a.heard), "second": bool(b.ran and b.heard),
+                "both": bool(a.heard and M.agree(a.at, b, win))}
+
+    out("  Your own \"hey Jarvis\" recordings")
+    clips = []
+    if record:
+        out(f"    Recording up to {record} (3.5 seconds each); none is kept")
+        clips += record_owner_clips(out, record)
+    own = {"clips": 0, "first": 0, "second": 0, "both": 0, "from_folder": 0, "unreadable": 0}
+    for p in sorted(owner_clip_dir().glob("*.wav")) if owner_clip_dir().is_dir() else []:
+        try:
+            clips.append(read_wav(p))
+            own["from_folder"] += 1
+        except ValueError:
+            own["unreadable"] += 1
+    for x, rate in clips:
+        r = clip(x, rate)
+        own["clips"] += 1
+        for k in ("first", "second", "both"):
+            own[k] += int(r[k])
+    m["owner"] = own
+    out(f"    {own['clips']} recordings heard: today's alone {own['first']}, the second alone "
+        f"{own['second']}, both together {own['both']}")
+
+    out("  The room")
+    room = {"minutes": 0.0, "first_wakes": 0, "second_wakes": 0, "both_wakes": 0}
+    if room_minutes:
+        out(f"    Listening for {room_minutes} minutes. Do not say \"hey Jarvis\"; talking "
+            f"and the television are what it should hear.")
+        tmp = Path(tempfile.mkdtemp(prefix="jarvis-room2-"))
+        try:
+            for k in range(room_minutes):
+                p = tmp / "minute.wav"
+                try:
+                    record_wav(p, 60.0)
+                    x, rate = read_wav(p)
+                except (OSError, ValueError) as exc:
+                    out(f"      could not record the room: {exc}")
+                    break
+                finally:
+                    try:
+                        p.unlink()
+                    except OSError:
+                        pass
+                first = cluster_times(_stream_first(W, cur, ver, x, rate))
+                b = M.spot(x, rate)
+                second = cluster_times(b.times if b.ran else [])
+                room["first_wakes"] += len(first)
+                room["second_wakes"] += len(second)
+                room["both_wakes"] += len(matched_events(first, b.times if b.ran else [], win))
+                room["minutes"] += len(x) / float(rate) / 60.0
+                if k % 10 == 9:
+                    out(f"      {k + 1} minutes: today's woke {room['first_wakes']} times, the "
+                        f"second {room['second_wakes']}, both {room['both_wakes']}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        room["minutes"] = round(room["minutes"], 1)
+        out(f"    {room['minutes']:.0f} minutes: false wake-ups - today's alone "
+            f"{room['first_wakes']}, the second alone {room['second_wakes']}, both "
+            f"{room['both_wakes']}")
+    else:
+        out("    skipped")
+    m["room"] = room
+
+    out("  The built-in voices (110 sentences, nothing kept)")
+    kok = {"voices": 0, "hey": 0, "other": 0}
+    for k in ("first", "second", "both"):
+        kok[k + "_hey"] = kok[k + "_other"] = 0
+    for text, x, rate in kokoro_clips():
+        r = clip(x, rate)
+        kind = "hey" if text in KOKORO_HEY else "other"
+        kok[kind] += 1
+        for k in ("first", "second", "both"):
+            kok[f"{k}_{kind}"] += int(r[k])
+    kok["voices"] = (kok["hey"] + kok["other"]) // max(1, len(KOKORO_HEY + KOKORO_OTHER))
+    m["kokoro"] = kok
+    if kok["hey"]:
+        out(f"    \"hey Jarvis\" heard (of {kok['hey']}): today's {kok['first_hey']}, the second "
+            f"{kok['second_hey']}, both {kok['both_hey']}; woke on the others (of "
+            f"{kok['other']}): today's {kok['first_other']}, the second {kok['second_other']}, "
+            f"both {kok['both_other']}")
+    else:
+        out("    skipped: the built-in voice (Kokoro) is not installed")
+    return m
+
+
+def kokoro_clips():
+    """(text, samples, rate) for the 110-sentence test in every built-in
+    Kokoro voice, made on the fly; nothing kept. Nothing when Kokoro is not
+    installed."""
+    try:
+        import jarvis_speech as S
+        eng = S._tts_engine()
+    except Exception:
+        eng = None
+    if eng is None:
+        return
+    try:
+        speakers = max(1, int(getattr(eng, "num_speakers", 1) or 1))
+    except Exception:
+        speakers = 1
+    for sid in range(speakers):
+        for text in KOKORO_HEY + KOKORO_OTHER:
+            try:
+                a = eng.generate(text, sid=sid, speed=1.0)
+            except Exception:
+                continue
+            x = np.asarray(a.samples, dtype=np.float32)
+            if not len(x):
+                continue
+            yield text, x / (float(np.abs(x).max()) or 1.0) * 0.6, int(a.sample_rate)
+
+
+# ---- The speech detector: Silero VAD v4 (today's) against v6 -------------
+
+USE_V6 = "use v6"
+KEEP_V4 = "keep v4"
+VAD_RULES = {
+    "min_owner_clips": 10,
+    # A clip's speech counts as cut when the detector's span (with Jarvis's
+    # own 0.3 s either side) misses more than this much of it.
+    "cut_seconds": 0.15,
+}
+#: The built-in sentences are also tried with hiss this far below their own
+#: loudness (dB) - easy, hard and very hard - and counted together.
+NOISE_SNRS = (5.0, 0.0, -5.0)
+VAD_RULE_WORDS = (
+    "The new file is installed and is exactly the pinned one.",
+    "At least 10 of your own recordings.",
+    "Speech found: v6 finds speech in at least as many clips as v4 - your recordings, the "
+    "built-in voices, and the built-in voices with hiss added (three levels, counted "
+    "together).",
+    "Noise alone (a fan, a hum, clicks, hiss, silence): v6 says \"speech\" on no more of "
+    "them than v4.",
+    "Speech kept whole: v6 cuts into the built-in voices' sentences no more often than v4.",
+    "Your voice check (when your voice is trained): with v6 cutting your recordings, at "
+    "least as many of them pass as with v4.",
+)
+
+
+def noise_clips(seconds: float = 3.0, seed: int = 7) -> list:
+    """(name, samples at 16 kHz) - sounds with no speech in them, made the
+    same way every run: hiss at three levels, a fan (low rumble), mains hum,
+    knocks, and silence."""
+    rng = np.random.RandomState(seed)
+    n = int(16000 * seconds)
+    t = np.arange(n) / 16000.0
+    out = []
+    for db in (-50, -35, -20):
+        out.append((f"hiss {db} dB", (rng.randn(n) * 10 ** (db / 20.0)).astype(np.float32)))
+    w = rng.randn(n)
+    fan = np.convolve(w, np.ones(64) / 64.0, mode="same")
+    out.append(("fan", (fan / (np.abs(fan).max() or 1.0) * 0.1).astype(np.float32)))
+    hum = sum(np.sin(2 * np.pi * f * t) / k for k, f in enumerate((50, 100, 150, 200), 1))
+    out.append(("hum", (hum * 0.05).astype(np.float32)))
+    knocks = np.zeros(n, dtype=np.float32)
+    for at in (0.4, 1.3, 2.2):
+        i = int(at * 16000)
+        burst = rng.randn(400) * np.exp(-np.arange(400) / 60.0)
+        knocks[i:i + 400] += (burst * 0.5).astype(np.float32)
+    out.append(("knocks", knocks))
+    out.append(("silence", np.zeros(n, dtype=np.float32)))
+    return out
+
+
+def with_noise(x, snr_db: float = 5.0, seed: int = 11):
+    """`x` with hiss added at `snr_db` below its own loudness."""
+    rng = np.random.RandomState(seed)
+    p = float(np.mean(np.square(x))) or 1e-9
+    noise = rng.randn(len(x)) * math.sqrt(p / (10 ** (snr_db / 10.0)))
+    return np.clip(x + noise, -1.0, 1.0).astype(np.float32)
+
+
+def speech_region(x, rate: int) -> tuple:
+    """(start, end) seconds of the loud part of a clean synthetic sentence:
+    20 ms frames above 2% of the loudest."""
+    f = max(1, int(rate * 0.02))
+    n = len(x) // f
+    if n < 1:
+        return 0.0, 0.0
+    e = np.abs(np.asarray(x[: n * f], dtype=np.float32)).reshape(n, f).max(axis=1)
+    on = np.where(e > 0.02 * (e.max() or 1.0))[0]
+    if not len(on):
+        return 0.0, 0.0
+    return on[0] * f / float(rate), (on[-1] + 1) * f / float(rate)
+
+
+def vad_verdict(m: dict, rules: dict = VAD_RULES) -> tuple:
+    """(USE_V6 or KEEP_V4, [reason, ...]) from vad_measure()'s dict."""
+    if not m.get("v6_ok"):
+        return KEEP_V4, [f"v6 could not be measured: {m.get('v6_why') or 'unknown'}."]
+    why = []
+    own = m.get("owner") or {}
+    n = int(own.get("clips", 0))
+    if n < rules["min_owner_clips"]:
+        why.append(f"Only {n} of your own recordings (at least {rules['min_owner_clips']} are "
+                   f"needed).")
+    for key, words in (("owner", "your recordings"), ("kokoro", "the built-in voices"),
+                       ("noisy", "the built-in voices with noise")):
+        d = m.get(key) or {}
+        if int(d.get("v6_found", 0)) < int(d.get("v4_found", 0)):
+            why.append(f"On {words}, v6 found speech in {d.get('v6_found')} of "
+                       f"{d.get('clips')}; v4 in {d.get('v4_found')}.")
+    noise = m.get("noise") or {}
+    if int(noise.get("v6_found", 0)) > int(noise.get("v4_found", 0)):
+        why.append(f"On noise alone, v6 said \"speech\" {noise.get('v6_found')} times; v4 "
+                   f"{noise.get('v4_found')}.")
+    kok = m.get("kokoro") or {}
+    if int(kok.get("v6_cut", 0)) > int(kok.get("v4_cut", 0)):
+        why.append(f"v6 cut into {kok.get('v6_cut')} of the built-in sentences; v4 into "
+                   f"{kok.get('v4_cut')}.")
+    if not kok.get("clips"):
+        why.append("The built-in voices' sentences could not be made (Kokoro is not "
+                   "installed), so that test did not run.")
+    if own.get("checked"):
+        if int(own.get("v6_passed", 0)) < int(own.get("v4_passed", 0)):
+            why.append(f"Your voice check let {own.get('v6_passed')} of your recordings "
+                       f"through with v6; {own.get('v4_passed')} with v4.")
+    return (KEEP_V4, why) if why else (USE_V6, ["Every rule was met."])
+
+
+def vad_measure(out: Out, *, record: Optional[int]) -> dict:
+    import jarvis_speech as S
+    m: dict = {"v6_ok": False}
+    d = S._models_dir() / "vad"
+    paths = {v: d / S.VAD_FILES[v]["file"] for v in ("v4", "v6")}
+    for v, p in paths.items():
+        if not p.is_file():
+            m["v6_why"] = f"the {v} file is not installed (looked for {p})"
+            return m
+        if S._file_sha256(p) != S.VAD_FILES[v]["sha256"]:
+            m["v6_why"] = f"{p.name} is not the expected file (its SHA-256 is different)"
+            return m
+    cfgs = {v: S.vad_config_for(str(p)) for v, p in paths.items()}
+    if any(c is None for c in cfgs.values()):
+        m["v6_why"] = "sherpa-onnx could not load one of the two files"
+        return m
+    m["v6_ok"] = True
+
+    def span(x, rate, v):
+        got = S._speech_span(x, rate, cfg=cfgs[v])
+        return None if got in (None, "skip") else got
+
+    try:
+        import jarvis_voice as JV
+        prof, _label = JV.find_profile("")
+        emb = JV.EcapaEmbedder() if prof is not None else None
+    except Exception:
+        prof, emb = None, None
+
+    out("  Your own recordings")
+    clips = []
+    if record:
+        out(f"    Recording up to {record} (3.5 seconds each); none is kept")
+        clips += record_owner_clips(out, record)
+    for p in sorted(owner_clip_dir().glob("*.wav")) if owner_clip_dir().is_dir() else []:
+        try:
+            clips.append(read_wav(p))
+        except ValueError:
+            pass
+    own = {"clips": len(clips), "v4_found": 0, "v6_found": 0, "checked": False,
+           "v4_passed": 0, "v6_passed": 0}
+    for x, rate in clips:
+        for v in ("v4", "v6"):
+            sp = span(x, rate, v)
+            own[v + "_found"] += int(sp is not None)
+            if sp is not None and prof is not None and emb is not None:
+                own["checked"] = True
+                try:
+                    verdict = JV.verify(x[sp[0]:sp[1]], emb, sample_rate=rate)
+                    own[v + "_passed"] += int(bool(verdict.is_owner))
+                except Exception:
+                    pass
+    m["owner"] = own
+    out(f"    {own['clips']} recordings: speech found by v4 in {own['v4_found']}, by v6 in "
+        f"{own['v6_found']}" + (f"; your voice check passed {own['v4_passed']} with v4 and "
+                                f"{own['v6_passed']} with v6" if own["checked"] else
+                                " (your voice is not trained, so the voice check was not run)"))
+
+    out("  The built-in voices, clean and with noise (nothing kept)")
+    kok = {"clips": 0, "v4_found": 0, "v6_found": 0, "v4_cut": 0, "v6_cut": 0}
+    noisy = {"clips": 0, "v4_found": 0, "v6_found": 0}
+    cut = VAD_RULES["cut_seconds"]
+    for k, (_text, x, rate) in enumerate(kokoro_clips()):
+        pad = np.zeros(int(rate * 0.8), dtype=np.float32)
+        x = np.concatenate([pad, x, pad])
+        s0, s1 = speech_region(x, rate)
+        kok["clips"] += 1
+        for v in ("v4", "v6"):
+            sp = span(x, rate, v)
+            kok[v + "_found"] += int(sp is not None)
+            if sp is None or sp[0] / rate > s0 + cut or sp[1] / rate < s1 - cut:
+                kok[v + "_cut"] += 1
+        for snr in NOISE_SNRS:
+            xn = with_noise(x, snr, seed=100 + k)
+            noisy["clips"] += 1
+            for v in ("v4", "v6"):
+                noisy[v + "_found"] += int(span(xn, rate, v) is not None)
+    m["kokoro"], m["noisy"] = kok, noisy
+    if kok["clips"]:
+        out(f"    {kok['clips']} sentences: speech found by v4 in {kok['v4_found']}, v6 in "
+            f"{kok['v6_found']}; cut into by v4 {kok['v4_cut']}, v6 {kok['v6_cut']}. With "
+            f"noise: v4 {noisy['v4_found']}, v6 {noisy['v6_found']}")
+    else:
+        out("    skipped: the built-in voice (Kokoro) is not installed")
+
+    out("  Noise alone (hiss, a fan, hum, knocks, silence)")
+    noise = {"clips": 0, "v4_found": 0, "v6_found": 0, "v4_names": [], "v6_names": []}
+    for name, x in noise_clips():
+        noise["clips"] += 1
+        for v in ("v4", "v6"):
+            if span(x, 16000, v) is not None:
+                noise[v + "_found"] += 1
+                noise[v + "_names"].append(name)
+    m["noise"] = noise
+    out(f"    {noise['clips']} clips said to hold speech: v4 {noise['v4_found']}, v6 "
+        f"{noise['v6_found']}")
+    return m
+
+
+# ---- The stronger voice-ID model: TitaNet against ResNet221 --------------
+
+#: The owner's sentences for this part (the same kind "Train my voice" asks
+#: for: a few seconds each, said normally).
+VOICE_ID_LINES = (
+    "What's on my calendar for tomorrow morning?",
+    "Remind me to water the plants when I get home.",
+    "Turn the living room lights down a little, please.",
+    "How long will it take to drive to the station?",
+    "Add eggs, bread and coffee to the shopping list.",
+    "Read me the last message from my brother.",
+    "Set a timer for twenty five minutes.",
+    "What did I say I wanted to do this weekend?",
+    "Play something calm while I cook dinner.",
+    "Is it going to rain before the evening?",
+)
+VOICE_ID_RULES = {
+    # Enough of the owner to split into a print and a test.
+    "min_owner_clips": 20,
+    # Enough real other people (WAVs the owner adds): Kokoro's synthetic
+    # voices are reported but never enough on their own - measured, they
+    # behave unlike real people.
+    "min_other_clips": 50,
+}
+VOICE_ID_RULE_WORDS = (
+    "At least 20 of your own sentences (half make a voice print in memory, half test it).",
+    "At least 50 sentences from other real people, as WAV files in the other-voices folder "
+    "(the built-in voices are shown too, but they are not real people).",
+    "Then the numbers below are enough to give the newer model its own bars. Nothing is "
+    "switched: you choose the model in Settings, Voice, and only after its bars are written.",
+)
+ROWS_READY = "enough to write its bars"
+ROWS_NOT_READY = "not enough yet"
+
+
+def other_voice_dir() -> Path:
+    return results_root() / "other-voices"
+
+
+def my_voice_dir() -> Path:
+    return results_root() / "my-voice"
+
+
+def sweep(owner: list, others: list, bars=None) -> list:
+    """[(bar, share of the owner's clips refused, share of others let in)]
+    for each raw bar - the table a MODEL_BARS row is chosen from."""
+    bars = bars if bars is not None else [round(0.20 + 0.05 * i, 2) for i in range(16)]
+    rows = []
+    for b in bars:
+        refused = sum(1 for s in owner if s < b) / len(owner) if owner else None
+        let_in = sum(1 for s in others if s >= b) / len(others) if others else None
+        rows.append((b, refused, let_in))
+    return rows
+
+
+def matching_bar(rows: list, let_in_max: float) -> Optional[tuple]:
+    """The LOWEST bar at which others are let in no more often than
+    `let_in_max` - the bar that keeps people out as well as the reference -
+    as (bar, owner refused, others let in), or None."""
+    for b, refused, let_in in rows:
+        if let_in is not None and let_in <= let_in_max:
+            return b, refused, let_in
+    return None
+
+
+def voiceid_verdict(m: dict, rules: dict = VOICE_ID_RULES) -> tuple:
+    if not m.get("resnet_ok"):
+        return ROWS_NOT_READY, [f"The newer model could not be measured: "
+                                f"{m.get('resnet_why') or 'unknown'}."]
+    why = []
+    if int(m.get("owner_clips", 0)) < rules["min_owner_clips"]:
+        why.append(f"Only {m.get('owner_clips', 0)} of your own sentences (at least "
+                   f"{rules['min_owner_clips']} are needed).")
+    if int(m.get("other_clips", 0)) < rules["min_other_clips"]:
+        why.append(f"Only {m.get('other_clips', 0)} sentences from other real people (at least "
+                   f"{rules['min_other_clips']} are needed).")
+    return (ROWS_NOT_READY, why) if why else (ROWS_READY, ["Every rule was met."])
+
+
+def voiceid_measure(out: Out, *, record: Optional[int]) -> dict:
+    import jarvis_voice as JV
+    m: dict = {"resnet_ok": False}
+    rn = JV.resnet_state()
+    if not rn["ok"]:
+        m["resnet_why"] = rn["why"]
+        return m
+    models = {}
+    for key, path in (("small", JV.speaker_model_path()), ("titanet", JV.titanet_model_path()),
+                      ("resnet221", JV.resnet_model_path())):
+        if not Path(path).is_file():
+            continue
+        try:
+            models[key] = JV.StrongEmbedder(Path(path))
+        except Exception as exc:
+            out(f"    {key}: would not load ({type(exc).__name__})")
+    if "resnet221" not in models:
+        m["resnet_why"] = "the newer model's file would not load"
+        return m
+    m["resnet_ok"] = True
+    m["models"] = sorted(models)
+
+    out("  Your own sentences")
+    mine = []
+    if record and can_record():
+        out(f"    Recording up to {record} (4 seconds each); none is kept")
+        tmp = Path(tempfile.mkdtemp(prefix="jarvis-me-"))
+        try:
+            for i in range(record):
+                line = VOICE_ID_LINES[i % len(VOICE_ID_LINES)]
+                if ask(f"  {i + 1}/{record}: press Enter, then say  \"{line}\"  (s and Enter "
+                       f"to stop) ", "").lower() == "s":
+                    break
+                p = tmp / "clip.wav"
+                try:
+                    record_wav(p, 4.0)
+                    mine.append(read_wav(p))
+                except (OSError, ValueError) as exc:
+                    out(f"      could not record: {exc}")
+                    break
+                finally:
+                    try:
+                        p.unlink()
+                    except OSError:
+                        pass
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    for p in sorted(my_voice_dir().glob("*.wav")) if my_voice_dir().is_dir() else []:
+        try:
+            mine.append(read_wav(p))
+        except ValueError:
+            pass
+    others = []
+    for p in sorted(other_voice_dir().rglob("*.wav")) if other_voice_dir().is_dir() else []:
+        try:
+            others.append(read_wav(p))
+        except ValueError:
+            pass
+    synthetic = [(x, r) for _t, x, r in kokoro_clips()]
+    try:
+        import jarvis_wakeword as W
+        mine, others, synthetic = ([(W.to_16k(x, r), 16000) for x, r in group]
+                                   for group in (mine, others, synthetic))
+    except Exception:
+        pass
+    m.update(owner_clips=len(mine), other_clips=len(others), synthetic_clips=len(synthetic))
+    out(f"    {len(mine)} of yours, {len(others)} from other people, {len(synthetic)} from the "
+        f"built-in voices")
+    half = len(mine) // 2
+    train, test = mine[:half], mine[half:]
+    m["results"] = {}
+    for key, emb in models.items():
+        t0 = time.perf_counter()
+        vec = lambda xr: JV._as_vector(JV._embed(emb, xr[0], xr[1]))  # noqa: E731
+        tv = [v for v in (vec(c) for c in train) if v]
+        cost = (time.perf_counter() - t0) / max(1, len(train))
+        if not tv:
+            m["results"][key] = {"why": "no usable voice print from your sentences"}
+            continue
+        centroid = JV._mean_unit(tv)
+
+        def score(xr, _vec=vec, _c=centroid) -> float:
+            v = _vec(xr)
+            return JV.cosine(v, _c) if v else 0.0
+        own_s = [score(c) for c in test]
+        oth_s = [score(c) for c in others]
+        syn_s = [score(c) for c in synthetic]
+        rows = sweep(own_s, oth_s)
+        m["results"][key] = {"ms_per_clip": round(cost * 1000), "owner": own_s,
+                             "others": oth_s, "synthetic": syn_s, "sweep": rows,
+                             "measured_bars": JV.bars_for(emb.name).get("known", False),
+                             "name": emb.name}
+        out(f"  {key}: about {round(cost * 1000)} ms a sentence")
+        out("    bar   you refused   others let in   built-in voices let in")
+        syn_rows = sweep(own_s, syn_s)
+        for (b, ref, let), (_b2, _r2, syn) in zip(rows, syn_rows):
+            out(f"    {b:.2f}  {_pct(ref):>11}   {_pct(let):>13}   {_pct(syn):>10}")
+    ti, rn_r = m["results"].get("titanet"), m["results"].get("resnet221")
+    if ti and rn_r and "sweep" in ti and "sweep" in rn_r:
+        vs_bar = JV.bar_for(ti["name"], "very_strict")[0]
+        ref = next((r for r in ti["sweep"] if abs(r[0] - vs_bar) < 1e-6), None)
+        if ref is not None and ref[2] is not None:
+            got = matching_bar(rn_r["sweep"], ref[2])
+            m["suggested"] = {"titanet_very_strict": ref, "resnet221_same_keep_out": got}
+            if got is not None:
+                out(f"  To keep other people out as well as today's very strict does "
+                    f"({_pct(ref[2])} let in, you refused {_pct(ref[1])}), the newer model needs "
+                    f"a bar of {got[0]:.2f} - and then refuses you {_pct(got[1])}.")
+    return m
+
+
+def _pct(v) -> str:
+    return "-" if v is None else f"{v * 100:.1f}%"
+
+
+# --------------------------------------------------------------------------
 #   The run
 # --------------------------------------------------------------------------
 
@@ -1008,8 +1658,13 @@ def main(argv=None) -> int:
     if np is None:
         print("numpy is not installed in this Python (py -3 -m pip install numpy).")
         return 1
-    do_wake = "--voice" not in argv or "--wake" in argv
-    do_voice = "--wake" not in argv or "--voice" in argv
+    # "Better voice" (2026-09-28): --wake2, --vad and --voice-id run only
+    # their own parts; the original two run as before when none is given.
+    do_wake2, do_vad, do_voice_id = ("--wake2" in argv, "--vad" in argv,
+                                     "--voice-id" in argv)
+    newer = do_wake2 or do_vad or do_voice_id
+    do_wake = ("--voice" not in argv or "--wake" in argv) and not (newer and "--wake" not in argv)
+    do_voice = ("--wake" not in argv or "--voice" in argv) and not (newer and "--voice" not in argv)
     out = Out()
     stamp = time.strftime("%Y%m%d-%H%M%S")
     work = results_root() / stamp
@@ -1065,6 +1720,90 @@ def main(argv=None) -> int:
         doc["voice"] = {"measured": _clean_for_json(m), "verdict": verdict, "why": why}
         out("")
         out(f"  VERDICT (the voice): {verdict.upper()}")
+        for w in why:
+            out(f"    - {w}")
+
+    if do_wake2:
+        out("")
+        out("PART 3 - \"Hey Jarvis\": one detector, or two that must agree")
+        for r in WAKE2_RULE_WORDS:
+            out(f"  rule: {r}")
+        record = room = None
+        if can_record():
+            n = ask("  Record some of your own \"hey Jarvis\" now? How many? (the rules need "
+                    "10; none is kept; Enter for 0): ", "0")
+            record = int(n) if n.isdigit() else 0
+            mins = ask("  Listen to the room for how many minutes? (60 is what the rules "
+                       "need; Enter for 0): ", "0")
+            room = int(mins) if mins.isdigit() else 0
+        else:
+            out(f"  (This system cannot record; put WAV files of you saying \"hey Jarvis\" "
+                f"in {owner_clip_dir()} instead.)")
+        try:
+            m = wake2_measure(out, record=record, room_minutes=room)
+        except Exception as exc:
+            m = {"second_ok": False,
+                 "second_why": f"the bake-off itself failed ({type(exc).__name__}: {exc})"}
+        verdict, why = wake2_verdict(m)
+        doc["wake2"] = {"measured": _clean_for_json(m), "verdict": verdict, "why": why,
+                        "rules": WAKE2_RULES}
+        out("")
+        out(f"  VERDICT (two detectors): {verdict.upper()}")
+        for w in why:
+            out(f"    - {w}")
+        if verdict == TURN_ON:
+            out("    You can turn it on in Settings, Voice, \"Second 'hey Jarvis' check\" - "
+                "on the phone or the PC. That is at once; going back asks with a card.")
+
+    if do_vad:
+        out("")
+        out("PART 4 - The speech detector: Silero VAD v4 (today's) against v6")
+        for r in VAD_RULE_WORDS:
+            out(f"  rule: {r}")
+        record = None
+        if can_record():
+            n = ask("  Record some of your own sentences now? How many? (the rules need 10; "
+                    "none is kept; Enter for 0): ", "0")
+            record = int(n) if n.isdigit() else 0
+        try:
+            m = vad_measure(out, record=record)
+        except Exception as exc:
+            m = {"v6_ok": False,
+                 "v6_why": f"the bake-off itself failed ({type(exc).__name__}: {exc})"}
+        verdict, why = vad_verdict(m)
+        doc["vad"] = {"measured": _clean_for_json(m), "verdict": verdict, "why": why,
+                      "rules": VAD_RULES}
+        out("")
+        out(f"  VERDICT (speech detector): {verdict.upper()}")
+        for w in why:
+            out(f"    - {w}")
+        if verdict == USE_V6:
+            out("    To use it: the line \"Use the newer speech detector\" in backend/README.md, "
+                "\"Better voice\", then restart Jarvis.")
+
+    if do_voice_id:
+        out("")
+        out("PART 5 - The voice check: the stronger model (TitaNet) against the newer one "
+            "(ResNet221)")
+        for r in VOICE_ID_RULE_WORDS:
+            out(f"  rule: {r}")
+        out(f"  Other people's sentences: WAV files in {other_voice_dir()} (sub-folders are "
+            f"fine). Yours can also go in {my_voice_dir()}.")
+        record = None
+        if can_record():
+            n = ask("  Record some of your own sentences now? How many? (the rules need 20; "
+                    "none is kept; Enter for 0): ", "0")
+            record = int(n) if n.isdigit() else 0
+        try:
+            m = voiceid_measure(out, record=record)
+        except Exception as exc:
+            m = {"resnet_ok": False,
+                 "resnet_why": f"the bake-off itself failed ({type(exc).__name__}: {exc})"}
+        verdict, why = voiceid_verdict(m)
+        doc["voice_id"] = {"measured": _clean_for_json(m), "verdict": verdict, "why": why,
+                           "rules": VOICE_ID_RULES}
+        out("")
+        out(f"  VERDICT (newer voice-ID model's bars): {verdict.upper()}")
         for w in why:
             out(f"    - {w}")
 

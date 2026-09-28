@@ -131,6 +131,10 @@
       "title": "Jarvis wants to run actions it has lined up"
     },
     {
+      "action": "github_read",
+      "title": "Jarvis wants to check GitHub for a \"tell me when\""
+    },
+    {
       "action": "history_enable",
       "title": "Jarvis wants to keep your chat history"
     },
@@ -156,7 +160,7 @@
     },
     {
       "action": "loosen_what_asks_first",
-      "title": "Jarvis wants to let one action go ahead without asking you first"
+      "title": "Jarvis wants to loosen what asks first"
     },
     {
       "action": "memory_manage",

@@ -312,7 +312,39 @@ def unknown_action_tier() -> str:
 
 
 def action_tier(action: str) -> str:
-    """Which tier an action falls in: "auto", "notify", "ask" or "never".
+    """Which tier an action falls in: "auto", "notify", "ask" or "never" -
+    the settings file's own line (file_action_tier, below), made stricter
+    while Lockdown is on.
+
+    LOCKDOWN (2026-09-28, jarvis_asks_first.py; docs/JARVIS-API.md section
+    75): one tap makes every way out of the PC ask first, or stop. While it
+    is on, a way out (jarvis_asks_first.LOCKDOWN_ACTIONS) whose line says
+    "auto" or "notify" is "ask" here - so the gate asks, and every module
+    that runs by itself (it accepts only "auto") stops. Only ever stricter:
+    "ask" and "never" are left as they are, and nothing is written to the
+    file. Without jarvis_asks_first.py (or an older copy of it) the file's
+    own line is returned unchanged - the feature is simply not there.
+    """
+    tier = file_action_tier(action)
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return tier
+    try:
+        got = str(jarvis_asks_first.lockdown_tier(str(action), tier))
+    except Exception:
+        # Lockdown could not be asked: a way out is stricter, never looser.
+        try:
+            way_out = bool(jarvis_asks_first.is_way_out(str(action)))
+        except Exception:
+            way_out = False
+        return "ask" if way_out and tier in ("auto", "notify") else tier
+    return got if got in TIERS else "ask"
+
+
+def file_action_tier(action: str) -> str:
+    """Which tier the settings file gives an action: "auto", "notify", "ask"
+    or "never", without Lockdown (action_tier, above, adds it).
 
     The contract is pinned by a surviving test, which is the only reason this
     function's behaviour is known rather than guessed - test_jobs.py:253:

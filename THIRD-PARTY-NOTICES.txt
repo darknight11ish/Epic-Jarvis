@@ -34,7 +34,8 @@ Worth knowing:
   * The WebView2 Runtime is Microsoft's and is not redistributed: the
     installer uses Microsoft's own bootstrapper.
   * The desktop's JavaScript has no third-party libraries; its only
-    third-party files are the fonts below.
+    third-party files are the fonts below. A few small pieces of code or
+    word lists copied from other projects are named in section 1.
 
 1. PARTS NAMED BY HAND
 ======================
@@ -370,6 +371,32 @@ HeadTTS (met4citizen), MIT - https://github.com/met4citizen/HeadTTS
   coarticulation in synthetic visual speech", in Models and Techniques in
   Computer Animation, Springer, 1993) - the idea only.
 
+THE BRAIN: A FACT'S HISTORY (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Hindsight (Vectorize AI), MIT - https://github.com/vectorize-io/hindsight
+  The word-by-word difference between two wordings of a fact, `diffWords`
+  (hindsight-control-plane/src/components/observation-history-view.tsx,
+  read on the default branch on 2026-09-28), is copied into
+  jarvis-desktop/src/fact-history.js, turned from TypeScript into plain
+  JavaScript. The copied function names its origin at its top. No other
+  Hindsight code is used; its entities view gave only the idea of the
+  people-and-things Galaxy (brain.js), and none of its code.
+  Copyright (c) 2025 Vectorize AI, Inc. Licensed under the MIT License,
+  whose full text is the one given for browser-use above with this
+  copyright line in place of that one.
+
+supermemory, MIT - https://github.com/supermemoryai/supermemory
+  The walk along a memory's versions in both directions,
+  VersionChainIndex.getChain (packages/memory-graph/src/canvas/
+  version-chain.ts, read on the default branch on 2026-09-28), is adapted
+  into backend/rebuilt/jarvis_memory.py, MemoryStore.fact_history(): the
+  link runs the other way in Jarvis (an old fact names what replaced it),
+  and every branch is followed, not the first one only. The adapted method
+  names its origin in its own description.
+  Copyright (c) 2025 supermemory. Licensed under the MIT License, whose
+  full text is the one given for browser-use above with this copyright
+  line in place of that one.
+
 OFFERS NOBODY ASKED FOR (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Leon (leon-ai/leon), MIT - https://github.com/leon-ai/leon
@@ -424,6 +451,72 @@ SIL Open Font License 1.1. Used only in the launch videos
 (videos/v5 and videos/v6, composition/assets/fonts/, each with its
 licence file beside it), not in either app. The OFL text is the one given
 under FONTS below.
+TALK-TO-TYPE (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Handy - https://github.com/cjpais/Handy (read 2026-09-28)
+Adapted: the clipboard paste that waits for proof the program in front
+read the words, then puts the owner's clipboard back without overwriting a
+newer copy, and keeps the words out of Windows Clipboard History and Cloud
+Clipboard (src-tauri/src/paste_tx/mod.rs and paste_tx/windows.rs, into
+jarvis-desktop/src-tauri/src/talk_type/paste_tx.rs and paste_windows.rs,
+changed as those files say at their top); and the list of filler words
+and the stutter clean-up (src-tauri/src/audio_toolkit/text.rs, ported to
+Python in backend/jarvis_speech.py, clean_dictation). Handy is not a
+dependency and none of its files are shipped as they are. Each adapted
+file carries this notice in full at its top.
+
+MIT License
+
+Copyright (c) 2025 CJ Pais
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+BETTER VOICE (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+None of these is shipped in this repository or an app: the owner installs
+or downloads each on the PC with a hash-checked line (backend/README.md,
+"Better voice"), and each is used only when chosen. Checked 2026-09-28.
+
+pymicro-wakeword 2.5.0 (Michael Hansen / Open Home Foundation), Apache-2.0 -
+  https://github.com/OHF-Voice/pymicro-wakeword (its wheel's LICENSE file).
+  The second "hey Jarvis" detector (backend/jarvis_microwake.py). Its wheel
+  carries microWakeWord's hey_jarvis.tflite model by Kevin Ahrendt,
+  byte-identical (SHA-256 21a7976a...) to the one in
+  https://github.com/esphome/micro-wake-word-models (Apache-2.0), and a
+  TensorFlow Lite runtime library (TensorFlow, Apache-2.0).
+pymicro-features 2.0.2 (Michael Hansen), Apache-2.0 -
+  https://github.com/rhasspy/pymicro-features. Its sound front end.
+
+Silero VAD v6.2.3 (silero_vad.onnx), MIT - https://github.com/snakers4/silero-vad
+  The newer speech detector, beside the v4 file already listed under
+  sherpa-onnx below. Copyright (c) 2020-present Silero Team; the MIT
+  licence text is the one at the end of this file.
+
+WeSpeaker ResNet221 (VoxCeleb, large-margin fine-tuned), as exported for
+  sherpa-onnx (wespeaker_en_voxceleb_resnet221_LM.onnx) - the newer
+  voice-ID model. WeSpeaker (https://github.com/wenet-e2e/wespeaker)
+  says in docs/pretrained.md that its VoxCeleb models follow the VoxCeleb
+  data's licence, Creative Commons Attribution 4.0
+  (https://creativecommons.org/licenses/by/4.0/). Attribution: WeSpeaker
+  (wenet-e2e) and the VoxCeleb dataset (A. Nagrani, J. S. Chung, A.
+  Zisserman et al., https://www.robots.ox.ac.uk/~vgg/data/voxceleb/).
+  Unchanged; used as it is.
 
 FONTS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
@@ -585,7 +678,7 @@ shows it under FAQ -> About -> Third-party notices.
 2. RUST LIBRARIES IN THE DESKTOP PROGRAM (generated)
 ====================================================
 
-379 libraries, from `cargo metadata --filter-platform x86_64-pc-windows-msvc` of
+380 libraries, from `cargo metadata --filter-platform x86_64-pc-windows-msvc` of
 jarvis-desktop/src-tauri (normal and build dependencies, not test-only ones).
 "Offered" is the library's own licence expression; "followed" is the
 licence Jarvis uses it under (the first of MIT, Apache-2.0, BSD, ... that a
@@ -600,7 +693,7 @@ BSD-3-Clause (3): alloc-no-stdlib, alloc-stdlib, subtle
 BSD-3-Clause AND MIT (2): brotli, encoding_rs
 BSL-1.0 (2): clipboard-win, error-code
 ISC (2): rustls-webpki, untrusted
-MIT (333): adler2, aho-corasick, anyhow, arboard, atomic-waker, autocfg, base64, base64, bit-set, bit-vec, bitflags, bitflags, block-buffer, brotli-decompressor, bs58, bytemuck, bytemuck_derive, byteorder, byteorder-lite, bytes, camino, cargo-platform, cargo_metadata, cargo_toml, cc, cfb, cfg-if, chrono, cookie, core_detect, cpufeatures, crc32fast, crossbeam-channel, crossbeam-deque, crossbeam-epoch, crossbeam-utils, crypto-common, ctor, ctor-proc-macro, darling, darling_core, darling_macro, dasp_sample, defmt, defmt-macros, defmt-parser, deranged, derive_more, derive_more-impl, digest, dirs, dirs-sys, displaydoc, dom_query, dtoa, dtor, dtor-proc-macro, dyn-clone, either, embed-resource, equivalent, erased-serde, fastrand, fax, fdeflate, find-msvc-tools, flate2, fnv, form_urlencoded, futures-channel, futures-core, futures-io, futures-macro, futures-sink, futures-task, futures-util, generic-array, getrandom, getrandom, getrandom, glob, global-hotkey, h2, half, hashbrown, hashbrown, heck, hex, html5ever, http, http-body, http-body-util, httparse, hyper, hyper-rustls, hyper-tls, hyper-util, ico, ident_case, idna, idna_adapter, image, indexmap, indexmap, infer, ipnet, itoa, jiff, jiff-core, jiff-tzdb, jiff-tzdb-platform, jobserver, json-patch, jsonptr, keyboard-types, libc, lock_api, log, markup5ever, memchr, mime, minisign-verify, miniz_oxide, miniz_oxide, mio, muda, multiversion, multiversion-macros, multiversion_no_op, native-tls, new_debug_unreachable, notify-rust, ntapi, num-conv, num-traits, once_cell, parking_lot, parking_lot_core, percent-encoding, phf, phf_codegen, phf_generator, phf_macros, phf_shared, pin-project-lite, plist, png, png, powerfmt, ppv-lite86, precomputed-hash, proc-macro2, quick-error, quick-xml, quote, rand, rand_chacha, rand_core, rand_core, raw-window-handle, rayon, rayon-core, ref-cast, ref-cast-impl, regex, regex-automata, regex-syntax, reqwest, reqwest, rustc-hash, rustc_version, rustls, rustls-pki-types, rustversion, same-file, schannel, schemars, schemars, schemars, schemars_derive, scopeguard, semver, serde, serde-untagged, serde_core, serde_derive, serde_derive_internals, serde_json, serde_repr, serde_spanned, serde_urlencoded, serde_with, serde_with_macros, serialize-to-javascript, serialize-to-javascript-impl, servo_arc, sha2, shlex, simd-adler32, simdutf8, siphasher, slab, smallvec, socket2, softbuffer, stable_deref_trait, string_cache, string_cache_codegen, strsim, syn, syn, synstructure, sysinfo, tauri, tauri-build, tauri-codegen, tauri-macros, tauri-plugin, tauri-plugin-clipboard-manager, tauri-plugin-global-shortcut, tauri-plugin-notification, tauri-plugin-single-instance, tauri-plugin-store, tauri-plugin-updater, tauri-runtime, tauri-runtime-wry, tauri-utils, tauri-winres, tauri-winrt-notification, tempfile, tendril, thiserror, thiserror, thiserror-impl, thiserror-impl, tiff, time, time-core, time-macros, tinyvec, tinyvec_macros, tokio, tokio-macros, tokio-native-tls, tokio-rustls, tokio-util, toml, toml, toml_datetime, toml_datetime, toml_parser, toml_writer, tower, tower-http, tower-layer, tower-service, tracing, tracing-attributes, tracing-core, tray-icon, try-lock, typeid, typenum, unic-char-property, unic-char-range, unic-common, unic-ucd-ident, unic-ucd-version, unicode-segmentation, url, urlpattern, utf8_iter, uuid, version_check, vswhom, vswhom-sys, walkdir, want, web_atoms, webview2-com, webview2-com-macros, webview2-com-sys, weezl, widestring, winapi, winapi-util, window-vibrancy, windows, windows, windows, windows, windows-collections, windows-collections, windows-core, windows-core, windows-core, windows-core, windows-future, windows-future, windows-implement, windows-implement, windows-interface, windows-interface, windows-link, windows-link, windows-numerics, windows-numerics, windows-registry, windows-result, windows-result, windows-result, windows-strings, windows-strings, windows-sys, windows-sys, windows-sys, windows-targets, windows-targets, windows-threading, windows-threading, windows-version, windows_x86_64_msvc, windows_x86_64_msvc, winnow, winnow, winreg, wry, zerocopy, zerocopy-derive, zeroize, zmij, zune-core, zune-jpeg
+MIT (334): adler2, aho-corasick, anyhow, arboard, atomic-waker, autocfg, base64, base64, bit-set, bit-vec, bitflags, bitflags, block-buffer, brotli-decompressor, bs58, bytemuck, bytemuck_derive, byteorder, byteorder-lite, bytes, camino, cargo-platform, cargo_metadata, cargo_toml, cc, cfb, cfg-if, chrono, cookie, core_detect, cpufeatures, crc32fast, crossbeam-channel, crossbeam-deque, crossbeam-epoch, crossbeam-utils, crypto-common, ctor, ctor-proc-macro, darling, darling_core, darling_macro, dasp_sample, defmt, defmt-macros, defmt-parser, deranged, derive_more, derive_more-impl, digest, dirs, dirs-sys, displaydoc, dom_query, dtoa, dtor, dtor-proc-macro, dyn-clone, either, embed-resource, equivalent, erased-serde, fastrand, fax, fdeflate, find-msvc-tools, flate2, fnv, form_urlencoded, futures-channel, futures-core, futures-io, futures-macro, futures-sink, futures-task, futures-util, generic-array, getrandom, getrandom, getrandom, glob, global-hotkey, h2, half, hashbrown, hashbrown, heck, hex, html5ever, http, http-body, http-body-util, httparse, hyper, hyper-rustls, hyper-tls, hyper-util, ico, ident_case, idna, idna_adapter, image, indexmap, indexmap, infer, ipnet, itoa, jiff, jiff-core, jiff-tzdb, jiff-tzdb-platform, jobserver, json-patch, jsonptr, keyboard-types, libc, lock_api, log, markup5ever, memchr, mime, minisign-verify, miniz_oxide, miniz_oxide, mio, muda, multiversion, multiversion-macros, multiversion_no_op, native-tls, new_debug_unreachable, notify-rust, ntapi, num-conv, num-traits, once_cell, parking_lot, parking_lot_core, percent-encoding, phf, phf_codegen, phf_generator, phf_macros, phf_shared, pin-project-lite, plist, png, png, powerfmt, ppv-lite86, precomputed-hash, proc-macro2, quick-error, quick-xml, quote, rand, rand_chacha, rand_core, rand_core, raw-window-handle, rayon, rayon-core, ref-cast, ref-cast-impl, regex, regex-automata, regex-syntax, reqwest, reqwest, rustc-hash, rustc_version, rustls, rustls-pki-types, rustversion, same-file, schannel, schemars, schemars, schemars, schemars_derive, scopeguard, semver, serde, serde-untagged, serde_core, serde_derive, serde_derive_internals, serde_json, serde_repr, serde_spanned, serde_urlencoded, serde_with, serde_with_macros, serialize-to-javascript, serialize-to-javascript-impl, servo_arc, sha2, shlex, simd-adler32, simdutf8, siphasher, slab, smallvec, socket2, softbuffer, stable_deref_trait, string_cache, string_cache_codegen, strsim, syn, syn, synstructure, sysinfo, tauri, tauri-build, tauri-codegen, tauri-macros, tauri-plugin, tauri-plugin-clipboard-manager, tauri-plugin-global-shortcut, tauri-plugin-notification, tauri-plugin-single-instance, tauri-plugin-store, tauri-plugin-updater, tauri-plugin-window-state, tauri-runtime, tauri-runtime-wry, tauri-utils, tauri-winres, tauri-winrt-notification, tempfile, tendril, thiserror, thiserror, thiserror-impl, thiserror-impl, tiff, time, time-core, time-macros, tinyvec, tinyvec_macros, tokio, tokio-macros, tokio-native-tls, tokio-rustls, tokio-util, toml, toml, toml_datetime, toml_datetime, toml_parser, toml_writer, tower, tower-http, tower-layer, tower-service, tracing, tracing-attributes, tracing-core, tray-icon, try-lock, typeid, typenum, unic-char-property, unic-char-range, unic-common, unic-ucd-ident, unic-ucd-version, unicode-segmentation, url, urlpattern, utf8_iter, uuid, version_check, vswhom, vswhom-sys, walkdir, want, web_atoms, webview2-com, webview2-com-macros, webview2-com-sys, weezl, widestring, winapi, winapi-util, window-vibrancy, windows, windows, windows, windows, windows-collections, windows-collections, windows-core, windows-core, windows-core, windows-core, windows-future, windows-future, windows-implement, windows-implement, windows-interface, windows-interface, windows-link, windows-link, windows-numerics, windows-numerics, windows-registry, windows-result, windows-result, windows-result, windows-strings, windows-strings, windows-sys, windows-sys, windows-sys, windows-targets, windows-targets, windows-threading, windows-threading, windows-version, windows_x86_64_msvc, windows_x86_64_msvc, winnow, winnow, winreg, wry, zerocopy, zerocopy-derive, zeroize, zmij, zune-core, zune-jpeg
 MIT AND Unicode-3.0 (1): unicode-ident
 MPL-2.0 (5): cssparser, cssparser-macros, dtoa-short, option-ext, selectors
 Unicode-3.0 (18): icu_collections, icu_locale_core, icu_normalizer, icu_normalizer_data, icu_properties, icu_properties_data, icu_provider, litemap, potential_utf, tinystr, writeable, yoke, yoke-derive, zerofrom, zerofrom-derive, zerotrie, zerovec, zerovec-derive
@@ -1167,7 +1260,7 @@ synstructure 0.13.2 - followed: MIT (offered: MIT)
 sysinfo 0.32.1 - followed: MIT (offered: MIT)
   Copyright (c) 2015 Guillaume Gomez
 tao 0.35.3 - followed: Apache-2.0 (offered: Apache-2.0)
-tauri 2.11.5 - followed: MIT (offered: Apache-2.0 OR MIT)
+tauri 2.11.6 - followed: MIT (offered: Apache-2.0 OR MIT)
   Copyright (c) 2017 - Present Tauri Apps Contributors
 tauri-build 2.6.3 - followed: MIT (offered: Apache-2.0 OR MIT)
   Copyright (c) 2017 - Present Tauri Apps Contributors
@@ -1188,6 +1281,8 @@ tauri-plugin-single-instance 2.4.4 - followed: MIT (offered: Apache-2.0 OR MIT)
 tauri-plugin-store 2.4.4 - followed: MIT (offered: Apache-2.0 OR MIT)
   Copyright (c) 2017 - Present Tauri Apps Contributors
 tauri-plugin-updater 2.11.0 - followed: MIT (offered: Apache-2.0 OR MIT)
+  Copyright (c) 2017 - Present Tauri Apps Contributors
+tauri-plugin-window-state 2.4.1 - followed: MIT (offered: Apache-2.0 OR MIT)
   Copyright (c) 2017 - Present Tauri Apps Contributors
 tauri-runtime 2.11.3 - followed: MIT (offered: Apache-2.0 OR MIT)
   Copyright (c) 2017 - Present Tauri Apps Contributors

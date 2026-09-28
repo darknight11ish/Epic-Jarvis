@@ -2541,6 +2541,9 @@ pub fn stop_everything_now(app: &AppHandle) {
     // First: a focus line still being made on the PC is dropped when it
     // arrives (brain/focus.rs `play_callout`).
     crate::brain::focus::note_stop_everything();
+    // Talk-to-type: the microphone closes and nothing still on its way is
+    // typed (talk_type.rs `stop`).
+    crate::talk_type::stop(app);
     crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
     // The HUD window is the backend's own page and speaks through the
     // browser's speech engine; a fixed line, no payload.
@@ -2698,7 +2701,11 @@ pub async fn set_power_mode(app: &AppHandle, mode: &str) -> Result<String, Strin
 /// literal plus, so an id containing a space would address a different
 /// resource. Unreserved characters per RFC 3986 pass through; everything
 /// else becomes %XX.
-fn encode_path_segment(raw: &str) -> String {
+///
+/// Also used for a query value (brain/history.rs, the History search): with
+/// every reserved byte encoded, `&`, `=`, `#` and `+` in the owner's words
+/// can never start a second parameter or turn into a space.
+pub(crate) fn encode_path_segment(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     for byte in raw.as_bytes() {
         match byte {
@@ -5397,6 +5404,9 @@ pub fn quit_app(app: AppHandle) {
     }
     // Closing the HUD explicitly stops WebView2 from logging a teardown warning
     // when the process exits while a remote origin is still loaded.
+    // Sizes and places first: the window-state plugin's own save runs
+    // at exit, when the HUD below is already gone (window_memory.rs).
+    crate::window_memory::save_now(&app);
     if let Some(hud) = tauri::Manager::get_webview_window(&app, HUD_LABEL) {
         let _ = hud.destroy();
     }

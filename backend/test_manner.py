@@ -315,10 +315,21 @@ def t_only_this_pcs_model():
     check("manner.patch adds only the two /api/manner routes (no /api/chat line)",
           added.count('"/api/manner"') == 2 and "/api/chat" not in added
           and "messages" not in added, added[:300])
-    check("the line is added inside run_local_turn only",
-          AG.run_local_turn.__code__.co_names.count("with_manner_note") >= 0
-          and "with_manner_note(body[\"messages\"]" in (BACKEND / "jarvis_agent.py").read_text(
-              encoding="utf-8"))
+    # Since the warm-up (2026-09-28) the notes are added by ONE function,
+    # dress_messages, which only the local turn and the warm-up of this PC's
+    # own model call - never the relay, the one path to a cloud model.
+    import ast
+    tree = ast.parse((BACKEND / "jarvis_agent.py").read_text(encoding="utf-8"))
+    callers = {}
+    for top in tree.body:
+        if isinstance(top, ast.FunctionDef):
+            for node in ast.walk(top):
+                if isinstance(node, ast.Call) and getattr(node.func, "id", "") in (
+                        "with_manner_note", "dress_messages"):
+                    callers.setdefault(node.func.id, set()).add(top.name)
+    check("the line is added inside run_local_turn (and its warm-up) only",
+          callers == {"with_manner_note": {"dress_messages"},
+                      "dress_messages": {"run_local_turn", "chat_prefix"}}, callers)
     check("shipped: jarvis_manner.py is in _where.SHIPPED", "jarvis_manner.py" in SHIPPED)
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("apply-patches.ps1 ships it and applies manner.patch",

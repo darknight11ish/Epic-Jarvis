@@ -372,8 +372,9 @@ def t_tool_content_never_slices_a_json_string_mid_structure():
     out = AG._tool_content(big)
     check("an oversized result is still valid JSON",
           json.loads(out) is not None, out[:200])
-    check("it says it was truncated rather than silently cutting the string",
-          json.loads(out).get("truncated") is True, out[:200])
+    check("it says it was shortened rather than silently cutting the string",
+          "shortened" in json.loads(out) or json.loads(out).get("truncated") is True,
+          out[:200])
     check("the safe fallback itself stays under the cap",
           len(out) <= AG._MAX_TOOL_CONTENT_CHARS, len(out))
 

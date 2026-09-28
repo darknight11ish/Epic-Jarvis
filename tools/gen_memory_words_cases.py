@@ -76,8 +76,10 @@ WORDS = {
     "search_by_meaning_off": "off - facts are found by keyword",
     "waiting_to_be_indexed": "Waiting to be indexed",
     "overnight": "Overnight tidying",
-    "overnight_on": "switched on, but not built yet - nothing runs",
-    "overnight_off": "off (not built yet)",
+    # The overnight tidy is built since 2026-09-28 (backend/jarvis_tidy.py):
+    # review cards only, once a day, while this switch is on.
+    "overnight_on": "on - once a day Jarvis may ask about facts that look out of date (review cards only)",
+    "overnight_off": "off",
     # I8
     "reranker": "Answer ordering (re-ranker)",
     "reranker_loading": "still loading - answers keep the old order until it is ready",

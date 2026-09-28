@@ -5,8 +5,9 @@
 //!
 //! * plugin registration — global shortcut, clipboard manager, notifications;
 //! * the global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`,
-//!   `Alt+Shift+N`, `Alt+Shift+W`, "Stop everything" on `Alt+Shift+X`, and
-//!   the floating face on `Alt+Shift+F`; all rebindable, [`hotkeys`]);
+//!   `Alt+Shift+N`, `Alt+Shift+W`, "Stop everything" on `Alt+Shift+X`, the
+//!   floating face on `Alt+Shift+F`, and talk-to-type on `Alt+Shift+T`; all
+//!   rebindable, [`hotkeys`]);
 //! * the notification-area tray icon ([`tray::create_tray`]);
 //! * window vibrancy and focus-loss auto-hide ([`windows::setup_windows`]).
 //!
@@ -39,12 +40,14 @@ pub mod plain_errors;
 pub mod proctree;
 pub mod pyfind;
 pub mod reach;
+pub mod screen_work;
 pub mod sidecar;
 pub mod spec;
 pub mod spec_drift;
 pub mod sse;
 pub mod stream;
 pub mod system_theme;
+pub mod talk_type;
 pub mod token_store;
 pub mod tool_updates;
 pub mod tray;
@@ -54,6 +57,7 @@ pub mod voice;
 pub mod voice_flow;
 pub mod voice_training;
 pub mod web_search;
+pub mod window_memory;
 pub mod windows;
 #[cfg(windows)]
 pub mod winrt_toast;
@@ -440,7 +444,7 @@ pub struct RouteState {
 /// numbers, and the GPU probe is a process spawn.
 fn spawn_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let mut system = telemetry_system();
+        let mut system = sysinfo::System::new_all();
 
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
@@ -491,7 +495,7 @@ fn spawn_telemetry_loop(app: AppHandle) {
                     // The blocking task panicked or was cancelled; `system`
                     // went with it, so start a fresh one for the next tick.
                     eprintln!("[jarvis] telemetry sampling failed: {err}");
-                    system = telemetry_system();
+                    system = sysinfo::System::new_all();
                     continue;
                 }
             };
@@ -500,19 +504,6 @@ fn spawn_telemetry_loop(app: AppHandle) {
             }
         }
     });
-}
-
-/// The sampler's `System`, loading only what `sample_telemetry` reads: CPU
-/// usage and memory. `System::new_all()` also listed every process, disk,
-/// network adapter and user at start-up and kept them for the session,
-/// none of which the widget shows.
-fn telemetry_system() -> sysinfo::System {
-    use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind};
-    sysinfo::System::new_with_specifics(
-        RefreshKind::new()
-            .with_cpu(CpuRefreshKind::new().with_cpu_usage())
-            .with_memory(MemoryRefreshKind::everything()),
-    )
 }
 
 /// Default note target for the quick-capture hotkey.
@@ -620,7 +611,13 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     // where it stays hidden anyway.
     let lock_first = !hidden && lock::current(app).app_lock;
 
-    tauri::WebviewWindowBuilder::new(
+    // Built hidden in every case, then put back where the owner left it
+    // (window_memory.rs), then shown if it should be: a window built visible
+    // would flash up centred and then jump. Hidden ones get their size and
+    // place now and their maximise when they are shown - maximising is what
+    // would otherwise show them, before Windows Hello.
+    let show_now = !hidden && !lock_first;
+    let hud = tauri::WebviewWindowBuilder::new(
         app,
         HUD_LABEL,
         tauri::WebviewUrl::App("jarvis_hud.html".into()),
@@ -634,13 +631,19 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     .always_on_top(false)
     .skip_taskbar(false)
     .resizable(true)
-    .visible(!hidden && !lock_first)
-    .focused(!hidden && !lock_first)
+    .visible(false)
+    .focused(false)
     .shadow(true)
     .theme(Some(tauri::Theme::Dark))
     .initialization_script(&script)
     .build()
     .map_err(|e| format!("{e}"))?;
+
+    window_memory::restore(&hud, show_now);
+    if show_now {
+        let _ = hud.show();
+        let _ = hud.set_focus();
+    }
 
     if lock_first {
         if let Err(err) = windows::show_hud(app) {
@@ -723,6 +726,9 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        // Brain, Settings, Faces and the HUD open where they were left - size,
+        // place and maximised only, never visibility (window_memory.rs).
+        .plugin(window_memory::plugin())
         // Registering this is not optional and its absence was invisible:
         // `UpdaterExt::updater_builder` resolves `state::<UpdaterState>()`,
         // which PANICS when the type was never managed. The empty `pubkey` in
@@ -740,6 +746,7 @@ pub fn run() {
         .manage(tray::TrayFlashGovernor::default())
         .manage(windows::WidgetState::default())
         .manage(windows::FloatingState::default())
+        .manage(window_memory::PendingMaximize::default())
         .manage(RouteState::default())
         // Registered here with every other managed type, not inside setup: the
         // shortcut handler reads it and would panic on an unregistered state
@@ -750,6 +757,8 @@ pub fn run() {
         .manage(system_theme::AppliedTheme::default())
         .manage(voice::VoiceCaptureState::default())
         .manage(voice::AutoListenState::default())
+        // Talk-to-type: the hotkey's microphone and typing (talk_type.rs).
+        .manage(talk_type::TalkTypeState::default())
         // Settings' voice recordings, held in memory until sent (voice_training.rs).
         .manage(voice_training::SampleState::default())
         // Windows Hello: when the owner was last here, and whether the
@@ -790,6 +799,10 @@ pub fn run() {
             commands::pause_task,
             commands::resume_task,
             commands::stop_task,
+            // "Jarvis is working on your screen, 0:42 - Stop" (screen_work.rs):
+            // the widget's line, and its Stop, which is the hotkey's.
+            screen_work::screen_work,
+            screen_work::stop_everything,
             commands::inject_task_note,
             commands::amend_approval,
             commands::set_route_lane,
@@ -827,12 +840,25 @@ pub fn run() {
             brain::schedule::brain_schedule_act,
             brain::schedule::brain_schedule_add_todo,
             brain::schedule::brain_schedule_add_standby,
+            brain::schedule::brain_schedule_add_today,
+            brain::widgets::brain_widgets,
+            brain::widgets::brain_widgets_draft,
+            brain::widgets::brain_widgets_add,
+            brain::widgets::brain_widgets_discard,
+            brain::widgets::brain_widgets_delete,
+            brain::widgets::widget_board,
+            brain::widgets::widget_board_action,
             brain::schedule::brain_schedule_clear_list,
             brain::goals::brain_goals,
             brain::goals::brain_goals_create,
             brain::goals::brain_goals_accept,
             brain::goals::brain_goals_step,
             brain::goals::brain_goals_stop,
+            brain::photo_reminder::photo_scan,
+            brain::photo_reminder::photo_add_reminder,
+            brain::history_import::history_import_status,
+            brain::history_import::history_import_start,
+            brain::history_import::history_import_cancel,
             brain::focus::focus_status,
             brain::focus::focus_start,
             brain::focus::focus_act,
@@ -846,6 +872,9 @@ pub fn run() {
             brain::sources::chat_sources,
             brain::history::brain_history_list,
             brain::history::brain_history_open,
+            brain::history::brain_history_search,
+            brain::fact_history::brain_fact_history,
+            brain::conversation_facts::brain_conversation_facts,
             brain::history::brain_history_delete,
             brain::history::brain_history_settings,
             brain::brain_model,
@@ -878,6 +907,7 @@ pub fn run() {
             hardware::apply_hardware,
             hardware::hardware_step,
             hardware::measure_hardware,
+            hardware::get_pc_help,
             web_search::get_web_search,
             web_search::set_web_search,
             web_search::test_web_search,
@@ -1002,11 +1032,6 @@ pub fn run() {
         builder = builder.plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
-                    // Key-up would otherwise fire every action twice.
-                    if event.state() != ShortcutState::Pressed {
-                        return;
-                    }
-
                     // Resolved against the LIVE bindings. This used to compare
                     // the fired shortcut against five values captured at
                     // startup, which is correct exactly until someone rebinds
@@ -1015,6 +1040,18 @@ pub fn run() {
                     let Some(action) = hotkeys::action_for(app, shortcut) else {
                         return;
                     };
+
+                    // Talk-to-type is the one action that reads key-up too:
+                    // holding the key is how long it listens (talk_type.rs).
+                    if action == talk_type::ACTION_ID {
+                        talk_type::on_hotkey(app, event.state() == ShortcutState::Pressed);
+                        return;
+                    }
+
+                    // Key-up would otherwise fire every action twice.
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
 
                     match action {
                         "toggle_quickbar" => match windows::toggle_quickbar(app) {

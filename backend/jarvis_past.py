@@ -315,6 +315,43 @@ def label_since(fact: dict) -> str:
     return f"{text} ({'true' if said else 'known'} since {day})"
 
 
+def label_until(fact: dict, now: Optional[float] = None) -> str:
+    """A CURRENT fact's words with "(until 12 Oct)" on the end, when its own
+    words gave an end date that is still ahead (jarvis_memory.true_until,
+    smarter memory dates, 2026-09-28; JARVIS-API section 78). The words
+    alone otherwise: once the date has passed, the fact is NOT hidden or
+    relabelled on its own - the overnight tidy asks "Still true?" instead."""
+    text = str(fact.get("text", ""))
+    meta = _meta(fact)
+    end = meta.get("true_until")
+    said = meta.get("true_until_said")
+    now = time.time() if now is None else float(now)
+    if not isinstance(end, (int, float)) or isinstance(end, bool) or float(end) <= now:
+        return text
+    try:
+        import jarvis_memory
+        words = jarvis_memory.until_words(said, now)
+    except Exception:
+        words = ""
+    return f"{text} (until {words})" if words else text
+
+
+def _label_until(hits: list, now: Optional[float] = None) -> list:
+    """`hits` with each current, not-yet-labelled fact given its "(until
+    ...)" (label_until). A copy of each one changed; the rest as they were."""
+    out = []
+    for h in hits:
+        if isinstance(h, dict) and h.get("current", True) and not h.get("past") \
+                and not h.get("later"):
+            text = label_until(h, now)
+            if text != str(h.get("text", "")):
+                h = dict(h)
+                h["text"] = text
+                h["until"] = True
+        out.append(h)
+    return out
+
+
 def _label_later(hits: list, window) -> list:
     """`hits` with every current fact that became true only AFTER the
     window the question names labelled (label_since) and marked
@@ -410,7 +447,9 @@ def recall(store, query: str, k: int, now: Optional[float] = None) -> list:
     """What a chat turn recalls. Exactly store.search(query, k=k,
     entities=True, rerank=True, said_again=True) for an ordinary question; for a question about the past,
     that plus up to min(PAST_K, k) retired facts, labelled. k <= 0 is none
-    at all.
+    at all. A current fact whose words gave an end date still ahead gets
+    "(until 12 Oct)" on its words (label_until, 2026-09-28) - the same
+    facts, in the same order.
 
     Only the current search can raise (as it always could - the caller
     already handles that). Anything going wrong in the past half gives the
@@ -420,7 +459,7 @@ def recall(store, query: str, k: int, now: Optional[float] = None) -> list:
         return hits
     try:
         if not is_past_question(query, now):
-            return hits
+            return _until_labelled(hits, now)
         ids = {h.get("id") for h in hits}
         # "Where did I live in February?": a fact that only became true
         # after February is labelled, never handed over bare as if it were
@@ -429,6 +468,15 @@ def recall(store, query: str, k: int, now: Optional[float] = None) -> list:
             hits = _label_later(hits, when(query, now))
         except Exception:
             pass
-        return hits + past_hits(store, query, k=min(PAST_K, k), now=now, exclude=ids)
+        return _until_labelled(hits, now) + past_hits(store, query, k=min(PAST_K, k),
+                                                      now=now, exclude=ids)
+    except Exception:
+        return hits
+
+
+def _until_labelled(hits: list, now: Optional[float]) -> list:
+    """_label_until, and the hits as they were if anything goes wrong."""
+    try:
+        return _label_until(hits, now)
     except Exception:
         return hits

@@ -53,6 +53,7 @@ import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatPicture
+import com.jarvis.client.net.PhotoReminder
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.NoteCapture
@@ -87,6 +88,7 @@ import com.jarvis.client.ui.screens.FaqScreen
 import com.jarvis.client.ui.screens.HistoryScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
+import com.jarvis.client.ui.screens.PhotoReminderDialog
 import com.jarvis.client.ui.screens.HomeState
 import com.jarvis.client.ui.screens.InboxScreen
 import com.jarvis.client.ui.screens.LockedScreen
@@ -107,6 +109,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -156,6 +159,19 @@ class MainActivity : FragmentActivity() {
 
     /** The briefing notification was tapped - see [readBriefingIntent]. Consumed once. */
     private val openBriefingRequested = mutableStateOf(false)
+
+    /**
+     * When the restart notice was tapped (`SystemClock.elapsedRealtime`), or
+     * null - see [readResumeListeningIntent]. Consumed once, after App lock,
+     * and only while fresh ([RESUME_REQUEST_FRESH_MS]).
+     */
+    private val resumeListeningRequestedAt = mutableStateOf<Long?>(null)
+
+    /** Why listening could not be started from the restart notice; shown once on Checks. */
+    private val resumeListeningNotice = mutableStateOf<String?>(null)
+
+    /** An empty tile slot was tapped - see [readTileSettingsIntent]. Consumed once. */
+    private val openTileSettingsRequested = mutableStateOf(false)
 
     /** Set when the runtime itself failed to start. Shown instead of the app. */
     private val startupError = mutableStateOf<String?>(null)
@@ -243,6 +259,34 @@ class MainActivity : FragmentActivity() {
     private val pictureBusy = mutableStateOf(false)
 
     /**
+     * "Photo to reminder" ([PhotoReminder]): what the PC found in the
+     * attached picture, on screen only. In memory, never in a Bundle; Close
+     * drops it and the words read from the picture with it.
+     */
+    private val photoScan = mutableStateOf<PhotoReminder.Scan?>(null)
+
+    /** True while the PC reads the attached picture. */
+    private val photoFinding = mutableStateOf(false)
+
+    /**
+     * "Find a date in it" under the attached picture: the same picture that
+     * would go with a question - already shrunk, in memory only - is sent to
+     * the PC, which PROPOSES a reminder. Nothing is set up here.
+     */
+    private fun findDateInPicture() {
+        val pic = picture.value ?: return
+        if (photoFinding.value) return
+        photoFinding.value = true
+        lifecycleScope.launch {
+            when (val out = JarvisRuntime.scanPhotoForDate(pic.dataUri)) {
+                is PhotoReminder.Outcome.Ok -> photoScan.value = out.scan
+                is PhotoReminder.Outcome.Failed -> JarvisRuntime.setNotice(out.why)
+            }
+            photoFinding.value = false
+        }
+    }
+
+    /**
      * Android's photo picker (API 33+ has it built in): the owner chooses one
      * photo and the app may read that one. No storage permission is asked
      * for, and nothing is copied to the app's own storage - the photo is read
@@ -327,6 +371,11 @@ class MainActivity : FragmentActivity() {
         readVoiceIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        // Only on a fresh start: a rotation (or Android rebuilding the app)
+        // hands the same intent back, and must not open the microphone again
+        // after the owner has switched listening off.
+        if (savedInstanceState == null) readResumeListeningIntent(intent)
+        readTileSettingsIntent(intent)
 
         setContent { App() }
 
@@ -352,6 +401,26 @@ class MainActivity : FragmentActivity() {
         readVoiceIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        readResumeListeningIntent(intent)
+        readTileSettingsIntent(intent)
+    }
+
+    /**
+     * The restart notice ([com.jarvis.client.data.WakeResume]). Only a flag:
+     * listening starts in App(), after App lock, never from here.
+     */
+    private fun readResumeListeningIntent(intent: Intent?) {
+        if (intent?.action != ACTION_RESUME_LISTENING) return
+        // Reopened from Recents, Android replays the intent that first
+        // opened the task: that is not a new tap.
+        if ((intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
+        resumeListeningRequestedAt.value = android.os.SystemClock.elapsedRealtime()
+    }
+
+    /** An empty Quick Settings tile slot: open Settings at the tile section. */
+    private fun readTileSettingsIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_TILE_SETTINGS) return
+        openTileSettingsRequested.value = true
     }
 
     /**
@@ -644,6 +713,8 @@ class MainActivity : FragmentActivity() {
         // "draw over other apps" can be revoked in Android's own Settings at
         // any time, and this is what notices that on return.
         val floatingAvatar by JarvisRuntime.settings.floatingAvatar.collectAsState()
+        // Settings -> Quick Settings tiles (data/QuickTiles.kt): this phone only.
+        val quickTiles by JarvisRuntime.settings.quickTiles.collectAsState()
         LaunchedEffect(floatingAvatar, tick) {
             if (floatingAvatar == FloatingAvatarMode.OVERLAY &&
                 Settings.canDrawOverlays(this@MainActivity)
@@ -674,6 +745,20 @@ class MainActivity : FragmentActivity() {
         val activity by JarvisRuntime.activity.collectAsState()
         val faceState by JarvisRuntime.face.collectAsState()
         val power by JarvisRuntime.power.collectAsState()
+        val lockdown by JarvisRuntime.lockdown.collectAsState()
+
+        // "Photo to reminder": the PC's proposal for the attached picture.
+        // Nothing is set up until one of its buttons is tapped; the add is
+        // held on a stale link here and in the runtime. Never over App
+        // lock's lock screen: nothing behind it is shown.
+        photoScan.value?.takeIf { !locked }?.let { scan ->
+            PhotoReminderDialog(
+                scan = scan,
+                canAct = link == LinkState.CONNECTED && !stale,
+                onAdd = { what, date, time -> JarvisRuntime.addPhotoReminder(what, date, time) },
+                onClose = { photoScan.value = null },
+            )
+        }
         val status by JarvisRuntime.status.collectAsState()
         val version by JarvisRuntime.version.collectAsState()
         val pending by JarvisRuntime.pending.collectAsState()
@@ -806,6 +891,15 @@ class MainActivity : FragmentActivity() {
             pendingSettingsSection = target
             nav.go(Screen.SETTINGS)
             chat.consumeOpenSettings()
+        }
+        // An empty Quick Settings tile slot was tapped: the same one-time
+        // scroll, to "Quick Settings tiles".
+        LaunchedEffect(openTileSettingsRequested.value) {
+            if (!openTileSettingsRequested.value) return@LaunchedEffect
+            openTileSettingsRequested.value = false
+            pendingSettingsSection = QUICK_TILES_SECTION
+            nav.resetTo(Screen.HOME)
+            nav.go(Screen.SETTINGS)
         }
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
@@ -1035,6 +1129,41 @@ class MainActivity : FragmentActivity() {
             openBriefingRequested.value = false
             nav.resetTo(Screen.HOME)
             nav.go(Screen.BRAIN)
+        }
+
+        // The restart notice ("Hey Jarvis" is off since the phone restarted,
+        // data/WakeResume.kt): start listening from here - the app in front,
+        // from the owner's tap, the only way Android allows the microphone.
+        // Keyed on `locked`: with App lock on, nothing happens until the
+        // owner has unlocked Jarvis. The link may still be coming up after a
+        // restart, so it is given a few seconds, and the desktop's wake-word
+        // switch is read fresh - the same checks as the Checks switch.
+        // A tap left behind App lock and unlocked much later is dropped: the
+        // microphone opens only close to the owner's own tap.
+        LaunchedEffect(resumeListeningRequestedAt.value, locked) {
+            val at = resumeListeningRequestedAt.value ?: return@LaunchedEffect
+            if (locked) return@LaunchedEffect
+            resumeListeningRequestedAt.value = null
+            if (android.os.SystemClock.elapsedRealtime() - at > RESUME_REQUEST_FRESH_MS) return@LaunchedEffect
+            if (!JarvisRuntime.isPaired()) return@LaunchedEffect
+            // On the activity's own scope, not this effect's: clearing the
+            // request above changes this effect's key, which would cancel it
+            // half way through the wait below.
+            lifecycleScope.launch {
+                kotlinx.coroutines.withTimeoutOrNull(RESUME_LINK_WAIT_MS) {
+                    JarvisRuntime.link.first { it == LinkState.CONNECTED }
+                }
+                JarvisRuntime.voice.refreshStatus()
+                val why = startPhoneListening()
+                if (why == null) {
+                    JarvisRuntime.setNotice(com.jarvis.client.data.WakeResume.BACK_ON)
+                } else {
+                    // Checks, where the switch is, with the reason under it.
+                    resumeListeningNotice.value = why
+                    nav.resetTo(Screen.HOME)
+                    nav.go(Screen.CHECKS)
+                }
+            }
         }
 
         JarvisTheme(
@@ -1274,6 +1403,14 @@ class MainActivity : FragmentActivity() {
                         }
                         var wakeBusy by remember { mutableStateOf(false) }
                         var wakeNotice by remember { mutableStateOf<String?>(null) }
+                        // Why the restart notice could not start listening
+                        // (data/WakeResume.kt): shown once, under the switch.
+                        LaunchedEffect(resumeListeningNotice.value) {
+                            resumeListeningNotice.value?.let {
+                                wakeNotice = it
+                                resumeListeningNotice.value = null
+                            }
+                        }
                         // The desktop's switch went off (from here, the
                         // desktop, or a restart): this phone stops too. The
                         // listener also checks for itself every few minutes.
@@ -1874,6 +2011,10 @@ class MainActivity : FragmentActivity() {
                                 .contains(packageName)
                         },
                         onOpenNotificationAccess = ::openNotificationAccessSettings,
+                        quickTiles = quickTiles,
+                        onQuickTileChange = { slot, action ->
+                            JarvisRuntime.settings.setQuickTile(slot, action)
+                        },
                     )
 
                     Screen.APPEARANCE -> AppearanceScreen(
@@ -2016,6 +2157,7 @@ class MainActivity : FragmentActivity() {
                             },
                             sharedLine = sharedHeld?.let { Provenance.sharedLine(it) },
                             pictureBusy = pictureBusy.value,
+                            photoFinding = photoFinding.value,
                             noteTargets = noteTargets,
                             updateLine = updateState.newerLine.takeIf { updateChecks },
                             temporary = temporaryChat,
@@ -2026,6 +2168,7 @@ class MainActivity : FragmentActivity() {
                             memoryHidden = privateHidden,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
+                            lockdown = lockdown,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -2117,6 +2260,7 @@ class MainActivity : FragmentActivity() {
                                         .sharedText()
                                         ?.let { sharedHeld = Provenance.joinShared(sharedHeld, it) }
                                 },
+                                onFindDateInPicture = ::findDateInPicture,
                                 onInterrupt = { chat.cancel() },
                                 onNewConversation = { chat.newConversation() },
                                 // A temporary chat: no card and no hold - it only
@@ -2203,6 +2347,8 @@ class MainActivity : FragmentActivity() {
                                 // The desktop's Alt+Shift+X, as a button:
                                 // this phone's speech, then POST /api/stop_all.
                                 onStopEverything = { JarvisRuntime.stopEverything() },
+                                onPcMedia = { JarvisRuntime.pcMedia() },
+                                onPcMediaControl = { action -> JarvisRuntime.pcMediaControl(action) },
                                 onInjectTaskNote = { note -> JarvisRuntime.injectTaskNote(note) },
                                 // Saved only when the owner's own drag (or a
                                 // screen reader's Bigger/Smaller) finishes - never
@@ -2613,6 +2759,16 @@ class MainActivity : FragmentActivity() {
 
         /** Fired by the "your morning briefing is ready" notification ([com.jarvis.client.service.ScheduleNotifier]). */
         const val ACTION_OPEN_BRIEFING = "com.jarvis.client.action.OPEN_BRIEFING"
+
+        /**
+         * The "\"Hey Jarvis\" is off since the phone restarted" notification's
+         * tap ([com.jarvis.client.service.WakeResumeNotifier]): start "Listen
+         * on this phone" from here, once App lock (if on) has been passed.
+         */
+        const val ACTION_RESUME_LISTENING = "com.jarvis.client.action.RESUME_LISTENING"
+
+        /** An empty Quick Settings tile slot's tap: Settings, at "Quick Settings tiles". */
+        const val ACTION_OPEN_TILE_SETTINGS = "com.jarvis.client.action.OPEN_TILE_SETTINGS"
     }
 }
 
@@ -2649,6 +2805,15 @@ private val pairingBusy = mutableStateOf(false)
  * app lock is on.
  */
 private val lockSession = LockSession()
+
+/** How long the restart notice's tap waits for the link before asking the desktop anyway. */
+private const val RESUME_LINK_WAIT_MS = 8_000L
+
+/** How long after tapping the restart notice listening may still start (App lock in between). */
+private const val RESUME_REQUEST_FRESH_MS = 2 * 60 * 1000L
+
+/** SettingsScreen's key for "Quick Settings tiles" (its SETTINGS_ITEM_INDEX). */
+private const val QUICK_TILES_SECTION = "quick-tiles"
 
 /** How often, while the app stays open, the once-a-day update check is looked at. */
 private const val UPDATE_RECHECK_MS = 60 * 60 * 1000L

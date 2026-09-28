@@ -20,6 +20,7 @@
     "task-control",
     "widget-surface",
     "appearance-read",
-    "focus"
+    "focus",
+    "widget-board"
   ]
 }

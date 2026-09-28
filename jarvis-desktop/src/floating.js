@@ -32,11 +32,18 @@ const frame = document.getElementById("face-frame");
 /** The owner's appearance document, as this window last read it. */
 let faceAppearance = null;
 
+/** Talk-to-type holds this PC's microphone (talk_type.rs sends
+ *  `talk-type-listening`): the face shows "listening" while it does, the
+ *  same sign the tray icon gives - a local fact the event stream cannot
+ *  know, so it wins over what the stream says. */
+let talkTypeListening = false;
+
 /** Hands the face frame the state to show and the face to wear - the same
  *  message shape widget.js's `postFace` sends. */
 function postFace() {
   if (!frame || !frame.contentWindow) return;
-  const message = { type: "jarvis-hud-face", state: surfaceState(currentLink()) };
+  const state = talkTypeListening ? "listening" : surfaceState(currentLink());
+  const message = { type: "jarvis-hud-face", state };
   if (faceAppearance) message.appearance = faceAppearance;
   try {
     frame.contentWindow.postMessage(message, location.origin);
@@ -69,5 +76,9 @@ if (frame) frame.addEventListener("load", postFace);
 relayFaceVoice(frame, listen);
 onLink(() => postFace());
 listen("appearance-changed", () => readFaceAppearance(false));
+listen("talk-type-listening", (event) => {
+  talkTypeListening = event && event.payload === true;
+  postFace();
+});
 readFaceAppearance(true);
 startLink();

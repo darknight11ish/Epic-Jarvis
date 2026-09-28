@@ -64,16 +64,36 @@ object ChatLog {
     const val KEEP_TITLE = "Delete conversations older than"
     const val WAITING = "Waiting for your approval to turn chat history on. ${Approvals.WHERE}"
     const val EMPTY = "No conversations are kept on your PC."
-    /** Under Delete, in both apps: deleting a chat is not forgetting (ease-of-use audit #7). */
+    /** Under Delete, in both apps: deleting a chat is not forgetting (ease-of-use audit #7) -
+     *  said when there is nothing to offer (section 79, below). */
     const val DELETE_KEEPS_FACTS =
         "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain."
     const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone. $DELETE_KEEPS_FACTS"
-    /** Search box, over the list already loaded (ease-of-use audit row 20;
-     *  the owner's answer of 2026-09-27: "shown on screen only; nothing
-     *  saved, nothing handed to the AI"). The desktop says the same
-     *  (brain.js `paintHistoryList`). */
-    const val SEARCH_PLACEHOLDER = "Search this list…"
+    /**
+     * The search box (the owner's answer of 2026-09-27: "shown on screen
+     * only; nothing saved, nothing handed to the AI"). Since 2026-09-28
+     * (docs/JARVIS-API.md section 71) two letters or more ask the PC to
+     * search what was SAID ([searchPath]); one letter, or a PC that cannot
+     * search the words, narrows the loaded list by title ([filtered]). The
+     * desktop says the same (history-view.js).
+     */
+    const val SEARCH_PLACEHOLDER = "Search what was said…"
     const val NO_MATCH = "No conversations match that search."
+    const val SEARCH_NOTE =
+        "Searched on your PC, in your kept chats only. Nothing is saved and nothing is sent to the AI."
+    const val SEARCHING = "Searching…"
+    const val SEARCH_NONE = "No kept conversation has all of those words."
+    /** A PC without the search: the box narrows titles, and says so. */
+    const val SEARCH_OLD =
+        "This PC's Jarvis can only search titles. To search what was said, update it by running " +
+            "apply-patches.ps1 on the PC."
+    /** The shortest search sent to the PC. */
+    const val SEARCH_MIN = 2
+    /** The longest: the PC's own `SEARCH_MAX_CHARS`. Nothing longer is sent. */
+    const val SEARCH_MAX_CHARS = 100
+
+    const val FIND_PLACEHOLDER = "Find in this chat…"
+    const val FIND_NONE = "Not in this chat."
 
     // ----------------------------------------------------------- paths ---
 
@@ -82,6 +102,20 @@ object ChatLog {
         "$LIST_PATH?limit=${limit.coerceIn(1, 100)}" + (before?.let { "&before=$it" } ?: "")
 
     fun conversationPath(id: String): String = "$CONVERSATION_PATH?id=${URLEncoder.encode(id, "UTF-8")}"
+
+    const val SEARCH_PATH = "/api/history/search"
+
+    /**
+     * `GET /api/history/search?q=` for these words (section 71), or null
+     * when there is nothing worth sending: fewer than [SEARCH_MIN] letters
+     * or more than [SEARCH_MAX_CHARS] once the spaces are tidied. The words
+     * are URL-encoded, so nothing typed can add a second parameter.
+     */
+    fun searchPath(query: String, limit: Int = 20): String? {
+        val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+        if (words.length < SEARCH_MIN || words.length > SEARCH_MAX_CHARS) return null
+        return "$SEARCH_PATH?q=${URLEncoder.encode(words, "UTF-8")}&limit=${limit.coerceIn(1, 50)}"
+    }
 
     fun deleteBody(id: String): String = buildJsonObject { put("id", id) }.toString()
 
@@ -213,6 +247,131 @@ object ChatLog {
         val n = needle.trim()
         if (n.isEmpty()) return shown
         return shown.filter { it.title.contains(n, ignoreCase = true) }
+    }
+
+    // ----------------------------------------- search and find (s. 71) ---
+
+    /** One piece of a snippet: plain words, or a matched word. */
+    data class Part(val text: String, val hit: Boolean)
+
+    /** A short piece of the message a search word was found in. */
+    data class Snippet(
+        /** "user", "assistant", or "title" when only the title matched. */
+        val role: String,
+        val cutBefore: Boolean,
+        val cutAfter: Boolean,
+        val parts: List<Part>,
+    )
+
+    /** One conversation the PC found, with where. */
+    data class Found(val row: Summary, val hits: Int, val snippet: Snippet)
+
+    /**
+     * `GET /api/history/search`'s answer. [queryOk] false is a search the
+     * PC would not run, with its sentence in [why]. [more]: there were more
+     * matches than shown. [partial]: the PC stopped early to stay quick.
+     */
+    data class Search(
+        val queryOk: Boolean,
+        val why: String?,
+        val whyNot: String?,
+        val found: List<Found>,
+        val more: Boolean,
+        val partial: Boolean,
+        val searched: Int,
+    )
+
+    /** `GET /api/history/search`. A row with no id cannot be opened, so it is left out. */
+    fun search(body: JsonObject): Search {
+        val found = (body["conversations"] as? JsonArray).orEmpty().mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val id = o.str("id") ?: return@mapNotNull null
+            val s = o["snippet"] as? JsonObject
+            val parts = (s?.get("parts") as? JsonArray).orEmpty().mapNotNull { p ->
+                val po = p as? JsonObject ?: return@mapNotNull null
+                val text = (po["text"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+                    ?: return@mapNotNull null
+                Part(text, po.flag("hit") == true)
+            }
+            Found(
+                row = Summary(
+                    id = id,
+                    title = o.str("title") ?: UNTITLED,
+                    started = o.whole("started"),
+                    updated = o.whole("updated"),
+                    turns = o.whole("turns")?.toInt(),
+                    device = o.str("device"),
+                    hasVoice = o.flag("has_voice") == true,
+                    tainted = o.flag("tainted") == true,
+                ),
+                hits = o.whole("hits")?.toInt() ?: 0,
+                snippet = Snippet(
+                    role = s?.str("role")?.takeIf { it in setOf("user", "assistant", "title") } ?: "user",
+                    cutBefore = s?.flag("before") == true,
+                    cutAfter = s?.flag("after") == true,
+                    parts = parts,
+                ),
+            )
+        }
+        return Search(
+            queryOk = body.flag("query_ok") != false,
+            why = body.str("why"),
+            whyNot = body.str("why_not"),
+            found = found,
+            more = body.flag("more") == true,
+            partial = body.flag("partial") == true,
+            searched = body.whole("searched")?.toInt() ?: 0,
+        )
+    }
+
+    /** A PC without the search route: a 404, or a 501 from an older module. */
+    fun searchMissing(e: ApiError): Boolean =
+        e == ApiError.NotFound || (e is ApiError.Server && e.code == 501)
+
+    /** "found in 3 messages", or null. */
+    fun hitsLine(n: Int): String? = if (n <= 0) null else "found in $n ${if (n == 1) "message" else "messages"}"
+
+    /** Who said the snippet's words, before them. */
+    fun snippetWho(s: Snippet): String = when (s.role) {
+        "assistant" -> "Jarvis: "
+        "title" -> ""
+        else -> "You: "
+    }
+
+    /** The last line under the results. */
+    fun searchMoreLine(s: Search): String? = when {
+        s.more -> "Showing the newest matches only. Add another word to narrow it down."
+        s.partial -> "Stopped after the newest ${s.searched} conversations to stay quick. " +
+            "Add another word to narrow it down."
+        else -> null
+    }
+
+    /** One place a find word is in an open conversation: which turn, and where in its text. */
+    data class Match(val turn: Int, val start: Int, val end: Int)
+
+    /**
+     * "Find in this chat": every place any of [needle]'s words is in [turns],
+     * in reading order, case ignored. Done on the phone, over the conversation
+     * already open - the PC is not asked. The words are words, not a pattern.
+     */
+    fun findMatches(turns: List<Turn>, needle: String): List<Match> {
+        val words = needle.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.sortedByDescending { it.length }
+        if (words.isEmpty()) return emptyList()
+        val rx = Regex(words.joinToString("|") { Regex.escape(it) }, RegexOption.IGNORE_CASE)
+        val out = mutableListOf<Match>()
+        turns.forEachIndexed { i, t ->
+            rx.findAll(t.text).forEach { m ->
+                if (m.range.last >= m.range.first) out += Match(i, m.range.first, m.range.last + 1)
+            }
+        }
+        return out
+    }
+
+    /** "3 of 7", "1 match", or [FIND_NONE]. */
+    fun findCount(current: Int, total: Int): String = when (total) {
+        0 -> FIND_NONE
+        1 -> "1 match"
+        else -> "${current + 1} of $total"
     }
 
     // --------------------------------------------------------- switch ---
@@ -387,6 +546,81 @@ object ChatLog {
     const val TAINT_LINE =
         "In this conversation Jarvis read text that did not come from you - a web page, a file, " +
             "an email or another tool's output - from the marked message on."
+
+    // ------------------------------------------- facts this chat taught ---
+    //
+    // Deleting a chat offers to forget the facts it taught (docs/JARVIS-API.md
+    // section 79, the owner's choice of 2026-09-28). The desktop's
+    // history-view.js says the same words (tests/history.mjs checks). NONE is
+    // ticked to start with - deleting a chat never widens into forgetting by
+    // itself - and each ticked fact is then forgotten through the ordinary
+    // Forget, ONE fact per call (JarvisRuntime.forgetAutoFact). There is no
+    // list form of Forget.
+
+    const val FACTS_PATH = "/api/memory/conversation-facts"
+
+    /** One fact the chat taught: its id and its words, as the PC keeps them. */
+    data class TaughtFact(val id: Long, val text: String)
+
+    /**
+     * The PC's answer, read. [available] false: an older PC that cannot say
+     * (404/501) - Delete then asks exactly as it always did. [hiddenCount]:
+     * facts the PC held back while the memory lists are hidden.
+     */
+    data class Taught(val available: Boolean, val facts: List<TaughtFact>, val hiddenCount: Int = 0)
+
+    private val CONVERSATION_ID = Regex("[A-Za-z0-9_-]{8,64}")
+
+    /** `GET /api/memory/conversation-facts?conversation_id=`, or null for anything
+     *  that is not a conversation id (JARVIS-API 18.1) - nothing is sent. */
+    fun factsPath(conversationId: String): String? =
+        if (CONVERSATION_ID.matches(conversationId)) "$FACTS_PATH?conversation_id=$conversationId" else null
+
+    /** The facts in a 2xx answer - each a whole-number id above 0 with words. */
+    fun taught(body: JsonObject): Taught {
+        val facts = (body["facts"] as? JsonArray).orEmpty().mapNotNull { v ->
+            val o = v as? JsonObject ?: return@mapNotNull null
+            val id = o.whole("id") ?: return@mapNotNull null
+            val words = o.str("text")?.trim().orEmpty()
+            if (id <= 0 || words.isEmpty()) null else TaughtFact(id, words)
+        }
+        val hidden = if (body.flag("hidden") == true) (body.whole("hidden_count") ?: 0L).toInt() else 0
+        return Taught(available = true, facts = facts, hiddenCount = hidden.coerceAtLeast(0))
+    }
+
+    /** Above the list, with how many facts the chat taught. */
+    fun chatFactsIntro(n: Int): String = if (n == 1) {
+        "Jarvis learned 1 fact from this chat. It is kept unless you tick it - a ticked fact is forgotten, like Forget in the Brain."
+    } else {
+        "Jarvis learned $n facts from this chat. They are kept unless you tick them - each ticked fact is forgotten, like Forget in the Brain."
+    }
+
+    /** While the memory lists are hidden: not shown, and kept. */
+    fun chatFactsHiddenLine(n: Int): String =
+        "Jarvis learned $n ${if (n == 1) "fact" else "facts"} from this chat. " +
+            "Your memory lists are hidden, so they are kept. To forget any, show the memory lists first."
+
+    /** The Delete button's words, with how many ticked facts go with it. */
+    fun deleteChatButton(n: Int): String =
+        if (n <= 0) "Delete the chat" else "Delete the chat and forget $n ${if (n == 1) "fact" else "facts"}"
+
+    /** The "are you sure?" line above Yes, with how many ticked facts go. */
+    fun deleteAndForgetConfirm(n: Int): String = if (n <= 0) {
+        "Delete this conversation from your PC? This cannot be undone. The facts it taught are kept."
+    } else {
+        "Delete this conversation and forget $n ${if (n == 1) "fact" else "facts"}? The chat cannot be " +
+            "brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words."
+    }
+
+    /** What happened, in one sentence: [chatSaid] is the delete's own sentence. */
+    fun deleteDoneWords(chatSaid: String, forgot: Int, failed: Int): String {
+        val done = if (forgot > 0) " Forgot $forgot ${if (forgot == 1) "fact" else "facts"}." else ""
+        val bad = if (failed > 0) {
+            " $failed ${if (failed == 1) "fact" else "facts"} could not be forgotten - try Forget on " +
+                "${if (failed == 1) "it" else "them"} in the Brain."
+        } else ""
+        return chatSaid + done + bad
+    }
 
     /** Why the phone could not do something with History - in the PC's words when there are some. */
     fun failure(e: ApiError): String? = when (e) {

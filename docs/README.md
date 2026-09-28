@@ -43,6 +43,7 @@ what changed when.
 
 | Date | Document | About |
 |---|---|---|
+| 2026-09-28 | [RESEARCH-AUDIT-2026-09-28.md](RESEARCH-AUDIT-2026-09-28.md) and [research-audit-2026-09-28/](research-audit-2026-09-28/) | Every feature next to competitors and GitHub projects; the Brain; what to fix, borrow and speed up. |
 | 2026-09-28 | [HARDWARE-DETECTION-AUDIT-2026-09-28.md](HARDWARE-DETECTION-AUDIT-2026-09-28.md) | How well Jarvis detects hardware (graphics cards, Windows Hello, the phone's mic/notifications/battery, RAM and disk), adapts to it, and tells the owner why - every mechanism, not only GPUs. One small wording bug found. |
 | 2026-09-27 | [BACKGROUND-WORK-AUDIT-2026-09-27.md](BACKGROUND-WORK-AUDIT-2026-09-27.md) | Everything Jarvis does unattended - the scheduler, standby, briefing, "tell me when", focus, backups, initiative - checked and tested for real. |
 | 2026-09-27 | [GPU-SUPPORT-RESEARCH-2026-09-27.md](GPU-SUPPORT-RESEARCH-2026-09-27.md) | What a third graphics card, and AMD/Intel GPUs, would actually need - sized, not guessed. |

@@ -1441,6 +1441,22 @@ html[data-state="error"] .pulse {
 }
 .temporary-strip[data-state="refused"] .temporary-label { display: none; }
 .temporary-label { color: var(--accent-text); font-weight: 650; }
+
+/* Lockdown (2026-09-28): every way out of the PC asks first, or stops. */
+.lockdown-strip {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 7px 14px 7px 16px;
+  border-top: 1px solid var(--hairline);
+  border-left: 2px solid var(--warn);
+  background: var(--warn-faint);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.lockdown-strip[hidden] { display: none; }
+.lockdown-label { color: var(--warn); font-weight: 650; }
 .shell[data-temporary="true"] .bar { outline: 1px dashed var(--accent-dim); outline-offset: -1px; }
 
 /* "Used 2 memories" under an answer, and what the PC said about a
@@ -2307,4 +2323,75 @@ html[data-state="approval"] .pulse {
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-chip);
   padding: 1px 7px;
+}
+
+/* "Photo to reminder" (photo-reminder.js): the PC's proposal for a capture.
+   The words came from a picture - outside text - and are shown only. */
+.photo-box {
+  margin: 0 16px 12px 18px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+}
+
+.photo-box[hidden] {
+  display: none;
+}
+
+.photo-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.photo-proposal p {
+  margin: 0;
+}
+
+.photo-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photo-label {
+  min-width: 44px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.photo-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.photo-picks,
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.photo-proposal .note,
+.photo-words summary {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.photo-text {
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
 }

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.data.WakeResume
 
 /**
  * Restarts the link after a reboot or an app update.
@@ -37,6 +38,15 @@ class BootReceiver : BroadcastReceiver() {
                 }
                 Log.i(TAG, "restarting link after ${intent.action}")
                 EventService.start(context)
+                // "Hey Jarvis" is NOT restarted here - Android does not let
+                // an app open the microphone from the background, and Jarvis
+                // opens it only from the owner's tap anyway. If the owner had
+                // it on, ONE quiet notification says so; its tap opens the
+                // app, which starts listening from there (WakeResume).
+                val wanted = runCatching { JarvisRuntime.settings.phoneListeningWanted }.getOrDefault(false)
+                if (WakeResume.offer(intent.action, paired = true, wanted = wanted)) {
+                    WakeResumeNotifier.post(context, intent.action)
+                }
             }
         }
     }

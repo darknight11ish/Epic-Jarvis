@@ -105,6 +105,13 @@ news_read                 = "auto"
 # Must be "auto", exactly like email_read/home_read above, or a look every
 # 30 minutes would mean a card every 30 minutes.
 page_read                 = "auto"
+# GitHub watches in "tell me when" (jarvis_tellme.py "github" source, the
+# owner's choice of 2026-09-28): one read-only GET to api.github.com per look
+# - a workflow run list or one pull request - for a watch the owner already
+# approved with its own card (schedule_repeat). Must be "auto", like
+# page_read above, or a look every 10 minutes would mean a card every 10
+# minutes. Without this line GitHub watches are refused, with the reason.
+github_read               = "auto"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval
@@ -603,23 +610,22 @@ model_pass = false
 # never retire or change a stored fact by itself. Nothing in memory is
 # retired or changed without your yes on that one fact.
 #
-# NONE OF THIS EXISTS YET, REGARDLESS OF THE FLAG ABOVE. The line that used
-# to stand here - "the deterministic parts (duplicate merge, contradiction
-# detection) are safe and run either way" - was checked against the code
-# during a self-improvement audit and found false: no code anywhere merges
-# two stored facts or detects a contradiction between them, on or off.
-# jarvis_sleep.py is the whole of what exists: it decides whether to OFFER
-# the feature, once a day, and says so in its own status() as
-# "implemented": false. There is no "either way" to run in yet.
+# BUILT ON 2026-09-28, AS REVIEW CARDS ONLY (jarvis_tidy.py): once a day it
+# may ask "Still true?" about a fact whose own end date has passed, and
+# "Which is true now?" about two facts that may not both be true (found with
+# the learner's model on this PC). At most five cards a night. It merges
+# nothing and never retires or changes a fact by itself. There is still no
+# "deterministic part that runs either way": nothing runs while this is off.
 enabled = false
 # While disabled, a once-a-day card in the Brain window's Memory tab (and
-# on the phone's Mind screen) says it is not built yet and offers to
-# record that you want it. Turning it on runs nothing. Set remind = false
+# on the phone's Brain screen) offers to switch it on. Set remind = false
 # to stop being asked.
 remind = true
 remind_hour_local = 9
-# When enabled: only between these local hours, and only if the
-# assistant has been idle for this long.
+# When enabled: the day's look starts at window_start_hour and tries once
+# an hour until it has run that day - held back while you chat, in Quiet
+# or Standby, or while other offers wait (jarvis_backoff.py).
+# window_end_hour and idle_minutes_required are not read yet.
 window_start_hour = 2
 window_end_hour = 6
 idle_minutes_required = 30
@@ -960,7 +966,8 @@ wake_word_enabled = false
 # "Voice: install the models", has the one-line download for each.
 stt_engine = "sherpa-onnx"
 # sherpa_stt_kind = "nemo_transducer"   # or "sense_voice"; normally guessed from the files
-# stt_threads = 2                       # CPU threads for speech-to-text
+# stt_threads = 4                       # CPU threads for speech-to-text (default: 4, or 2 on a small PC)
+# tts_threads = 4                       # CPU threads for the voice (the same default)
 # tts_speaker_id = 0                    # Kokoro voice: 0 = American female; 9 = British male (bm_george)
 # vad_enabled = true                    # Silero VAD trims silence and drops clips with no speech
 #

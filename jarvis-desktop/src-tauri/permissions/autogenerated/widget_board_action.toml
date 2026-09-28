@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-widget-board-action"
+description = "Enables the widget_board_action command without any pre-configured scope."
+commands.allow = ["widget_board_action"]
+
+[[permission]]
+identifier = "deny-widget-board-action"
+description = "Denies the widget_board_action command without any pre-configured scope."
+commands.deny = ["widget_board_action"]

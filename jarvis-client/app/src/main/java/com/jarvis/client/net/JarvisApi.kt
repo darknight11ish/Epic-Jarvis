@@ -704,6 +704,82 @@ class JarvisApi(
     suspend fun setBriefingSenders(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(Briefing.SENDERS_PATH, Briefing.sendersBody(on))
 
+    /** Windows gets 30 seconds to read the words in one picture (backend jarvis_ocr.TIMEOUT_S). */
+    private val photoCall: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(50, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * `POST /api/photo/scan` ("Photo to reminder", JARVIS-API.md section 83):
+     * the PC reads the dates in one picture and PROPOSES a reminder
+     * ([PhotoReminder.parse] reads the answer). It sets nothing up, so it is
+     * not held on a stale link, like every read. The body is
+     * [PhotoReminder.scanBody]'s: a `data:image/` picture only.
+     */
+    suspend fun photoScan(json: String): ApiResult<Pair<Int, JsonObject?>> = withContext(Dispatchers.IO) {
+        val target = url(PhotoReminder.SCAN_PATH) ?: return@withContext ApiResult.Failed(noAddress())
+        val body = json.toRequestBody("application/json".toMediaType())
+        val req = Request.Builder().url(target).post(body).authed().build()
+        runCatching {
+            photoCall.newCall(req).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                if (resp.code == 401 || resp.code == 403) {
+                    ApiResult.Failed(ApiError.BadToken)
+                } else {
+                    ApiResult.Ok(resp.code to obj)
+                }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+    }
+
+    /** A widget preview waits for the PC's AI model: it gets 40 seconds there. */
+    private val widgetDraftCall: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(65, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /** `GET /api/widgets` - the saved widgets, the previews and the menu ([JarvisWidgets]). A read. */
+    suspend fun widgets(): ApiResult<JsonObject> = probe(JarvisWidgets.LIST_PATH)
+
+    /** `GET /api/widgets/show?id=` - one widget, filled in now on the PC. A read. */
+    suspend fun widgetShow(id: String): ApiResult<JsonObject> {
+        if (!JarvisWidgets.validId(id)) return ApiResult.Failed(ApiError.Malformed("not a widget id"))
+        return probe(JarvisWidgets.SHOW_PATH + "?id=" + id)
+    }
+
+    /**
+     * One of the widget POSTs ([JarvisWidgets.POST_PATHS]) - anything else is
+     * refused here, before anything is sent. The answer's status and body
+     * come back together, so the PC's own sentence is shown for a refusal.
+     */
+    suspend fun widgetPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            if (path !in JarvisWidgets.POST_PATHS) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a widget route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            val caller = if (path == JarvisWidgets.DRAFT_PATH) widgetDraftCall else shortCall
+            runCatching {
+                caller.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(resp.code to obj)
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     /** "Brief me now" can wait for a slow calendar or mail server: the PC gives them 25 seconds. */
     private val briefingCall: OkHttpClient by lazy {
         client.newBuilder()
@@ -949,6 +1025,22 @@ class JarvisApi(
     suspend fun historyConversation(id: String): ApiResult<JsonObject> = probe(ChatLog.conversationPath(id))
 
     /**
+     * `GET /api/history/search` (section 71): the kept conversations whose
+     * words hold every search word, with a snippet each. The PC opens each
+     * kept turn in memory for this one search and keeps nothing; neither
+     * does this. [path] is [ChatLog.searchPath]'s.
+     */
+    suspend fun historySearch(path: String): ApiResult<JsonObject> = probe(path)
+
+    /**
+     * `GET /api/memory/conversation-facts` (section 79, 2026-09-28): the facts
+     * still in use ONE conversation taught, for History's Delete to offer
+     * forgetting them. A read; nothing is forgotten here. [path] is
+     * [ChatLog.factsPath]'s.
+     */
+    suspend fun conversationFacts(path: String): ApiResult<JsonObject> = probe(path)
+
+    /**
      * `POST /api/history/delete`: ONE conversation. No route deletes them
      * all, on purpose. A 404 - already gone - comes back as
      * [ApiError.NotFound] whatever its body says ([ChatLog.deleteSaid]).
@@ -1109,6 +1201,48 @@ class JarvisApi(
         postWrite(AsksFirst.LIGHTS_PATH, AsksFirst.lightsBody(on))
 
     /**
+     * `POST /api/asks_first/tier {"action": "lockdown", "ask": true}` - turn
+     * Lockdown ON (2026-09-28). At once, no card. The phone never sends the
+     * other direction: turning it off is the PC's alone ([AsksFirst]).
+     */
+    suspend fun lockdownOn(): ApiResult<DesktopWrite.Outcome> =
+        postWrite(AsksFirst.TIER_PATH, AsksFirst.lockdownBody())
+
+    /** `GET /api/media` - what is playing on the PC, in its own sentence ([PcMedia]). */
+    suspend fun pcMedia(): ApiResult<JsonObject> = probeKeeping503(PcMedia.PATH)
+
+    /**
+     * `POST /api/media/control {"action"}` - ONE of play, pause, next,
+     * previous ([PcMedia]). No card. The PC answers its own sentence on a
+     * 200 and on a 503 ("Nothing seems to be playing right now."), so both
+     * come back as [ApiResult.Ok] with that body; anything else fails.
+     */
+    suspend fun pcMediaControl(action: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val json = PcMedia.body(action)
+                ?: return@withContext ApiResult.Failed(ApiError.Unreachable("That is not a media button."))
+            val target = url(PcMedia.CONTROL_PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when {
+                        (resp.isSuccessful || resp.code == 503) && PcMedia.said(obj) != null ->
+                            ApiResult.Ok(obj!!)
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 -> ApiResult.Failed(ApiError.NotFound)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/email/sending` - whether sending email is set up, from which
      * address and through which server, in the PC's own words
      * ([EmailSending.parse]). A read; never the password. A 404 or 503 is a
@@ -1237,6 +1371,13 @@ class JarvisApi(
      * an older backend and a 503 a module that did not load.
      */
     suspend fun hardware(): ApiResult<JsonObject> = probe(Hardware.PATH)
+
+    /**
+     * `GET /api/pc/help` (section 84) - five plain answers about the PC
+     * ([PcHelp.parse]). Reads only. A 404 is an older backend, a 503 one
+     * whose jarvis_pc_help.py did not load.
+     */
+    suspend fun pcHelp(): ApiResult<JsonObject> = probe(PcHelp.PATH)
 
     /**
      * One of the hardware POSTs: choosing a setup ([Hardware.APPLY_PATH]),
@@ -1408,7 +1549,8 @@ class JarvisApi(
         probe("/api/memory/facts?known_at=$knownAtEpochSeconds")
 
     /**
-     * Answers the daily overnight-tidy card (not built yet) - see
+     * Answers the daily overnight-tidy card, and turns the tidy off again
+     * (since 2026-09-28 it runs: review cards only, backend/jarvis_tidy.py) - see
      * `BrainSnapshot.memory`'s own `setup.sleep_time_offer`. Each of its
      * three actions sends exactly one field: "enable" [enabled], "stop
      * asking" [remind] false, and "not now" [notNow] (since 2026-09-25,

@@ -96,10 +96,14 @@ def t_no_current_offer_breaks_the_rule():
            if not v or any(a not in BO.MAY_ASK or a in BO.NEVER_ASKS for a in v)}
     check("every offer made today asks only for what MAY_ASK lists", not bad, bad)
     check("MAY_ASK and NEVER_ASKS share nothing", not set(BO.MAY_ASK) & set(BO.NEVER_ASKS))
-    check("today's offers are the overnight tidy, the skill offer and the "
-          "bigger-model suggestion",
-          set(BO.OFFERS) == {"sleep_time_offer", "skill_offer", "second_card_combined_offer"},
+    check("today's offers are the overnight tidy's switch and its cards, the skill offer "
+          "and the bigger-model suggestion",
+          set(BO.OFFERS) == {"sleep_time_offer", "tidy_cards", "skill_offer",
+                             "second_card_combined_offer"},
           sorted(BO.OFFERS))
+    check("the overnight tidy's cards ask only to check one fact (2026-09-28)",
+          BO.OFFERS["tidy_cards"] == ("review_a_fact",)
+          and BO.OFFERS["sleep_time_offer"] == ("start_a_card_only_check",))
 
 
 class _Catch(logging.Handler):
@@ -166,6 +170,9 @@ def t_every_offer_site_passes_its_kind():
           "may_offer(fp, kind=OFFER)" in sleep and 'OFFER = "sleep_time_offer"' in sleep)
     check("the skill offer passes its own kind", 'may_offer(fp, kind="skill_offer")' in skill
           and 'fpr("skill_offer", p.key)' in skill)
+    tidy = (HERE / "jarvis_tidy.py").read_text(encoding="utf-8")
+    check("the overnight tidy's cards pass their own kind (2026-09-28)",
+          "may_offer(fp, kind=OFFER)" in tidy and 'OFFER = "tidy_cards"' in tidy)
 
 
 def t_the_overnight_card_obeys_it():

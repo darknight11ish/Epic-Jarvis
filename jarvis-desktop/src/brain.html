@@ -177,10 +177,17 @@
         <!-- ── Galaxy ─────────────────────────────────────────────────── -->
         <section class="view view-galaxy" id="view-galaxy" role="tabpanel"
                  aria-labelledby="tab-galaxy">
+          <!-- The people and things Jarvis's saved facts name (2026-09-28;
+               /api/memory/entities, hidden with the memory lists under
+               Windows Hello). Two names are joined when a fact names both.
+               It used to draw /api/graph, whose fact dots were not hidden
+               with the memory lists (privacy finding B1). -->
           <div class="galaxy-bar">
             <input class="field search" id="graph-search" type="search"
-                   placeholder="Search the graph…" spellcheck="false"
-                   autocomplete="off" aria-label="Search the graph" />
+                   placeholder="Find a name…" spellcheck="false"
+                   autocomplete="off" aria-label="Find a person or thing by name"
+                   aria-describedby="graph-find" />
+            <span class="stat graph-find" id="graph-find" role="status" aria-live="polite"></span>
             <div class="legend" id="legend" role="group" aria-label="Filter by kind"></div>
             <div class="galaxy-actions">
               <span class="stat mono" id="graph-stat">—</span>
@@ -194,10 +201,11 @@
                  node count is set by how much the owner's memory store knows
                  rather than by anything the UI controls. -->
             <canvas id="graph-canvas" tabindex="0"
-                    aria-label="Memory graph, drawn on a canvas. Arrow keys pan, plus and minus zoom, 0 fits. To select a node, use the search field; the panel that opens reports it and lists what it connects to."></canvas>
+                    aria-label="The people and things Jarvis knows about, drawn on a canvas. Arrow keys pan, plus and minus zoom, 0 fits. To pick a name, use the search field; the panel that opens reports it and lists the names it shares facts with."></canvas>
 
             <div class="galaxy-empty" id="graph-empty" hidden>
-              <p id="graph-empty-text">Reading the graph…</p>
+              <p id="graph-empty-text">Reading the names…</p>
+              <div class="row-actions" id="graph-empty-actions"></div>
             </div>
 
             <!-- The inspector doubles as the accessible view of the canvas:
@@ -212,7 +220,8 @@
               </header>
               <h2 class="inspector-title" id="node-label" tabindex="-1"></h2>
               <dl class="inspector-facts" id="node-facts"></dl>
-              <h3 class="inspector-sub">Connected</h3>
+              <div class="row-actions" id="node-actions"></div>
+              <h3 class="inspector-sub">Shares facts with</h3>
               <ul class="inspector-links" id="node-links"></ul>
             </aside>
           </div>
@@ -315,6 +324,20 @@
               <div id="memory-learning"></div>
               <!-- Automatic learning (auto-learn.js): its two switches. -->
               <div id="memory-auto"></div>
+            </div>
+            <!-- "Bring in old chats" (history-import.js; JARVIS-API.md section
+                 85): an export from ChatGPT, Claude or Gemini, picked on this
+                 PC. Every fact it finds waits under "Waiting for you". The
+                 note is HISTORY_IMPORT.about, word for word. -->
+            <div class="card card-wide" id="history-import-card">
+              <h2>Bring in old chats</h2>
+              <p class="note" id="history-import-note">Jarvis reads only what you wrote in those chats - never the other assistant's replies - on this PC, with the AI model on this PC. Every possible fact waits under “Waiting for you” for your yes, one at a time; nothing is saved by itself. The chats are not added to your History. It can take hours for a big export, and Jarvis may answer more slowly while it runs.</p>
+              <p class="history-import-words" id="history-import-words" role="status" aria-live="polite"></p>
+              <div class="row-actions">
+                <button class="btn small" id="history-import-start" type="button">Bring in chats from ChatGPT, Claude or Gemini</button>
+                <button class="btn small" id="history-import-stop" type="button" hidden>Stop</button>
+              </div>
+              <p class="hint" id="history-import-how"></p>
             </div>
             <div class="card card-wide" id="memory-auto-card">
               <h2>Saved automatically</h2>
@@ -431,14 +454,15 @@
                 everything": delete them one at a time, or choose above how
                 long they are kept.
               </p>
-              <!-- Filters the list already loaded, by title (ease-of-use
-                   audit row 20; the owner's answer of 2026-09-27: "shown on
-                   screen only; nothing saved, nothing handed to the AI").
-                   Asks the PC nothing - the same shape as "What Jarvis knows
-                   about you"'s filter above. -->
+              <!-- "Search what was said" (JARVIS-API.md section 71; the
+                   owner's answer of 2026-09-27: "shown on screen only;
+                   nothing saved, nothing handed to the AI"). Two letters or
+                   more: the PC searches the kept chats' words, in memory,
+                   keeping no index (brain_history_search). One letter, or an
+                   older PC: the loaded list, by title. -->
               <input class="field search history-filter" id="history-filter" type="search"
-                     placeholder="Search this list…" spellcheck="false" autocomplete="off"
-                     aria-label="Search your chat history" />
+                     placeholder="Search what was said…" spellcheck="false" autocomplete="off"
+                     aria-label="Search what was said in your chats" />
               <div id="history-list"></div>
             </div>
           </div>
@@ -463,6 +487,44 @@
               <p class="note">Or say "focus for 30 minutes". While one runs: "lock on this", "snooze", "I'm doing research", "I need a minute", "pause", "how am I doing?".</p>
               <div id="focus-report"></div>
             </div>
+            <div class="card card-wide" id="today-card">
+              <h2>Today</h2>
+              <p class="note">Your own cards, shown at the times and on the days you choose, and the parts of your latest briefing. Kept on your PC; nothing new is read for this page, and adding a card needs no approval card.</p>
+              <div id="today"></div>
+              <h3 class="subhead">Add a card</h3>
+              <form id="today-form" class="todo-form today-form" autocomplete="off">
+                <input id="today-text" class="field todo-text" type="text" maxlength="80"
+                       placeholder="What the card says, like Gym bag" aria-label="What the card says">
+                <label class="standby-time">From
+                  <input id="today-at" class="field" type="time" value="07:00" required>
+                </label>
+                <fieldset id="today-days" class="today-days">
+                  <legend>On</legend>
+                  <label><input type="checkbox" value="0" checked> Mon</label>
+                  <label><input type="checkbox" value="1" checked> Tue</label>
+                  <label><input type="checkbox" value="2" checked> Wed</label>
+                  <label><input type="checkbox" value="3" checked> Thu</label>
+                  <label><input type="checkbox" value="4" checked> Fri</label>
+                  <label><input type="checkbox" value="5"> Sat</label>
+                  <label><input type="checkbox" value="6"> Sun</label>
+                </fieldset>
+                <button id="today-add" class="btn small" type="submit">Add</button>
+              </form>
+              <p class="note" id="today-hint">Or say "show gym bag on my Today page on Mondays and Wednesdays at 7". Delete removes a card at once; it is also under Coming up, where Pause skips it.</p>
+            </div>
+            <div class="card card-wide" id="widgets-card">
+              <h2>Widgets</h2>
+              <p class="note" id="widgets-detail">Describe a small widget and Jarvis makes a preview: a heading, numbers, short lists, a bar and up to four buttons, from a fixed menu. You see the preview first, and nothing is added until you tap Add. Delete removes one at once.</p>
+              <div id="widgets"></div>
+              <h3 class="subhead">Describe a widget</h3>
+              <form id="widgets-form" class="todo-form" autocomplete="off">
+                <input id="widgets-words" class="field todo-text" type="text" maxlength="300"
+                       placeholder="What it should show, like my next 3 reminders and a timer button"
+                       aria-label="What the widget should show">
+                <button id="widgets-make" class="btn small" type="submit">Make a preview</button>
+              </form>
+              <p class="note" id="widgets-hint">For example: "my next 3 reminders, my to-do count and a 10-minute timer button". You can also say "make me a widget showing ..." to Jarvis. Show one on your desktop from the widget window's "Your widget" list, or on your phone's home screen as a Jarvis widget.</p>
+            </div>
             <div class="card card-wide" id="coming-up-card">
               <h2>Coming up</h2>
               <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. A repeating reminder or alarm is set up at once, with no card; a repeating briefing or "tell me when" waits for your yes on an approval card.</p>
@@ -473,7 +535,16 @@
               </div>
               <div id="coming-up"></div>
               <h3 class="subhead">Tell me when</h3>
-              <p class="note" id="tellme-hint">Say or type "tell me when an email from Alex arrives" or "tell me when the washing machine finishes" - add "urgently" to make it ring until you look. Setting one up asks once with an approval card; when it happens, Jarvis only tells you.</p>
+              <p class="note" id="tellme-hint">Say or type "tell me when an email from Alex arrives", "tell me when the washing machine finishes", "tell me when a search for Kokoro voices shows something new", "tell me when the price on https://example.com/kettle drops below 25" or "tell me when CI fails on owner/repo" - add "urgently" to make it ring until you look. Setting one up asks once with an approval card; when it happens, Jarvis only tells you. If a watch stops working, Jarvis tells you once.</p>
+              <h3 class="subhead">Reminder for next time</h3>
+              <p class="note" id="next-time-hint">Say or type "remind me next time I talk about the dentist to ask about the bill". Jarvis brings it up in the chat when your own words mention it - at most 3 times, a day apart at least - and it is gone after 90 days. No card; Delete stops it.</p>
+              <h3 class="subhead">Photo to reminder</h3>
+              <p class="note" id="photo-note">Choose a photo or screenshot of a flyer, a ticket or a message. Your PC reads the words in it and suggests a reminder; nothing is set up until you tap Add. In the Jarvis bar, Alt+Shift+S then "Find a date in it" does the same for your screen.</p>
+              <div>
+                <input id="photo-file" type="file" accept="image/jpeg,image/png,image/bmp,image/gif,image/webp,image/tiff" hidden>
+                <button id="photo-choose" class="btn small" type="button">Choose a picture…</button>
+              </div>
+              <div class="photo-box" id="photo-proposal" hidden></div>
               <h3 class="subhead">To-do list</h3>
               <div id="todo-list"></div>
               <form id="todo-form" class="todo-form" autocomplete="off">

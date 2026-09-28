@@ -16,6 +16,10 @@
 # be set on the MODEL, which is this file, or in the environment.
 # (jarvis_agent does ask Ollama what the loaded model has, and trims the
 # history to fit - that avoids silent cutting; it cannot make room.)
+# The warm-up with words (jarvis_agent.warm_prefix, 2026-09-28) builds its
+# request with the same function and sends the same fields - still no
+# num_ctx, options or keep_alive - so it never makes Ollama reload the model
+# at another size either.
 #
 # Left alone, Ollama picks. server/sched.go:
 #
@@ -56,7 +60,32 @@
 #   Do NOT set OLLAMA_FLASH_ATTENTION, to 0 or to 1.
 #       Auto is correct. Forcing 1 removes llama.cpp's per-model fallback.
 #
-# VERIFY ONCE, BEFORE TRUSTING ANY OF THIS
+# UPDATED 2026-09-28 - READ THIS BEFORE THE REST OF THIS SECTION
+# The budget above predates two changes found in Ollama's and llama.cpp's
+# source (docs/HARDWARE-PROFILES.md, section 3):
+#   * llama.cpp now decides what fits, and keeps about 1 GiB of the card free
+#     on purpose. Counted that way, 16384 here is about 0.6 GiB over on the
+#     2080 Super, which would put roughly 4 of the 37 layers on the
+#     processor - calculated, NOT measured.
+#   * Ollama passes `--flash-attn auto` unless OLLAMA_FLASH_ATTENTION is set
+#     (llm/llama_server.go, appendFlashAttentionArgs - read 2026-09-28). So
+#     the log says `auto`, not `on`, and that is fine; llama.cpp turns flash
+#     attention on by itself for a q8_0 cache (HARDWARE-PROFILES says forcing
+#     it off with q8_0 now fails to load instead of spilling quietly).
+# The check that matters is how many layers are on the card. Send Jarvis
+# one message, then run this one line in PowerShell (it only prints):
+#
+#   Select-String -Path "$env:LOCALAPPDATA\Ollama\server.log" -Pattern 'offloaded \d+/\d+ layers to GPU|flash_attn|starting llama-server' | Select-Object -Last 4 | ForEach-Object { $_.Line }
+#
+# `offloaded 37/37` (both numbers the same) means the whole model is on the
+# card. A smaller first number means it spills: then lower num_ctx below to
+# 12288, or use a Hardware preset (HARDWARE-PROFILES section 4). Do not
+# change num_ctx here until that line has been read on the PC.
+#
+# The older check below is kept for its reasoning; its "`off` means q8_0 is
+# silently ignored" is out of date (see above).
+#
+# VERIFY ONCE, BEFORE TRUSTING ANY OF THIS (the older check)
 # Everything above depends on flash attention being live, because llama.cpp
 # reaches the q8_0 KV path only through its fused-attention kernels. The gate
 # is ml/device.go:

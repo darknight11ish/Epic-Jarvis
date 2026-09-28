@@ -60,6 +60,12 @@ object MemoryCounts {
      */
     fun fields(status: JsonObject): List<Pair<String, String>> = MemoryWords.statusRows(status)
 
+    /** Is the overnight tidy on (`sleep_time.enabled` on `/api/memory/status`)? Then
+     *  "Turn off overnight tidying" is offered (2026-09-28): one tap, at once. */
+    fun tidyOn(status: JsonObject): Boolean =
+        ((status["sleep_time"] as? JsonObject)?.prim("enabled"))?.takeIf { !it.isString }
+            ?.booleanOrNull == true
+
     /** `learning` off `/api/memory/facts`: true, false, or null when it is not there. */
     fun learning(facts: JsonObject): Boolean? = facts.prim("learning")?.booleanOrNull
 
