@@ -579,6 +579,12 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   face has been resting a while, now and then one plays, then it settles
   back. Calm, never during an approval or error, off under Still and in
   serious moments, with a switch in the animal options.
+- **Goodbye and hello when switching faces**, both apps: the leaving
+  animal or robot plays a short goodbye (about a second - a little wave or
+  bow, then out of view), then the incoming one a short hello (pops in, a
+  small bounce, a look at the owner). A non-animal face just fades on its
+  side. Under Still, calm motion or a serious moment it is a quick gentle
+  crossfade.
 
 ## Every new feature gets its own audit, without being asked
 
