@@ -783,6 +783,21 @@ $PATCHES = @(
     # and jarvis_sky_places.py copied in; without them, or on any error, the
     # banner says so and the route answers 503 - the faces are drawn as before.
     'sky.patch'
+    # Pairing a phone by QR code, with a key per device (the owner's
+    # decisions of 2026-09-24 and 2026-09-28; docs/PAIRING-DESIGN.md phase 1,
+    # docs/JARVIS-API.md section 90). Three hunks: two in jarvis_gate.py - the
+    # two new cards (pair_device, unretire_shared_key) join the "a no is not
+    # a standing rule" list right after its opening line (gate-outcome.patch's
+    # own lines), and their _RISK lines go after phone-notifications.patch's
+    # own entry - and ONE block in jarvis_hud.py, right after
+    # `_refuse_every_interface(bind)` and BEFORE owner-check.patch's block,
+    # because every module's install() keeps the _token_ok it is handed: the
+    # device-key check must replace it before the first of them. It goes last
+    # in this list because its context is other patches' lines; its block
+    # still lands before theirs in the file. Needs jarvis_devices.py copied
+    # in; without it, or on any error, nothing is replaced - only the shared
+    # key works, exactly as before - and the banner says so.
+    'devices.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -976,6 +991,8 @@ $SHIPPED = @(
     # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
     'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
     'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online
+    # --- pairing a phone by QR code, a key per device (2026-09-28, devices.patch) ---
+    'jarvis_devices.py'          # devices.patch: every request's key checked (a device key never falls back to the shared one), the registry of key hashes, ONE pairing at a time, the pair_device card (PC only, Windows Hello), Remove and Retire
 )
 
 # The settings file. Installed only where none exists; never overwritten.
