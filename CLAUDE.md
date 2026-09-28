@@ -509,6 +509,13 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
 - **Not connected = asleep with a hollow ring**, on every face surface of
   both apps, matching the tray icon; never an approval pose while acting is
   blocked. The screen reader says "Jarvis isn't connected".
+- **Asleep shows rising Zs** above each animal whenever Jarvis is on standby,
+  whether the standby schedule or the owner put it there - never while
+  merely not connected (that is the hollow ring alone). Drawn over the face,
+  not inside the shader, in both apps.
+- **A "Still" option for the animals** in both apps' face settings, off by
+  default: the animal sits calmly and only breathes - no looking around,
+  no gestures or idle events.
 
 ## Every new feature gets its own audit, without being asked
 
