@@ -4739,17 +4739,36 @@ def _note_side_talk(text: str) -> None:
         pass
 
 
+def _chat_model_now() -> Optional[str]:
+    """jarvis_power_switch.chat_model() - the everyday model chat uses now -
+    or JARVIS_MODEL when that module is not here."""
+    try:
+        import jarvis_power_switch
+        got = jarvis_power_switch.chat_model()
+    except Exception:
+        got = None
+    return got or (os.environ.get("JARVIS_MODEL") or "").strip() or None
+
+
 def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None) -> bool:
     """Loads the everyday model into the graphics card now (Ollama's own
     "load with an empty prompt"), so Jarvis Live's first answer does not wait
     for it. THIS PC's Ollama only; never a cloud model. Best effort: False
-    when it could not. jarvis_live.py calls it - never on Standby."""
+    when it could not. jarvis_live.py calls it - never on Standby.
+
+    With no `model`, the model chat really uses right now
+    (jarvis_power_switch.chat_model: the owner's current model, else
+    JARVIS_MODEL) - after a switch from the phone, warming the old name
+    would load a second model onto a card with room for one (effectiveness
+    audit 2026-09-28, 3.2). No keep_alive is sent, so Ollama's own setting
+    (OLLAMA_KEEP_ALIVE=-1, MODEL-TOPOLOGY) is left alone - the preload
+    jarvis_power_switch.warm_up already does the same."""
     url = (ollama_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
-    name = model or os.environ.get("JARVIS_MODEL") or "jarvis-primary"
+    name = model or _chat_model_now() or "jarvis-primary"
     try:
         if not _is_this_machine(url) or local_model_refusal(url, name):
             return False
-        _get_json(f"{url}/api/generate", {"model": name, "keep_alive": "30m"}, timeout=120.0)
+        _get_json(f"{url}/api/generate", {"model": name}, timeout=120.0)
         return True
     except Exception:
         return False
