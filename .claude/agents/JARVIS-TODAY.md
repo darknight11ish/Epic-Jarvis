@@ -36,7 +36,7 @@ the code, one question at a time after the owner's yes** (ARCHITECTURE §11;
 lane is configured on the owner's PC**: the lane list comes from
 `litellm-proxy.yaml`, which `backend/README.md` (~line 2339) says does not
 exist there, so every turn is local. Talking to an outside AI through its
-API is designed in `docs/CHATBOT-DRIVER-DESIGN.md`; the owner chose Gemini's website instead, and "Talk to a chatbot for me" (the driver core, `/api/chatbot/*` routes and both apps' screens, one card per conversation) is built but reaches no chatbot yet - the Gemini adapter is not built (JARVIS-API §60). A cloud turn carries only the owner's newest words, never private,
+API is designed in `docs/CHATBOT-DRIVER-DESIGN.md`; the owner chose Gemini's website instead, and "Talk to a chatbot for me" is built (JARVIS-API §60; one card per conversation; the driver core `jarvis_chatbot.py`, `/api/chatbot/*` routes and both apps' screens) and reaches: nine chatbot websites driven openly with a spare account each (Gemini, ChatGPT, Claude, Copilot, Perplexity, DeepSeek, Grok, Le Chat, Meta AI; shared base `jarvis_chatbot_web.py`), six services by API key (`jarvis_chatbot_api.py`, OpenAI-style: OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq), and a second local AI on the PC (`jarvis_chatbot_local.py`). None is tried against the real sites yet. Compare mode and customer-support chats are designed, not built. A cloud turn carries only the owner's newest words, never private,
 tainted or picture turns (ARCHITECTURE §4). Big-model switch across both
 cards (`jarvis_big_model.py`). Simple commands answered without the model
 (`jarvis_quick.py`). Short tool list with more on request; MCP bridge for
@@ -118,8 +118,13 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   mouth track carried in the WAV, on both apps (fixes the studio's finding
   that the desktop mouth ran on a made-up rhythm).
 - On this branch (`claude/jarvis-ai-assistant-research-ff37vy`): the
-  chatbot driver core (`jarvis_chatbot.py`, API §60) and Projects steps 1-2
-  (`jarvis_projects.py`, API §61).
+  chatbot driver (core, websites, API services, second local AI; API §60),
+  Projects steps 1-2 (`jarvis_projects.py`, API §61) and the phone's
+  "Swipe to approve or deny" switch.
+- **Third graphics card: detection only** - on
+  `claude/jarvis-continuation-03kls1` (2026-09-28): a third NVIDIA card is
+  now detected and explained, but runs nothing yet. The owner asked that
+  session about a third card; research here still plans for one or two.
 
 ## Decided but not built yet (don't propose these as new)
 
