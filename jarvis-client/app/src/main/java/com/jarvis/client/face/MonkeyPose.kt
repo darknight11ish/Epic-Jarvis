@@ -34,7 +34,7 @@ import com.jarvis.client.face.CritterPose.cuteAt
 import com.jarvis.client.face.CritterPose.cuteBusy
 import com.jarvis.client.face.CritterPose.cuteOf
 import com.jarvis.client.face.CritterPose.cuteQuiet
-import com.jarvis.client.face.CritterPose.extras
+import com.jarvis.client.face.CritterPose.switchE
 import com.jarvis.client.face.CritterPose.focusEndOf
 import com.jarvis.client.face.CritterPose.focusOf
 import com.jarvis.client.face.CritterPose.fullTurn
@@ -175,6 +175,12 @@ object MonkeyPose {
         state == FaceState.IDLE && (CritterPose.playing(happening(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS)) ||
             cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
+    /** Whether one of its own talking gestures is playing at clock [t] - the desktop's gesturing(t). */
+    fun gesturing(t: Float): Boolean {
+        val b = beat(t, S_BEAT, S_GAZE, 1.6f, 5.5f, 0.65f)
+        return b[0] >= 0f && b[1] >= 0f && b[1] < CritterPose.GESTURE_S
+    }
+
     private fun headTurn(p: FloatArray): FloatArray = mul(ry(-p[HEAD_YAW]), mul(rx(p[HEAD_PITCH]), rz(-p[HEAD_ROLL])))
 
     /** A point in the head's (unscaled) frame, in the body's frame. */
@@ -216,6 +222,7 @@ object MonkeyPose {
         val cu = if (state == FaceState.IDLE) cuteAt(t, since, S_CUTE, CUTE_LEN) else NONE
         val cw = if (cu[0] >= 0f) cuteOf(o) else 0f
         val fw = if (state == FaceState.IDLE) focusOf(o) else 0f
+        val fp = fw * (1f - 0.6f * o.calm)   // the focus pose itself: smaller under calm (the happenings still go by fw)
         // (and so do the stretch as a focus session ends, and being stroked)
         val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
         val pw = if (awake(state)) petOf(o) else 0f
@@ -444,11 +451,11 @@ object MonkeyPose {
                 if (fw > 0f) {
                     // Working beside you: it hangs steadier and looks at its banana, far fewer looks.
                     val f = gaze(t, S_FOCUS, 4f, 12f, 0.75f, 0.3f, 0.12f, 0f, 0.03f, 1.6f)
-                    p[HEAD_YAW] += (-0.05f + 0.2f * f[2] - p[HEAD_YAW]) * fw
-                    p[HEAD_PITCH] += (-0.12f + 0.1f * f[3] - p[HEAD_PITCH]) * fw
-                    p[LOOK_X] += (-0.3f + f[0] - 0.4f * f[2] - p[LOOK_X]) * fw
-                    p[LOOK_Y] += (-0.4f + f[1] - 0.4f * f[3] - p[LOOK_Y]) * fw
-                    turnBlink *= 1f - fw
+                    p[HEAD_YAW] += (-0.05f + 0.2f * f[2] - p[HEAD_YAW]) * fp
+                    p[HEAD_PITCH] += (-0.12f + 0.1f * f[3] - p[HEAD_PITCH]) * fp
+                    p[LOOK_X] += (-0.3f + f[0] - 0.4f * f[2] - p[LOOK_X]) * fp
+                    p[LOOK_Y] += (-0.4f + f[1] - 0.4f * f[3] - p[LOOK_Y]) * fp
+                    turnBlink *= 1f - fp
                 }
                 // The small stretch as a focus session ends (its waking stretch).
                 if (fe > 0f) {
@@ -569,32 +576,30 @@ object MonkeyPose {
 
     /**
      * Hello and goodbye - the desktop's monkey farewell(): a little wave of
-     * its banana (a bow while waiting on you or after something wrong;
-     * nothing asleep), then its vine draws it up out of the picture; hello,
-     * it drops in on its vine with a small springy bounce, and looks at you.
+     * its banana (nothing asleep or dozing; none of it waiting on you or at
+     * an error - [CritterPose.switchE]), then its vine draws it up out of the
+     * picture; hello, it drops in on its vine with a small springy bounce,
+     * and looks at you.
      */
     private const val LIFT = 2.2f
     private fun farewell(p: FloatArray, state: FaceState, o: Opts) {
         val g = o.goodbye
         val h = o.hello
         if (g <= 0f && h >= 1f) return
-        val e = extras(o)
-        val aw = if (awake(state) || state == FaceState.APPROVAL || state == FaceState.ERROR) 1f else 0f
-        val wave1 = if (awake(state)) 1f else 0f
+        val e = switchE(o, state)
+        val aw = if (awake(state)) 1f else 0f
         if (g > 0f) {
             val a = e * bump(clamp(g / 0.6f, 0f, 1f))
             val at = e * aw * ease(g / 0.2f)
             p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
             p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
-            val wv = a * wave1
+            val wv = a * aw
             val sn = sin(CritterPose.TAU_F * 1.6f * g)
             p[B_EX] += (-0.30f - p[B_EX]) * wv; p[B_EY] += (0.12f - p[B_EY]) * wv; p[B_EZ] += (-0.08f - p[B_EZ]) * wv
             p[B_HX] += (-0.34f + 0.05f * sn - p[B_HX]) * wv; p[B_HY] += (0.30f - p[B_HY]) * wv
             p[B_HZ] += (-0.14f - p[B_HZ]) * wv
             p[BAN_ROLL] += 0.4f * wv * sn
             p[BROW] += 0.2f * wv
-            val bw = a * (aw - wave1)
-            p[HEAD_PITCH] -= 0.2f * bw; p[LEAN] += 0.04f * bw
             p[VINE_Y_K] += LIFT * e * ease((g - 0.4f) / 0.6f)
         }
         if (h < 1f) {
@@ -603,7 +608,7 @@ object MonkeyPose {
             val at = e * aw * ease((h - 0.25f) / 0.25f) * (1f - ease((h - 0.8f) / 0.2f))
             p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
             p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
-            p[BROW] += 0.2f * at * wave1
+            p[BROW] += 0.2f * at
         }
     }
 

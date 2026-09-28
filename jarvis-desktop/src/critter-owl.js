@@ -19,7 +19,7 @@
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
           wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
           overlayAt, ease, toward, eyesOpen, eyesClose, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
-          extras, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
+          switchE, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
           cuteQuiet, cuteBusy, HELLO_S, GOODBYE_S } = C.util;
 
   const KEYS = [
@@ -107,6 +107,7 @@
     const cu = state === "idle" ? cuteAt(t, since, S_CUTE, CUTE_LEN) : NONE;
     const cw = cu[0] >= 0 ? cuteOf(o) : 0;
     const fw = state === "idle" ? focusOf(o) : 0;
+    const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
     // (and so do the stretch as a focus session ends, and being stroked)
     const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
     m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
@@ -311,11 +312,11 @@
         // Working beside you (a focus session): it half turns to watch the
         // work, head a little down, and looks about far less.
         const f = gaze(t, S_FOCUS, 4, 12, 0.75, 0.3, 0.12, 0, 0.02, 1.6);
-        P.headYaw += (0.35 + 0.4 * f[2] - P.headYaw) * fw;
-        P.headPitch += (-0.12 + 0.12 * f[3] - P.headPitch) * fw;
-        P.lookX += (f[0] - 0.8 * f[2] - P.lookX) * fw;
-        P.lookY += (-0.2 + f[1] - 0.8 * f[3] - P.lookY) * fw;
-        turnBlink *= 1 - fw;
+        P.headYaw += (0.35 + 0.4 * f[2] - P.headYaw) * fp;
+        P.headPitch += (-0.12 + 0.12 * f[3] - P.headPitch) * fp;
+        P.lookX += (f[0] - 0.8 * f[2] - P.lookX) * fp;
+        P.lookY += (-0.2 + f[1] - 0.8 * f[3] - P.lookY) * fp;
+        turnBlink *= 1 - fp;
       }
       // The small stretch as a focus session ends: a ruffle, wings eased out.
       if (fe > 0) {
@@ -393,14 +394,15 @@
    * owl's goodbye is a small bow, looking at you, then it spreads its wings
    * and flies up out of the picture (its branch stays); its hello, it
    * flutters down onto the branch, lands with a fluff and looks at you.
-   * Asleep or dozing: no bow, no look.
+   * Asleep or dozing: no bow, no look. Waiting on you or at an error: none
+   * of it, the host's cross-fade (switchE).
    */
   const RISE = 2.2;   // how far up it flies to be out of view
   function farewell(P, state, o) {
     const g = o.goodbye, h = o.hello;
     if (g <= 0 && h >= 1) return;
-    const E = extras(o);
-    const awake = AWAKE[state] || state === "approval" || state === "error" ? 1 : 0;
+    const E = switchE(o, state);
+    const awake = AWAKE[state] ? 1 : 0;
     if (g > 0) {
       const a = E * awake * bump(clamp(g / 0.6, 0, 1));
       const at = E * awake * ease(g / 0.2);
@@ -556,5 +558,11 @@
       || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 
-  C.species.pygmyowl = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, HELLO_S, GOODBYE_S };
+  /** Whether one of its own talking gestures is playing at clock t (critter-pose.js gesturing()). */
+  function gesturing(t) {
+    const b = beat(t, S_BEAT, S_GAZE, 1.8, 6, 0.65);
+    return b[0] >= 0 && b[1] >= 0 && b[1] < C.util.GESTURE_S;
+  }
+
+  C.species.pygmyowl = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, gesturing, HELLO_S, GOODBYE_S };
 })(typeof globalThis !== "undefined" ? globalThis : this);

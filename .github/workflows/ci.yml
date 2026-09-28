@@ -179,6 +179,16 @@ jobs:
         run: |
           python tools/gen_animal_cases.py --check
           node jarvis-desktop/tests/animal-settings.mjs
+      # The animals' new behaviours as the desktop feeds them (the moments'
+      # relay, the lock rules) and the faces at every speed of Jarvis's
+      # voice (the phrase-end finder, the robot's eye pulse). Both also run,
+      # whole, in the frontend job's every-suite loop; here - with no browser
+      # installed - animal-behaviours runs its browser-free half and skips
+      # the face page, as sky.mjs does, and voice-speed needs no browser.
+      - name: Animal behaviours and voice speed - the browser-free checks
+        run: |
+          node jarvis-desktop/tests/animal-behaviours.mjs
+          node jarvis-desktop/tests/voice-speed.mjs
       # Seasonal touches (leaves, snow, blossom, fireflies, a few holidays)
       # are worked out twice - season.js on the desktop, Season.kt on the
       # phone - and the phone's SeasonTest checks its copy against a fixture

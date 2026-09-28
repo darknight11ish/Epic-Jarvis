@@ -648,10 +648,15 @@ object CritterPose {
 
     const val HELLO_S = 1.0f
     const val GOODBYE_S = 1.0f
-    /** How opaque to draw an animal while it says hello or goodbye - the desktop's switchAlpha(). */
-    fun switchAlpha(opts: Opts): Float {
+    /**
+     * How opaque to draw an animal while it says hello or goodbye - the
+     * desktop's switchAlpha(). [state] is the state it is drawn in: waiting
+     * on you and something wrong cross-fade, as a serious moment does. Left
+     * out (null), no state counts as serious - the old one-argument call.
+     */
+    fun switchAlpha(opts: Opts, state: FaceState? = null): Float {
         val o = opts.norm(0f)
-        val e = extras(o)
+        val e = switchE(o, state)
         return clamp(1f - (1f - e) * max(o.goodbye, 1f - o.hello), 0f, 1f)
     }
 
@@ -694,6 +699,37 @@ object CritterPose {
     fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
         state == FaceState.IDLE && (playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)) ||
             cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
+
+    /** The longest a talking gesture plays - the desktop's GESTURE_S. */
+    const val GESTURE_S = 2f
+    /**
+     * Whether one of the panda's own talking gestures ([beat]: the timing
+     * used until the host hands it Jarvis's phrase ends) is playing at clock
+     * [t] - the desktop's gesturing(t). The host asks before it switches the
+     * gestures over to the phrase ends part way into an answer, so a gesture
+     * is never cut off half way.
+     */
+    fun gesturing(t: Float): Boolean {
+        val b = beat(t, S_BEAT, S_GAZE, 1.8f, 6f, 0.65f)
+        return b[0] >= 0f && b[1] >= 0f && b[1] < GESTURE_S
+    }
+
+    /**
+     * Whether one of the moments the host hands in is playing, for the frame
+     * pacer - the desktop's momentsBusy(state, opts): being stroked, a fact's
+     * nod, the long answer's glow (awake) or the stretch as a focus session
+     * ends (idle); none under still or a serious moment. One function for all
+     * five faces (the moments are the same length on each).
+     */
+    fun momentsBusy(state: FaceState, opts: Opts): Boolean {
+        val o = opts.norm(0f)
+        if (o.still >= 0.99f || o.serious >= 0.99f) return false
+        // (Worked out at clock 0, each moment's clock is minus its "seconds since".)
+        fun on(at: Float, len: Float) = -at > 0f && -at < len
+        if (awake(state) && ((o.pet > 0f && o.petting > 0f) ||
+                (o.acks > 0f && (on(o.ackNod, ACK_S) || on(o.ackGlow, GLOW_S))))) return true
+        return state == FaceState.IDLE && o.focusBuddy > 0f && on(o.focusEnd, FOCUS_END_S)
+    }
 
     /** The tail's swing at clock [t] in one state; the tip is asked for an earlier time. */
     private fun tailAt(state: FaceState, t: Float, o: Opts, hap: Float): Float {
@@ -738,6 +774,7 @@ object CritterPose {
         val cu = if (state == FaceState.IDLE) cuteAt(t, since, S_CUTE, CUTE_LEN) else NONE
         val cw = if (cu[0] >= 0f) cuteOf(o) else 0f
         val fw = if (state == FaceState.IDLE) focusOf(o) else 0f
+        val fp = fw * (1f - 0.6f * o.calm)   // the focus pose itself: smaller under calm (the happenings still go by fw)
         // (and so do the stretch as a focus session ends, and being stroked)
         val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
         val pw = if (awake(state)) petOf(o) else 0f
@@ -965,12 +1002,12 @@ object CritterPose {
                 if (fw > 0f) {
                     // Working beside you: gazing into the orb in its lap, far fewer looks.
                     val f = gaze(t, S_FOCUS, 4f, 12f, 0.75f, 0.3f, 0.12f, 0f, 0.03f, 1.6f)
-                    p[LOOK_X] += (f[0] - 0.4f * f[2] - p[LOOK_X]) * fw
-                    p[LOOK_Y] += (-0.6f + f[1] - 0.4f * f[3] - p[LOOK_Y]) * fw
-                    p[HEAD_YAW] += (0.2f * f[2] - p[HEAD_YAW]) * fw
-                    p[HEAD_PITCH] += (-0.16f + 0.1f * f[3] - p[HEAD_PITCH]) * fw
-                    p[LEAN] += 0.02f * fw
-                    turnBlink *= 1f - fw
+                    p[LOOK_X] += (f[0] - 0.4f * f[2] - p[LOOK_X]) * fp
+                    p[LOOK_Y] += (-0.6f + f[1] - 0.4f * f[3] - p[LOOK_Y]) * fp
+                    p[HEAD_YAW] += (0.2f * f[2] - p[HEAD_YAW]) * fp
+                    p[HEAD_PITCH] += (-0.16f + 0.1f * f[3] - p[HEAD_PITCH]) * fp
+                    p[LEAN] += 0.02f * fp
+                    turnBlink *= 1f - fp
                 }
                 // The small stretch as a focus session ends (the idle stretch's).
                 if (fe > 0f) {
@@ -1070,31 +1107,31 @@ object CritterPose {
 
     /**
      * Hello and goodbye when the owner switches faces - the desktop's
-     * farewell(): a little wave (a bow while waiting on you or after
-     * something wrong; nothing asleep), then down out of view; hello comes
-     * back up with a small bounce and looks at you. [Opts.goodbye] and
-     * [Opts.hello] are how far each has got; under still, calm or serious the
-     * host cross-fades instead ([switchAlpha]).
+     * farewell(): a little wave (nothing asleep or dozing), then down out of
+     * view; hello comes back up with a small bounce and looks at you.
+     * [Opts.goodbye] and [Opts.hello] are how far each has got; under still,
+     * calm or serious, and while waiting on you or at an error ([switchE]),
+     * the host cross-fades instead ([switchAlpha]).
      */
     private const val DROP = 2.1f
+    /** How much of its own hello and goodbye an animal plays - the desktop's switchE(): none while waiting on you or at an error. */
+    internal fun switchE(o: Opts, state: FaceState?): Float =
+        if (state == FaceState.APPROVAL || state == FaceState.ERROR) 0f else extras(o)
     private fun farewell(p: FloatArray, state: FaceState, o: Opts) {
         val g = o.goodbye
         val h = o.hello
         if (g <= 0f && h >= 1f) return
-        val e = extras(o)
-        val aw = if (awake(state) || state == FaceState.APPROVAL || state == FaceState.ERROR) 1f else 0f
-        val wave1 = if (awake(state)) 1f else 0f
+        val e = switchE(o, state)
+        val aw = if (awake(state)) 1f else 0f
         if (g > 0f) {
             val a = e * bump(clamp(g / 0.6f, 0f, 1f))
             val at = e * aw * ease(g / 0.2f)
             p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
             p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
-            val wv = a * wave1
+            val wv = a * aw
             p[PAW_RX] += 0.12f * wv + 0.06f * wv * sin(TAU * 1.6f * g)
             p[PAW_RY] += 0.36f * wv; p[PAW_RZ] -= 0.08f * wv
             p[BROW] += 0.2f * wv
-            val bw = a * (aw - wave1)
-            p[HEAD_PITCH] -= 0.22f * bw; p[LEAN] += 0.05f * bw
             p[BOB] -= e * DROP * ease((g - 0.4f) / 0.6f)
         }
         if (h < 1f) {
@@ -1103,7 +1140,7 @@ object CritterPose {
             val at = e * aw * ease((h - 0.25f) / 0.25f) * (1f - ease((h - 0.8f) / 0.2f))
             p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
             p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at; p[HEAD_PITCH] += (0.04f - p[HEAD_PITCH]) * at
-            p[BROW] += 0.2f * at * wave1
+            p[BROW] += 0.2f * at
         }
     }
 

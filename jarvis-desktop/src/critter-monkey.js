@@ -28,7 +28,7 @@
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
           wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
           overlayAt, ease, toward, eyesOpen, eyesClose, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
-          extras, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
+          switchE, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
           cuteQuiet, cuteBusy, fullTurn, HELLO_S, GOODBYE_S, TAU } = C.util;
 
   const KEYS = [
@@ -111,6 +111,7 @@
     const cu = state === "idle" ? cuteAt(t, since, S_CUTE, CUTE_LEN) : NONE;
     const cw = cu[0] >= 0 ? cuteOf(o) : 0;
     const fw = state === "idle" ? focusOf(o) : 0;
+    const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
     // (and so do the stretch as a focus session ends, and being stroked)
     const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
     m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
@@ -350,11 +351,11 @@
         // Working beside you (a focus session): it hangs steadier (the swing,
         // below) and looks at the banana in its hand, far fewer looks about.
         const f = gaze(t, S_FOCUS, 4, 12, 0.75, 0.3, 0.12, 0, 0.03, 1.6);
-        P.headYaw += (-0.05 + 0.2 * f[2] - P.headYaw) * fw;
-        P.headPitch += (-0.12 + 0.1 * f[3] - P.headPitch) * fw;
-        P.lookX += (-0.3 + f[0] - 0.4 * f[2] - P.lookX) * fw;
-        P.lookY += (-0.4 + f[1] - 0.4 * f[3] - P.lookY) * fw;
-        turnBlink *= 1 - fw;
+        P.headYaw += (-0.05 + 0.2 * f[2] - P.headYaw) * fp;
+        P.headPitch += (-0.12 + 0.1 * f[3] - P.headPitch) * fp;
+        P.lookX += (-0.3 + f[0] - 0.4 * f[2] - P.lookX) * fp;
+        P.lookY += (-0.4 + f[1] - 0.4 * f[3] - P.lookY) * fp;
+        turnBlink *= 1 - fp;
       }
       // The small stretch as a focus session ends (its waking stretch).
       if (fe > 0) {
@@ -486,29 +487,26 @@
    * monkey's goodbye is a little wave of its banana, looking at you, then
    * its vine draws it up out of the picture; its hello, it drops in on its
    * vine from above, the vine giving a small springy bounce, and it looks at
-   * you. Asleep or dozing: no wave, no look; a small bow while waiting on
-   * you or after something went wrong.
+   * you. Asleep or dozing: no wave, no look. Waiting on you or at an error:
+   * none of it, the host's cross-fade (switchE).
    */
   const LIFT = 2.2;   // how far up the vine goes to be out of view, feet and tail too
   function farewell(P, state, o) {
     const g = o.goodbye, h = o.hello;
     if (g <= 0 && h >= 1) return;
-    const E = extras(o);
-    const awake = AWAKE[state] || state === "approval" || state === "error" ? 1 : 0;
-    const wave1 = AWAKE[state] ? 1 : 0;
+    const E = switchE(o, state);
+    const awake = AWAKE[state] ? 1 : 0;
     if (g > 0) {
       const a = E * bump(clamp(g / 0.6, 0, 1));
       const at = E * awake * ease(g / 0.2);
       P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
       P.headYaw += (0 - P.headYaw) * at;
-      const wv = a * wave1;
+      const wv = a * awake;
       P.bEx += (-0.30 - P.bEx) * wv; P.bEy += (0.12 - P.bEy) * wv; P.bEz += (-0.08 - P.bEz) * wv;
       P.bHx += (-0.34 + 0.05 * Math.sin(TAU * 1.6 * g) - P.bHx) * wv; P.bHy += (0.30 - P.bHy) * wv;
       P.bHz += (-0.14 - P.bHz) * wv;
       P.banRoll += 0.4 * wv * Math.sin(TAU * 1.6 * g);
       P.brow += 0.2 * wv;
-      const bw = a * (awake - wave1);
-      P.headPitch -= 0.2 * bw; P.lean += 0.04 * bw;
       P.vineY += LIFT * E * ease((g - 0.4) / 0.6);
     }
     if (h < 1) {
@@ -517,7 +515,7 @@
       const at = E * awake * ease((h - 0.25) / 0.25) * (1 - ease((h - 0.8) / 0.2));
       P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
       P.headYaw += (0 - P.headYaw) * at;
-      P.brow += 0.2 * at * wave1;
+      P.brow += 0.2 * at;
     }
   }
 
@@ -756,5 +754,11 @@
       || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 
-  C.species.monkey = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, HELLO_S, GOODBYE_S };
+  /** Whether one of its own talking gestures is playing at clock t (critter-pose.js gesturing()). */
+  function gesturing(t) {
+    const b = beat(t, S_BEAT, S_GAZE, 1.6, 5.5, 0.65);
+    return b[0] >= 0 && b[1] >= 0 && b[1] < C.util.GESTURE_S;
+  }
+
+  C.species.monkey = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, gesturing, HELLO_S, GOODBYE_S };
 })(typeof globalThis !== "undefined" ? globalThis : this);

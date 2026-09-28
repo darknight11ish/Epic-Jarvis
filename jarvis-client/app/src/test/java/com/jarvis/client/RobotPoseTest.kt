@@ -264,6 +264,27 @@ class RobotPoseTest {
     }
 
     @Test
+    fun `its hello's fin flick plays awake only, and none of the hello waiting on you or at an error`() {
+        val fins = { s: FaceState, h: Float -> u(s, 30f, o = opts(hello = h)).getValue("uFins") }
+        // Awake, the fins flick as it settles (0.6 to 0.9 of the way in).
+        val awake = (0..10).maxOf { k -> abs(fins(FaceState.IDLE, 0.6f + 0.03f * k)[0] - fins(FaceState.IDLE, 1f)[0]) }
+        assertTrue("no fin flick awake ($awake)", awake > 0.1f)
+        // Asleep or dozing: no flick (it drops in, its eyes stay as they are).
+        for (s in listOf(FaceState.STANDBY, FaceState.BANKED)) {
+            val move = (0..10).maxOf { k -> abs(fins(s, 0.6f + 0.03f * k)[0] - fins(s, 1f)[0]) }
+            assertTrue("$s: its fins flicked by $move in the hello", move < 1e-5f)
+        }
+        // Waiting on you or at an error: none of it - the host's cross-fade.
+        for (s in listOf(FaceState.APPROVAL, FaceState.ERROR)) {
+            val base = u(s, 30f, o = opts())
+            for (h in listOf(0.1f, 0.5f, 0.7f)) {
+                val got = u(s, 30f, o = opts(hello = h))
+                for ((n, v) in base) for (i in v.indices) assertEquals("$s hello $h changed $n[$i]", v[i], got.getValue(n)[i], 1e-6f)
+            }
+        }
+    }
+
+    @Test
     fun `asleep, its eyes are a dim line and only its hover moves`() {
         val m = u(FaceState.STANDBY, 30f, o = opts())
         assertEquals(0f, m.getValue("uEyes")[0], 0f)

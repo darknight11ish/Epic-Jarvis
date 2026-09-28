@@ -6,6 +6,41 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The animals' new behaviours, on both apps.** Every animal and the robot
+  now does what the six "Animal options" switches promised, each switch
+  turning its own off: **listening nods** (a small nod in your pauses while
+  you talk) and **gestures on Jarvis's sentence ends** (while it speaks
+  aloud, its nods and paw lifts land where a sentence ends - a typed or
+  quiet answer keeps the old timing); a **focus buddy** (in a focus session
+  it works quietly beside you, and stretches when the session ends); a small
+  **nod when a fact is saved** (never while App lock or "Hide memory lists
+  and chat history" is on) and a **glow when a long answer is ready**;
+  **petting** (on the PC stroke the Widget's face, or press, hold and stroke
+  in the Faces window; on the phone a long press on the face, which does not
+  open the Brain); **two cute idle moments** per face, taking turns after it
+  has rested a while; a **goodbye and a hello** when you switch faces; and
+  **seasonal touches** behind the face (off to start). "Keep the animal
+  still" and serious moments switch every one off; calm motion makes them
+  smaller - the focus buddy's pose included (it was drawn full size under
+  calm; fixed). While Jarvis is waiting on you or something went wrong, a
+  face switch is a quick gentle cross-fade, as in a serious moment (the
+  animal used to bow and drop out of view). Also fixed in this batch:
+  **the voice-speed fix** - the sentence-end finder missed almost every
+  sentence end at the normal pace and faster (only 1 of 36 at the fastest),
+  because sentences spoken back to back leave only about a tenth of a
+  second of quiet; it now finds 25 to 34 of 36, and never one inside a
+  sentence. **The options snap** - a face opened before the stored options
+  were read eased in from the defaults, so a face set to Still moved for a
+  moment; both apps now take them at once. On the PC the same now holds for
+  a face switched back to after another, and for the seasonal touches. And
+  on the PC, the sentence-end gestures
+  now switch on when Jarvis's voice is first heard (they almost never did:
+  the face turns to "speaking" as the text starts, before any sound), a
+  face that has just opened waits its "rested a while" before a cute moment,
+  and a stroke, a nod, a glow or a stretch is drawn at the full frame rate.
+  Needs `apply-patches.ps1` on the PC for the new Petting wording
+  (`jarvis_animal.py`). See `docs/CRITTERS.md`, "New behaviours".
+
 - **A fifth face: the robot, on both apps.** From the owner's own picture:
   a small floating robot with a big white helmet, a glossy dark-blue visor
   with a glowing rim, ear pods with teal fins, an egg of a body with a teal
@@ -30,12 +65,12 @@ number as the last part - `0.2.57` is a build of 0.2.
   "Animal options" card; the phone's Appearance has the same section. It
   holds "Keep the animal still", the sun, moon and weather (moved there),
   sharpness and frame rate (marked "on this computer" / "on this phone"),
-  a button to the face's voice, and six new switches for the behaviours
-  coming in the next update - listening nods, focus buddy, small
-  acknowledgements, petting and cute idle moments (on to start) and seasonal
-  touches (off). It covers every character face, the robot included.
-  Those six are saved and shared now; each says plainly that the animal
-  starts doing it in the next update. **"Keep the animal still" and the
+  a button to the face's voice, and six switches for the new behaviours -
+  listening nods, focus buddy, small acknowledgements, petting and cute
+  idle moments (on to start) and seasonal touches (off). It covers every
+  character face, the robot included. Those six are saved and shared, and
+  the animals now do all six (see "The animals' new behaviours" above).
+  **"Keep the animal still" and the
   switches are now shared**: kept on the PC, so a change on either device
   changes both (before, each device had its own Still - if either had it on,
   it stays on). Sharpness and frame rate stay per device. Say "keep the

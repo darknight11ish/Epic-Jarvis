@@ -13993,9 +13993,10 @@ already be set up for Jarvis (the same device the morning briefing reads).
 
 Every animal option is in one place in both apps now ("Animal options"),
 and Jarvis changes any of them when you ask. "Keep the animal still" and
-six new switches for the behaviours coming next (listening nods, focus
-buddy, small acknowledgements, petting, cute idle moments - on to start -
-and seasonal touches, off) are kept on the PC, so the desktop and the phone always agree.
+six switches for the animals' new behaviours (listening nods, focus buddy,
+small acknowledgements, petting, cute idle moments - on to start - and
+seasonal touches, off) are kept on the PC, so the desktop and the phone
+always agree. The animals do all six now; each switch turns its own off.
 Sharpness and frame rate stay on each device. None of them asks with a card
 - they only change how the animal moves. The weather from Open-Meteo still
 does.
@@ -14040,8 +14041,11 @@ once - unless you have already changed a switch since, which then wins).
 - **Not run on the owner's PC.** `animal.patch` was rehearsed against the
   text the earlier patches write (`_stack.stand_in`), not the real
   `jarvis_hud.py`; `apply-patches.ps1` on the PC is the proof.
-- **The six behaviours are switches only today.** They are saved and
-  shared; the animal starts doing each one when it is built.
+- **The six behaviours are built** (every switch is `built: True`), so no
+  row shows the "Coming in the next update" line any more; the line and
+  `built` stay for the next new behaviour. Petting's words say where to
+  stroke on the PC (the Widget's face, or press, hold and stroke in the
+  Faces window - the floating face and the HUD let clicks through).
 - An app older than this feature ignores `face_tuning`, so "make the animal
   sharper" answered on it says "Done" while nothing changes - update both
   apps.

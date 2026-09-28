@@ -40,7 +40,7 @@
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, ease, rx, ry, rz, mul, apply, add, invRow,
           wave, bump, envAHR, happening, chain, shift, gaze, looks, restingGaze, optsOf, mods, blinkAt,
-          overlayAt, toward, eyesClose, TAU, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf, varOf, extras,
+          overlayAt, toward, eyesClose, TAU, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf, varOf, switchE,
           listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, cuteAt, cuteQuiet, cuteBusy,
           HELLO_S, GOODBYE_S } = C.util;
   const hash01 = C.hash01;
@@ -232,6 +232,7 @@
     const cu = state === "idle" ? cuteAt(t, since, S_CUTE, CUTE_LEN) : NONE;
     const cw = cu[0] >= 0 ? cuteOf(o) : 0;
     const fw = state === "idle" ? focusOf(o) : 0;
+    const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
     m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0));
     const hap = m[0], sw = m[2], play = m[3];
     // The zip: gone under calm, Still, serious, a wake-up and a focus session
@@ -464,14 +465,14 @@
         // front of it, tinkering a little, its eyes on them, looking up now
         // and then - far fewer looks, no happenings and no zips.
         const f = gaze(t, S_FOCUS, 4, 12, 0.75, 0.3, 0.12, 0, 0.03, 1.6);
-        P.lookX += (f[0] - 0.4 * f[2] - P.lookX) * fw;
-        P.lookY += (-0.6 + f[1] - 0.4 * f[3] - P.lookY) * fw;
-        P.headYaw += (0.2 * f[2] - P.headYaw) * fw;
-        P.headPitch += (-0.14 + 0.1 * f[3] - P.headPitch) * fw;
-        handL(P, [-0.14, -0.14 + 0.01 * sw * wave(t, 260, 0), -0.30], fw);
-        handR(P, [0.14, -0.14 + 0.01 * sw * wave(t, 260, 2.1), -0.30], fw);
-        P.happy += (0.5 - P.happy) * fw;
-        turnBlink *= 1 - fw;
+        P.lookX += (f[0] - 0.4 * f[2] - P.lookX) * fp;
+        P.lookY += (-0.6 + f[1] - 0.4 * f[3] - P.lookY) * fp;
+        P.headYaw += (0.2 * f[2] - P.headYaw) * fp;
+        P.headPitch += (-0.14 + 0.1 * f[3] - P.headPitch) * fp;
+        handL(P, [-0.14, -0.14 + 0.01 * sw * wave(t, 260, 0), -0.30], fp);
+        handR(P, [0.14, -0.14 + 0.01 * sw * wave(t, 260, 2.1), -0.30], fp);
+        P.happy += (0.5 - P.happy) * fp;
+        turnBlink *= 1 - fp;
       }
       // The small stretch as a focus session ends: mittens up and out, fins
       // flicking, eyes smiling shut.
@@ -586,12 +587,13 @@
   /**
    * Hello and goodbye, when the owner switches faces (critter-pose.js's
    * farewell says how the host plays them: o.hello and o.goodbye, 0..1).
-   *  - Goodbye: a quick wave, eyes smiling, looking at you (a small bow
-   *    instead while waiting on you or after something went wrong; neither
-   *    asleep or dozing), then it zips up and out of the top of the picture.
+   *  - Goodbye: a quick wave, eyes smiling, looking at you (not asleep or
+   *    dozing), then it zips up and out of the top of the picture.
    *  - Hello: it drops in from above, settles with a small bounce, its eyes
-   *    boot up, blink, and look at you; its fins flick.
-   * Under still, calm or a serious moment (E) the pose plays none of it and
+   *    boot up, blink, and look at you; its fins flick (not asleep or
+   *    dozing).
+   * Under still, calm or a serious moment, and while waiting on you or at
+   * an error (E, critter-pose.js's switchE), the pose plays none of it and
    * the host cross-fades the faces (critter-pose.js's switchAlpha), as for
    * every face. Returns how open the eyes are (0..1) for the caller to lay
    * on the lids.
@@ -600,21 +602,18 @@
   function farewell(P, state, o) {
     const g = o.goodbye, h = o.hello;
     if (g <= 0 && h >= 1) return 1;
-    const E = extras(o);
-    const awake = AWAKE[state] || state === "approval" || state === "error" ? 1 : 0;
-    const wave1 = AWAKE[state] ? 1 : 0;
+    const E = switchE(o, state);
+    const awake = AWAKE[state] ? 1 : 0;
     let lid = 1;
     if (g > 0) {
       const a = E * bump(clamp(g / 0.6, 0, 1));
       const at = E * awake * ease(g / 0.2);
       P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
       P.headYaw += (0 - P.headYaw) * at;
-      const wv = a * wave1;
+      const wv = a * awake;
       handR(P, WAVE_R, wv);
       P.rHx += 0.06 * wv * Math.sin(TAU * 1.6 * g);
       P.happy += (1 - P.happy) * wv;
-      const bw = a * (awake - wave1);
-      P.headPitch -= 0.2 * bw; P.pitch += 0.04 * bw;
       const go = E * ease((g - 0.45) / 0.55);
       P.posY += UP * go; P.posZ += 0.2 * go;
       P.finL += 0.2 * go; P.finR += 0.2 * go;
@@ -622,12 +621,12 @@
     if (h < 1) {
       lid *= toward(1, ease((h - 0.35) / 0.3) * (1 - bump((h - 0.72) / 0.18)), E);
       P.posY += E * (DOWN * (1 - ease(h / 0.55)) - 0.045 * bump((h - 0.52) / 0.33));
-      const f = E * bump((h - 0.6) / 0.3);
+      const f = E * awake * bump((h - 0.6) / 0.3);
       P.finL -= 0.25 * f; P.finR -= 0.25 * f;
       const at = E * awake * ease((h - 0.4) / 0.2) * (1 - ease((h - 0.85) / 0.15));
       P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
       P.headYaw += (0 - P.headYaw) * at;
-      P.happy += (1 - P.happy) * E * wave1 * bump((h - 0.6) / 0.4);
+      P.happy += (1 - P.happy) * E * awake * bump((h - 0.6) / 0.4);
     }
     return lid;
   }
@@ -736,5 +735,11 @@
     return state === "idle" && (C.util.playing(idleEvent(t)) || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 
-  C.species.robot = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, HELLO_S, GOODBYE_S };
+  /** Whether one of its own talking gestures is playing at clock t (critter-pose.js gesturing()). */
+  function gesturing(t) {
+    const b = beat(t);
+    return b[0] >= 0 && b[1] >= 0 && b[1] < C.util.GESTURE_S;
+  }
+
+  C.species.robot = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, gesturing, HELLO_S, GOODBYE_S };
 })(typeof globalThis !== "undefined" ? globalThis : this);
