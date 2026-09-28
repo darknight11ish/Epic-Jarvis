@@ -602,21 +602,35 @@ SENSITIVE_MEMORY = (SENSITIVE_ON_SCREEN, SENSITIVE_ALOUD)
 SAME_AS_BUTTON = "same_as_button"
 BUTTON_ONLY = "button_only"
 HANDS_FREE = (SAME_AS_BUTTON, BUTTON_ONLY)
+#: Answers about the SCREEN ("Look at this", "Watch with me": the
+#: `read_screen` read, docs/SCREEN-DESIGN.md) to a turn that did not come
+#: from the talk button, while the owner chose `button_only` above. The
+#: owner's decision, 2026-09-28: under "Only trust the talk button" they
+#: stay on screen - a turn started by "Hey Jarvis" gets a written answer
+#: about the screen only - and `screen_aloud` lets them be read aloud even
+#: then; choosing it raises the voice approval card, going back is
+#: immediate. Under `same_as_button` this setting changes nothing: screen
+#: answers are read aloud as for the talk button, every earlier rule first.
+SCREEN_ON_SCREEN = "screen_on_screen"
+SCREEN_ALOUD = "screen_aloud"
+HANDS_FREE_SCREEN = (SCREEN_ON_SCREEN, SCREEN_ALOUD)
 #: The one source the talk button sends (jarvis_speech.hear's `source`).
 PUSH_TO_TALK = "push_to_talk"
-#: The default of each setting. For strictness, privacy and sensitive_memory
-#: it is the strict value, also used for a missing, unreadable or unknown
-#: one. For memory and hands_free the default is the owner's looser choice;
-#: an unknown VALUE (a damaged file) still falls back to the strict one -
-#: see settings().
+#: The default of each setting. For strictness, privacy, sensitive_memory
+#: and hands_free_screen it is the strict value, also used for a missing,
+#: unreadable or unknown one. For memory and hands_free the default is the
+#: owner's looser choice; an unknown VALUE (a damaged file) still falls back
+#: to the strict one - see settings().
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
             "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN,
-            "hands_free": SAME_AS_BUTTON}
+            "hands_free": SAME_AS_BUTTON, "hands_free_screen": SCREEN_ON_SCREEN}
 _CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
-            "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE}
+            "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE,
+            "hands_free_screen": HANDS_FREE_SCREEN}
 #: The LOOSER value of each: choosing it needs an approval card.
 LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
-          "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON}
+          "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON,
+          "hands_free_screen": SCREEN_ALOUD}
 #: The settings whose DEFAULT is the looser value, and the strict value each
 #: falls back to when the file is unreadable or holds a value that is not
 #: one of its choices. Only a file that never had the key gets the default.
@@ -640,7 +654,7 @@ def settings_path() -> Path:
 
 def settings() -> dict:
     """{"strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-    "changed"}. The strict value for anything missing, unreadable or
+    "hands_free_screen", "changed"}. The strict value for anything missing, unreadable or
     unknown - except that a file with no "memory" or no "hands_free" in it
     (every file written before 2026-09-24, and no file at all) gets the
     owner's default for it: MEMORY_ALOUD, SAME_AS_BUTTON. The one rule
@@ -699,7 +713,8 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
                              "check is very strict")
         new = {"strictness": cur["strictness"], "privacy": cur["privacy"],
                "memory": cur["memory"], "sensitive_memory": cur["sensitive_memory"],
-               "hands_free": cur["hands_free"], key: value}
+               "hands_free": cur["hands_free"],
+               "hands_free_screen": cur["hands_free_screen"], key: value}
         if new["strictness"] != VERY_STRICT:
             new["privacy"] = PRIVATE_ON_SCREEN
         new["changed"] = time.time()
@@ -1900,6 +1915,22 @@ def hands_free_trusted(source) -> bool:
     return settings()["hands_free"] == SAME_AS_BUTTON
 
 
+def screen_aloud(source) -> bool:
+    """May an answer about the SCREEN (the `read_screen` read) be read aloud
+    for a voice turn that came from `source`, as far as the hands-free
+    settings go? Every earlier rule (a sensitive saved fact, a private
+    question, a private tool) is the apps' and still comes first.
+
+    Yes for every turn `hands_free_trusted` trusts: the talk button always,
+    and any turn under the default `same_as_button`. Under `button_only`, a
+    turn from anywhere else ("hey Jarvis", or a source missing or not known)
+    only while the owner chose `screen_aloud` (the owner's decision,
+    2026-09-28)."""
+    if hands_free_trusted(source):
+        return True
+    return settings()["hands_free_screen"] == SCREEN_ALOUD
+
+
 def may_speak(private: bool, origin: str = "voice") -> dict:
     """{"speak": bool, "why": str} - may an answer be read aloud?
 
@@ -2032,17 +2063,22 @@ def status() -> dict:
         "memory": s["memory"],
         "sensitive_memory": s["sensitive_memory"],
         "hands_free": s["hands_free"],
+        # Since 2026-09-28: answers about the screen after "hey Jarvis",
+        # under "only trust the talk button".
+        "hands_free_screen": s["hands_free_screen"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
             "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
             "hands_free": s["hands_free"],
+            "hands_free_screen": s["hands_free_screen"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],
             "choices": {"strictness": list(STRICTNESS), "privacy": list(PRIVACY),
                         "memory": list(MEMORY),
                         "sensitive_memory": list(SENSITIVE_MEMORY),
-                        "hands_free": list(HANDS_FREE)},
+                        "hands_free": list(HANDS_FREE),
+                        "hands_free_screen": list(HANDS_FREE_SCREEN)},
             "defaults": dict(DEFAULTS),
         },
         "models": {

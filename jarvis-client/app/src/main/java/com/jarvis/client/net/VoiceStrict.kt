@@ -57,6 +57,13 @@ object VoiceStrict {
      */
     const val SAME_AS_BUTTON = "same_as_button"
     const val BUTTON_ONLY = "button_only"
+    /**
+     * Answers about the screen after "Hey Jarvis", under "only trust the
+     * talk button" (the owner's decision, 2026-09-28): kept on screen by
+     * default; "read aloud" is the looser choice and asks first.
+     */
+    const val SCREEN_ON_SCREEN = "screen_on_screen"
+    const val SCREEN_ALOUD = "screen_aloud"
 
     /** The `mode`s that change a setting, and what each value is called on the wire. */
     const val STRICTNESS = "strictness"
@@ -64,6 +71,7 @@ object VoiceStrict {
     const val MEMORY = "memory"
     const val SENSITIVE_MEMORY = "sensitive_memory"
     const val HANDS_FREE = "hands_free"
+    const val HANDS_FREE_SCREEN = "hands_free_screen"
 
     /** `repeat.very_strict` / `repeat.balanced` - since the PC's voice module started. */
     data class Counts(
@@ -142,6 +150,12 @@ object VoiceStrict {
          * sends is read as the strict one, "button_only".
          */
         val handsFree: String = "",
+        /**
+         * "screen_on_screen", "screen_aloud", or "" from a PC older than that
+         * setting (the screen then does not offer it). Any other value the PC
+         * sends is read as the strict one, "screen_on_screen".
+         */
+        val handsFreeScreen: String = "",
         val voiceIsEnoughAllowed: Boolean = false,
         /** A spoken command needs at least this many seconds of speech (0 = not said). */
         val minCommandSeconds: Double = 0.0,
@@ -251,6 +265,17 @@ object VoiceStrict {
         else -> BUTTON_ONLY
     }
 
+    /**
+     * `gate.hands_free_screen` as the screen reads it: "" (an older PC - not
+     * offered) stays "", the two known values stay, and anything else is the
+     * strict one - never read as "read aloud" by accident.
+     */
+    fun handsFreeScreen(raw: String): String = when (raw) {
+        "" -> ""
+        SCREEN_ALOUD -> SCREEN_ALOUD
+        else -> SCREEN_ON_SCREEN
+    }
+
     /** Reads the stricter check out of a whole `/api/voice/status` body. Never throws. */
     fun parse(status: JsonObject?): View {
         val gate = status?.obj("gate") ?: return View()
@@ -274,6 +299,9 @@ object VoiceStrict {
             }),
             handsFree = handsFree(gate.str("hands_free").ifEmpty {
                 settings?.str("hands_free").orEmpty()
+            }),
+            handsFreeScreen = handsFreeScreen(gate.str("hands_free_screen").ifEmpty {
+                settings?.str("hands_free_screen").orEmpty()
             }),
             voiceIsEnoughAllowed = settings?.flag("voice_is_enough_allowed") ?: false,
             minCommandSeconds = settings?.num("min_command_seconds") ?: 0.0,
@@ -360,11 +388,12 @@ object VoiceStrict {
         MEMORY to setOf(MEMORY_ON_SCREEN, MEMORY_ALOUD),
         SENSITIVE_MEMORY to setOf(SENSITIVE_ON_SCREEN, SENSITIVE_ALOUD),
         HANDS_FREE to setOf(BUTTON_ONLY, SAME_AS_BUTTON),
+        HANDS_FREE_SCREEN to setOf(SCREEN_ON_SCREEN, SCREEN_ALOUD),
     )
 
     /**
      * `{"mode": "strictness" | "privacy" | "memory" | "sensitive_memory" |
-     * "hands_free", "value": ...}`. Only this app's fixed words go in, and only a value of
+     * "hands_free" | "hands_free_screen", "value": ...}`. Only this app's fixed words go in, and only a value of
      * that setting's own.
      */
     fun settingBody(setting: String, value: String): String {
@@ -378,7 +407,8 @@ object VoiceStrict {
         (setting == STRICTNESS && value == BALANCED) || (setting == PRIVACY && value == VOICE_IS_ENOUGH) ||
             (setting == MEMORY && value == MEMORY_ALOUD) ||
             (setting == SENSITIVE_MEMORY && value == SENSITIVE_ALOUD) ||
-            (setting == HANDS_FREE && value == SAME_AS_BUTTON)
+            (setting == HANDS_FREE && value == SAME_AS_BUTTON) ||
+            (setting == HANDS_FREE_SCREEN && value == SCREEN_ALOUD)
 
     // ------------------------------------------------------------ answers --
 

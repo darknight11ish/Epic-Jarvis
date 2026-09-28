@@ -27,8 +27,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
 import {
-  createToolWatch, isPrivateToolRun, isToolRun, mayReadAloud, onlyReadAloudToolsBetween, privacyFromHeard, PRIVATE_LINE,
-  READ_ALOUD_TOOLS, toolRanBetween, toolsKnownBetween, usedSensitiveFact,
+  createToolWatch, isPrivateToolRun, isScreenRead, isToolRun, mayReadAloud, onlyReadAloudToolsBetween, privacyFromHeard,
+  PRIVATE_LINE, READ_ALOUD_TOOLS, screenReadBetween, toolRanBetween, toolsKnownBetween, usedSensitiveFact,
 } from "../src/private-speech.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -97,12 +97,13 @@ await check("the rule, from the real route headers", async () => {
   assert.equal(mayReadAloud({ ...mem, route: { ...OFFER_ROUTE, injected_facts: 2 }, toolRan: true }), false);
   // An older PC sends no private_aloud, memory_aloud or sensitive_aloud:
   // read as false, not as true.
-  const none = { privateAloud: false, questionPrivate: false, memoryAloud: false, sensitiveAloud: false };
+  const none = { privateAloud: false, questionPrivate: false, memoryAloud: false, sensitiveAloud: false, screenAloud: false };
   assert.deepEqual(privacyFromHeard(K.HEARD_OWNER), none);
-  assert.deepEqual(privacyFromHeard({ privateAloud: "true", questionPrivate: 1, memoryAloud: "yes", sensitiveAloud: "true" }),
-    none);
+  assert.deepEqual(privacyFromHeard({ privateAloud: "true", questionPrivate: 1, memoryAloud: "yes", sensitiveAloud: "true",
+    screenAloud: "true" }), none);
   assert.deepEqual(privacyFromHeard({ memoryAloud: true }), { ...none, memoryAloud: true });
   assert.deepEqual(privacyFromHeard({ sensitiveAloud: true }), { ...none, sensitiveAloud: true });
+  assert.deepEqual(privacyFromHeard({ screenAloud: true }), { ...none, screenAloud: true });
   assert.equal(PRIVATE_LINE, "It's on your screen.");
 });
 
@@ -156,12 +157,68 @@ await check("the shared table: every case, as the phone runs it (private-aloud-c
     const got = mayReadAloud({
       privateAloud: h.private_aloud, questionPrivate: h.question_private,
       memoryAloud: h.memory_aloud, sensitiveAloud: h.sensitive_aloud,
+      screenAloud: h.screen_aloud,
       route: c.route,
       toolRan: toolRanBetween(start, now),
+      screenRead: screenReadBetween(start, now),
       toolsKnown: toolsKnownBetween(start, now),
     });
     assert.equal(got, c.read, c.name);
+    // The same case the way main.js asks: the utterance reply as voice.rs
+    // camelCases it, through privacyFromHeard (a missing field is false).
+    const camel = {};
+    for (const [k, v] of Object.entries(h)) camel[k.replace(/_([a-z])/g, (_, ch) => ch.toUpperCase())] = v;
+    const viaPage = mayReadAloud({
+      ...privacyFromHeard(camel),
+      route: c.route,
+      toolRan: toolRanBetween(start, now),
+      screenRead: screenReadBetween(start, now),
+      toolsKnown: toolsKnownBetween(start, now),
+    });
+    assert.equal(viaPage, c.read, `${c.name} (privacyFromHeard)`);
   }
+});
+
+await check("answers about the screen: kept on screen unless the reply said screenAloud (owner, 2026-09-28)", async () => {
+  const quiet = { privateAloud: false, questionPrivate: false, toolsKnown: true, route: OFFER_ROUTE };
+  assert.equal(isScreenRead({ phase: "tool_started", tool: "read_screen" }), true);
+  assert.equal(isScreenRead({ phase: "tool_finished", tool: "read_screen", ok: true }), true);
+  for (const data of [{ phase: "tool_refused", tool: "read_screen" }, { phase: "tool_started", tool: "Read_Screen" },
+    { phase: "tool_started", tool: "web_search" }, { phase: "tool_started" }, null]) {
+    assert.equal(isScreenRead(data), false, JSON.stringify(data));
+  }
+  // The rule itself.
+  assert.equal(mayReadAloud({ ...quiet, screenRead: true, screenAloud: true }), true, "the talk button, or allowed");
+  assert.equal(mayReadAloud({ ...quiet, screenRead: true, screenAloud: false }), false, "hey Jarvis, strict");
+  assert.equal(mayReadAloud({ ...quiet, screenRead: true }), false, "not said (an older PC): on screen");
+  assert.equal(mayReadAloud({ ...quiet, screenRead: true, screenAloud: false, privateAloud: true }), false,
+    "nothing after it lets it through, not even voice check is enough");
+  assert.equal(mayReadAloud({ ...quiet, screenRead: false, screenAloud: false }), true, "no screen read: untouched");
+  assert.equal(mayReadAloud({ ...quiet, screenRead: true, screenAloud: true, route: { ...OFFER_ROUTE, injected_facts: 1,
+    injected_sensitive: 1 } }), false, "a sensitive fact still comes first");
+  // The watch counts screen reads on their own.
+  const w = createToolWatch();
+  w.link({ connected: true, stale: false });
+  const start = w.snapshot();
+  w.event({ kind: "step", data: { phase: "tool_started", tool: "web_search" } });
+  assert.equal(screenReadBetween(start, w.snapshot()), false, "web search is not the screen");
+  w.event({ kind: "step", data: { phase: "tool_started", tool: "read_screen" } });
+  assert.equal(screenReadBetween(start, w.snapshot()), true);
+  assert.equal(toolRanBetween(start, w.snapshot()), false, "the screen is not a private tool");
+  // Snapshots with no screenRuns (not this module's): every run may be the screen.
+  assert.equal(screenReadBetween({ runs: 1 }, { runs: 2 }), true);
+  assert.equal(screenReadBetween({ runs: 1 }, { runs: 1 }), false);
+  assert.equal(screenReadBetween(null, w.snapshot()), false, "no start: the stream rule decides (toolsKnown)");
+  // main.js hands it over.
+  const main = read("src/main.js");
+  assert.match(main, /screenRead: screenReadBetween\(state\.toolStart, now\)/);
+});
+
+await check("CONTROL (Rust): the utterance reply carries screen_aloud as screenAloud", async () => {
+  const rs = read("src-tauri/src/voice.rs");
+  assert.match(rs, /#\[serde\(default\)\]\s*screen_aloud: bool,/);
+  assert.match(rs, /pub screen_aloud: bool,/);
+  assert.match(rs, /screen_aloud: raw\.screen_aloud,/);
 });
 
 await check("read-aloud tools: web search and home status only; any other name, or none, is private", async () => {

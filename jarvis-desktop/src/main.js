@@ -137,6 +137,7 @@ import {
   onlyReadAloudToolsBetween,
   privacyFromHeard,
   PRIVATE_LINE,
+  screenReadBetween,
   TOOL_WORDS,
   toolRanBetween,
   toolsKnownBetween,
@@ -403,7 +404,7 @@ const state = {
   routeFromHeader: false,
   /** The private-answer rule (private-speech.js), for a voice turn: what the
    *  utterance reply said (`privateAloud`, `questionPrivate`,
-   *  `memoryAloud`, `sensitiveAloud`), the route line (`gate`,
+   *  `memoryAloud`, `sensitiveAloud`, `screenAloud`), the route line (`gate`,
    *  `injected_facts`, `injected_sensitive`), whether `: jarvis-status` said a
    *  tool ran, the tool counters when the question was sent (`toolStart`,
    *  a `toolWatch` snapshot), and whether "It's on your screen." was said
@@ -3215,6 +3216,9 @@ function speakableNow() {
     ...(state.voicePrivacy || {}),
     route: state.turnRoute,
     toolRan: statusSaysPrivate || toolRanBetween(state.toolStart, now),
+    // An answer about the screen: kept on screen unless the utterance reply
+    // said `screenAloud` (the owner's decision of 2026-09-28).
+    screenRead: screenReadBetween(state.toolStart, now),
     toolsKnown: toolsKnownBetween(state.toolStart, now),
   });
 }

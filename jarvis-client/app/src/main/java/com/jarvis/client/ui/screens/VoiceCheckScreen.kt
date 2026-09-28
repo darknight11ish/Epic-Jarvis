@@ -340,6 +340,22 @@ private fun CheckPlates(
                         onPick = onPick,
                     )
                 }
+                // Answers about your screen after "Hey Jarvis" (the owner's
+                // decision, 2026-09-28) - only when the PC reports the setting.
+                // It matters only under "Only trust the talk button", and its
+                // note says so otherwise (StrictVoice.plateNote); "Read aloud"
+                // asks, and is held on a stale link (StrictVoice.blocker).
+                if (strict.handsFreeScreen.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.HANDS_FREE_SCREEN_TITLE,
+                        setting = VoiceStrict.HANDS_FREE_SCREEN,
+                        choices = StrictVoice.HANDS_FREE_SCREEN,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.HANDS_FREE_SCREEN }?.second,
+                        onPick = onPick,
+                    )
+                }
                 Text(
                     "Making it stricter applies at once. Making it looser asks first: an approval " +
                         "card on your PC or this phone's Home screen, and nothing changes until you " +

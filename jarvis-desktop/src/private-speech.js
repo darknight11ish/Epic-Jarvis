@@ -52,6 +52,15 @@
  * in were sensitive (`injected_sensitive`); a PC that does not say, while
  * `injected_facts` is above 0, is read as "they may all be sensitive".
  *
+ * Right after it, the screen (the owner's decision of 2026-09-28): an
+ * answer about the screen (`read_screen` ran) is kept on screen unless the
+ * utterance reply said `screen_aloud: true`. The PC says true for the talk
+ * button, and for "Hey Jarvis" under "Same as the talk button"; under "Only
+ * trust the talk button", only when the owner turned on "Answers about your
+ * screen after "Hey Jarvis"" (voice setting `hands_free_screen`). Missing
+ * (an older PC) counts as false. Nothing after it can let such an answer
+ * through - not even `private_aloud`.
+ *
  * @module private-speech
  */
 
@@ -64,9 +73,9 @@ export const TOOL_WORDS = Object.freeze(["working", "approval"]);
 /**
  * The privacy facts of one voice question, from the utterance reply
  * (`HeardReply`, camelCased by voice.rs): `{privateAloud, questionPrivate,
- * memoryAloud, sensitiveAloud}`. Anything missing reads as the refusing
- * answer for `privateAloud`, `memoryAloud` and `sensitiveAloud` (an older
- * PC), and as "not said" for `questionPrivate`.
+ * memoryAloud, sensitiveAloud, screenAloud}`. Anything missing reads as the
+ * refusing answer for `privateAloud`, `memoryAloud`, `sensitiveAloud` and
+ * `screenAloud` (an older PC), and as "not said" for `questionPrivate`.
  */
 export function privacyFromHeard(heard) {
   const h = heard && typeof heard === "object" ? heard : {};
@@ -75,6 +84,7 @@ export function privacyFromHeard(heard) {
     questionPrivate: h.questionPrivate === true,
     memoryAloud: h.memoryAloud === true,
     sensitiveAloud: h.sensitiveAloud === true,
+    screenAloud: h.screenAloud === true,
   };
 }
 
@@ -117,10 +127,20 @@ export function isPrivateToolRun(data) {
   return typeof tool !== "string" || !READ_ALOUD_TOOLS.includes(tool);
 }
 
+/** The read an answer about the screen records (jarvis_screen.SCREEN_TOOL). */
+export const SCREEN_READ = "read_screen";
+
+/** A `step` event says the screen was read: a tool run named exactly
+ *  `read_screen`. The phone's `PrivateAloud.isScreenRead`. */
+export function isScreenRead(data) {
+  return isToolRun(data) && data.tool === SCREEN_READ;
+}
+
 /**
  * What this window knows about tools, as counters: `runs` (`step` events
  * that said a tool ran), `privateRuns` (those whose tool is not on
- * `READ_ALOUD_TOOLS`), `drops` (times the event stream stopped being
+ * `READ_ALOUD_TOOLS`), `screenRuns` (those that were the screen being read,
+ * `read_screen`), `drops` (times the event stream stopped being
  * live, or fell off the back of the server's ring) and `live` (connected
  * and not stale now). Two snapshots - one when the question was sent, one
  * when a sentence is about to be spoken - say whether a tool ran in
@@ -130,6 +150,7 @@ export function isPrivateToolRun(data) {
 export function createToolWatch() {
   let runs = 0;
   let privateRuns = 0;
+  let screenRuns = 0;
   let drops = 0;
   let live = false;
   return {
@@ -144,6 +165,7 @@ export function createToolWatch() {
       if (frame && frame.kind === "step" && isToolRun(frame.data)) {
         runs += 1;
         if (isPrivateToolRun(frame.data)) privateRuns += 1;
+        if (isScreenRead(frame.data)) screenRuns += 1;
       }
     },
     /** `jarvis-resync`: events were missed. */
@@ -151,9 +173,20 @@ export function createToolWatch() {
       drops += 1;
     },
     snapshot() {
-      return { runs, privateRuns, drops, live };
+      return { runs, privateRuns, screenRuns, drops, live };
     },
   };
+}
+
+/** The screen was read between two snapshots. A snapshot without
+ *  `screenRuns` (not one this module made) counts every tool that ran as
+ *  possibly the screen. The phone's `PrivateAloud.screenRead`. */
+export function screenReadBetween(start, now) {
+  if (!start || !now) return false;
+  if (Number.isInteger(start.screenRuns) && Number.isInteger(now.screenRuns)) {
+    return now.screenRuns !== start.screenRuns;
+  }
+  return now.runs !== start.runs;
 }
 
 /** A PRIVATE tool ran between two snapshots - one not on
@@ -185,9 +218,10 @@ export function toolsKnownBetween(start, now) {
 
 /**
  * May this answer be read aloud? `ctx`: `{privateAloud, questionPrivate,
- * memoryAloud, sensitiveAloud}` from the question, `route` (the route
+ * memoryAloud, sensitiveAloud, screenAloud}` from the question, `route` (the route
  * line's object: `gate`, `injected_facts`, `injected_sensitive`),
- * `toolRan` (a PRIVATE tool ran - `toolRanBetween`), and `toolsKnown` (the event stream was live the whole time;
+ * `toolRan` (a PRIVATE tool ran - `toolRanBetween`), `screenRead` (the
+ * screen was read - `screenReadBetween`), and `toolsKnown` (the event stream was live the whole time;
  * anything but `true` counts as "a tool may have run", as on the phone).
  */
 export function mayReadAloud(ctx) {
@@ -195,6 +229,11 @@ export function mayReadAloud(ctx) {
   // Decision 13, first: a sensitive saved fact stays on screen unless the
   // owner chose to hear those answers - whatever else says "aloud".
   if (usedSensitiveFact(c.route) && c.sensitiveAloud !== true) return false;
+  // Then the screen (the owner's decision of 2026-09-28): an answer about
+  // the screen stays on screen unless the PC said `screen_aloud` for this
+  // clip - false for "Hey Jarvis" under "Only trust the talk button" unless
+  // the owner allowed it. Before `privateAloud`, so nothing lets it through.
+  if (c.screenRead === true && c.screenAloud !== true) return false;
   if (c.privateAloud === true) return true;
   if (c.questionPrivate === true) return false;
   const route = c.route && typeof c.route === "object" ? c.route : {};
