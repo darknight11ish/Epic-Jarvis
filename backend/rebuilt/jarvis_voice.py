@@ -368,14 +368,123 @@ def speaker_model_path() -> Path:
     return _profile_dir().parent / "voice-models" / "speaker" / "model.onnx"
 
 
+def titanet_model_path() -> Path:
+    """strong.onnx beside model.onnx: NeMo TitaNet-Large, "the stronger
+    model" whose bars were measured (MODEL_BARS)."""
+    return speaker_model_path().with_name("strong.onnx")
+
+
+#: The third choice ("Better voice", the owner's group of 2026-09-28):
+#: WeSpeaker's ResNet221 (VoxCeleb, large-margin fine-tuned), exported for
+#: sherpa-onnx and published on its "speaker-recongition-models" release
+#: (the misspelling is the real address). 95,037,599 bytes; the SHA-256
+#: below was measured from that download on 2026-09-28. CC BY 4.0 (the
+#: VoxCeleb data's licence, which WeSpeaker's docs/pretrained.md says its
+#: VoxCeleb models follow) - THIRD-PARTY-NOTICES.txt.
+#:
+#: NOT MEASURED HERE. It starts on GENERIC_BARS - the rule for a model
+#: whose bars nobody has measured - and gets its own MODEL_BARS row only
+#: after the owner's measurement (jarvis_bakeoff.py --voice-id), the way
+#: TitaNet's row came from numbers, not from a published error rate.
+#: WeSpeaker's published error rate (0.57% against CAM++'s 0.80%) is for
+#: long clips, not Jarvis's 1.5-2 seconds.
+RESNET_FILE = "resnet221.onnx"
+RESNET_SHA256 = "182f4ae144d70dfeb78064f6d507f8aada35c732a782631152a2626a4f20a60a"
+RESNET_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+              "speaker-recongition-models/wespeaker_en_voxceleb_resnet221_LM.onnx")
+
+
+def resnet_model_path() -> Path:
+    """Where the third choice, ResNet221, is looked for: `[voice]
+    speaker_model_resnet`, otherwise resnet221.onnx beside model.onnx."""
+    configured = str(_cfg("speaker_model_resnet", "") or "").strip()
+    if configured:
+        return Path(os.path.expanduser(configured))
+    return speaker_model_path().with_name(RESNET_FILE)
+
+
+_HASHES: dict = {}
+
+
+def file_sha256(path: Path) -> str:
+    """The file's SHA-256, cached by (path, size, modification time) - the
+    speaker models are ~100 MB, and status() asks on every read. "" when
+    it cannot be read."""
+    try:
+        st = Path(path).stat()
+    except OSError:
+        return ""
+    key = (str(path), st.st_size, st.st_mtime_ns)
+    got = _HASHES.get(key)
+    if got is None:
+        h = hashlib.sha256()
+        try:
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+        except OSError:
+            return ""
+        got = h.hexdigest()
+        for old in [k for k in _HASHES if k[0] == key[0]]:
+            del _HASHES[old]
+        _HASHES[key] = got
+    return got
+
+
+def resnet_state() -> dict:
+    """{"installed", "ok", "why", "path"} for the ResNet221 file: there, and
+    the pinned file (by SHA-256). A different file is never used - its
+    numbers would mean nothing known - and `why` says so."""
+    p = resnet_model_path()
+    out = {"installed": p.is_file(), "ok": False, "why": "", "path": str(p)}
+    if not out["installed"]:
+        out["why"] = (f"the newer voice-ID model is not installed (looked for {p}); "
+                      f"backend/README.md, \"Better voice\", has the one line that "
+                      f"downloads it")
+        return out
+    if file_sha256(p) != RESNET_SHA256:
+        out["why"] = (f"{p.name} is not the expected file (its SHA-256 is different), so "
+                      f"it is not used - download it again with the line in "
+                      f"backend/README.md")
+        return out
+    out["ok"] = True
+    return out
+
+
 def strong_model_path() -> Path:
     """Where the STRONGER speaker model is looked for (very strict needs it
     as well as the small one). `[voice] speaker_model_strong` wins;
-    otherwise strong.onnx beside model.onnx."""
+    otherwise the owner's `voice_id_model` setting (settings()): the newer
+    ResNet221 when that is chosen AND its pinned file is installed, else
+    strong.onnx (TitaNet) beside model.onnx. A chosen-but-missing ResNet
+    falls back to TitaNet - the measured one - never to the small model on
+    its own account, and status() says so."""
     configured = str(_cfg("speaker_model_strong", "") or "").strip()
     if configured:
         return Path(os.path.expanduser(configured))
-    return speaker_model_path().with_name("strong.onnx")
+    try:
+        chosen = settings().get("voice_id_model")
+    except Exception:
+        chosen = None
+    if chosen == MODEL_RESNET and resnet_state()["ok"]:
+        return resnet_model_path()
+    return titanet_model_path()
+
+
+def other_strong_paths() -> list:
+    """The installed stronger models that are NOT the one in use - trained
+    into every voice print too (enroll(extra=...)), so switching between
+    them in Settings never needs a new training, and the bake-off can
+    compare them on one print."""
+    if str(_cfg("speaker_model_strong", "") or "").strip():
+        return []
+    use = strong_model_path()
+    out = []
+    for p, ok in ((titanet_model_path(), titanet_model_path().is_file()),
+                  (resnet_model_path(), resnet_state()["ok"])):
+        if ok and p != use:
+            out.append(p)
+    return out
 
 
 #: Loaded models, reused. jarvis_speech builds an EcapaEmbedder for every
@@ -388,7 +497,9 @@ def strong_model_path() -> Path:
 #: pushed the other out on every clip.
 _SHERPA: dict = {}
 _SHERPA_LOCK = threading.Lock()
-_SHERPA_MAX = 3
+#: Four since 2026-09-28: the small model, TitaNet and ResNet221 are all
+#: trained into a print at once (other_strong_paths), plus one swapped in.
+_SHERPA_MAX = 4
 
 #: Why the model file, if present, could not be used - shown by status() so
 #: "I put the file there and nothing changed" has an answer on screen.
@@ -504,26 +615,34 @@ class StrongEmbedder(EcapaEmbedder):
     because "the strong model" must mean one known file. Raises when it is
     not installed; strong_embedder() turns that into None."""
 
-    def __init__(self) -> None:          # noqa: D401 - no super(): no fallback
+    def __init__(self, path: Optional[Path] = None) -> None:  # noqa: D401 - no fallback
+        # `path`: another installed stronger model (other_strong_paths), for
+        # training it into the print too. Only the one in use (no `path`)
+        # sets the error status() shows.
         global _strong_model_error
+        in_use = path is None
         self._kind = ""
-        path = strong_model_path()
+        path = Path(path) if path is not None else strong_model_path()
         if not path.is_file():
-            _strong_model_error = ""
+            if in_use:
+                _strong_model_error = ""
             raise FileNotFoundError(f"no stronger voice-ID model at {path}")
         try:
             self._ext, self.name = _sherpa_extractor(path)
         except ImportError:
-            _strong_model_error = ("the stronger model file is there but the "
-                                   "sherpa-onnx package is not installed")
+            if in_use:
+                _strong_model_error = ("the stronger model file is there but the "
+                                       "sherpa-onnx package is not installed")
             raise
         except Exception as exc:
-            _strong_model_error = (f"the stronger model file at {path} would "
-                                   f"not load ({type(exc).__name__})")
+            if in_use:
+                _strong_model_error = (f"the stronger model file at {path} would "
+                                       f"not load ({type(exc).__name__})")
             raise
         self.dim = int(self._ext.dim)
         self._kind = "sherpa-onnx"
-        _strong_model_error = ""
+        if in_use:
+            _strong_model_error = ""
 
 
 def strong_embedder(primary=None):
@@ -537,6 +656,23 @@ def strong_embedder(primary=None):
     if primary is not None and getattr(primary, "name", None) == s.name:
         return None
     return s
+
+
+def other_strong_embedders(primary=None, strong=None) -> list:
+    """Every installed stronger model other than `strong` (the one in use)
+    and the small one, loaded - see other_strong_paths. Never raises; a file
+    that will not load is left out."""
+    names = {getattr(m, "name", None) for m in (primary, strong) if m is not None}
+    out = []
+    for p in other_strong_paths():
+        try:
+            e = StrongEmbedder(p)
+        except Exception:
+            continue
+        if e.name not in names:
+            names.add(e.name)
+            out.append(e)
+    return out
 
 
 def _embed(emb, audio, sample_rate: Optional[int]):
@@ -615,25 +751,57 @@ PUSH_TO_TALK = "push_to_talk"
 TALK_TYPE_OFF = "off"
 TALK_TYPE_ON = "on"
 TALK_TO_TYPE = (TALK_TYPE_OFF, TALK_TYPE_ON)
+#: A second "hey Jarvis" detector ("Better voice", the owner's group of
+#: 2026-09-28). `one`: openWakeWord alone decides, as it always has (the
+#: default - nothing changes until the owner chooses). `both`: a wake also
+#: needs microWakeWord's own "hey Jarvis" model (jarvis_microwake.py) to hear
+#: the phrase within about a second of it - a different front end and model,
+#: so the two rarely make the same mistake: fewer false wake-ups, and
+#: possibly more missed ones (jarvis_bakeoff.py --wake2 measures both).
+#: `both` is the STRICTER value (it only narrows when Jarvis wakes), so it
+#: applies at once; going back to `one` is the voice card. `both` cannot be
+#: chosen while microWakeWord is not installed (setting_blocker). Checked on
+#: the PC in jarvis_speech.hear(), before the voice check and before any
+#: words exist - so it covers the phone's "hey Jarvis" clips as well.
+WAKE_ONE = "one"
+WAKE_BOTH = "both"
+WAKE_CONFIRM = (WAKE_ONE, WAKE_BOTH)
+#: Which STRONGER voice-ID model very strict and balanced use ("Better
+#: voice", 2026-09-28). `titanet` (strong.onnx, NeMo TitaNet-Large - the
+#: measured one, the default) or `resnet221` (WeSpeaker ResNet221, not
+#: measured here: GENERIC_BARS until it is). Choosing the unmeasured one is
+#: the LOOSER value - Jarvis cannot say how well it keeps other people out -
+#: so it is the voice card, and it cannot be chosen until its pinned file
+#: is installed; going back to TitaNet is at once. Nothing switches by
+#: itself. Neither can tell the owner's voice from a recording of it.
+MODEL_TITANET = "titanet"
+MODEL_RESNET = "resnet221"
+VOICE_ID_MODEL = (MODEL_TITANET, MODEL_RESNET)
 #: The default of each setting. For strictness, privacy and sensitive_memory
 #: it is the strict value, also used for a missing, unreadable or unknown
 #: one. For memory and hands_free the default is the owner's looser choice;
 #: an unknown VALUE (a damaged file) still falls back to the strict one -
-#: see settings().
+#: see settings(). wake_confirm's default is today's behaviour (one
+#: detector), which is the looser value; voice_id_model's is the measured
+#: model, which is the stricter one.
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
             "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN,
-            "hands_free": SAME_AS_BUTTON, "talk_to_type": TALK_TYPE_OFF}
+            "hands_free": SAME_AS_BUTTON, "talk_to_type": TALK_TYPE_OFF,
+            "wake_confirm": WAKE_ONE, "voice_id_model": MODEL_TITANET}
 _CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
             "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE,
-            "talk_to_type": TALK_TO_TYPE}
+            "talk_to_type": TALK_TO_TYPE, "wake_confirm": WAKE_CONFIRM,
+            "voice_id_model": VOICE_ID_MODEL}
 #: The LOOSER value of each: choosing it needs an approval card.
 LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
           "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON,
-          "talk_to_type": TALK_TYPE_ON}
+          "talk_to_type": TALK_TYPE_ON, "wake_confirm": WAKE_ONE,
+          "voice_id_model": MODEL_RESNET}
 #: The settings whose DEFAULT is the looser value, and the strict value each
 #: falls back to when the file is unreadable or holds a value that is not
 #: one of its choices. Only a file that never had the key gets the default.
-_STRICT_WHEN_DAMAGED = {"memory": MEMORY_ON_SCREEN, "hands_free": BUTTON_ONLY}
+_STRICT_WHEN_DAMAGED = {"memory": MEMORY_ON_SCREEN, "hands_free": BUTTON_ONLY,
+                        "wake_confirm": WAKE_BOTH}
 _SETTINGS_LOCK = threading.Lock()
 
 #: The least speech a COMMAND must have, in seconds (the VAD's span, which
@@ -653,10 +821,11 @@ def settings_path() -> Path:
 
 def settings() -> dict:
     """{"strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-    "talk_to_type", "changed"}. The strict value for anything missing, unreadable or
-    unknown - except that a file with no "memory" or no "hands_free" in it
-    (every file written before 2026-09-24, and no file at all) gets the
-    owner's default for it: MEMORY_ALOUD, SAME_AS_BUTTON. The one rule
+    "talk_to_type", "wake_confirm", "voice_id_model", "changed"}. The strict
+    value for anything missing, unreadable or unknown - except that a file
+    with no "memory", "hands_free" or "wake_confirm" in it (every file
+    written before those settings, and no file at all) gets the owner's
+    default for it: MEMORY_ALOUD, SAME_AS_BUTTON, WAKE_ONE. The one rule
     applied on every read as well as every write: private answers may be
     read aloud only while the check is very strict."""
     out = {**DEFAULTS, "changed": 0.0}
@@ -685,6 +854,47 @@ def settings() -> dict:
     return out
 
 
+def _microwake_status() -> dict:
+    """jarvis_microwake.status(), or "not there" - never raises."""
+    try:
+        import jarvis_microwake
+        return jarvis_microwake.status()
+    except Exception:
+        return {"available": False,
+                "why": "jarvis_microwake.py is not in the backend folder (run the patch script)"}
+
+
+def setting_blocker(key: str, value: str) -> str:
+    """Why `value` cannot be chosen for `key` on this PC right now, in
+    words, or "". Only the two "Better voice" choices that need something
+    installed: `both` detectors needs microWakeWord, and `resnet221` needs
+    its pinned model file. A choice that could not work is refused before
+    any card - never saved and then quietly ignored."""
+    if key == "wake_confirm" and value == WAKE_BOTH:
+        st = _microwake_status()
+        if not st.get("available"):
+            return ("the second \"hey Jarvis\" detector (microWakeWord) is not installed on "
+                    "this PC, so it cannot be switched on: "
+                    + str(st.get("why") or "unknown reason"))
+    if key == "voice_id_model" and value == MODEL_RESNET:
+        if str(_cfg("speaker_model_strong", "") or "").strip():
+            return ("speaker_model_strong is set in jarvis-framework.toml, and that file is "
+                    "always used - remove that line to choose a model here")
+        st = resnet_state()
+        if not st["ok"]:
+            return st["why"]
+        if RESNET_SHA256[:12] not in MODEL_BARS:
+            # Not until it is measured (the owner's rule: a voice part is
+            # measured before it replaces anything). In the 2026-09-28
+            # container test, at the general bars it let in 83% of other
+            # computer-made voices, against 20% for the model used today.
+            return ("the newer voice-ID model is not measured on this PC yet. Until it is, it "
+                    "could let other people's voices through more often than the one used "
+                    "today. Run the voice-ID comparison (backend/README.md, \"Better voice\", "
+                    "step 7); once its own bars are added, it can be chosen here")
+    return ""
+
+
 def is_loosening(key: str, value: str) -> bool:
     """Whether setting `key` to `value` would loosen what is set now."""
     return key in LOOSER and value == LOOSER[key] and settings().get(key) != value
@@ -703,6 +913,9 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
         raise ValueError(f"there is no voice setting called {str(key)[:30]!r}")
     if value not in _CHOICES[key]:
         raise ValueError(f"{key} must be one of: " + ", ".join(_CHOICES[key]))
+    why = setting_blocker(key, value)
+    if why:
+        raise ValueError(why)
     with _SETTINGS_LOCK:
         cur = settings()
         if value == LOOSER[key] and cur[key] != value and not approved:
@@ -710,10 +923,8 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
         if key == "privacy" and value == VOICE_IS_ENOUGH and cur["strictness"] != VERY_STRICT:
             raise ValueError("private answers can only be read aloud while the voice "
                              "check is very strict")
-        new = {"strictness": cur["strictness"], "privacy": cur["privacy"],
-               "memory": cur["memory"], "sensitive_memory": cur["sensitive_memory"],
-               "hands_free": cur["hands_free"], "talk_to_type": cur["talk_to_type"],
-               key: value}
+        new = {k: cur[k] for k in _CHOICES}
+        new[key] = value
         if new["strictness"] != VERY_STRICT:
             new["privacy"] = PRIVATE_ON_SCREEN
         new["changed"] = time.time()
@@ -1165,7 +1376,7 @@ def _loo_scores(vecs: list) -> list:
 def enroll(clips: list, embedder=None, path: Optional[Path] = None,
            sample_rate: Optional[int] = None, mic: str = "",
            conditions: Optional[list] = None, add: bool = False,
-           strong=None) -> VoiceProfile:
+           strong=None, extra: Optional[list] = None) -> VoiceProfile:
     """Build a voice print from sample clips (and save it).
 
     `conditions` names each clip's recording condition ("close", "far",
@@ -1183,13 +1394,24 @@ def enroll(clips: list, embedder=None, path: Optional[Path] = None,
     `add`: keep the print already there and add these clips to it (merged
     into the sub-print for the same condition, or a new one) instead of
     replacing it.
+
+    `extra` (2026-09-28): other installed stronger models - the one NOT in
+    use now (other_strong_embedders) - trained into the same print, so the
+    owner can switch between them in Settings without training again, and
+    the bake-off can compare them. They never judge outliers: that stays
+    the model in use (`strong`, listed last).
     """
     emb = embedder or Embedder()
     n = len(clips)
     conds = [clean_condition(c) for c in (conditions or [])][:n]
     conds += ["general"] * (n - len(conds))
-    models = [emb] + ([strong] if strong is not None
-                      and getattr(strong, "name", None) != emb.name else [])
+    models = [emb]
+    for mod in list(extra or []) + [strong]:
+        if mod is not None and getattr(mod, "name", None) not in {m.name for m in models}:
+            models.append(mod)
+    if strong is not None and any(m is strong for m in models) and models[-1] is not strong:
+        # `strong` must stay last: it is the one that judges outliers.
+        models = [m for m in models if m is not strong] + [strong]
 
     m = clean_mic(mic)
     target = Path(path or profile_path(m))
@@ -1520,9 +1742,18 @@ def plan(strictness: str, emb, strong, prof: Optional[VoiceProfile] = None) -> l
     check measures it)."""
     if strictness == VERY_STRICT:
         return [(strong, VERY_STRICT)] if strong is not None else [(emb, VERY_STRICT)]
-    if strong is not None and (prof is None or prof.subprints(strong.name)):
+    if strong is not None and (prof is None or prof.subprints(strong.name)
+                                or _is_resnet(strong)):
+        # The newer, owner-chosen model ("Better voice", 2026-09-28) never
+        # falls back to the weak small model in balanced: a print without it
+        # is refused with "train your voice again", as very strict does.
         return [(strong, BALANCED)]
     return [(emb, BALANCED)]
+
+
+def _is_resnet(model) -> bool:
+    """Whether `model` is the newer ResNet221 file (by its hash-based name)."""
+    return _short(getattr(model, "name", "")) == RESNET_SHA256[:12]
 
 
 def raw_bar(prof: VoiceProfile, name: str, role: str) -> float:
@@ -1555,6 +1786,8 @@ def _judge(vecs: dict, prof: VoiceProfile, emb, strong, strictness: str) -> tupl
         if not subs:
             checks.append(blank)
             first_fail = first_fail or (
+                "your voice print has nothing from the newer voice-ID model you chose - "
+                "train your voice again" if _is_resnet(mod) else
                 "your voice print was made before the stronger voice-ID model was "
                 "installed - train your voice again")
             continue
@@ -1994,7 +2227,7 @@ def status() -> dict:
     retrain = bool(prof and prof.embedder and prof.embedder != model)
     # Very strict with the strong model installed refuses a print that has
     # no strong sub-print: the same "train again", for the same reason.
-    strong_missing_in_print = bool(prof and very and strong_name
+    strong_missing_in_print = bool(prof and (very or _is_resnet(strong)) and strong_name
                                    and not prof.subprints(strong_name))
     notes = []
     if not speaker_model:
@@ -2015,9 +2248,23 @@ def status() -> dict:
     if speaker_model and not bars_for(model)["known"]:
         notes.append("the voice-ID model installed is not one whose bars were measured, so "
                      "Jarvis cannot say how well it keeps other people out")
+    chosen = s.get("voice_id_model", MODEL_TITANET)
+    rn = resnet_state()
+    if strong_name and not bars_for(strong_name)["known"]:
+        notes.append("the stronger voice-ID model in use has not been measured on real "
+                     "voices yet, so Jarvis holds it to general bars and cannot say how well "
+                     "it keeps other people out. Like every voice check, it cannot tell your "
+                     "voice from a recording or a copy of it")
+    if chosen == MODEL_RESNET and not rn["ok"] and not str(
+            _cfg("speaker_model_strong", "") or "").strip():
+        notes.append("you chose the newer voice-ID model, but " + rn["why"]
+                     + " - so the measured stronger one is used instead")
     if retrain:
         notes.append("your voice was trained with a different voice check than the one "
                      "installed now, so it will be refused until you train it again")
+    elif strong_missing_in_print and _is_resnet(strong):
+        notes.append("your voice print has nothing from the newer voice-ID model you chose, "
+                     "so Jarvis refuses spoken commands until you train your voice again")
     elif strong_missing_in_print:
         notes.append("your voice print was made before the stronger voice-ID model was "
                      "installed, so very strict refuses it until you train your voice again")
@@ -2058,19 +2305,25 @@ def status() -> dict:
         "hands_free": s["hands_free"],
         # Talk-to-type on the PC (2026-09-28): "off" (the default) or "on".
         "talk_to_type": s["talk_to_type"],
+        # "Better voice" (2026-09-28): the second "hey Jarvis" detector
+        # ("one" / "both") and the stronger voice-ID model ("titanet" /
+        # "resnet221"). docs/JARVIS-API.md section 80.
+        "wake_confirm": s["wake_confirm"],
+        "voice_id_model": s["voice_id_model"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
             "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
             "hands_free": s["hands_free"], "talk_to_type": s["talk_to_type"],
+            "wake_confirm": s["wake_confirm"], "voice_id_model": s["voice_id_model"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],
-            "choices": {"strictness": list(STRICTNESS), "privacy": list(PRIVACY),
-                        "memory": list(MEMORY),
-                        "sensitive_memory": list(SENSITIVE_MEMORY),
-                        "hands_free": list(HANDS_FREE),
-                        "talk_to_type": list(TALK_TO_TYPE)},
+            "choices": {k: list(v) for k, v in _CHOICES.items()},
             "defaults": dict(DEFAULTS),
+            # Why a choice cannot be made on this PC now ("" when it can):
+            # both apps grey it out with these words.
+            "blocked": {"wake_confirm": setting_blocker("wake_confirm", WAKE_BOTH),
+                        "voice_id_model": setting_blocker("voice_id_model", MODEL_RESNET)},
         },
         "models": {
             "small": {"installed": speaker_model, "name": model if speaker_model else "",
@@ -2082,6 +2335,22 @@ def status() -> dict:
                        "bars_measured": bool(strong_name and bars_for(strong_name)["known"]),
                        "path": str(strong_model_path()),
                        "why": _strong_model_error},
+            # The two stronger models the owner can choose between
+            # (voice_id_model): which is chosen, which is in use, and
+            # whether each is installed. `in_use` is "" with neither.
+            "choice": {
+                "chosen": chosen,
+                "in_use": ("" if strong is None else
+                           MODEL_RESNET if rn["ok"] and strong_model_path() == resnet_model_path()
+                           else MODEL_TITANET if strong_model_path() == titanet_model_path()
+                           else "configured"),
+                MODEL_TITANET: {"installed": titanet_model_path().is_file(),
+                                "path": str(titanet_model_path()),
+                                "bars_measured": True},
+                MODEL_RESNET: {"installed": rn["installed"], "ok": rn["ok"],
+                               "path": rn["path"], "why": "" if rn["ok"] else rn["why"],
+                               "bars_measured": bool(MODEL_BARS.get(RESNET_SHA256[:12]))},
+            },
             # How many models very strict asks right now, and which one
             # balanced asks ("strong", "small", or "" with none installed).
             # Since 2026-09-24 very strict asks ONE model (the stronger one
@@ -2091,7 +2360,8 @@ def status() -> dict:
                                   "strong" if strong is not None else "small"),
             "balanced_uses": ("" if not speaker_model else
                               "strong" if strong is not None and (
-                                  prof is None or prof.subprints(strong_name)) else "small"),
+                                  prof is None or prof.subprints(strong_name)
+                                  or _is_resnet(strong)) else "small"),
         },
         "cohort": {"small": _bank(model if speaker_model else "", primary),
                    "strong": _bank(strong_name, strong)},
@@ -2147,6 +2417,9 @@ def build_cohort(folder, embedders: Optional[list] = None, speakers: int = 300,
         st = strong_embedder(embedders[0] if embedders else None)
         if st is not None:
             embedders.append(st)
+        # Every installed stronger model, not only the one in use - so the
+        # newer one has a bank of other voices too once it is built.
+        embedders += other_strong_embedders(embedders[0] if embedders else None, st)
     embedders = [e for e in embedders if getattr(e, "semantic", False)]
     if not embedders:
         return {"ok": False, "why": NO_MODEL_REASON}

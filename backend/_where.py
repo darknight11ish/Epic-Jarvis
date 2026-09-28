@@ -212,6 +212,9 @@ SHIPPED = (
     # The overnight tidy (2026-09-28): "Still true?" and "Which is true
     # now?" review cards only, a kind of job on the one scheduler, no patch
     "jarvis_tidy.py",
+    # "Better voice" (2026-09-28): the second "hey Jarvis" detector
+    # (microWakeWord); jarvis_speech.py and jarvis_voice.py call it
+    "jarvis_microwake.py",
 )
 
 

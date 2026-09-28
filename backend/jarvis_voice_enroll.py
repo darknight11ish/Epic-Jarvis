@@ -87,6 +87,13 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
     {"mode": "sensitive_memory", "value": "sensitive_on_screen"|"sensitive_aloud"}
     {"mode": "hands_free", "value": "same_as_button"|"button_only"}
     {"mode": "talk_to_type", "value": "off"|"on"}   (since 2026-09-28)
+    {"mode": "wake_confirm", "value": "one"|"both"}  ("Better voice", 2026-09-28:
+        "both" - a second "hey Jarvis" detector must agree - is the stricter
+        value, at once; "one" is the card. docs/JARVIS-API.md section 80)
+    {"mode": "voice_id_model", "value": "titanet"|"resnet221"}  (the same day:
+        "resnet221", the unmeasured newer model, is the card; "titanet" at once)
+        Either choice that needs something installed is refused (409, in
+        words) before any card while it is not - jarvis_voice.setting_blocker.
         Tightening applies at once. Loosening raises ONE card
         (change_own_config), and changes nothing until it is approved.
         `voice_is_enough` is refused unless the check is very strict;
@@ -390,6 +397,10 @@ def _enroll(clips: list, mic: str = "", conditions: Optional[list] = None,
         kw["conditions"] = conditions
         kw["add"] = bool(add)
         kw["strong"] = _strong(emb)
+    if "extra" in params and hasattr(jarvis_voice, "other_strong_embedders"):
+        # "Better voice" (2026-09-28): the other installed stronger model too,
+        # so switching models in Settings needs no new training.
+        kw["extra"] = jarvis_voice.other_strong_embedders(emb, kw.get("strong"))
     return jarvis_voice.enroll(clips, embedder=emb, **kw)
 
 
@@ -629,7 +640,7 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
         # The same: scores, no card.
         return measure(doc, measure_fn=measure_fn)
     if mode in ("strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-                "talk_to_type"):
+                "talk_to_type", "wake_confirm", "voice_id_model"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
     if mode not in ("enroll", "threshold", "train"):
@@ -961,10 +972,38 @@ _SETTING_WORDS = {
         "You can turn it off again at any time, and that is instant.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - talk-to-type stays off."),
+    # "Better voice" (the owner's group, 2026-09-28): with both detectors on,
+    # going back to the first one alone lets Jarvis wake more easily.
+    ("wake_confirm", "one"): (
+        "Go back to ONE \"hey Jarvis\" detector?\n\n"
+        "Now two different detectors must both hear \"hey Jarvis\" before Jarvis "
+        "wakes. With one, Jarvis wakes more easily - on the phrase, and more often by "
+        "mistake on something that only sounds like it. Your voice is still checked "
+        "every time before anything is written down or done.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - both detectors must still agree."),
+    # The same day: the newer voice-ID model has not been measured on real
+    # voices, so choosing it is the looser choice.
+    ("voice_id_model", "resnet221"): (
+        "Use the newer voice-ID model to tell your voice from other people's?\n\n"
+        "It is WeSpeaker's ResNet221. It has NOT been measured on real voices here, so "
+        "Jarvis holds it to general bars and cannot say how well it keeps other people "
+        "out. Tried on computer-made voices, at those general bars it let in far more "
+        "of the other voices than the model you use now - run the measurement in "
+        "backend/README.md (\"Better voice\") before choosing it. It is also slower "
+        "(about half a second a sentence on a small processor). Like every voice "
+        "check, it cannot tell your voice from a recording or a copy of it.\n\n"
+        "If your voice print has nothing from this model yet, Jarvis will ask you to "
+        "train your voice again before very strict lets you in.\n\n"
+        "You can go back to the measured one at any time, and that is instant.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - the measured stronger model stays."),
 }
 
 #: What each loosening card is about, for the card's `what` line.
-_SETTING_WHAT = {"talk_to_type": "turn on talk-to-type on this PC"}
+_SETTING_WHAT = {"talk_to_type": "turn on talk-to-type on this PC",
+                 "wake_confirm": "go back to one \"hey Jarvis\" detector",
+                 "voice_id_model": "use the newer, unmeasured voice-ID model"}
 
 
 def _voice():
@@ -987,6 +1026,9 @@ def settings_view() -> dict:
             "hands_free": s.get("hands_free", ""),
             # "" from a jarvis_voice.py older than talk-to-type (2026-09-28).
             "talk_to_type": s.get("talk_to_type", ""),
+            # "" from a jarvis_voice.py older than "Better voice" (2026-09-28).
+            "wake_confirm": s.get("wake_confirm", ""),
+            "voice_id_model": s.get("voice_id_model", ""),
             "voice_is_enough_allowed": s["strictness"] == v.VERY_STRICT}
 
 
@@ -1028,6 +1070,13 @@ def stage_setting(doc: dict, key: str, *, gate: Callable, tier_of: Callable,
             _withdraw(key)
         return 200, {"ok": True, "changed": False, "pending": False,
                      "settings": settings_view()}
+    blocker = getattr(V, "setting_blocker", None)
+    why = blocker(key, value) if blocker is not None else ""
+    if why:
+        # "Better voice" (2026-09-28): a choice that needs something not
+        # installed here is refused before any card, in words - never saved
+        # and then quietly ignored.
+        return 409, {"error": why, "pending": False}
     if not V.is_loosening(key, value):
         # Tightening: at once, no card - it only narrows who Jarvis obeys or
         # what it says aloud. It also withdraws a waiting card that would

@@ -356,7 +356,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         }
       },
       "code": 200
@@ -374,7 +376,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         }
       },
       "code": 200
@@ -392,7 +396,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         }
       },
       "code": 200
@@ -538,6 +544,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -557,7 +579,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -617,6 +639,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 1790000000.0,
           "choices": {
             "hands_free": [
@@ -642,6 +668,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -650,7 +684,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -659,7 +695,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "balanced",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": false
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": false,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "balanced",
@@ -694,7 +732,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -709,6 +749,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -728,7 +784,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -789,6 +845,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 1790000000.0,
         "choices": {
           "hands_free": [
@@ -814,6 +874,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -822,7 +890,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -831,7 +901,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "balanced",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": false
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": false,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -880,11 +952,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -905,6 +990,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -1047,6 +1133,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -1066,7 +1168,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 0.0,
@@ -1121,6 +1223,10 @@
         "samples": 0,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -1146,6 +1252,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -1154,7 +1268,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -1163,7 +1279,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -1196,7 +1314,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -1211,6 +1331,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -1230,7 +1366,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
@@ -1286,6 +1422,10 @@
       "samples": 0,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -1311,6 +1451,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -1319,7 +1467,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -1328,7 +1478,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -1377,11 +1529,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -1402,6 +1567,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -1544,6 +1710,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -1563,7 +1745,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -1623,6 +1805,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -1648,6 +1834,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -1656,7 +1850,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -1665,7 +1861,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -1711,7 +1909,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -1726,6 +1926,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -1745,7 +1961,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -1806,6 +2022,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -1831,6 +2051,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -1839,7 +2067,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -1848,7 +2078,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -1897,11 +2129,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -1922,6 +2167,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -2064,6 +2310,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "small",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -2083,7 +2345,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": true,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. your voice print was made before the stronger voice-ID model was installed, so very strict refuses it until you train your voice again",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it. your voice print was made before the stronger voice-ID model was installed, so very strict refuses it until you train your voice again",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -2143,6 +2405,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -2168,6 +2434,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -2176,7 +2450,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -2185,7 +2461,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -2214,7 +2492,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -2229,6 +2509,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "small",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -2248,7 +2544,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": true,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. your voice print was made before the stronger voice-ID model was installed, so very strict refuses it until you train your voice again sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it. your voice print was made before the stronger voice-ID model was installed, so very strict refuses it until you train your voice again sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -2309,6 +2605,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -2334,6 +2634,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -2342,7 +2650,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -2351,7 +2661,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -2400,11 +2712,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -2425,6 +2750,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -2567,6 +2893,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": false,
@@ -2641,6 +2983,10 @@
         "samples": 0,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -2666,6 +3012,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -2674,7 +3028,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -2683,7 +3039,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": false,
         "strictness": "very_strict",
@@ -2712,7 +3070,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -2727,6 +3087,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": false,
@@ -2802,6 +3178,10 @@
       "samples": 0,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -2827,6 +3207,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -2835,7 +3223,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -2844,7 +3234,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": false,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -2893,11 +3285,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -2918,6 +3323,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -3060,6 +3466,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -3079,7 +3501,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 0.0,
@@ -3134,6 +3556,10 @@
         "samples": 0,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -3159,6 +3585,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -3167,7 +3601,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -3176,7 +3612,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -3219,7 +3657,9 @@
             "seconds": 6.0
           },
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -3234,6 +3674,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -3253,7 +3709,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
@@ -3309,6 +3765,10 @@
       "samples": 0,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -3334,6 +3794,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -3342,7 +3810,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -3351,7 +3821,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -3400,11 +3872,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -3425,6 +3910,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -3567,6 +4053,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -3586,7 +4088,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 0.0,
@@ -3646,6 +4148,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -3671,6 +4177,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -3679,7 +4193,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -3688,7 +4204,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -3731,7 +4249,9 @@
             "seconds": 24.0
           },
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -3746,6 +4266,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -3765,7 +4301,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
@@ -3826,6 +4362,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -3851,6 +4391,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -3859,7 +4407,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -3868,7 +4418,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -3917,11 +4469,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -3942,6 +4507,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -4084,6 +4650,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -4103,7 +4685,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -4163,6 +4745,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -4188,6 +4774,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -4196,7 +4790,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -4205,7 +4801,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -4241,7 +4839,9 @@
             "value": "balanced"
           },
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -4256,6 +4856,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -4275,7 +4891,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -4336,6 +4952,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -4361,6 +4981,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -4369,7 +4997,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -4378,7 +5008,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -4427,11 +5059,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -4452,6 +5097,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -4594,6 +5240,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "small",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -4673,6 +5335,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -4698,6 +5364,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -4706,7 +5380,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -4715,7 +5391,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -4744,7 +5422,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -4759,6 +5439,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "small",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -4839,6 +5535,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -4864,6 +5564,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -4872,7 +5580,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -4881,7 +5591,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -4930,11 +5642,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -4955,6 +5680,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -5097,6 +5823,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -5116,7 +5858,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -5181,6 +5923,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -5206,6 +5952,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -5214,7 +5968,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -5223,7 +5979,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -5252,7 +6010,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -5267,6 +6027,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -5286,7 +6062,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -5352,6 +6128,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -5377,6 +6157,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -5385,7 +6173,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -5394,7 +6184,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -5443,11 +6235,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -5468,6 +6273,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -5610,6 +6416,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -5629,7 +6451,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -5689,6 +6511,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 1790000000.0,
           "choices": {
             "hands_free": [
@@ -5714,6 +6540,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -5722,7 +6556,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -5731,7 +6567,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -5766,7 +6604,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -5781,6 +6621,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -5800,7 +6656,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -5861,6 +6717,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 1790000000.0,
         "choices": {
           "hands_free": [
@@ -5886,6 +6746,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -5894,7 +6762,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -5903,7 +6773,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -5952,11 +6824,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -5977,6 +6862,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -6119,6 +7005,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -6138,7 +7040,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -6202,6 +7104,10 @@
         "samples": 7,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -6227,6 +7133,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -6235,7 +7149,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -6244,7 +7160,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -6285,7 +7203,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -6300,6 +7220,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -6319,7 +7255,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -6384,6 +7320,10 @@
       "samples": 7,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -6409,6 +7349,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -6417,7 +7365,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -6426,7 +7376,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -6475,11 +7427,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -6500,6 +7465,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -6642,6 +7608,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -6661,7 +7643,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -6729,6 +7711,10 @@
         "samples": 16,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -6754,6 +7740,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -6762,7 +7756,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -6771,7 +7767,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -6822,7 +7820,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -6837,6 +7837,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -6856,7 +7872,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -6925,6 +7941,10 @@
       "samples": 16,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -6950,6 +7970,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -6958,7 +7986,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -6967,7 +7997,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -7016,11 +8048,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -7041,6 +8086,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -7183,6 +8229,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -7202,7 +8264,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 0.0,
@@ -7257,6 +8319,10 @@
         "samples": 0,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -7282,6 +8348,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -7290,7 +8364,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -7299,7 +8375,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -7332,7 +8410,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -7347,6 +8427,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -7366,7 +8462,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
@@ -7422,6 +8518,10 @@
       "samples": 0,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -7447,6 +8547,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -7455,7 +8563,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -7464,7 +8574,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -7513,11 +8625,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -7538,6 +8663,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -7680,6 +8806,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -7699,7 +8841,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 0.0,
@@ -7754,6 +8896,10 @@
         "samples": 0,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -7779,6 +8925,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -7787,7 +8941,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -7796,7 +8952,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -7856,7 +9014,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -7871,6 +9031,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -7890,7 +9066,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
@@ -7946,6 +9122,10 @@
       "samples": 0,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -7971,6 +9151,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -7979,7 +9167,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -7988,7 +9178,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -8037,11 +9229,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -8062,6 +9267,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -8204,6 +9410,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -8223,7 +9445,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 0.0,
@@ -8283,6 +9505,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 0.0,
           "choices": {
             "hands_free": [
@@ -8308,6 +9534,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -8316,7 +9550,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -8325,7 +9561,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -8357,7 +9595,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -8372,6 +9612,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -8391,7 +9647,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
@@ -8452,6 +9708,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 0.0,
         "choices": {
           "hands_free": [
@@ -8477,6 +9737,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -8485,7 +9753,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -8494,7 +9764,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -8543,11 +9815,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -8568,6 +9853,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     },
@@ -8710,6 +9996,22 @@
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
+          "choice": {
+            "chosen": "titanet",
+            "in_use": "titanet",
+            "resnet221": {
+              "bars_measured": false,
+              "installed": false,
+              "ok": false,
+              "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+              "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+            },
+            "titanet": {
+              "bars_measured": true,
+              "installed": false,
+              "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+            }
+          },
           "small": {
             "bars_measured": false,
             "installed": true,
@@ -8729,7 +10031,7 @@
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -8789,6 +10091,10 @@
         "samples": 3,
         "sensitive_memory": "sensitive_on_screen",
         "settings": {
+          "blocked": {
+            "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+            "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+          },
           "changed": 1790000000.0,
           "choices": {
             "hands_free": [
@@ -8814,6 +10120,14 @@
             "talk_to_type": [
               "off",
               "on"
+            ],
+            "voice_id_model": [
+              "titanet",
+              "resnet221"
+            ],
+            "wake_confirm": [
+              "one",
+              "both"
             ]
           },
           "defaults": {
@@ -8822,7 +10136,9 @@
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict",
-            "talk_to_type": "off"
+            "talk_to_type": "off",
+            "voice_id_model": "titanet",
+            "wake_confirm": "one"
           },
           "hands_free": "same_as_button",
           "memory": "memory_aloud",
@@ -8831,7 +10147,9 @@
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "talk_to_type": "off",
-          "voice_is_enough_allowed": true
+          "voice_id_model": "titanet",
+          "voice_is_enough_allowed": true,
+          "wake_confirm": "one"
         },
         "speaker_model": true,
         "strictness": "very_strict",
@@ -8866,7 +10184,9 @@
           "rounds": true,
           "session": null,
           "settings": true
-        }
+        },
+        "voice_id_model": "titanet",
+        "wake_confirm": "one"
       },
       "hands_free": "same_as_button",
       "listening": {
@@ -8881,6 +10201,22 @@
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
+        "choice": {
+          "chosen": "titanet",
+          "in_use": "titanet",
+          "resnet221": {
+            "bars_measured": false,
+            "installed": false,
+            "ok": false,
+            "path": "~/.openjarvis/voice-models/speaker/resnet221.onnx",
+            "why": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it"
+          },
+          "titanet": {
+            "bars_measured": true,
+            "installed": false,
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx"
+          }
+        },
         "small": {
           "bars_measured": false,
           "installed": true,
@@ -8900,7 +10236,7 @@
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out. the stronger voice-ID model in use has not been measured on real voices yet, so Jarvis holds it to general bars and cannot say how well it keeps other people out. Like every voice check, it cannot tell your voice from a recording or a copy of it sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -8961,6 +10297,10 @@
       "samples": 3,
       "sensitive_memory": "sensitive_on_screen",
       "settings": {
+        "blocked": {
+          "voice_id_model": "the newer voice-ID model is not installed (looked for ~/.openjarvis/voice-models/speaker/resnet221.onnx); backend/README.md, \"Better voice\", has the one line that downloads it",
+          "wake_confirm": "the second \"hey Jarvis\" detector (microWakeWord) is not installed on this PC, so it cannot be switched on: the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "changed": 1790000000.0,
         "choices": {
           "hands_free": [
@@ -8986,6 +10326,14 @@
           "talk_to_type": [
             "off",
             "on"
+          ],
+          "voice_id_model": [
+            "titanet",
+            "resnet221"
+          ],
+          "wake_confirm": [
+            "one",
+            "both"
           ]
         },
         "defaults": {
@@ -8994,7 +10342,9 @@
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
-          "talk_to_type": "off"
+          "talk_to_type": "off",
+          "voice_id_model": "titanet",
+          "wake_confirm": "one"
         },
         "hands_free": "same_as_button",
         "memory": "memory_aloud",
@@ -9003,7 +10353,9 @@
         "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "talk_to_type": "off",
-        "voice_is_enough_allowed": true
+        "voice_id_model": "titanet",
+        "voice_is_enough_allowed": true,
+        "wake_confirm": "one"
       },
       "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
@@ -9052,11 +10404,24 @@
       },
       "vad": {
         "available": false,
+        "chosen": "v4",
         "engine": "silero (sherpa-onnx)",
-        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+        "note": "",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)",
+        "version": "v4"
       },
+      "voice_id_model": "titanet",
       "wake": {
         "awake_seconds": 8.0,
+        "confirm": {
+          "active": false,
+          "agree_seconds": 1.0,
+          "available": false,
+          "engine": "microWakeWord (pymicro-wakeword)",
+          "note": "",
+          "setting": "one",
+          "why": "the pymicro-wakeword package is not installed in the Python that runs Jarvis - backend/README.md, \"Better voice\", has the one line that installs it"
+        },
         "enabled": false,
         "pending": false,
         "phrase": "hey_jarvis",
@@ -9077,6 +10442,7 @@
           "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
         }
       },
+      "wake_confirm": "one",
       "wake_phrase": "hey_jarvis",
       "wake_word_enabled": false
     }

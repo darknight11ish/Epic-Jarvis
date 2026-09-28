@@ -9914,6 +9914,131 @@ the desktop's Rust tests compile but run only on Windows.
 
 ---
 
+## 80. Better voice: a second "hey Jarvis" detector, a newer speech detector, a third voice-ID model (added 2026-09-28)
+
+The owner's group of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md,
+sections 1.4 and 5): each part is off, or not the default, until it is
+measured on the PC (`jarvis_bakeoff.py --wake2`, `--vad`, `--voice-id`;
+backend/README.md, "Better voice"). Nothing switches by itself.
+
+**No new route.** Two more voice settings on the route the other six use
+(section 16, section 72), and three new read-only fields in
+`GET /api/voice/status`.
+
+### 80.1 The two settings
+
+`GET /api/voice/status` carries each twice, like `hands_free`:
+
+```
+"gate": {
+  "wake_confirm":   "one",        "one" (the default) or "both"; "" from an older PC
+  "voice_id_model": "titanet",    "titanet" (the default) or "resnet221"; "" from an older PC
+  "settings": {
+    "wake_confirm": "one", "voice_id_model": "titanet",
+    "choices":  {"wake_confirm": ["one", "both"], "voice_id_model": ["titanet", "resnet221"], ...},
+    "defaults": {"wake_confirm": "one", "voice_id_model": "titanet", ...},
+    "blocked":  {"wake_confirm": "<why 'both' cannot be chosen here, or ''>",
+                 "voice_id_model": "<why 'resnet221' cannot be chosen here, or ''>"}
+  },
+  "models": {
+    ...,
+    "choice": {"chosen": "titanet", "in_use": "titanet" | "resnet221" | "configured" | "",
+               "titanet":   {"installed", "path", "bars_measured": true},
+               "resnet221": {"installed", "ok", "path", "why", "bars_measured"}}
+  }
+}
+```
+
+`POST /api/voice/enroll`:
+
+```
+{"mode": "wake_confirm", "value": "both"}         200, at once, no card (stricter)
+{"mode": "wake_confirm", "value": "one"}          202, ONE card (change_own_config)
+{"mode": "voice_id_model", "value": "titanet"}    200, at once, no card
+{"mode": "voice_id_model", "value": "resnet221"}  202, ONE card
+either choice that needs something not installed  409 {"error": <the blocked words>,
+                                                       "pending": false} - before any card
+```
+
+The same one-at-a-time voice card, `gate.training` while it waits and
+`gate.training.last` when it ends as every other voice setting; choosing
+the stricter value while the card waits withdraws it (`withdrawn`). A
+missing, unreadable or unknown value reads as the strict one (`both`,
+`titanet`); a settings file from before these settings reads as `one`.
+
+- **`wake_confirm: "both"`**: a "hey Jarvis" clip (`source=wake_word`, from
+  either app) is taken only when microWakeWord's own model also hears the
+  phrase within 1.0 s of openWakeWord. It runs in `hear()` after the first
+  detector said yes and BEFORE the voice check - so it can only refuse, and
+  a refused clip is never checked or transcribed: `{"is_owner": false,
+  "reason": "the second \"hey Jarvis\" detector did not hear it, ..."}`.
+  If the package goes missing after it was chosen, the first detector
+  decides alone, as before, and `wake.confirm.note` says so.
+- **`voice_id_model: "resnet221"`**: very strict and balanced use
+  WeSpeaker ResNet221 (`resnet221.onnx`, only the pinned SHA-256) as the
+  stronger model, on `GENERIC_BARS` until it is measured. If its file goes
+  missing, TitaNet is used, never the small model on that account, and
+  `gate.note` says so. Every installed stronger model is trained into the
+  voice print, so switching needs no new training. `[voice]
+  speaker_model_strong`, when set, still wins (and blocks the choice).
+
+### 80.2 What the status says
+
+```
+"wake": {..., "confirm": {"setting": "one" | "both", "active": bool,
+                          "available": bool, "why": "...", "engine":
+                          "microWakeWord (pymicro-wakeword)",
+                          "agree_seconds": 1.0, "note": "..."}}
+"vad":  {"engine", "available", "status",
+         "version": "v4" | "v6" | "configured",   the Silero file in use
+         "chosen":  "v4" | "v6",                  the [voice] vad_version line
+         "note":    "..."}                        why the chosen one is not in use
+```
+
+`vad_version` is a line in the PC's settings file, not an app setting: a
+new speech detector is measured, then chosen with one PowerShell line
+(backend/README.md, "Better voice", step 8). v6 is used only when its file
+is the pinned one (sherpa-onnx ends the process on a VAD file it does not
+understand); otherwise v4, with the reason in `note`.
+
+### 80.3 In the apps
+
+Both apps, Settings -> Voice (the phone: Voice check), after "Hands-free":
+**Second "hey Jarvis" check** - "One detector (default)" / "Two detectors
+must agree"; **Voice-ID model** - "The stronger one (measured)
+(recommended)" / "The newer one (not measured yet)". A choice in
+`settings.blocked` is greyed out with those words. The looser choice of
+each is held on a stale link (rule 4). The desktop also shows two status
+lines: the second detector (`wake.confirm`) and the speech detector
+(`vad`). The phone's own "hey Jarvis" listener is unchanged
+(ARCHITECTURE section 8).
+
+### 80.4 Limits, said plainly
+
+- Measured in the dev container on Kokoro's computer-made voices only
+  (backend/README.md has the numbers); the owner's PC measurements decide.
+- The newer voice-ID model let in far more of the other computer-made
+  voices at the general bars than TitaNet at its own - it should not be
+  chosen before `--voice-id` has been run with real other voices.
+- The stop word, and "hey Jarvis", do not silence a ringing alarm on the
+  PC: they stop only Jarvis's own speech (desktop `stopSpeaking`). A
+  ringing alarm (a Windows toast whose sound loops) stops when its toast is
+  dismissed, or when the PC says the job changed - snoozed, deleted or done
+  (`brain/schedule.rs` `on_changed`). Home Assistant's "the wake word stops
+  a ringing timer" is not built; not checked here: whether a spoken
+  "snooze" sends that "changed" event for the job that rang.
+
+
+**Not choosable until measured** (added at the merge, 2026-09-28). The newer
+voice-ID model (`resnet221`) is refused - before any card - until its own
+`MODEL_BARS` row exists, the way TitaNet's was added after the owner's
+measurement. The refusal says so and points to "Better voice" step 7 in
+`backend/README.md`. Why: in the container test with computer-made voices,
+at the general bars it let in 83% of other voices, against 20% for the model
+used today. Measured first, then chosen - the owner's rule for voice parts.
+
+---
+
 ## 81. Phone conveniences (phone, added 2026-09-28)
 
 The owner chose ideas 14 and 15 of `docs/RESEARCH-AUDIT-2026-09-28.md`

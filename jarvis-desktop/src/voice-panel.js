@@ -574,6 +574,25 @@ function paintSettings() {
       say($("vt-talktype-note"), VT.TALK_TO_TYPE.find((c) => c.id === view.talkToType).detail);
     }
   }
+  // "Better voice" (2026-09-28): the second "hey Jarvis" check and the
+  // voice-ID model. Offered only when the PC reports them. A choice that
+  // needs something the PC does not have is greyed out, with the PC's own
+  // words saying why (VT.blockedWhy); the looser choice of each is held on
+  // a stale link (changeSetting, VT.loosens).
+  const better = [
+    ["vt-wakeconfirm", VT.WAKE_CONFIRM, view.wakeConfirm, "wake_confirm"],
+    ["vt-voiceid", VT.VOICE_ID_MODEL, view.voiceIdModel, "voice_id_model"],
+  ];
+  for (const [id, list, chosen, setting] of better) {
+    const box = $(`${id}-box`);
+    if (!box) continue;
+    box.hidden = !chosen;
+    if (!chosen) continue;
+    group($(id), list, chosen, setting, (c) => Boolean(VT.blockedWhy(status, setting, c.id)));
+    const blocked = list.map((c) => VT.blockedWhy(status, setting, c.id)).find(Boolean);
+    const detail = list.find((c) => c.id === chosen).detail;
+    say($(`${id}-note`), blocked ? `${detail} ${blocked}` : detail);
+  }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;

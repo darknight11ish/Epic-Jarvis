@@ -465,6 +465,37 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+BETTER VOICE (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+None of these is shipped in this repository or an app: the owner installs
+or downloads each on the PC with a hash-checked line (backend/README.md,
+"Better voice"), and each is used only when chosen. Checked 2026-09-28.
+
+pymicro-wakeword 2.5.0 (Michael Hansen / Open Home Foundation), Apache-2.0 -
+  https://github.com/OHF-Voice/pymicro-wakeword (its wheel's LICENSE file).
+  The second "hey Jarvis" detector (backend/jarvis_microwake.py). Its wheel
+  carries microWakeWord's hey_jarvis.tflite model by Kevin Ahrendt,
+  byte-identical (SHA-256 21a7976a...) to the one in
+  https://github.com/esphome/micro-wake-word-models (Apache-2.0), and a
+  TensorFlow Lite runtime library (TensorFlow, Apache-2.0).
+pymicro-features 2.0.2 (Michael Hansen), Apache-2.0 -
+  https://github.com/rhasspy/pymicro-features. Its sound front end.
+
+Silero VAD v6.2.3 (silero_vad.onnx), MIT - https://github.com/snakers4/silero-vad
+  The newer speech detector, beside the v4 file already listed under
+  sherpa-onnx below. Copyright (c) 2020-present Silero Team; the MIT
+  licence text is the one at the end of this file.
+
+WeSpeaker ResNet221 (VoxCeleb, large-margin fine-tuned), as exported for
+  sherpa-onnx (wespeaker_en_voxceleb_resnet221_LM.onnx) - the newer
+  voice-ID model. WeSpeaker (https://github.com/wenet-e2e/wespeaker)
+  says in docs/pretrained.md that its VoxCeleb models follow the VoxCeleb
+  data's licence, Creative Commons Attribution 4.0
+  (https://creativecommons.org/licenses/by/4.0/). Attribution: WeSpeaker
+  (wenet-e2e) and the VoxCeleb dataset (A. Nagrani, J. S. Chung, A.
+  Zisserman et al., https://www.robots.ox.ac.uk/~vgg/data/voxceleb/).
+  Unchanged; used as it is.
+
 FONTS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Chakra Petch (The Chakra Petch Project Authors), IBM Plex Sans and IBM Plex

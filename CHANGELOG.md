@@ -109,6 +109,17 @@ number as the last part - `0.2.57` is a build of 0.2.
   unverified apps by tapping the file; installing from the PC with adb stays
   allowed (docs/INSTALL.md).
 
+**New: better voice (each off until measured on your PC)**
+
+- **An optional second "hey Jarvis" check:** two detectors must agree before
+  Jarvis wakes, for fewer false wake-ups. Off until you choose it, in both
+  apps.
+- **A newer speech detector (Silero VAD v6)** you can switch to after
+  measuring it on your PC; today's stays the default.
+- **A third voice-ID model (WeSpeaker ResNet221)** is ready but cannot be
+  chosen until it is measured on your PC - in a first test it let other
+  voices through more often than the one used today.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

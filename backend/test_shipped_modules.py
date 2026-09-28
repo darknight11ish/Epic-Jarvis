@@ -77,6 +77,8 @@ THIRD_PARTY = {
     "winrt": "winrt-Windows.Media.Control",
     "espeakng_loader": "espeakng-loader",
     "onnx": "onnx",
+    # "Better voice" (2026-09-28): the optional second "hey Jarvis" detector
+    "pymicro_wakeword": "pymicro-wakeword",
 }
 
 # Packages in requirements.txt that no shipped module imports BY NAME,
