@@ -3541,6 +3541,40 @@ object JarvisRuntime {
      * link, like every change. @return whether the PC took it, and the
      * sentence to show.
      */
+    /**
+     * "Photo to reminder" (JARVIS-API.md section 83): the PC reads the dates
+     * in one picture - already shrunk, in memory only - and PROPOSES a
+     * reminder. Sets nothing up, so it is not held on a stale link. The
+     * words that come back are outside text: shown, never sent on, never
+     * saved by this app.
+     */
+    suspend fun scanPhotoForDate(dataUri: String): com.jarvis.client.net.PhotoReminder.Outcome {
+        val body = com.jarvis.client.net.PhotoReminder.scanBody(dataUri)
+            ?: return com.jarvis.client.net.PhotoReminder.Outcome.Failed(
+                com.jarvis.client.net.PhotoReminder.NOT_A_PICTURE,
+            )
+        return when (val r = api.photoScan(body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.PhotoReminder.parse(r.value.first, r.value.second)
+            is ApiResult.Failed -> com.jarvis.client.net.PhotoReminder.Outcome.Failed(describe(r.error))
+        }
+    }
+
+    /**
+     * The owner's tap on "Add a Jarvis reminder": ONE one-off reminder, no
+     * card, the date and time read on the PC's clock. Held on a stale link.
+     */
+    suspend fun addPhotoReminder(what: String, date: String, time: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.PhotoReminder.reminderBody(what, date, time)
+            ?: return false to (com.jarvis.client.net.PhotoReminder.problem(what, date, time) ?: "Not set up.")
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not set up. " + describe(r.error))
+        }
+    }
+
     suspend fun addStandbySchedule(start: String, end: String): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         val body = com.jarvis.client.net.Schedule.standbyBody(start, end)

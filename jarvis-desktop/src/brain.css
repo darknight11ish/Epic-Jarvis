@@ -1771,3 +1771,74 @@ mark.find-current {
 .card-link-said:empty { display: none; }
 /* In the Brain it sits under the top bar, lined up with its padding. */
 .main > .card-link { margin: 0 18px 10px; }
+
+/* "Photo to reminder" (photo-reminder.js): the PC's proposal for a capture.
+   The words came from a picture - outside text - and are shown only. */
+.photo-box {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+}
+
+.photo-box[hidden] {
+  display: none;
+}
+
+.photo-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.photo-proposal p {
+  margin: 0;
+}
+
+.photo-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photo-label {
+  min-width: 44px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.photo-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.photo-picks,
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.photo-proposal .note,
+.photo-words summary {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.photo-text {
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+}

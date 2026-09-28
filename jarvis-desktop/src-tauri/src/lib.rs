@@ -820,6 +820,8 @@ pub fn run() {
             brain::schedule::brain_schedule_add_standby,
             brain::schedule::brain_schedule_add_today,
             brain::schedule::brain_schedule_clear_list,
+            brain::photo_reminder::photo_scan,
+            brain::photo_reminder::photo_add_reminder,
             brain::focus::focus_status,
             brain::focus::focus_start,
             brain::focus::focus_act,

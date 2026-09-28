@@ -371,6 +371,12 @@ fn main() {
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",
+            // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
+            // dates in a picture, read on the PC and PROPOSED (a scan sets
+            // nothing up), and the owner's tap adding ONE reminder - no
+            // card, held on a stale link. The Jarvis bar and the Brain.
+            "photo_scan",
+            "photo_add_reminder",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on

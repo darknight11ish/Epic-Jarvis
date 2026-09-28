@@ -1,0 +1,19 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2596,6 +2596,16 @@
+     except Exception as exc:
+         print(f"  brain      NOT ON ({type(exc).__name__}) - Searching old chats is off")
+         print("             until jarvis_brain_reads.py is back: run apply-patches.ps1 again")
++    # photo-reminder.patch ("Photo to reminder", 2026-09-28; JARVIS-API.md
++    # section 83): POST /api/photo/scan reads the dates in a picture and
++    # PROPOSES a reminder - it sets nothing up. The rules are all in
++    # jarvis_photo_remind.py.
++    try:
++        import jarvis_photo_remind
++        print(jarvis_photo_remind.install(Handler, origin_ok=_origin_ok,
++                                          token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  photo      NOT ON ({type(exc).__name__}) - Photo to reminder is off")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

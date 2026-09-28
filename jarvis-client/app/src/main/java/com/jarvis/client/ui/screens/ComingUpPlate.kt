@@ -479,7 +479,7 @@ private fun ScheduleRow(
  * only ever from the owner's tap. Returns a sentence to show when no app on
  * the phone takes it, else null.
  */
-private fun handToPhone(context: Context, offer: AlsoOnPhone.Offer): String? {
+internal fun handToPhone(context: Context, offer: AlsoOnPhone.Offer): String? {
     val intent = when (offer) {
         is AlsoOnPhone.Offer.ToClock -> Intent(AlarmClock.ACTION_SET_ALARM).apply {
             putExtra(AlarmClock.EXTRA_HOUR, offer.alarm.hour)

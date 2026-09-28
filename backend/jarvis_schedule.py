@@ -1936,11 +1936,31 @@ def _num(v) -> Optional[float]:
     return float(v)
 
 
+def wall_at(date, hhmm) -> float:
+    """The moment this PC's clock reads `date` ("2026-10-12") at `hhmm`
+    ("14:00"). ValueError, in words, for anything else."""
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", str(date or "").strip())
+    if not m:
+        raise ValueError("a date looks like 2026-10-12")
+    y, mo, d = (int(g) for g in m.groups())
+    try:
+        import datetime
+        datetime.date(y, mo, d)
+    except ValueError:
+        raise ValueError("that date is not on the calendar")
+    t = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", str(hhmm or "").strip())
+    if not t:
+        raise ValueError("a time looks like 14:00")
+    return wall_to_epoch(y, mo, d, int(t.group(1)), int(t.group(2)))
+
+
 def handle_add(body: dict) -> tuple:
     """POST /api/schedule/add - one job.
       {"kind": "todo", "text", "list"?}            a to-do item (on a named list)
       {"kind": "timer", "seconds", "text"?}        a timer
       {"kind": "alarm"|"reminder", "at", "text"?}  once, at an epoch time
+      {"kind": "alarm"|"reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}
+                                                   once, on this PC's clock ("said")
       {"kind": "alarm"|"reminder", "repeat": {...}, "text"?}   repeating: no card
       {"kind": "standby", "repeat": {"every", "at", "until"}}  no card
       {"kind": "briefing", "repeat": {...}}        repeating: ONE card
@@ -1966,6 +1986,20 @@ def handle_add(body: dict) -> tuple:
                 job = s.add_repeat(kind, body.get("repeat"), body.get("text") or "",
                                    source="app")
                 return _repeat_answer(job, s.now())
+            if kind in ("alarm", "reminder") and ("date" in body or "time" in body):
+                # "Photo to reminder" (2026-09-28, JARVIS-API section 83):
+                # the owner's edited date and time, read as THIS PC's clock
+                # - the PC is Jarvis's only clock - and set by the owner's
+                # tap, with no card, like any one-off reminder.
+                at = wall_at(body.get("date"), body.get("time"))
+                now = s.now()
+                if at <= now:
+                    raise ValueError(f"{when_words(at, now)} has already passed - "
+                                     f"change the date or time")
+                job = s.add_at(kind, at, body.get("text") or "", source="app")
+                noun = "Alarm" if kind == "alarm" else "Reminder"
+                return 200, {"ok": True, "job": job,
+                             "said": f"{noun} set for {when_words(at, now)}."}
             job = s.add_at(kind, _num(body.get("at")), body.get("text") or "", source="app")
         elif kind in KINDS and KINDS[kind].window:
             # The standby schedule: {"kind": "standby", "repeat": {"every":

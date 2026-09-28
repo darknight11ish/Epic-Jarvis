@@ -219,6 +219,10 @@ SHIPPED = (
     # part of both apps at a time, on chosen days - a kind of job on the one
     # scheduler, no card, no patch
     "jarvis_today.py",
+    # "Photo to reminder" (2026-09-28, photo-reminder.patch): POST
+    # /api/photo/scan reads a picture's dates with plain code and PROPOSES a
+    # reminder; it sets nothing up itself
+    "jarvis_photo_remind.py",
 )
 
 

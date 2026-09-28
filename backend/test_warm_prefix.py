@@ -594,8 +594,14 @@ def t_a_turn_that_raises_is_still_uncounted():
 
 def t_its_place_in_the_stack():
     order = _stack.order()
-    check(f"{PATCH} is in apply-patches.ps1's list, last", order and order[-1] == PATCH,
-          order[-3:])
+    # Last when it was written; photo-reminder.patch (an install block beside
+    # brain-reads') now follows it. What matters is that nothing after it
+    # touches the learner-thread lines it rewrites.
+    check(f"{PATCH} is in apply-patches.ps1's list", PATCH in order, order[-3:])
+    for later in order[order.index(PATCH) + 1:] if PATCH in order else []:
+        body = (HERE / later).read_text(encoding="utf-8")
+        check(f"{later}, after it, leaves the learner thread's lines alone",
+              "self._pass()" not in body and "EXTRACT_MIN_GAP" not in body)
     patch = (HERE / PATCH).read_text(encoding="utf-8")
     check("it patches jarvis_hud.py and nothing else",
           sorted(l[6:].strip() for l in patch.splitlines() if l.startswith("+++ b/"))
@@ -612,7 +618,7 @@ def t_its_place_in_the_stack():
           [c for c in context if c not in written])
     later = order[order.index("rebuilt-patches/extraction-wiring.patch")
                   if "rebuilt-patches/extraction-wiring.patch" in order
-                  else order.index("extraction-wiring.patch"):]
+                  else order.index("extraction-wiring.patch"):order.index(PATCH) + 1]
     touched = [n for n in later[1:-1]
                if "if self._pass() and self._stop.wait(EXTRACT_MIN_GAP):"
                in (HERE / n).read_text(encoding="utf-8")]

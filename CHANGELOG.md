@@ -129,6 +129,15 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **The Today section also shows today's briefing** - weather, calendar,
   email and what is still to come - without reading anything new.
 
+**New: photo to reminder**
+
+- **Give Jarvis a screenshot, a picture file or a shared photo** of a flyer or
+  ticket, and it suggests a reminder from the date and time it finds. Nothing
+  is set up until you tap Add (or "Also on my phone"). The words are read on
+  your PC, never by the AI model, and are not kept.
+- **You can now say calendar dates:** "remind me on 12 October at 2pm to pay
+  the deposit". A slashed date like 5/10 is read month first (May 10).
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

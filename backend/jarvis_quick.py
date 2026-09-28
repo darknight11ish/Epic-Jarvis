@@ -455,9 +455,92 @@ DEFAULT_HOUR = {"morning": 9, "afternoon": 14, "evening": 18, "night": 20, "toni
 _DAYPART = r"(?:\s+(morning|afternoon|evening|night))?"
 
 
+#: Months and short weekdays, for a calendar date ("Sat 12 Oct", "October
+#: 12th 2026", "12/10", "2026-10-12") - added 2026-09-28 for "Photo to
+#: reminder" (jarvis_photo_remind.py), which reads dates off a flyer with THIS
+#: parser rather than a second one. Said to Jarvis it works too: "remind me on
+#: 12 October at 2pm to pay the deposit".
+_MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august",
+           "september", "october", "november", "december")
+_MONTH_OF = {m: i + 1 for i, m in enumerate(_MONTHS)}
+_MONTH_OF.update({m[:3]: i + 1 for i, m in enumerate(_MONTHS)})
+_MONTH_OF["sept"] = 9
+_MON = "|".join(sorted(_MONTH_OF, key=len, reverse=True))
+_WD_SHORT = r"(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)"
+_WD_ANY = r"(?:(?:" + _WD + r"|" + _WD_SHORT + r")\.?,?\s+(?:the\s+)?)?"
+_DAY_NUM = r"(\d{1,2})(?:st|nd|rd|th)?"
+_YEAR = r"(?:,?\s+(\d{4}))?"
+
+#: How a slashed date is read when both numbers could be the month
+#: ("5/10"): month first, as in the United States (the owner's help line is
+#: the US one, CLAUDE.md 2026-09-27). "13/10" can only be day first, and is.
+SLASH_MONTH_FIRST = True
+
+
+def _calendar_day(s: str):
+    """('date', year or None, month, day) for a calendar date, or None. Not
+    checked against a calendar here - _ymd does that, and says None for 31
+    February."""
+    m = re.fullmatch(_WD_ANY + _DAY_NUM + r"(?:\s+of)?\s+(" + _MON + r")\.?" + _YEAR, s)
+    if m:
+        return ("date", int(m.group(3)) if m.group(3) else None,
+                _MONTH_OF[m.group(2)], int(m.group(1)))
+    m = re.fullmatch(_WD_ANY + r"(" + _MON + r")\.?\s+(?:the\s+)?" + _DAY_NUM + _YEAR, s)
+    if m:
+        return ("date", int(m.group(3)) if m.group(3) else None,
+                _MONTH_OF[m.group(1)], int(m.group(2)))
+    m = re.fullmatch(_WD_ANY + r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if m:
+        return ("date", int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    m = re.fullmatch(_WD_ANY + r"(\d{1,2})/(\d{1,2})(?:/(\d{2}|\d{4}))?", s)
+    if m:
+        a, b = int(m.group(1)), int(m.group(2))
+        y = m.group(3)
+        year = None if y is None else (2000 + int(y) if len(y) == 2 else int(y))
+        if a > 12 >= b:
+            mo, d = b, a
+        elif b > 12 >= a or SLASH_MONTH_FIRST:
+            mo, d = a, b
+        else:
+            mo, d = b, a
+        return ("date", year, mo, d)
+    return None
+
+
+def _ymd(day, now: float):
+    """(y, mo, d) for a day from _parse_day, or None for a date that does not
+    exist. A calendar date with no year is the next one: this year's, or next
+    year's when this year's has gone."""
+    if isinstance(day, tuple) and day and day[0] == "date":
+        import datetime
+        _, year, mo, d = day
+        lt = time.localtime(now)
+        today = (lt.tm_year, lt.tm_mon, lt.tm_mday)
+        y = year if year is not None else lt.tm_year
+        try:
+            datetime.date(y, mo, d)
+        except ValueError:
+            if year is not None:
+                return None
+            y = None
+        if year is None and (y is None or (y, mo, d) < today):
+            try:
+                datetime.date(lt.tm_year + 1, mo, d)
+            except ValueError:
+                return None
+            y = lt.tm_year + 1
+        return (y, mo, d)
+    n = _days_until(now, day[1]) if isinstance(day, tuple) else day
+    return _day_of(now, n)
+
+
 def _parse_day(s: str):
-    """(days from today or ('wd', n), part) for a day phrase, or None."""
+    """(days from today, ('wd', n) or ('date', y, mo, d), part) for a day
+    phrase, or None."""
     s = s.strip()
+    cal = _calendar_day(s)
+    if cal is not None:
+        return cal, None
     m = re.fullmatch(r"(today|tomorrow|tonight)" + _DAYPART, s)
     if m:
         day, part = m.group(1), m.group(2)
@@ -483,11 +566,11 @@ def _resolve(c: Clock, day, part, now: float, kind: str) -> When:
             if best is None or t < best:
                 best = t
         return When(at=best)
-    if isinstance(day, tuple):
-        n = _days_until(now, day[1])
-    else:
-        n = day
-    y, mo, d = _day_of(now, n)
+    ymd = _ymd(day, now)
+    if ymd is None:
+        return None
+    y, mo, d = ymd
+    n = 1 if ymd != _day_of(now, 0) else 0      # another day than today
     hours = _hour24(c, part)
     if c.mer is None and part is None and n > 0 and len(hours) == 2:
         # A bare hour on another day. An alarm is for waking up: the morning.
@@ -574,8 +657,10 @@ def parse_when(s: str, now: float, kind: str) -> Optional[When]:
         if kind == "alarm":
             return None       # "set an alarm for tomorrow" - at what time?
         day, part = dp
-        n = _days_until(now, day[1]) if isinstance(day, tuple) else day
-        y, mo, d = _day_of(now, n)
+        ymd = _ymd(day, now)
+        if ymd is None:
+            return None
+        y, mo, d = ymd
         import jarvis_schedule as S
         t = S.wall_to_epoch(y, mo, d, DEFAULT_HOUR.get(part, 9), 0)
         return When(at=t, default_time=True, passed=t <= now)

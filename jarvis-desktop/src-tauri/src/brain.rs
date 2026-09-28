@@ -41,6 +41,7 @@ pub mod conversation_facts;
 pub mod fact_history;
 pub mod focus;
 pub mod history;
+pub mod photo_reminder;
 pub mod profile;
 mod routes;
 pub mod schedule;

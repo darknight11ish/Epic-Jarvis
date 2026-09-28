@@ -141,6 +141,7 @@ on a throwaway copy instead.
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
 | `brain-reads.patch` | `jarvis_hud.py` | **The Brain upgrades** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §71). One install()-shaped hunk at start-up - `jarvis_brain_reads.install(Handler, ...)` - whose context is `answer-sources.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/history/search?q=` ("search what was said": `jarvis_chat_log.ChatLog.search` opens each kept turn in memory for that one search - no index, nothing written) and `GET /api/memory/fact-history?id=` ("history of this fact": `jarvis_memory.fact_history_view`, an erased version never with its words). Reads for the apps only; nothing reaches the AI model. Needs `jarvis_brain_reads.py`; without it the banner says so and the two routes are not there. See "The Brain upgrades", at the very end. |
+| `photo-reminder.patch` | `jarvis_hud.py` | **Photo to reminder** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §83). One install()-shaped hunk at start-up - `jarvis_photo_remind.install(Handler, ...)` - whose context is `brain-reads.patch`'s own install block, so it goes after it, last like every new patch. It answers `POST /api/photo/scan`: the words in a picture read by Windows (`jarvis_ocr.py`), a date, time and title found by `jarvis_quick.py`'s own parser, and a PROPOSED reminder sent back - nothing set up, nothing kept, outside text. Needs `jarvis_photo_remind.py`; without it the banner says so and the route is not there. See "Photo to reminder", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -14753,3 +14754,51 @@ scheduler.
   tests compile but run only on Windows.
 - Not run on the owner's PC: the scheduler's firing at a card's time was
   driven by the test's own clock.
+
+# Photo to reminder: `jarvis_photo_remind.py`, `photo-reminder.patch` (2026-09-28)
+
+**What you get.** Give Jarvis a picture of a flyer, a ticket or a message -
+a screen capture or a picture file on the PC, a photo shared to Jarvis on
+the phone - and it suggests a reminder: "Summer fair", Monday 12 October,
+14:00. You change anything that is wrong and tap "Add a Jarvis reminder".
+Nothing is set up before that tap, and there is no approval card after it,
+like any one-off reminder you set yourself. On the phone, "Also on my phone"
+puts it in the phone's own calendar instead or as well.
+
+**How.** The PC reads the words with Windows' own text recognition (the
+same reader chat uses for pictures, `jarvis_ocr.py`), then plain code - not
+the AI model - finds the dates and times with `jarvis_quick.py`'s parser.
+That parser now knows calendar dates ("12 Oct", "October 12th 2026",
+"2026-10-12", "10/12"), so "remind me on 12 October at 2pm to pay the
+deposit" works when said or typed too.
+
+**Safe by design.** The words came from someone else's picture, so they
+are outside text: they never reach the model, a tool or the learner, and
+the PC keeps nothing - no file, no database row, no log line. A command
+written on a flyer can only ever be a suggested title you can see.
+
+What changed:
+
+- `jarvis_photo_remind.py` (new, shipped whole): the finder and the route.
+- `photo-reminder.patch` (new, last in `apply-patches.ps1`): the one
+  install hunk.
+- `jarvis_quick.py`: calendar dates in the one date parser.
+- `jarvis_schedule.py`: `POST /api/schedule/add` also takes `"date"` and
+  `"time"` for a one-off alarm or reminder, read on this PC's clock.
+- `test_warm_prefix.py`: its patch is no longer last; it now checks that
+  nothing after it touches its lines instead.
+
+## Test it
+
+    python3 backend/test_photo_remind.py
+    python3 backend/test_schedule.py
+
+## Not checked, said plainly
+
+- **Windows reading a real picture.** There is no Windows in the
+  development container; every test uses a stand-in reader. Try it on the
+  PC: Alt+Shift+S over a flyer, then "Find a date in it".
+- **English only**, like the rest of the fast path.
+- **"5/10" is May 10** (month first). A flyer written day first comes out
+  wrong in the date box - check it before adding.
+- The phone half is not compiled here; CI compiles it.
