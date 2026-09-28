@@ -172,6 +172,23 @@ def t_chatbot_row():
     r = row(R.view(ctx()), "chatbot")
     check("chatbot: the real reading (this machine) is never 'on' - there is no route",
           r["state"] in ("off", "not_set_up"), r)
+    two = {"routed": False, "chatbots": [
+        {"id": "gemini_web", "name": "Gemini", "host": "gemini.google.com", "built": True,
+         "ready": False, "note": note},
+        {"id": "chatgpt_web", "name": "ChatGPT", "host": "chatgpt.com", "built": True,
+         "ready": False, "note": "Jarvis's ChatGPT window has never been signed in."}]}
+    r = row(R.view(ctx(chatbot=two)), "chatbot")
+    check("chatbot: several websites, none signed in: each is signed in on its own, and "
+          "one site's words do not speak for all", r["state"] == "not_set_up"
+          and "Gemini, ChatGPT" in r["line"].replace(" and ", ", ")
+          and "each is signed in on its own" in r["line"] and "Gemini: " + note in r["line"],
+          r)
+    two["chatbots"][1]["ready"] = True
+    two["routed"] = True
+    r = row(R.view(ctx(chatbot=two)), "chatbot")
+    check("chatbot: once routed, 'where' names only the websites that are set up",
+          r["on"] and r["where"].startswith("chatgpt.com")
+          and "gemini.google.com" not in r["where"], r)
 
 
 def t_no_secret_anywhere():

@@ -3,7 +3,12 @@
 Status: **partly built, not reachable from either app** (2026-09-28): the
 core (`backend/jarvis_chatbot.py`) and Gemini's website adapter
 (`backend/jarvis_chatbot_gemini.py`, driven openly as the owner chose);
-no route or app screen yet (`docs/JARVIS-API.md` section 60). Written 2026-09-27 by the
+no route or app screen yet (`docs/JARVIS-API.md` section 60). Since
+"the chatbot driver becomes versatile" (owner, 2026-09-28), eight more
+websites are built the same open way over one shared base
+(`backend/jarvis_chatbot_web.py`): ChatGPT, Claude, Copilot, Perplexity,
+DeepSeek, Grok, Le Chat and Meta AI, each with its own spare account and
+self-check, none yet tried against its real site (section 60.5). Written 2026-09-27 by the
 studio's designer for the owner's decision in `CLAUDE.md` ("Decided
 2026-09-27, the owner's answers after the studio review"): Jarvis may hold a
 conversation with an AI chatbot for the owner, following up **on its own,

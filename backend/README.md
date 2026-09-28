@@ -140,7 +140,7 @@ on a throwaway copy instead.
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Two more small hunks (the owner, 2026-09-28) hand a crisis turn's `turn_id` to `jarvis_agent.note_crisis_turn` - right after `feedback.patch` makes the id, on `wellbeing.patch`'s flag, and again after `run_local_turn` on its own crisis check - so a "wrong" mark on a crisis answer is never counted. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `projects.patch` | `jarvis_hud.py` | **Projects, build steps 1 and 2** (the owner's decision of 2026-09-28, `docs/PROJECTS-DESIGN.md`). One hunk, like every install()-shaped patch: `jarvis_projects.install(Handler, ...)` at start-up, answering `GET`/`POST /api/projects` and its benchmarks (`docs/JARVIS-API.md` §61). Its context is `answer-sources.patch`'s own install block, so it goes after it - last, like every new patch. **When the continuation branch merges:** `goals.patch` there anchors on the very same lines, so whichever lands second is re-anchored on the other's block. Needs `jarvis_projects.py`; without it, or on any error, the banner says so and the routes are not there. See "Projects", at the very end. |
-| `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py` and `jarvis_chatbot_gemini.py`, shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window", at the very end. |
+| `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py`, `jarvis_chatbot_gemini.py` and the other website adapters (`jarvis_chatbot_web.py` and a site file each), shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window" and "... more chatbot websites, the same open way", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -14021,3 +14021,163 @@ the message box and the send button.
   instead.
 - A captcha that appears after a message went means that message counts
   as sent; after Resume the driver carries on from the next message.
+
+# Talking to an AI chatbot for you: more chatbot websites, the same open way (2026-09-28)
+
+The owner's decision "the chatbot driver becomes versatile" (`CLAUDE.md`,
+2026-09-28): ChatGPT, Claude, Microsoft Copilot, Perplexity and other
+commonly used chatbot websites, each driven **openly like Gemini**, each
+with **its own spare account** used only by Jarvis. `docs/JARVIS-API.md`
+section 60.5. **Still not usable from either app**: no route and no app
+screen yet.
+
+## In plain words
+
+Jarvis can now work eight more chatbot websites the same way it works
+Gemini: a browser window you can see, a new chat, the question typed at a
+steady pace, and only the answer read back. Nothing hides that a program is
+typing, nothing changes how the browser looks to the site, and at a
+captcha, a sign-in page or an "unusual activity" / "verify you are human"
+page it **stops and asks you**. Each website has its own browser profile
+(its own folder under `.openjarvis\chatbot\`) and you sign in to each one
+**once, by hand**, with a spare account made only for Jarvis.
+
+**Worth knowing before you sign in to any of them:** every one of these
+companies' terms restricts automated use (for ChatGPT, OpenAI's terms
+forbid automatically extracting its answers; the others' terms were not
+read word for word). The spare account may be blocked or closed. Jarvis
+will not work around a block. The last four - DeepSeek, Grok, Le Chat and
+Meta AI - were picked by the studio as "other commonly used" websites; say
+if you want any of them left out. Not checked: whether Meta allows a second
+account kept only for this.
+
+The four you named, then the four others:
+
+| Website | Its file | Its spare account |
+|---|---|---|
+| ChatGPT (`chatgpt.com`) | `jarvis_chatbot_chatgpt.py` | an OpenAI account |
+| Claude (`claude.ai`) | `jarvis_chatbot_claude.py` | a Claude account |
+| Microsoft Copilot (`copilot.microsoft.com`) | `jarvis_chatbot_copilot.py` | a Microsoft account |
+| Perplexity (`www.perplexity.ai`) | `jarvis_chatbot_perplexity.py` | a Perplexity account |
+| DeepSeek (`chat.deepseek.com`) | `jarvis_chatbot_deepseek.py` | a DeepSeek account |
+| Grok (`grok.com`) | `jarvis_chatbot_grok.py` | a Grok account |
+| Le Chat by Mistral AI (`chat.mistral.ai`) | `jarvis_chatbot_lechat.py` | a Mistral account |
+| Meta AI (`www.meta.ai`) | `jarvis_chatbot_metaai.py` | a Meta account |
+
+**Perplexity's sources:** Perplexity lists the web pages its answer came
+from. Jarvis copies those links as text under the answer ("Sources listed
+by Perplexity (links not opened)") and never opens them, so a later
+comparison can say which answers came with sources.
+
+## What to do on the PC, in order (for each website you want)
+
+1. **Install Playwright once**, if you have not already for Gemini:
+
+   ```
+   py -3 -m pip install playwright; py -3 -m playwright install chromium
+   ```
+
+2. **Sign in once, by hand.** Each line opens that website's own Jarvis
+   window and waits; sign in to the spare account there, then close the
+   window when the message box shows. One line at a time - each is a whole
+   command on its own:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py sign-in
+   cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py sign-in
+   ```
+
+3. **Check it works on the real site.** How Jarvis finds each site's
+   message box, send button and answer could not be tried against the real
+   sites (the place this was built cannot reach them). Each line sends ONE
+   harmless fixed question, "What is 2 plus 2?", and prints PASS or FAIL
+   for each step and which way of finding each part worked; the results
+   are also saved in `%USERPROFILE%\.openjarvis\chatbot\<site>-check.txt`:
+
+   ```
+   cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py check
+   cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py check
+   ```
+
+   If a step says FAIL, paste the printed lines back. The fix is that
+   site's one table (`SELECTORS`, near the top of its file).
+
+`JARVIS_CHATGPT_BROWSER=msedge` (and the same for each site), or
+`JARVIS_CHATBOT_BROWSER=msedge` for all of them, uses Microsoft Edge
+instead of Playwright's own Chromium.
+
+## What changed
+
+- `backend/jarvis_chatbot_web.py` (new): what every website adapter shares,
+  moved out of `jarvis_chatbot_gemini.py` - the browser thread, the visible
+  window, the typing, the host lock, "the reply is finished", every "needs
+  you" page (now also Cloudflare's "verify you are human" page, hCaptcha,
+  Turnstile and Arkose checks, a sign-in address on the site itself, and
+  "Log in" as well as "Sign in"), the sign-in helper and the self-check. At
+  its end it loads every site file (`SITE_MODULES`); one that is broken is
+  recorded in `LOAD_ERRORS` and does not take the others down.
+- `backend/jarvis_chatbot_gemini.py`: now a thin site file (its table,
+  hosts and words); it behaves as before.
+- `backend/jarvis_chatbot_chatgpt.py`, `_claude.py`, `_copilot.py`,
+  `_perplexity.py`, `_deepseek.py`, `_grok.py`, `_lechat.py`, `_metaai.py`
+  (new): one thin site file each, registered as `chatgpt_web`,
+  `claude_web`, `copilot_web`, `perplexity_web`, `deepseek_web`,
+  `grok_web`, `lechat_web`, `metaai_web`.
+- `backend/jarvis_chatbot.py`: its last lines import `jarvis_chatbot_web`
+  instead of `jarvis_chatbot_gemini` (the web module now loads Gemini, with
+  the others). Nothing else in it changed.
+- `backend/jarvis_reach.py`: the "Chatbot conversations" row says, when
+  several websites are listed and none is signed in, that each is signed
+  in on its own, instead of letting the first one's words speak for all.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: the nine new files
+  shipped.
+- `backend/test_chatbot_sites.py` (new); `backend/test_chatbot_gemini.py`
+  (its code checks now read the site file AND the shared base);
+  `backend/test_reach.py`.
+
+## Test it
+
+```
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 backend/test_chatbot_sites.py
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 backend/test_chatbot_gemini.py
+```
+
+`test_chatbot_sites.py` builds ONE generic fake chat page per website from
+that website's own `SELECTORS` table, serves it on 127.0.0.1, and runs the
+site's adapter in a real, visible Chromium (under Xvfb on a Linux machine
+with no screen): a full turn, a reply that pauses before it finishes, the
+new chat's own address, every "needs you" page, another host refused,
+close from another thread, the sign-in helper, the self-check, and
+Perplexity's sources through the whole driver. Without a browser it still
+reads the shared base and every site file for any stealth, fingerprint,
+webdriver-hiding, proxy or captcha-solving code, checks that only the base
+drives the browser (one visible launch, one host-checked address, clicks
+only on the message box and the send button), and that every send selector
+names "send" or "submit". Pass site names to run just those
+(`... test_chatbot_sites.py chatgpt perplexity`).
+
+## Not checked, said plainly
+
+- **Not tried against any real site.** Every selector is a best guess from
+  how each site is generally known to be built; the fake page proves the
+  adapter and its table fit together, not that the table matches the real
+  page. The self-checks above are the proof.
+- **Any of these sites may block it anyway**, and its spare account may be
+  closed. Jarvis will not work around a block.
+- A cookie box or "what's new" box over the page counts as "needs you":
+  Jarvis stops rather than guess which button closes it (some of these
+  sites show a cookie box in some countries).
+- If a site's send button is not found, it stops - it does not press Enter
+  instead.

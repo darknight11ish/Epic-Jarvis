@@ -76,7 +76,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import REPO, SHIPPED, require_shipped  # noqa: E402
 
-require_shipped("jarvis_chatbot.py", "jarvis_chatbot_gemini.py", "jarvis_task_control.py",
+require_shipped("jarvis_chatbot.py", "jarvis_chatbot_gemini.py", "jarvis_chatbot_web.py",
+                "jarvis_task_control.py",
                 "jarvis_stop_all.py", "rebuilt/jarvis_router.py")
 if str(HERE / "rebuilt") not in sys.path:
     sys.path.insert(1, str(HERE / "rebuilt"))
@@ -106,7 +107,11 @@ def check(name, cond, detail=""):
 #   The code checks - these run even without a browser
 # ==========================================================================
 
-SRC = (HERE / "jarvis_chatbot_gemini.py").read_text(encoding="utf-8")
+# The site file and the shared base it hands everything else to
+# (jarvis_chatbot_web.py): every check below reads both, as one.
+SOURCES = [(HERE / "jarvis_chatbot_gemini.py").read_text(encoding="utf-8"),
+           (HERE / "jarvis_chatbot_web.py").read_text(encoding="utf-8")]
+SRC = "\n".join(SOURCES)
 
 
 def _code_only(src: str) -> str:
@@ -149,14 +154,15 @@ FORBIDDEN = (
 
 
 def t_openly_no_stealth_code():
-    code = _code_only(SRC).lower()
+    code = " ".join(_code_only(s) for s in SOURCES).lower()
     found = [w for w in FORBIDDEN if w in code]
     check("the module has no stealth, fingerprint, webdriver-hiding, proxy or "
           "captcha-solving code", not found, found)
     check("... and its docstring still says what it never does (the check reads code, "
-          "not words)", "No stealth plug-in" in SRC and "captcha solving" in SRC)
-    tree = ast.parse(SRC)
-    launches = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+          "not words)", all("No stealth plug-in" in s and "captcha solving" in s
+                            for s in SOURCES))
+    trees = [ast.parse(s) for s in SOURCES]
+    launches = [n for tree in trees for n in ast.walk(tree) if isinstance(n, ast.Call)
                 and isinstance(n.func, ast.Attribute)
                 and n.func.attr in ("launch", "launch_persistent_context")]
     ok = bool(launches)
@@ -170,7 +176,7 @@ def t_openly_no_stealth_code():
     check("nothing anywhere starts a headless browser", "headless=True" not in SRC
           and "headless = True" not in SRC)
     clickers = set()
-    for fn in ast.walk(tree):
+    for fn in (f for tree in trees for f in ast.walk(tree)):
         if isinstance(fn, ast.FunctionDef):
             for n in ast.walk(fn):
                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) \
@@ -179,7 +185,7 @@ def t_openly_no_stealth_code():
                     clickers.add(fn.name)
     check("it clicks in exactly two places: the message box and the send button",
           clickers == {"_type_message", "_press_send"}, clickers)
-    gotos = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+    gotos = [n for tree in trees for n in ast.walk(tree) if isinstance(n, ast.Call)
              and isinstance(n.func, ast.Attribute) and n.func.attr == "goto"]
     check("one place opens an address, and it checks the host first",
           len(gotos) == 1 and "def _goto_here" in SRC
@@ -188,7 +194,7 @@ def t_openly_no_stealth_code():
           G.START_URL == "https://gemini.google.com/app" and G.GeminiWeb().chat_hosts
           == ("gemini.google.com",))
     check("a fixed typing pace, not a random one (the point is the site's load, not a "
-          "disguise)", "random" not in _code_only(SRC).lower() and G.TYPE_DELAY_MS > 0)
+          "disguise)", "random" not in code and G.TYPE_DELAY_MS > 0)
     check("every selector is in the one table, with fallbacks",
           all(len(G.SELECTORS[r]) >= 2 for r in ("input", "send", "stop", "reply",
                                                  "reply_text", "captcha")))

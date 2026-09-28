@@ -783,6 +783,16 @@ $SHIPPED = @(
     # --- Projects, build steps 1 and 2 (projects.patch, 2026-09-28) ---
     'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
     'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
+    # --- more chatbot websites, driven the same open way (2026-09-28, "the chatbot driver becomes versatile"); no route yet ---
+    'jarvis_chatbot_web.py'      # what every website adapter shares: the visible window, the typing, the host lock, every "needs you" page, sign-in and self-check; jarvis_chatbot.py loads it, and it loads the site files below
+    'jarvis_chatbot_chatgpt.py'  # ChatGPT (chatgpt.com): a thin site file - its selectors, host and words; its own profile and spare account
+    'jarvis_chatbot_claude.py'   # Claude (claude.ai): a thin site file
+    'jarvis_chatbot_copilot.py'  # Microsoft Copilot (copilot.microsoft.com): a thin site file
+    'jarvis_chatbot_perplexity.py' # Perplexity (www.perplexity.ai): a thin site file; its listed sources are read as text, never opened
+    'jarvis_chatbot_deepseek.py' # DeepSeek (chat.deepseek.com): a thin site file
+    'jarvis_chatbot_grok.py'     # Grok (grok.com): a thin site file
+    'jarvis_chatbot_lechat.py'   # Le Chat by Mistral AI (chat.mistral.ai): a thin site file
+    'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
 )
 
 # The settings file. Installed only where none exists; never overwritten.

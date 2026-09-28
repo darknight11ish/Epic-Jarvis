@@ -792,9 +792,11 @@ def _chatbot_status() -> dict:
 
 
 def _chatbot(ctx: Ctx) -> dict:
-    """Chatbot conversations (jarvis_chatbot.py + jarvis_chatbot_gemini.py,
-    the owner's decisions of 2026-09-27/28): Jarvis talks to an AI chatbot
-    WEBSITE for the owner, one card per conversation."""
+    """Chatbot conversations (jarvis_chatbot.py and its website adapters -
+    jarvis_chatbot_web.py and one site file per website, Gemini first; the
+    owner's decisions of 2026-09-27/28): Jarvis talks to an AI chatbot
+    WEBSITE for the owner, one card per conversation. One row for all of
+    them; `where` names every host that is set up, each its own way out."""
     name = "Chatbot conversations"
     st = ctx.chatbot if ctx.chatbot is not None else _chatbot_status()
     bots = [b for b in st.get("chatbots") or [] if b.get("built")]
@@ -813,6 +815,11 @@ def _chatbot(ctx: Ctx) -> dict:
     ready = [b for b in bots if b.get("ready")]
     if not ready:
         why = str(bots[0].get("note") or "")
+        if len(bots) > 1 and any(str(b.get("note") or "") != why for b in bots):
+            # Each website is signed in on its own: say so, with the first
+            # one's line, rather than let one site's words speak for all.
+            why = ("none of them is set up on this PC yet; each is signed in on its own. "
+                   + str(bots[0].get("name") or bots[0].get("id")) + ": " + why)
         return _row("chatbot", name, "not_set_up", "", ASK_NA,
                     ("Not set up (" + names + "): " + why).strip())
     ready_names = _join([str(b.get("name") or b.get("id")) for b in ready])
