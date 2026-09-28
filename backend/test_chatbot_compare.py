@@ -826,9 +826,9 @@ def t_shipped_and_documented():
     check("JARVIS-API.md documents both routes",
           "/api/chatbot/compare/start" in api and "/api/chatbot/compare/stop" in api)
     design = (REPO / "docs" / "CHATBOT-DRIVER-DESIGN.md").read_text(encoding="utf-8")
-    check("the design doc has the proposed numbers",
-          "Ask several and compare" in design and "proposed - the owner can change them"
-          in design)
+    check("the design doc has the numbers the owner confirmed (2026-09-28)",
+          "Ask several and compare" in design
+          and "The limits (confirmed by the owner, 2026-09-28)" in design)
 
 
 def main():
