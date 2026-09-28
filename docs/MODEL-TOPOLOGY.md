@@ -333,6 +333,84 @@ roughly triple the injected block, from ~100 to ~320 tokens — small in a 16K
 window, and much cheaper than it was before that patch moved the block out of
 the prefix.
 
+## Engine settings to try (written down, not applied)
+
+Two settings of the engine inside Ollama (llama.cpp) that the research audit
+(`docs/RESEARCH-AUDIT-2026-09-28.md` section 6, items 2 and 4) says are
+worth measuring. **Neither is switched on.** Both are read by the engine
+from the environment: Ollama starts it with its own environment, so any
+`LLAMA_ARG_...` setting reaches it (the audit read this in Ollama's and
+llama.cpp's source; it has not been tried on the PC). Jarvis already sets
+one this way, `LLAMA_ARG_FIT_TARGET`, in the Hardware presets.
+
+Measure before and after with the speed record's quick mode - it times
+`jarvis-primary` alone (1st, 2nd and 3rd request after loading, words per
+second, a note-tidying job, and how much is on the card) and adds one line
+to `C:\Users\pcadmin\jarvis-model-tryout\speed-only.jsonl`, so before and
+after sit next to each other. About 2 minutes; run it when Jarvis is idle,
+from this repository's folder:
+
+```powershell
+py -3 tools\model_tryout\chat_tryout.py --speed-only; Write-Host "Added to $env:USERPROFILE\jarvis-model-tryout\speed-only.jsonl"
+```
+
+**1. Cap the engine's prompt memory in system RAM: `LLAMA_ARG_CACHE_RAM=3072`.**
+The engine keeps recent prompts in the PC's main memory so a repeated start
+(Jarvis's rules and tool list) is not read again. Its default allows 8 GB
+per running copy, and Jarvis can run up to three copies (the main one, the
+second card's, the big model's). 3072 caps each at 3 GB. What to watch: the
+2nd and 3rd "first word" times should stay the same (if they grow, the cap
+is too small), and the memory Ollama's programs use should drop. This one
+line prints that memory (it only reads):
+
+```powershell
+"{0:N1} GB used by Ollama's programs" -f ((Get-Process -Name 'ollama*','llama*' -ErrorAction SilentlyContinue | Measure-Object WorkingSet64 -Sum).Sum / 1GB)
+```
+
+This line reaches the **main** Ollama only. The copies Jarvis starts itself
+- the second card's Ollama and the big model - are handed a fixed list of
+settings (`jarvis_child_env.py`, checked 2026-09-28) that does not include
+it; adding it there is a small code change for later, once the second card
+is in. Switch it on (then quit Ollama - right-click its icon by the clock,
+Quit Ollama - and start it again from the Start menu):
+
+```powershell
+[Environment]::SetEnvironmentVariable('LLAMA_ARG_CACHE_RAM', '3072', 'User'); Write-Host 'Saved for your Windows user. Quit Ollama and start it again.'
+```
+
+Undo: `[Environment]::SetEnvironmentVariable('LLAMA_ARG_CACHE_RAM', $null, 'User'); Write-Host 'Undone. Quit Ollama and start it again.'`
+
+**2. "Guess ahead" without a second model: `LLAMA_ARG_SPEC_TYPE=ngram-mod`.**
+While writing, the engine guesses the next few words from words already in
+the conversation and checks them in one go - cheap (about 16 MB) and it
+needs no draft model. It helps most when an answer repeats text it was given
+(tidying a note, a summary); for a fresh answer it may do nothing or cost a
+little. **Keep it only if words per second go up** in the speed record
+(look at "words/s" and "tidying a note ... tokens/s"), and the answers still
+read right. Like the first setting, it reaches the main Ollama only.
+
+```powershell
+[Environment]::SetEnvironmentVariable('LLAMA_ARG_SPEC_TYPE', 'ngram-mod', 'User'); Write-Host 'Saved for your Windows user. Quit Ollama and start it again.'
+```
+
+Undo: `[Environment]::SetEnvironmentVariable('LLAMA_ARG_SPEC_TYPE', $null, 'User'); Write-Host 'Undone. Quit Ollama and start it again.'`
+
+Change one setting at a time, and measure after each, or you cannot tell
+which one did what. Neither shows up in Ollama's log line of settings (they
+are not passed as flags), so the speed record is the only proof either one
+took effect - an unchanged record after a restart can also mean it was not
+picked up. Send the `speed-only.jsonl` lines back.
+
+**A hidden place settings can come from.** The same engine also reads
+`%PROGRAMDATA%\llama.cpp\config.ini` and `%APPDATA%\llama.cpp\config.ini`
+(the audit's item 3). Nothing in Jarvis writes them, and nothing in Jarvis
+would show a setting that came from them, so the preflight
+(`py -3 backend\selftest.py --preflight`) now warns when either exists, with
+the settings' names and the one line that renames the file.
+
+Trying other chat models, and other memory-search models, is
+`tools/model_tryout/README.md`.
+
 ---
 
 ## The planned second card: RTX 2060 12 GB

@@ -463,6 +463,55 @@ class HashEmbedder(Embedder):
         return out
 
 
+#: The meaning model Jarvis has always used. JARVIS_MEMORY_EMBED_MODEL names
+#: another one (the "Model tryouts" group, 2026-09-28); left unset, nothing
+#: about the store changes - same model, same name, same vectors.
+EMBED_MODEL_DEFAULT = "BAAI/bge-small-en-v1.5"
+
+#: What some models need written in front of a QUESTION and of a stored FACT
+#: to work as their makers measured them. From fastembed 0.8.1's own model
+#: list, which says so in each model's description (read 2026-09-28):
+#: EmbeddingGemma wants "task: search result | query: " and "title: none |
+#: text: "; Qwen3-Embedding wants "Instruct: <the task>\nQuery:" before a
+#: question and nothing before a fact. fastembed itself adds none of them
+#: (its query_embed() is plain embed() for these models), so they are added
+#: here. The default model has none, so its vectors and name are unchanged.
+EMBED_PREFIXES = {
+    "google/embeddinggemma-300m": ("task: search result | query: ", "title: none | text: "),
+    "Qwen/Qwen3-Embedding-0.6B": (
+        "Instruct: Given a question, retrieve the saved facts that answer it\nQuery:", ""),
+    "Qwen/Qwen3-Embedding-0.6B-Q": (
+        "Instruct: Given a question, retrieve the saved facts that answer it\nQuery:", ""),
+}
+#: Bumped if the prefixes above ever change, so the store's name for the
+#: model changes with them and every fact is embedded again (see _init()).
+EMBED_PREFIX_VERSION = 1
+
+
+def embed_model_wanted() -> str:
+    """The meaning model the owner asked for (JARVIS_MEMORY_EMBED_MODEL), or
+    the default."""
+    return (os.environ.get("JARVIS_MEMORY_EMBED_MODEL") or "").strip() or EMBED_MODEL_DEFAULT
+
+
+class EmbedModelUnavailable(Exception):
+    """The model asked for is not one the installed fastembed has. str() is
+    a plain sentence for the owner."""
+
+
+def fastembed_version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("fastembed")
+    except Exception:
+        return "unknown"
+
+
+#: Why the model asked for is not the one in use, in plain words - or "".
+#: status() shows it, and it is said once in the backend's window.
+_embed_refused = ""
+
+
 class FastEmbedder(Embedder):
     """The real one, if fastembed is installed.
 
@@ -470,18 +519,35 @@ class FastEmbedder(Embedder):
     finite/zero check at all, so a model that returned NaN - which they do, on
     an empty string or a pathological input - wrote a row nothing could ever
     find again. Checked here, at the only place vectors are produced.
+
+    A model other than the default must be one the installed fastembed lists,
+    or this refuses it with EmbedModelUnavailable (a plain sentence) before
+    anything is downloaded or loaded. Its name in the store carries the
+    prefix version when it uses prefixes, so a change of prefixes counts as a
+    change of model: the store then embeds every fact again (never a mix -
+    MemoryStore._init() compares the name, not the width).
     """
 
     semantic = True
 
-    def __init__(self, model: str = "BAAI/bge-small-en-v1.5") -> None:
+    def __init__(self, model: Optional[str] = None) -> None:
+        model = (model or embed_model_wanted()).strip()
         quiet_onnxruntime()
         from fastembed import TextEmbedding  # imported lazily and on purpose
+        if model != EMBED_MODEL_DEFAULT and model not in {
+                str(m.get("model")) for m in TextEmbedding.list_supported_models()}:
+            raise EmbedModelUnavailable(
+                f"The memory search model {model!r} is not one this PC's fastembed "
+                f"({fastembed_version()}) has, so it was not used. Check the spelling "
+                "against tools/model_tryout/README.md; the newer models need fastembed "
+                "0.8.1 or later (the same page has the one line that installs it).")
         self._m = TextEmbedding(model_name=model, cache_dir=model_cache_dir())
-        self.name = model
-        self.dim = len(next(iter(self._m.embed(["probe"]))))
+        self._q, self._d = EMBED_PREFIXES.get(model, ("", ""))
+        self.name = model if not (self._q or self._d) else \
+            f"{model}+prefixes-{EMBED_PREFIX_VERSION}"
+        self.dim = len(next(iter(self._m.embed([self._d + "probe"]))))
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    def _vectors(self, texts) -> list[list[float]]:
         out: list[list[float]] = []
         for v in self._m.embed(list(texts)):
             vec = [float(x) for x in v]
@@ -491,13 +557,50 @@ class FastEmbedder(Embedder):
             out.append(vec if _usable_vector(vec, self.dim) else [0.0] * self.dim)
         return out
 
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Facts, and anything compared with facts."""
+        return self._vectors([self._d + t for t in texts] if self._d else texts)
+
+    def embed_query(self, texts: list[str]) -> list[list[float]]:
+        """A question to search with. The same as embed() for the default."""
+        return self._vectors([self._q + t for t in texts] if self._q else texts)
+
+
+def _embed_query(embedder, query: str):
+    """One question's vector: embed_query() where the embedder has one."""
+    fn = getattr(embedder, "embed_query", None)
+    return (fn if callable(fn) else embedder.embed)([query])[0]
+
+
+def _say_refused(why: str) -> None:
+    global _embed_refused
+    _embed_refused = why
+    try:
+        print(f"  memory     {why} Using {EMBED_MODEL_DEFAULT} instead.", file=sys.stderr)
+    except Exception:
+        pass
+
 
 def _make_embedder():
-    """The best available, never an exception."""
+    """The best available, never an exception.
+
+    JARVIS_MEMORY_EMBED_MODEL naming a model this fastembed does not have (or
+    cannot load) is REFUSED in plain words - said once, and in status() - and
+    the default model is used instead, never a silent drop to words only."""
     if os.environ.get("JARVIS_NO_EMBED"):
         return HashEmbedder()
+    wanted = embed_model_wanted()
     try:
-        return FastEmbedder()
+        return FastEmbedder(wanted)
+    except EmbedModelUnavailable as exc:
+        _say_refused(str(exc))
+    except Exception as exc:
+        if wanted == EMBED_MODEL_DEFAULT:
+            return HashEmbedder()
+        _say_refused(f"The memory search model {wanted!r} could not be loaded "
+                     f"({type(exc).__name__}), so it was not used.")
+    try:
+        return FastEmbedder(EMBED_MODEL_DEFAULT)
     except Exception:
         return HashEmbedder()
 
@@ -537,7 +640,12 @@ def _make_embedder():
 # up to RERANK_BUDGET_S seconds (1.5 s); a re-rank slower than that is not
 # waited for any longer and that question gets the merged order.
 
-RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
+RERANK_MODEL_DEFAULT = "Xenova/ms-marco-MiniLM-L-6-v2"
+#: JARVIS_MEMORY_RERANK_MODEL names another of fastembed's re-rankers (the
+#: "Model tryouts" group, 2026-09-28) - for the self-test's tryout, or for
+#: real once the self-test shows it helps. Unset: the default above.
+RERANK_MODEL = (os.environ.get("JARVIS_MEMORY_RERANK_MODEL") or "").strip() \
+    or RERANK_MODEL_DEFAULT
 
 
 def _env_int(name: str, default: int, lo: int, hi: int) -> int:
@@ -584,6 +692,12 @@ class FastReranker(Reranker):
     def __init__(self, model: str = RERANK_MODEL) -> None:
         quiet_onnxruntime()
         from fastembed.rerank.cross_encoder import TextCrossEncoder
+        if model != RERANK_MODEL_DEFAULT and model not in {
+                str(m.get("model")) for m in TextCrossEncoder.list_supported_models()}:
+            raise EmbedModelUnavailable(
+                f"the re-ranking model {model!r} is not one this PC's fastembed "
+                f"({fastembed_version()}) has - check the spelling against "
+                "tools/model_tryout/README.md")
         self._m = TextCrossEncoder(model_name=model, cache_dir=model_cache_dir())
         self.name = model
         list(self._m.rerank("probe", ["probe"]))      # load it now, not on a question
@@ -2268,7 +2382,7 @@ class MemoryStore:
             # meaning
             if self._vec_ok and self.embedder.semantic:
                 try:
-                    qv = self.embedder.embed([query])[0]
+                    qv = _embed_query(self.embedder, query)
                     # A bad QUERY vector is worse than a bad stored one: it
                     # does not fail, it silently ranks the whole table by
                     # distance-from-nonsense, and those rows then outrank the
@@ -2583,6 +2697,10 @@ class MemoryStore:
                "vector_search": self._vec_ok, "unembedded": pending,
                "erased": erased, "entities": ents, "reranker": reranker_status(),
                "said_again": repeats}
+        if _embed_refused:
+            # Only when JARVIS_MEMORY_EMBED_MODEL asked for a model that could
+            # not be used: why, in plain words (the default is in use).
+            out["embedder_refused"] = _embed_refused
         if self._entity_errors:
             out["entity_errors"] = self._entity_errors
         if self._bad_vectors:
