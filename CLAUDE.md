@@ -542,6 +542,9 @@ before acting on any outside review; its disproven findings stay closed):
   the owner's go-ahead is given; (9) a "match my speaking pace" setting, off
   to start, both apps; (10) microWakeWord joins the wake-word trial; (11)
   offline developer docs. Details in the audit, section 6.
+- **Milestone 12, the same day:** "said again" counts become a small
+  tie-breaker in recall - never hiding or fading a fact - kept only if the
+  memory self-tests improve.
 - **Copying the owner's own voice stays refused** (`jarvis_voices.py`): a
   Jarvis speaking in the owner's voice could pass its own voice check.
 

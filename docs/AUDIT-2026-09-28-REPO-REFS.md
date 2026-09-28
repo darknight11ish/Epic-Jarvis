@@ -164,6 +164,19 @@ existing behaviour until it's switched on. Each gets the usual new-feature audit
   like "Folders Jarvis may look in" and treated as outside text. Downloaded
   once, by the owner. Most useful alongside the app builder.
 
+### Milestone 12 - "Said again" as a small tie-breaker in recall (queued 2026-09-28)
+
+- **What.** `fact_repeats` already records each time the owner repeats
+  something Jarvis knows (`said_again`, `said_again_counts` in
+  `backend/rebuilt/jarvis_memory.py`), but recall doesn't use it; only
+  `jarvis_auto_learn.py` reads it. Use it as a small tie-breaker in ranking,
+  so a fact the owner keeps repeating edges ahead of an equal one.
+- **Limits.** A tie-breaker only: nothing is hidden, faded or removed (the
+  memory research turned down forgetting by decay because it "hides facts
+  without your decision"). Kept only if `eval_memory.py` and
+  `eval_learner.py` get better on the PC, with the numbers on the memory
+  scoreboard.
+
 ## 7. Rounds three and four (later on 2026-09-28)
 
 Two more batches of suggestions from Gemini, checked the same way.
@@ -228,4 +241,21 @@ in `docs/APP-BUILDER-DESIGN.md`):
 - **Not queued, but possible later:** matching the owner's speaking pace
   (faster when they are quick, slower when quiet), as a "How Jarvis talks"
   setting.
+
+**Round six** (memory refinement, later on 2026-09-28; the four repositories
+were not opened, so their names and contents are unverified):
+- **nec-research/oblivion (fading facts by decay):** turned down as a
+  mechanism, because the memory research rejected hiding facts without the
+  owner's decision (`MEMORY-RESEARCH-2026-09-26.md`, "Forgetting by heat or
+  decay"). Its acceptable slice, recent use as a small tie-breaker, is
+  milestone 12.
+- **tao-hpu/cog-canvas (exact words, not summaries):** already a rule.
+  "Never compress facts or transcripts" (`ARCHITECTURE.md`), the pinned
+  list is never rewritten, and the overnight tidy only proposes cards.
+- **lipps/EverMemOS (small units of memory):** already how facts are
+  stored: one statement each, dated, linked to the people and things they
+  mention.
+- **scitrera/memorylayer:** nothing to take. Memory is already a local
+  SQLite file with no outside database, and exposing it to plug-ins (MCP)
+  would go against rule 1.
 
