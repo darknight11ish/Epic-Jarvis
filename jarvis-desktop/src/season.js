@@ -152,6 +152,9 @@
    *  south's are six months on. */
   const HOLIDAYS = [["pumpkin", 10, 24, 11, 1], ["lights", 12, 18, 1, 2]];
   const SNOWMAN = [12, 15, 2, 1];
+  /** Within this many degrees of the equator (the tropics), no autumn
+   *  leaves and no winter snow are drawn (see scene()). */
+  const TROPIC_LAT = 23.5;
   /** The New Year sparkle: seconds after local midnight on 1 January. */
   const SPARKLE_S = 60;
 
@@ -305,7 +308,15 @@
    *               the sun's altitude for the saved place, or null (then the
    *               clock decides day and night); snow, rain: the weather the
    *               sky is drawing, 0..1 (real snow replaces the seasonal
-   *               snowfall; rain puts out the fireflies and the haze)}
+   *               snowfall; rain puts out the fireflies and the haze);
+   *               snowman: false for a face whose own scenery covers its
+   *               corner (the owl's branch) - left out, it stands as usual}
+   *
+   * In the tropics (the saved town within TROPIC_LAT of the equator) there
+   * are no autumn leaves and no winter snow - leaves, snow bank, snowfall or
+   * snowman: the months there have no such seasons. The holidays, spring's
+   * petals and summer's haze and fireflies stay. With no town saved, the
+   * north's seasons are drawn, as before.
    */
   function scene(ms, tzMin, t, opts) {
     const o = opts || {};
@@ -321,6 +332,10 @@
     const C = calendar(ms, tzMin, lat);
     const S = C.seasons, I = C.items;
     const L = LAYOUT;
+    // Autumn's and winter's pieces, taken away in the tropics.
+    const temperate = lat !== null && Math.abs(lat) < TROPIC_LAT ? 0 : 1;
+    const autumnW = S.autumn * temperate, winterW = S.winter * temperate;
+    const snowmanOn = o.snowman === false ? 0 : 1;
     const tt = calm ? 0 : t;
     const hour = C.local[3];
     const ops = [];
@@ -336,7 +351,7 @@
     if (hazeA > MIN_A) put(GLOW, [0.55 * ax, 0.72, 1.1, 255, 226, 178, hazeA]);
 
     // Winter: a soft snow bank along the floor, higher in the corners.
-    const bankA = S.winter * all;
+    const bankA = winterW * all;
     if (bankA > MIN_A) {
       const pts = [];
       const n = 24;
@@ -355,7 +370,7 @@
 
     // Autumn: fallen leaves gathering in the corners - none for the first
     // ten days, all six by day sixty.
-    const autumnA = S.autumn * all;
+    const autumnA = autumnW * all;
     if (autumnA > MIN_A) {
       const nFallen = Math.floor(6 * clamp((C.day.autumn - 10) / 50, 0, 1));
       for (let i = 0; i < nFallen; i++) {
@@ -383,7 +398,7 @@
     // The snowman, mid-winter: two snowballs, coal eyes, a small nose, a
     // scarf and twig arms, standing in the snow bank. `u` is its size unit
     // (about 0.25 tall).
-    const snA = I.snowman * S.winter * moving;
+    const snA = I.snowman * winterW * moving * snowmanOn;
     if (snA > MIN_A) {
       const u = 0.0145, x = L.LEFT_X, by = L.FLOOR + 0.07 + 3.0 * u;
       const hy = by + 4.8 * u + 2.4 * u;
@@ -440,7 +455,7 @@
     }
 
     // Autumn: leaves drifting down, turning and tumbling as they sway.
-    const leafA = S.autumn * moving;
+    const leafA = autumnW * moving;
     if (leafA > MIN_A) {
       const n = calm ? 5 : 9;
       for (let i = 0; i < n; i++) {
@@ -483,7 +498,7 @@
 
     // Winter: light snowfall - fewer and smaller flakes than the weather's,
     // and none while the sky is drawing real snow.
-    const flakeA = S.winter * moving * (1 - smoothstep(0.02, 0.1, snowW));
+    const flakeA = winterW * moving * (1 - smoothstep(0.02, 0.1, snowW));
     if (flakeA > MIN_A) {
       const n = calm ? 7 : 14;
       const fallS = 2 * ay + 0.1;
@@ -604,7 +619,7 @@
   }
 
   const api = {
-    VERSION: 1, LAYOUT, SEASONS, HOLIDAYS, SNOWMAN, SPARKLE_S, FADE_DAYS, HOLD_EASE_S,
+    VERSION: 1, LAYOUT, SEASONS, HOLIDAYS, SNOWMAN, SPARKLE_S, FADE_DAYS, HOLD_EASE_S, TROPIC_LAT,
     LEAF_RGB, PETAL_RGB, BULB_RGB, GLOW, DOT, POLY, LINE, MIN_A,
     hash01, smoothstep, daysFromCivil, civilFromDays, localOf, windowAt, calendar, holdWeight,
     leafShape, petalShape, glintShape, ellipse, place, scene, draw, follow,

@@ -126,6 +126,7 @@ fun DrawScope.drawSeasonBehind(face: CritterFace, f: FaceFrame, ground: Color) {
         lat = place?.lat, calm = f.calm, hide = max(f.stillW, f.seriousW).toDouble(), hold = hold,
         ax0 = (w / k).toDouble(), ay0 = (h / k).toDouble(), sunAlt0 = sunAlt,
         snow = weather?.snow ?: 0.0, rain = weather?.rain ?: 0.0,
+        snowman = Season.snowmanFor(face.id),
     )
     SeasonDraw.draw(this, sc, face.dimFor(f), ground)
 }

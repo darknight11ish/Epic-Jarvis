@@ -530,8 +530,8 @@ petting, two cute idle moments per animal, a hello and a goodbye when the
 face is switched, and more variety in every kind of move. They are all in
 the pose code (`critter-pose.js` and each animal's file on the PC, the
 Kotlin copies on the phone), held equal by the fixture like everything
-else. **None of them is switched on by a host yet** - each app has to pass
-the new inputs below; until it does, the animals move exactly as before.
+else. **Both apps feed them now** (2026-09-28): what each input is made
+from, on each app, is in "What each app feeds them" below.
 
 The rules each one keeps:
 
@@ -692,6 +692,74 @@ cute moments take turns, only after 150 s of rest; goodbye and hello go out
 of view and back, and only cross-fade under calm; an arrival reacts a
 little, then is still, never the same twice running; and nothing changes
 speed suddenly or stops being a number.
+
+##### What each app feeds them (2026-09-28)
+
+The hosts - the desktop's `faces.html` (every desktop face: the Widget's,
+the floating face, the HUD's and the Faces window) and the phone's
+`FaceView` (Home and Appearance's preview) - hand the pose these. Where both
+apps do the same thing, they do it the same way; the phone's side is
+`face/AnimalNow.kt` (`AnimalNow`, `AnimalFeed`), checked on the JVM by
+`AnimalFeedTest` and `FaceSwitchTest`; the desktop's is checked by
+`jarvis-desktop/tests/animal-behaviours.mjs`.
+
+| Input | Desktop | Phone |
+|---|---|---|
+| `nods`, `focus_buddy`, `acks`, `petting`, `cute_moments` | the switches this computer keeps from the PC (`animal-shared.js`, read with Still), each eased over a second | `AppearanceStore.animal`, handed to `AnimalNow` by JarvisRuntime, eased the same way |
+| `variety` | 1, always | 1, always |
+| `heard`, `heardN` | `pauseStep` on the microphone's level as heard (the `voice-level` event's, under the room's gate), while listening | the same, on the recorder's level (`micLevel`) |
+| `phraseEnd`, `phraseN` | `pauseStep` on Jarvis's voice as heard (the lip-sync track's level), while speaking; passed only when a real voice is heard as an answer starts and "Listening nods" is on - decided then, never in the middle of an answer. A typed or quiet answer keeps the gestures' own timing | the same, on the speaker's level (`speechMouth` / `speechLevel`) |
+| `ackNod` | the `memory_saved` event, relayed by the window around the face (`face-moments.js`); never while App lock or "Hide memory lists and chat history" is on, or before the app knows (a new two-answer command, `get_lock_flags`, then the `security-changed` event); a replayed event never nods twice; at least 1.2 s apart | the same event (`JarvisRuntime.onMemorySaved`, fresh ids only), held back while App lock or "Hide memory lists" is on |
+| `ackGlow` | the `deep` event with `state: "done"`, relayed the same way; at least 1.8 s apart | the same event |
+| `focus`, `focusEnd` | the `focus` event (`started` / `changed`: on; `ended`: off), eased; the stretch is handed on once Jarvis is idle again (dropped after a minute of waiting) | the same |
+| `pet`, `petX`, `petDir` | a press on the Widget's face that moves, or is held half a second; in the Faces window, only a held press (a quick drag still turns the face round). In over 0.3 s, out over 1 s | a long press on the face (half a second), then moving the finger strokes; a quick drag still turns it round. The long press never opens the Brain (Home's tap does, only when short) |
+| `goodbye`, `hello` | the face switch below | the face switch below |
+| `busy(state, t, since, opts)` | the frame pacer (`dueFrame`, display mode's tick) passes how long the face has been in its state and its opts, so a cute moment is drawn at the full rate | `FaceHost.restFps`, the same (`CritterFace.busyAt` with `since` and `opts`) |
+
+**Switching faces** (both apps). When the owner picks another face - in the
+Faces window, on the phone, or by asking Jarvis - each face surface plays it
+out: the leaving character's `goodbye` from 0 to 1 over `GOODBYE_S`, then the
+new one, whose `hello` goes 0 to 1 over `HELLO_S`. A face that is not a
+character fades out, or in, on its side. Under Still, calm motion or a
+serious moment the pose plays neither, and the host fades the face by
+`CritterPose.switchAlpha(opts)` - the quick gentle cross-fade. Two faces
+that are neither switch at once, as they always did. Both apps key this on
+"is it a character face" (the desktop's `family: "critter"`, any
+`critterFace()`; the phone's `CritterFace`), never on a list of names, so the
+robot face plugs in as it is. Details:
+
+- Desktop: display mode's `switchFace` (the Widget, the floating face and the
+  HUD). The HUD used to reload its face frame on any change of the owner's
+  appearance; a change of face alone is now told to the frame instead, so it
+  can say goodbye (a change of colours still reloads it). The hello's clock
+  starts on the frame after the new face is first drawn, because that first
+  draw may build its shader. The canvas's opacity carries the fades.
+- Phone: `FaceView` draws `shownFace`, which follows the `face` it is given
+  through the goodbye and the hello (on the host's clock, capped at 1.5 s of
+  wall time each, so a stopped frame loop never leaves it waiting). The
+  Canvas's layer alpha carries the fades. The two mesh faces (Tokamak,
+  Membrane) draw on their own surface and switch at once, as before.
+- A switch that comes while a hello is still playing waits for it to end, so
+  a face never jumps back into view half way through coming in; switching
+  back while the old face is leaving brings it back with a hello.
+
+**Things to know, plainly:**
+
+- **Petting on the desktop works on the Widget's face and in the Faces
+  window.** The floating face and the HUD's face are click-through by design
+  (the floating window is dragged by its face; the HUD's face is made
+  click-through so it reads as part of the page), so they are not stroked.
+- **A focus session that was already running when the app started** is not
+  known until its next `focus` event (a pause, a drift, the end), on either
+  app - the events are the only source the faces read, never `GET /api/focus`.
+- **Nods and phrase gestures use the levels as heard**, not the faces' own
+  smoothed levels: the smoothing (made to hold the face up through a gap
+  between words) would have put every nod about half a second late and hidden
+  a comma's short pause.
+- **The desktop app needs its new build for the fact's nod**: the lock answer
+  is a new command (`get_lock_flags`, granted to every window with a face). A
+  window without it keeps the nod back until the Security settings change
+  once (fails closed).
 
 ### How the mouths talk
 
@@ -1157,6 +1225,58 @@ moon (a few minutes in its rising time) - far finer than the picture shows.
 Not yet seen on a real phone: the phone's drawing (`SkyDraw.kt`) is checked
 by CI's compiler and the emulator only.
 
+## Seasonal touches (2026-09-28)
+
+The owner's decision: "seasonal touches from the date (off by default)", one
+switch in the animal options ("Seasonal touches", `seasonal`), changeable by
+asking Jarvis ("turn on seasonal touches"). No card: it only changes the
+picture, and nothing leaves the device.
+
+**What is drawn** - a short list, every piece small and calm, behind the
+face (drawn right after the sky and before the face, so the face is in front
+and dims them with itself):
+
+- autumn: a few leaves drifting down, and fallen leaves gathering in the
+  corners as the season goes on;
+- winter: light snowfall, a soft snow bank along the floor, and from
+  mid-winter (15 December - 31 January in the north) a tiny snowman in the
+  left corner;
+- spring: blossom petals on a light breeze;
+- summer: a faint warm haze by day, a few fireflies at dusk and night;
+- a plain pumpkin in the right corner, 24-31 October; a string of soft
+  lights along the top, 18 December - 1 January; a few slow sparkles, once,
+  in the first minute of 1 January.
+
+**Where it comes from.** The device's own date, time and time zone; the half
+of the world from the sky's saved town (north when none is set) - nothing
+else, and nothing goes online. `jarvis-desktop/src/season.js` works it out
+and draws it on the desktop; `face/Season.kt` and `SeasonDraw.kt` on the
+phone, held equal by `tools/gen_season.py` (`season-golden.json`, checked by
+the phone's `SeasonTest`).
+
+**When it shows.** Still and a serious moment hide it (eased over about a
+second); an approval or an error puts away everything that moves and every
+holiday piece (only the still ground stays); calm motion holds it still, with
+fewer pieces; standby dims it with the face. A season or holiday fades in
+over the first hour of its day.
+
+**Two rules added with the host wiring:**
+
+- **The tropics.** With the town within 23.5 degrees of the equator there
+  are no autumn leaves and no winter snow (leaves, snow bank, snowfall or
+  snowman) - those months have no such seasons there. The holidays, spring's
+  petals and summer's haze and fireflies stay. With no town saved the
+  north's seasons are drawn, as before.
+- **The owl has no snowman.** Its branch runs across the lower left corner
+  where the snowman stands, and hid all but its head. Everything else in its
+  winter stays; the pumpkin, in the right corner, shows past the end of its
+  branch. (The desktop's owl face says `seasonSnowman: false`; the phone's
+  `Season.snowmanFor`.)
+
+Checked by `jarvis-desktop/tests/season.mjs` (the calendar, what shows when,
+the promises about how it looks and moves, the tropics and the owl, and the
+face pages drawing it from this computer's store with Still hiding it).
+
 ## Animal options: every option in one place (2026-09-28)
 
 The owner's decision: "Every animal option lives in one place in both apps'
@@ -1173,12 +1293,12 @@ worn, so a new face slots in with no change to the section.
 | Part of the section | Kept | Notes |
 |---|---|---|
 | Keep the animal still | the PC, shared | Off by default. Built: the animal only breathes and blinks. |
-| Listening nods | the PC, shared | On by default. Saved and shared now; the animal starts nodding in the next update. |
-| Focus buddy | the PC, shared | On by default. Next update. |
-| Small acknowledgements | the PC, shared | On by default. Next update. |
-| Petting | the PC, shared | On by default. Next update. |
-| Cute idle moments | the PC, shared | On by default (owner, later the same day). Two per face, alternating, after resting a while. Next update. |
-| Seasonal touches | the PC, shared | Off by default. Next update. |
+| Listening nods | the PC, shared | On by default. Built: nods in your pauses, gestures on Jarvis's phrase ends. |
+| Focus buddy | the PC, shared | On by default. Built. |
+| Small acknowledgements | the PC, shared | On by default. Built: a nod when a fact is saved (not while App lock or "Hide memory lists" is on), a glow when a long answer is ready. |
+| Petting | the PC, shared | On by default. Built: stroke the Widget's face on the PC (or hold, then stroke, in the Faces window); on the phone, a long press, then stroke. |
+| Cute idle moments | the PC, shared | On by default (owner, later the same day). Two per face, alternating, after resting a while. Built. |
+| Seasonal touches | the PC, shared | Off by default. Built (see "Seasonal touches" below). |
 | Sun and moon, your town, the weather and its source | the PC, shared (`/api/sky`) | Unchanged; moved into the section. Open-Meteo still asks with its card. |
 | Sharpness and frame rate (and Auto adjust, speed) | this device only | "on this computer" / "on this phone". |
 | The animal's voice | the PC's voice settings | A button goes there. |

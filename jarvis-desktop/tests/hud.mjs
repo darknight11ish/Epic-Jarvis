@@ -799,7 +799,10 @@ await check("the HUD holds the mic's command and its reads, chat and mark - and 
   const link = surfaces.slice(surfaces.indexOf('identifier = "hud-link"'));
   const linkPerms = link.slice(link.indexOf("permissions = ["), link.indexOf("]") + 1);
   assert.deepEqual(linkPerms.match(/allow-[a-z-]+/g),
-    ["allow-hud-get", "allow-hud-chat", "allow-hud-chat-cancel", "allow-mark-answer"]);
+    ["allow-hud-get", "allow-hud-chat", "allow-hud-chat-cancel", "allow-mark-answer",
+      // Two yes/no answers (App lock, "Hide memory lists"): its face never
+      // nods at a saved fact while either is on (face-moments.js).
+      "allow-get-lock-flags"]);
   // The token is never put in the page.
   const lib = readFileSync(join(HERE, "..", "src-tauri", "src", "lib.rs"), "utf8");
   assert.doesNotMatch(BOOT, /__JARVIS_TOKEN__/);

@@ -12,6 +12,7 @@
 
 import { currentLink, faceSignal, onEvent, onLink, onSerious, start as startLink } from "./jarvis-link.js";
 import { relayFaceVoice } from "./face-voice.js";
+import { relayFaceMoments } from "./face-moments.js";
 import { startSkyFeed } from "./sky-feed.js";
 
 const TAURI = globalThis.__TAURI__;
@@ -82,6 +83,9 @@ if (frame) frame.addEventListener("load", postFace);
 // Lip-sync: Jarvis's voice and the owner's microphone, passed into the face
 // the same way (face-voice.js) - an event reaches this page, never its frame.
 relayFaceVoice(frame, listen);
+// A fact saved, a long answer ready, a focus session on or off, for the
+// animal's nod, glow and focus buddy (face-moments.js) - the same road.
+relayFaceMoments(frame, listen, IS_TAURI ? (command) => TAURI.core.invoke(command) : null);
 onLink(() => postFace());
 // A serious moment starting or ending (the `wellbeing` event) is not a link
 // change, so it has its own call to post again.

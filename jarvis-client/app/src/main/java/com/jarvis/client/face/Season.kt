@@ -128,6 +128,16 @@ object Season {
     val SNOWMAN = intArrayOf(12, 15, 2, 1)
     const val SPARKLE_S = 60.0
 
+    /** Within this many degrees of the equator, no autumn leaves and no winter snow (season.js TROPIC_LAT). */
+    const val TROPIC_LAT = 23.5
+
+    /**
+     * Whether face [id] has the mid-winter snowman: every face but the owl,
+     * whose branch runs across its corner - the desktop's `seasonSnowman:
+     * false` on the owl's face.
+     */
+    fun snowmanFor(id: String): Boolean = id != "pygmyowl"
+
     private fun shift6(m: Int) = ((m + 5) % 12) + 1
 
     class Calendar(
@@ -305,13 +315,15 @@ object Season {
      * this phone's offset from UTC now, minutes east; [t] the wall clock in
      * seconds. [hide] (Still, a serious moment) and [hold] (an approval, an
      * error) are 0..1, eased by the host; [snow] and [rain] the weather the
-     * sky is drawing.
+     * sky is drawing. [snowman] false: a face whose own scenery covers its
+     * corner (the owl's branch, [snowmanFor]) has none. In the tropics
+     * ([TROPIC_LAT]) there are no autumn leaves and no winter snow.
      */
     fun scene(
         ms: Double, tzMin: Double, t: Double,
         lat: Double? = null, calm: Boolean = false, hide: Double = 0.0, hold: Double = 0.0,
         ax0: Double = 1.0, ay0: Double = 1.0, sunAlt0: Double? = null,
-        snow: Double = 0.0, rain: Double = 0.0,
+        snow: Double = 0.0, rain: Double = 0.0, snowman: Boolean = true,
     ): Scene {
         val ax = if (ax0 > 0) ax0 else 1.0
         val ay = if (ay0 > 0) ay0 else 1.0
@@ -332,8 +344,10 @@ object Season {
         if (all <= 0) return Scene(ax, ay, cal.season, cal.south, cal, ops)
         val fall = 2 * ay + 0.2
         val summer = s.getValue("summer")
-        val winter = s.getValue("winter")
-        val autumn = s.getValue("autumn")
+        // Autumn's and winter's pieces, taken away in the tropics.
+        val temperate = if (latV != null && abs(latV) < TROPIC_LAT) 0.0 else 1.0
+        val winter = s.getValue("winter") * temperate
+        val autumn = s.getValue("autumn") * temperate
         val spring = s.getValue("spring")
 
         // Summer by day: a faint warm haze high on one side.
@@ -397,7 +411,7 @@ object Season {
         }
 
         // The snowman, mid-winter.
-        val snA = items.getValue("snowman") * winter * moving
+        val snA = items.getValue("snowman") * winter * moving * (if (snowman) 1.0 else 0.0)
         if (snA > MIN_A) {
             val u = 0.0145
             val x = LEFT_X

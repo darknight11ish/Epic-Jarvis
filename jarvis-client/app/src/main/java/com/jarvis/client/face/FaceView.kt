@@ -1,8 +1,12 @@
 package com.jarvis.client.face
 
 import android.opengl.GLSurfaceView
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -219,10 +223,54 @@ fun FaceView(
 
     LaunchedEffect(state) { host.onStateChange(state) }
 
+    // SWITCHING FACES (the owner's decision of 2026-09-28): the face drawn is
+    // [shown], which follows [face] with a goodbye and a hello. The leaving
+    // animal (or robot - any CritterFace) plays a short goodbye, then the
+    // incoming one a short hello; a face that is not a character just fades
+    // on its side; under Still, calm motion or a serious moment a character
+    // cross-fades instead (CritterPose.switchAlpha, FaceFrame.alpha). Two
+    // faces that are neither switch at once, as they always have. Timed on
+    // the host's own clock, with a wall-clock cap so a stopped frame loop
+    // (the screen off) never leaves it waiting.
+    var shownFace by remember { mutableStateOf(face) }
+    LaunchedEffect(face) {
+        if (face == shownFace) {
+            // Switched back while the old face was leaving: it comes back.
+            if (host.leaving()) host.beginHello()
+            return@LaunchedEffect
+        }
+        // A face that has hardly been seen yet (the app opening on the
+        // default face, and the owner's arriving a moment later) is not a
+        // switch the owner made: it is worn at once.
+        if (host.onScreenS() < SWITCH_SETTLE_S) {
+            shownFace = face
+            return@LaunchedEffect
+        }
+        // A hello still playing finishes first, so a face never jumps back
+        // into view half way through coming in.
+        val helloBy = System.nanoTime() + SWITCH_CAP_NS
+        while (!host.helloDone() && System.nanoTime() < helloBy) delay(SWITCH_POLL_MS)
+        if (shownFace !is CritterFace && face !is CritterFace) {
+            shownFace = face
+            return@LaunchedEffect
+        }
+        // A mesh face (Tokamak, Membrane) draws on its own GL surface, which
+        // cannot fade here: it leaves at once rather than sit still for a
+        // second.
+        if (!MeshFaces.isMesh(shownFace.id)) {
+            host.beginGoodbye()
+            val byeBy = System.nanoTime() + SWITCH_CAP_NS
+            while (!host.goodbyeDone() && System.nanoTime() < byeBy) delay(SWITCH_POLL_MS)
+        }
+        shownFace = face
+        host.beginHello()
+    }
+    val shown = shownFace
+
     // A new face's first frames include one-off work (a shader compiling, a
     // point cloud being built), which is not what it costs to keep drawing.
     // An animal may be taken up to Maximum by Auto, and rests by its own rule.
-    LaunchedEffect(face.id) { FaceQuality.onFaceChanged(isAnimal = face is CritterFace) }
+    LaunchedEffect(shown.id) { FaceQuality.onFaceChanged(isAnimal = shown is CritterFace) }
 
     // The frame loop is suspended while the app is not at least STARTED.
     //
@@ -254,7 +302,7 @@ fun FaceView(
         }
     }
 
-    LaunchedEffect(face, bindings, frameLoopOwner) {
+    LaunchedEffect(shown, bindings, frameLoopOwner) {
         // False for the block's first run in this effect, which is a new face
         // or new colours on a screen being looked at; true for every later
         // run, each a return from ON_STOP - the screen was off or the app
@@ -286,7 +334,7 @@ fun FaceView(
             fun step(dt: Float, b: ResolvedBudget): Boolean {
                 val voiced = mouthOf(voiceNow)
                 return host.advance(
-                    dt, liveState, mic(), if (voiced) voiceNow[0] else speech(), bindings, face,
+                    dt, liveState, mic(), if (voiced) voiceNow[0] else speech(), bindings, shown,
                     calm || b.calm, b.speed, if (voiced) voiceNow else null,
                     serious = seriousNow, still = stillNow, offline = offlineNow,
                     pace = FaceQuality.pace,
@@ -346,7 +394,7 @@ fun FaceView(
                 // The resting rate for what the face shows now (FaceHost.restFps):
                 // 0 for every frame; an animal's by its own rule (AnimalPace),
                 // every other face's by the spec's state_fps.
-                val rest = host.restFps(face, FaceQuality.pace)
+                val rest = host.restFps(shown, FaceQuality.pace)
                 if (rest in 1..DELAY_MAX_FPS) {
                     // STANDBY (15) and BANKED (2) only. They sleep on `delay`
                     // rather than `withFrameNanos` because these are the states
@@ -476,9 +524,36 @@ fun FaceView(
                     change.consume()
                     host.onDrag(drag)
                 }
+            }
+            // PETTING (the owner's decision of 2026-09-28): a long press on
+            // an animal pets it, and moving the finger then strokes it; a
+            // quick drag still turns the face round, as before. Watched on
+            // the Final pass, so it sees the finger whatever the drag above
+            // has consumed, and consumes nothing itself. Home's own tap
+            // (open the Brain) is left alone on a long press
+            // (HomeScreen's tapThrough). The pose ignores it on every face
+            // but an animal, and while waiting on you, after something went
+            // wrong, asleep or dozing.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+                    val slop = viewConfiguration.touchSlop
+                    host.onPetDown(down.position.x, size.width.toFloat())
+                    wake.trySend(Unit)
+                    try {
+                        while (true) {
+                            val ev = awaitPointerEvent(PointerEventPass.Final)
+                            val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!c.pressed) break
+                            host.onPetMove(c.position.x, size.width.toFloat(), slop)
+                        }
+                    } finally {
+                        host.onPetUp()
+                    }
+                }
             },
     ) {
-        val mesh = remember(face.id) { MeshFaces.rendererFor(face.id) }
+        val mesh = remember(shown.id) { MeshFaces.rendererFor(shown.id) }
         if (mesh != null) {
             // key(), because the new renderer above is useless without a new
             // view to attach it to. GLFaceSurface is one call site, so
@@ -500,16 +575,18 @@ fun FaceView(
             // below never had the problem, because it reads `frame` only inside
             // its draw lambda; the lambda gives the mesh branch the same shape,
             // read only where it is used (see GLFaceSurface).
-            key(face.id) {
-                GLFaceSurface(mesh, { frame }, face, notches, background, glowK, drawCost, ringColour)
+            key(shown.id) {
+                GLFaceSurface(mesh, { frame }, shown, notches, background, glowK, drawCost, ringColour)
             }
         } else {
-            Canvas(Modifier.matchParentSize()) {
+            // The face switch's fade (FaceFrame.alpha), read in the layer only,
+            // so a changing alpha redraws the layer and recomposes nothing.
+            Canvas(Modifier.matchParentSize().graphicsLayer { alpha = frame.alpha }) {
                 // Timed for the Auto adjust governor: two clock reads a frame.
                 val t0 = System.nanoTime()
                 // The quality tier's `post`: no glow at Low or in battery saver.
                 val postGlow = if (FaceQuality.current.post) glowK else 0f
-                drawFace(frame, face, notches, glowSprite, background, postGlow)
+                drawFace(frame, shown, notches, glowSprite, background, postGlow)
                 if (ringColour != null) drawOfflineRing(size.minDimension, ringColour)
                 drawCost.nanos = System.nanoTime() - t0
             }
@@ -977,6 +1054,20 @@ data class FaceFrame(
      * never shows the live animal's pose (CritterFaces.layerFor).
      */
     val still: Boolean = false,
+    /**
+     * What the animals are handed for the new behaviours (the owner's
+     * decisions of 2026-09-28; [AnimalFeed.opts]): the owner's switches, a
+     * focus session, the pauses, the moments, being stroked, and a face
+     * switch's goodbye and hello. Its calm, serious and still are the
+     * weights above ([calmW]...). Only the animals read it.
+     */
+    val behave: CritterPose.Opts = CritterPose.Opts(),
+    /**
+     * How opaque to draw the whole face, 0..1: 1 except while a face switch
+     * fades it - a character under Still, calm or a serious moment
+     * ([CritterPose.switchAlpha]), or a face that is not a character.
+     */
+    val alpha: Float = 1f,
 )
 
 /**
@@ -1008,6 +1099,13 @@ private const val OPTION_EASE_S = 1.0f
 
 /** Seconds the Zs take to fade out when the link drops (or back in) - the desktop's ZS_FADE_S. */
 private const val ZS_FADE_S = 0.5f
+
+/** A face switch never waits longer than this for the host's clock (a stopped frame loop). */
+private const val SWITCH_CAP_NS = 1_500_000_000L
+private const val SWITCH_POLL_MS = 16L
+
+/** A face on screen for less than this has not really been seen: a change then is worn at once. */
+private const val SWITCH_SETTLE_S = 1f
 
 /**
  * How early a resting frame may arrive and still be drawn - the desktop's
@@ -1094,6 +1192,13 @@ class FaceHost {
     private var stillRamp = 0f
     // The Zs' weight (FaceFrame.zsW), eased; starts shown.
     private var zsRamp = 1f
+    // The new behaviours' side of this face (FaceFrame.behave).
+    private val feed = AnimalFeed()
+    // The face on screen is a character (an animal or the robot).
+    private var character = false
+    // A face switch: 0 none, 1 the goodbye, 2 the hello; since when (t).
+    private var switchPhase = 0
+    private var switchAt = 0f
     // FaceFrame.awakeDim: the dim standby's is laid over (DimRule.awakeAfter).
     private var awakeDim = 1f
     private var zsTint: Color = Color.White
@@ -1151,6 +1256,9 @@ class FaceHost {
     }
 
     fun onDrag(delta: Offset) {
+        // A finger stroking an animal (a long press, then moving) pets it;
+        // it does not turn the face round.
+        if (character && feed.petting()) return
         dragging = true
         yaw += delta.x * Spec.DRAG_YAW_PER_PX
         pitch = (pitch + delta.y * Spec.DRAG_PITCH_PER_PX)
@@ -1162,6 +1270,47 @@ class FaceHost {
     fun onDragEnd() {
         dragging = false
     }
+
+    /** A finger down on the face, [x] pixels across a face [width] wide (petting). */
+    fun onPetDown(x: Float, width: Float) = feed.petDown(x, width)
+
+    /** The finger moved. While it is stroking an animal, a drag does not turn the face. */
+    fun onPetMove(x: Float, width: Float, slop: Float) {
+        feed.petMove(x, width, slop)
+    }
+
+    fun onPetUp() = feed.petUp()
+
+    // ---- The face switch (FaceView): a goodbye, then a hello ----------------
+
+    /** The leaving face starts its goodbye (carrying on if it already is). */
+    fun beginGoodbye() {
+        if (switchPhase == 1) return
+        switchPhase = 1
+        switchAt = t
+    }
+
+    /** The new face starts its hello. */
+    fun beginHello() {
+        switchPhase = 2
+        switchAt = t
+    }
+
+    /** The goodbye is playing. */
+    fun leaving(): Boolean = switchPhase == 1
+
+    /** Seconds this host has been drawing (its real clock). */
+    fun onScreenS(): Float = t
+
+    fun goodbyeDone(): Boolean = switchPhase != 1 || t - switchAt >= CritterPose.GOODBYE_S
+
+    fun helloDone(): Boolean = switchPhase != 2 || t - switchAt >= CritterPose.HELLO_S
+
+    private fun goodbyeNow(): Float =
+        if (switchPhase == 1) ((t - switchAt) / CritterPose.GOODBYE_S).coerceIn(0f, 1f) else 0f
+
+    private fun helloNow(): Float =
+        if (switchPhase == 2) ((t - switchAt) / CritterPose.HELLO_S).coerceIn(0f, 1f) else 1f
 
     /**
      * The frame loop is starting again - the screen came back on, or the app
@@ -1255,6 +1404,10 @@ class FaceHost {
             wanted
         }
         if (shown != state) onStateChange(shown)
+        // Gestures on the phrase ends: decided as an answer starts - however
+        // the state changed (here, or the composable's onStateChange).
+        feed.onState(state, voiceIn != null || voiceMouth != null)
+        character = face is CritterFace
         this.calm = calm
         val speedK = if (speed.isFinite() && speed > 0f) speed else 1f
         // Exactly 1 when calm is off and speed is 1, so a default face
@@ -1271,6 +1424,11 @@ class FaceHost {
         seriousRamp = ramp(seriousRamp, serious, step)
         stillRamp = ramp(stillRamp, still, step)
         zsRamp = ZsRule.step(zsRamp, offline, state == FaceState.STANDBY, dtIn / ZS_FADE_S)
+        // The owner's behaviour switches, a focus session and being stroked,
+        // eased the same way (AnimalFeed).
+        feed.stepWeights(dtIn, OPTION_EASE_S)
+        // A hello that has played out is over.
+        if (switchPhase == 2 && t - switchAt >= CritterPose.HELLO_S) switchPhase = 0
         awakeDim = DimRule.awakeAfter(awakeDim, state)
         zsTint = lift(bindings.of(state).tint ?: Palette.NEUTRAL_3, CritterPose.Zs.LIGHTEN)
         // Seen only by a face left on screen for about nine hours without a
@@ -1311,6 +1469,15 @@ class FaceHost {
             voice = smooth(voice, 0f, dt, Spec.VOICE_ATTACK_S, Spec.VOICE_RELEASE_S)
         }
         if (voice < Spec.VOICE_GATE) voice = 0f
+
+        // The pauses in the owner's talking (listening) and in Jarvis's real
+        // voice (speaking), and the stretch as a focus session ends. Both the
+        // levels as heard, not the enveloped ones above: the envelope's slow
+        // fall-off would put every nod about half a second late and hide a
+        // comma's short pause (the desktop's faces.html does the same). The
+        // room's hum under the gate is quiet.
+        val micHeard = (micIn ?: 0f).coerceIn(0f, 1f).let { if (it < Spec.MIC_GATE) 0f else it }
+        feed.stepFrame(dt, state, micHeard, voiceIn?.coerceIn(0f, 1f))
 
         // The mouth, as heard: no envelope of its own - the track is
         // smoothed already, and another lag here would put it behind.
@@ -1373,7 +1540,8 @@ class FaceHost {
 
     /** Past the full-rate window after the last change of state and the last tap. */
     private fun settled(): Boolean =
-        (t - changedAt) > Spec.FULL_RATE_WINDOW_S && (t - tapStartedAt) > Spec.FULL_RATE_WINDOW_S
+        (t - changedAt) > Spec.FULL_RATE_WINDOW_S && (t - tapStartedAt) > Spec.FULL_RATE_WINDOW_S &&
+            switchPhase == 0 && !(character && feed.petting())
 
     /**
      * The resting rate for the state on screen now, in frames a second; 0 for
@@ -1386,7 +1554,17 @@ class FaceHost {
     fun restFps(face: Face, pace: RestPace?): Int {
         if (!settled()) return 0
         if (pace == null || face !is CritterFace) return Spec.fpsFor(state)
-        val busy = !calm && stillRamp < 0.99f && face.busyAt(state, motionT.toFloat())
+        // A cute moment counts too: the pose finds it from how long the face
+        // has been idle and its switches (only idle has any, so the opts are
+        // made only then - this runs on every vsync).
+        val busy = !calm && stillRamp < 0.99f && if (state == FaceState.IDLE) {
+            face.busyAt(
+                state, motionT.toFloat(), t - changedAt,
+                feed.opts(smoothstep(calmRamp), smoothstep(seriousRamp), smoothstep(stillRamp)),
+            )
+        } else {
+            face.busyAt(state, motionT.toFloat())
+        }
         return AnimalPace.restFps(state, pace.target, pace.headroom, busy)
     }
 
@@ -1415,6 +1593,17 @@ class FaceHost {
         }
 
         val ringFrac = if (sinceTap in 0f..Spec.TAP_RING_S) sinceTap / Spec.TAP_RING_S else -1f
+
+        // The new behaviours, and a face switch's goodbye, hello and fade.
+        val goodbye = goodbyeNow()
+        val hello = helloNow()
+        val behave = feed.opts(smoothstep(calmRamp), smoothstep(seriousRamp), smoothstep(stillRamp), goodbye, hello)
+        val alpha = when {
+            switchPhase == 0 -> 1f
+            character -> CritterPose.switchAlpha(behave)
+            switchPhase == 1 -> 1f - goodbye
+            else -> hello
+        }
 
         val drive = when (state) {
             FaceState.LISTENING, FaceState.APPROVAL -> max(Spec.LISTEN_FLOOR, mic)
@@ -1478,6 +1667,8 @@ class FaceHost {
             stillW = smoothstep(stillRamp),
             zsW = smoothstep(zsRamp),
             zsTint = zsTint,
+            behave = behave,
+            alpha = alpha,
             // A new three-float array only while a voice plays: a frame is
             // an immutable snapshot, and the draw may still hold the last.
             mouth = if (voiced) floatArrayOf(mouthOpen, mouthWide, mouthRound) else null,
@@ -1550,7 +1741,12 @@ private fun DrawScope.drawFace(
     // The sun, moon and weather behind an animal, when the owner has switched
     // them on (the owner's decisions of 2026-09-28; SkyDraw.kt). Before the
     // animal, so it is in front; never on a picker's still thumbnail.
-    if (face is CritterFace && !f.still) drawSkyBehind(face, f, background)
+    if (face is CritterFace && !f.still) {
+        drawSkyBehind(face, f, background)
+        // And the seasonal touches (off by default; SeasonDraw.kt), right
+        // after the sky, before the animal.
+        drawSeasonBehind(face, f, background)
+    }
 
     val hot = dimmed(f.swatch.a, f.dim, background)
     val cool = dimmed(f.swatch.b, f.dim, background)

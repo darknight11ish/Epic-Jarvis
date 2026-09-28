@@ -137,6 +137,20 @@ def cases():
     # A season changing over, New York, 00:30 on 1 December.
     m = local(2026, 12, 1, 0, 30, 0, ny)
     sc(m, ny, m / 1000, lat=40.7)
+    # The owl's scenery covers the snowman's corner: none for it.
+    m = local(2026, 12, 24, 20, 0, 0, ny)
+    sc(m, ny, m / 1000, lat=40.7, snowman=False)
+    # The tropics: no autumn leaves and no winter snow; the holidays stay.
+    # Singapore in December (the lights), Mumbai in late October (the
+    # pumpkin), and just outside the line (Hong Kong, 22.3 - inside; Taipei,
+    # 25.0 - outside) and south of it (Darwin, -12.5, in July's "winter").
+    for lat in (1.3, 22.3, 25.0):
+        m = local(2026, 12, 24, 20, 0, 0, 480)
+        sc(m, 480, m / 1000, lat=lat)
+    m = local(2026, 10, 28, 15, 0, 0, 330)
+    sc(m, 330, m / 1000, lat=19.1)
+    m = local(2027, 7, 1, 12, 0, 0, 570)
+    sc(m, 570, m / 1000, lat=-12.5)
     return {"civil": civil, "calendars": cals, "holds": holds, "scenes": scenes}
 
 

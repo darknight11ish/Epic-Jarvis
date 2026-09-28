@@ -205,6 +205,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 <script src="critters-gen.js"></script>
 <script src="lipsync.js"></script>
 <script src="sky.js"></script>
+<script src="season.js"></script>
 <script>
 "use strict";
 // The spec is loaded from `faces-spec.js`, generated from
@@ -1305,6 +1306,87 @@ const OPTION_EASE_S = 1;
 // animals only.
 let FACE_STILL = false;
 function applyFaceStill(tune){ FACE_STILL = !!(tune && tune.still === true); }
+/* THE NEW BEHAVIOURS (the owner's decisions of 2026-09-28; docs/CRITTERS.md
+ * "New behaviours" says what each does, and "What each app feeds them" where
+ * every input below comes from). The pose code already knows how to play
+ * them; this page hands it what is happening.
+ *
+ * The owner's switches, shared with the phone and kept on the PC ("Animal
+ * options"), as this computer keeps them (animal-shared.js) - read at the
+ * end of this file together with Still. The defaults are the PC's. */
+const FACE_ANIMAL = { nods: true, focus_buddy: true, acks: true, petting: true, cute_moments: true, seasonal: false };
+function applyFaceAnimal(values){
+  const v = values && typeof values === "object" ? values : {};
+  for(const k of Object.keys(FACE_ANIMAL)) if(typeof v[k] === "boolean") FACE_ANIMAL[k] = v[k];
+}
+/* What has just happened, told by the window around this frame
+ * (face-moments.js relays the event stream: an event reaches that window's
+ * page, never this frame). Stamped with performance.now() when it arrives;
+ * the pose is handed "seconds since", as it asks. A fact's nod is never
+ * relayed while App lock or "Hide memory lists and chat history" is on -
+ * the sender holds it back (the owner's rule). */
+const FACE_MOMENTS = { factAt: 0, glowAt: 0, focusOn: false, focusEndDue: 0 };
+// The closest two of each may come (the pose's own lengths): a second one
+// sooner is dropped rather than restarting the first half way through.
+const ACK_NOD_GAP_S = 1.2, ACK_GLOW_GAP_S = 1.8;
+// The stretch at the end of a focus session plays once Jarvis is idle again;
+// one that has waited longer than this is dropped.
+const FOCUS_END_WAIT_S = 60;
+function faceMoment(m){
+  if(!m || typeof m !== "object") return;
+  const now = performance.now();
+  if(m.kind === "fact"){
+    if(!FACE_MOMENTS.factAt || (now - FACE_MOMENTS.factAt) / 1000 >= ACK_NOD_GAP_S) FACE_MOMENTS.factAt = now;
+  } else if(m.kind === "glow"){
+    if(!FACE_MOMENTS.glowAt || (now - FACE_MOMENTS.glowAt) / 1000 >= ACK_GLOW_GAP_S) FACE_MOMENTS.glowAt = now;
+  } else if(m.kind === "focus" && typeof m.on === "boolean"){
+    if(FACE_MOMENTS.focusOn && !m.on) FACE_MOMENTS.focusEndDue = now;
+    if(m.on) FACE_MOMENTS.focusEndDue = 0;
+    FACE_MOMENTS.focusOn = m.on;
+  }
+}
+/* The face switch (display mode's switchFace): how far the leaving face's
+ * goodbye and the new face's hello have got, for the surface being drawn -
+ * {goodbye, hello}, each 0..1, or null when no switch is playing. */
+let FACE_SWITCH = null;
+/* PETTING. Stroking the face: a press that moves across it, or a press held
+ * still for PET_HOLD_S (the phone's long press). Where a drag already turns
+ * the face round (the Faces window), only a held press pets - a quick drag
+ * still turns it. The weight eases in over PET_IN_S and out over PET_OUT_S,
+ * as docs/CRITTERS.md asks. */
+const PET_HOLD_S = 0.5, PET_MOVE_PX = 6, PET_IN_S = 0.3, PET_OUT_S = 1;
+/** Whether the press on `touch` (a surface's) is petting now. */
+function pettingNow(touch, now){
+  const p = touch && touch.pet;
+  if(!p || !p.down) return false;
+  return p.moved || (now - p.downAt) / 1000 >= PET_HOLD_S;
+}
+/** A press lands on canvas `cv` of a surface whose pointer is `touch`.
+ *  `holdOnly`: only a held press pets (a drag there turns the face). */
+function petDown(touch, e, cv, holdOnly){
+  const r = cv.getBoundingClientRect(), now = performance.now();
+  touch.pet = { down: true, holdOnly: !!holdOnly, downAt: now, x0: e.clientX, y0: e.clientY, moved: false,
+                x: ((e.clientX - r.left) / Math.max(1, r.width)) * 2 - 1, vx: 0, lx: e.clientX, lt: now, movedAt: 0 };
+}
+/** The pointer moved while pressed. True when it is stroking - the caller
+ *  must not turn the face with it. A held-only press that moves away before
+ *  it has been held long enough is a drag, and never pets. */
+function petMove(touch, e, cv){
+  const p = touch && touch.pet;
+  if(!p || !p.down) return false;
+  const now = performance.now(), r = cv.getBoundingClientRect();
+  const far = Math.hypot(e.clientX - p.x0, e.clientY - p.y0) > PET_MOVE_PX;
+  if(p.holdOnly && !pettingNow(touch, now)){ if(far) p.down = false; return false; }
+  if(far) p.moved = true;
+  const half = Math.max(1, r.width / 2);
+  const dts = Math.max(0.001, (now - p.lt) / 1000);
+  // Across the face, in half-widths a second, lightly smoothed.
+  p.vx += ((e.clientX - p.lx) / half / dts - p.vx) * 0.5;
+  p.x = (e.clientX - r.left) / half - 1;
+  p.lx = e.clientX; p.lt = now; p.movedAt = now;
+  return pettingNow(touch, now);
+}
+function petUp(touch){ if(touch && touch.pet) touch.pet.down = false; }
 // THE SKY BEHIND THE ANIMALS (the owner's decisions of 2026-09-28, both off
 // by default): the real sun and moon for the owner's town, and the weather.
 // sky.js works them out and draws them; this reads what Settings, the Widget
@@ -1340,6 +1422,43 @@ function paintSky(g, w, h){
   // For tests: what this frame drew.
   window.__faceSky = { drawn: true, sun: sc.sun ? sc.sun.alpha : 0, moon: sc.moon ? sc.moon.alpha : 0,
                        rain: sc.rain.length, snow: sc.snow.length, clouds: sc.clouds.length };
+}
+// SEASONAL TOUCHES behind the character faces (the owner's decision of
+// 2026-09-28, off by default: the `seasonal` switch in "Animal options").
+// season.js works out and draws them from this computer's own date, time and
+// time zone; the hemisphere (and whether the town is in the tropics, where
+// there are no autumn leaves or snow) comes from the sky's saved place,
+// north when there is none. Drawn right after the sky, before the face, so
+// the face is in front and its dim covers them too. Still and a serious
+// moment hide them (eased, JarvisSeason.follow); an approval or an error
+// puts away everything that moves; reduced motion holds them still. `s` is
+// the surface (its own easing memory), `th` its face - a face whose own
+// scenery would hide the snowman leaves it out (`seasonSnowman: false`:
+// the owl, whose branch runs across that corner).
+function paintSeason(s, g, w, h, state){
+  window.__faceSeason = null;
+  if(typeof JarvisSeason === "undefined") return;
+  const mem = s.seasonMem || (s.seasonMem = {});
+  const f = JarvisSeason.follow(mem, { state, still: FACE_STILL, serious: faceSerious() }, performance.now() / 1000);
+  if(!FACE_ANIMAL.seasonal){ window.__faceSeason = { ops: 0 }; return; }
+  const now = Date.now();
+  const doc = typeof JarvisSky !== "undefined" ? JarvisSky.fromDoc(SKY_DOC) : null;
+  const place = doc && doc.place;
+  const live = typeof JarvisSky !== "undefined" ? JarvisSky.liveInput(SKY_DOC, now) : null;
+  const wx = live && live.weather;
+  const k = Math.min(w, h);
+  const th = s.theme || {};
+  const sc = JarvisSeason.scene(now, -new Date(now).getTimezoneOffset(), now / 1000, {
+    lat: place ? place.lat : null, calm: CALM.matches, hide: f.hide, hold: f.hold,
+    ax: w / k, ay: h / k,
+    sunAlt: place ? JarvisSky.sun(now, place.lat, place.lon).alt : null,
+    snow: wx ? wx.snow : 0, rain: wx ? wx.rain : 0,
+    snowman: th.seasonSnowman !== false,
+  });
+  JarvisSeason.draw(g, w, h, sc);
+  if(sc.ops.length) SKY_UNDER = true;
+  // For tests: what this frame drew.
+  window.__faceSeason = { ops: sc.ops.length, season: sc.season, hide: f.hide, hold: f.hold };
 }
 // Whether the surface being drawn cannot reach Jarvis (drawSurface sets it
 // from the surface's own `offline`). An animal on standby then shows the
@@ -1430,8 +1549,24 @@ function critterFace(o){
               lookW: 0, lookAt: now, tx: TOUCH.x, ty: TOUCH.y,
               // The option weights start where they are, not eased in from 0.
               calmR: CALM.matches ? 1 : 0, seriousR: faceSerious() ? 1 : 0, stillR: FACE_STILL ? 1 : 0,
-              zsR: FACE_OFFLINE ? 0 : 1, optAt: now };
+              zsR: FACE_OFFLINE ? 0 : 1, optAt: now,
+              // The new behaviours' switches and weights, starting where
+              // they are; the pause finders (CritterPose.pauseStep) for the
+              // owner's voice and Jarvis's; whether this answer's gestures
+              // follow its phrase ends; being stroked; the focus stretch.
+              nodsR: FACE_ANIMAL.nods ? 1 : 0, focusBuddyR: FACE_ANIMAL.focus_buddy ? 1 : 0,
+              acksR: FACE_ANIMAL.acks ? 1 : 0, pettingR: FACE_ANIMAL.petting ? 1 : 0,
+              cuteR: FACE_ANIMAL.cute_moments ? 1 : 0, focusR: FACE_MOMENTS.focusOn ? 1 : 0,
+              heard: null, phrase: null, phraseOn: false,
+              petR: 0, petX: 0, petDir: 0, focusEndAt: 0 };
         this.mem.set(VIEW, m);
+      }
+      if(m.st !== st && st === "speaking"){
+        // Gestures on Jarvis's phrase ends (the "nods" switch): decided as an
+        // answer starts, never in the middle of one, and only when a real
+        // voice is being heard - a typed or quiet answer has no phrase ends
+        // to find, and keeps the gestures' own timing.
+        m.phraseOn = FACE_ANIMAL.nods && realVoiceNow();
       }
       if(m.st !== st){
         // What CritterPose.pose needs to carry on from what was on screen:
@@ -1455,7 +1590,67 @@ function critterFace(o){
       m.stillR = ramp(m.stillR, FACE_STILL);
       // The Zs fade out while Jarvis cannot be reached (and back in).
       m.zsR = zsStep(m.zsR, FACE_OFFLINE, st === "standby", dt / ZS_FADE_S);
+      // The owner's behaviour switches and a focus session, eased the same way.
+      m.nodsR = ramp(m.nodsR, FACE_ANIMAL.nods);
+      m.focusBuddyR = ramp(m.focusBuddyR, FACE_ANIMAL.focus_buddy);
+      m.acksR = ramp(m.acksR, FACE_ANIMAL.acks);
+      m.pettingR = ramp(m.pettingR, FACE_ANIMAL.petting);
+      m.cuteR = ramp(m.cuteR, FACE_ANIMAL.cute_moments);
+      m.focusR = ramp(m.focusR, FACE_MOMENTS.focusOn);
+      // The stretch as a focus session ends, once Jarvis is idle again.
+      if(FACE_MOMENTS.focusEndDue && st === "idle"){
+        if((now * 1000 - FACE_MOMENTS.focusEndDue) / 1000 <= FOCUS_END_WAIT_S) m.focusEndAt = now;
+        FACE_MOMENTS.focusEndDue = 0;
+      }
+      // The pauses in the owner's talking (the microphone) while listening,
+      // and in Jarvis's real voice (the lip-sync track's own level) while
+      // speaking. Both the levels as heard, not the face's enveloped ones:
+      // the envelope's slow fall-off (made to hold the face up through a
+      // gap between words) would put every nod about half a second late and
+      // hide a comma's short pause. The room's hum under the gate is quiet.
+      // Between times each record only ages, so its count carries on (the
+      // nods and gestures are dealt from it, never the same twice running).
+      const PZ = CritterPose.PAUSE;
+      const age = (r) => r && { talk: 0, quiet: 0, ago: Math.min(1e9, r.ago + dt), n: r.n };
+      const micNow = HUD.raw < AMP.gate ? 0 : HUD.raw;
+      m.heard = st === "listening" ? CritterPose.pauseStep(m.heard, dt, micNow, PZ.NOD_QUIET, PZ.NOD_GAP) : age(m.heard);
+      m.phrase = st === "speaking" && m.phraseOn
+        ? CritterPose.pauseStep(m.phrase, dt, realVoiceNow() ? HUD.voiceRaw : 0, PZ.PHRASE_QUIET, PZ.PHRASE_GAP)
+        : age(m.phrase);
+      // Being stroked: in over PET_IN_S, out over PET_OUT_S; where the hand is
+      // across the face and which way it moves, smoothed.
+      const pet = pettingNow(TOUCH, now * 1000);
+      m.petR = pet ? Math.min(1, m.petR + dt / PET_IN_S) : Math.max(0, m.petR - dt / PET_OUT_S);
+      const tp = TOUCH.pet;
+      if(pet && tp){
+        m.petX += (Math.max(-1, Math.min(1, tp.x)) - m.petX) * (1 - Math.exp(-dt / 0.15));
+        const moving = now * 1000 - (tp.movedAt || 0) < 150;
+        const want = moving ? Math.max(-1, Math.min(1, (tp.vx || 0) / 1.5)) : 0;
+        m.petDir += (want - m.petDir) * (1 - Math.exp(-dt / 0.3));
+      } else {
+        m.petDir *= Math.exp(-dt / 0.3);
+      }
       return m;
+    },
+    // What the pose is handed besides calm, serious and still: the new
+    // behaviours (docs/CRITTERS.md "What a host passes"), every moment as
+    // seconds since it happened.
+    behaviours(m, e){
+      const now = performance.now() / 1000;
+      const o = {
+        variety: 1,
+        nods: e(m.nodsR), focus_buddy: e(m.focusBuddyR), acks: e(m.acksR),
+        petting: e(m.pettingR), cute_moments: e(m.cuteR),
+        focus: e(m.focusR),
+        pet: e(m.petR), petX: m.petX, petDir: m.petDir,
+      };
+      if(m.heard){ o.heard = m.heard.ago; o.heardN = m.heard.n; }
+      if(m.phraseOn){ o.phraseEnd = m.phrase ? m.phrase.ago : 1e9; o.phraseN = m.phrase ? m.phrase.n : 0; }
+      if(FACE_MOMENTS.factAt) o.ackNod = now - FACE_MOMENTS.factAt / 1000;
+      if(FACE_MOMENTS.glowAt) o.ackGlow = now - FACE_MOMENTS.glowAt / 1000;
+      if(m.focusEndAt) o.focusEnd = now - m.focusEndAt;
+      if(FACE_SWITCH){ o.goodbye = FACE_SWITCH.goodbye; o.hello = FACE_SWITCH.hello; }
+      return o;
     },
     look(m){
       // The pointer, for a few seconds after it last moved over the face. The
@@ -1479,9 +1674,13 @@ function critterFace(o){
       if(!this.species) return null;
       const m = this.track(st, amp);
       const e = (r) => r * r * (3 - 2 * r);
+      const o = Object.assign({ calm: e(m.calmR), serious: e(m.seriousR), still: e(m.stillR) }, this.behaviours(m, e));
+      // Kept for the frame pacer (busy) and the face switch's fade (draw).
+      m.opts = o;
+      // For tests: what display mode's one face was last handed.
+      if(DISPLAY_MODE) window.__faceOpts = o;
       return this.species.pose(st, m.prev, performance.now() / 1000 - m.at, t, amp, this.look(m),
-                              { past: m.past },
-                              { calm: e(m.calmR), serious: e(m.seriousR), still: e(m.stillR) });
+                              { past: m.past }, o);
     },
     gpu(g, w, h, t, st, amp, P){
       if(typeof GPU === "undefined" || GPU.dead || !GPUOK || !P) return false;
@@ -1550,9 +1749,17 @@ function critterFace(o){
       // Whether one of its idle happenings is playing, for the frame pacer
       // (dueFrame, display mode's tick): at rest an animal is drawn 30 or 60
       // times a second, and at the full rate while a stretch or a scratch
-      // plays. Not under "Still" or reduced motion, which take them away.
-      VIEW.busy = !!(this.species && this.species.busy && !FACE_STILL && !CALM.matches
-                     && this.species.busy(st, t));
+      // plays - or one of its cute moments, which the pose finds from how
+      // long it has been idle and its switches. Not under "Still" or reduced
+      // motion, which take them away.
+      const m = this.mem.get(VIEW);
+      VIEW.busy = !!(this.species && this.species.busy && !FACE_STILL && !CALM.matches && m
+                     && this.species.busy(st, t, performance.now() / 1000 - m.at, m.opts));
+      // How opaque the face switch draws it (display mode's switchFace): 1
+      // while the animal plays its own goodbye or hello; a gentle cross-fade
+      // under Still, calm motion or a serious moment, when it plays neither.
+      VIEW.alpha = m && m.opts && typeof CritterPose !== "undefined" && CritterPose.switchAlpha
+        ? CritterPose.switchAlpha(m.opts) : 1;
       // Standby's dim follows the pose nodding off and waking (sleepDim).
       FACE_DIM = sleepDim(FACE_DIM_AWAKE, P ? Math.max(0, Math.min(1, +P.asleep || 0)) : (st === "standby" ? 1 : 0));
       if(this.gpu(g, w, h, t, st, amp, P)){
@@ -3476,6 +3683,10 @@ critterFace({
   rest:{ bob:0, breath:1, fluff:1, wingL:0, wingR:0, neckDrop:0, headRoll:0, headYaw:0, headPitch:0,
          eyeL:1, eyeR:1, lookX:0, lookY:0, orbX:.5, orbY:.3, orbR:.09, orbGlow:.55 },
   swatch:["#04060b","#ffc14d","#1d6f8a","#e6d2b2"],
+  // Its branch runs across the lower left corner, where the seasonal
+  // touches' mid-winter snowman stands: it would be hidden behind it, so the
+  // owl has none (paintSeason; the phone's Season.snowmanFor).
+  seasonSnowman: false,
   spec:"A pygmy owl on a branch, made of maths rather than a model file: one egg of a body, a big round head with huge yellow eyes in pale facial discs, folded spotted wings and a streaked front, all ray-traced with soft shadows. Owls have no hands, so its orb floats beside it - the state colour, and a real light on its feathers. It turns its head to follow what is going on, tips it a little to follow its orb circling while it thinks, draws itself up and looks at you, still, when something is waiting on you and puffs up round to sleep.",
   // Without a GPU: a flat owl in the same pose - head tilt, eyes, beak,
   // wings and orb - without the lighting.
@@ -4207,6 +4418,11 @@ function driveAmp(state, s){
   return HUD.amp;
 }
 const listenAmp = driveAmp;
+/** Whether Jarvis's real voice has been heard within VOICE.stale_s - not the
+ *  made-up beat. The animals' gestures follow its phrase ends only then. */
+function realVoiceNow(){
+  return (performance.now() / 1000 - HUD.voiceAt) <= VOICE.stale_s;
+}
 function voiceLevel(s){
   const stale = (performance.now() / 1000 - HUD.voiceAt) > VOICE.stale_s;
   if(!stale) return HUD.voice;
@@ -4827,6 +5043,8 @@ function drawSurface(s, dt, state){
   const sub = s.speed / reps;
 
   VIEW = s.view; TOUCH = s.touch;
+  // A face switch playing on this surface (display mode only), for the pose.
+  FACE_SWITCH = s.switching || null;
   QUALITY = s.detail;
   gpuRetry(s, performance.now());
   // Geometry density is chosen from `w` inside the faces (detail(w,...)), and
@@ -4909,7 +5127,7 @@ function drawSurface(s, dt, state){
     g.fillStyle = BG;
     g.fillRect(0,0,w,h);
     // The sky behind an animal, when the owner has switched it on (paintSky).
-    if(th.family === "critter") paintSky(g, w, h);
+    if(th.family === "critter"){ paintSky(g, w, h); paintSeason(s, g, w, h, state); }
     else SKY_UNDER = false;
   };
   if(!th.persistent) paintBg();
@@ -5972,6 +6190,9 @@ function openSolo(theme){
     SOLO.touch.f = 1; SOLO.view.vyaw = 0;
     const rr = cv.getBoundingClientRect();
     ack(SOLO, ((e.clientX - rr.left) / rr.width) * 2 - 1, ((e.clientY - rr.top) / rr.height) * 2 - 1);
+    // An animal is stroked by holding the press, then moving (a quick drag
+    // still turns it round, as every other face).
+    if(SOLO.theme && SOLO.theme.family === "critter") petDown(SOLO.touch, e, cv, true);
   };
   cv.onpointermove = e => {
     const rr = cv.getBoundingClientRect();
@@ -5979,6 +6200,7 @@ function openSolo(theme){
     SOLO.touch.y = ((e.clientY - rr.top) / rr.height) * 2 - 1;
     SOLO.touch.at = performance.now();
     if(!drag) return;
+    if(petMove(SOLO.touch, e, cv)){ lx = e.clientX; ly = e.clientY; lt = performance.now(); return; }
     const now = performance.now(), ddt = Math.max(1, now - lt) / 1000;
     const dyaw = (e.clientX - lx) * .008;
     SOLO.view.yaw += dyaw;
@@ -5986,7 +6208,7 @@ function openSolo(theme){
     SOLO.view.vyaw = Math.max(-4, Math.min(4, dyaw / ddt));
     lx = e.clientX; ly = e.clientY; lt = now;
   };
-  cv.onpointerup = cv.onpointerleave = () => { drag = false; SOLO.touch.f = 0; };
+  cv.onpointerup = cv.onpointerleave = () => { drag = false; SOLO.touch.f = 0; petUp(SOLO.touch); };
   cv.onwheel = e => { SOLO.view.zoom = Math.max(.45, Math.min(3,
       SOLO.view.zoom * (e.deltaY < 0 ? 1.1 : .91))); e.preventDefault(); };
   cv.ondblclick = () => { SOLO.view = { yaw:0, pitch:0, zoom:1 }; };
@@ -6536,6 +6758,102 @@ async function bootDisplay() {
   window.addEventListener("resize", fit);
   fit();
 
+  // ---- Stroking the face (petting) ----------------------------------------
+  // A press that moves across the face, or is held still (docs/CRITTERS.md).
+  // Nothing else happens on a press here, so a drag strokes at once. Only
+  // where the frame takes the pointer: the Widget's face does; the floating
+  // face and the HUD's are click-through by design (the floating window is
+  // dragged by its face), so they are not stroked.
+  canvas.addEventListener("pointerdown", (e) => {
+    petDown(surface.touch, e, canvas, false);
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* an old engine */ }
+  });
+  canvas.addEventListener("pointermove", (e) => petMove(surface.touch, e, canvas));
+  for (const end of ["pointerup", "pointercancel", "lostpointercapture"]) {
+    canvas.addEventListener(end, () => petUp(surface.touch));
+  }
+
+  // ---- Switching faces: a goodbye, then a hello ---------------------------
+  // The owner's decision of 2026-09-28: the leaving animal (or robot) plays a
+  // short goodbye, then the incoming one a short hello; a face that is not a
+  // character just fades on its side; under Still, calm motion or a serious
+  // moment the pose plays neither and the character cross-fades instead
+  // (CritterPose.switchAlpha). Keyed on "is this a character face" - any face
+  // built by critterFace(), whatever it is - never on a list of names. Two
+  // faces that are neither switch at once, as they always have.
+  const SWITCH = { phase: null, at: 0, next: null, queued: null };
+  const isCharacter = (th) => !!(th && th.family === "critter");
+  const byeS = () => (typeof CritterPose !== "undefined" && CritterPose.GOODBYE_S) || 1;
+  const helloS = () => (typeof CritterPose !== "undefined" && CritterPose.HELLO_S) || 1;
+  function swapTo(next) {
+    faceId = next;
+    surface.theme = THEME[faceId];
+    surface.f = FACE[faceId];
+    gpuReset(surface);
+    fit();
+  }
+  // Whether the face on show is the owner's yet. A frame fed by its window
+  // and loaded without a face named in its address (the Widget's, the
+  // floating face's) starts on the default face until the first appearance
+  // arrives: that first one is not a switch the owner made, so it is worn at
+  // once, with no goodbye or hello.
+  let faceSettled = !FROM_PARENT || !!params.get("face");
+  function switchFace(next) {
+    if (!FACE[next]) return;
+    if (!faceSettled) {
+      faceSettled = true;
+      if (next !== faceId) { SWITCH.phase = null; swapTo(next); }
+      return;
+    }
+    if (SWITCH.phase === "bye") { SWITCH.next = next; return; }   // still leaving: go to the latest
+    // Still arriving: the next goodbye waits for this hello to finish, so the
+    // new face never jumps back into view half way through coming in.
+    if (SWITCH.phase === "hello") { SWITCH.queued = next === faceId ? null : next; return; }
+    if (next === faceId) return;
+    if (!isCharacter(surface.theme) && !isCharacter(THEME[next])) { SWITCH.phase = null; swapTo(next); return; }
+    SWITCH.phase = "bye"; SWITCH.at = performance.now(); SWITCH.next = next;
+  }
+  /** Before each drawn frame: how far the switch has got, and the swap. */
+  function stepSwitch() {
+    if (!SWITCH.phase) { surface.switching = null; return; }
+    const now = performance.now();
+    if (SWITCH.phase === "bye") {
+      const g = Math.min(1, (now - SWITCH.at) / 1000 / byeS());
+      if (g < 1) { surface.switching = { goodbye: g, hello: 1 }; return; }
+      if (SWITCH.next !== faceId) swapTo(SWITCH.next);
+      // The hello's clock starts on the frame AFTER the new face is first
+      // drawn: that first draw may build its shader (a quarter of a second
+      // or more on a slow graphics chip), and the hello must not be half
+      // over before it is seen.
+      SWITCH.phase = "hello"; SWITCH.at = 0;
+      surface.switching = { goodbye: 0, hello: 0 };
+      return;
+    }
+    if (!SWITCH.at) { SWITCH.at = now; surface.switching = { goodbye: 0, hello: 0 }; return; }
+    const h = Math.min(1, (now - SWITCH.at) / 1000 / helloS());
+    if (h >= 1) {
+      SWITCH.phase = null; surface.switching = null;
+      const q = SWITCH.queued; SWITCH.queued = null;
+      if (q) switchFace(q);
+      return;
+    }
+    surface.switching = { goodbye: 0, hello: h };
+  }
+  /** After it: how opaque the face is drawn. A character says (switchAlpha,
+   *  set by its draw); any other face fades out, then in. */
+  function switchOpacity() {
+    const sw = surface.switching;
+    let a = 1;
+    if (sw) a = isCharacter(surface.theme) ? (typeof surface.view.alpha === "number" ? surface.view.alpha : 1)
+                                           : (sw.goodbye > 0 ? 1 - sw.goodbye : sw.hello);
+    const v = a >= 0.999 ? "" : String(Math.max(0, a).toFixed(3));
+    if (canvas.style.opacity !== v) canvas.style.opacity = v;
+  }
+  // For tests and anyone debugging: switch the way an appearance change does,
+  // and the one surface this page draws.
+  window.__faceSwitch = { to: switchFace, surface, now: () => ({ face: faceId, phase: SWITCH.phase,
+                          switching: surface.switching, opacity: canvas.style.opacity || "1" }) };
+
   // ---- This computer's face settings --------------------------------------
   // Settings → "Animal options" → "Sharpness and frame rate on this computer" (face-tuning.js): the
   // phone's face editor controls, for the desktop's own face. The defaults -
@@ -6673,7 +6991,8 @@ async function bootDisplay() {
     if (paced) lipStep();
     const shownNow = lipState(LIVE_STATE);
     const rest = restFpsOf(surface, shownNow, TUNE.autoAdjust ? "auto" : TUNE.frameRate, headroom.on);
-    const fresh = surface.fxState !== shownNow || (surface.fxAge || 0) < 0.6;
+    // (A face switch playing is drawn at the full rate too.)
+    const fresh = surface.fxState !== shownNow || (surface.fxAge || 0) < 0.6 || !!SWITCH.phase;
     const restStepS = rest > 0 ? restStep(rest, hz) : 0;
     const restDue = !rest || fresh || owed >= restStepS - 0.002;
     if (paced && restDue && (!CALM.matches || now - lastDraw >= 1000 / calmHz)) {
@@ -6691,7 +7010,9 @@ async function bootDisplay() {
       describe();
       // The watchdog's "slow" is measured against this loop's real budget.
       CLOCK.budget = 1000 / (hz / stride);
+      stepSwitch();
       drawSurface(surface, dt, shown);
+      switchOpacity();
       // Auto adjust judges the frame by whichever took longer: the script,
       // or the graphics card's own time for this face (a few frames old -
       // GPU WATCHDOG). The script alone reads well under a millisecond while
@@ -6715,6 +7036,9 @@ async function bootDisplay() {
       const data = event.data;
       // Lip-sync: Jarvis's voice and the owner's microphone (face-voice.js).
       if (data && data.type === "jarvis-face-voice") { lipCue(data); return; }
+      // What just happened, for the animals (face-moments.js): a fact saved,
+      // a long answer ready, a focus session on or off.
+      if (data && data.type === "jarvis-face-moment") { faceMoment(data); return; }
       if (!data || data.type !== "jarvis-hud-face") return;
       // A state id this build of the spec does not know is ignored, not
       // guessed at: the face keeps showing the last state it was told.
@@ -6732,13 +7056,7 @@ async function bootDisplay() {
         try {
           mergeBindings(data.appearance);
           const next = data.appearance.face;
-          if (typeof next === "string" && next !== faceId && FACE[next]) {
-            faceId = next;
-            surface.theme = THEME[faceId];
-            surface.f = FACE[faceId];
-            gpuReset(surface);
-            fit();
-          }
+          if (typeof next === "string" && FACE[next]) switchFace(next);
         } catch (error) { console.error("[faces] could not apply the HUD's appearance", error); }
       }
     });
@@ -6776,13 +7094,7 @@ async function bootDisplay() {
       try {
         const loaded = await TAURI.core.invoke("get_appearance");
         mergeBindings(loaded);
-        if (loaded && loaded.face && loaded.face !== faceId && FACE[loaded.face]) {
-          faceId = loaded.face;
-          surface.theme = THEME[faceId];
-          surface.f = FACE[faceId];
-          gpuReset(surface);
-          fit();
-        }
+        if (loaded && typeof loaded.face === "string" && FACE[loaded.face]) switchFace(loaded.face);
       } catch (error) { /* keep showing what was already loaded */ }
     });
   }
@@ -6799,9 +7111,13 @@ else (DISPLAY_MODE ? bootDisplay : boot)();
 // Before this computer has heard the PC (an older PC), its own old switch
 // (face-tuning.js `still`) counts - animal-shared.js effectiveStill.
 Promise.all([import("./face-tuning.js"), import("./animal-shared.js")]).then(([t, a]) => {
-  const read = () => applyFaceStill({
-    still: a.effectiveStill(a.loadAnimal(), t.loadFaceTuning(), a.migrated()),
-  });
+  const read = () => {
+    const shared = a.loadAnimal();
+    applyFaceStill({ still: a.effectiveStill(shared, t.loadFaceTuning(), a.migrated()) });
+    // The behaviour switches and the seasonal touches (FACE_ANIMAL): the
+    // PC's values once heard, its defaults before.
+    applyFaceAnimal(shared || a.DEFAULTS);
+  };
   read();
   window.addEventListener("storage", (event) => {
     if (event.key === null || event.key === t.FACE_TUNING_KEY || event.key === a.STORE_KEY

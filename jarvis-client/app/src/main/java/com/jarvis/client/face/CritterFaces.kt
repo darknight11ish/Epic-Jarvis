@@ -58,12 +58,25 @@ abstract class CritterFace(
      */
     abstract fun busyAt(state: FaceState, t: Float): Boolean
 
+    /**
+     * [busyAt], told how long the face has shown [state] ([since], seconds)
+     * and its [opts] - so one of its cute moments counts as well (the pose's
+     * `busy(state, t, since, opts)`, the desktop's). A face whose pose has
+     * no cute moments need not override it.
+     */
+    open fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts): Boolean = busyAt(state, t)
+
     /** What the host remembered at the last state changes (see [CritterPose.Hist]). */
     protected fun hist(f: FaceFrame) =
         CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp, prevAmp2 = f.prevAmp2, past = f.past)
 
-    /** Calm motion, a serious moment, "Still": the host's eased weights (see [CritterPose.Opts]). */
-    protected fun opts(f: FaceFrame) = CritterPose.Opts(calm = f.calmW, serious = f.seriousW, still = f.stillW)
+    /**
+     * Calm motion, a serious moment, "Still" - the host's eased weights - and
+     * the new behaviours the host feeds ([FaceFrame.behave]: the owner's
+     * switches, a focus session, the pauses, the moments, petting and a face
+     * switch; see [CritterPose.Opts] and [AnimalFeed]).
+     */
+    protected fun opts(f: FaceFrame) = f.behave.copy(calm = f.calmW, serious = f.seriousW, still = f.stillW)
 
     // The shell's spin rate. This receives the BORROWED movement (approval,
     // standby and banked arrive as IDLE, error as THINKING), so the desktop's
@@ -360,6 +373,8 @@ object RedPanda : CritterFace("redpanda", "Red Panda", CritterShaders.RED_PANDA)
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = CritterPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = CritterPose.overlay(p, yaw, pitch, 1f)
     override fun busyAt(state: FaceState, t: Float) = CritterPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        CritterPose.busy(state, t, since, opts)
 }
 
 /** The pygmy owl on its branch, its orb floating beside it. */
@@ -369,6 +384,8 @@ object PygmyOwl : CritterFace("pygmyowl", "Pygmy Owl", CritterShaders.PYGMY_OWL)
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = OwlPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = OwlPose.overlay(p, yaw, pitch, 1f)
     override fun busyAt(state: FaceState, t: Float) = OwlPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        OwlPose.busy(state, t, since, opts)
 }
 
 /** The sea otter afloat in its pool, a glowing pebble on its chest. */
@@ -378,6 +395,8 @@ object SeaOtter : CritterFace("seaotter", "Sea Otter", CritterShaders.SEA_OTTER)
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = OtterPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = OtterPose.overlay(p, yaw, pitch, 1f)
     override fun busyAt(state: FaceState, t: Float) = OtterPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        OtterPose.busy(state, t, since, opts)
 }
 
 /**
@@ -390,6 +409,8 @@ object Monkey : CritterFace("monkey", "Monkey", CritterShaders.MONKEY) {
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = MonkeyPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = MonkeyPose.overlay(p, yaw, pitch, 1f)
     override fun busyAt(state: FaceState, t: Float) = MonkeyPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        MonkeyPose.busy(state, t, since, opts)
 }
 
 /**
@@ -407,6 +428,8 @@ object Robot : CritterFace("robot", "Robot", CritterShaders.ROBOT) {
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = RobotPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = RobotPose.overlay(p, yaw, pitch, 1f)
     override fun busyAt(state: FaceState, t: Float) = RobotPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        RobotPose.busy(state, t, since, opts)
 }
 
 /**

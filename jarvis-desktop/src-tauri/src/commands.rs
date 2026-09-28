@@ -3105,6 +3105,19 @@ pub fn get_app_lock(app: AppHandle) -> bool {
     crate::lock::current(&app).app_lock
 }
 
+/// Whether App lock and "Hide memory lists and chat history" are on, as two
+/// yes/no answers and nothing else from the settings - all a face needs to
+/// hold back the small nod it gives when Jarvis saves a fact, which never
+/// plays while either is on (the owner's rule, 2026-09-28; face-moments.js).
+/// Changes arrive as the `security-changed` event every window hears; this
+/// is the answer before the first one. Reveals nothing a window could not
+/// already learn from that event.
+#[tauri::command]
+pub fn get_lock_flags(app: AppHandle) -> serde_json::Value {
+    let s = crate::lock::current(&app);
+    serde_json::json!({ "appLock": s.app_lock, "privateAnswers": s.private_answers })
+}
+
 /// The widget's Approve while App lock is on or on an email (where an
 /// email can be read whole), and "Open the card" in
 /// Settings and the Brain (card-link.js): opens the Jarvis bar on the

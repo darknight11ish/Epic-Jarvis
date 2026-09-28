@@ -42,6 +42,7 @@ import { EMAIL_APPROVE, EMAIL_DETAIL, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
 import { isHeavy } from "./heavy-approve.js";
 import { relayFaceVoice } from "./face-voice.js";
+import { relayFaceMoments } from "./face-moments.js";
 import { startSkyFeed } from "./sky-feed.js";
 import {
   actionsOf as focusActionsOf,
@@ -1452,6 +1453,9 @@ startLink();
   // Lip-sync: Jarvis's voice and the owner's microphone, passed into the
   // face (face-voice.js) - an event reaches this page, never its frame.
   relayFaceVoice(dom.faceFrame, listen);
+  // A fact saved, a long answer ready, a focus session on or off - for the
+  // animal's small nod, glow and focus buddy (face-moments.js), the same way.
+  relayFaceMoments(dom.faceFrame, listen, IS_TAURI ? invokeStrict : null);
   listen("appearance-changed", () => readFaceAppearance(false));
   readFaceAppearance(true);
   // The sun, the moon and the weather behind the animal (sky-feed.js): kept

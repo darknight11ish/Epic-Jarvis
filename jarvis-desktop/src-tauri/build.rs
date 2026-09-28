@@ -33,6 +33,9 @@ fn main() {
             // App lock and the widget: is the lock on, and "Approve in the
             // Jarvis bar" (apps security audit M3).
             "get_app_lock",
+            // App lock and "Hide memory lists", two yes/no answers: a face's
+            // nod on a saved fact never plays while either is on.
+            "get_lock_flags",
             "open_approval_in_quickbar",
             // A note on a proposal, and the controls for the turn already
             // running. `jarvis-link.js` invoked all five of these before any
