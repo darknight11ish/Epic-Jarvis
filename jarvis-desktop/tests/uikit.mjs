@@ -15,6 +15,12 @@
  * to get the app running. Paying for a UI test harness at that moment is the
  * wrong trade, so it is loaded at run time and its absence is explained rather
  * than thrown.
+ *
+ * A suite that runs part of itself WITHOUT Playwright (sky, season, face-pace,
+ * animal-settings - the browser-free half runs in CI's backend job) must
+ * import "playwright" itself FIRST and only then this file: the exit below
+ * happens while this module loads, and no try/catch around the import can
+ * catch it. `try { await import("playwright"); K = await import("./uikit.mjs"); }`
  */
 let chromium;
 try {

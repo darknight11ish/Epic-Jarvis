@@ -85,7 +85,7 @@ await check("Still: the PC's value, and an old 'on' until it has moved", () => {
 });
 
 let K = null;
-try { K = await import("./uikit.mjs"); await import("playwright"); } catch { K = null; }
+try { await import("playwright"); K = await import("./uikit.mjs"); } catch { K = null; }
 if (!K) {
   console.log("SKIP  the Settings part - Playwright is not installed (npm i -D playwright)");
 } else {
