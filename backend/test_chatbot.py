@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import socket
 import sys
 import tempfile
@@ -703,8 +704,16 @@ def t_clean_context():
     reads = {"jarvis_email", "jarvis_notes", "jarvis_calendar", "jarvis_chat_log",
              "jarvis_documents", "jarvis_intake", "jarvis_extract", "jarvis_recall",
              "jarvis_agent", "jarvis_home"}
-    check("the module imports no email, notes, calendar, documents or history module",
-          not (imported & reads), sorted(imported & reads))
+    check("the module imports no email, notes, calendar, documents or learning module",
+          not (imported & (reads - {"jarvis_chat_log"})), sorted(imported & reads))
+    # The one exception (the chat audit, 2026-09-28): a FINISHED conversation
+    # is WRITTEN to the encrypted chat history - never read from it. Only the
+    # write, in one place.
+    check("jarvis_chat_log is imported only by keep_history's writer, and only to write",
+          src.count("import jarvis_chat_log") == 1
+          and "def _default_keep_history" in src.split("import jarvis_chat_log")[0][-900:]
+          and set(re.findall(r"jarvis_chat_log\.(\w+)", src)) == {"record_chatbot"},
+          sorted(set(re.findall(r"jarvis_chat_log\.(\w+)", src))))
     check("jarvis_memory is imported only by the last check's own fact reader",
           src.count("import jarvis_memory") == 1
           and "def _default_saved_facts" in src.split("import jarvis_memory")[0][-400:])

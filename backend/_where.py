@@ -63,6 +63,14 @@ REPO = _HERE.parent
 #: them, so nothing there needs the variable.
 BACKEND = Path(os.environ.get("JARVIS_BACKEND") or _HERE).resolve()
 
+#: Every suite imports this file. A suite run on the owner's PC (with
+#: JARVIS_BACKEND set, or by apply-patches.ps1) must never write the made-up
+#: conversations it runs into the owner's real chat history: the modules that
+#: keep a finished conversation there on their own (jarvis_chatbot's
+#: keep_in_history) keep nothing while this is set. A suite that tests the
+#: keeping hands in its own ChatLog.
+os.environ["JARVIS_SUITE_RUNNING"] = "1"
+
 # Prepended, not appended: if a stale copy of a module is ever left in this
 # folder, the one in BACKEND is the one under test and must win.
 _b = str(BACKEND)

@@ -605,6 +605,7 @@ def _finish(c: Compare, code: str, d: CB.Deps, *, words: str = "") -> None:
         else:
             use_model = False
     c.summary = summarise(c, d, use_model=use_model)
+    keep_in_history(c, d)
     d.audit("compare_ended", {"compare": c.id, "code": code, "n": _sent(c)})
     try:
         d.activity("idle", "")
@@ -649,6 +650,46 @@ SUMMARY_SCHEMA = {
 }
 
 _URL = re.compile(r"https?://[^\s<>\"'`)\]]+", re.I)
+
+
+def keep_in_history(c: Compare, d: Optional[CB.Deps] = None) -> dict:
+    """A finished comparison, kept in the encrypted chat history as ONE
+    conversation of kind "compare" under its own id (the owner's decision of
+    2026-09-28, "Chats with other AIs and comparisons are kept in History"):
+    the goal, each chatbot's conversation in turn, and the one summary -
+    outside text, never learned from, never read aloud, read-only in both
+    apps. Kept once at least one message was sent. Never raises."""
+    d = d or CB.DEPS
+    if not any(m.transcript for m in c.members):
+        return {"recorded": False, "why": "nothing was said"}
+    at0 = c.created or None
+    names = [CB._name(m) for m in c.members]
+    rows = [{"provenance": "chatbot_note",
+             "text": f"Your question for {', '.join(names)}: {c.goal}", "at": at0}]
+    last = at0
+    for m, name in zip(c.members, names):
+        if not m.transcript:
+            rows.append({"provenance": "chatbot_note",
+                         "text": f"{name}: {m.ended_words or 'not asked.'}", "at": last})
+            continue
+        rows += CB.history_rows(m, name=name)
+        last = m.transcript[-1].get("at") or last
+        if m.ended_words:
+            rows.append({"provenance": "chatbot_note", "text": f"{name}: {m.ended_words}",
+                         "at": last})
+    if c.ended_words:
+        rows.append({"provenance": "chatbot_note", "text": c.ended_words, "at": last})
+    answer = c.summary.get("answer") if isinstance(c.summary, dict) else ""
+    if answer:
+        rows.append({"provenance": "chatbot_summary",
+                     "text": f"Summary, written on your PC from their replies: {answer}",
+                     "at": last})
+    first = (str(c.goal or "").strip().splitlines() or [""])[0]
+    title = f"Compared {len(names)} AIs: {first}" if first else f"Compared {len(names)} AIs"
+    try:
+        return d.keep_history(c.id, title, rows, "compare") or {}
+    except Exception as exc:
+        return {"recorded": False, "why": type(exc).__name__}
 
 
 def _replies(m) -> list:

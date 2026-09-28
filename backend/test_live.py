@@ -239,6 +239,37 @@ def t_one_session_at_a_time():
           any(ev == "voice.live" and d.get("ended_other") for ev, d in AUDIT))
 
 
+def t_the_session_names_its_chat():
+    """The chat audit (2026-09-28): "Move it here" used to carry on the wrong
+    chat. The session now carries the app's conversation id, and the other
+    device takes it over."""
+    w = World()
+    e = w.engine
+    e.start("desktop", conversation_id="conv-live-desk-1")
+    check("the status names the session's chat while it is on",
+          e.status()["conversation_id"] == "conv-live-desk-1", e.status())
+    e.start("phone", conversation_id="conv-live-desk-1")
+    st = e.status()
+    check("moved to the phone with the same chat: still that chat",
+          st["device"] == "phone" and st["conversation_id"] == "conv-live-desk-1", st)
+    e.stop()
+    check("ended: no chat named", e.status()["conversation_id"] is None)
+    e.start("phone", conversation_id="not ok!")
+    check("a malformed id is none, not kept", e.status()["conversation_id"] is None)
+    got = e.note_active("phone", "conv-voice-start-2")
+    check("a voice-started session is named by its app once (note_active)",
+          got["ok"] and e.status()["conversation_id"] == "conv-voice-start-2", got)
+    e.note_active("phone", "conv-other-3")
+    check("...and keeps that name: a second one does not replace it",
+          e.status()["conversation_id"] == "conv-voice-start-2")
+    check("the other device cannot name it",
+          not e.note_active("desktop", "conv-desk-4")["ok"]
+          and e.status()["conversation_id"] == "conv-voice-start-2")
+    check("the route hands conversation_id to start (read in the source)",
+          'conversation_id=body.get("conversation_id")' in
+          (HERE / "jarvis_live.py").read_text(encoding="utf-8"))
+
+
 def t_warning_quiet_sleep_and_lock():
     w = World()
     e = w.engine
@@ -715,7 +746,8 @@ def t_status_and_events_carry_no_words():
                "quiet_warn", "paused", "pause_words", "muted", "muted_why", "muted_words",
                "started_by", "started_at", "hint", "hint_words", "ending_soon", "ended", "ended_words",
                "ended_say", "ended_device", "ended_ago_s", "resumable", "turns",
-               "refused_in_a_row", "limits", "lines", "seen", "camera", "end_on"}
+               "refused_in_a_row", "limits", "lines", "seen", "camera", "end_on",
+               "conversation_id"}
     check("every event is the status and nothing else", w.events and all(
         k == "live" and set(d) == allowed for k, d in w.events), w.events[:1])
     fixed = (set(L.PAUSE_WORDS.values()) | set(L.HINT_WORDS.values())
