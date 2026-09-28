@@ -245,6 +245,9 @@ SHIPPED = (
     # ... and the camera's photo test, run once when the second card is in
     # (no patch: the owner runs it by hand)
     "jarvis_live_photo_test.py",
+    # "Forget a time frame" (2026-09-28): a checked list, ONE card, 10
+    # minutes to undo; GET/POST /api/memory/forget_range (forget-range.patch)
+    "jarvis_forget_range.py",
 )
 
 

@@ -631,6 +631,15 @@
        "title": "Change what it remembers"
       },
       {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -1439,6 +1448,15 @@
        "title": "Change what it remembers"
       },
       {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -2245,6 +2263,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
+      },
+      {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
       },
       {
        "action": "user_profile_manage",
@@ -3062,6 +3089,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
+      },
+      {
+       "action": "memory_forget_range",
+       "fixed": false,
+       "id": "memory_forget_range",
+       "note": "Always asks, with ONE card listing every fact and chat - approved by tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Forget what it learned and delete chats from the days you chose"
       },
       {
        "action": "user_profile_manage",

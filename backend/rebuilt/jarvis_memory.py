@@ -2190,6 +2190,58 @@ class MemoryStore:
                 "SELECT * FROM facts WHERE valid_to IS NULL OR valid_to > ?"
                 " ORDER BY id DESC LIMIT ?", (time.time(), limit))]
 
+    # ---- "Forget a time frame" (jarvis_forget_range.py, 2026-09-28) -------
+
+    def saved_between(self, start: float, end: float, limit: int = 201) -> tuple:
+        """(facts, how many) - the CURRENT facts this PC SAVED at or after
+        `start` and before `end` (epoch seconds; `end` is exclusive), oldest
+        first, at most `limit` of them; and how many there are in all.
+
+        By `created` - when Jarvis learned the fact - never `valid_from`,
+        which can be a "true from" date taken from the words themselves ("I
+        moved here in 2019", memory idea 4): "forget what you learned last
+        week" is about when Jarvis learned it. Only facts still in use
+        (valid_to NULL or later - the rule every reader uses) and never an
+        erased one: an already forgotten fact has nothing left to forget."""
+        now = time.time()
+        where = ("created >= ? AND created < ? AND erased_at IS NULL"
+                 " AND (valid_to IS NULL OR valid_to > ?)")
+        args = (float(start), float(end), now)
+        with _LOCK, closing(self._connect()) as c:
+            total = c.execute(f"SELECT COUNT(*) FROM facts WHERE {where}", args).fetchone()[0]
+            rows = [dict(r) for r in c.execute(
+                f"SELECT * FROM facts WHERE {where} ORDER BY created, id LIMIT ?",
+                args + (max(0, int(limit)),))]
+        return rows, int(total)
+
+    def unforget(self, fact_id: int, *, stamp: float,
+                 valid_to_before: Optional[float] = None) -> bool:
+        """Undo ONE Forget, for "Forget a time frame"'s 10-minute Undo only.
+
+        Puts the fact back exactly as it was: `valid_to` as before (NULL, or
+        the later date a lease ends on), `retired_at` and `retired_by`
+        cleared, the "forgotten" mark taken off, and its names linked again.
+        ONLY when the row is still in the state that Forget left it in -
+        retired at `stamp` (the retired_at retire() wrote), replaced by
+        nothing, and its words not erased since. Anything else (erased in
+        the meantime, corrected, forgotten again later) is left alone and
+        this returns False: an Undo must never bring back words the owner
+        wiped, or undo a later decision. retire() itself stays one-way for
+        every other caller."""
+        with _LOCK, closing(self._connect()) as c:
+            row = c.execute("SELECT text FROM facts WHERE id=?", (int(fact_id),)).fetchone()
+            if row is None:
+                return False
+            cur = c.execute(
+                "UPDATE facts SET valid_to=?, retired_at=NULL, retired_by=NULL"
+                " WHERE id=? AND retired_at=? AND retired_by IS NULL AND erased_at IS NULL",
+                (valid_to_before, int(fact_id), float(stamp)))
+            if cur.rowcount:
+                _set_meta(c, int(fact_id), forgotten_at=None)
+                self._link_safely(c, int(fact_id), str(row["text"]))
+            c.commit()
+            return cur.rowcount > 0
+
     def known_at(self, when: float, limit: int = 400) -> list[dict]:
         """What this machine BELIEVED at a past moment, right or wrong.
 

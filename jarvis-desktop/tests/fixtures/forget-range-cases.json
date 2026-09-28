@@ -1,0 +1,680 @@
+{
+ "card_title": "Jarvis wants to forget what it learned and delete chats from the days you chose",
+ "cases": {
+  "asked_said": {
+   "opens": true,
+   "said": "I've put the list in Brain, under Forget a time frame: 2 facts from 1 to 15 September 2026. Check it, untick anything you want to keep, and tap Forget these, then Approve on the card. Nothing is removed until you do - saying yes out loud does not approve it."
+  },
+  "forget_list_changed": {
+   "body": {
+    "changed": true,
+    "error": "The list changed since you read it - something on it was already forgotten, deleted, or is not from those days. Read the list again.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "forget_none_ticked": {
+   "body": {
+    "error": "Tick at least one thing to forget.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "forget_second_card": {
+   "body": {
+    "error": "A card for this is already waiting - answer it first.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "forget_waiting": {
+   "body": {
+    "counts": {
+     "chats": 2,
+     "facts": 2
+    },
+    "message": "Waiting for your approval. Nothing is forgotten or deleted unless you approve the card.",
+    "ok": true,
+    "waiting": true
+   },
+   "status": 202
+  },
+  "forget_while_undo": {
+   "body": {
+    "error": "You can still undo the last time frame you forgot, for about 9 more minutes. Once that time is up, or you tap Undo, you can forget another.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "preview": {
+   "body": {
+    "chats": [
+     {
+      "id": "conv-poem-00002",
+      "in_frame": 1,
+      "label": "31 August to 1 September · 2 messages",
+      "spills": true,
+      "started": 1788213600,
+      "title": "Help me write a poem",
+      "turns": 2,
+      "updated": 1788249600
+     },
+     {
+      "id": "conv-trip-00001",
+      "in_frame": 1,
+      "label": "4 September · 1 message",
+      "spills": false,
+      "started": 1788512400,
+      "title": "Plan the trip to Rome",
+      "turns": 1,
+      "updated": 1788512400
+     }
+    ],
+    "chats_why": "",
+    "counts": {
+     "chats": 2,
+     "facts": 2
+    },
+    "empty": false,
+    "facts": [
+     {
+      "between_us": false,
+      "id": 1,
+      "label": "Saved 3 September",
+      "pinned": false,
+      "saved": 1788436800,
+      "text": "The owner moved to Leeds in 2019"
+     },
+     {
+      "between_us": true,
+      "id": 2,
+      "label": "Saved 10 September",
+      "pinned": true,
+      "saved": 1789041600,
+      "text": "The owner's sister likes jazz"
+     }
+    ],
+    "frame": {
+     "end": 1789516800,
+     "from": "2026-09-01",
+     "said": "1 to 15 September 2026",
+     "start": 1788220800,
+     "to": "2026-09-15"
+    },
+    "kinds": [
+     "facts",
+     "chats"
+    ],
+    "max_items": 200,
+    "ok": true,
+    "said": "2 facts and 2 chats from 1 to 15 September 2026.",
+    "too_many": false
+   },
+   "status": 200
+  },
+  "preview_bad_date": {
+   "body": {
+    "error": "Type the dates like 2026-09-01.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "preview_bad_preset": {
+   "body": {
+    "error": "Pick one of the choices, or type two dates.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "preview_chats_only": {
+   "body": {
+    "chats": [
+     {
+      "id": "conv-poem-00002",
+      "in_frame": 1,
+      "label": "31 August to 1 September · 2 messages",
+      "spills": true,
+      "started": 1788213600,
+      "title": "Help me write a poem",
+      "turns": 2,
+      "updated": 1788249600
+     },
+     {
+      "id": "conv-trip-00001",
+      "in_frame": 1,
+      "label": "4 September · 1 message",
+      "spills": false,
+      "started": 1788512400,
+      "title": "Plan the trip to Rome",
+      "turns": 1,
+      "updated": 1788512400
+     }
+    ],
+    "chats_why": "",
+    "counts": {
+     "chats": 2
+    },
+    "empty": false,
+    "facts": [],
+    "frame": {
+     "end": 1789516800,
+     "from": "2026-09-01",
+     "said": "1 to 15 September 2026",
+     "start": 1788220800,
+     "to": "2026-09-15"
+    },
+    "kinds": [
+     "chats"
+    ],
+    "max_items": 200,
+    "ok": true,
+    "said": "2 chats from 1 to 15 September 2026.",
+    "too_many": false
+   },
+   "status": 200
+  },
+  "preview_empty": {
+   "body": {
+    "chats": [],
+    "chats_why": "",
+    "counts": {
+     "chats": 0,
+     "facts": 0
+    },
+    "empty": true,
+    "facts": [],
+    "frame": {
+     "end": 1789516800,
+     "from": "2026-09-01",
+     "said": "1 to 15 September 2026",
+     "start": 1788220800,
+     "to": "2026-09-15"
+    },
+    "kinds": [
+     "facts",
+     "chats"
+    ],
+    "max_items": 200,
+    "ok": true,
+    "said": "0 facts and 0 chats from 1 to 15 September 2026.",
+    "too_many": false
+   },
+   "status": 200
+  },
+  "preview_morning": {
+   "body": {
+    "chats": [],
+    "chats_why": "",
+    "counts": {
+     "chats": 0,
+     "facts": 0
+    },
+    "empty": true,
+    "facts": [],
+    "frame": {
+     "end": 1790596800,
+     "from": "2026-09-28T00:00",
+     "said": "28 September 2026, midnight to 11:59 am",
+     "start": 1790553600,
+     "to": "2026-09-28T11:59"
+    },
+    "kinds": [
+     "facts",
+     "chats"
+    ],
+    "max_items": 200,
+    "ok": true,
+    "said": "0 facts and 0 chats from 28 September 2026, midnight to 11:59 am.",
+    "too_many": false
+   },
+   "status": 200
+  },
+  "preview_preset_last_week": {
+   "body": {
+    "chats": [],
+    "chats_why": "",
+    "counts": {
+     "facts": 0
+    },
+    "empty": true,
+    "facts": [],
+    "frame": {
+     "end": 1790553600,
+     "from": "2026-09-21",
+     "said": "21 to 27 September 2026",
+     "start": 1789948800,
+     "to": "2026-09-27"
+    },
+    "kinds": [
+     "facts"
+    ],
+    "max_items": 200,
+    "ok": true,
+    "said": "0 facts from 21 to 27 September 2026.",
+    "too_many": false
+   },
+   "status": 200
+  },
+  "preview_too_many": {
+   "body": {
+    "chats": [],
+    "chats_why": "",
+    "counts": {
+     "chats": 0,
+     "facts": 201
+    },
+    "empty": false,
+    "facts": [],
+    "frame": {
+     "end": 1789516800,
+     "from": "2026-09-01",
+     "said": "1 to 15 September 2026",
+     "start": 1788220800,
+     "to": "2026-09-15"
+    },
+    "kinds": [
+     "facts",
+     "chats"
+    ],
+    "max_items": 200,
+    "ok": true,
+    "said": "That is 201 facts and 0 chats from 1 to 15 September 2026 - more than 200 at once. Choose fewer days.",
+    "too_many": true
+   },
+   "status": 200
+  },
+  "status_after_undo": {
+   "body": {
+    "asked": null,
+    "available": true,
+    "last": {
+     "at": 0,
+     "message": "Put back: 2 facts and 2 chats.",
+     "outcome": "undone",
+     "why": ""
+    },
+    "max_items": 200,
+    "presets": [
+     {
+      "id": "today",
+      "label": "Today"
+     },
+     {
+      "id": "yesterday",
+      "label": "Yesterday"
+     },
+     {
+      "id": "this_week",
+      "label": "This week"
+     },
+     {
+      "id": "last_week",
+      "label": "Last week"
+     },
+     {
+      "id": "last_7_days",
+      "label": "The last 7 days"
+     },
+     {
+      "id": "this_month",
+      "label": "This month"
+     },
+     {
+      "id": "last_month",
+      "label": "Last month"
+     }
+    ],
+    "title": "Forget a time frame",
+    "undo": null,
+    "undo_minutes": 10,
+    "waiting": false,
+    "waiting_for": null
+   },
+   "status": 200
+  },
+  "status_asked": {
+   "body": {
+    "asked": {
+     "from": "2026-09-01",
+     "id": "asked-id",
+     "kinds": [
+      "facts"
+     ],
+     "said": "1 to 15 September 2026",
+     "to": "2026-09-15"
+    },
+    "available": true,
+    "last": null,
+    "max_items": 200,
+    "presets": [
+     {
+      "id": "today",
+      "label": "Today"
+     },
+     {
+      "id": "yesterday",
+      "label": "Yesterday"
+     },
+     {
+      "id": "this_week",
+      "label": "This week"
+     },
+     {
+      "id": "last_week",
+      "label": "Last week"
+     },
+     {
+      "id": "last_7_days",
+      "label": "The last 7 days"
+     },
+     {
+      "id": "this_month",
+      "label": "This month"
+     },
+     {
+      "id": "last_month",
+      "label": "Last month"
+     }
+    ],
+    "title": "Forget a time frame",
+    "undo": null,
+    "undo_minutes": 10,
+    "waiting": false,
+    "waiting_for": null
+   },
+   "status": 200
+  },
+  "status_denied": {
+   "body": {
+    "asked": null,
+    "available": true,
+    "last": {
+     "at": 0,
+     "message": "Nothing was forgotten - you said no.",
+     "outcome": "denied",
+     "why": ""
+    },
+    "max_items": 200,
+    "presets": [
+     {
+      "id": "today",
+      "label": "Today"
+     },
+     {
+      "id": "yesterday",
+      "label": "Yesterday"
+     },
+     {
+      "id": "this_week",
+      "label": "This week"
+     },
+     {
+      "id": "last_week",
+      "label": "Last week"
+     },
+     {
+      "id": "last_7_days",
+      "label": "The last 7 days"
+     },
+     {
+      "id": "this_month",
+      "label": "This month"
+     },
+     {
+      "id": "last_month",
+      "label": "Last month"
+     }
+    ],
+    "title": "Forget a time frame",
+    "undo": null,
+    "undo_minutes": 10,
+    "waiting": false,
+    "waiting_for": null
+   },
+   "status": 200
+  },
+  "status_fresh": {
+   "body": {
+    "asked": null,
+    "available": true,
+    "last": null,
+    "max_items": 200,
+    "presets": [
+     {
+      "id": "today",
+      "label": "Today"
+     },
+     {
+      "id": "yesterday",
+      "label": "Yesterday"
+     },
+     {
+      "id": "this_week",
+      "label": "This week"
+     },
+     {
+      "id": "last_week",
+      "label": "Last week"
+     },
+     {
+      "id": "last_7_days",
+      "label": "The last 7 days"
+     },
+     {
+      "id": "this_month",
+      "label": "This month"
+     },
+     {
+      "id": "last_month",
+      "label": "Last month"
+     }
+    ],
+    "title": "Forget a time frame",
+    "undo": null,
+    "undo_minutes": 10,
+    "waiting": false,
+    "waiting_for": null
+   },
+   "status": 200
+  },
+  "status_undo": {
+   "body": {
+    "asked": null,
+    "available": true,
+    "last": {
+     "at": 0,
+     "message": "Done. You can undo it for 10 minutes.",
+     "outcome": "done",
+     "why": ""
+    },
+    "max_items": 200,
+    "presets": [
+     {
+      "id": "today",
+      "label": "Today"
+     },
+     {
+      "id": "yesterday",
+      "label": "Yesterday"
+     },
+     {
+      "id": "this_week",
+      "label": "This week"
+     },
+     {
+      "id": "last_week",
+      "label": "Last week"
+     },
+     {
+      "id": "last_7_days",
+      "label": "The last 7 days"
+     },
+     {
+      "id": "this_month",
+      "label": "This month"
+     },
+     {
+      "id": "last_month",
+      "label": "Last month"
+     }
+    ],
+    "title": "Forget a time frame",
+    "undo": {
+     "chats": 2,
+     "facts": 2,
+     "frame": "1 to 15 September 2026",
+     "minutes_left": 10,
+     "said": "Forgot 2 facts and deleted 2 chats from 1 to 15 September 2026.",
+     "seconds_left": 600,
+     "until": 1790610000
+    },
+    "undo_minutes": 10,
+    "waiting": false,
+    "waiting_for": null
+   },
+   "status": 200
+  },
+  "status_waiting": {
+   "body": {
+    "asked": null,
+    "available": true,
+    "last": null,
+    "max_items": 200,
+    "presets": [
+     {
+      "id": "today",
+      "label": "Today"
+     },
+     {
+      "id": "yesterday",
+      "label": "Yesterday"
+     },
+     {
+      "id": "this_week",
+      "label": "This week"
+     },
+     {
+      "id": "last_week",
+      "label": "Last week"
+     },
+     {
+      "id": "last_7_days",
+      "label": "The last 7 days"
+     },
+     {
+      "id": "this_month",
+      "label": "This month"
+     },
+     {
+      "id": "last_month",
+      "label": "Last month"
+     }
+    ],
+    "title": "Forget a time frame",
+    "undo": null,
+    "undo_minutes": 10,
+    "waiting": true,
+    "waiting_for": {
+     "chats": 2,
+     "facts": 2,
+     "frame": "1 to 15 September 2026"
+    }
+   },
+   "status": 200
+  },
+  "undo": {
+   "body": {
+    "message": "Put back: 2 facts and 2 chats.",
+    "not_restored": {
+     "chats": 0,
+     "facts": 0
+    },
+    "ok": true,
+    "restored": {
+     "chats": 2,
+     "facts": 2
+    }
+   },
+   "status": 200
+  },
+  "undo_nothing": {
+   "body": {
+    "error": "There is nothing to undo - the 10 minutes are up, or it was already undone.",
+    "ok": false
+   },
+   "status": 409
+  }
+ },
+ "limits": {
+  "max_items": 200,
+  "undo_minutes": 10
+ },
+ "missing": {
+  "body": {
+   "error": "not found"
+  },
+  "status": 404
+ },
+ "presets": [
+  {
+   "id": "today",
+   "label": "Today"
+  },
+  {
+   "id": "yesterday",
+   "label": "Yesterday"
+  },
+  {
+   "id": "this_week",
+   "label": "This week"
+  },
+  {
+   "id": "last_week",
+   "label": "Last week"
+  },
+  {
+   "id": "last_7_days",
+   "label": "The last 7 days"
+  },
+  {
+   "id": "this_month",
+   "label": "This month"
+  },
+  {
+   "id": "last_month",
+   "label": "Last month"
+  }
+ ],
+ "routes": {
+  "preview": "/api/memory/forget_range/preview",
+  "status": "/api/memory/forget_range",
+  "undo": "/api/memory/forget_range/undo"
+ },
+ "words": {
+  "asked": "You asked Jarvis to forget {said}. Check the list below.",
+  "bad_date": "Type the dates like 2026-09-01.",
+  "between_us": "Between us",
+  "chats_head": "Chats from then",
+  "date_hint": "A date like 2026-09-01",
+  "erase_note": "Facts are forgotten, as Forget does: they stop being used and stay in the history. To wipe a fact's words for good, use Erase the words on that fact.",
+  "facts_head": "What Jarvis learned then",
+  "forget": "Forget these",
+  "from": "From",
+  "kind_chats": "Chats",
+  "kind_facts": "What Jarvis learned",
+  "kinds": "What to look for",
+  "locked": "Unlock Jarvis to see this list.",
+  "missing": "Your PC's Jarvis cannot forget a time frame yet - run apply-patches.ps1 on the PC.",
+  "none_ticked": "Tick at least one thing to forget.",
+  "pinned": "Always kept in mind",
+  "show": "Show the list",
+  "spills": "Also has messages from outside these days - the whole chat is deleted.",
+  "stale": "The connection to Jarvis is catching up, so nothing can be sent until it does.",
+  "title": "Forget a time frame",
+  "to": "To",
+  "under": "Choose some days. Jarvis lists what it learned and your chats from then - untick anything you want to keep, then tap Forget these. Nothing is removed until you approve the card, and for 10 minutes one tap on Undo puts it all back.",
+  "undo": "Undo",
+  "undo_left": "{minutes} min left to undo",
+  "waiting": "Waiting for your yes on the approval card. Nothing is removed until you approve it - saying yes out loud does not."
+ }
+}

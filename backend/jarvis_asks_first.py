@@ -170,6 +170,11 @@ SAYS_ONCE = "Asks the first time only, then never again"
 NOTE_TOOL_UPDATES = ("Checking is read-only - it only reports, never installs anything. It "
                      "asks once, the first time you ever press the button; after that one "
                      "yes it never asks again, and this cannot be changed from an app.")
+#: "Forget a time frame" (jarvis_forget_range.py, the owner's decision of
+#: 2026-09-28): one card for the whole list, then 10 minutes to undo.
+NOTE_FORGET_RANGE = ("Always asks, with ONE card listing every fact and chat - approved by "
+                     "tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. "
+                     "This cannot be changed from an app.")
 NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell me when\", "
              "which cannot stop to ask.")
 NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
@@ -251,7 +256,7 @@ HARD_LIMITS = frozenset({
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
-    "chatbot_session",
+    "chatbot_session", "memory_forget_range",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -266,7 +271,7 @@ MUST_ASK = frozenset({
     "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
-    "restore_backup", "check_tool_updates", "chatbot_session",
+    "restore_backup", "check_tool_updates", "chatbot_session", "memory_forget_range",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -300,7 +305,8 @@ GROUPS = (
     ("Jarvis's own settings, memory and voice", [
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
-        "memory_manage", "user_profile_manage", "custom_voice", "better_voice_enable",
+        "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
+        "better_voice_enable",
         "watch_notifications_enable", "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION,
         "restore_backup", "check_tool_updates"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
@@ -466,6 +472,8 @@ def _row(action: str, *, here: bool) -> dict:
             row["note"] = NOTE_WIKI
         elif action == "check_tool_updates":
             row["note"] = NOTE_TOOL_UPDATES
+        elif action == "memory_forget_range":
+            row["note"] = NOTE_FORGET_RANGE
         else:
             row["note"] = NOTE_ALWAYS
         return row

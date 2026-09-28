@@ -672,6 +672,18 @@ $PATCHES = @(
     # tool loop already makes - for the local model only. Needs nothing new
     # copied in: jarvis_agent.py is already in this list.
     'rules-first-relay.patch'
+    # "Forget a time frame" (the owner's decision of 2026-09-28; JARVIS-API
+    # section 64): GET /api/memory/forget_range and /preview, POST
+    # /api/memory/forget_range (ONE approval card listing every fact and
+    # chat; nothing changes before a person approves) and /undo (10
+    # minutes, no card). Three hunks: two in jarvis_gate.py, whose context
+    # is chatbot.patch's own lines (the "a no is not a standing rule" list
+    # and the risk table), and the startup install() block in jarvis_hud.py,
+    # whose context is live.patch's own block - so it goes after both, last,
+    # like every new patch. Needs jarvis_forget_range.py copied in; without
+    # it, or on any error, the banner says so and the routes are simply not
+    # there.
+    'forget-range.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -830,6 +842,8 @@ $SHIPPED = @(
     # --- Jarvis Live (2026-09-28): talking back and forth; the camera off until the second card passes the photo test ---
     'jarvis_live.py'             # the Live session (start, stop, time limit, quiet, pauses), the source=live rules jarvis_speech follows, GET/POST /api/voice/live (live.patch)
     'jarvis_live_photo_test.py'  # the camera's photo test: run once, when the 12 GB card is in; a pass is what lets the camera switch appear on the phone
+    # --- "Forget a time frame" (2026-09-28): a checked list, ONE card, 10 minutes to undo ---
+    'jarvis_forget_range.py'     # forget-range.patch: GET/POST /api/memory/forget_range, /preview and /undo; jarvis_quick.py (already SHIPPED) calls it for "forget what you learned last week"
 )
 
 # The settings file. Installed only where none exists; never overwritten.

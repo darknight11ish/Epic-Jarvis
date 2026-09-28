@@ -308,6 +308,13 @@ history_enable            = "ask"
 # line here become your yes.
 learning_auto_enable      = "ask"
 learning_sensitive_enable = "ask"
+# "Forget a time frame" (docs/JARVIS-API.md section 64, the owner's decision
+# of 2026-09-28): forgetting what Jarvis learned, and deleting your chats,
+# from the days you chose - ONE card listing every fact and chat, with 10
+# minutes to Undo afterwards. Must stay "ask": jarvis_forget_range.py
+# refuses any other tier rather than let this line become your yes. A file
+# without this line asks too (unknown_action_tier).
+memory_forget_range       = "ask"
 
 # --- Custom voices (docs/JARVIS-API.md section 15) -----------------------
 # Adding a voice (a recording of someone reading a sentence, kept on this
