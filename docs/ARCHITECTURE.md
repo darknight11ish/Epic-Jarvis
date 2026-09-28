@@ -997,12 +997,26 @@ fact_repeats  fact_id, said_at, how ("typed" | "voice")   "said again" - NO WORD
   owner's own live words, by automatic learning's own checks (typed or
   strictly checked voice, seen live, no outside text read, every word said
   and no "not" dropped), only after the fact was saved, one row per turn
-  however often the learner re-reads it. Nothing reads the count to decide
-  anything, so it can never make a fact harder to forget, correct or erase;
-  Erase keeps the rows (ids and dates, like the fact's own dates). Shown as
+  however often the learner re-reads it. The count can never make a fact
+  harder to forget, correct or erase, and the only thing that may read it
+  to decide anything is the tie-break below (off by default); Erase keeps
+  the rows (ids and dates, like the fact's own dates). Shown as
   "said again 3 times" in both apps' "Saved automatically" list (the one
   list both apps read from a shipped module; the full memory list is the
   owner's `jarvis_hud` route and does not carry it yet).
+- **"Said again" as a tie-breaker** (milestone 12, 2026-09-28). Chat
+  recall only (`jarvis_past.recall` -> `search(said_again=True)`): after
+  the fusion, the re-ranker and the cut to `k`, facts NEXT TO EACH OTHER
+  that tie exactly - the same RRF score, and the same re-ranker score if it
+  ran - are put in "said again" order, most first. It is a permutation of
+  the final list: no fact added, dropped, hidden or faded, `k` and both
+  floors unchanged, and no fact moves past one that scored differently.
+  Never `find_one()`, corrections or anything that writes; a failure is the
+  old order. **Off by default** (kept only once the PC's self-test shows it
+  helps); `JARVIS_MEMORY_SAID_AGAIN_TIEBREAK=1` turns it on, and
+  `eval_memory.py` measures it on its own "said again" line whatever the
+  setting. Words only, it changed nothing on the golden set (2026-09-28);
+  ties are commoner with meaning search on, so only the PC's run can say.
 - **Real "true from" dates** (idea 4). `add()` sets `valid_from` from the
   owner's own words when they say when something changed ("I moved to Leeds
   in January", told in March -> 1 January; `true_from()`: fixed English
@@ -2000,7 +2014,7 @@ Do not relitigate these without new evidence.
 | Voice | sherpa-onnx for STT (Parakeet TDT 0.6B v2), speaker verification, Kokoro TTS, Silero VAD. 0 GB VRAM. First audio is slow: from the owner finishing to Jarvis's first sound is roughly **2.5–4 s** today, with the voice on the processor. That is an estimate - the model's part (first word, first sentence) has not been measured; making the first sentence's sound alone takes about 1.3–1.6 s (measured in the dev container, not the owner's PC). The real figure is in `flow.timings` and `flow.summary` of `/api/voice/status` on the owner's PC (`backend/README.md`, "The voice flow"). Design a "thinking" state that survives several seconds of silence. Both apps make the next sentence's sound while the current one plays (one ahead), so there is no silence *between* sentences as long as making the next one takes less time than saying the current one (a simulation in the dev container: 3.5 s of mid-answer silence became 0 s; a short sentence followed by a long one can still leave a pause). Both apps also start speaking at the **first comma** of an answer once the phrase is long enough - the first piece only, the same rule on both (`jarvis-desktop/src/speech-pieces.js`, `SpeechText.kt`, one shared list of cases); in the dev container that moved the first sound from 2.04 s to 1.23 s, at the cost of one short pause after that first phrase. And a question **said** out loud is answered in a spoken style - a short first sentence, one to three sentences, no lists or markdown - by one line the PC adds for this PC's own model only (`jarvis_agent.SPOKEN_NOTE`, `JARVIS-API.md` section 17); typed questions are unchanged. The "One moment." clip's suggested 1000 ms (`JARVIS-API.md` section 17) would therefore fire on most spoken turns at today's speeds. **The wake word is the exception**: openWakeWord's `hey_jarvis` model on ONNX Runtime, on the phone and the PC alike - sherpa-onnx has no Android library on Maven Central/Google, and the TOML and `WAKE-WORD.md` had already chosen openWakeWord. Measured side by side in `backend/README.md`. **Custom voices** (2026-09-24, the owner's decision): ZipVoice via sherpa-onnx on the processor, and F5-TTS as an optional second-card "better voice" in its own process (on demand, stopped when idle and in standby); Kokoro stays the fallback. Adding a voice and switching to one are each a card; a voice that sounds like the owner's is refused (`backend/jarvis_voices.py`, `JARVIS-API.md` section 15). **Voice upgrades** (2026-09-26, the owner's choice, "each measured before it replaces anything"): a newer "hey Jarvis" detector (livekit-wakeword, trained once on the owner's PC) and Pocket TTS (a faster voice-copying engine on the processor) are built but **switched off**, with no switch in either app (the feasibility audit's "invisible upgrades get no switch"). `backend/jarvis_bakeoff.py` measures each against today's on the owner's PC and says "replace" or "keep what we have" by rules fixed beforehand (`backend/README.md`, "Voice upgrades: the bake-off"). A winner replaces the old part - never two detectors or three voice engines side by side. Every Pocket TTS file is hash-pinned and refused if it changed; the candidate detector is refused unless it matches the hash its training wrote down; the wake-word files the phone ships are pinned to the same hashes as the PC's (`test_voice_upgrades.py`). **How fast Jarvis speaks** (Slower / Normal / Faster) is in both apps: one number for every voice made on the PC, no card either way. **Which of Kokoro's own voices the built-in one uses** (2026-09-27, ease-of-use audit row 13) is the same shape, right next to it in both apps: no card either way, `[voice] tts_speaker_id` in the toml until a choice is made. **Voice follows the face** (2026-09-27, the owner's choice): with an animal face showing (red panda, pygmy owl, sea otter), the built-in voice becomes that animal's - one of the Kokoro voices already installed, its own pace and a small pitch rise (`jarvis_voices.FACE_VOICES`, not listened to yet). An on/off switch, on by default, under the built-in voice choice in both apps: no card either way (it changes how Jarvis sounds, never what it does), held on a stale link; a recorded custom voice still wins. |
 | Cloud / API keys | Allowed, **per use, with permission**. Jarvis works out what it genuinely needs the internet for, explains it, and asks. No standing grant. Enforced in `jarvis_router.choose()` since 2026-09-24 (the owner chose "ask each time"): without the owner's yes for that one question it answers locally and only names the cloud lane in `offer`; a yes never carries a private, tainted or picture turn out. Before that, the router escalated long questions by itself. |
 | Structured output | Ollama's native `format: <schema>` — GBNF at the sampler. **Not** `outlines`, which cannot constrain Ollama. |
-| Sandbox | Git worktrees, not Docker. |
+| Sandbox | Git worktrees, not Docker - for keeping the app builder's changes apart until a card approves them (`jarvis_app_workspace.py`, 2026-09-28). A worktree is NOT a sandbox for running programs: `shell_exec` and any build command run with the owner's full permissions, which is why each one asks with the exact command (`docs/APP-BUILDER-DESIGN.md`). |
 | Extraction | `ast-grep` — measured 54,490 → 1,088 bytes, 0 VRAM. |
 
 **Rejected, with reasons, so they stay rejected:** screenpipe (relicensed,

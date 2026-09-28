@@ -99,6 +99,12 @@ installed and measured. `docs/MODEL-TOPOLOGY.md` has the numbers.
 4. The app never auto-approves anything, and blocks acting when the event
    stream is stale.
 5. Non-commercial build. Sideloaded via adb, never listed on Play.
+   The owner said on 2026-09-28 that EpicJarvis **will never be
+   commercialized**. So a non-commercial licence (CC BY-NC, CC BY-NC-SA) is
+   no reason to avoid or replace a part - don't raise "it blocks selling
+   Jarvis" as a concern. Everything else those licences ask still applies:
+   credit in THIRD-PARTY-NOTICES.txt, share-alike, no redistribution
+   against their terms.
 
 Also standing: do not build the model catalogue, the memory graph, or deep
 config editing on the phone. A client must not do speech-to-text. Never build a
@@ -485,7 +491,8 @@ here rather than patched blind:
   across two separate patches (`chat-stream.patch`, which has the flag, and
   `second-card-suggest.patch`, which has the id) - mechanical, but not done
   without the owner's go-ahead given how carefully this project already
-  treats crisis handling.
+  treats crisis handling. **Go-ahead given 2026-09-28: queued as milestone 8**
+  (`docs/AUDIT-2026-09-28-REPO-REFS.md`).
 
 Decided 2026-09-27, when the owner asked for a 3D animal face (with
 Gemini's notes as input, not instructions):
@@ -516,6 +523,59 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
 - **A "Still" option for the animals** in both apps' face settings, off by
   default: the animal sits calmly and only breathes - no looking around,
   no gestures or idle events.
+
+Decided 2026-09-28, after checking two Gemini reviews of the outside
+projects Jarvis names (`docs/AUDIT-2026-09-28-REPO-REFS.md` - read it
+before acting on any outside review; its disproven findings stay closed):
+- **Three separate milestones are queued, none started**, in this order:
+  (1) Silero speech detection in the apps for "stopped talking" and
+  interruptions (wake-up stays with the wake-word model); (2) Prompt Guard 2
+  as a warning only, after the owner gets Meta's access and it is measured;
+  (3) "quiz me on my notes" with FSRS, deferred until a note-review screen
+  is designed. Details and limits are in that audit, section 6.
+  Added the same day, as milestones 4-7: (4) a one-line lesson from each
+  "wrong" mark, offered on a card and saved only on the owner's yes; (5)
+  multi-hop memory, kept only if the memory self-tests improve; (6) a skill
+  that fails twice in a row stops being offered and asks "keep or turn
+  off?"; (7) record how much of each prompt Ollama reuses from its cache.
+- **Milestones 8-11, the same day:** (8) close the crisis "wrong" gap (the 2026-09-27 re-check above) -
+  the owner's go-ahead is given; (9) a "match my speaking pace" setting, off
+  to start, both apps; (10) microWakeWord joins the wake-word trial; (11)
+  offline developer docs. Details in the audit, section 6.
+- **Milestone 12, the same day:** "said again" counts become a small
+  tie-breaker in recall - never hiding or fading a fact - kept only if the
+  memory self-tests improve.
+- **Milestones 13-14, the same day:** LoCoMo's multi-hop questions join the
+  memory self-test (before milestone 5), and PrefEval's questions test "From
+  now on..." preferences. Test data only (CC BY-NC 4.0), never shipped,
+  credited when added.
+- **Built the same day:** milestones 7 (the prompt-cache share, shown in
+  Brain -> Model in both apps), 12 (the tie-breaker, OFF until the PC's
+  numbers improve) and 13 (`eval_memory.py --locomo`). On LoCoMo, words only,
+  the entity layer made every number worse - not looked into yet
+  (`docs/MEMORY-SCOREBOARD.md`).
+- **Copying the owner's own voice stays refused** (`jarvis_voices.py`): a
+  Jarvis speaking in the owner's voice could pass its own voice check.
+
+Decided 2026-09-28, after the app-builder suggestions
+(`docs/APP-BUILDER-DESIGN.md` has the plan):
+- **Jarvis may build apps and write code for the owner** - web apps (React +
+  Vite, Android through Capacitor) and native Android apps (Kotlin).
+- **Local model first; a cloud model only when Jarvis is stuck.** After a
+  set number of failed tries on one step, Jarvis may OFFER cloud help on a
+  card listing the exact files and error text that would leave the PC. This
+  bends rule 1 for app project files only, one card per offer - never email,
+  notes, memory, chat history, settings, `.env` files, signing keys or
+  anything that looks like a secret. A project can be marked "never cloud".
+- **Every merge into an app and every command (npm, Gradle) asks with a
+  card**; a git worktree keeps changes apart but is not a sandbox for
+  running programs.
+- Offline developer docs (Dash/Zeal docsets): queued as milestone 11 (below).
+- **aider is trialled as the coding engine**, locked down: only inside a
+  task's copy, no shell commands, no "yes to everything", no analytics, no
+  cloud model. Kept only if it beats Jarvis's own file blocks (design doc,
+  milestone D2). No second agent framework: one permission model, one
+  scheduler.
 
 ## Every new feature gets its own audit, without being asked
 

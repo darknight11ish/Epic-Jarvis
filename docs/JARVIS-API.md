@@ -1127,14 +1127,22 @@ path ever appears in it (`routes.rs:67-101`).
 `{"available": true, "recent": [up to 20 answer rows, oldest first; since
 2026-09-26 a row may also carry "cached_tokens" (how much of the prompt
 Ollama reused) and "prompt_rounds" (requests to the model in that answer,
-whose "prompt_tokens" and "cached_tokens" are summed) - numbers only, and
-neither app needs to show them],
+whose "prompt_tokens" and "cached_tokens" are summed) - numbers only; the
+apps read the share below, not these],
 "by_model": {"<model>": {"answers", "median_first_word_ms",
 "median_tokens_per_s", "median_words_per_s", "median_on_gpu_percent",
-"last_at"}}, "last_switch": null | {...}, "last_switch_note": null | "<sentence>",
+"median_reused_percent", "reused_answers", "last_at"}}, "last_switch": null | {...}, "last_switch_note": null | "<sentence>",
 "slowdown": null | {"slower", "change_percent", "recent_tokens_per_s",
-"earlier_tokens_per_s"}, "note"}`, or `{"available": false, "note"}`. Show one
-line for `by_model[current]`; show `note` as a warning line only when
+"earlier_tokens_per_s"}, "note"}`, or `{"available": false, "note"}`. `median_reused_percent` (milestone 7,
+2026-09-28) is the middle, over the answers that have both counts, of
+`cached_tokens` out of `prompt_tokens` as a percentage - how much of the
+conversation Ollama had already read from the last question and did not
+read again (its prompt cache); `reused_answers` is how many answers had the
+counts. It is `null` when none did: rows from before 2026-09-26, an older
+Ollama, or answers with no tools switched on (those are relayed as the app
+asked, and neither app asks for the counts). Show one
+line for `by_model[current]`, ending with "N% of the conversation reused,
+not read again" when `median_reused_percent` is a number; show `note` as a warning line only when
 `slowdown.slower` is true; show `last_switch_note` word for word beside the
 rollback button when `last_switch` is set. Numbers only - nothing in it is
 conversation text. **Android** does exactly those three things in the Brain's Model

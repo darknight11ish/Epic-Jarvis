@@ -440,6 +440,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -1213,6 +1222,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -1986,6 +2004,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"
@@ -2768,6 +2795,15 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
       }
      ],
      "title": "This PC and your phone"

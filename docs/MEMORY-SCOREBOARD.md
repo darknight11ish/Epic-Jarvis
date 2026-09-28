@@ -99,3 +99,35 @@ What is not known yet, and waits for the PC run:
 - **How well the real 8B model picks facts out of a conversation.** The
   learner cases above use a stand-in for the model's one judgement call (is
   this a sensitive topic?). `--learner-model` runs the real one.
+
+### LoCoMo "link two facts" questions (milestone 13, added 2026-09-28)
+
+A separate test: `python backend/eval_memory.py --locomo` (on the PC, with
+the real models). It asks 169 multi-hop questions over 5 of LoCoMo's long
+made-up chats (`backend/fixtures/locomo_multihop.json`, CC BY-NC 4.0, test
+data only). One stored item is one line of chat, not a saved fact, so these
+numbers **can't be compared** with the table above or with published LoCoMo
+scores. "Found all" = every chat line the question relies on came back.
+
+| Date | Search | Where measured | Found any @5 | Found all @5 | nDCG@5 | Found all @10 |
+|---|---|---|---|---|---|---|
+| 2026-09-28 | plain | build machine, words only | 45.0% | 9.5% | 0.238 | 18.9% |
+| 2026-09-28 | with the entity layer (how chat recall runs) | build machine, words only | 32.0% | 3.6% | 0.124 | 11.8% |
+| - | both, real models | **the PC - not run yet** | - | - | - | - |
+
+**Worth knowing:** on this data, words only, the entity layer made every
+number worse, in every one of the five chats. Nobody has looked into why yet.
+It may not hold with the real models; the PC run will tell. This is the
+baseline milestone 5 (multi-hop memory) has to beat.
+
+### "Said again" as a tie-breaker (milestone 12, added 2026-09-28, OFF)
+
+Switched on only with `JARVIS_MEMORY_SAID_AGAIN_TIEBREAK=1`. It reorders only
+facts that scored exactly the same, putting the one said more often first;
+it never adds, drops or hides a fact (`backend/README.md`, "Said again").
+
+| Date | Where measured | Result |
+|---|---|---|
+| 2026-09-28 | build machine, words only, re-ranker off, 71 to 10,071 facts | **No change**: 0 questions reordered at every size, every number identical (recall@5 80.9% at 71 facts, 79.8% at 10,071). The 6 exact ties involving a repeated fact already had it first. |
+| - | the PC, real models | **not run yet** - ties should be commoner with meaning search on, so only this run can say whether it helps. It stays off unless this run improves a number. |
+

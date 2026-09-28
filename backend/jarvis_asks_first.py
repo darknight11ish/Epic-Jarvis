@@ -251,6 +251,7 @@ HARD_LIMITS = frozenset({
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
+    "app_merge_change",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -287,7 +288,8 @@ GROUPS = (
                       "news_read", "page_read"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "fixed:plugin_start", "fixed:plugin_use",
-                                "delete_file", "spend_money", "power_manage"]),
+                                "delete_file", "spend_money", "power_manage",
+                                "app_merge_change"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       "second_card_enable", "second_card_browser_enable",

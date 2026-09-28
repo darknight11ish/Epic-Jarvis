@@ -125,6 +125,8 @@ TITLES = {
     "watch_notifications_enable": "let your notifications show on a smartwatch too",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
+    # --- the app builder (docs/APP-BUILDER-DESIGN.md)
+    "app_merge_change": "add its change to one of your apps",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

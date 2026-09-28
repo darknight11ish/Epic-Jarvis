@@ -23,6 +23,10 @@
       "title": "Jarvis wants to start a helper task"
     },
     {
+      "action": "app_merge_change",
+      "title": "Jarvis wants to add its change to one of your apps"
+    },
+    {
       "action": "append_logseq_journal",
       "title": "Jarvis wants to add to today's Logseq journal"
     },

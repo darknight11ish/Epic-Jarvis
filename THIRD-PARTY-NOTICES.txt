@@ -402,6 +402,29 @@ MarkItDown (Microsoft), MIT - https://github.com/microsoft/markitdown
   magika (Apache-2.0), beautifulsoup4 and markdownify (MIT), defusedxml
   (PSFL) and charset-normalizer (MIT).
 
+THE FACES' SHAPE MATHS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Inigo Quilez - https://iquilezles.org/articles/distfunctions/ and
+https://iquilezles.org/articles/distfunctions2d/
+  The animal faces (jarvis-desktop/critters/common_head.sksl, generated into
+  jarvis-desktop/src/critters-gen.js and the phone's face/CritterShaders.kt)
+  use his published distance formulas: the ellipsoid bound, the capsule, the
+  polynomial smooth minimum and the Newton-step distance to a 2D ellipse.
+  The Nucleus face (jarvis-desktop/src/faces.html, the phone's
+  face/Faces.kt) uses the same smooth minimum. Each is a few lines of maths
+  written out here, with a comment naming him and the address above. The
+  licence on those pages was NOT checked (the site could not be reached from
+  where this was written); this build is non-commercial either way (rule 5).
+
+LAUNCH VIDEO FONTS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Inter (The Inter Project Authors, https://github.com/rsms/inter) and
+Fraunces (The Fraunces Project Authors, https://github.com/undercasetype/Fraunces),
+SIL Open Font License 1.1. Used only in the launch videos
+(videos/v5 and videos/v6, composition/assets/fonts/, each with its
+licence file beside it), not in either app. The OFL text is the one given
+under FONTS below.
+
 FONTS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Chakra Petch (The Chakra Petch Project Authors), IBM Plex Sans and IBM Plex
@@ -530,6 +553,27 @@ https://huggingface.co/BAAI/bge-small-en-v1.5
   shipped in either app. Licence: MIT, as its model card states - recorded
   from memory, NOT re-checked here (huggingface.co is blocked from where
   this was written).
+
+MEMORY SELF-TEST DATA (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+LoCoMo (Snap Research), CC BY-NC 4.0 -
+https://github.com/snap-research/locomo
+  Test data only, never shipped to the PC's backend folder or in either
+  app: backend/fixtures/locomo_multihop.json holds the chat turns of five
+  of the ten conversations in its data/locomo10.json and their multi-hop
+  questions (answers and evidence turn ids), read out at commit
+  3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376 by tools/build_locomo_fixture.py
+  - cut down, with a few malformed evidence ids mended or dropped, as the
+  fixture's own "fixes" list says; the text itself is unchanged. Used by
+  `backend/eval_memory.py --locomo` (the memory self-test, milestone 13).
+  No LoCoMo code is used.
+  From "Evaluating Very Long-Term Conversational Memory of LLM Agents",
+  Adyasha Maharana, Dong-Ho Lee, Sergey Tulyakov, Mohit Bansal, Francesco
+  Barbieri and Yuwei Fang, ACL 2024. Licensed under the Creative Commons
+  Attribution-NonCommercial 4.0 International licence
+  (https://creativecommons.org/licenses/by-nc/4.0/legalcode), the text in
+  LoCoMo's LICENSE.txt. Non-commercial use only, which this build is
+  (rule 5).
 
 THE PHONE APP (not generated - keep when regenerating)
 ---------------------------------------------------------------------------

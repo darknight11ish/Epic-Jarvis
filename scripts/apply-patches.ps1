@@ -766,6 +766,8 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
+    # --- the app builder's workspace (2026-09-28, docs/APP-BUILDER-DESIGN.md milestone A) ---
+    'jarvis_app_workspace.py'    # app projects, a separate copy per task, one card with the full diff before a merge; runs nothing; no patch or tool yet
 )
 
 # The settings file. Installed only where none exists; never overwritten.

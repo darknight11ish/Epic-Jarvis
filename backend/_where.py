@@ -196,6 +196,10 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # the app builder's workspace: app projects, a separate copy per task, one
+    # card showing the full diff before anything reaches the app; runs nothing
+    # (docs/APP-BUILDER-DESIGN.md, milestone A - no patch, no tool yet)
+    "jarvis_app_workspace.py",
 )
 
 

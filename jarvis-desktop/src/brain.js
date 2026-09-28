@@ -1034,6 +1034,13 @@ function modelSpeed(speed, current) {
       const tenths = Math.round(firstMs / 100);
       parts.push(`first word after ${Math.floor(tenths / 10)}.${tenths % 10} s`);
     }
+    // Milestone 7: the share of the conversation Ollama already had read
+    // from the last question and did not read again (its prompt cache;
+    // jarvis_speed.reused_percent). Missing on older rows and older Ollamas.
+    const reused = num(mine.median_reused_percent);
+    if (reused !== null) {
+      parts.push(`${Math.round(Math.min(100, reused))}% of the conversation reused, not read again`);
+    }
     if (parts.length) {
       const n = num(mine.answers);
       const over = n ? ` (middle of the last ${Math.round(n)} answers)` : "";

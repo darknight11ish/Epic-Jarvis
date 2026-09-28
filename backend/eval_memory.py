@@ -7,6 +7,9 @@
     python eval_memory.py --against old.json   # better / worse than an earlier run;
                                                # exit 1 if recall@5, a wrong version
                                                # or a learner case got worse
+    python eval_memory.py --locomo             # ONLY LoCoMo's "link two facts"
+                                               # questions (milestone 13; see
+                                               # "LoCoMo's multi-hop questions")
 
 WHAT IT DOES, IN PLAIN WORDS
 
@@ -120,6 +123,16 @@ PIN_CASES = [
     ("f17", "can you suggest a snack for the train?"),
     ("f15", "what should I order at the cafe this morning?"),
 ]
+
+#: "Said again" (milestone 12): golden facts the made-up owner has said
+#: again since, and how many times - the kind of thing a person repeats.
+#: Chosen BEFORE the tie-break was measured, and not tuned on its numbers.
+#: Recorded on every store (MemoryStore.said_again, a day apart after the
+#: fact was told); nothing but the tie-break reads them, so every other
+#: number here is the same with or without them. Only facts still in use -
+#: said_again() refuses a replaced one, as it does in Jarvis.
+SAID_AGAIN = {"f11": 3, "f15": 2, "f16": 2, "f20": 1, "f13": 1, "f02": 2,
+              "f29": 1, "f32": 1}
 
 
 # ------------------------------------------------------------- the store --
@@ -395,16 +408,21 @@ class StandInReranker:
                 for t in texts]
 
 
-def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False) -> dict:
+def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False,
+           said_again: bool = False) -> dict:
     """Every question once, as chat recall asks it. Returns per-question
     rows. Whether the entity layer is on is M._ENTITY_RECALL, set by the
     caller (jarvis_past.recall asks for it; the flag switches it). Whether
     a re-ranker is loaded is the caller's too (jarvis_memory.set_reranker):
     jarvis_past.recall asks for it whenever one is; `rerank` asks for it on
-    the other questions, as that call does."""
+    the other questions, as that call does. `said_again` asks for the
+    "said again" tie-break the same way (jarvis_past.recall always asks; it
+    only acts while M._SAID_AGAIN_TIEBREAK is on)."""
     rows = []
     ent = _entity_search(st)
     rr = {"rerank": True} if rerank and _takes(st.search, "rerank") else {}
+    if said_again and _takes(st.search, "said_again"):
+        rr["said_again"] = True
     for q in qs:
         # "Don't know" questions through chat recall itself (the memory
         # review's I6): what a chat turn would put in front of the model,
@@ -444,6 +462,7 @@ def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False) -> d
             "labelled": q["type"] != "past" or any(
                 r.get("past") and "no longer true since" in r.get("text", "") for r in res),
             "chars": sum(len(r.get("text", "")) for r in res),
+            "got": [r["id"] for r in res],
         })
     return {r["id"]: r for r in rows}
 
@@ -541,6 +560,27 @@ def _pin_effect(M, P, st, gid: dict, now: float) -> dict:
     return {"available": True, "cases": cases, "limit": M.PROFILE_LIMIT}
 
 
+def _put_said_again(st, facts: list, ids: dict) -> dict:
+    """SAID_AGAIN, recorded through the real MemoryStore.said_again: {golden
+    id: rows written}. Empty on a memory without it."""
+    if not hasattr(st, "said_again"):
+        return {}
+    told = {f["id"]: f["told"] for f in facts}
+    out = {}
+    for g, n in SAID_AGAIN.items():
+        out[g] = sum(bool(st.said_again(ids[g], _day(told[g]) + 86400.0 * (i + 1), "typed"))
+                     for i in range(n))
+    return out
+
+
+def _moved(a: dict, b: dict) -> dict:
+    """Between two _score runs: questions whose facts came back in another
+    order, and whose SET of facts differs (the tie-break must never do that)."""
+    order = sum(a[q]["got"] != b[q]["got"] for q in a)
+    sets = sum(sorted(a[q]["got"]) != sorted(b[q]["got"]) for q in a)
+    return {"questions_reordered": order, "questions_other_facts": sets}
+
+
 def _db_bytes(path: Path) -> int:
     return sum(p.stat().st_size for p in path.parent.glob(path.name + "*") if p.is_file())
 
@@ -596,6 +636,11 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
     has_entities = hasattr(M, "_ENTITY_RECALL")
     entities_configured = bool(getattr(M, "_ENTITY_RECALL", False))
     M._ENTITY_RECALL = False
+    # The "said again" tie-break (milestone 12) likewise: its own line only,
+    # off for every other number, whatever this PC's setting is.
+    has_tiebreak = hasattr(M, "_SAID_AGAIN_TIEBREAK")
+    tiebreak_configured = bool(getattr(M, "_SAID_AGAIN_TIEBREAK", False))
+    M._SAID_AGAIN_TIEBREAK = False
     out = {"levels": [], "floor_sweep": [], "distance_sweep": []}
     for kind in ("neutral", "same_topic"):
         d = scratch / kind
@@ -609,6 +654,7 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
         out["vector_search"] = bool(stat["vector_search"])
         out["memory_module"] = str(Path(M.__file__).resolve())
         ids = _put_golden(M, st, facts)
+        out["said_again_recorded"] = _put_said_again(st, facts, ids)
         gid = {v: k for k, v in ids.items()}
         stream = filler(kind)
         have = 0
@@ -643,6 +689,20 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
                     level["misses_entities"] = sorted(
                         r["id"] for r in rows.values() if r["answerable"] and not r["hit5"])
                     level["entities"]["linked_entities"] = st.status().get("entities")
+                    if has_tiebreak:
+                        # Milestone 12: the same, with "said again" breaking
+                        # exact ties - kept only if this line beats the one
+                        # above on the PC.
+                        M._SAID_AGAIN_TIEBREAK = True
+                        try:
+                            tb = _score(M, P, st, qs, gid, now, said_again=True)
+                            level["said_again"] = _summary(tb)
+                            level["said_again"].update(_moved(rows, tb))
+                            level["misses_said_again"] = sorted(
+                                r["id"] for r in tb.values()
+                                if r["answerable"] and not r["hit5"])
+                        finally:
+                            M._SAID_AGAIN_TIEBREAK = False
                     if rr_model is not None:
                         # Memory idea 1: the same, with the re-ranker on - the
                         # way a chat turn recalls once it has loaded.
@@ -707,6 +767,9 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
                   f"{level['after']['dont_know_facts_avg']}"
                   + (f" -> {ent['dont_know_facts_avg']}" if ent else ""), flush=True)
     M._ENTITY_RECALL = entities_configured
+    if has_tiebreak:
+        M._SAID_AGAIN_TIEBREAK = tiebreak_configured
+    out["said_again_available"] = has_tiebreak
     out["entities_available"] = has_entities
     out["reranker"] = rr_what
     out["reranker_measured"] = rr_model is not None
@@ -915,6 +978,30 @@ def markdown(res: dict) -> str:
                       "gains. Run the self-test on the PC with fastembed to measure that."]
     elif "reranker" in res:
         lines += ["", f"The re-ranker (memory idea 1): not measured - {res['reranker']}."]
+    sa_rows = [lv for lv in res["levels"] if lv.get("said_again") and lv.get("entities")]
+    if sa_rows:
+        lines += [
+            "",
+            "**\"Said again\" as a tie-breaker** (milestone 12, off in Jarvis until this "
+            "helps on the PC): the entity-layer line, without -> with facts that tie "
+            "exactly put in \"said again\" order. Made-up repeats: "
+            + ", ".join(f"{g} x{n}" for g, n in SAID_AGAIN.items())
+            + ". Reordered = questions whose facts came back in another order; other "
+            "facts must be 0 (it only re-orders).",
+            "",
+            "| Filler | Facts | Recall@1 | Recall@5 | MRR | nDCG@5 | Don't know: facts "
+            "per question | Reordered | Other facts |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for lv in sa_rows:
+            a, t = lv["entities"], lv["said_again"]
+            lines.append(
+                f"| {lv['filler'].replace('_', '-')} | {lv['facts']:,} "
+                f"| {a['recall_at_1']}% -> {t['recall_at_1']}% "
+                f"| {a['recall_at_5']}% -> {t['recall_at_5']}% | {a['mrr']} -> {t['mrr']} "
+                f"| {a['ndcg_at_5']} -> {t['ndcg_at_5']} "
+                f"| {a['dont_know_facts_avg']} -> {t['dont_know_facts_avg']} "
+                f"| {t['questions_reordered']} | {t['questions_other_facts']} |")
     if "learner" in res:
         import eval_learner
         lines += eval_learner.markdown(res["learner"])
@@ -1051,6 +1138,229 @@ def compare(old: dict, new: dict) -> tuple:
     return head + lines, worse
 
 
+# --------------------------------------------- LoCoMo's multi-hop questions --
+#
+# Milestone 13 (docs/AUDIT-2026-09-28-REPO-REFS.md): "link two facts"
+# questions from outside, so a later multi-hop memory change (milestone 5)
+# has a number to beat that was not written by the people changing it.
+#
+# LoCoMo (Snap Research, ACL 2024; data CC BY-NC 4.0, test data only,
+# THIRD-PARTY-NOTICES.txt) is long made-up chats between two people. Its
+# multi-hop questions each cite the two or more chat turns that together
+# hold the answer. backend/fixtures/locomo_multihop.json keeps five of the
+# chats whole and their multi-hop questions (tools/build_locomo_fixture.py
+# says exactly what and why).
+#
+# HOW IT IS MEASURED. Each chat gets its own new store in the scratch
+# folder; every turn is one stored item ('Caroline said, "..."', plus
+# "[shares <picture caption>]" as LoCoMo's own retrieval code writes it),
+# dated the day its session happened. Then each question is searched, and
+# scored on the turns it cites: found-any (recall_any@k, as the self-test
+# above), found-all (every cited turn in the k - the number a multi-hop
+# change should move) and nDCG@k, with the same dcg()/ndcg() as above, at
+# k = 5 (what a chat turn gets) and 10. Twice: plain search, and with the
+# entity layer on, as chat recall runs. The word floor is as configured.
+# No re-ranker, and no chat model is asked anything.
+#
+# A LoCoMo turn is a line of chat, not a saved fact about the owner, so
+# these numbers are NOT comparable with the self-test's own, nor with
+# LoCoMo scores published elsewhere (those mostly judge answers, not
+# retrieval). They are for comparing Jarvis's memory with itself.
+
+LOCOMO = HERE / "fixtures" / "locomo_multihop.json"
+LOCOMO_KS = (5, 10)
+
+
+def load_locomo(path: Path = LOCOMO) -> dict:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def locomo_text(turn: list) -> str:
+    """One stored item for one chat turn: [id, speaker, text, caption?]."""
+    text = f'{turn[1]} said, "{turn[2]}"'
+    if len(turn) > 3 and turn[3]:
+        text += f" [shares {turn[3]}]"
+    return text
+
+
+def _iso_day(text: str) -> float:
+    y, m, d = (int(x) for x in text[:10].split("-"))
+    hh, mm = (int(x) for x in text[11:16].split(":")) if len(text) >= 16 else (12, 0)
+    return time.mktime((y, m, d, hh, mm, 0, 0, 0, -1))
+
+
+def _put_locomo(st, chat: dict) -> dict:
+    """Every turn of one chat into the store, each dated its session's day.
+    Returns {fact id: turn id}. Words go in as each is added; meaning is
+    embedded afterwards in batches, as _add_filler does."""
+    vec = st._vec_ok
+    st._vec_ok = False
+    rows, back = [], {}
+    try:
+        for s in chat["sessions"]:
+            when = _iso_day(s["date"])
+            for t in s["turns"]:
+                fid = st.add(locomo_text(t), source="locomo", valid_from=when)
+                rows.append((when, fid))
+                back[fid] = t[0]
+    finally:
+        st._vec_ok = vec
+    c = st._connect()
+    try:
+        c.executemany("UPDATE facts SET created=? WHERE id=?", rows)
+        c.commit()
+    finally:
+        c.close()
+    if vec:
+        st.backfill_embeddings(batch=64)
+    return back
+
+
+def _score_locomo(st, chat: dict, back: dict, entities: bool) -> list:
+    kw = {"entities": True} if entities else {}
+    rows = []
+    for q in chat["questions"]:
+        ev = set(q["evidence"])
+        row = {"chat": chat["id"], "q": q["q"], "evidence": len(ev)}
+        for k in LOCOMO_KS:
+            got = [back.get(r["id"], "?") for r in st.search(q["q"], k=k, **kw)]
+            row[f"any{k}"] = bool(ev & set(got))
+            row[f"all{k}"] = ev <= set(got)
+            row[f"ndcg{k}"] = ndcg(got, ev, k)
+            row[f"found{k}"] = sorted(ev & set(got))
+        rows.append(row)
+    return rows
+
+
+def _locomo_summary(rows: list) -> dict:
+    n = len(rows)
+
+    def pct(x):
+        return round(100.0 * x / n, 1) if n else None
+    out = {"questions": n,
+           "evidence_avg": round(statistics.mean(r["evidence"] for r in rows), 2) if n else None}
+    for k in LOCOMO_KS:
+        out[f"recall_any_at_{k}"] = pct(sum(r[f"any{k}"] for r in rows))
+        out[f"recall_all_at_{k}"] = pct(sum(r[f"all{k}"] for r in rows))
+        out[f"ndcg_at_{k}"] = round(sum(r[f"ndcg{k}"] for r in rows) / n, 3) if n else None
+    return out
+
+
+def run_locomo(words_only: bool, scratch: Path, fixture: Path = LOCOMO,
+               chats: int = None) -> dict:
+    """LoCoMo's multi-hop questions against Jarvis's memory. `chats` keeps
+    only the first so many (the test uses one); None is all of them."""
+    M, _P = _load_memory(scratch)
+    if hasattr(M, "set_reranker"):
+        M.set_reranker(None)
+    data = load_locomo(fixture)
+    todo = data["chats"][:chats] if chats else data["chats"]
+    ent = False
+    out = {"source": data["source"], "commit": data["commit"], "ks": list(LOCOMO_KS),
+           "word_floor": M._MIN_WORD_SHARE, "memory_module": str(Path(M.__file__).resolve()),
+           "chats": []}
+    rows = {"search": [], "entities": []}
+    for chat in todo:
+        d = scratch / "locomo" / chat["id"]
+        d.mkdir(parents=True, exist_ok=True)
+        emb = M.HashEmbedder() if words_only else M._make_embedder()
+        st = M.MemoryStore(d / "memory.db", embedder=emb)
+        stat = st.status()
+        out["embedder"] = stat["embedder"]
+        out["semantic"] = bool(stat["semantic"])
+        out["vector_search"] = bool(stat["vector_search"])
+        t0 = time.perf_counter()
+        back = _put_locomo(st, chat)
+        took = round(time.perf_counter() - t0, 1)
+        ent = _entity_search(st)
+        r_search = _score_locomo(st, chat, back, entities=False)
+        rows["search"] += r_search
+        line = {"id": chat["id"], "turns": len(back), "questions": len(chat["questions"]),
+                "store_s": took, "search": _locomo_summary(r_search)}
+        if ent:
+            r_ent = _score_locomo(st, chat, back, entities=True)
+            rows["entities"] += r_ent
+            line["entities"] = _locomo_summary(r_ent)
+        out["chats"].append(line)
+        print(f"  {chat['id']}: {len(back)} turns, {len(chat['questions'])} questions, "
+              f"found-all@5 {line['search']['recall_all_at_5']}%"
+              + (f" -> {line['entities']['recall_all_at_5']}% with the entity layer"
+                 if ent else ""), flush=True)
+    out["entities_available"] = ent
+    out["search"] = _locomo_summary(rows["search"])
+    if ent:
+        out["entities"] = _locomo_summary(rows["entities"])
+    best = "entities" if ent else "search"
+    out["misses_all_at_5"] = [f"{r['chat']}: {r['q']}" for r in rows[best] if not r["all5"]]
+    return out
+
+
+def locomo_markdown(res: dict) -> str:
+    sem = res["semantic"] and res["vector_search"]
+    lines = [
+        "# Jarvis memory self-test - LoCoMo multi-hop questions",
+        "",
+        f"Run {res['ran_at']} on {res['machine']}. Embedder: **{res['embedder']}** - "
+        + ("meaning search is ON." if sem else
+           "**words only**: these numbers say nothing about meaning search."),
+        "",
+        f"Data: LoCoMo (Snap Research, CC BY-NC 4.0, test data only), commit "
+        f"{res['commit'][:12]}. Each chat line is one stored item; a question counts as "
+        "found when search brings back the chat lines LoCoMo says hold its answer. "
+        "Not comparable with the main self-test or with LoCoMo scores published elsewhere.",
+        "",
+        "| Search | Questions | Found any @5 | Found ALL @5 | nDCG@5 | Found any @10 | "
+        "Found ALL @10 | nDCG@10 |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for name, label in (("search", "plain search"),
+                        ("entities", "with the entity layer (as chat recall)")):
+        s = res.get(name)
+        if not s:
+            continue
+        lines.append(f"| {label} | {s['questions']} | {s['recall_any_at_5']}% | "
+                     f"{s['recall_all_at_5']}% | {s['ndcg_at_5']} | {s['recall_any_at_10']}% | "
+                     f"{s['recall_all_at_10']}% | {s['ndcg_at_10']} |")
+    lines += ["", "Per chat (found ALL @5):", ""]
+    for c in res["chats"]:
+        lines.append(f"- {c['id']}: {c['turns']} lines, {c['questions']} questions, "
+                     f"{c['search']['recall_all_at_5']}%"
+                     + (f" -> {c['entities']['recall_all_at_5']}% with the entity layer"
+                        if c.get("entities") else "")
+                     + f" (stored in {c['store_s']} s)")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def main_locomo(a) -> int:
+    scratch = Path(tempfile.mkdtemp(prefix="jarvis-memory-eval-"))
+    real = Path(os.path.expanduser("~")) / ".openjarvis" / "memory.db"
+    assert (scratch / "memory.db").resolve() != real.resolve()
+    print(f"scratch store: {scratch} (deleted at the end; your memory.db is not opened)")
+    t0 = time.time()
+    try:
+        res = run_locomo(a.words_only, scratch)
+    finally:
+        if not a.keep:
+            shutil.rmtree(scratch, ignore_errors=True)
+    import platform
+    res["ran_at"] = time.strftime("%Y-%m-%d %H:%M")
+    res["machine"] = f"{platform.system()} {platform.machine()}, Python {platform.python_version()}"
+    res["seconds"] = round(time.time() - t0, 1)
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    (out / f"memory-eval-locomo-{stamp}.json").write_text(json.dumps(res, indent=1),
+                                                          encoding="utf-8")
+    md = locomo_markdown(res)
+    (out / f"memory-eval-locomo-{stamp}.md").write_text(md, encoding="utf-8")
+    print()
+    print(md)
+    print(f"Saved: {out / f'memory-eval-locomo-{stamp}.md'} and the .json beside it "
+          f"({res['seconds']} s).")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--sizes", default="0,100,1000,10000",
@@ -1076,7 +1386,17 @@ def main(argv=None) -> int:
                     help="an earlier run's memory-eval-*.json: print each number better / "
                          "worse / unchanged, and exit 1 if recall@5, a wrong version or a "
                          "learner case got worse (timings are not compared)")
+    ap.add_argument("--locomo", action="store_true",
+                    help="run ONLY LoCoMo's multi-hop questions (backend/fixtures/"
+                         "locomo_multihop.json) instead of the self-test; files are "
+                         "memory-eval-locomo-*.md/.json. --sizes, --learner-model, "
+                         "--reranker and --against do not apply")
     a = ap.parse_args(argv)
+    if a.locomo:
+        if a.against:
+            print("--against compares the main self-test only; it cannot be used with --locomo")
+            return 2
+        return main_locomo(a)
     earlier = None
     if a.against:
         try:
