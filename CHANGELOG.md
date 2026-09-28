@@ -19,6 +19,21 @@ number as the last part - `0.2.57` is a build of 0.2.
   Jarvis finds each site's buttons could not be tried against the real
   sites: run each site's one-line self-check on the PC first
   (`backend/README.md`).
+
+- **The rules for letting Jarvis look at your screen - not in the apps
+  yet.** "Look at this" (one look when you ask) and "Watch with me" (a
+  session you start and stop, 30 minutes unless you say otherwise, 2 hours
+  at most) now have their rules written and tested on the PC side: Jarvis
+  pauses on password boxes, on anything on your "Never look at" list
+  (password managers and Windows sign-in to start with; adding is instant,
+  taking something off asks with a card), on protected windows and on pages
+  whose site it can't read; it checks just before and just after each
+  picture and throws the picture away if either check fails; it keeps
+  nothing it saw; and "Stop everything" ends a session. Answers about the
+  screen will be read aloud unless a sensitive fact was used, like web
+  search answers. There is no key, button or setting for it in either app
+  yet, and the parts that read Windows itself are the next step.
+
 - **A switch to turn off swiping on approval cards** (phone, Security).
   Swiping right to approve and left to deny stays on unless you turn it
   off; off, every card is decided with its buttons only. Turning it back on

@@ -96,10 +96,12 @@ object PrivateAloud {
      * The only tools whose answers may be read aloud to a voice question
      * (the owner's decision of 2026-09-27: web search, weather and home
      * status - weather is read with `home_read`, or answered with no tool
-     * at all). Exact names, as the `step` event carries them. The
-     * desktop's `READ_ALOUD_TOOLS` (private-speech.js).
+     * at all) - and `read_screen`, an answer about the screen (the owner's
+     * answer of 2026-09-28; a read the PC records, not a model tool). Exact
+     * names, as the `step` event carries them. The desktop's
+     * `READ_ALOUD_TOOLS` (private-speech.js).
      */
-    val READ_ALOUD_TOOLS: Set<String> = setOf("home_read", "web_search")
+    val READ_ALOUD_TOOLS: Set<String> = setOf("home_read", "read_screen", "web_search")
 
     /**
      * What the phone knows about tools at one moment: how many `step`

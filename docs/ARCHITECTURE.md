@@ -1525,7 +1525,7 @@ backend routes, in both directions; the rest are listed here only.
 | Deep config editing (`/api/config`) | Out of scope on the phone (`CLAUDE.md`). The desktop does not use it either today: it is only in the Brain window's read allow-list, and no window asks for it. |
 | Fetching the look spec (`/api/visual-spec`) | The phone ships its own copy and checks it in a unit test (`SpecDriftTest`); `JARVIS-API.md` says the phone never fetches it. |
 | "Finished, or only paused?" (`/api/voice/turn`) | The phone runs the same Smart Turn model itself (`voice/SmartTurn.kt`), so its audio never leaves it just to ask. The desktop asks its own PC over loopback. |
-| Screen capture | Nothing earlier wrote a reason down; this one is written 2026-09-24 from the code. The phone attaches a picture through Android's photo picker (`MainActivity.kt`, `PickVisualMedia`), which already offers the phone's own screenshots - one picture, chosen by the owner. Capturing the screen live on Android needs a separate system permission every session and shows a "casting" icon, for no gain over the picker. |
+| Looking at the screen: the Alt+Shift+S "Look at this" key, the optional Alt+Shift+V "Watch with me" key, and the always-on-top "Jarvis is watching" badge (**rewritten 2026-09-28**) | **The old row is replaced.** It said (2026-09-24) that the phone should not capture the screen live, because Android's photo picker already offered its screenshots. The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the owner's screen, on the PC and the phone") replaces that: **both apps get both halves** (`docs/SCREEN-DESIGN.md` §6) - on the phone, "Look at this" through the assistant gesture and "Watch with me" through Android's own screen sharing, with Android's consent dialog every session, the phone's own "Never look at" list of apps, and the pictures sent only to the PC over Tailscale/Meshnet, never streamed. What stays on the desktop alone is the **keys and the badge**: keyboard shortcuts are PC things (like the hotkeys below), and the phone's sign is its persistent "Jarvis is watching · Stop" notification and Android's own status-bar icon instead of a floating window. Built so far: the backend's rules only (`jarvis_screen.py`, JARVIS-API §62) - neither app has either half yet. |
 | Global hotkeys (`hotkeys.rs`) | Keyboard shortcuts for a PC. A phone has no equivalent. |
 | The "Stop everything" hotkey (Alt+Shift+X, `hotkeys.rs`) | Written with the feature, 2026-09-25. A key on a PC's keyboard; a phone has no global keys. The phone has the same control as a button - Home's "Stop everything", shown whenever Jarvis is busy - calling the same route (`/api/stop_all`, `ported` in `tools/check_parity.py`) with the same words. Each app stops only its OWN speech: pressing it on the phone does not silence the PC, or the other way round (JARVIS-API §28). |
 | The tray icon (`tray.rs`) | Part of Windows' taskbar. |
@@ -1921,6 +1921,16 @@ they landed):
 
 **Still missing:**
 
+- **Looking at the screen ("Look at this", "Watch with me").** Decided
+  2026-09-28 and designed (`docs/SCREEN-DESIGN.md`). Built: the rules only -
+  `jarvis_front.py` (the front-window reader, now shared with focus
+  sessions) and `jarvis_screen.py` (session states, the pause rules, the
+  caps, the Never look at list, Stop everything), plus the router keeping a
+  screen turn on this PC (`has_screen`) and `read_screen` on the read-aloud
+  list (JARVIS-API §62). Missing: the Windows readers (password boxes,
+  capture protection, a window's own text), the chat route reading
+  `screen_text`, and everything in both apps. The preflight's `screen` check
+  says "not built on this PC yet".
 - **Obsidian daily notes in every date format.** Only formats that can be
   written out exactly are followed (YYYY, YY, MM, M, DD, D, bracketed words,
   `/` folders). A format with month or weekday names, or week numbers, is

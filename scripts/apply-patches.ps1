@@ -759,6 +759,7 @@ $SHIPPED = @(
     'jarvis_stop_all.py'         # stop-all.patch: POST /api/stop_all, and the hook other features register with
     'jarvis_tellme.py'           # "tell me when ..." (an email from someone, a device changing): a kind of job on the one scheduler, no patch; NOT a model tool
     # --- focus sessions (focus.patch) ---
+    'jarvis_front.py'            # what is in front on this PC: the one front-window reader focus sessions and "Watch with me" share (split out of jarvis_focus.py, 2026-09-28); no patch
     'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
     # --- what asks first (asks-first.patch) ---
     'jarvis_asks_first.py'       # "What asks first": every action and whether it asks; stricter from either app, looser on the PC only; lights without a card
@@ -807,6 +808,8 @@ $SHIPPED = @(
     'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
     'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
     'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
+    # --- looking at the screen, build steps 1 and 2 (2026-09-28): the session rules only; no route, no Windows readers yet ---
+    'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list; not reachable from the apps yet
 )
 
 # The settings file. Installed only where none exists; never overwritten.

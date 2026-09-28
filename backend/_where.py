@@ -157,6 +157,9 @@ SHIPPED = (
     # "tell me when ..." - a kind of job on the one scheduler (not a tool)
     "jarvis_tellme.py",
     # focus sessions (focus.patch): a kind of job on the one scheduler
+    # what is in front on this PC: the one reader focus sessions and
+    # "Watch with me" share (split out of jarvis_focus.py, no patch)
+    "jarvis_front.py",
     "jarvis_focus.py",
     # "What asks first" and "Lights, plugs and fans without a card" (asks-first.patch)
     "jarvis_asks_first.py",
@@ -226,6 +229,10 @@ SHIPPED = (
     # of their own: jarvis_chatbot.py loads both.
     "jarvis_chatbot_api.py",
     "jarvis_chatbot_local.py",
+    # "Look at this" and "Watch with me", build steps 1 and 2: the session
+    # rules, pause rules, caps and the Never look at list (no route yet, no
+    # patch; the Windows readers are step 3)
+    "jarvis_screen.py",
 )
 
 

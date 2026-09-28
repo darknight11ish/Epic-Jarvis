@@ -230,7 +230,7 @@ def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
     want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
             "gate", "stop_all", "scheduler", "folders", "instant_email", "events", "voice",
-            "reach", "home", "sleep", "phone", "data_health", "credentials"]
+            "reach", "home", "sleep", "phone", "data_health", "credentials", "screen"]
     check("every check the owner asked for is registered, in order", keys == want, keys)
     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
     try:
@@ -556,6 +556,19 @@ def t_folders_and_instant_email():
     live, _f, _o = _live(fake)
     _p, f, _w, _s, rows, _t = _run(live, only={"backend", "instant_email"})
     check("connected: PASS", _rows(rows, "instant_email")[0][0] == S.PASS)
+
+
+def t_screen_says_not_built_yet():
+    """"Look at this" and "Watch with me" (2026-09-28): build steps 1 and 2
+    are the rules only, so the check says plainly that it is not built on
+    this PC yet - a skip, never a PASS it has not earned, never a FAIL."""
+    live, _fake, _ollama = _live()
+    _p, f, _w, _s, rows, text = _run(live, only={"backend", "screen"})
+    sc = _rows(rows, "screen")
+    check("one screen row, a skip", len(sc) == 1 and sc[0][0] == S.SKIP, sc)
+    check("... that says it is not built on this PC yet",
+          sc and "not built on this PC yet" in sc[0][1], sc)
+    check("... and that there is nothing to fix", sc and "Nothing to fix" in sc[0][2], sc)
 
 
 def t_data_health():
