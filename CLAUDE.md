@@ -1368,8 +1368,11 @@ Decided 2026-09-28, the owner's answers after the post-change audits
   voice" question - in one checked pull request, before bringing in the
   other sessions' newer work.
 - **Phone builds publish from `main` only**, not from the old branch.
-- **Under App lock, the phone widget's buttons open the locked app
-  first**, like the desktop widget; they do not act on their own.
+- **Under App lock, the widgets' buttons open the locked app first, in
+  both apps** (the desktop widget's Focus/timer/music tiles and the phone's
+  home-screen widget buttons); they do not act on their own. The owner was
+  first told, wrongly, that the desktop widget already did this - only its
+  approval button did.
 - **A goal's weekly check-in needs no card**, like plain repeating
   reminders: it only reminds and never acts.
 - **QR-code pairing keeps waiting** for per-device keys ("more devices").
