@@ -8868,7 +8868,7 @@ second version of any of it.
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
 
-## 60. Chatbot conversations - Jarvis talks to an AI chatbot for you (core, Gemini adapter, routes and both apps' screens built 2026-09-28)
+## 60. Chatbot conversations - Jarvis talks to an AI chatbot for you (core, routes, both apps' screens, and Gemini plus eight more website adapters built 2026-09-28)
 
 **Routed, on both apps' screens, with the Gemini website adapter - but not
 yet tried against the real gemini.google.com** (the owner's self-check in
@@ -8893,6 +8893,11 @@ owner's answers (2026-09-28)"); the owner's decisions are in `CLAUDE.md`
   `ui/screens/ChatbotPlate.kt`; `ChatbotTest`), and an ongoing notification
   while one is going ("Talking to Gemini, 3 of 5", with Stop;
   `service/ChatbotNotifier.kt`).
+- **Eight more websites** (the owner's "the chatbot driver becomes
+  versatile", 2026-09-28), built the same open way (§60.5): each a thin site
+  file over one shared base, `backend/jarvis_chatbot_web.py`, tested by
+  `backend/test_chatbot_sites.py`. None of their selectors is checked against
+  the real sites yet either.
 
 ### 60.1 What it is
 
@@ -9012,14 +9017,83 @@ sees or keeps the password. The owner's three lines, in PowerShell:
 `JARVIS_GEMINI_BROWSER=msedge` (or `chrome`) uses the browser already on
 the PC instead of Playwright's Chromium.
 
-### 60.5 Not decided or not built
+### 60.5 More chatbot websites (`jarvis_chatbot_web.py` and one site file each)
+
+The owner's decision of 2026-09-28 ("The chatbot driver becomes
+versatile"): ChatGPT, Claude, Microsoft Copilot, Perplexity **and other
+commonly used chatbot websites**, each driven **openly like Gemini** with
+its **own spare account** used only by Jarvis. The last four in the table
+(DeepSeek, Grok, Le Chat, Meta AI) are the studio's reading of "other
+commonly used" - the owner can drop any of them.
+
+Everything in 60.4 applies to every one of them, word for word: it lives in
+ONE shared base, `backend/jarvis_chatbot_web.py` (the browser thread, the
+visible `headless=False` window with Playwright's own defaults, the fixed
+typing pace, the host lock, "the reply is finished", every `needs_owner`
+page, the sign-in helper and the self-check). Each site file holds only its
+own `SELECTORS` table (plain CSS, role and aria-label first, with
+fallbacks), its host, the hosts of its sign-in pages, and its words. Every
+send-button selector names "send" or "submit", so a fallback can never
+click some other button. Each has its own browser profile,
+`<config>/chatbot/<site>-profile` (normally
+`%USERPROFILE%\.openjarvis\chatbot\<site>-profile`), and its own check
+report, `<config>/chatbot/<site>-check.txt`.
+
+| id | host (the only one it opens) | sign in once, by hand (PowerShell) | self-check (PowerShell) |
+|---|---|---|---|
+| `gemini_web` | `gemini.google.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py check` |
+| `chatgpt_web` | `chatgpt.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py check` |
+| `claude_web` | `claude.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py check` |
+| `copilot_web` | `copilot.microsoft.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py check` |
+| `perplexity_web` | `www.perplexity.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py check` |
+| `deepseek_web` | `chat.deepseek.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py check` |
+| `grok_web` | `grok.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py check` |
+| `lechat_web` | `chat.mistral.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py check` |
+| `metaai_web` | `www.meta.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py check` |
+
+Each self-check sends the one fixed question "What is 2 plus 2?" and prints
+PASS/FAIL per step and which selector matched. `JARVIS_<SITE>_BROWSER`
+(for example `JARVIS_CHATGPT_BROWSER=msedge`), or `JARVIS_CHATBOT_BROWSER`
+for all of them, uses a browser already on the PC.
+
+**Sign-in pages** are recognised (reason `login`) on the site's own sign-in
+address and on the hosts its "Sign in with ..." buttons lead to (Google,
+Microsoft, Apple, X, Facebook and the sites' own `auth.` hosts, listed in
+each file's `SIGN_IN_HOSTS`); the window never opens any of them by
+itself. The shared "needs the owner" checks also know Cloudflare's "verify
+you are human" page and the reCAPTCHA, hCaptcha, Turnstile and Arkose
+checks - Jarvis stops at all of them and never solves one.
+
+**Perplexity's sources.** A Perplexity reply is the answer's words, then
+`Sources listed by Perplexity (links not opened):` and each listed link as
+plain text, `1. <label> - <address>`: read from the reply's own links with
+`get_attribute("href")`, never clicked, opened or followed; http(s) only,
+each once, at most 20. So a comparison can say which answers came with
+sources. Like every reply, it is outside text.
+
+**Each card note says, in plain words:** driven openly (a person's pace, a
+window you can see, never hidden, never a captcha solved); that site's
+terms (OpenAI's terms forbid automatically extracting ChatGPT's answers,
+as quoted in `docs/CHATBOT-DRIVER-DESIGN.md`; for the others, "their terms
+restrict automated access" - not read word for word); a spare account used
+only by Jarvis, never the owner's own; and that the account may be blocked
+or closed.
+
+**Not verified, said plainly:** no selector in any of these files has been
+tried against its real site - the container they were built in cannot
+reach them, and must not automate them. Each was written from how the site
+is generally known to be built, and each site's self-check on the owner's
+PC is the proof. Not checked either: whether Meta allows a second account
+kept only for this.
+
+### 60.6 Not decided or not built
 
 Starting a conversation by saying it ("ask Gemini for me about ...") -
 today only the form starts one; task notes to a running conversation ("ask
 it about X too"); keeping the transcript in the encrypted chat history
 (today it is in memory only and lost on a restart); the two-card version's
-measurements; checking the Gemini selectors on the owner's PC (the
-self-check above).
+measurements; checking the selectors of every website on the owner's PC (the
+self-checks in §60.4 and §60.5).
 
 ## 61. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
 

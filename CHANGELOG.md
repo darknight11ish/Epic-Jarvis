@@ -6,6 +6,19 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The chatbot driver can now work eight more chatbot websites - still not
+  usable from either app.** ChatGPT, Claude, Microsoft Copilot and
+  Perplexity, plus DeepSeek, Grok, Le Chat (Mistral) and Meta AI (these
+  last four picked as "other commonly used" websites - say if you want any
+  left out). Each works exactly like Gemini: a browser window you can see,
+  a steady typing pace, nothing hidden, and a stop to ask you at any
+  captcha, sign-in or "unusual activity" page. Each has its own spare
+  account, signed in once by hand, and each company's terms restrict
+  automated use, so that account may be blocked or closed. Perplexity's
+  listed sources are copied as text under its answer, never opened. How
+  Jarvis finds each site's buttons could not be tried against the real
+  sites: run each site's one-line self-check on the PC first
+  (`backend/README.md`).
 - **A switch to turn off swiping on approval cards** (phone, Security).
   Swiping right to approve and left to deny stays on unless you turn it
   off; off, every card is decided with its buttons only. Turning it back on

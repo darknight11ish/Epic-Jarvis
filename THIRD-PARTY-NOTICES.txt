@@ -289,8 +289,8 @@ BROWSER WINDOWS (not generated - keep when regenerating)
 Playwright for Python (Microsoft), Apache-2.0 -
 https://github.com/microsoft/playwright-python
   Used by backend/jarvis_browser_control.py (the "browser_control" tool)
-  and backend/jarvis_chatbot_gemini.py (Jarvis's Gemini window, the
-  chatbot driver). OPTIONAL: installed on the PC by the owner with pip
+  and backend/jarvis_chatbot_web.py (Jarvis's chatbot website windows -
+  Gemini, ChatGPT and the others - for the chatbot driver). OPTIONAL: installed on the PC by the owner with pip
   (`py -3 -m pip install playwright`), not by apply-patches.ps1, not
   shipped here, and none of its code is copied. Version 1.56.0's wheel was
   read on 2026-09-28: "License-Expression: Apache-2.0", "Portions Copyright

@@ -32,9 +32,9 @@ tzdata; sys_platform == "win32"        # calendar: time-zone data, so an event s
 #
 #   playwright   the "browser_control" tool (jarvis_browser_control.py), which
 #                stays OFF until [tools].enabled in jarvis-framework.toml names
-#                it; and Jarvis's Gemini window for the chatbot driver
-#                (jarvis_chatbot_gemini.py), which is not reachable from the
-#                apps yet. Apache-2.0. Also needs a browser downloaded. One line:
+#                it; and Jarvis's chatbot website windows for the chatbot
+#                driver (jarvis_chatbot_web.py and its site files, Gemini
+#                first), which are not reachable from the apps yet. Apache-2.0. Also needs a browser downloaded. One line:
 #                    py -3 -m pip install playwright; py -3 -m playwright install chromium
 #   speechbrain  an older, much heavier voice check (rebuilt jarvis_voice.py),
 #   torch        used only if sherpa-onnx's speaker model is not set up. The

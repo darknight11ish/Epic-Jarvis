@@ -206,6 +206,20 @@ SHIPPED = (
     "jarvis_chatbot_gemini.py",
     # ...and its routes, /api/chatbot/* (chatbot-routes.patch)
     "jarvis_chatbot_routes.py",
+    # ... what every chatbot website adapter shares (the visible window, the
+    # typing, the host lock, every "needs the owner" page, sign-in and
+    # self-check), and the other chatbot websites, each a thin site file
+    # driven the same open way (2026-09-28, "the chatbot driver becomes
+    # versatile")
+    "jarvis_chatbot_web.py",
+    "jarvis_chatbot_chatgpt.py",
+    "jarvis_chatbot_claude.py",
+    "jarvis_chatbot_copilot.py",
+    "jarvis_chatbot_perplexity.py",
+    "jarvis_chatbot_deepseek.py",
+    "jarvis_chatbot_grok.py",
+    "jarvis_chatbot_lechat.py",
+    "jarvis_chatbot_metaai.py",
 )
 
 

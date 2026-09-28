@@ -1955,9 +1955,11 @@ try:
 except Exception:  # pragma: no cover - shipped beside it on the PC
     pass
 
-# The real Gemini adapter (step 2) replaces the "not built yet" entry. It
-# imports nothing heavy: Playwright is loaded only when a window opens.
+# The chatbot websites: jarvis_chatbot_web.py loads every site file it lists
+# (Gemini first, which replaces the "not built yet" entry; then ChatGPT,
+# Claude, Copilot, Perplexity and the others). Nothing heavy: Playwright is
+# loaded only when a window opens.
 try:
-    import jarvis_chatbot_gemini  # noqa: F401,E402
+    import jarvis_chatbot_web  # noqa: F401,E402
 except ImportError:  # pragma: no cover - shipped beside it on the PC
     pass
