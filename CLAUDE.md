@@ -664,6 +664,24 @@ testers, scouts and integration scouts; `.claude/agents/`):
   Jarvis is paused there. Solving it on the PC still works. Jarvis itself
   never solves a captcha. The app says plainly that some captchas may
   reject taps passed on this way. Queued after customer-support chats.
+- **The build queue, set by the owner (2026-09-28)**, in this order:
+  1. customer-support chats; 2. the captcha hand-off to the phone;
+  3. **one pull request to `main`** with everything so far (the owner
+  merges); 4. the voice upgrade (Kokoro v1.0, "Hear it" samples);
+  5. finishing the screen feature ("Look at this" and "Watch with me"
+  working on the PC and phone); 6. inbox tidy by voice, **Undo for 10
+  minutes**; 7. talk-to-type on the PC, **held Right Ctrl** by default
+  (changeable in Settings); 8. QR pairing with per-device keys; 9. the
+  sneaky-instruction detector test.
+  **Jarvis Live extras, all yes:** a phone Quick Settings tile (start/end);
+  a headset button (press = stop talking, long press = mic off, never
+  approves); a 10-minute "Live ended - Resume" notification; a PC hotkey to
+  start/end Live, off until the owner picks one (Alt+Shift+L suggested);
+  preferring a Bluetooth headset microphone in Live; "Talk about this in
+  Live" from the phone's Share (the shared item is outside text). **The
+  phone gets the same "End Live when" setting as the PC** (default strict;
+  the looser choice asks for the fingerprint or PIN). These extras are
+  built alongside the queue where they fit, the phone ones with item 2.
 - **Jarvis may look at the owner's screen, on the PC and the phone**
   (owner, 2026-09-28), two ways: **"Look at this"** - one look when the
   owner asks (a key on the PC; the assistant gesture on the phone), nothing
