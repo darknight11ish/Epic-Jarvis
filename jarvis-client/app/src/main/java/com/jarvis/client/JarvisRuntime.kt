@@ -676,6 +676,17 @@ object JarvisRuntime {
                 }
             }
         }
+        // The shared animal switches (AnimalOptions) for the faces: the new
+        // behaviours (face.AnimalNow) and the seasonal touches (SeasonNow),
+        // whenever they arrive - this phone's copy first, then the PC's. The
+        // PC's defaults until either has been heard.
+        scope.launch {
+            appearance.animal.collect { shared ->
+                val values = (shared ?: com.jarvis.client.net.AnimalOptions.Shared()).values
+                com.jarvis.client.face.AnimalNow.apply(values)
+                com.jarvis.client.face.SeasonNow.on = values["seasonal"] == true
+            }
+        }
 
         faceJob = scope.launch {
             // `_stale` is in the combine: a stale link is as cut as a dropped
@@ -1149,6 +1160,10 @@ object JarvisRuntime {
             // never the question or the answer). The list is re-read for the
             // answer, and the switches for the speed it measured.
             "deep" -> {
+                // A long answer ready: the animal's glow (a doorbell only).
+                if (com.jarvis.client.face.AnimalNow.deepDone(event.data)) {
+                    com.jarvis.client.face.AnimalNow.longAnswer()
+                }
                 refreshDeep()
                 refreshBigModel()
             }
@@ -1207,7 +1222,11 @@ object JarvisRuntime {
             // number - a doorbell, never what was in front). Mind's "Focus
             // session" reads itself again. The spoken line is the PC's
             // alone: the phone is refused it, and does not ask.
-            "focus" -> _focusTick.update { it + 1 }
+            "focus" -> {
+                // The animal's focus buddy, and its stretch as a session ends.
+                com.jarvis.client.face.AnimalNow.focusOf(event.data)?.let { com.jarvis.client.face.AnimalNow.focus(it) }
+                _focusTick.update { it + 1 }
+            }
             // Face and bindings changed on another device. Each device renders
             // its own face and the server is only the sync channel, so this
             // just re-reads the shared document; nothing here redraws
@@ -3378,6 +3397,10 @@ object JarvisRuntime {
         if (fresh.isNotEmpty()) {
             _autoRemembered.update { it + fresh.size }
             _autoRememberedIds.update { (it + fresh).takeLast(com.jarvis.client.net.MemoryUsed.MAX) }
+            // The animal's small nod - never while App lock or "Hide memory
+            // lists and chat history" is on (the owner's rule, 2026-09-28).
+            val security = settings.security.value
+            if (!security.appLock && !security.privateLists) com.jarvis.client.face.AnimalNow.factSaved()
         }
         _autoTick.update { it + 1 }
     }

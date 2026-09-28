@@ -53,8 +53,9 @@ fall back to their own copy of this list, held equal by
 tools/gen_animal_cases.py's fixture) and the spoken on/off
 (jarvis_settings_registry.find_animal_switch, jarvis_quick._animal) follow
 from it. The six behaviours (the owner added "Cute idle moments" the same day) are
-stored and shared from today, each with the owner's chosen default; the animal starts doing each one when that behaviour
-is built, and until then its row says so plainly (COMING).
+stored and shared, each with the owner's chosen default, and all six are built
+(2026-09-28): both apps feed them to the face. A behaviour added later and not
+yet built says so plainly under its row (COMING) until it is.
 
 NOTHING HERE IS PRIVILEGED
 Every switch here is cosmetic: it changes how the animal moves, approves
@@ -136,58 +137,52 @@ SWITCHES: tuple = (
         "nods", "Listening nods",
         "Small nods in your pauses while you talk, and gestures that land at the ends of "
         "Jarvis's sentences.",
-        True, False,
+        True, True,
         ("listening nods", "nods", "nodding", "the animal's nods", "the animal's nodding",
          "the animal nodding", "animal nods"),
-        "listening nods are on for your PC and phone; the animal starts nodding in the next "
-        "update",
+        "listening nods are on for your PC and phone",
         "listening nods are off, on your PC and phone"),
     Switch(
         "focus_buddy", "Focus buddy",
         "In a focus session the animal works quietly beside you and stretches at the end. It "
         "never sees your screen and never scolds.",
-        True, False,
+        True, True,
         ("focus buddy", "the animal's focus buddy", "focus buddy mode"),
-        "focus buddy is on for your PC and phone; the animal starts doing it in the next "
-        "update",
+        "focus buddy is on for your PC and phone",
         "focus buddy is off, on your PC and phone"),
     Switch(
         "acks", "Small acknowledgements",
         "A small nod when Jarvis saves a fact (not while App lock or \"Hide memory lists\" is "
         "on), and a glow when a long answer is ready.",
-        True, False,
+        True, True,
         ("small acknowledgements", "small acknowledgments", "acknowledgements",
          "acknowledgments", "the animal's acknowledgements", "the animal's acknowledgments"),
-        "small acknowledgements are on for your PC and phone; the animal starts doing them "
-        "in the next update",
+        "small acknowledgements are on for your PC and phone",
         "small acknowledgements are off, on your PC and phone"),
     Switch(
         "petting", "Petting",
         "Stroke the animal and it leans in. On the phone it is a long press on the face, which "
         "does not open the Brain.",
-        True, False,
+        True, True,
         ("petting", "the animal's petting", "petting the animal", "pet mode"),
-        "petting is on for your PC and phone; the animal starts leaning in in the next "
-        "update",
+        "petting is on for your PC and phone",
         "petting is off, on your PC and phone"),
     Switch(
         "cute_moments", "Cute idle moments",
         "Now and then, after the face has rested a while, one of its two short cute moments "
         "plays, then it settles back. Never during an approval or an error.",
-        True, False,
+        True, True,
         ("cute idle moments", "cute moments", "idle moments",
          "the animal's cute moments", "cute animations"),
-        "cute idle moments are on for your PC and phone; they start playing in the next "
-        "update",
+        "cute idle moments are on for your PC and phone",
         "cute idle moments are off, on your PC and phone"),
     Switch(
         "seasonal", "Seasonal touches",
         "Small touches for the time of year, from the date on your device. Off by default.",
-        False, False,
+        False, True,
         ("seasonal touches", "the animal's seasonal touches", "seasonal decorations",
          "seasonal things"),
-        "seasonal touches are on for your PC and phone; they start showing in the next "
-        "update",
+        "seasonal touches are on for your PC and phone",
         "seasonal touches are off, on your PC and phone"),
 )
 

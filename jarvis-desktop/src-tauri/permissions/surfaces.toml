@@ -32,6 +32,11 @@ permissions = [
   # window opens first, since Settings may never be opened. It can only
   # ever send {"still": true}, once; cosmetic, approves nothing.
   "allow-migrate-animal-still",
+  # Whether App lock and "Hide memory lists and chat history" are on - two
+  # yes/no answers, the same ones the `security-changed` event already hands
+  # every window. The faces never nod at a saved fact while either is on
+  # (face-moments.js, the owner's rule of 2026-09-28).
+  "allow-get-lock-flags",
 ]
 
 # Reading the theme and nothing else: the first-run window paints the
@@ -152,6 +157,9 @@ permissions = [
   "allow-hud-chat",
   "allow-hud-chat-cancel",
   "allow-mark-answer",
+  # Two yes/no answers - App lock and "Hide memory lists" - so the HUD's
+  # face never nods at a saved fact while either is on (face-moments.js).
+  "allow-get-lock-flags",
 ]
 
 # The daily brief and the interruption budget. Granted to the quickbar alone,

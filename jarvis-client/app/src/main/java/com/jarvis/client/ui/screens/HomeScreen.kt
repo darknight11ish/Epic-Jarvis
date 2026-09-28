@@ -1501,9 +1501,12 @@ private fun Modifier.tapThrough(label: String, onTap: () -> Unit): Modifier = th
     }
     .pointerInput(onTap) {
         awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             val up = waitForUpOrCancellation(PointerEventPass.Initial)
-            if (up != null) onTap()
+            // A long press is petting the animal (the owner's decision of
+            // 2026-09-28: "a long press on the phone that does not open
+            // Brain"), so only a short tap opens it.
+            if (up != null && up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) onTap()
         }
     }
 

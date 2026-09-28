@@ -83,36 +83,36 @@ object AnimalOptions {
             "nods", "Listening nods",
             "Small nods in your pauses while you talk, and gestures that land at the ends of Jarvis's " +
                 "sentences.",
-            default = true, built = false,
+            default = true, built = true,
         ),
         Switch(
             "focus_buddy", "Focus buddy",
             "In a focus session the animal works quietly beside you and stretches at the end. It never " +
                 "sees your screen and never scolds.",
-            default = true, built = false,
+            default = true, built = true,
         ),
         Switch(
             "acks", "Small acknowledgements",
             "A small nod when Jarvis saves a fact (not while App lock or \"Hide memory lists\" is on), and " +
                 "a glow when a long answer is ready.",
-            default = true, built = false,
+            default = true, built = true,
         ),
         Switch(
             "petting", "Petting",
             "Stroke the animal and it leans in. On the phone it is a long press on the face, which does " +
                 "not open the Brain.",
-            default = true, built = false,
+            default = true, built = true,
         ),
         Switch(
             "cute_moments", "Cute idle moments",
             "Now and then, after the face has rested a while, one of its two short cute moments plays, " +
                 "then it settles back. Never during an approval or an error.",
-            default = true, built = false,
+            default = true, built = true,
         ),
         Switch(
             "seasonal", "Seasonal touches",
             "Small touches for the time of year, from the date on your device. Off by default.",
-            default = false, built = false,
+            default = false, built = true,
         ),
     )
 

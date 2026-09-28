@@ -777,6 +777,8 @@ pub fn run() {
             hud_proxy::hud_chat_cancel,
             // App lock and the widget (apps security audit M3).
             commands::get_app_lock,
+            // The two lock switches, for the faces' fact nod (face-moments.js).
+            commands::get_lock_flags,
             commands::open_approval_in_quickbar,
             // The five `jarvis-link.js` has invoked since before they
             // existed. Without these lines every task-control button and the

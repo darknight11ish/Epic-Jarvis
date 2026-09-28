@@ -135,6 +135,7 @@ class SeasonTest {
                 ax0 = o.dOrNull("ax") ?: 1.0, ay0 = o.dOrNull("ay") ?: 1.0,
                 sunAlt0 = o.dOrNull("sunAlt"),
                 snow = o.dOrNull("snow") ?: 0.0, rain = o.dOrNull("rain") ?: 0.0,
+                snowman = (o["snowman"] as? JsonPrimitive)?.booleanOrNull ?: true,
             )
             val at = "scene at ${c.d("ms")} ${c["opts"]}"
             assertEquals("season $at", c.getValue("season").jsonPrimitive.content, sc.season)

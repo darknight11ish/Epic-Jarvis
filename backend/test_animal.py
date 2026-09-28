@@ -130,9 +130,11 @@ def t_defaults():
     names = [AN._bare(n) for s in AN.SWITCHES for n in s.names]
     check("no spoken name is claimed by two switches", len(names) == len(set(names)))
     built = {s.id: s.built for s in AN.SWITCHES}
-    check("only Still is built today; the rest say they are coming",
-          built == {"still": True, "nods": False, "focus_buddy": False, "acks": False,
-                    "petting": False, "cute_moments": False, "seasonal": False}, built)
+    check("every behaviour is built now (2026-09-28): nothing says it is coming",
+          built == {"still": True, "nods": True, "focus_buddy": True, "acks": True,
+                    "petting": True, "cute_moments": True, "seasonal": True}, built)
+    check("and no switch's words promise a next update",
+          not any("next update" in (s.on_said + s.off_said + s.detail) for s in AN.SWITCHES))
     v = AN.view()
     check("the view lists every switch, in order, with its value",
           [s["id"] for s in v["switches"]] == ids and v["values"] == AN.DEFAULTS
@@ -165,8 +167,9 @@ def t_changes_at_once():
     check("an unknown option is refused", AN.handle_post({"sparkles": True})[0] == 400)
     check("a non-boolean is refused", AN.handle_post({"nods": "off"})[0] == 400)
     code, out = AN.handle_post({"seasonal": True})
-    check("a behaviour not built yet says it starts in the next update",
-          code == 200 and "next update" in out["said"] and one_sentence(out["said"]), out)
+    check("a built behaviour says it is on, with no 'next update'",
+          code == 200 and "next update" not in out["said"] and "on for your PC and phone" in out["said"]
+          and one_sentence(out["said"]), out)
     fresh()
 
 
@@ -244,8 +247,9 @@ def t_asking_changes_the_pc():
     check("'stop the animal's nodding': nods off", AN.values()["nods"] is False
           and "off" in r.reply, r and r.reply)
     r = go("turn on seasonal touches")
-    check("'turn on seasonal touches': on, and says it comes in the next update",
-          AN.values()["seasonal"] is True and "next update" in r.reply, r and r.reply)
+    check("'turn on seasonal touches': on at once, no 'next update'",
+          AN.values()["seasonal"] is True and "next update" not in r.reply and one_sentence(r.reply),
+          r and r.reply)
     r = go("turn off the cute moments")
     check("'turn off the cute moments': off at once (owner, 2026-09-28)",
           AN.values()["cute_moments"] is False and one_sentence(r.reply), r and r.reply)

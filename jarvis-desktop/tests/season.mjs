@@ -167,6 +167,42 @@ await check("each touch draws in its own season, and nothing else", () => {
   assert.ok(flakes({ lat: 40.7 }) >= 10 && flakes({ lat: 40.7, snow: 0.6 }) === 0);
 });
 
+await check("the tropics: no autumn leaves and no winter snow; the holidays stay", () => {
+  // A leaf, drifting or fallen: twelve points, in an autumn colour (the petals are paler).
+  const leaves = (sc) => sc.ops.filter((o) => o.k === S.POLY && o.v.length === 4 + 24 && o.v[0] < 200).length;
+  const snowy = (sc) => sc.ops.filter((o) => (o.k === S.DOT && (o.v[3] === 232 || o.v[3] === 236 && o.v[4] === 240))
+    || (o.k === S.POLY && o.v[0] === 226 && o.v[1] === 234)).length;
+  const lights = (sc) => sc.ops.filter((o) => o.k === S.LINE && o.v[1] === 70).length;
+  const pumpkin = (sc) => sc.ops.filter((o) => o.k === S.POLY && o.v[0] === 198 && o.v[1] === 106).length;
+  const [dec, dtz] = MOMENTS.december, [hal, htz] = MOMENTS.halloween, [aut, atz] = MOMENTS.autumn;
+  for (const lat of [1.3, -12.5, 22.3, -23.4]) {
+    assert.equal(snowy(scene(dec, dtz, { lat })), 0, `snow at ${lat}`);
+    assert.equal(lights(scene(dec, dtz, { lat })), 1, `the lights at ${lat}`);
+    assert.equal(leaves(scene(aut, atz, { lat })), 0, `leaves at ${lat}`);
+    assert.equal(leaves(scene(hal, htz, { lat })), 0, `leaves at ${lat}`);
+    assert.equal(pumpkin(scene(hal, htz, { lat })), 1, `the pumpkin at ${lat}`);
+  }
+  // Outside the tropics, and with no town saved: as before.
+  for (const lat of [25.0, 40.7, null]) {
+    assert.ok(snowy(scene(dec, dtz, { lat })) > 5, `snow at ${lat}`);
+    assert.ok(leaves(scene(aut, atz, { lat })) >= 9, `leaves at ${lat}`);
+  }
+});
+
+await check("a face whose scenery covers the corner (the owl's branch) has no snowman", () => {
+  const snowman = (sc) => sc.ops.filter((o) => o.k === S.DOT && o.v[3] === 236 && o.v[4] === 240).length;
+  assert.equal(snowman(scene(...MOMENTS.december, { lat: 40.7 })), 1);
+  assert.equal(snowman(scene(...MOMENTS.december, { lat: 40.7, snowman: false })), 0);
+  // The rest of winter stays.
+  const all = scene(...MOMENTS.december, { lat: 40.7 }).ops.length;
+  const without = scene(...MOMENTS.december, { lat: 40.7, snowman: false }).ops.length;
+  assert.ok(all - without <= 8 && without > 10, `${all} -> ${without}`);
+  // The page: the owl's face says so; no other face does.
+  const html = readFileSync(new URL("../src/faces.html", import.meta.url), "utf8");
+  assert.match(html, /id:"pygmyowl"[\s\S]{0,900}seasonSnowman: false/);
+  assert.equal((html.match(/^\s*seasonSnowman: false,/gm) || []).length, 1);
+});
+
 await check("Still and serious moments (hide): nothing at all", () => {
   for (const [ms, tz] of Object.values(MOMENTS)) assert.equal(scene(ms, tz, { lat: 40.7, hide: 1 }).ops.length, 0);
 });

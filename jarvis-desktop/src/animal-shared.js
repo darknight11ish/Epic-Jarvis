@@ -42,17 +42,17 @@ export const MIGRATED_KEY = "jarvis.animal.migrated";
 export const SWITCHES = [
   { id: "still", label: "Keep the animal still", default: false, built: true,
     detail: "It only breathes and blinks - no looking around, gestures or little idle events. For the animal and robot faces; the others are not changed." },
-  { id: "nods", label: "Listening nods", default: true, built: false,
+  { id: "nods", label: "Listening nods", default: true, built: true,
     detail: "Small nods in your pauses while you talk, and gestures that land at the ends of Jarvis's sentences." },
-  { id: "focus_buddy", label: "Focus buddy", default: true, built: false,
+  { id: "focus_buddy", label: "Focus buddy", default: true, built: true,
     detail: "In a focus session the animal works quietly beside you and stretches at the end. It never sees your screen and never scolds." },
-  { id: "acks", label: "Small acknowledgements", default: true, built: false,
+  { id: "acks", label: "Small acknowledgements", default: true, built: true,
     detail: "A small nod when Jarvis saves a fact (not while App lock or \"Hide memory lists\" is on), and a glow when a long answer is ready." },
-  { id: "petting", label: "Petting", default: true, built: false,
+  { id: "petting", label: "Petting", default: true, built: true,
     detail: "Stroke the animal and it leans in. On the phone it is a long press on the face, which does not open the Brain." },
-  { id: "cute_moments", label: "Cute idle moments", default: true, built: false,
+  { id: "cute_moments", label: "Cute idle moments", default: true, built: true,
     detail: "Now and then, after the face has rested a while, one of its two short cute moments plays, then it settles back. Never during an approval or an error." },
-  { id: "seasonal", label: "Seasonal touches", default: false, built: false,
+  { id: "seasonal", label: "Seasonal touches", default: false, built: true,
     detail: "Small touches for the time of year, from the date on your device. Off by default." },
 ];
 

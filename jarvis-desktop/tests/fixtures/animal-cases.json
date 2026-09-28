@@ -1369,7 +1369,7 @@
     "on": false
    },
    {
-    "built": false,
+    "built": true,
     "default": true,
     "detail": "Small nods in your pauses while you talk, and gestures that land at the ends of Jarvis's sentences.",
     "id": "nods",
@@ -1377,7 +1377,7 @@
     "on": true
    },
    {
-    "built": false,
+    "built": true,
     "default": true,
     "detail": "In a focus session the animal works quietly beside you and stretches at the end. It never sees your screen and never scolds.",
     "id": "focus_buddy",
@@ -1385,7 +1385,7 @@
     "on": true
    },
    {
-    "built": false,
+    "built": true,
     "default": true,
     "detail": "A small nod when Jarvis saves a fact (not while App lock or \"Hide memory lists\" is on), and a glow when a long answer is ready.",
     "id": "acks",
@@ -1393,7 +1393,7 @@
     "on": true
    },
    {
-    "built": false,
+    "built": true,
     "default": true,
     "detail": "Stroke the animal and it leans in. On the phone it is a long press on the face, which does not open the Brain.",
     "id": "petting",
@@ -1401,7 +1401,7 @@
     "on": true
    },
    {
-    "built": false,
+    "built": true,
     "default": true,
     "detail": "Now and then, after the face has rested a while, one of its two short cute moments plays, then it settles back. Never during an approval or an error.",
     "id": "cute_moments",
@@ -1409,7 +1409,7 @@
     "on": true
    },
    {
-    "built": false,
+    "built": true,
     "default": false,
     "detail": "Small touches for the time of year, from the date on your device. Off by default.",
     "id": "seasonal",
