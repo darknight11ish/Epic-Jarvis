@@ -623,6 +623,11 @@ testers, scouts and integration scouts; `.claude/agents/`):
   that service when it is reached, and the approval card shows how much is
   left. Prices change, so the amount is an estimate from a price list the
   owner can see and correct, and the card says "about".
+  **Built 2026-09-28; the owner then chose to make it a hard stop too:**
+  Jarvis also asks each service to cap how long an answer can be, so one
+  long answer cannot carry a month past the limit. Each service names that
+  setting differently, so each one's own documentation is checked before
+  it is used.
   **Compare, as built, is confirmed** (owner, 2026-09-28): up to 3 chatbots
   per comparison on one graphics card and 4 on two, asked one after
   another; a chatbot that shows a captcha or sign-in page is left out and
@@ -678,7 +683,7 @@ testers, scouts and integration scouts; `.claude/agents/`):
   and everything stays on the owner's own devices. Not full-duplex (that
   skips the voice check), so a turn takes about 2-4 seconds (estimated; corrected by the design). The camera
   understands pictures only with the 12 GB card (Qwen 3.5 9B or Qwen3-VL
-  8B, unmeasured); with one card it reads text only. The camera part stays
+  8B, unmeasured); with one card there is no camera (see the owner's answers below). The camera part stays
   off until the card is in and a photo test passes. Designed in
   `docs/LIVE-DESIGN.md` and brought back to the owner before anything is
   built.
@@ -691,6 +696,20 @@ testers, scouts and integration scouts; `.claude/agents/`):
   answers**, unless a sensitive fact was used or the strict setting says
   otherwise. **The camera stays off until the 12 GB card is in and passes
   the photo test** - no words-only camera on one card.
+  After the rules check (owner, 2026-09-28): **a Live session started by
+  voice ("Hey Jarvis, let's talk") is trusted the same as one started with
+  the button** by default, and **the Live voice setting can change it** -
+  its choices are full trust (default), "only when started with the
+  button", and the "Hey Jarvis" caution for all of Live; a stricter choice
+  is immediate, a looser one raises an approval card. **Live pauses itself
+  during a phone or video call** and picks up afterwards (whether Windows
+  and Android can always tell a call is happening is to be checked; where
+  they cannot, the app says so and the Mute button covers it).
+  After the voice play-test (owner, 2026-09-28): **Live keeps the 2-second
+  voice check** - no "Balanced" option for Live; tap buttons cover quick
+  answers. **Side remarks to someone else are ignored**: when a Live clip is
+  clearly not meant for Jarvis, Jarvis stays silent and nothing from it is
+  learned.
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
