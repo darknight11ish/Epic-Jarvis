@@ -311,6 +311,47 @@ def t_every_behaviour_check_tells_good_from_bad():
           BH.sentences("It is 3.5 metres, e.g. tall. Yes.") == 2)
 
 
+def t_the_nothing_done_count():
+    """"Smarter answers" (2026-09-28): the run counts how often Jarvis's own
+    run-time line would be added. No known-good answer may set it off (a
+    false alarm on a right answer), and the made-up claims must."""
+    for case in BH.CASES:
+        if isinstance(case["good"], str):
+            check(f"{case['id']}: its good answer would not get 'nothing was done'",
+                  not BH.nothing_done_would_show(case["good"], []), case["good"])
+    for cid in ("no_fake_action", "no_fake_action_tools"):
+        case = next(c for c in BH.CASES if c["id"] == cid)
+        with NoSocket():
+            row = E.run_behaviour_case(E.scripted(lambda m, t, a=case["bad"]: a), "full", case)
+        check(f"{cid}: a made-up claim would get the line", row["nothing_done"] is True, row)
+    case = next(c for c in BH.CASES if c["id"] == "no_fake_action_tools")
+    check("a claim after the matching call would not",
+          not BH.nothing_done_would_show(case["bad"], [("set_reminder", {})]))
+    with NoSocket():
+        rows = [E.run_behaviour_case(E.scripted(lambda m, t, a=c["bad"]: a
+                                                 if isinstance(c["bad"], str) else "ok"),
+                                     "full", c) for c in BH.CASES[:4]]
+    line = E.summary({"full": {"behaviour": rows}})["full"]["behaviour"]
+    check("the summary counts it", line["nothing_done"] >= 1
+          and "nothing_done_on_passes" in line, line)
+    printed = []
+    E.print_summary("m", {"full": {"behaviour": line}}, {"full": {"behaviour": rows}},
+                    out=printed.append)
+    check("and prints it", any('"nothing was done" added' in p for p in printed), printed)
+
+
+def t_a_long_result_reaches_the_model_shortened():
+    case = next(c for c in BH.CASES if c["id"] == "long_result")
+    msgs = E.behaviour_messages(case)
+    tool = next(m for m in msgs if m.get("role") == "tool")
+    got = json.loads(tool["content"])
+    check("the long file is far over the limit", len(json.dumps(case["turns"][1][2]))
+          > AG._MAX_TOOL_CONTENT_CHARS)
+    check("the model is handed it shortened, with its last line kept",
+          "shortened" in got and got["content"].endswith("at Sam's house."), str(got)[:200])
+    check("still labelled as outside text", got.get(AG.OUTSIDE_FIELD) == AG.OUTSIDE_LABEL)
+
+
 def t_run_all_and_the_dated_results_file():
     def rule(messages, tools):
         return "I don't know. Canberra. Good night."
@@ -413,6 +454,8 @@ if __name__ == "__main__":
                t_multi_step_cases_pass_their_own_path_and_fail_when_cut_short,
                t_injection_counts_the_attackers_cards,
                t_every_behaviour_check_tells_good_from_bad,
+               t_the_nothing_done_count,
+               t_a_long_result_reaches_the_model_shortened,
                t_run_all_and_the_dated_results_file,
                t_a_fair_test_for_every_model):
         print(f"\n--- {fn.__name__} ---")

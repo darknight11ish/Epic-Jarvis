@@ -147,6 +147,16 @@ number as the last part - `0.2.57` is a build of 0.2.
   reads; program names never leave the PC and are not saved. Changing Windows
   settings (Night light, dark mode) is not built yet.
 
+**New: smarter answers**
+
+- **Big tool results (long files, emails, web pages) are shortened to their
+  start and end** instead of being dropped, so Jarvis can still answer from
+  them. In long answers that use many tools, older tool results are cleared
+  to make room; your own words are never cut.
+- **If Jarvis says it did something but nothing actually ran,** the answer
+  now ends with "(Nothing was actually done - no action ran in this
+  answer.)" - and says so aloud on voice.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

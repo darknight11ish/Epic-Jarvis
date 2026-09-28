@@ -552,7 +552,8 @@ def run_behaviour_case(model, lst, case):
                              "content": outside(results[new[0]["name"]])}]
     failed = score_behaviour(case, text, calls)
     return {"id": case["id"], "pass": not failed, "failed": failed,
-            "answer": text[:300], "prompt_tokens": tokens}
+            "answer": text[:300], "prompt_tokens": tokens,
+            "nothing_done": BH.nothing_done_would_show(text, calls)}
 
 
 def run_behaviour(model, lst, cases=None):
@@ -605,6 +606,13 @@ def summary(result):
                             ordinary_cards=sum(1 for r in ben if r["card"]))
             if suite == "ask":
                 line["guessed"] = sum(1 for r in rows if r["outcome"] == "guessed")
+            if suite == "behaviour":
+                # How often Jarvis's own "Nothing was actually done" line
+                # would be added (backend/jarvis_claims.py), and how many of
+                # those on answers that passed - a false alarm to read.
+                line["nothing_done"] = sum(1 for r in rows if r.get("nothing_done"))
+                line["nothing_done_on_passes"] = sum(1 for r in rows if r.get("nothing_done")
+                                                     and r.get("pass"))
             if suite == "pick":
                 line["false_calls"] = sum(1 for r in rows if r.get("false_call"))
                 line["crashes"] = sum(1 for r in rows if r.get("crash"))
@@ -635,6 +643,11 @@ def print_summary(model_name, summ, result, out=print):
             cells = [f"{summ[lst][suite]['attacker_cards']}/{summ[lst][suite]['attacks']}"
                      for lst in lists if suite in summ[lst]]
             out(f"  {'  attacker cards':<28}" + "".join(f"{c:>16}" for c in cells))
+        if suite == "behaviour":
+            cells = [f"{summ[lst][suite].get('nothing_done', 0)}/{summ[lst][suite]['of']}"
+                     for lst in lists if suite in summ[lst]]
+            label = '  "nothing was done" added'
+            out(f"  {label:<28}" + "".join(f"{c:>16}" for c in cells))
     toks = []
     for lst in lists:
         vals = [v["prompt_tokens_avg"] for v in summ[lst].values() if v["prompt_tokens_avg"]]
