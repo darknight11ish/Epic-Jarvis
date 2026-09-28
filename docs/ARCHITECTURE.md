@@ -359,6 +359,18 @@ further tool call of the answer being written, even one whose card is
 approved after the press: a stop wins over an approval of the earlier
 question.
 
+**"Solve it here" needs no card, and can only do what the owner does**
+(`jarvis_handoff.py`, JARVIS-API §60.8, the owner's decision of 2026-09-28).
+When a chatbot website or a support chat is paused at a captcha, a sign-in
+page or an "unusual activity" page, the phone may be shown that ONE browser
+window and pass the owner's own taps and typing to it. Nothing is decided
+by Jarvis, nothing leaves the owner's own devices, and it never resumes the
+conversation: Resume is still the task's own card. The routes refuse every
+picture and every input unless the session is still paused at that very
+page, in that window, on the site's own hosts; a Resume, a Stop, Stop
+everything or the window going elsewhere ends it at once. Input is held on
+a stale link (rule 4); ending never is.
+
 ### Two rules that are easy to get wrong
 
 **`allowed` is not "a human decided".** `jarvis_gate.check()` returns
@@ -768,6 +780,16 @@ nothing and says why, and `jarvis_router.choose` gives it the gate
 `cloud_model` instead of "stays on this machine". Anything else that talks to
 Ollama must do the same. Not yet: the model switch and install routes (the
 owner's `jarvis_models.py`) do not refuse a cloud model's name.
+
+**Not a way out: "Solve it here"** (`jarvis_handoff.py`, 2026-09-28). A
+picture of the paused chatbot or support window goes from the PC to the
+owner's phone over the same authenticated link every answer uses
+(Tailscale or Meshnet), and the owner's taps and typing come back. It stays
+on the owner's own devices, is never saved on either, and sends nothing to
+the website that the owner did not type or tap there - so it adds no row to
+the table above. The window's own host lock stays as it was: a hand-off ends
+the moment the window shows any host but the site's own, its sign-in hosts
+and the one it showed when the hand-off began.
 
 ---
 
@@ -1631,7 +1653,8 @@ backend routes, in both directions; the rest are listed here only.
 | Saving a chatbot API key (`py -3 jarvis_chatbot_api.py key <service>`) and choosing "a second AI on this PC" (`local_model` under `[chatbot]` in `jarvis-framework.toml`), 2026-09-28 | A key is entered on the PC only, like the web-search keys: sending it from the phone would send it somewhere other than its own service (rule 3). Neither app has a screen for entering a key or choosing the local model; once either is done on the PC, both apps' chatbot screens can start a conversation with it (`/api/chatbot/*`), and both apps see whether a key is saved, in "What Jarvis can reach" ("Chatbot conversations with a key (API)"). The local model is a settings-file line, as the other second-card settings are. |
 | Setting an API chatbot's monthly money limit, or correcting its price (`py -3 jarvis_chatbot_api.py limit <service> <dollars>`, `price <service> <in> <out>`, `spent`), 2026-09-28 | Set on the PC only, the same place a key is added, as the owner decided ("a monthly amount per service, set on the PC"). Raising a limit or lowering a price is a loosening - more money can leave - and a person typing at the PC's own command line is how every other loosening of this feature is done (a key, the model line); there is no route for either, so no app, and nothing that holds the pairing token, can raise one. Both apps READ it: the chooser shows "About $X of $Y left this month for <company> (prices are estimates you can correct on the PC)" under each API service with a limit, and the approval card (written on the PC) says the same. Lowering is on the PC too, to keep ONE place for the numbers. |
 | Jarvis Live's always-on-top badge, its tray row and the red mark on the tray icon, and ending Live when Windows locks (and pausing it when the lock cannot be read) | The badge is the PC's always-visible Live sign (docs/LIVE-DESIGN.md); the phone's sign is its Live screen, a strip on Home and an ongoing notification (the row in the phone table). Windows' lock is a PC thing; on the phone, App lock and the screen do that job. |
-| Jarvis Live's "End Live when" voice setting (`live_end`: when App lock would ask again, or - looser, with a card - only when Windows locks) | The owner's decision of 2026-09-28 is about the PC, where Live can outlast App lock while the owner walks away from a desk. **The phone has no such setting on purpose:** it keeps App lock's own rule - Live ends when App lock would lock the app again ("Lock again after") - which is already the stricter choice, and a phone is carried, not left at a desk. If the owner wants the looser choice on the phone too, it is a new decision. |
+| Jarvis Live's "End Live when" as a PC voice setting (`live_end`: when App lock would ask again, or - looser, with an approval card - only when Windows locks) | The owner's decision of 2026-09-28 is about the PC, where Live can outlast App lock while the owner walks away from a desk. **The phone has its own "End Live when" since 2026-09-28 (the Jarvis Live extras)**, on its Security screen, saved on the phone: "When App lock would ask again" (default) or "Only when the phone's screen locks" (looser, so it asks for the fingerprint or PIN, like every loosening there - not a card, because the phone's lock settings never go to the PC). Each app keeps its own, because each app's App lock is its own. |
+| The "Start or end Jarvis Live" hotkey (`hotkeys.rs` `toggle_live`, off until the owner picks a key; Alt+Shift+L suggested), 2026-09-28 | A key on a PC's keyboard. The phone's one-tap equivalents are its Quick Settings tile and the headset button (the phone table). |
 | Jarvis Live noticing "another program is using the microphone" (Windows' own record) and muting itself | The PC's way of noticing a call (the owner's answer, 2026-09-28). The phone notices a call from Android's audio mode instead (the phone row). When Windows' record cannot be read, the PC's sign says "Jarvis can't tell when you're on a call - use Mute". |
 
 **On the phone, kept off the desktop:**
@@ -1651,6 +1674,10 @@ backend routes, in both directions; the rest are listed here only.
 | Jarvis Live's ongoing notification (End, Mute; kept on the phone) and the screen kept on while the Live screen shows | The phone's always-visible Live sign when the owner leaves the app; the PC's is the badge (the row in the desktop table). A PC screen does not sleep under a conversation the way a phone's does. |
 | Jarvis Live noticing a phone or video call from Android's audio mode, and saying "I've lost the link to your PC." in the phone's own offline voice | Calls happen on the phone; the PC uses Windows' microphone record instead (the desktop row). The link line is the phone's because the PC's voice cannot reach it when the link is down; on the PC the sign says "Paused: link lost". |
 | Jarvis Live's camera (built switched OFF, hidden in both apps until the 12 GB card passes the photo test) | The owner's answers of 2026-09-28: the phone's camera only - a PC webcam mostly sees the owner's face and room (docs/LIVE-DESIGN.md section 5). Taking the picture on the phone is not built yet; only the gate is. |
+| **"Solve it here"**: a live picture of the PC's paused browser window and the owner's taps and typing passed back to it (`/api/chatbot/handoff/*`, `phone-only` in `tools/check_parity.py`; JARVIS-API §60.8), 2026-09-28 | The owner's decision is about the PHONE: "a captcha can be handed to the owner's phone". On the PC the browser window is right there, so the desktop shows the same alert on the Brain's Work tab ("Gemini needs you on this PC", from `/api/chatbot/status`'s `handoff`) and points at the window - it never calls the picture or input routes (`tests/handoff.mjs` checks). The phone's alert is its own channel and always stays on the phone. |
+| The Jarvis Live Quick Settings tile, the headset button in Live, and the 10-minute "Live ended - Resume" notification (the Jarvis Live extras), 2026-09-28 | Phone things: a tile lives in Android's pulled-down shade, a headset button reaches a phone's media session, and a notification is how a phone in a pocket offers Resume. The PC has the tray row and the Live hotkey (the desktop table) and its badge shows "Resume Live" for 15 seconds, in the Jarvis bar until the 10 minutes are up. |
+| Preferring a Bluetooth headset's microphone in Live, and saying which microphone is in use (the Jarvis Live extras), 2026-09-28 | On the phone Jarvis picks the microphone (Android's communication device; no Bluetooth permission). On the PC Windows picks it - Live opens the default microphone, both the plain and the echo-cancelled way (`aec.rs`) - so a Bluetooth headset is used when Windows makes it the default, and the Voice settings already say which microphone that is. Choosing a different microphone on the PC is a larger change to both capture paths, not made here. |
+| "Talk about this in Live" in Android's Share sheet (the Jarvis Live extras), 2026-09-28 | A Share sheet is Android's. The text is outside text exactly as a share to Home is (`provenance: "shared"`, JARVIS-API §18); the PC's quickbar already takes clipboard text with its own "clipboard" tag, in Live as anywhere. |
 
 **The picture-in-picture idea landed on both apps, on 2026-09-27, by two
 different sessions working at the same time - not one shared mechanism,

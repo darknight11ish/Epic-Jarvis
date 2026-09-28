@@ -621,3 +621,41 @@ uses Intercom" (DEV); LivePerson engagement window docs; Gorgias chat HTML
 snippets; freshworks/freshchat-widget; Salesforce Embedded Service guide;
 Groupon support FAQ and Terms of Use (blocked here; search summary); SB 1001
 text and Perkins Coie's summary.
+
+## "Solve it here" - a captcha handed to the owner's phone (built 2026-09-28)
+
+The owner's decision (CLAUDE.md, "A captcha can be handed to the owner's
+phone"), item 2 of the build queue. Every website adapter already stops at a
+captcha, a sign-in page or an "unusual activity" page and asks the owner
+(section 1, "driven openly"); until now the only place to deal with it was
+the window on the PC. `jarvis_handoff.py` (JARVIS-API §60.8) adds the phone:
+
+- **The alert** names the site and the reason only, on its own channel,
+  always kept on the phone, and says nothing about the site while App lock
+  is on. The desktop's Brain shows the same alert and points at the window.
+- **"Solve it here"** shows a live picture of THAT ONE window (Playwright's
+  screenshot of the one page, about once a second, never saved on either
+  side; screenshots of Jarvis are blocked while it shows) and passes the
+  owner's own taps, typing, a few keys and scrolls back to it.
+- **Only while Jarvis is paused there.** Every picture and every input first
+  checks that the session is still paused at that same page, in that same
+  window, on the site's own hosts (fixed when the hand-off starts). Resume,
+  Stop, Stop everything, the window leaving the site, 45 seconds with nobody
+  looking or 15 minutes end it.
+- **Jarvis never solves anything.** There is no code that decides where to
+  tap; the audit line holds counts and key names, never typed text. The
+  openness rules of section 1 hold for this module too (`test_handoff.py`
+  runs the websites' own forbidden-word check over it).
+- **Said plainly in the app:** some captchas refuse taps passed on from a
+  phone this way (they are Playwright's own mouse events); "Solve it on the
+  PC instead" is always there. A site that opens a new window or tab for a
+  sign-in is finished on the PC - only the first window is passed on.
+- **Not handed on:** "are you a bot?" questions and identity checks in a
+  support chat (the owner answers those in the window on the PC, as
+  decided), any pause that is not one of the three pages, a comparison's
+  conversation (a chatbot at a captcha is left out of a comparison), and the
+  API services (no window).
+
+Tried against a fake page in a real Chromium (a picture, a tap reaching a
+checkbox, typing reaching a box, a tap that left the site ending it); not yet
+against a real captcha or sign-in page.

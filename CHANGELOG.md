@@ -6,6 +6,29 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Solve it here: a captcha handed to your phone.** When a chatbot website
+  or a customer-support chat that Jarvis is using stops at a captcha, a
+  sign-in page or an "unusual activity" page, your phone now says so ("Gemini
+  needs you") and offers **Solve it here**: a live picture of that one
+  browser window on your PC, and your taps and typing passed back to it -
+  only while Jarvis is paused there, never saved on either side. Jarvis never
+  solves it for you. Some captchas refuse taps passed on this way; "Solve it
+  on the PC instead" is always there, and the PC's Brain shows the same
+  alert. Press Resume when it is done (Resume asks with a card, as always).
+  Not yet tried against a real captcha.
+
+- **Jarvis Live extras.** On the PC: a key to start or end Live, off until
+  you pick one in Settings -> Shortcuts (Alt+Shift+L is free for it). On the
+  phone: a Quick Settings tile (with the minutes left), the headset button
+  (press to stop Jarvis talking, hold to turn the microphone off or on - it
+  never approves anything), a "Live ended - Resume" notification for ten
+  minutes, a Bluetooth headset's microphone used while one is connected (the
+  Live screen says which microphone), "Talk about this in Live" in the Share
+  sheet (the shared text is outside text and goes when you tap Send), and
+  "End Live when" on the Security screen, like the PC's: when App lock would
+  ask again (the default), or only when the phone's screen locks (asks for
+  your fingerprint or PIN). Not yet tried on a real phone.
+
 - **Chat with customer support for me.** Jarvis can chat with a company's
   customer support for you - Groupon first - in your name, in a browser
   window you can see on the PC. Fill in the company, what you want done and

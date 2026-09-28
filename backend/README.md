@@ -15046,6 +15046,12 @@ all of it is in the files shipped whole):
 - `tools/gen_live_cases.py`: the new words, buttons and rules for both
   apps, including the tap-button examples that used to come out garbled
   and the one "Interrupting Jarvis" setting's carry-over rule.
+- The Live extras (2026-09-28): `jarvis_live.py` takes one more end
+  reason from an app, `screen_lock` ("The phone's screen locked."), for the
+  phone's own "End Live when: Only when the phone's screen locks". The PC
+  hotkey, the phone's tile, headset button, "Live ended - Resume", Bluetooth
+  microphone and "Talk about this in Live" use the existing routes
+  (docs/JARVIS-API.md 63.4).
 
 Nothing new to run on the PC beyond `apply-patches.ps1` as usual.
 
@@ -15371,3 +15377,61 @@ Playwright). Both apps' words and answers:
   logic (`net/Support.kt`) and test were compiled and run here.
 - The limits (15 messages, 30 minutes of chat, 45 in the queue on one
   card) are proposals.
+
+# Solve it here: a captcha handed to your phone, `jarvis_handoff.py` (2026-09-28)
+
+## In plain words
+
+When a chatbot website or a customer-support chat that Jarvis is using
+stops at a captcha, a sign-in page or an "unusual activity" page, your phone
+gets an alert ("Gemini needs you") and offers **Solve it here**: a live
+picture of that one browser window on your PC, and your own taps and typing
+passed back to it - only while Jarvis is paused there. Nothing is saved on
+either side. Jarvis never solves it for you. The PC's Brain shows the same
+alert, and the window is right there too. When it is done, press Resume
+(Resume asks with a card, as always).
+
+## What to do on the PC
+
+Nothing new: `scripts\apply-patches.ps1` copies `jarvis_handoff.py` beside
+the other chatbot files. No patch - `jarvis_chatbot_routes.py` (already
+shipped whole) answers its four routes. It needs Playwright, like the
+chatbot websites themselves.
+
+## What the code does
+
+- `offer()` - on `GET /api/chatbot/status` as `handoff`: which session is
+  paused at one of the three pages, its site and its reason. Never a picture.
+- `start()` - `POST /api/chatbot/handoff/start`: no card. Fixes the hosts the
+  window may show meanwhile (the site's, its sign-in hosts, and the one it
+  shows now).
+- `frame()` - `GET /api/chatbot/handoff/frame?h=`: ONE screenshot of that
+  one page, as a JPEG, handed back and not kept. At most two a second.
+- `send_input()` - `POST /api/chatbot/handoff/input`: one tap (fractions of
+  the picture), a few typed characters, one key from a short list, or a
+  scroll. At most 30 in 3 seconds. The audit line has counts only.
+- Every picture and input first checks the session is STILL paused at that
+  page, in that window, on those hosts - else it ends ("resumed", "left",
+  "closed", "idle" after 45 seconds unlooked-at, "time" after 15 minutes,
+  "stop_all").
+
+## Test it
+
+`py -3 backend\test_handoff.py` - the rules check in code (the only page
+calls are one screenshot and the owner's own input, both after the "still
+paused there" check) and in behaviour, and a real Chromium window against a
+fake page on this PC (skips itself without Playwright). Both apps' words and
+answers: `python3 tools/gen_handoff_cases.py --check`.
+
+## Not checked, said plainly
+
+- Not tried against a real captcha or sign-in page. Some captchas can tell a
+  tap passed on this way (Playwright's own mouse event) and refuse it; the
+  phone says so and offers "Solve it on the PC instead".
+- A site that opens a NEW window or tab (some "Sign in with Google" pop-ups)
+  is finished on the PC: only the first window is passed on.
+- A password typed on the phone for a sign-in page travels over your own
+  link (Tailscale or Meshnet, scrambled) and through the PC's memory for
+  that one input; it is never logged or kept.
+- The phone's screen, alert and notification are compiled only by CI; the
+  pure logic (`net/Handoff.kt`) and its test were compiled and run here.
