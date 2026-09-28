@@ -170,11 +170,21 @@ def _wake_state_path() -> Path:
     return _config_dir() / "voice" / "wake_override.json"
 
 
+#: Processor threads for speech-to-text and the voice when the owner has not
+#: set `stt_threads` / `tts_threads`. 4 on a PC with cores to spare (the
+#: owner's 12-core Ryzen is mostly idle while the graphics card thinks), 2 on
+#: a small one. Measured 2026-09-28 (research audit, section 1.5), 2 -> 4
+#: threads: a short spoken phrase 1.13 s -> 0.86 s, a 97-character sentence
+#: 2.51 s -> 1.80 s, speech-to-text on a 4 s clip 0.45 s -> 0.36 s. The wake
+#: word and the voice check keep one thread each (they run all the time).
+DEFAULT_THREADS = max(2, min(4, (os.cpu_count() or 4) // 3))
+
+
 def _threads(key: str) -> int:
     try:
-        return max(1, min(8, int(_cfg(key, 2))))
+        return max(1, min(8, int(_cfg(key, DEFAULT_THREADS))))
     except (TypeError, ValueError):
-        return 2
+        return DEFAULT_THREADS
 
 
 # --------------------------------------------------------------------------

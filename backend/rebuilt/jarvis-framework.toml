@@ -946,7 +946,8 @@ wake_word_enabled = false
 # "Voice: install the models", has the one-line download for each.
 stt_engine = "sherpa-onnx"
 # sherpa_stt_kind = "nemo_transducer"   # or "sense_voice"; normally guessed from the files
-# stt_threads = 2                       # CPU threads for speech-to-text
+# stt_threads = 4                       # CPU threads for speech-to-text (default: 4, or 2 on a small PC)
+# tts_threads = 4                       # CPU threads for the voice (the same default)
 # tts_speaker_id = 0                    # Kokoro voice: 0 = American female; 9 = British male (bm_george)
 # vad_enabled = true                    # Silero VAD trims silence and drops clips with no speech
 #

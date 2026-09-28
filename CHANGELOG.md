@@ -23,6 +23,17 @@ number as the last part - `0.2.57` is a build of 0.2.
   is learned again from the lines it had already read in that chat, and if
   you say a forgotten fact again later, it waits for your yes.
 
+**Faster**
+
+- **Jarvis speaks sooner.** Speech-to-text and the voice now use 4 processor
+  threads instead of 2 on a PC with cores to spare (2 on a small one), which
+  measured about 0.3 s sooner to the first sound. Your own `stt_threads` /
+  `tts_threads` setting still wins.
+- **The model's settings file explains the real memory check.** The notes in
+  `backend/jarvis-primary.Modelfile` were out of date about flash attention.
+  They now give the one PowerShell line that shows whether the whole model is
+  on the graphics card ("offloaded 37/37").
+
 ## 0.2.0 - 26 September 2026
 
 The first numbered version. It gathers the work of the last few days.
