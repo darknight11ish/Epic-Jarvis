@@ -27,6 +27,19 @@ import {
   LIGHTS_LABEL,
   LIGHTS_WAITING,
   lightsView,
+  LOCKDOWN_ACTION,
+  LOCKDOWN_BAR_LABEL,
+  LOCKDOWN_BAR_LINE,
+  LOCKDOWN_DETAIL,
+  LOCKDOWN_LABEL,
+  LOCKDOWN_OFF_LABEL,
+  LOCKDOWN_OFF_SAYS,
+  LOCKDOWN_ON_LABEL,
+  LOCKDOWN_ON_SAYS,
+  LOCKDOWN_PC_ONLY,
+  LOCKDOWN_ROW_NOTE,
+  LOCKDOWN_WAITING,
+  lockdownView,
   MISSING,
   NOT_HERE,
   ONE_AT_A_TIME,
@@ -82,6 +95,54 @@ await check("the words are the PC's own, and the phone says the same", async () 
     LIGHTS_DETAIL, LIGHTS_WAITING]) {
     assert.ok(kt.includes(JSON.stringify(w).slice(1, -1)), `the phone says: ${w.slice(0, 50)}`);
   }
+});
+
+await check("Lockdown's words are the PC's own, and the phone says the same", async () => {
+  assert.equal(LOCKDOWN_ACTION, Wd.lockdown_action);
+  assert.equal(LOCKDOWN_LABEL, Wd.lockdown_label);
+  assert.equal(LOCKDOWN_DETAIL, Wd.lockdown_detail);
+  assert.equal(LOCKDOWN_ON_SAYS, Wd.lockdown_on_says);
+  assert.equal(LOCKDOWN_OFF_SAYS, Wd.lockdown_off_says);
+  assert.equal(LOCKDOWN_ON_LABEL, Wd.lockdown_on_label);
+  assert.equal(LOCKDOWN_OFF_LABEL, Wd.lockdown_off_label);
+  assert.equal(LOCKDOWN_PC_ONLY, Wd.lockdown_pc_only);
+  assert.equal(LOCKDOWN_WAITING, Wd.lockdown_waiting);
+  assert.equal(LOCKDOWN_ROW_NOTE, Wd.lockdown_row_note);
+  const kt = read("../jarvis-client/app/src/main/java/com/jarvis/client/net/AsksFirst.kt")
+    .replace(/"\s*\+\s*\n\s*"/g, "");
+  for (const w of [LOCKDOWN_LABEL, LOCKDOWN_DETAIL, LOCKDOWN_ON_SAYS, LOCKDOWN_OFF_SAYS,
+    LOCKDOWN_ON_LABEL, LOCKDOWN_PC_ONLY, LOCKDOWN_WAITING, LOCKDOWN_BAR_LABEL]) {
+    assert.ok(kt.includes(JSON.stringify(w).slice(1, -1)), `the phone says: ${w.slice(0, 50)}`);
+  }
+  const html = read("src/index.html");
+  assert.ok(html.includes(`>${LOCKDOWN_BAR_LABEL}</strong>`) && html.includes(`>${LOCKDOWN_BAR_LINE}</span>`),
+    "the bar's strip");
+});
+
+await check("Lockdown: ON at once, never held; OFF only from the PC, live, one card", async () => {
+  const off = readAsksFirst(C.pc_shipped).lockdown;
+  const v0 = lockdownView(off, false);
+  assert.deepEqual(v0.button, { label: LOCKDOWN_ON_LABEL, ask: true, disabled: false },
+    "turning it on is never held on a stale link");
+  assert.deepEqual(v0.lines, [LOCKDOWN_OFF_SAYS]);
+  const pcOn = readAsksFirst(C.pc_lockdown_on);
+  const v1 = lockdownView(pcOn.lockdown, true);
+  assert.deepEqual(v1.button, { label: LOCKDOWN_OFF_LABEL, ask: false, disabled: false });
+  assert.equal(v1.lines[0], LOCKDOWN_ON_SAYS);
+  assert.equal(lockdownView(pcOn.lockdown, false).button.disabled, true, "OFF is held on a stale link");
+  const phoneOn = readAsksFirst(C.phone_lockdown_on);
+  const v2 = lockdownView(phoneOn.lockdown, true);
+  assert.equal(v2.button, null, "not from the PC: no way to turn it off here");
+  assert.ok(v2.lines.includes(LOCKDOWN_PC_ONLY));
+  const waiting = readAsksFirst(C.pc_lockdown_off_card_waiting);
+  const v3 = lockdownView(waiting.lockdown, true);
+  assert.equal(v3.button.disabled, true, "its card waits");
+  assert.ok(v3.lines.includes(LOCKDOWN_WAITING));
+  const cal = pcOn.groups[0].rows.find((r) => r.action === "calendar_read");
+  assert.equal(cal.lockdown, true);
+  assert.ok(cal.note.includes(LOCKDOWN_ROW_NOTE));
+  assert.equal(switchView(cal, pcOn, true).disabled, true, "nothing loosens while it is on");
+  assert.equal(lockdownView(null, true).show, false, "an older PC: nothing shown");
 });
 
 await check("readAsksFirst reads every real answer, and an older PC says so", async () => {
@@ -282,6 +343,48 @@ await check("Settings: offering a tool - ON held on a stale link, OFF goes", asy
   assert.deepEqual(calls, [{ cmd: "set_tool_enabled", tool: "calendar_read", enabled: false }]);
 });
 
+await check("Settings: Lockdown - ON sent at once even on a stale link; OFF held, then ONE request", async () => {
+  let page = await settings(C.pc_shipped, { link: { stale: true } });
+  const box = await page.locator("#af-lockdown").innerText();
+  await page.locator("#af-lockdown-button").click();
+  await page.waitForTimeout(300);
+  let calls = await page.evaluate(() => window.__asksCalls.filter((c) => c.cmd !== "get_asks_first"));
+  await page.close();
+  assert.ok(box.includes(LOCKDOWN_LABEL) && box.includes(LOCKDOWN_OFF_SAYS), box);
+  assert.deepEqual(calls, [{ cmd: "set_asks_first", action: "lockdown", ask: true }]);
+  page = await settings(C.pc_lockdown_on, { link: { stale: true } });
+  const held = await page.locator("#af-lockdown-button").isDisabled();
+  await page.close();
+  assert.equal(held, true, "turning it off is held on a stale link");
+  page = await settings(C.pc_lockdown_on);
+  await page.locator("#af-lockdown-button").click();
+  await page.waitForTimeout(300);
+  calls = await page.evaluate(() => window.__asksCalls.filter((c) => c.cmd !== "get_asks_first"));
+  const text = await page.locator("#asks-first").innerText();
+  await page.close();
+  assert.deepEqual(calls, [{ cmd: "set_asks_first", action: "lockdown", ask: false }]);
+  assert.ok(text.includes(LOCKDOWN_ON_SAYS) && text.includes(LOCKDOWN_ROW_NOTE));
+  page = await settings(C.phone_lockdown_on);
+  const none = await page.locator("#af-lockdown-button").count();
+  await page.close();
+  assert.equal(none, 0, "not from the PC: no button to turn it off");
+});
+
+await check("The Jarvis bar says Lockdown is on, from the link, and nothing when it is off", async () => {
+  let page = await K.open(browser, base, "index.html", { link: { lockdown: true } });
+  await page.waitForTimeout(400);
+  const shown = await page.locator("#lockdown-strip").isVisible();
+  const words = await page.locator("#lockdown-strip").innerText();
+  await page.close();
+  assert.equal(shown, true);
+  assert.ok(words.includes(LOCKDOWN_BAR_LABEL), words);
+  page = await K.open(browser, base, "index.html", { link: {} });
+  await page.waitForTimeout(400);
+  const hidden = await page.locator("#lockdown-strip").isHidden();
+  await page.close();
+  assert.equal(hidden, true);
+});
+
 await check("Settings: a PC without it says what to do", async () => {
   const page = await settings({ available: false, why: MISSING });
   const state = await page.locator("#af-state").innerText();
@@ -311,7 +414,7 @@ await check("CONTROL: Settings only; Rust refuses an action off the list; no app
     assert.ok(build.includes(`"${c}"`), c);
   }
   const rs = read("src-tauri/src/asks_first.rs");
-  assert.match(rs, /if !SWITCHABLE\.contains\(&action\)/);
+  assert.match(rs, /if action != LOCKDOWN && !SWITCHABLE\.contains\(&action\)/);
   assert.match(rs, /if !TOOLS_SWITCHABLE\.contains\(&tool\)/);
   assert.match(rs, /held_on_stale\(!ask\) && stale\(&app\)/);
   assert.doesNotMatch(rs, /api\/approve/);

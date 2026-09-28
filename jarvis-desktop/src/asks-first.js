@@ -15,6 +15,11 @@
  *    link. The PC refuses anything off the list, and so does Rust;
  *  - "Lights, plugs and fans without a card": ON is one approval card (held
  *    on a stale link), OFF is at once.
+ *  - Lockdown (2026-09-28): one tap makes every way out of the PC ask first,
+ *    or stop. ON is at once, never held (set_asks_first with the action
+ *    "lockdown" and ask: true - it only makes Jarvis ask more); OFF is the
+ *    PC only, ONE loosening card that needs Windows Hello, held on a stale
+ *    link. The phone can turn it on, never off.
  *
  * @module asks-first
  */
@@ -73,6 +78,34 @@ export const TOOLS_PC_ONLY =
   "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
   "first). It takes an approval card and Windows Hello.";
 
+/** Lockdown (2026-09-28): the PC's words (jarvis_asks_first.py LOCKDOWN_*). */
+export const LOCKDOWN_ACTION = "lockdown";
+export const LOCKDOWN_LABEL = "Lockdown";
+export const LOCKDOWN_DETAIL =
+  "One tap makes every way out of this PC ask you first, or stop: web search and research, " +
+  "sending or saving email, reading your calendar, email and Home Assistant, your smart " +
+  "home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and " +
+  "checking for tool updates. Turning it on is instant, from either app. Turning it off is " +
+  "on the PC only, with an approval card and Windows Hello.";
+export const LOCKDOWN_ON_SAYS =
+  "Lockdown is on: everything that would leave this PC asks you first, and anything that " +
+  "runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.";
+export const LOCKDOWN_OFF_SAYS = "Lockdown is off: everything asks first as your settings say.";
+export const LOCKDOWN_ON_LABEL = "Turn on Lockdown";
+export const LOCKDOWN_OFF_LABEL = "Turn off Lockdown";
+export const LOCKDOWN_PC_ONLY =
+  "Lockdown can only be turned off on the PC (Settings, What asks first), with an approval " +
+  "card and Windows Hello.";
+export const LOCKDOWN_WAITING =
+  "Waiting for your yes on the approval card, and Windows Hello, on your PC.";
+/** The Jarvis bar's strip while Lockdown is on (index.html #lockdown-strip). */
+export const LOCKDOWN_BAR_LABEL = "Lockdown is on";
+export const LOCKDOWN_BAR_LINE =
+  "Everything that would leave this PC asks you first, and anything that runs by itself has " +
+  "stopped. To turn it off: Settings, What asks first.";
+export const LOCKDOWN_ROW_NOTE =
+  "Lockdown is on, so this asks you first - or stops, if it runs by itself.";
+
 const text = (v) => (typeof v === "string" ? v : "");
 
 function readSwitch(s) {
@@ -89,6 +122,7 @@ function readRow(r) {
     note: text(r.note),
     fixed: r.fixed === true,
     lights: r.lights === true,
+    lockdown: r.lockdown === true,
     switch: SWITCHABLE.includes(text(r.action)) ? readSwitch(r.switch) : null,
   };
 }
@@ -114,6 +148,21 @@ function readToolItem(i) {
     waiting: i.waiting === true,
     last: last ? text(last.message) : "",
     lastOutcome: last ? text(last.outcome) : "",
+  };
+}
+
+/** `view.lockdown` - Lockdown's state; null from a PC without it. */
+function readLockdown(k) {
+  if (!k || typeof k !== "object" || typeof k.on !== "boolean") return null;
+  const last = k.last && typeof k.last === "object" ? k.last : null;
+  return {
+    on: k.on,
+    waiting: k.waiting === true,
+    last: last ? text(last.message) : "",
+    lastOutcome: last ? text(last.outcome) : "",
+    why: text(k.why),
+    says: text(k.says) || (k.on ? LOCKDOWN_ON_SAYS : LOCKDOWN_OFF_SAYS),
+    canTurnOff: k.can_turn_off === true,
   };
 }
 
@@ -154,7 +203,34 @@ export function readAsksFirst(answer) {
     last: last ? { outcome: text(last.outcome), action: text(last.action), message: text(last.message) } : null,
     lights: readLights(a.lights),
     tools: readTools(a.tools),
+    lockdown: readLockdown(a.lockdown),
   };
+}
+
+/**
+ * Lockdown's box: {show, on, lines, button: {label, ask, disabled} | null}.
+ * `ask` is what set_asks_first sends: true turns it on (never held - it only
+ * makes Jarvis ask more), false asks for the ONE card that turns it off -
+ * only when the PC says this app may, on a live link, and not while that
+ * card already waits.
+ */
+export function lockdownView(k, live) {
+  if (!k) return { show: false, on: false, lines: [], button: null };
+  const lines = [k.says];
+  if (k.why) lines.push(k.why.charAt(0).toUpperCase() + k.why.slice(1) + ".");
+  if (k.waiting) lines.push(LOCKDOWN_WAITING);
+  else if (k.last && k.lastOutcome !== "off") lines.push(k.last);
+  if (!k.on) {
+    return { show: true, on: false, lines, button: { label: LOCKDOWN_ON_LABEL, ask: true,
+      disabled: false } };
+  }
+  if (!k.canTurnOff) {
+    lines.push(LOCKDOWN_PC_ONLY);
+    return { show: true, on: true, lines, button: null };
+  }
+  if (!live && !k.waiting) lines.push(STALE);
+  return { show: true, on: true, lines, button: { label: LOCKDOWN_OFF_LABEL, ask: false,
+    disabled: k.waiting || !live } };
 }
 
 /** A row's first line: "Read your calendar - Does it without asking". */

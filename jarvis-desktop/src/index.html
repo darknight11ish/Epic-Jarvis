@@ -205,6 +205,15 @@
           <span class="temporary-refused" id="temporary-refused" hidden></span>
         </div>
 
+        <!-- Lockdown (2026-09-28, backend jarvis_asks_first.py): shown while
+             every way out of the PC asks first, from the link (stream.rs
+             LinkState.lockdown), so every window agrees. Words: asks-first.js
+             LOCKDOWN_BAR_*. -->
+        <div class="lockdown-strip" id="lockdown-strip" role="status" hidden>
+          <strong class="lockdown-label">Lockdown is on</strong>
+          <span class="lockdown-line">Everything that would leave this PC asks you first, and anything that runs by itself has stopped. To turn it off: Settings, What asks first.</span>
+        </div>
+
         <div class="attachments" id="attachments" hidden>
           <div class="attachment" id="attachment-capture" hidden>
             <img id="capture-thumb" alt="Desktop capture attached to the next prompt" />

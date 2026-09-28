@@ -204,6 +204,11 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
                         if o.contains_key("broken") {
                             o.insert("broken".into(), serde_json::json!(""));
                         }
+                        // A reminder for next time's subject is the owner's
+                        // words too (jarvis_next_time.py, 2026-09-28).
+                        if o.contains_key("about") {
+                            o.insert("about".into(), serde_json::json!(""));
+                        }
                         o.insert("hidden".into(), serde_json::json!(true));
                         let named = o
                             .get("list")
@@ -998,6 +1003,23 @@ mod tests {
         assert_eq!(hidden["todo"][0]["list"], "hidden-1");
         assert_eq!(hidden["todo"][1]["list"], "hidden-1");
         assert_eq!(hidden["todo"][2]["list"], "");
+    }
+
+    #[test]
+    fn hidden_lists_hide_a_reminder_for_next_times_subject_too() {
+        // jarvis_next_time.py (2026-09-28): the subject is the owner's words.
+        let list = serde_json::json!({
+            "jobs": [{"id": "s0123456785", "kind": "nexttime", "text": "ask about the bill",
+                      "about": "the dentist", "when": "until Sunday 27 December",
+                      "note": "Waits for you to talk about it."}],
+            "todo": []
+        });
+        let hidden = redact_list(list);
+        let s = hidden.to_string();
+        assert!(!s.contains("dentist") && !s.contains("bill"), "{s}");
+        assert_eq!(hidden["jobs"][0]["about"], "");
+        assert_eq!(hidden["jobs"][0]["when"], "until Sunday 27 December");
+        assert_eq!(hidden["jobs"][0]["hidden"], true);
     }
 
     #[test]

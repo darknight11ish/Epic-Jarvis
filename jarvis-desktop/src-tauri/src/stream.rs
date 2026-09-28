@@ -109,6 +109,13 @@ pub struct LinkState {
     pub attention: crate::attention::Attention,
     /// Why the stream is down, when it is. `None` while connected.
     pub error: Option<String>,
+    /// Lockdown is on (backend jarvis_asks_first.py, 2026-09-28): every way
+    /// out of the PC asks first, or has stopped. From `/api/version`'s
+    /// `capabilities.lockdown.on` at connect, then the `lockdown` event.
+    /// False from a PC without it. Every window shows "Lockdown is on" from
+    /// this one field, so they cannot disagree.
+    #[serde(default)]
+    pub lockdown: bool,
 }
 
 impl Default for LinkState {
@@ -128,6 +135,7 @@ impl Default for LinkState {
             approvals: 0,
             attention: crate::attention::Attention::default(),
             error: None,
+            lockdown: false,
         }
     }
 }
@@ -669,6 +677,16 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             crate::appearance::refresh_from_server(app).await;
         }
 
+        // Lockdown turned on or off (backend jarvis_asks_first.py,
+        // 2026-09-28): `{"on": bool}` and nothing else. Carried on the link,
+        // like the power mode, so the Jarvis bar and Settings agree; fanned
+        // out below too, and Settings reads "What asks first" again on it.
+        "lockdown" => {
+            if let Some(on) = lockdown_on(&event.data) {
+                publish_link(app, |link| link.lockdown = on);
+            }
+        }
+
         // A deep question finished (backend/big-model.patch): `{"id",
         // "state": "done"|"failed"}` and nothing else - never the question or
         // the answer. Nothing here reads anything for it: the only window
@@ -836,13 +854,23 @@ async fn prime_from_version(app: &AppHandle, base: &str) {
         }
     }
     let activity = activity.unwrap_or_else(|| "idle".to_string());
+    // Lockdown's state rides on the handshake like the power mode; a PC
+    // without it says nothing, and the link says off.
+    let lockdown = lockdown_on(&version["capabilities"]["lockdown"]).unwrap_or(false);
     publish_link(app, |link| {
         link.activity = activity;
         if let Some(power) = power {
             link.power = power;
             link.power_set_by = set_by.clone();
         }
+        link.lockdown = lockdown;
     });
+}
+
+/// `{"on": bool}` - the `lockdown` event's data, or `capabilities.lockdown`
+/// in `/api/version`. `None` for anything else.
+pub(crate) fn lockdown_on(value: &serde_json::Value) -> Option<bool> {
+    value.get("on").and_then(|v| v.as_bool())
 }
 
 /// One authenticated GET, as JSON. `None` (and a line on stderr) on any
