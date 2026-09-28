@@ -285,7 +285,15 @@ def plan(chatbots, goal, *, max_turns=None, max_minutes=None, never_send=None,
             if problem:
                 break
     if not problem:
+        # The summary says who said what BY NAME: two chatbots with one name
+        # would make that ambiguous.
+        names = [_name_of(cid).casefold() for cid in ids]
+        if len(set(names)) < len(names):
+            problem = "two of those chatbots have the same name, so their answers could be mixed up"
+    if not problem:
         sweep_forgotten(d, grace=0.0)
+        with CB._LOCK:
+            CB._sweep_forgotten(d)
         with _LOCK:
             if any(_live(x) for x in _COMPARES.values()):
                 problem = ("another comparison is still running or paused - stop it or let it "

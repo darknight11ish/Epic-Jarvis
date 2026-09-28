@@ -755,6 +755,48 @@ def t_routes():
           and "switched off" in out["error"], out)
 
 
+def t_hardening():
+    clean()
+    bots = {"fake_a": bot("fake_a", on_send=lambda t, n: n == 1 and TC.handle_post(
+        "/api/task/pause", {})), "fake_b": bot("fake_b")}
+    c, d, *_ = go(bots, max_turns=3)
+    mid = c.members[0].id
+    code, out = R.handle_post(R.LIMITS_ROUTE, {"id": mid, "max_messages": 5}, deps=d,
+                              spawn=lambda fn: fn())
+    check("a comparison's conversation cannot have its limits changed on its own (route)",
+          code == 409 and "stop it and start a new one" in out["error"] and len(CARDS) == 1,
+          out)
+    code, out = CB.change_limits(mid, max_turns=5, deps=d)
+    check("... nor through the core", code == 409 and c.members[0].limits.max_turns == 3, out)
+    keep = CB.DEPS
+    CB.DEPS = d
+    try:
+        TC.resume("test", wait=True, gate_check=lambda a, det, pr: Verdict(True, "approved"))
+    finally:
+        CB.DEPS = keep
+    check("... so its Resume still runs it to the end", c.state == "done"
+          or CMP.get(c.id).state == "done", CMP.get(c.id).state)
+
+    clean()
+    CB.register_adapter(CB.AdapterInfo("fake_twin", "Test chatbot A", "twin.example",
+                                       CB.FakeChatbot, test_only=True))
+    bots = {"fake_a": bot("fake_a"), "fake_twin": bot("fake_b")}
+    c = CMP.plan(["fake_a", "fake_twin"], GOAL, deps=deps(bots))
+    check("two chatbots with the same name are refused (who said what must be clear)",
+          "same name" in c.problem and not CARDS, c.problem)
+    CB.ADAPTERS.pop("fake_twin", None)
+
+    clean()
+    bots = {"fake_a": bot("fake_a", statuses={1: CB.Status("needs_owner", "captcha")})}
+    d = deps(bots)
+    s = CB.plan("fake_a", GOAL, deps=d)
+    CB.start(s, deps=d, wait=True)
+    TC.handle_post("/api/task/stop", {})         # forgets the paused conversation
+    c = CMP.plan(["fake_b", "fake_c"], GOAL, deps=d)
+    check("a paused conversation nobody can resume no longer blocks a comparison",
+          not c.problem and s.state == "stopped", (c.problem, s.state))
+
+
 def t_a_paused_comparison_nobody_can_resume_is_ended():
     clean()
     bots = {"fake_a": bot("fake_a", on_send=lambda t, n: n == 1 and TC.handle_post(

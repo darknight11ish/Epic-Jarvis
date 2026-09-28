@@ -239,6 +239,9 @@ SUMMARY_WAIT = 120.0
 FACTS_CHECKED = 20
 
 IF_REFUSED = "nothing is sent, and no chatbot window is opened."
+#: A conversation inside a comparison keeps the comparison's limits.
+COMPARE_LIMITS = ("a comparison's limits cannot change while it runs - stop it and start a "
+                  "new one")
 
 
 # ============================================================================
@@ -1918,6 +1921,9 @@ def change_limits(session_id: str, *, max_turns=None, max_minutes=None, never_se
     s = get(session_id)
     if s is None:
         return 404, {"ok": False, "error": "no such conversation"}
+    if s.compare:
+        # Its limits are on the comparison's card, for every chatbot at once.
+        return 409, {"ok": False, "error": COMPARE_LIMITS}
     if s.state not in ("running", "paused"):
         return 409, {"ok": False, "error": "only a running or paused conversation's limits "
                                            "can change"}

@@ -314,6 +314,8 @@ def _limits(body: dict, deps, spawn: Callable) -> tuple:
     s = CB.get(sid)
     if s is None:
         return 404, {"ok": False, "error": "No such conversation."}
+    if s.compare:
+        return 409, {"ok": False, "error": _sentence(CB.COMPARE_LIMITS)}
     if s.state not in ("running", "paused"):
         return 409, {"ok": False, "error": "Only a running or paused conversation's limits "
                                            "can change."}

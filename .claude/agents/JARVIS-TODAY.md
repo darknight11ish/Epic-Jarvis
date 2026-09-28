@@ -36,7 +36,7 @@ the code, one question at a time after the owner's yes** (ARCHITECTURE §11;
 lane is configured on the owner's PC**: the lane list comes from
 `litellm-proxy.yaml`, which `backend/README.md` (~line 2339) says does not
 exist there, so every turn is local. Talking to an outside AI through its
-API is designed in `docs/CHATBOT-DRIVER-DESIGN.md`; the owner chose Gemini's website instead, and "Talk to a chatbot for me" (the driver core, `/api/chatbot/*` routes and both apps' screens, one card per conversation) is built but reaches no chatbot yet - the Gemini adapter is not built (JARVIS-API §60). A cloud turn carries only the owner's newest words, never private,
+API is designed in `docs/CHATBOT-DRIVER-DESIGN.md`; the owner chose Gemini's website instead, and "Talk to a chatbot for me" (the driver core, `/api/chatbot/*` routes and both apps' screens, one card per conversation) is built, with Gemini and eight more website adapters, API adapters and "a second AI on this PC" (none yet tried against the real sites; JARVIS-API §60), and "Ask several and compare" (two or more chatbots, one card, one summary; `jarvis_chatbot_compare.py`, JARVIS-API §60.7). An earlier version of this line said the Gemini adapter was not built; it is. A cloud turn carries only the owner's newest words, never private,
 tainted or picture turns (ARCHITECTURE §4). Big-model switch across both
 cards (`jarvis_big_model.py`). Simple commands answered without the model
 (`jarvis_quick.py`). Short tool list with more on request; MCP bridge for
