@@ -858,6 +858,8 @@ $SHIPPED = @(
     # --- "Chat with customer support for me" (2026-09-28): Groupon first; the details card, an offer card per offer, identity checks and "are you a bot?" handed to the owner ---
     'jarvis_support.py'          # the support chat's rules: the details card, the last check before every message, offers, the transcript; routes in jarvis_chatbot_routes.py, risk lines in support-chat.patch
     'jarvis_support_widget.py'   # the support window on the chatbot websites' shared base: the company's help page, its chat widget (Zendesk, Intercom, LivePerson, Gorgias, Freshchat, Salesforce, unbranded); needs Playwright (not installed by this script)
+    # --- "Solve it here" (2026-09-28): a captcha or sign-in page handed to the owner's phone ---
+    'jarvis_handoff.py'          # one picture at a time of the ONE paused browser window, and the owner's own taps and typing to it, only while paused there; routes in jarvis_chatbot_routes.py
 )
 
 # The settings file. Installed only where none exists; never overwritten.
