@@ -2,7 +2,6 @@ package com.jarvis.client.widget
 
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -77,8 +76,9 @@ import com.jarvis.client.service.QuickTileService
  *
  * BUTTONS follow the tiles exactly: [QuickTiles.decide] decides, and
  * [QuickTileService.perform] does it - held on a stale link (rule 4) except
- * Stop everything, "Brief me" only opens the app (behind App lock). Never
- * Approve or Deny.
+ * Stop everything, "Brief me" only opens the app (behind App lock). Under
+ * App lock every button but Stop everything only opens Jarvis, which asks
+ * for the unlock, and does nothing on its own. Never Approve or Deny.
  */
 open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
 
@@ -131,7 +131,7 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
                 if (m != null || v == null) {
                     MessageState(m?.first ?: JarvisWidgets.W_FAILED, m?.second ?: JarvisWidgets.W_STALE_SUB)
                 } else {
-                    Board(context, v)
+                    Board(context, v, security?.appLock)
                 }
             }
         }
@@ -153,7 +153,7 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
     }
 
     @Composable
-    private fun Board(context: Context, view: JarvisWidgets.View) {
+    private fun Board(context: Context, view: JarvisWidgets.View, appLock: Boolean?) {
         val buttons = view.blocks.filterIsInstance<JarvisWidgets.Block.Button>()
         Column(modifier = GlanceModifier.fillMaxSize()) {
             Column(
@@ -215,7 +215,7 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
                 Row(modifier = GlanceModifier.fillMaxWidth()) {
                     pair.forEachIndexed { i, b ->
                         if (i > 0) Spacer(GlanceModifier.width(6.dp))
-                        PillButton(b.label, press(context, b.action), GlanceModifier.defaultWeight())
+                        PillButton(b.label, press(context, b.action, appLock), GlanceModifier.defaultWeight())
                     }
                 }
             }
@@ -225,14 +225,20 @@ open class JarvisBoardWidget(private val slot: Int) : GlanceAppWidget() {
     private fun small(color: ColorProvider) = TextStyle(color = color, fontSize = 11.sp)
 
     /** "Brief me" opens the app straight from the tap (the tile's own
-     *  OpenBriefing); every other button goes through [BoardButtonCallback]. */
-    private fun press(context: Context, action: TileAction): Action =
+     *  OpenBriefing). Under App lock every other button except Stop
+     *  everything only opens Jarvis, which asks for the unlock first, and
+     *  does nothing on its own ([QuickTiles.widgetOpensApp]); otherwise it
+     *  goes through [BoardButtonCallback]. [appLock] null: settings could not
+     *  be read, which counts as locked. */
+    private fun press(context: Context, action: TileAction, appLock: Boolean?): Action =
         if (action == TileAction.BRIEF_ME) {
             actionStartActivityIntent(
                 Intent(context, MainActivity::class.java)
                     .setAction(MainActivity.ACTION_OPEN_BRIEFING)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             )
+        } else if (QuickTiles.widgetOpensApp(action, appLock)) {
+            actionStartActivity<MainActivity>()
         } else {
             actionRunCallback<BoardButtonCallback>(actionParametersOf(BoardButtonCallback.PARAM_ACTION to action.wire))
         }
@@ -285,9 +291,9 @@ object JarvisBoardWidgets {
 /**
  * One button on a home-screen Jarvis widget: the Quick Settings tile's own
  * decision ([QuickTiles.decide]) and action ([QuickTileService.perform]).
- * A widget cannot ask for the phone's unlock the way a tile can, so App
- * lock with a locked phone says so instead; the home screen is only seen
- * unlocked, so that is rare.
+ * Under App lock the button is drawn as "open Jarvis" instead and never
+ * reaches here ([QuickTiles.widgetOpensApp], the owner's 2026-09-28 rule);
+ * a tap on a button drawn before App lock went on is refused here too.
  */
 class BoardButtonCallback : ActionCallback {
 
@@ -296,6 +302,14 @@ class BoardButtonCallback : ActionCallback {
         val app = context.applicationContext
         runCatching { JarvisRuntime.initialize(app) }
         if (!JarvisRuntime.isInitialized) return
+        // The button was drawn before App lock went on (the redraw has not
+        // happened yet): do nothing, say why, and redraw so the next tap
+        // opens Jarvis. A widget's background tap cannot open the app itself.
+        if (QuickTiles.widgetOpensApp(action, JarvisRuntime.settings.security.value.appLock)) {
+            QuickTileService.say(app, QuickTiles.WIDGET_LOCKED)
+            runCatching { JarvisBoardWidgets.updateAll(app) }
+            return
+        }
         val paired = JarvisRuntime.isPaired()
         val decision = QuickTiles.decide(
             action = action,
@@ -315,15 +329,17 @@ class BoardButtonCallback : ActionCallback {
             }
             QuickTiles.Decision.UnlockThenRun -> QuickTileService.say(app, UNLOCK_FIRST)
             // Not reached: "Brief me" opens the app from the tap itself, and
-            // a button always has an action.
-            QuickTiles.Decision.OpenBriefing, QuickTiles.Decision.OpenChooser ->
-                runCatching { Toast.makeText(app, JarvisWidgets.W_STALE_SUB, Toast.LENGTH_SHORT).show() }
+            // a button always has an action. Plain words anyway, not the
+            // "not connected" line these used to show.
+            QuickTiles.Decision.OpenBriefing -> QuickTileService.say(app, OPEN_FOR_BRIEFING)
+            QuickTiles.Decision.OpenChooser -> QuickTileService.say(app, JarvisWidgets.W_NONE_SUB)
         }
     }
 
     companion object {
         val PARAM_ACTION = ActionParameters.Key<String>("board_action")
         const val UNLOCK_FIRST = "Unlock your phone first, then tap it again."
+        const val OPEN_FOR_BRIEFING = "Open Jarvis to hear your briefing."
     }
 }
 

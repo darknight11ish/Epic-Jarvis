@@ -807,12 +807,15 @@ object JarvisRuntime {
         }
         // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
         // so read again from the PC - when the link comes or goes stale, when
-        // a timer or reminder changes, when the saved widgets change here, or
-        // when a slot is given another widget. Never on a clock of its own
-        // beyond the launcher's half-hourly update.
+        // a timer or reminder changes, when the saved widgets change here,
+        // when a slot is given another widget, or when App lock or "Hide
+        // memory lists" changes (so the words hide, and the buttons turn into
+        // "open Jarvis", at once - not up to 30 minutes later). Never on a
+        // clock of its own beyond the launcher's half-hourly update.
         boardJob?.cancel()
         boardJob = scope.launch {
             combine(_link, _stale, _scheduleTick, _widgetsTick, settings.homeWidgets) { _, _, _, _, _ -> }
+                .combine(settings.security) { _, _ -> }
                 .collect { com.jarvis.client.widget.JarvisBoardWidgets.updateAll(app) }
         }
     }

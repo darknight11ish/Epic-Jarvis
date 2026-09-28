@@ -141,6 +141,26 @@ object QuickTiles {
         else -> Decision.Run
     }
 
+    /**
+     * A HOME-SCREEN WIDGET button only, never a tile (the owner, 2026-09-28:
+     * "under App lock, the widgets' buttons open the locked app first ...
+     * they do not act on their own"). True when this button must open Jarvis
+     * - which asks for the unlock - instead of doing anything: App lock is
+     * on (or cannot be read: [appLock] null fails closed). Stop everything is
+     * the one exception, as everywhere else here: it only makes Jarvis do
+     * less, so it is never put behind an unlock. "Brief me" already only
+     * opens the app. Tiles keep [decide]'s own rule (they can ask Android for
+     * the phone's unlock; a widget cannot).
+     */
+    fun widgetOpensApp(action: TileAction, appLock: Boolean?): Boolean = when (action) {
+        TileAction.STOP_EVERYTHING -> false
+        TileAction.BRIEF_ME -> true
+        else -> appLock != false
+    }
+
+    /** Said when a widget button is tapped under App lock before the widget redrew. */
+    const val WIDGET_LOCKED = "App lock is on - open Jarvis first, then use it there."
+
     /** Whether the tile shows as lit (ready to use now) or dimmed. */
     fun ready(action: TileAction?, paired: Boolean, connected: Boolean, stale: Boolean): Boolean = when {
         action == null -> false

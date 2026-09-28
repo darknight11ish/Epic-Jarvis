@@ -12300,7 +12300,12 @@ and events.
   every private block shows its label and "Hidden - open Jarvis to see it."
   Buttons follow the tiles exactly (`QuickTiles.decide`,
   `QuickTileService.perform`): held on a stale link except Stop everything;
-  Brief me only opens the app. Nothing of the widget is kept on the phone.
+  Brief me only opens the app. **Under App lock** (the owner, 2026-09-28)
+  every button but Stop everything only opens Jarvis, which asks for the
+  unlock, and never acts on its own (`QuickTiles.widgetOpensApp`); the
+  widget also redraws at once when App lock or "Hide memory lists" changes.
+  The Quick Settings tiles keep their own rule (they can ask Android for
+  the phone's unlock). Nothing of the widget is kept on the phone.
 
 Both apps draw a filled-in widget by one rule, held with the PC's by
 `tools/gen_widget_cases.py` (`tests/fixtures/widget-cases.json` and the
