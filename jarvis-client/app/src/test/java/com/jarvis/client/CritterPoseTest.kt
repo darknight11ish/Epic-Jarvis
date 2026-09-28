@@ -101,11 +101,7 @@ class CritterPoseTest {
                         )
                     },
                 ),
-                CritterPose.Opts(
-                    calm = opts?.get("calm")?.jsonPrimitive?.float ?: 0f,
-                    serious = opts?.get("serious")?.jsonPrimitive?.float ?: 0f,
-                    still = opts?.get("still")?.jsonPrimitive?.float ?: 0f,
-                ),
+                optsOf(opts),
             )
             val mouth = o["mouth"]?.jsonObject?.let { m ->
                 floatArrayOf(
@@ -143,6 +139,23 @@ class CritterPoseTest {
         }
     }
 
+    /** The host's opts as the fixture gives them (the desktop's keys, the switches by their ids). */
+    private fun optsOf(o: kotlinx.serialization.json.JsonObject?): CritterPose.Opts {
+        fun f(k: String, d: Float) = o?.get(k)?.jsonPrimitive?.float ?: d
+        fun i(k: String, d: Int) = o?.get(k)?.jsonPrimitive?.content?.toFloat()?.toInt() ?: d
+        return CritterPose.Opts(
+            calm = f("calm", 0f), serious = f("serious", 0f), still = f("still", 0f),
+            variety = f("variety", 0f), cute = f("cute_moments", f("cute", 1f)),
+            nods = f("nods", 1f), focusBuddy = f("focus_buddy", 1f), acks = f("acks", 1f), petting = f("petting", 1f),
+            focus = f("focus", 0f), pet = f("pet", 0f), petX = f("petX", 0f), petDir = f("petDir", 0f),
+            hello = f("hello", 1f), goodbye = f("goodbye", 0f),
+            heard = f("heard", CritterPose.NEVER), heardN = i("heardN", -1),
+            phraseEnd = f("phraseEnd", CritterPose.NEVER), phraseN = i("phraseN", -1),
+            ackNod = f("ackNod", CritterPose.NEVER), ackGlow = f("ackGlow", CritterPose.NEVER),
+            focusEnd = f("focusEnd", CritterPose.NEVER),
+        )
+    }
+
     /**
      * Whether an idle happening is playing - what the frame pacer on both
      * apps reads to draw a stretch or a scratch at the full rate. The
@@ -158,8 +171,8 @@ class CritterPoseTest {
         val times = o["times"]!!.jsonArray.map { it.jsonPrimitive.float }
         val busy = o["busy"]!!.jsonObject
         val phone = mapOf<String, (FaceState, Float) -> Boolean>(
-            "redpanda" to CritterPose::busy, "pygmyowl" to OwlPose::busy,
-            "seaotter" to OtterPose::busy, "monkey" to MonkeyPose::busy,
+            "redpanda" to { s, t -> CritterPose.busy(s, t) }, "pygmyowl" to { s, t -> OwlPose.busy(s, t) },
+            "seaotter" to { s, t -> OtterPose.busy(s, t) }, "monkey" to { s, t -> MonkeyPose.busy(s, t) },
         )
         assertEquals(phone.keys, busy.keys)
         for ((sp, fn) in phone) {
@@ -904,6 +917,358 @@ class CritterPoseTest {
             val got = a.uniforms(a.pose(FaceState.SPEAKING, FaceState.STANDBY, x, 170f + x, 0.4f, CritterPose.Look(), asleep9, opts()), voice)
             val was = a.uniforms(a.plain(FaceState.SPEAKING, FaceState.STANDBY, x, 170f + x, 0.4f, asleep9, opts()), voice)
             for (i in 0 until 3) assertEquals("${a.id}: mouth[$i] at $x s", was.getValue("uMouth")[i], got.getValue("uMouth")[i], 1e-6f)
+        }
+    }
+
+    // --- the new behaviours (critter-pose.js "New behaviours") ------------
+
+    /** Every animal's pose and uniforms, with the host's opts. */
+    private fun u(a: Sleeper, s: FaceState, since: Float, t: Float, o: CritterPose.Opts, prev: FaceState = s,
+                  h: CritterPose.Hist = CritterPose.Hist(), mouth: FloatArray? = null) =
+        a.uniforms(a.pose(s, prev, since, t, ampOf(s), CritterPose.Look(), h, o), mouth)
+    private fun gap(a: Map<String, FloatArray>, b: Map<String, FloatArray>): Float {
+        var worst = 0f
+        for ((name, v) in a) for (i in v.indices) worst = maxOf(worst, abs(v[i] - b.getValue(name)[i]))
+        return worst
+    }
+    private val awakeStates = listOf(FaceState.IDLE, FaceState.LISTENING, FaceState.THINKING, FaceState.SPEAKING)
+    /** Every input a host may pass, at once, part way through each. */
+    private fun everything(base: CritterPose.Opts = opts()) = base.copy(
+        variety = 1f, focus = 0.7f, pet = 0.8f, petX = 0.4f, petDir = 0.5f, goodbye = 0.3f,
+        heard = 0.4f, heardN = 2, phraseEnd = 0.5f, phraseN = 3, ackNod = 0.4f, ackGlow = 0.8f, focusEnd = 1.1f,
+    )
+
+    @Test
+    fun `left out, the new inputs and switches change nothing`() {
+        // The owner's switches are on unless given, and do nothing without
+        // something happening: so a host passing none of the new inputs draws
+        // exactly what it drew before (the fixture holds the rest).
+        val off = CritterPose.Opts(cute = 0f, nods = 0f, focusBuddy = 0f, acks = 0f, petting = 0f)
+        for (a in sleepers) for (s in FaceState.entries) for (f in 0 until 120) {
+            val t = 40f + f * 0.37f
+            assertEquals("${a.id} $s at $t", 0f, gap(u(a, s, 99f, t, opts()), u(a, s, 99f, t, off)), 0f)
+        }
+    }
+
+    @Test
+    fun `still, serious and the waiting and wrong looks switch every new behaviour off`() {
+        for (a in sleepers) for (s in awakeStates) for (f in 0 until 20) {
+            val t = 60f + f * 0.29f
+            for (w in listOf(opts(still = 1f), opts(serious = 1f))) {
+                // (hello and goodbye are the host's cross-fade under these: the pose plays none of it)
+                val g = gap(u(a, s, 20f, t, w), u(a, s, 20f, t, everything(w)))
+                assertTrue("${a.id} $s: a new behaviour moved it by $g under $w", g < 1e-5f)
+            }
+        }
+        // Waiting on you, something wrong, asleep, dozing: none of them (the
+        // arrival's reaction is over after its first 1.3 s).
+        for (a in sleepers) for (s in listOf(FaceState.APPROVAL, FaceState.ERROR, FaceState.STANDBY, FaceState.BANKED)) {
+            val o = everything().copy(goodbye = 0f)
+            for (f in 0 until 20) {
+                val t = 60f + f * 0.29f
+                val g = gap(u(a, s, 20f, t, opts()), u(a, s, 20f, t, o))
+                assertTrue("${a.id} $s: moved $g", g < 1e-5f)
+            }
+        }
+    }
+
+    @Test
+    fun `calm makes the new behaviours smaller, not bigger`() {
+        for (a in sleepers) for (s in awakeStates) {
+            var full = 0f
+            var calm = 0f
+            for (f in 0 until 40) {
+                val t = 70f + f * 0.13f
+                // (Not the focus session: that takes movement away, calm or not.)
+                full = maxOf(full, bodyGap(u(a, s, 20f, t, opts()), u(a, s, 20f, t, everything().copy(goodbye = 0f, focus = 0f))))
+                calm = maxOf(calm, bodyGap(u(a, s, 20f, t, opts(calm = 1f)), u(a, s, 20f, t, everything(opts(calm = 1f)).copy(goodbye = 0f, focus = 0f))))
+            }
+            assertTrue("${a.id} $s: calm $calm against $full", calm <= full * 0.75f + 1e-4f)
+        }
+    }
+
+    @Test
+    fun `the mouth is never touched by a new behaviour`() {
+        val voice = floatArrayOf(0.6f, 0.4f, 0.2f)
+        for (a in sleepers) for (f in 0 until 60) {
+            val t = 80f + f * 0.11f
+            val plain = u(a, FaceState.SPEAKING, 20f, t, opts(), mouth = voice).getValue("uMouth")
+            val busy = u(a, FaceState.SPEAKING, 20f, t, everything(), mouth = voice).getValue("uMouth")
+            for (i in 0 until 3) assertEquals("${a.id}: mouth[$i]", plain[i], busy[i], 1e-6f)
+        }
+    }
+
+    @Test
+    fun `a shuffle bag never deals the same one twice running`() {
+        for (salt in listOf(74, 154, 234, 118)) {
+            var last = -1
+            val seen = IntArray(3)
+            for (n in 0 until 3000) {
+                val k = CritterPose.bagKind(n, 3, salt)
+                assertTrue("salt $salt: kind $k twice running at $n", k != last)
+                seen[k]++
+                last = k
+            }
+            assertTrue("salt $salt: a kind never came up", seen.all { it > 800 })
+        }
+    }
+
+    @Test
+    fun `the pause finder counts a pause after talking, never closer than its gap`() {
+        // Talk 1.2 s, quiet 0.5 s, over and over, at 60 frames a second.
+        var rec: CritterPose.PauseRec? = null
+        val at = ArrayList<Float>()
+        var lastN = 0
+        for (f in 0 until 60 * 30) {
+            val t = f / 60f
+            val level = if ((t % 1.7f) < 1.2f) 0.4f else 0.01f
+            rec = CritterPose.pauseStep(rec, 1f / 60f, level, CritterPose.Pause.NOD_QUIET, CritterPose.Pause.NOD_GAP)
+            if (rec.n != lastN) { at.add(t); lastN = rec.n; assertEquals(0f, rec.ago, 0f) }
+        }
+        assertTrue("too few pauses: $at", at.size >= 7)
+        for (i in 1 until at.size) assertTrue("pauses ${at[i - 1]} and ${at[i]} too close", at[i] - at[i - 1] >= CritterPose.Pause.NOD_GAP - 1e-3f)
+        // Silence, or a cough too short to be talking, is never a pause.
+        var q: CritterPose.PauseRec? = null
+        for (f in 0 until 600) q = CritterPose.pauseStep(q, 1f / 60f, if (f % 100 < 10) 0.5f else 0f, 0.3f, 3f)
+        assertEquals(0, q!!.n)
+    }
+
+    @Test
+    fun `a listening nod is small and plays once, all three kinds`() {
+        for (a in sleepers) for (n in 0 until 3) {
+            var most = 0f
+            var any = 0f
+            for (f in 0 until 90) {
+                val x = f / 60f
+                val o = opts().copy(heard = x, heardN = n)
+                val p0 = u(a, FaceState.LISTENING, 20f, 30f + x, opts())
+                val p1 = u(a, FaceState.LISTENING, 20f, 30f + x, o)
+                val g = gap(p0, p1)
+                any = maxOf(any, g)
+                for (nm in listOf("uHeadR0", "uHeadR1", "uHeadR2")) for (i in 0 until 3) most = maxOf(most, abs(p0.getValue(nm)[i] - p1.getValue(nm)[i]))
+                if (x > CritterPose.NOD_S) assertTrue("${a.id}: nod $n still playing at $x", g < 1e-5f)
+            }
+            assertTrue("${a.id}: nod $n did nothing", any > 0.005f)
+            // Small: the head turns at most about 3 degrees (0.06 of its turn).
+            assertTrue("${a.id}: nod $n turned the head by $most", most < 0.07f)
+            // The switch takes it away.
+            val sw = gap(u(a, FaceState.LISTENING, 20f, 30.4f, opts()),
+                u(a, FaceState.LISTENING, 20f, 30.4f, opts().copy(heard = 0.4f, heardN = n, nods = 0f)))
+            assertTrue("${a.id}: nodded with the switch off", sw < 1e-5f)
+        }
+    }
+
+    @Test
+    fun `with the host's phrase ends, gestures come only at them`() {
+        // phraseN 0: the host counts phrases but none has ended - no gesture
+        // at all, where the random ones would have played.
+        for (a in sleepers) {
+            var random = 0f
+            var none = 0f
+            for (f in 0 until 1200) {
+                val t = 100f + f / 10f
+                val still = u(a, FaceState.SPEAKING, 20f, t, opts(calm = 0f).copy(phraseN = 0))
+                val talk = u(a, FaceState.SPEAKING, 20f, t, opts())
+                random = maxOf(random, gap(still, talk))
+                none = maxOf(none, gap(still, u(a, FaceState.SPEAKING, 20f, t, opts(still = 0f).copy(phraseN = 5, phraseEnd = 9f))))
+            }
+            assertTrue("${a.id}: the random gestures never played ($random)", random > 0.01f)
+            assertTrue("${a.id}: a gesture long after a phrase end ($none)", none < 1e-5f)
+        }
+        // At a phrase end one plays (most phrase ends; one near a look is let go).
+        for (a in sleepers) {
+            var played = 0
+            for (n in 1..20) {
+                val t = 100f + n * 3.1f
+                val g = gap(u(a, FaceState.SPEAKING, 20f, t, opts().copy(phraseN = 0)),
+                    u(a, FaceState.SPEAKING, 20f, t, opts().copy(phraseN = n, phraseEnd = 0.5f)))
+                if (g > 0.005f) played++
+            }
+            assertTrue("${a.id}: only $played of 20 phrase ends had a gesture", played >= 8)
+        }
+    }
+
+    @Test
+    fun `a saved fact nods, a ready answer swells the orb - not while waiting on you`() {
+        for (a in sleepers) {
+            val glow = u(a, FaceState.IDLE, 20f, 30f, opts().copy(ackGlow = 0.9f)).getValue("uOrbGlow")[0] -
+                u(a, FaceState.IDLE, 20f, 30f, opts()).getValue("uOrbGlow")[0]
+            assertTrue("${a.id}: the orb did not swell ($glow)", glow > 0.2f)
+            val nod = gap(u(a, FaceState.IDLE, 20f, 30f, opts()), u(a, FaceState.IDLE, 20f, 30f, opts().copy(ackNod = 0.4f)))
+            assertTrue("${a.id}: no nod ($nod)", nod > 0.01f)
+            for (s in listOf(FaceState.APPROVAL, FaceState.ERROR, FaceState.STANDBY)) {
+                val g = gap(u(a, s, 20f, 30f, opts()), u(a, s, 20f, 30f, opts().copy(ackNod = 0.4f, ackGlow = 0.9f)))
+                assertTrue("${a.id} $s: acknowledged ($g)", g < 1e-5f)
+            }
+            val sw = gap(u(a, FaceState.IDLE, 20f, 30f, opts()), u(a, FaceState.IDLE, 20f, 30f, opts().copy(ackNod = 0.4f, ackGlow = 0.9f, acks = 0f)))
+            assertTrue("${a.id}: acknowledged with the switch off", sw < 1e-5f)
+        }
+    }
+
+    @Test
+    fun `in a focus session it looks about far less, and stretches at the end`() {
+        for (a in sleepers) {
+            fun looksIn(o: CritterPose.Opts): Int {
+                var n = 0
+                var last = u(a, FaceState.IDLE, 99f, 1000f, o).getValue("uLook")
+                for (f in 1 until 6000) {
+                    val now = u(a, FaceState.IDLE, 99f, 1000f + f / 10f, o).getValue("uLook")
+                    if (abs(now[0] - last[0]) + abs(now[1] - last[1]) > 0.15f) n++
+                    last = now
+                }
+                return n
+            }
+            val normal = looksIn(opts())
+            val focus = looksIn(opts().copy(focus = 1f))
+            assertTrue("${a.id}: $focus looks in focus against $normal", focus * 2 < normal)
+            val stretch = gap(u(a, FaceState.IDLE, 20f, 30f, opts()), u(a, FaceState.IDLE, 20f, 30f, opts().copy(focusEnd = 1.2f)))
+            assertTrue("${a.id}: no stretch at the end of a session ($stretch)", stretch > 0.02f)
+            val sw = gap(u(a, FaceState.IDLE, 20f, 30f, opts()), u(a, FaceState.IDLE, 20f, 30f, opts().copy(focus = 1f, focusEnd = 1.2f, focusBuddy = 0f)))
+            assertTrue("${a.id}: focus buddy with the switch off", sw < 1e-5f)
+        }
+    }
+
+    @Test
+    fun `stroked, it leans toward the hand and its eyes soften`() {
+        for (a in sleepers) {
+            val left = u(a, FaceState.IDLE, 20f, 30f, opts().copy(pet = 1f, petX = -1f))
+            val right = u(a, FaceState.IDLE, 20f, 30f, opts().copy(pet = 1f, petX = 1f))
+            assertTrue("${a.id}: leans the same way whichever side the hand is", gap(left, right) > 0.02f)
+            // (At a moment its eyes are open - not mid-blink.)
+            val t = (0 until 200).map { 30f + it * 0.05f }.first { u(a, FaceState.IDLE, 20f, it, opts()).getValue("uFace")[0] > 0.9f }
+            val eyes = u(a, FaceState.IDLE, 20f, t, opts().copy(pet = 1f)).getValue("uFace")[0]
+            val open = u(a, FaceState.IDLE, 20f, t, opts()).getValue("uFace")[0]
+            assertTrue("${a.id}: eyes $eyes against $open", eyes < open - 0.2f)
+            val sw = gap(u(a, FaceState.IDLE, 20f, 30f, opts()), u(a, FaceState.IDLE, 20f, 30f, opts().copy(pet = 1f, petX = 1f, petting = 0f)))
+            assertTrue("${a.id}: petted with the switch off", sw < 1e-5f)
+        }
+    }
+
+    @Test
+    fun `the cute moments take turns, only after it has rested, and the switch stops them`() {
+        val salts = mapOf("redpanda" to (76 to floatArrayOf(7f, 5f)), "pygmyowl" to (156 to floatArrayOf(8.2f, 3f)),
+            "seaotter" to (236 to floatArrayOf(6.8f, 6.5f)), "monkey" to (121 to floatArrayOf(5.5f, 4.4f)))
+        for ((id, sl) in salts) {
+            val kinds = ArrayList<Int>()
+            var was = false
+            for (k in 0 until 4096 * 20) {
+                val c = CritterPose.cuteAt(k / 20f, 1e6f, sl.first, sl.second)
+                if (c[0] >= 0f && !was) kinds.add(c[0].toInt())
+                was = c[0] >= 0f
+            }
+            assertEquals("$id: one cute moment every 256 s", 16, kinds.size)
+            for (i in 1 until kinds.size) assertTrue("$id: the same cute moment twice running", kinds[i] != kinds[i - 1])
+        }
+        for (a in sleepers) {
+            val start = mapOf("redpanda" to 102.082f, "pygmyowl" to 173.461f, "seaotter" to 101.685f, "monkey" to 87.92f).getValue(a.id)
+            val t = start + 2.6f
+            val on = gap(u(a, FaceState.IDLE, 1e6f, t, opts()), u(a, FaceState.IDLE, 1e6f, t, opts().copy(cute = 0f)))
+            assertTrue("${a.id}: the cute moment did nothing ($on)", on > 0.02f)
+            val fresh = gap(u(a, FaceState.IDLE, 100f, t, opts()), u(a, FaceState.IDLE, 100f, t, opts().copy(cute = 0f)))
+            assertTrue("${a.id}: a cute moment before it had rested", fresh < 1e-5f)
+        }
+    }
+
+    @Test
+    fun `goodbye takes it out of view and hello brings it back`() {
+        for (a in sleepers) {
+            val rest = u(a, FaceState.IDLE, 20f, 30f, opts())
+            val gone = u(a, FaceState.IDLE, 20f, 30f, opts().copy(goodbye = 1f))
+            val coming = u(a, FaceState.IDLE, 20f, 30f, opts().copy(hello = 0f))
+            // The whole animal moves well over a picture's height away (1 is
+            // half the picture): the monkey on its vine, the others' bodies.
+            val key = if (a.id == "monkey") "uVine" else "uBodyPos"
+            val i = if (a.id == "monkey") 0 else 1
+            for (w in listOf(gone, coming)) assertTrue("${a.id}: only ${abs(w.getValue(key)[i] - rest.getValue(key)[i])} away",
+                abs(w.getValue(key)[i] - rest.getValue(key)[i]) > (if (a.id == "seaotter") 0.5f else 1.5f))
+            assertEquals("${a.id}: hello done is its own pose", 0f, gap(rest, u(a, FaceState.IDLE, 20f, 30f, opts().copy(hello = 1f))), 0f)
+            // Under calm the pose plays none of it: the host cross-fades.
+            assertTrue("${a.id}: moved under calm", gap(u(a, FaceState.IDLE, 20f, 30f, opts(calm = 1f)),
+                u(a, FaceState.IDLE, 20f, 30f, opts(calm = 1f).copy(goodbye = 0.7f))) < 1e-5f)
+        }
+        assertEquals(1f, CritterPose.switchAlpha(opts().copy(goodbye = 0.7f)), 0f)
+        assertEquals(0.3f, CritterPose.switchAlpha(opts(calm = 1f).copy(goodbye = 0.7f)), 1e-5f)
+        assertEquals(0.25f, CritterPose.switchAlpha(opts(still = 1f).copy(hello = 0.25f)), 1e-5f)
+    }
+
+    @Test
+    fun `an arrival reacts a little, then is still - never the same reaction twice running`() {
+        for (a in sleepers) for (s in listOf(FaceState.APPROVAL, FaceState.ERROR)) {
+            val h = CritterPose.Hist(prevAmp = 0f)
+            val o = opts().copy(variety = 1f)
+            val early = (1..12).maxOf { f -> gap(u(a, s, f * 0.1f, 40f + f * 0.1f, opts(), FaceState.IDLE, h), u(a, s, f * 0.1f, 40f + f * 0.1f, o, FaceState.IDLE, h)) }
+            val body = (1..12).maxOf { f -> bodyGap(u(a, s, f * 0.1f, 40f + f * 0.1f, opts(), FaceState.IDLE, h), u(a, s, f * 0.1f, 40f + f * 0.1f, o, FaceState.IDLE, h)) }
+            assertTrue("${a.id} $s: no reaction ($early)", early > 0.005f)
+            assertTrue("${a.id} $s: too big a reaction ($body)", body < 0.1f)
+            for (f in 0 until 10) {
+                val x = 1.35f + f * 0.3f
+                assertEquals("${a.id} $s: still reacting at $x", 0f,
+                    gap(u(a, s, x, 40f + x, opts(), FaceState.IDLE, h), u(a, s, x, 40f + x, o, FaceState.IDLE, h)), 1e-6f)
+            }
+        }
+        // Back to back (waiting on you, idle a few seconds, waiting on you again): never the same one.
+        for (s in listOf(FaceState.APPROVAL, FaceState.ERROR)) for (k in 0 until 400) {
+            val t = 20f + k * 1.37f
+            val back = listOf(CritterPose.Change(FaceState.IDLE, 3f, 0f), CritterPose.Change(s, 2f, 0f), CritterPose.Change(FaceState.IDLE, 9f, 0f))
+            val now = CritterPose.arriveKind(s, back, 0, 0.2f, t, 255)
+            val before = CritterPose.arriveKind(s, back, 2, 2f, t - 0.2f - 3f, 255)
+            assertTrue("$s at $t: reaction $now twice running", now != before)
+        }
+    }
+
+    /** The largest change of speed in one frame at 240 a second, over a run of the host's opts and states. */
+    private fun worstRun(a: Sleeper, secs: Float, t0: Float, since0: Float, plan: (Float) -> Pair<FaceState, CritterPose.Opts>): Float {
+        val dt = 1f / 240f
+        val frames = ArrayList<Map<String, FloatArray>>()
+        var worst = 0f
+        for (k in 0 until (secs * 240).toInt()) {
+            val x = k * dt
+            val (s, o) = plan(x)
+            val now = u(a, s, since0 + x, t0 + x, o)
+            for ((name, v) in now) for (i in v.indices) assertTrue("${a.id}: $name[$i] is not a number at $x", v[i].isFinite())
+            frames.add(now)
+            if (frames.size >= 3) {
+                val (p2, p1, p0) = Triple(frames[0], frames[1], frames[2])
+                for ((name, v) in p0) for (i in v.indices) {
+                    if (!glides(name, i)) continue
+                    val dv = abs((v[i] - p1.getValue(name)[i]) - (p1.getValue(name)[i] - p2.getValue(name)[i])) / dt
+                    worst = maxOf(worst, dv)
+                }
+                frames.removeAt(0)
+            }
+        }
+        return worst
+    }
+
+    @Test
+    fun `the new behaviours never change speed suddenly, and are always numbers`() {
+        fun eased(x: Float, a: Float, b: Float) = CritterPose.ease((x - a) / 0.8f) * (1f - CritterPose.ease((x - b) / 0.8f))
+        val runs = listOf<Triple<String, Float, (Float) -> Pair<FaceState, CritterPose.Opts>>>(
+            Triple("nods", 8f) { x -> FaceState.LISTENING to opts().copy(heard = if (x < 1f) CritterPose.NEVER else (x - 1f) % 3f, heardN = ((x - 1f) / 3f).toInt()) },
+            Triple("phrases", 9f) { x -> FaceState.SPEAKING to opts().copy(phraseEnd = if (x < 0.5f) CritterPose.NEVER else (x - 0.5f) % 2.2f, phraseN = ((x - 0.5f) / 2.2f).toInt() + 1) },
+            Triple("focus", 10f) { x -> FaceState.IDLE to opts().copy(focus = eased(x, 0.5f, 6f), focusEnd = if (x < 6.8f) CritterPose.NEVER else x - 6.8f) },
+            Triple("acks", 4f) { x -> FaceState.IDLE to opts().copy(ackNod = if (x < 0.5f) CritterPose.NEVER else x - 0.5f, ackGlow = if (x < 1.5f) CritterPose.NEVER else x - 1.5f) },
+            Triple("pet", 6f) { x -> FaceState.IDLE to opts().copy(pet = eased(x, 0.5f, 4f), petX = 0.5f, petDir = kotlin.math.sin(x * 2f)) },
+            Triple("goodbye", 1.5f) { x -> FaceState.IDLE to opts().copy(goodbye = CritterPose.clamp(x - 0.2f, 0f, 1f)) },
+            Triple("hello", 1.5f) { x -> FaceState.IDLE to opts().copy(hello = CritterPose.clamp(x - 0.2f, 0f, 1f)) },
+            Triple("variety", 16f) { x -> (if (x < 8f) FaceState.LISTENING else FaceState.THINKING) to opts().copy(variety = 1f) },
+        )
+        for (a in sleepers) for ((name, secs, plan) in runs) {
+            // (The variety run crosses from listening to thinking without the
+            // host's history: that jump is the settling's to smooth, not this.)
+            val w = if (name == "variety") maxOf(worstRun(a, 7.9f, 2000f, 20f, plan), worstRun(a, 7.9f, 2008.1f, 20f) { plan(it + 8.1f) })
+                    else worstRun(a, secs, 60f, 20f, plan)
+            // A goodbye and a hello move the whole animal out of view in about
+            // half a second - quickly, but eased: still no step.
+            val limit = if (name == "goodbye" || name == "hello") 0.6f else 0.25f
+            assertTrue("${a.id} $name: speed changed by $w a second in one frame", w < limit)
+        }
+        // The cute moments, from end to end.
+        val starts = mapOf("redpanda" to listOf(102.082f, 408.591f), "pygmyowl" to listOf(173.461f, 313.491f),
+            "seaotter" to listOf(101.685f, 403.501f), "monkey" to listOf(87.92f, 426.323f))
+        for (a in sleepers) for (st in starts.getValue(a.id)) {
+            val w = worstRun(a, 9f, st - 0.5f, 1e6f) { FaceState.IDLE to opts() }
+            assertTrue("${a.id} cute at $st: speed changed by $w a second in one frame", w < 0.25f)
         }
     }
 }

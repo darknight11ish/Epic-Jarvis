@@ -24,6 +24,24 @@ import com.jarvis.client.face.CritterPose.shift
 import com.jarvis.client.face.CritterPose.smooth
 import com.jarvis.client.face.CritterPose.toward
 import com.jarvis.client.face.CritterPose.wave
+import com.jarvis.client.face.CritterPose.NONE
+import com.jarvis.client.face.CritterPose.ZERO2
+import com.jarvis.client.face.CritterPose.ackGlowOf
+import com.jarvis.client.face.CritterPose.ackNodOf
+import com.jarvis.client.face.CritterPose.arrivalOf
+import com.jarvis.client.face.CritterPose.awake
+import com.jarvis.client.face.CritterPose.cuteAt
+import com.jarvis.client.face.CritterPose.cuteBusy
+import com.jarvis.client.face.CritterPose.cuteOf
+import com.jarvis.client.face.CritterPose.cuteQuiet
+import com.jarvis.client.face.CritterPose.extras
+import com.jarvis.client.face.CritterPose.focusEndOf
+import com.jarvis.client.face.CritterPose.focusOf
+import com.jarvis.client.face.CritterPose.gaze
+import com.jarvis.client.face.CritterPose.listenNod
+import com.jarvis.client.face.CritterPose.petOf
+import com.jarvis.client.face.CritterPose.phraseBeat
+import com.jarvis.client.face.CritterPose.variant
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -84,14 +102,24 @@ object OwlPose {
     private const val S_LEAN = 112
     private const val S_BEAT = 120
     private const val S_BLINK = 128
+    // ...and for the new behaviours (critter-pose.js's note).
+    private const val S_LISTEN = 136
+    private const val S_THINK = 139
+    private const val S_FOCUS = 142
+    private const val S_NOD = 154
+    private const val S_PHRASE = 155
+    private const val S_CUTE = 156
+    /** How long each cute moment lasts: turning its head right round, a hop. */
+    private val CUTE_LEN = floatArrayOf(8.2f, 3.0f)
 
     // Its idle happenings, and how often each comes up (the desktop's EVENTS):
     // ruffle, wing left, wing right, tilt left, tilt right, slow blink.
     private val EVENTS = floatArrayOf(14f, 12f, 12f, 20f, 20f, 22f)
 
     /** Whether one of its idle happenings is playing at clock [t] - the desktop's busy(state, t). */
-    fun busy(state: FaceState, t: Float): Boolean =
-        state == FaceState.IDLE && CritterPose.playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS))
+    fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
+        state == FaceState.IDLE && (CritterPose.playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)) ||
+            cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
     // Thinking: the orb circles the head, riding high in front, and comes up
     // the right-hand side first - the desktop's orbit() and its note.
@@ -120,8 +148,16 @@ object OwlPose {
         return floatArrayOf(f, 0.55f + (y - 0.55f) * rise, r, ca, sa)
     }
 
-    fun stateTargets(state: FaceState, t: Float, amp: Float, look: Look, since: Float = 1e9f, o: Opts = Opts()): FloatArray {
-        val hap = o.hap
+    fun stateTargets(state: FaceState, t: Float, amp: Float, look: Look, since: Float = 1e9f, o0: Opts = Opts()): FloatArray {
+        val o = o0.norm(t)
+        // Idle: a focus session, and a cute moment while it plays, take the happenings away.
+        val cu = if (state == FaceState.IDLE) cuteAt(t, since, S_CUTE, CUTE_LEN) else NONE
+        val cw = if (cu[0] >= 0f) cuteOf(o) else 0f
+        val fw = if (state == FaceState.IDLE) focusOf(o) else 0f
+        // (and so do the stretch as a focus session ends, and being stroked)
+        val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
+        val pw = if (awake(state)) petOf(o) else 0f
+        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw)
         val sw = o.sway
         val play = o.play
         val p = FloatArray(N)
@@ -137,6 +173,8 @@ object OwlPose {
         var turnBlink = 0f
         var eyeK = 1f
         var deepBreath = 0f
+        var ackK = 1f
+        var hop = 0f
 
         when (state) {
             FaceState.LISTENING -> {
@@ -152,6 +190,14 @@ object OwlPose {
                 p[LOOK_X] = g[0] - 0.7f * g[2]; p[LOOK_Y] = 0.1f + g[1]
                 p[ORB_A] = ORB_LISTEN[0]; p[ORB_Y] = ORB_LISTEN[1]; p[ORB_D] = ORB_LISTEN[2]
                 p[ORB_GLOW] = 0.55f + 0.5f * amp
+                // Now and then (variety): the other tilt, leaning closer, a bob of the head.
+                val v = variant(t, o, S_LISTEN, 0.4f)
+                if (v[0] == 0f) p[HEAD_ROLL] -= 0.51f * play * v[1]
+                else if (v[0] == 1f) { p[LEAN] += 0.03f * v[1]; p[FLUFF] -= 0.015f * v[1] }
+                else if (v[0] == 2f) p[NECK_DROP] += 0.015f * v[1] * wave(t, 1024f, 0f)
+                // A small nod in your pauses (a fluff for the ear flick).
+                val nd = listenNod(t, o, S_NOD)
+                p[HEAD_PITCH] += nd[0]; p[HEAD_ROLL] += play * nd[1]; eyeK *= 1f - nd[2]; p[FLUFF] += 0.03f * nd[3]
                 turnBlink = g[4]
             }
             FaceState.THINKING -> {
@@ -166,13 +212,20 @@ object OwlPose {
                 p[LOOK_X] = (0.35f + 0.55f * sw) * ca; p[LOOK_Y] = 0.45f - 0.1f * sw
                 p[BROW] = 0.1f
                 p[ORB_GLOW] = 0.95f + 0.2f * wave(t, 424f, 0f)
+                // Now and then (variety): the other tilt, eyes narrowing, a bob of the head.
+                val v = variant(t, o, S_THINK, 0.5f)
+                if (v[0] == 0f) p[HEAD_ROLL] -= 0.15f * play * v[1]
+                else if (v[0] == 1f) { eyeK *= 1f - 0.25f * v[1]; p[LEAN] += 0.025f * v[1] }
+                else if (v[0] == 2f) p[NECK_DROP] += 0.015f * v[1] * wave(t, 1024f, 0f)
             }
             FaceState.SPEAKING -> {
                 // The beak follows the mouth track (CritterPose.mouthOf); gestures in
                 // phrases, never on top of a look; the eyes lead each look.
                 val g = looks(t, S_GAZE, 1.8f, 6f, 0.65f, 0.5f, 0.18f, 0f, 0.04f, 0.6f, o)
-                val b = beat(t, S_BEAT, S_GAZE, 1.8f, 6f, 0.65f)
+                // (With the host's phrase ends, the gestures land on them instead.)
+                val b = if (o.phraseN >= 0) phraseBeat(t, o, S_PHRASE, S_GAZE, 1.8f, 6f, 0.65f) else beat(t, S_BEAT, S_GAZE, 1.8f, 6f, 0.65f)
                 val x = b[1]
+                ackK = if (b[0] >= 0f) 1f - bump(clamp(x / 1.6f, 0f, 1f)) else 1f
                 p[SPEAK] = 1f
                 p[LEAN] = 0.04f
                 p[HEAD_PITCH] = 0.03f
@@ -204,6 +257,10 @@ object OwlPose {
                 p[LOOK_X] = g[0]; p[LOOK_Y] = g[1]
                 p[ORB_GLOW] = 0.9f
                 blinkSlow = 1.6f
+                // The small reaction as it arrives (variety), then still.
+                val ar = arrivalOf(state, o, since)
+                p[HEAD_PITCH] += ar[0]; p[HEAD_ROLL] += play * ar[1]; p[LEAN] += ar[2]; eyeK *= 1f - ar[3]
+                p[FLUFF] -= 0.03f * ar[4]
             }
             FaceState.STANDBY -> {
                 val e = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.35f, 1)
@@ -229,6 +286,9 @@ object OwlPose {
                 p[FLUFF] = 1.03f
                 p[ORB_GLOW] = 0.35f
                 blinkSlow = 1.6f
+                val ar = arrivalOf(state, o, since)
+                p[HEAD_PITCH] += ar[0]; p[HEAD_ROLL] += play * ar[1]; p[LEAN] += ar[2]; eyeK *= 1f - ar[3]
+                p[FLUFF] -= 0.03f * ar[4]
             }
             FaceState.BANKED -> {
                 val e = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.55f, 1)
@@ -279,12 +339,62 @@ object OwlPose {
                     eyeK = 1f - 0.85f * envAHR(x, 0.45f, 0.35f, 0.6f) * (1f - o.quiet)
                 }
                 turnBlink = g[4]
+                if (fw > 0f) {
+                    // Working beside you: it half turns to watch the work, far fewer looks.
+                    val f = gaze(t, S_FOCUS, 4f, 12f, 0.75f, 0.3f, 0.12f, 0f, 0.02f, 1.6f)
+                    p[HEAD_YAW] += (0.35f + 0.4f * f[2] - p[HEAD_YAW]) * fw
+                    p[HEAD_PITCH] += (-0.12f + 0.12f * f[3] - p[HEAD_PITCH]) * fw
+                    p[LOOK_X] += (f[0] - 0.8f * f[2] - p[LOOK_X]) * fw
+                    p[LOOK_Y] += (-0.2f + f[1] - 0.8f * f[3] - p[LOOK_Y]) * fw
+                    turnBlink *= 1f - fw
+                }
+                // The small stretch as a focus session ends: a ruffle, wings eased out.
+                if (fe > 0f) {
+                    p[FLUFF] += 0.06f * fe; p[NECK_DROP] += 0.012f * fe; p[HEAD_PITCH] -= 0.05f * fe
+                    p[WING_L] += 0.25f * fe; p[WING_R] += 0.25f * fe; eyeK *= 1f - 0.3f * fe
+                    deepBreath = max(deepBreath, fe)
+                }
+                if (cw > 0f && cu[0] == 0f) {
+                    // Cute moment: it turns its head right round (about 140 degrees), and back.
+                    val s = if (CritterPose.hash01((kotlin.math.floor(cu[2]).toInt() and 4095) * 256 + S_CUTE + 1) < 0.5f) -1f else 1f
+                    val x = cu[1]
+                    val e = cw * (ease((x - 0.3f) / 3.6f) - ease((x - 4.5f) / 3.6f))
+                    p[HEAD_YAW] += s * 2.4f * e
+                    val hold = cw * envAHR(x, 0.8f, 6.6f, 0.8f)
+                    p[LOOK_X] += (0f - p[LOOK_X]) * hold; p[LOOK_Y] += (0f - p[LOOK_Y]) * hold
+                    p[HEAD_PITCH] += (0.05f - p[HEAD_PITCH]) * hold
+                    turnBlink *= 1f - hold
+                } else if (cw > 0f && cu[0] == 1f) {
+                    // Cute moment: a little hop on its branch, and a look at you.
+                    val x = cu[1]
+                    hop = cw * (0.055f * bump((x - 0.55f) / 0.7f) - 0.012f * bump((x - 0.15f) / 0.5f) - 0.01f * bump((x - 1.1f) / 0.5f))
+                    p[WING_L] += 0.3f * cw * bump((x - 0.5f) / 0.8f); p[WING_R] += 0.3f * cw * bump((x - 0.5f) / 0.8f)
+                    p[FLUFF] += cw * (0.04f * bump((x - 1.05f) / 0.7f) - 0.02f * bump((x - 0.15f) / 0.5f))
+                    p[NECK_DROP] += cw * 0.012f * bump((x - 0.15f) / 0.5f)
+                    val at = cw * envAHR(x - 1.4f, 0.3f, 0.8f, 0.5f)
+                    p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
+                    p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
+                }
             }
         }
 
+        // Stroked: it fluffs up and leans its head into your hand, eyes closing.
+        if (pw > 0f) {
+            p[HEAD_ROLL] += pw * play * (0.12f * o.petX + 0.03f * o.petDir)
+            p[HEAD_PITCH] += 0.03f * pw
+            p[NECK_DROP] -= 0.01f * pw
+            p[FLUFF] += 0.05f * pw
+            eyeK *= 1f - 0.6f * pw
+        }
+        // A fact saved: one small nod, a flick of its feathers. A long answer ready: the orb swells once.
+        val an = if (awake(state)) ackNodOf(t, o) else ZERO2
+        p[HEAD_PITCH] += ackK * an[0]; p[FLUFF] += 0.02f * ackK * an[1]
+        val gl = if (awake(state)) ackGlowOf(t, o) else 0f
+        p[ORB_GLOW] += 0.4f * gl; p[ORB_R] *= 1f + 0.2f * gl
+
         val b = wave(t, breathK, 0f) * (1f + 0.6f * deepBreath)
         p[BREATH] = 1f + 0.016f * breathDepth * b
-        p[BOB] = 0.006f * breathDepth * b
+        p[BOB] = 0.006f * breathDepth * b + hop
 
         val w = if (state == FaceState.STANDBY) 0f else clamp(look.w, 0f, 1f)
         if (w > 0f) {
@@ -295,12 +405,47 @@ object OwlPose {
             p[HEAD_YAW] += o.head * 0.3f * lx * w
             p[HEAD_PITCH] += o.head * 0.25f * ly * w
         }
+        farewell(p, state, o)
 
         val q = 1f - o.quiet
         val k = eyeK * (1f - q * max(if (blinks) blinkAt(t, S_BLINK, blinkSlow, 3f, 12f) else 0f, turnBlink))
         p[EYE_L] *= k
         p[EYE_R] *= k
         return p
+    }
+
+    /**
+     * Hello and goodbye - the desktop's owl farewell(): a small bow, then it
+     * flies up out of the picture (its branch stays); hello, it flutters down
+     * onto the branch with a fluff and looks at you.
+     */
+    private const val RISE = 2.2f
+    private fun farewell(p: FloatArray, state: FaceState, o: Opts) {
+        val g = o.goodbye
+        val h = o.hello
+        if (g <= 0f && h >= 1f) return
+        val e = extras(o)
+        val aw = if (awake(state) || state == FaceState.APPROVAL || state == FaceState.ERROR) 1f else 0f
+        if (g > 0f) {
+            val a = e * aw * bump(clamp(g / 0.6f, 0f, 1f))
+            val at = e * aw * ease(g / 0.2f)
+            p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
+            p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
+            p[HEAD_PITCH] -= 0.25f * a; p[NECK_DROP] += 0.02f * a; p[LEAN] += 0.04f * a
+            val up = e * ease((g - 0.35f) / 0.65f)
+            p[WING_L] += 0.9f * e * ease((g - 0.3f) / 0.3f); p[WING_R] += 0.9f * e * ease((g - 0.3f) / 0.3f)
+            p[BOB] += RISE * up
+        }
+        if (h < 1f) {
+            p[BOB] += e * RISE * (1f - ease(h / 0.5f))
+            p[BOB] -= e * 0.02f * bump((h - 0.42f) / 0.3f)
+            val wg = e * 0.9f * (1f - ease((h - 0.4f) / 0.3f))
+            p[WING_L] += wg; p[WING_R] += wg
+            p[FLUFF] += e * 0.05f * bump((h - 0.42f) / 0.35f)
+            val at = e * aw * ease((h - 0.3f) / 0.25f) * (1f - ease((h - 0.8f) / 0.2f))
+            p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
+            p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
+        }
     }
 
     /** The owl's waking up and nodding off - the desktop's wakeSleep in critter-owl.js, and its notes. */

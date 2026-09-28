@@ -258,6 +258,11 @@ def golden_cases(species):
         # Where the sleeping Zs rise from, with the host's own camera turn and zoom.
         cases.append({"species": sp, "state": "standby", "prev": "standby", "since": 9.0, "t": 33.3, "amp": 0.0,
                       "look": {}, "view": {"yaw": 0.4, "pitch": -0.15, "zoom": 1.3}})
+    # The new behaviours (critter-pose.js "New behaviours"): each input the
+    # host may pass, in the states it acts in, fully on and part way, under
+    # the options that switch it off or make it smaller.
+    for sp in species:
+        cases.extend(behaviour_cases(sp))
     # The owl's orb kept clear of its head while the pointer turns the head
     # toward it (the push in critter-owl.js's clearOfHead is working here),
     # and coming up its side into the thinking circle.
@@ -268,6 +273,89 @@ def golden_cases(species):
         for since in (0.1, 0.5, 1.5, 3.0):
             cases.append({"species": "pygmyowl", "state": "thinking", "prev": "idle", "since": since,
                           "t": 44.0 + since, "amp": 0.0, "look": {}, "hist": {"prevAmp": 0.0}})
+    return cases
+
+
+# Where each animal's two cute idle moments start (clock, seconds): found by
+# scanning the pose code, like MOMENTS - if the timings change these stop
+# landing on a moment, so find new ones the same way (cuteAt, since 1e6).
+CUTE = {"redpanda": (102.082, 408.591), "pygmyowl": (173.461, 313.491),
+        "seaotter": (101.685, 403.501), "monkey": (87.92, 426.323)}
+
+
+def behaviour_cases(sp):
+    """The new behaviours' moments for one animal (see golden_cases)."""
+    cases = []
+    base = {"species": sp, "amp": 0.3, "look": {}}
+
+    def add(state, t, opts, since=20.0, prev=None, hist=None, amp=None):
+        c = dict(base, state=state, prev=prev or state, since=since, t=t, opts=opts)
+        if hist is not None:
+            c["hist"] = hist
+        if amp is not None:
+            c["amp"] = amp
+        cases.append(c)
+
+    # Listening nods in the owner's pauses, all three kinds, and under calm
+    # (smaller) and serious (none).
+    for n, ago in enumerate((0.35, 0.4, 0.5, 0.9)):
+        add("listening", 10.4 + n, {"heard": ago, "heardN": n})
+    add("listening", 10.4, {"heard": 0.4, "heardN": 0, "calm": 1})
+    add("listening", 10.4, {"heard": 0.4, "heardN": 0, "serious": 1})
+    # Gestures at Jarvis's phrase ends (in place of the random ones), and the
+    # host tracking phrases before the first one ends (no gesture).
+    for n, t in enumerate((20.0, 31.3, 44.6, 57.1, 63.9)):
+        add("speaking", t, {"phraseEnd": 0.3 + 0.2 * n, "phraseN": n + 1})
+    add("speaking", 20.0, {"phraseN": 0})
+    # A fact saved (a nod), a long answer ready (the orb swells), in idle and
+    # while speaking; none while waiting on you or asleep.
+    for st in ("idle", "speaking", "approval", "standby"):
+        add(st, 30.0, {"ackNod": 0.4, "ackGlow": 0.9})
+    # A focus session, fully and part way, and the stretch as it ends.
+    add("idle", 30.0, {"focus": 1})
+    add("idle", 77.3, {"focus": 0.5})
+    add("idle", 30.0, {"focusEnd": 1.2})
+    # Petting, in idle and listening, and switched off by still.
+    add("idle", 30.0, {"pet": 1, "petX": 0.5, "petDir": 1})
+    add("listening", 30.0, {"pet": 0.6, "petX": -0.8, "petDir": -0.5})
+    add("idle", 30.0, {"pet": 1, "petX": 0.5, "still": 1})
+    # Each owner's switch (jarvis_animal.SWITCHES) off, and part way.
+    add("listening", 10.4, {"heard": 0.4, "heardN": 0, "nods": 0})
+    add("idle", 30.0, {"ackNod": 0.4, "ackGlow": 0.9, "acks": 0.5})
+    add("idle", 30.0, {"focus": 1, "focus_buddy": 0})
+    add("idle", 30.0, {"focusEnd": 1.2, "focus_buddy": 0})
+    add("idle", 30.0, {"pet": 1, "petX": 0.5, "petting": 0})
+    # Goodbye and hello, part way; a bow (not a wave) while waiting on you;
+    # nothing but the move out of view asleep; only a cross-fade under calm.
+    for g in (0.3, 0.7):
+        add("idle", 30.0, {"goodbye": g})
+    for h in (0.2, 0.6):
+        add("idle", 30.0, {"hello": h})
+    add("approval", 30.0, {"goodbye": 0.3})
+    add("standby", 30.0, {"goodbye": 0.5}, since=9.0)
+    add("idle", 30.0, {"goodbye": 0.5, "calm": 1})
+    # Variety: listening's and thinking's variants now and then, and the
+    # small reaction as waiting on you or something wrong arrives - the
+    # second arrival in a row never repeating the first's.
+    for i in range(8):
+        add("listening", 2000.3 + 7.7 * i, {"variety": 1})
+        add("thinking", 2000.3 + 7.7 * i, {"variety": 1})
+    for since in (0.3, 0.6):
+        add("approval", 40.0 + since, {"variety": 1}, since=since, prev="idle", hist={"prevAmp": 0.0}, amp=0.28)
+        add("error", 50.0 + since, {"variety": 1}, since=since, prev="idle", hist={"prevAmp": 0.0}, amp=0.0)
+        add("approval", 60.0 + since, {"variety": 1}, since=since, prev="idle", amp=0.28,
+            hist={"past": [{"state": "idle", "gap": 3.0, "amp": 0.0}, {"state": "approval", "gap": 2.0, "amp": 0.28},
+                           {"state": "idle", "gap": 9.0, "amp": 0.0}]})
+    # The two cute idle moments, part way through each (idle long enough),
+    # and switched off by the owner's switch, smaller under calm, and none
+    # when it has not been idle long.
+    for start in CUTE[sp]:
+        for x in (1.5, 2.6, 3.8):
+            add("idle", start + x, {}, since=1e6, amp=0.0)
+    add("idle", CUTE[sp][0] + 2.6, {"cute_moments": 0}, since=1e6, amp=0.0)
+    add("idle", CUTE[sp][1] + 2.6, {"cute_moments": 0.5}, since=1e6, amp=0.0)
+    add("idle", CUTE[sp][0] + 2.6, {"calm": 1}, since=1e6, amp=0.0)
+    add("idle", CUTE[sp][0] + 2.6, {}, since=100.0, amp=0.0)
     return cases
 
 

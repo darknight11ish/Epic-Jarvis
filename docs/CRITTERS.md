@@ -382,10 +382,9 @@ never change speed suddenly (stepped at 240 frames a second).
 **The voice's loudness does not move the body.** It rises and falls with
 every syllable, about four times a second, and a head that followed it
 would bob like a toy. It still brightens the orb (and a little, the
-eyebrows and the panda's listening ears). Following the real phrases of
-the voice - nodding as a sentence lands - would need each app to hand the
-pose a slower "phrase loudness" as well; that is written down as a later
-step.
+eyebrows and the panda's listening ears). The gestures can now follow the
+real phrases instead - landing as a sentence ends - when the host hands the
+pose its phrase ends (`phraseEnd`, see "New behaviours" below).
 
 The motion is built on other people's published work, all under the MIT
 licence and credited in THIRD-PARTY-NOTICES.txt: Daniel Holden's
@@ -395,6 +394,170 @@ pauses between the eyes' small jumps) and pixiv's ChatVRM (how much of a
 look the head takes). Everything is still worked out fresh each frame from
 the clock - "random" means a hash of the time - so both apps draw the same
 animal.
+
+#### New behaviours (the owner, 2026-09-28)
+
+The owner chose all of these after the ideas research: listening nods,
+gestures on Jarvis's sentence ends, a focus buddy, small acknowledgements,
+petting, two cute idle moments per animal, a hello and a goodbye when the
+face is switched, and more variety in every kind of move. They are all in
+the pose code (`critter-pose.js` and each animal's file on the PC, the
+Kotlin copies on the phone), held equal by the fixture like everything
+else. **None of them is switched on by a host yet** - each app has to pass
+the new inputs below; until it does, the animals move exactly as before.
+
+The rules each one keeps:
+
+- **Still and serious switch every one off; calm makes them smaller**
+  (to 40 percent). Each is eased in and out, so nothing snaps.
+- **Nothing cute while waiting on you or after something went wrong** - only
+  a small reaction as either arrives (below), then attentive and still.
+  Nothing while asleep or dozing.
+- **The mouth is never touched.** It follows Jarvis's real voice only.
+- **Within the comfort limits.** Eased (no sudden change of speed, checked
+  at 240 frames a second), nothing but a blink faster than three times a
+  second, a talking nod about 3 degrees, at most one gesture every 2
+  seconds, at most one listening nod every 3 seconds.
+
+What each animal does:
+
+| | Red panda | Pygmy owl | Sea otter | Monkey |
+|---|---|---|---|---|
+| **Listening nods** (in your pauses; three kinds, never the same twice running) | a small nod; a smaller nod with a tilt and an ear flick; two little nods with a slow blink ("mm-hm") | the same, its feathers fluffing for the ear flick | the same, its head end lifting a touch | the same, its ears flicking forward |
+| **Gestures on sentence ends** | its existing nod, paw lift and tilt, now landing where a phrase ends | its nod, wing lift and tilt | its nod, paws lifting and tilt | its nod, banana lift and tilt |
+| **Focus buddy** (a focus session) | gazes into the orb in its lap, head a little down | half turns to watch the work | looks at the pebble on its chest | hangs steadier and looks at its banana |
+| ...and as the session ends | its idle stretch | a ruffle, wings eased out | a stretch in the water | its waking stretch (legs out) |
+| **A fact saved** | one small nod, ears flicking | a nod, feathers flicking | a nod | a nod, ears forward |
+| **A long answer ready** | the orb swells and brightens once | the same | the pebble glows up once | the banana's glow swells once |
+| **Petting** (leans toward the hand, eyes soft) | head tips into the hand, ears back happily | fluffs up, eyes closing | rolls a little toward the hand, a happy kick | swings a little toward the hand |
+| **Cute moment A** | hugs its tail, curled across its front, eyes shut, nuzzling | turns its head right round (about 140 degrees, slowly) and back | rolls right over in the water, pebble held, and bobs up | sniffs its banana under its nose, eyes shut happily |
+| **Cute moment B** | tosses its orb up a little and catches it, twice | a little hop on its branch, wings eased out, a look at you | juggles its pebble from paw to paw, eyes following | twirls its banana round once and gives you a pleased look |
+| **Goodbye** | a little wave, then ducks down out of view | a small bow, then flies up out of view (the branch stays) | a little wave, then dives under the water | a little banana wave, then its vine draws it up out of view |
+| **Hello** | comes back up with a small bounce and looks at you | flutters down onto the branch, lands with a fluff, looks at you | pops up with a splash of rings, looks at you | drops in on its vine with a springy bounce, looks at you |
+| **Listening variety** | the other tilt, leaning in closer, an ear turned | the other tilt, leaning closer, a head bob | the other tilt, head lifted closer, a small kick | the other tilt, leaning closer, an ear turned |
+| **Thinking variety** | turns the orb in its paws, peers into it, a thinking tilt | the other tilt, eyes narrowing, a head bob | rolls the pebble, looks up at the sky, holds the pebble nearer | looks up, turns its banana to look at it, a slow tilt |
+| **Arriving in "waiting on you"** | a small perk (ears up), a double blink with a lean in, or a small tilt of interest - then still | | | |
+| **Arriving in "something went wrong"** | a small start back with a blink, the head dipping (ears back), or one slow blink - then still | | | |
+
+(The two arrival rows are the same for every animal, told apart by its own
+ears or feathers. The existing idle happenings - five or six per animal -
+are already the "resting moments" variety.)
+
+Things to know, plainly:
+
+- **The monkey does not hang by its tail.** The ideas list suggested it, but
+  its tail can only wrap the vine while it sits on it (asleep); hanging by
+  the tail would need a new rig in the shader, which is at its size limit.
+  It twirls its banana instead.
+- **The otter's pebble is not balanced on its nose.** It was tried: seen
+  from the camera, which looks at its face, the pebble covered its face. It
+  juggles the pebble from paw to paw instead.
+- **A whole roll (the otter) or twirl (the monkey's banana) cannot be made
+  "smaller"** and still end where it began, so under calm those moments
+  keep only their smaller parts (the otter a small roll to one side and
+  back). If a setting changes part way through, what is left of the turn is
+  turned back the short way before the moment ends, so it never jumps.
+- **The goodbye moves the whole animal out of view in about half a second.**
+  That is faster than anything else it does - on purpose, it is leaving -
+  but eased, never a jump.
+
+##### What a host passes (the input API)
+
+Everything goes in the pose's last argument, `opts` (desktop:
+`species[id].pose(..., opts)`; phone: `Pose.pose(..., opts = CritterPose.Opts(...))`),
+beside `calm`, `serious` and `still`. **Every one is optional**: left out,
+nothing changes. A *weight* is 0..1 and the host eases it over about a
+second, as it already does for calm, serious and still. A *moment* is
+given as **seconds since it happened** (not a clock time), so the phone's
+clock restarting at a multiple of 4096 s never moves it; the pose turns it
+into the clock it happened at itself.
+
+| Input (desktop key; phone `Opts` field) | Kind | What it is |
+|---|---|---|
+| `nods`, `focus_buddy`, `acks`, `petting`, `cute_moments` (phone: `nods`, `focusBuddy`, `acks`, `petting`, `cute`) | weight, default 1 | the owner's switches, by their ids in `jarvis_animal.SWITCHES`. Pass the switch eased (1 on, 0 off). |
+| `variety` | weight, default 0 | the variants of listening and thinking and the arrival reactions. Not an owner option (the owner decided variety for every face): **hosts pass 1**. It is an input only so that a host that passes nothing draws exactly what it drew before. |
+| `heard`, `heardN` | moment + count | the latest pause in the owner's talking, and how many there have been (`heardN` -1 or left out: none). Worked out from the microphone level the host already has, with `CritterPose.pauseStep` (below). Listening only. |
+| `phraseEnd`, `phraseN` | moment + count | the latest end of one of Jarvis's phrases, and how many. **Passing `phraseN` (0 or more) switches the talking gestures over** from their own random timing to the phrase ends: with `phraseN` 0 and no phrase ended yet, no gesture. From `pauseStep` on Jarvis's voice level, or from the lip-sync track's phrase ends (Kokoro knows where each sentence and comma is). Start or stop passing it between answers, not in the middle of one, and only while the "nods" switch is on. |
+| `ackNod` | moment | a fact was just saved (`memory_saved`). **The host must not pass it while App lock or "Hide memory lists" is on** (the owner's rule). |
+| `ackGlow` | moment | a long answer is ready (`deep` done). |
+| `focus` | weight | a focus session is on (the `focus` event), eased. |
+| `focusEnd` | moment | the focus session ended. Pass it when Jarvis is idle again: the stretch plays only in idle. |
+| `pet`, `petX`, `petDir` | weight, -1..1, -1..1 | being stroked (ease in over about 0.3 s, out over about 1 s); where the hand is across the face (-1 the viewer's left, 1 the right) and which way it is stroking. Not while waiting on you, something wrong, asleep or dozing - the pose ignores it then. |
+| `goodbye`, `hello` | 0..1 progress | the face switch: the host plays the leaving face's `goodbye` from 0 to 1 over `GOODBYE_S` (1 s), swaps faces, then the new face's `hello` from 0 to 1 over `HELLO_S` (1 s). `hello` 0 is out of view; left out it counts as done (1); `goodbye` left out is 0. The same shape as the robot's. |
+
+Helpers for the host, in the same files:
+
+- **`CritterPose.pauseStep(rec, dt, level, quietMin, gapMin)`** (phone:
+  `CritterPose.pauseStep`, `PauseRec`): the pause finder. Keep one record
+  per voice (null to start), hand it back each frame with the seconds since
+  the last frame and the level (0..1), and put `rec.ago` and `rec.n` into
+  opts. A pause counts when the level has stayed under 0.05 for `quietMin`
+  seconds after at least 0.6 s over 0.10, and the last one counted was at
+  least `gapMin` seconds before. Use `PAUSE.NOD_QUIET`/`NOD_GAP` (0.3 s, 3 s)
+  for the microphone and `PAUSE.PHRASE_QUIET`/`PHRASE_GAP` (0.15 s, 2 s) for
+  Jarvis's voice. The gap is what keeps a nod or a gesture from starting
+  again before the last one has finished - a host that counts moments its
+  own way must keep them at least that far apart too (and a fact's nod, and
+  the glow, at least 1.2 and 1.8 s apart).
+- **`CritterPose.switchAlpha(opts)`**: how opaque to draw the face during a
+  hello or goodbye. 1 while the animal plays its own piece; under still,
+  calm or a serious moment the pose plays none of it and this fades the face
+  instead - the quick gentle cross-fade the owner asked for.
+- **`busy(state, t, since, opts)`**: the frame pacer's "a happening is
+  playing" now also covers the cute moments - but only when the host passes
+  how long it has been idle (`since`) and its opts. Called the old way it
+  answers exactly as before.
+
+**How the cute moments are timed.** Time is cut into slots of 256 seconds
+(about four minutes); each slot has one moment, somewhere between 30 and 200
+seconds in, the two kinds taking turns slot by slot. It plays only if the
+animal had then been idle at least 150 seconds (the pose's own `since` - no
+new input), never in a focus session, and the idle happenings wait while it
+plays. So a resting animal does one about every four minutes, at uneven
+times.
+
+**How the variants are picked.** Listening's and thinking's come up in
+8-second slots, about one slot in two, never the same kind twice running
+(the same rule as the idle happenings). The listening nods and the phrase
+gestures are dealt from a shuffled hand of three (a "shuffle bag"), so
+never the same twice running. An arrival's reaction is a hash of when it
+arrived, never the one the same state played the last time it arrived if
+that was within the host's last few changes (which is when a repeat would be
+seen); further apart, it is a fresh pick.
+
+Measured (a still animal at the same moment as the reference, so only what
+the new behaviour adds; the desktop's pose code):
+
+| | Red panda | Pygmy owl | Sea otter | Monkey |
+|---|---|---|---|---|
+| Idle, 30 minutes, no new inputs (before and after: identical) | body 3.4 deg, top 3.0 %, head 12 deg | 1.1 deg, 1.0 %, 21 deg | 3.0 deg, 1.2 %, 13 deg | 1.5 deg, 2.2 %, 12 deg |
+| Listening with nods every 3.2 s: head at most | 4 deg, 13 deg/s | 5 deg, 13 deg/s | 5 deg, 16 deg/s | 4 deg, 13 deg/s |
+| Listening variety (the other tilt): head at most | 24 deg, 30 deg/s | 31 deg, 38 deg/s | 25 deg, 32 deg/s | 24 deg, 31 deg/s |
+| Talking on phrase ends: head at most | 6 deg, 16 deg/s | 8 deg, 23 deg/s | 8 deg, 17 deg/s | 7 deg, 17 deg/s |
+| Focus session: head speed at most | 4 deg/s | 8 deg/s | 6 deg/s | 4 deg/s |
+| Petting: body tip, top travel | 2.5 deg, 2.2 % | 0.8 deg, 0.9 % | 4.4 deg, 1.1 % | 2.2 deg, 3.3 % |
+| Cute moments (30 minutes idle) | head 16 deg | head 150 deg (the turn), hop 3.8 % | a whole roll, 142 deg/s at its fastest | head 12 deg |
+
+(The listening variety's 24 to 31 degrees is the head going from its usual
+listening tilt to the same tilt the other way, over about a second.) The
+largest change of speed in one frame at 240 frames a second, for every new
+behaviour, is at most 0.12 (the monkey's ear flick; 0.26 for the goodbye and
+hello, which move the whole animal); the tests hold it under 0.25 (0.6 for
+goodbye and hello).
+
+Tests (`CritterPoseTest`): the fixture has every new input in the states it
+acts in, fully and part way, with each switch off and under calm, serious
+and still; and each behaviour is checked to play and to stop - left out,
+nothing changes; still, serious, waiting on you, something wrong, asleep and
+dozing switch every one off; calm makes them smaller; the mouth is never
+touched; the shuffle bag never repeats; the pause finder counts only real
+pauses, never closer than its gap; a nod is at most about 3 degrees; with
+the host's phrase ends, gestures come only at them; the acknowledgements,
+the focus buddy (at most half as many looks), petting and each switch; the
+cute moments take turns, only after 150 s of rest; goodbye and hello go out
+of view and back, and only cross-fade under calm; an arrival reacts a
+little, then is still, never the same twice running; and nothing changes
+speed suddenly or stops being a number.
 
 ### How the mouths talk
 

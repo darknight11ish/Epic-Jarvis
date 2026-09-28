@@ -27,7 +27,9 @@
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
           wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
-          overlayAt, ease, toward, eyesOpen, eyesClose } = C.util;
+          overlayAt, ease, toward, eyesOpen, eyesClose, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
+          extras, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
+          cuteQuiet, cuteBusy, fullTurn, HELLO_S, GOODBYE_S, TAU } = C.util;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "swing", "lean", "breath", "bob",
@@ -62,6 +64,10 @@
 
   // The monkey's own dice (see critter-pose.js's note on salts).
   const S_GAZE = 224, S_EVENT = 240, S_ROLL = 248, S_LEAN = 216, S_BEAT = 232, S_BLINK = 212;
+  // ...and for the new behaviours (critter-pose.js's "New behaviours").
+  const S_LISTEN = 100, S_THINK = 103, S_FOCUS = 106, S_NOD = 118, S_PHRASE = 119, S_CUTE = 121;
+  // How long each cute moment lasts: sniffing its banana, twirling it.
+  const CUTE_LEN = [5.5, 4.4];
   // Its idle happenings, and how often each comes up: kicking its legs,
   // looking round and curling its tail most; looking at its banana and a
   // wider swing a little less; a scratch of its head (the biggest) least.
@@ -98,8 +104,17 @@
 
   function stateTargets(state, t, amp, look, since, o) {
     if (typeof since !== "number") since = 1e9;
-    o = o || optsOf();
-    const m = mods(o), hap = m[0], sw = m[2], play = m[3];
+    o = optsOf(o, t);
+    const m = mods(o);
+    // Idle: a focus session, and a cute moment while it plays, take the
+    // happenings away.
+    const cu = state === "idle" ? cuteAt(t, since, S_CUTE, CUTE_LEN) : NONE;
+    const cw = cu[0] >= 0 ? cuteOf(o) : 0;
+    const fw = state === "idle" ? focusOf(o) : 0;
+    // (and so do the stretch as a focus session ends, and being stroked)
+    const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
+    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
+    const hap = m[0], sw = m[2], play = m[3];
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, swing: 0, lean: 0, breath: 1, bob: 0,
       eyeL: 1, eyeR: 1, brow: 0, speak: 0, lookX: 0, lookY: 0, earL: 0, earR: 0,
@@ -113,7 +128,7 @@
     };
     // 244 cycles a loop: a breath every 4.2 seconds.
     let breathK = 244, breathDepth = 1, blinkSlow = 1, blinks = true, turnBlink = 0;
-    let eyeK = 1, deepBreath = 0, scratch = 0, peel = 0;
+    let eyeK = 1, deepBreath = 0, scratch = 0, peel = 0, ackK = 1, sniff = 0, twirl = 0;
 
     if (state === "listening") {
       // Leans in, head tilted about 15 degrees, ears turned forward to you,
@@ -129,6 +144,16 @@
       P.brow = 0.3 + 0.4 * play;
       P.lookX = g[0] - 0.4 * g[2]; P.lookY = 0.1 + g[1] - 0.4 * g[3];
       P.orbGlow = 0.55 + 0.5 * amp;
+      // Now and then (variety): it tilts its head the other way, leans in a
+      // little closer, or turns an ear to you.
+      const v = variant(t, o, S_LISTEN, 0.4);
+      if (v[0] === 0) P.headRoll -= 0.39 * play * v[1];
+      else if (v[0] === 1) P.lean += 0.04 * v[1];
+      else if (v[0] === 2) P.earR -= 0.3 * v[1];
+      // A small nod in your pauses.
+      const nd = listenNod(t, o, S_NOD);
+      P.headPitch += nd[0]; P.headRoll += play * nd[1]; eyeK *= 1 - nd[2];
+      P.earL -= 0.25 * nd[3]; P.earR -= 0.25 * nd[3];
       turnBlink = g[4];
     } else if (state === "thinking") {
       // Brings its banana up in front of its chest and looks into it - it
@@ -149,6 +174,12 @@
       P.brow = 0.25;
       P.lean = 0.05;
       P.orbGlow = 0.95 + 0.2 * wave(t, 424, 0);
+      // Now and then (variety): it looks up, thinking, turns its banana to
+      // look at it, or tilts its head slowly.
+      const v = variant(t, o, S_THINK, 0.5);
+      if (v[0] === 0) { P.headPitch += 0.25 * v[1]; P.lookY += 0.8 * v[1]; }
+      else if (v[0] === 1) P.banYaw += 0.3 * v[1] * wave(t, 160, 0);
+      else if (v[0] === 2) { P.headRoll += 0.12 * play * v[1]; P.brow += 0.1 * v[1]; }
       turnBlink = g[4];
     } else if (state === "speaking") {
       // Talks with its eyes, its head and its banana hand - in phrases: at
@@ -158,8 +189,10 @@
       // Its swing settles to a little over half. The mouth follows the
       // words being heard (critter-pose.js's mouthOf).
       const g = looks(t, S_GAZE, 1.6, 5.5, 0.65, 0.5, 0.18, 0, 0.06, 1.1, o);
-      const b = beat(t, S_BEAT, S_GAZE, 1.6, 5.5, 0.65);
+      // (With the host's phrase ends, the gestures land on them instead.)
+      const b = o.phraseN >= 0 ? phraseBeat(t, o, S_PHRASE, S_GAZE, 1.6, 5.5, 0.65) : beat(t, S_BEAT, S_GAZE, 1.6, 5.5, 0.65);
       const x = b[1];
+      ackK = b[0] >= 0 ? 1 - bump(clamp(x / 1.6, 0, 1)) : 1;
       P.speak = 1;
       P.lean = 0.05;
       P.headPitch = 0.03;
@@ -202,6 +235,10 @@
       P.lookX = g[0]; P.lookY = g[1];
       P.orbGlow = 0.9;
       blinkSlow = 1.4;
+      // The small reaction as it arrives (variety), then still.
+      const ar = arrivalOf(state, o, since);
+      P.headPitch += ar[0]; P.headRoll += play * ar[1]; P.lean += ar[2]; eyeK *= 1 - ar[3];
+      P.earL -= 0.3 * ar[4]; P.earR -= 0.3 * ar[4];
     } else if (state === "standby") {
       // Asleep, sitting on the vine: it has climbed up onto it, its legs
       // hanging in front and its tail curled round it, hugging its banana
@@ -238,6 +275,9 @@
       P.lookX = g[0]; P.lookY = -0.3 + g[1];
       P.orbGlow = 0.35;
       blinkSlow = 1.4;
+      const ar = arrivalOf(state, o, since);
+      P.headPitch += ar[0]; P.headRoll += play * ar[1]; P.lean += ar[2]; eyeK *= 1 - ar[3];
+      P.earL -= 0.3 * ar[4]; P.earR -= 0.3 * ar[4];
     } else if (state === "banked") {
       // Keeping things for later: dozing where it hangs, half-lidded,
       // blinking slowly, swinging a little - and now and then its head sinks
@@ -306,11 +346,68 @@
         P.tailCurl += hap * 0.9 * envAHR(x, 0.7, 1.0, 1.0);
       }
       turnBlink = g[4];
+      if (fw > 0) {
+        // Working beside you (a focus session): it hangs steadier (the swing,
+        // below) and looks at the banana in its hand, far fewer looks about.
+        const f = gaze(t, S_FOCUS, 4, 12, 0.75, 0.3, 0.12, 0, 0.03, 1.6);
+        P.headYaw += (-0.05 + 0.2 * f[2] - P.headYaw) * fw;
+        P.headPitch += (-0.12 + 0.1 * f[3] - P.headPitch) * fw;
+        P.lookX += (-0.3 + f[0] - 0.4 * f[2] - P.lookX) * fw;
+        P.lookY += (-0.4 + f[1] - 0.4 * f[3] - P.lookY) * fw;
+        turnBlink *= 1 - fw;
+      }
+      // The small stretch as a focus session ends (its waking stretch).
+      if (fe > 0) {
+        P.legLf += 0.25 * fe; P.legRf += 0.25 * fe; P.legLk -= 0.2 * fe; P.legRk -= 0.2 * fe;
+        P.headPitch += 0.06 * fe; P.earL -= 0.2 * fe; P.earR -= 0.2 * fe; eyeK *= 1 - 0.45 * fe;
+        deepBreath = Math.max(deepBreath, fe);
+      }
+      if (cw > 0 && cu[0] === 0) {
+        // Cute moment: it sniffs its banana - brings it up under its nose,
+        // eyes shutting happily, two little sniffs - and lowers it again.
+        const x = cu[1];
+        sniff = cw * envAHR(x, 0.9, 3.4, 1.2);
+        P.headPitch += (-0.04 - P.headPitch) * sniff + cw * 0.025 * (bump((x - 1.3) / 0.45) + bump((x - 1.9) / 0.45));
+        P.headYaw += (-0.04 - P.headYaw) * sniff;
+        P.lookX += (-0.1 - P.lookX) * sniff; P.lookY += (-0.45 - P.lookY) * sniff;
+        eyeK *= 1 - 0.6 * cw * envAHR(x - 1.1, 0.4, 1.9, 0.6);
+        P.brow += 0.2 * sniff;
+        turnBlink *= 1 - sniff;
+      } else if (cw > 0 && cu[0] === 1) {
+        // Cute moment: it twirls its banana round once in its fingers,
+        // watching it, and gives you a pleased look.
+        const x = cu[1];
+        twirl = cw * envAHR(x, 0.6, 2.9, 0.8);
+        P.banRoll += fullTurn(x, 0.8, 1.8, CUTE_LEN[1], cw);
+        const w = cw * envAHR(x, 0.6, 1.9, 0.5);
+        P.lookX += (-0.3 - P.lookX) * w; P.lookY += (-0.25 - P.lookY) * w;
+        const at = cw * envAHR(x - 2.8, 0.3, 0.6, 0.6);
+        P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+        P.headYaw += (0 - P.headYaw) * Math.max(w, at);
+        P.brow += 0.25 * at;
+        turnBlink *= 1 - twirl;
+      }
     }
+
+    // Stroked (petting): it swings a little toward your hand and leans its
+    // head into it, eyes half shut and happy.
+    if (pw > 0) {
+      P.headRoll += pw * play * (0.10 * o.petX + 0.03 * o.petDir);
+      P.headPitch += 0.04 * pw;
+      P.brow += 0.15 * pw;
+      eyeK *= 1 - 0.45 * pw;
+    }
+    // A fact saved: one small nod, ears flicking forward. A long answer
+    // ready: the banana glows up once.
+    const an = AWAKE[state] ? ackNodOf(t, o) : ZERO2;
+    P.headPitch += ackK * an[0]; P.earL -= 0.3 * ackK * an[1]; P.earR -= 0.3 * ackK * an[1];
+    const gl = AWAKE[state] ? ackGlowOf(t, o) : 0;
+    P.orbGlow += 0.4 * gl; P.orbR *= 1 + 0.2 * gl;
 
     // The swing, and what trails it: the tail swings as the body did a
     // moment ago, further back along it (follow-through), and the legs
     // trail it a little. The head stays more level than the body.
+    m[2] *= 1 - 0.6 * fw;   // (a focus session: it hangs steadier)
     P.swing = swingAt(state, t, m);
     const s1 = swingAt(state, t - TAIL_LAG, m), s2 = swingAt(state, t - 2 * TAIL_LAG, m);
     const s3 = swingAt(state, t - 3 * TAIL_LAG, m), s4 = swingAt(state, t - 4 * TAIL_LAG, m);
@@ -322,6 +419,7 @@
     const legLag = 1.5 * (s2 - P.swing);
     P.legLo -= legLag; P.legRo += legLag;
     P.headRoll -= 0.4 * P.swing;
+    P.swing += 0.02 * pw * o.petX;   // (stroked: toward your hand)
 
     // Breathing: the chest swells and the body lifts a little.
     const b = wave(t, breathK, 0) * (1 + 0.6 * deepBreath);
@@ -357,6 +455,21 @@
       P.banYaw += 0.25 * peel * wave(t, 160, 0); P.banRoll += 0.45 * peel;
     }
 
+    if (sniff > 0) {
+      // Under its nose, wherever the head has turned, the banana lying
+      // across it.
+      const q = onHead(P, [-0.10, 0.15, -0.38]);
+      P.bEx += (-0.25 - P.bEx) * sniff; P.bEy += (0.0 - P.bEy) * sniff; P.bEz += (-0.16 - P.bEz) * sniff;
+      P.bHx += (q[0] - P.bHx) * sniff; P.bHy += (q[1] - P.bHy) * sniff; P.bHz += (q[2] - P.bHz) * sniff;
+      P.banYaw += (1.1 - P.banYaw) * sniff; P.banRoll += (0.1 - P.banRoll) * sniff;
+    }
+    if (twirl > 0) {
+      // Up in front of its chest, to twirl it.
+      P.bEx += (-0.26 - P.bEx) * twirl; P.bEy += (0.0 - P.bEy) * twirl; P.bEz += (-0.12 - P.bEz) * twirl;
+      P.bHx += (-0.16 - P.bHx) * twirl; P.bHy += (0.10 - P.bHy) * twirl; P.bHz += (-0.30 - P.bHz) * twirl;
+    }
+    farewell(P, state, o);
+
     // The banana rides in the hand holding it.
     const ban = banFrame(P);
     const off = apply(ban, BAN_AT);
@@ -366,6 +479,46 @@
     const k = eyeK * (1 - qk * Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 2, 9) : 0, turnBlink));
     P.eyeL *= k; P.eyeR *= k;
     return P;
+  }
+
+  /**
+   * Hello and goodbye (critter-pose.js's farewell says how they work). The
+   * monkey's goodbye is a little wave of its banana, looking at you, then
+   * its vine draws it up out of the picture; its hello, it drops in on its
+   * vine from above, the vine giving a small springy bounce, and it looks at
+   * you. Asleep or dozing: no wave, no look; a small bow while waiting on
+   * you or after something went wrong.
+   */
+  const LIFT = 2.2;   // how far up the vine goes to be out of view, feet and tail too
+  function farewell(P, state, o) {
+    const g = o.goodbye, h = o.hello;
+    if (g <= 0 && h >= 1) return;
+    const E = extras(o);
+    const awake = AWAKE[state] || state === "approval" || state === "error" ? 1 : 0;
+    const wave1 = AWAKE[state] ? 1 : 0;
+    if (g > 0) {
+      const a = E * bump(clamp(g / 0.6, 0, 1));
+      const at = E * awake * ease(g / 0.2);
+      P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+      P.headYaw += (0 - P.headYaw) * at;
+      const wv = a * wave1;
+      P.bEx += (-0.30 - P.bEx) * wv; P.bEy += (0.12 - P.bEy) * wv; P.bEz += (-0.08 - P.bEz) * wv;
+      P.bHx += (-0.34 + 0.05 * Math.sin(TAU * 1.6 * g) - P.bHx) * wv; P.bHy += (0.30 - P.bHy) * wv;
+      P.bHz += (-0.14 - P.bHz) * wv;
+      P.banRoll += 0.4 * wv * Math.sin(TAU * 1.6 * g);
+      P.brow += 0.2 * wv;
+      const bw = a * (awake - wave1);
+      P.headPitch -= 0.2 * bw; P.lean += 0.04 * bw;
+      P.vineY += LIFT * E * ease((g - 0.4) / 0.6);
+    }
+    if (h < 1) {
+      P.vineY += E * LIFT * (1 - ease(h / 0.45));
+      P.dip += E * 0.05 * bump((h - 0.35) / 0.45);
+      const at = E * awake * ease((h - 0.25) / 0.25) * (1 - ease((h - 0.8) / 0.2));
+      P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+      P.headYaw += (0 - P.headYaw) * at;
+      P.brow += 0.2 * at * wave1;
+    }
   }
 
   // Which way a happening starting at clock `at` looks, 0..1: a hash of its
@@ -459,6 +612,8 @@
      "banYaw", "banRoll", "banPitch", "grip"],
     ["earL", "earR", "legLf", "legLo", "legLk", "legRf", "legRo", "legRk",
      "tail1", "tail2", "tail3", "tail4", "tailCurl", "tailWrap"]);
+  // (banRoll is an angle: twirled right round, it settles the short way.)
+  HALF.banRoll = [HALF.banRoll[0], 0, Math.PI];
   const pose = makePose(stateTargets, KEYS, HALF, wakeSleep);
 
   // The tail hanging (body frame, the last number its thickness there): down
@@ -596,9 +751,10 @@
   }
 
   /** Whether one of its idle happenings is playing at clock t (critter-pose.js playing()). */
-  function busy(state, t) {
-    return state === "idle" && C.util.playing(happening(t, SLOT, 0.5, 5.5, S_EVENT, CHANCE, EVENTS));
+  function busy(state, t, since, opts) {
+    return state === "idle" && (C.util.playing(happening(t, SLOT, 0.5, 5.5, S_EVENT, CHANCE, EVENTS))
+      || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 
-  C.species.monkey = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy };
+  C.species.monkey = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, HELLO_S, GOODBYE_S };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -24,6 +24,25 @@ import com.jarvis.client.face.CritterPose.shift
 import com.jarvis.client.face.CritterPose.smooth
 import com.jarvis.client.face.CritterPose.toward
 import com.jarvis.client.face.CritterPose.wave
+import com.jarvis.client.face.CritterPose.NONE
+import com.jarvis.client.face.CritterPose.ZERO2
+import com.jarvis.client.face.CritterPose.ackGlowOf
+import com.jarvis.client.face.CritterPose.ackNodOf
+import com.jarvis.client.face.CritterPose.arrivalOf
+import com.jarvis.client.face.CritterPose.awake
+import com.jarvis.client.face.CritterPose.cuteAt
+import com.jarvis.client.face.CritterPose.cuteBusy
+import com.jarvis.client.face.CritterPose.cuteOf
+import com.jarvis.client.face.CritterPose.cuteQuiet
+import com.jarvis.client.face.CritterPose.extras
+import com.jarvis.client.face.CritterPose.focusEndOf
+import com.jarvis.client.face.CritterPose.focusOf
+import com.jarvis.client.face.CritterPose.fullTurn
+import com.jarvis.client.face.CritterPose.gaze
+import com.jarvis.client.face.CritterPose.listenNod
+import com.jarvis.client.face.CritterPose.petOf
+import com.jarvis.client.face.CritterPose.phraseBeat
+import com.jarvis.client.face.CritterPose.variant
 import kotlin.math.PI
 import kotlin.math.floor
 import kotlin.math.max
@@ -88,10 +107,20 @@ object OtterPose {
     // Its idle happenings, and how often each comes up (the desktop's EVENTS):
     // wash, roll left, roll right, kick, rub.
     private val EVENTS = floatArrayOf(14f, 20f, 20f, 20f, 26f)
+    // ...and for the new behaviours (critter-pose.js's note).
+    private const val S_LISTEN = 216
+    private const val S_THINK = 219
+    private const val S_FOCUS = 222
+    private const val S_NOD = 234
+    private const val S_PHRASE = 235
+    private const val S_CUTE = 236
+    /** How long each cute moment lasts: rolling over in the water, juggling its pebble from paw to paw. */
+    private val CUTE_LEN = floatArrayOf(6.8f, 6.5f)
 
     /** Whether one of its idle happenings is playing at clock [t] - the desktop's busy(state, t). */
-    fun busy(state: FaceState, t: Float): Boolean =
-        state == FaceState.IDLE && CritterPose.playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS))
+    fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
+        state == FaceState.IDLE && (CritterPose.playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)) ||
+            cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
     private fun headTurn(p: FloatArray): FloatArray =
         mul(ry(-(HEAD_BASE_YAW + p[HEAD_YAW])), mul(rx(HEAD_BASE_PITCH + p[HEAD_PITCH]), rz(-p[HEAD_ROLL])))
@@ -106,8 +135,16 @@ object OtterPose {
         p[base] = v[0]; p[base + 1] = v[1]; p[base + 2] = v[2]
     }
 
-    fun stateTargets(state: FaceState, t: Float, amp: Float, look: Look, since: Float = 1e9f, o: Opts = Opts()): FloatArray {
-        val hap = o.hap
+    fun stateTargets(state: FaceState, t: Float, amp: Float, look: Look, since: Float = 1e9f, o0: Opts = Opts()): FloatArray {
+        val o = o0.norm(t)
+        // Idle: a focus session, and a cute moment while it plays, take the happenings away.
+        val cu = if (state == FaceState.IDLE) cuteAt(t, since, S_CUTE, CUTE_LEN) else NONE
+        val cw = if (cu[0] >= 0f) cuteOf(o) else 0f
+        val fw = if (state == FaceState.IDLE) focusOf(o) else 0f
+        // (and so do the stretch as a focus session ends, and being stroked)
+        val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
+        val pw = if (awake(state)) petOf(o) else 0f
+        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw)
         val sw = o.sway
         val play = o.play
         val p = FloatArray(N)
@@ -131,6 +168,7 @@ object OtterPose {
         var deepBreath = 0f
         var pawsOnEyes = false
         var wash = 0f
+        var ackK = 1f
 
         when (state) {
             FaceState.LISTENING -> {
@@ -143,6 +181,14 @@ object OtterPose {
                 p[EYE_L] = 1f + 0.12f * play; p[EYE_R] = p[EYE_L]
                 p[LOOK_X] = g[0] - 0.4f * g[2]; p[LOOK_Y] = g[1] - 0.4f * g[3]
                 p[ORB_GLOW] = 0.55f + 0.5f * amp
+                // Now and then (variety): the other tilt, head lifted closer, a small kick.
+                val v = variant(t, o, S_LISTEN, 0.4f)
+                if (v[0] == 0f) p[HEAD_ROLL] -= 0.42f * play * v[1]
+                else if (v[0] == 1f) { p[HEAD_PITCH] += 0.06f * v[1]; p[TILT] += 0.03f * v[1] }
+                else if (v[0] == 2f) p[PADDLE] += 0.5f * v[1] * (0.5f + 0.5f * wave(t, 1024f, 0f))
+                // A small nod in your pauses.
+                val nd = listenNod(t, o, S_NOD)
+                p[HEAD_PITCH] += nd[0]; p[HEAD_ROLL] += play * nd[1]; eyeK *= 1f - nd[2]; p[TILT] += 0.02f * nd[3]
                 turnBlink = g[4]
             }
             FaceState.THINKING -> {
@@ -157,14 +203,26 @@ object OtterPose {
                 p[HEAD_ROLL] = sw * 0.10f * wave(t, 98f, 0f)
                 p[LOOK_X] = 0.3f + g[0] - 0.4f * g[2]; p[LOOK_Y] = -0.7f + g[1] - 0.4f * g[3]
                 p[ORB_GLOW] = 0.95f + 0.2f * wave(t, 424f, 0f)
+                // Now and then (variety): the pebble rolled between its paws, a look up, the pebble held nearer.
+                val v = variant(t, o, S_THINK, 0.5f)
+                if (v[0] == 0f) {
+                    val r = 0.03f * v[1] * wave(t, 1536f, 0f)
+                    p[PAW_LX] += r; p[PAW_RX] -= r
+                } else if (v[0] == 1f) {
+                    p[HEAD_PITCH] += 0.25f * v[1]; p[LOOK_Y] += 0.9f * v[1]
+                } else if (v[0] == 2f) {
+                    p[ORB_Y] += 0.05f * v[1]; p[PAW_LY] += 0.05f * v[1]; p[PAW_RY] += 0.05f * v[1]; p[HEAD_PITCH] -= 0.06f * v[1]
+                }
                 turnBlink = g[4]
             }
             FaceState.SPEAKING -> {
                 // Holds the pebble and talks with its eyes and head, in phrases,
                 // never on top of a look (CritterPose.mouthOf for the mouth).
                 val g = looks(t, S_GAZE, 1.8f, 6f, 0.65f, 0.5f, 0.18f, 0f, 0.06f, 1.1f, o)
-                val b = beat(t, S_BEAT, S_GAZE, 1.8f, 6f, 0.65f)
+                // (With the host's phrase ends, the gestures land on them instead.)
+                val b = if (o.phraseN >= 0) phraseBeat(t, o, S_PHRASE, S_GAZE, 1.8f, 6f, 0.65f) else beat(t, S_BEAT, S_GAZE, 1.8f, 6f, 0.65f)
                 val x = b[1]
+                ackK = if (b[0] >= 0f) 1f - bump(clamp(x / 1.6f, 0f, 1f)) else 1f
                 p[SPEAK] = 1f
                 p[TILT] = 0.16f
                 p[HEAD_PITCH] = 0.05f
@@ -198,6 +256,9 @@ object OtterPose {
                 p[LOOK_X] = g[0]; p[LOOK_Y] = g[1]
                 p[ORB_GLOW] = 0.9f
                 calm = 0.7f; blinkSlow = 1.4f
+                // The small reaction as it arrives (variety), then still.
+                val ar = arrivalOf(state, o, since)
+                p[HEAD_PITCH] += ar[0]; p[HEAD_ROLL] += play * ar[1]; p[TILT] += ar[2] + 0.03f * ar[4]; eyeK *= 1f - ar[3]
             }
             FaceState.STANDBY -> {
                 val e = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.35f, 1)
@@ -220,6 +281,8 @@ object OtterPose {
                 p[LOOK_X] = g[0]; p[LOOK_Y] = -0.25f + g[1]
                 p[ORB_GLOW] = 0.35f
                 calm = 0.8f; blinkSlow = 1.4f
+                val ar = arrivalOf(state, o, since)
+                p[HEAD_PITCH] += ar[0]; p[HEAD_ROLL] += play * ar[1]; p[TILT] += ar[2] + 0.03f * ar[4]; eyeK *= 1f - ar[3]
             }
             FaceState.BANKED -> {
                 val e = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.55f, 1)
@@ -268,8 +331,54 @@ object OtterPose {
                 p[HEAD_ROLL] = sw * 0.05f * wave(t, 67f, 0f)
                 p[LOOK_X] = g[0] - 0.4f * hx; p[LOOK_Y] = g[1] - 0.4f * g[3]
                 turnBlink = g[4]
+                if (fw > 0f) {
+                    // Working beside you: it looks at the pebble on its chest, far fewer looks.
+                    val f = gaze(t, S_FOCUS, 4f, 12f, 0.75f, 0.3f, 0.12f, 0f, 0.03f, 1.6f)
+                    p[HEAD_YAW] += (0.2f * f[2] - p[HEAD_YAW]) * fw
+                    p[HEAD_PITCH] += (-0.22f + 0.1f * f[3] - p[HEAD_PITCH]) * fw
+                    p[LOOK_X] += (0.3f + f[0] - 0.4f * f[2] - p[LOOK_X]) * fw
+                    p[LOOK_Y] += (-0.6f + f[1] - 0.4f * f[3] - p[LOOK_Y]) * fw
+                    turnBlink *= 1f - fw
+                }
+                // The small stretch in the water as a focus session ends.
+                if (fe > 0f) { stretch(p, fe); eyeK *= 1f - 0.4f * fe; deepBreath = max(deepBreath, fe) }
+                if (cw > 0f && cu[0] == 0f) {
+                    // Cute moment: it rolls right over in the water (under calm, only a small roll and back).
+                    val x = cu[1]
+                    p[ROCK] += fullTurn(x, 0.8f, 4.8f, CUTE_LEN[0], cw) +
+                        0.25f * cw * (1f - smooth(clamp((cw - 0.8f) / 0.2f, 0f, 1f))) * bump((x - 0.8f) / 4.8f)
+                    eyeK *= 1f - cw * envAHR(x - 2.0f, 0.5f, 1.6f, 0.6f)
+                    p[RIPPLE] += 0.008f * cw * bump((x - 1.0f) / 5.5f)
+                    turnBlink *= 1f - cw * envAHR(x, 0.6f, 5.4f, 0.8f)
+                } else if (cw > 0f && cu[0] == 1f) {
+                    // Cute moment: it juggles its pebble from paw to paw over its chest, eyes following.
+                    val x = cu[1]
+                    val j = cw * envAHR(x, 0.8f, 4.6f, 1.0f)
+                    val s = sin(TAU * 0.55f * (x - 0.8f))
+                    val c = 1f - s * s
+                    p[ORB_Z] += 0.10f * j * s; p[ORB_Y] += j * (0.03f + 0.09f * c)
+                    p[PAW_LZ] += (-0.13f - p[PAW_LZ]) * j; p[PAW_RZ] += (0.13f - p[PAW_RZ]) * j
+                    p[PAW_LY] += j * (0.03f + 0.05f * max(0f, -s)); p[PAW_RY] += j * (0.03f + 0.05f * max(0f, s))
+                    p[LOOK_Y] += (-0.3f - 0.4f * s - p[LOOK_Y]) * j; p[LOOK_X] += (0.2f - p[LOOK_X]) * j
+                    p[HEAD_PITCH] += (-0.12f - p[HEAD_PITCH]) * j
+                    turnBlink *= 1f - j
+                }
             }
         }
+
+        // Stroked: it rolls a little toward your hand, leans its head in, a happy kick.
+        if (pw > 0f) {
+            p[ROCK] += 0.05f * pw * o.petX
+            p[HEAD_ROLL] += pw * play * (0.10f * o.petX + 0.03f * o.petDir)
+            p[HEAD_PITCH] += 0.03f * pw
+            p[PADDLE] += 0.3f * pw * (0.5f + 0.5f * wave(t, 700f, 0f))
+            eyeK *= 1f - 0.5f * pw
+        }
+        // A fact saved: one small nod, its head end lifting a touch. A long answer ready: the pebble glows up once.
+        val an = if (awake(state)) ackNodOf(t, o) else ZERO2
+        p[HEAD_PITCH] += ackK * an[0]; p[TILT] += 0.02f * ackK * an[1]
+        val gl = if (awake(state)) ackGlowOf(t, o) else 0f
+        p[ORB_GLOW] += 0.4f * gl; p[ORB_R] *= 1f + 0.12f * gl
 
         // Floating: the whole otter bobs and rocks with the water, gently.
         val settle = (1f - 0.5f * o.calm) * (1f - 0.6f * o.serious) * (1f - o.still)
@@ -309,12 +418,50 @@ object OtterPose {
             p[PAW_RX] += (rr[0] - p[PAW_RX]) * wash; p[PAW_RY] += (rr[1] - p[PAW_RY]) * wash; p[PAW_RZ] += (rr[2] - p[PAW_RZ]) * wash
             p[ORB_Y] += (PEBBLE_DOWN - p[ORB_Y]) * wash
         }
+        farewell(p, state, o)
 
         val q = 1f - o.quiet
         val k = eyeK * (1f - q * max(if (blinks) blinkAt(t, S_BLINK, blinkSlow, 2f, 10f) else 0f, turnBlink))
         p[EYE_L] *= k
         p[EYE_R] *= k
         return p
+    }
+
+    /**
+     * Hello and goodbye - the desktop's otter farewell(): a little wave of
+     * its paw (a bow while waiting on you or after something wrong; nothing
+     * asleep), then it dives under the water; hello, it pops back up with a
+     * splash of rings, a small bob past the surface, and looks at you.
+     */
+    private const val DIVE = 0.6f
+    private fun farewell(p: FloatArray, state: FaceState, o: Opts) {
+        val g = o.goodbye
+        val h = o.hello
+        if (g <= 0f && h >= 1f) return
+        val e = extras(o)
+        val aw = if (awake(state) || state == FaceState.APPROVAL || state == FaceState.ERROR) 1f else 0f
+        val wave1 = if (awake(state)) 1f else 0f
+        if (g > 0f) {
+            val a = e * bump(clamp(g / 0.6f, 0f, 1f))
+            val at = e * aw * ease(g / 0.2f)
+            p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
+            p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
+            val wv = a * wave1
+            p[PAW_RX] -= 0.16f * wv; p[PAW_RY] += 0.20f * wv; p[PAW_RZ] += 0.10f * wv + 0.05f * wv * sin(TAU * 1.6f * g)
+            val bw = a * (aw - wave1)
+            p[HEAD_PITCH] -= 0.2f * bw
+            val d = e * ease((g - 0.4f) / 0.6f)
+            p[BOB] -= DIVE * d; p[TILT] -= 0.2f * d
+            p[RIPPLE] += 0.01f * e * bump((g - 0.45f) / 0.55f)
+        }
+        if (h < 1f) {
+            val d = e * (1f - ease(h / 0.45f))
+            p[BOB] -= DIVE * d - e * 0.035f * bump((h - 0.3f) / 0.45f); p[TILT] -= 0.2f * d
+            p[RIPPLE] += 0.012f * e * bump((h - 0.1f) / 0.8f)
+            val at = e * aw * ease((h - 0.25f) / 0.25f) * (1f - ease((h - 0.8f) / 0.2f))
+            p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
+            p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
+        }
     }
 
     /** A small stretch in the water, [s] 0..1: paws up and apart, chin up, toes out. */
@@ -366,7 +513,10 @@ object OtterPose {
         N,
         intArrayOf(EYE_L, EYE_R, LOOK_X, LOOK_Y), intArrayOf(SPEAK), intArrayOf(HEAD_YAW, HEAD_PITCH, HEAD_ROLL),
         intArrayOf(PAW_LX, PAW_LY, PAW_LZ, PAW_RX, PAW_RY, PAW_RZ, ORB_X, ORB_Y, ORB_Z), intArrayOf(PADDLE),
-    )
+    ).also { h ->
+        // (rock is an angle: rolled right over, it settles the short way round.)
+        h.cut[ROCK] = PI.toFloat()
+    }
 
     /** How much this pose is speaking, 0..1 - what [uniforms] scales the mouth by. */
     fun speakingWeight(p: FloatArray): Float = clamp(p[SPEAK], 0f, 1f)

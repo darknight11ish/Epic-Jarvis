@@ -17,7 +17,9 @@
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
           wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
-          overlayAt, ease, toward, eyesOpen, eyesClose, TAU } = C.util;
+          overlayAt, ease, toward, eyesOpen, eyesClose, TAU, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
+          extras, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
+          cuteQuiet, cuteBusy, fullTurn, HELLO_S, GOODBYE_S } = C.util;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "bob", "rock", "tilt", "breath",
@@ -37,6 +39,11 @@
 
   // The otter's own dice (see critter-pose.js's note on salts).
   const S_GAZE = 160, S_EVENT = 176, S_ROLL = 184, S_LEAN = 192, S_BEAT = 200, S_BLINK = 208;
+  // ...and for the new behaviours (critter-pose.js's "New behaviours").
+  const S_LISTEN = 216, S_THINK = 219, S_FOCUS = 222, S_NOD = 234, S_PHRASE = 235, S_CUTE = 236;
+  // How long each cute moment lasts: rolling over in the water, juggling
+  // its pebble from paw to paw.
+  const CUTE_LEN = [6.8, 6.5];
   // Its idle happenings, and how often each comes up: rubbing its pebble,
   // kicking and rolling most; washing its face (the biggest) less.
   const EVENTS = [14, 20, 20, 20, 26];   // wash, roll left, roll right, kick, rub
@@ -51,8 +58,17 @@
 
   function stateTargets(state, t, amp, look, since, o) {
     if (typeof since !== "number") since = 1e9;
-    o = o || optsOf();
-    const m = mods(o), hap = m[0], sw = m[2], play = m[3];
+    o = optsOf(o, t);
+    const m = mods(o);
+    // Idle: a focus session, and a cute moment while it plays, take the
+    // happenings away.
+    const cu = state === "idle" ? cuteAt(t, since, S_CUTE, CUTE_LEN) : NONE;
+    const cw = cu[0] >= 0 ? cuteOf(o) : 0;
+    const fw = state === "idle" ? focusOf(o) : 0;
+    // (and so do the stretch as a focus session ends, and being stroked)
+    const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
+    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
+    const hap = m[0], sw = m[2], play = m[3];
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, bob: 0, rock: 0, tilt: 0.10, breath: 1,
       eyeL: 1, eyeR: 1, paddle: 0, speak: 0, lookX: 0, lookY: 0,
@@ -65,7 +81,7 @@
     };
     // 244 cycles a loop: a breath every 4.2 seconds.
     let breathK = 244, breathDepth = 1, blinkSlow = 1, blinks = true, turnBlink = 0, calm = 1;
-    let eyeK = 1, deepBreath = 0, paws = null, wash = 0;
+    let eyeK = 1, deepBreath = 0, paws = null, wash = 0, ackK = 1;
 
     if (state === "listening") {
       // Head up and tilted, eyes on you, its pebble held on its chest.
@@ -77,6 +93,15 @@
       P.eyeL = P.eyeR = 1 + 0.12 * play;
       P.lookX = g[0] - 0.4 * g[2]; P.lookY = g[1] - 0.4 * g[3];
       P.orbGlow = 0.55 + 0.5 * amp;
+      // Now and then (variety): it tilts its head the other way, lifts it a
+      // little closer, or gives a small kick of its feet.
+      const v = variant(t, o, S_LISTEN, 0.4);
+      if (v[0] === 0) P.headRoll -= 0.42 * play * v[1];
+      else if (v[0] === 1) { P.headPitch += 0.06 * v[1]; P.tilt += 0.03 * v[1]; }
+      else if (v[0] === 2) P.paddle += 0.5 * v[1] * (0.5 + 0.5 * wave(t, 1024, 0));
+      // A small nod in your pauses (the head end lifting for the ear flick).
+      const nd = listenNod(t, o, S_NOD);
+      P.headPitch += nd[0]; P.headRoll += play * nd[1]; eyeK *= 1 - nd[2]; P.tilt += 0.02 * nd[3];
       turnBlink = g[4];
     } else if (state === "thinking") {
       // Taps the pebble on its belly, watching it - a few taps, then a
@@ -91,6 +116,17 @@
       P.headRoll = sw * 0.10 * wave(t, 98, 0);
       P.lookX = 0.3 + g[0] - 0.4 * g[2]; P.lookY = -0.7 + g[1] - 0.4 * g[3];
       P.orbGlow = 0.95 + 0.2 * wave(t, 424, 0);
+      // Now and then (variety): it rolls the pebble between its paws, looks
+      // up at the sky, thinking, or holds the pebble up nearer its eyes.
+      const v = variant(t, o, S_THINK, 0.5);
+      if (v[0] === 0) {
+        const r = 0.03 * v[1] * wave(t, 1536, 0);
+        P.pawLx += r; P.pawRx -= r;
+      } else if (v[0] === 1) {
+        P.headPitch += 0.25 * v[1]; P.lookY += 0.9 * v[1];
+      } else if (v[0] === 2) {
+        P.orbY += 0.05 * v[1]; P.pawLy += 0.05 * v[1]; P.pawRy += 0.05 * v[1]; P.headPitch -= 0.06 * v[1];
+      }
       turnBlink = g[4];
     } else if (state === "speaking") {
       // Holds the pebble and talks with its eyes and its head - in phrases:
@@ -101,8 +137,10 @@
       // looks like). The mouth follows the words being heard
       // (critter-pose.js's mouthOf).
       const g = looks(t, S_GAZE, 1.8, 6, 0.65, 0.5, 0.18, 0, 0.06, 1.1, o);
-      const b = beat(t, S_BEAT, S_GAZE, 1.8, 6, 0.65);
+      // (With the host's phrase ends, the gestures land on them instead.)
+      const b = o.phraseN >= 0 ? phraseBeat(t, o, S_PHRASE, S_GAZE, 1.8, 6, 0.65) : beat(t, S_BEAT, S_GAZE, 1.8, 6, 0.65);
       const x = b[1];
+      ackK = b[0] >= 0 ? 1 - bump(clamp(x / 1.6, 0, 1)) : 1;
       P.speak = 1;
       P.tilt = 0.16;
       P.headPitch = 0.05;
@@ -141,6 +179,10 @@
       P.lookX = g[0]; P.lookY = g[1];
       P.orbGlow = 0.9;
       calm = 0.7; blinkSlow = 1.4;
+      // The small reaction as it arrives (variety), then still. (Lying on
+      // its back, leaning in is lifting its head end.)
+      const ar = arrivalOf(state, o, since);
+      P.headPitch += ar[0]; P.headRoll += play * ar[1]; P.tilt += ar[2] + 0.03 * ar[4]; eyeK *= 1 - ar[3];
     } else if (state === "standby") {
       // Asleep, drifting, paws over its eyes and its pebble resting on its
       // chest. The water still rocks it, but gently; once in a while a sigh.
@@ -168,6 +210,8 @@
       P.lookX = g[0]; P.lookY = -0.25 + g[1];
       P.orbGlow = 0.35;
       calm = 0.8; blinkSlow = 1.4;
+      const ar = arrivalOf(state, o, since);
+      P.headPitch += ar[0]; P.headRoll += play * ar[1]; P.tilt += ar[2] + 0.03 * ar[4]; eyeK *= 1 - ar[3];
     } else if (state === "banked") {
       // Dozing on the water, half-lidded, blinking slowly, and now and then
       // nodding off - its head sinking back, until it catches itself.
@@ -217,7 +261,57 @@
       P.headRoll = sw * 0.05 * wave(t, 67, 0);
       P.lookX = g[0] - 0.4 * hx; P.lookY = g[1] - 0.4 * g[3];
       turnBlink = g[4];
+      if (fw > 0) {
+        // Working beside you (a focus session): it settles to look at the
+        // pebble on its chest, and looks about far less.
+        const f = gaze(t, S_FOCUS, 4, 12, 0.75, 0.3, 0.12, 0, 0.03, 1.6);
+        P.headYaw += (0.2 * f[2] - P.headYaw) * fw;
+        P.headPitch += (-0.22 + 0.1 * f[3] - P.headPitch) * fw;
+        P.lookX += (0.3 + f[0] - 0.4 * f[2] - P.lookX) * fw;
+        P.lookY += (-0.6 + f[1] - 0.4 * f[3] - P.lookY) * fw;
+        turnBlink *= 1 - fw;
+      }
+      // The small stretch in the water as a focus session ends.
+      if (fe > 0) { stretch(P, fe); eyeK *= 1 - 0.4 * fe; deepBreath = Math.max(deepBreath, fe); }
+      if (cw > 0 && cu[0] === 0) {
+        // Cute moment: it rolls right over in the water, pebble held to its
+        // chest, eyes shut as its face goes under, and bobs up the right way
+        // - the rings spreading. (Under calm, only a small roll to one side
+        // and back: a whole turn cannot be made smaller - see fullTurn.)
+        const x = cu[1];
+        P.rock += fullTurn(x, 0.8, 4.8, CUTE_LEN[0], cw) + 0.25 * cw * (1 - smooth(clamp((cw - 0.8) / 0.2, 0, 1))) * bump((x - 0.8) / 4.8);
+        eyeK *= 1 - cw * envAHR(x - 2.0, 0.5, 1.6, 0.6);
+        P.ripple += 0.008 * cw * bump((x - 1.0) / 5.5);
+        turnBlink *= 1 - cw * envAHR(x, 0.6, 5.4, 0.8);
+      } else if (cw > 0 && cu[0] === 1) {
+        // Cute moment: it juggles its pebble from paw to paw over its chest,
+        // a little arc each way, its eyes following - and catches it.
+        const x = cu[1], j = cw * envAHR(x, 0.8, 4.6, 1.0);
+        const s = Math.sin(TAU * 0.55 * (x - 0.8)), c = 1 - s * s;
+        P.orbZ += 0.10 * j * s; P.orbY += j * (0.03 + 0.09 * c);
+        P.pawLz += (-0.13 - P.pawLz) * j; P.pawRz += (0.13 - P.pawRz) * j;
+        P.pawLy += j * (0.03 + 0.05 * Math.max(0, -s)); P.pawRy += j * (0.03 + 0.05 * Math.max(0, s));
+        P.lookY += (-0.3 - 0.4 * s - P.lookY) * j; P.lookX += (0.2 - P.lookX) * j;
+        P.headPitch += (-0.12 - P.headPitch) * j;
+        turnBlink *= 1 - j;
+      }
     }
+
+    // Stroked (petting): it rolls a little toward your hand and leans its
+    // head into it, eyes half shut, its feet giving a happy little kick.
+    if (pw > 0) {
+      P.rock += 0.05 * pw * o.petX;
+      P.headRoll += pw * play * (0.10 * o.petX + 0.03 * o.petDir);
+      P.headPitch += 0.03 * pw;
+      P.paddle += 0.3 * pw * (0.5 + 0.5 * wave(t, 700, 0));
+      eyeK *= 1 - 0.5 * pw;
+    }
+    // A fact saved: one small nod, its head end lifting a touch. A long answer
+    // ready: the pebble glows up once.
+    const an = AWAKE[state] ? ackNodOf(t, o) : ZERO2;
+    P.headPitch += ackK * an[0]; P.tilt += 0.02 * ackK * an[1];
+    const gl = AWAKE[state] ? ackGlowOf(t, o) : 0;
+    P.orbGlow += 0.4 * gl; P.orbR *= 1 + 0.12 * gl;
 
     // Floating: the whole otter bobs and rocks with the water (179 and 130
     // cycles a loop: a swell every 5.7 seconds, a rock every 7.9) - gently,
@@ -260,11 +354,50 @@
       P.pawRx += (R[0] - P.pawRx) * wash; P.pawRy += (R[1] - P.pawRy) * wash; P.pawRz += (R[2] - P.pawRz) * wash;
       P.orbY += (PEBBLE_DOWN - P.orbY) * wash;
     }
+    farewell(P, state, o);
 
     const q = 1 - o.quiet;
     const k = eyeK * (1 - q * Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 2, 10) : 0, turnBlink));
     P.eyeL *= k; P.eyeR *= k;
     return P;
+  }
+
+  /**
+   * Hello and goodbye (critter-pose.js's farewell says how they work). The
+   * otter's goodbye is a little wave of its paw, looking at you, then it
+   * dives under the water; its hello, it pops back up with a splash of
+   * rings, a small bob past the surface, and looks at you. Asleep or dozing:
+   * no wave, no look. (A small bow while waiting on you or after something
+   * went wrong.)
+   */
+  const DIVE = 0.6;   // how far under it goes: hidden by the water, not so deep it shows below the pool
+  function farewell(P, state, o) {
+    const g = o.goodbye, h = o.hello;
+    if (g <= 0 && h >= 1) return;
+    const E = extras(o);
+    const awake = AWAKE[state] || state === "approval" || state === "error" ? 1 : 0;
+    const wave1 = AWAKE[state] ? 1 : 0;
+    if (g > 0) {
+      const a = E * bump(clamp(g / 0.6, 0, 1));
+      const at = E * awake * ease(g / 0.2);
+      P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+      P.headYaw += (0 - P.headYaw) * at;
+      const wv = a * wave1;
+      P.pawRx -= 0.16 * wv; P.pawRy += 0.20 * wv; P.pawRz += 0.10 * wv + 0.05 * wv * Math.sin(TAU * 1.6 * g);
+      const bw = a * (awake - wave1);
+      P.headPitch -= 0.2 * bw;
+      const d = E * ease((g - 0.4) / 0.6);
+      P.bob -= DIVE * d; P.tilt -= 0.2 * d;
+      P.ripple += 0.01 * E * bump((g - 0.45) / 0.55);
+    }
+    if (h < 1) {
+      const d = E * (1 - ease(h / 0.45));
+      P.bob -= DIVE * d - E * 0.035 * bump((h - 0.3) / 0.45); P.tilt -= 0.2 * d;
+      P.ripple += 0.012 * E * bump((h - 0.1) / 0.8);
+      const at = E * awake * ease((h - 0.25) / 0.25) * (1 - ease((h - 0.8) / 0.2));
+      P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+      P.headYaw += (0 - P.headYaw) * at;
+    }
   }
 
   /** A small stretch in the water, `s` 0..1: paws up and apart, chin up, toes out. */
@@ -315,9 +448,11 @@
     P.eyeL *= f; P.eyeR *= f;
   }
 
-  const HALF = halfLives(
+  // (rock is an angle: rolled right over, it settles the short way round.)
+  const HALF = Object.assign(halfLives(
     ["eyeL", "eyeR", "lookX", "lookY"], ["speak"], ["headYaw", "headPitch", "headRoll"],
-    ["pawLx", "pawLy", "pawLz", "pawRx", "pawRy", "pawRz", "orbX", "orbY", "orbZ"], ["paddle"]);
+    ["pawLx", "pawLy", "pawLz", "pawRx", "pawRy", "pawRz", "orbX", "orbY", "orbZ"], ["paddle"]),
+    { rock: [0.18, 0, Math.PI] });   // (0.18: HL_BODY, as before)
   const pose = makePose(stateTargets, KEYS, HALF, wakeSleep);
 
   const WATER_Y = -0.42;
@@ -360,9 +495,10 @@
   const ZZ_AT = [-0.05, 0.36, 0.05];
 
   /** Whether one of its idle happenings is playing at clock t (critter-pose.js playing()). */
-  function busy(state, t) {
-    return state === "idle" && C.util.playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS));
+  function busy(state, t, since, opts) {
+    return state === "idle" && (C.util.playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS))
+      || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 
-  C.species.seaotter = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy };
+  C.species.seaotter = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, HELLO_S, GOODBYE_S };
 })(typeof globalThis !== "undefined" ? globalThis : this);

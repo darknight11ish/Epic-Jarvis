@@ -319,14 +319,17 @@
   function beat(t, salt, gazeSalt, lo, hi, contact) {
     const b = happening(t, 2, 0, 0.6, salt, 0.45, BEAT_KINDS);
     if (b[0] < 0) return b;
+    return clearOfLooks(b[2], gazeSalt, lo, hi, contact) ? b : NONE;
+  }
+  /** Whether no look moves the eyes within LOOK_CLEAR seconds either side of clock `at` (see beat()). */
+  function clearOfLooks(at, gazeSalt, lo, hi, contact) {
     // Whether the look that starts with look `id` moves the eyes at all.
     const atYou = (id) => hash01(id * 256 + gazeSalt + 5) < contact;
     const moves = (c) => !(atYou(c[0]) && atYou(c[2]));
-    const c = chain(b[2], 32, gazeSalt, lo, hi, 1.3);
-    if (c[1] < LOOK_CLEAR && moves(c)) return NONE;
-    const n = chain(b[2] + LOOK_CLEAR, 32, gazeSalt, lo, hi, 1.3);
-    if (n[0] !== c[0] && moves(n)) return NONE;
-    return b;
+    const c = chain(at, 32, gazeSalt, lo, hi, 1.3);
+    if (c[1] < LOOK_CLEAR && moves(c)) return false;
+    const n = chain(at + LOOK_CLEAR, 32, gazeSalt, lo, hi, 1.3);
+    return !(n[0] !== c[0] && moves(n));
   }
 
   /**
@@ -421,10 +424,35 @@
    * gestures and the ordinary blinks away (the looks stay the state's own),
    * so the wake-up never lands on top of a stretch or a nod.
    */
-  function optsOf(o) {
+  function optsOf(o, now) {
     o = o || {};
+    if (o._n) return o;   // already worked out (makePose hands the same one on)
     const w = (v) => (v === true ? 1 : clamp(+v || 0, 0, 1));
-    return { calm: w(o.calm), serious: w(o.serious), still: w(o.still), quiet: 0 };
+    const num = (v, d) => (typeof v === "number" && isFinite(v) ? v : d);
+    const t0 = num(now, 0);
+    // A moment the host gives as SECONDS SINCE it happened, turned into the
+    // clock it happened at - so a pose worked out at an earlier clock (the
+    // settling does that) sees it at the right distance. Left out, or
+    // negative: none (NEVER seconds ago).
+    const at = (v) => { const a = num(v, NEVER); return a >= 0 && a < NEVER ? t0 - a : -NEVER; };
+    // An owner's switch (jarvis_animal.SWITCHES, by its id): on unless given.
+    const sw = (v) => (v == null ? 1 : w(v));
+    return {
+      calm: w(o.calm), serious: w(o.serious), still: w(o.still), quiet: 0,
+      // The new behaviours (see "New behaviours" below and docs/CRITTERS.md):
+      // the owner's switches, eased by the host like the options...
+      nods: sw(o.nods), focusBuddy: sw(o.focus_buddy), acks: sw(o.acks), petting: sw(o.petting),
+      cute: sw(o.cute_moments != null ? o.cute_moments : o.cute),
+      // ...and what is happening.
+      variety: w(o.variety), focus: w(o.focus),
+      pet: w(o.pet), petX: clamp(num(o.petX, 0), -1, 1), petDir: clamp(num(o.petDir, 0), -1, 1),
+      hello: o.hello == null ? 1 : w(o.hello), goodbye: w(o.goodbye),
+      heardAt: at(o.heard), heardN: Math.floor(num(o.heardN, -1)),
+      phraseAt: at(o.phraseEnd), phraseN: Math.floor(num(o.phraseN, -1)),
+      nodAt: at(o.ackNod), glowAt: at(o.ackGlow), focusEndAt: at(o.focusEnd),
+      arrive: -1,
+      _n: 1,
+    };
   }
   /**
    * How much of each kind of movement is left under the options:
@@ -463,8 +491,260 @@
     return o;
   }
 
+  /* ------------------------------------------------------------------ *
+   * New behaviours (the owner, 2026-09-28: "New animal behaviours, all four
+   * chosen", "Two cute idle moments per face", "Goodbye and hello when
+   * switching faces", "Variety, never over the top"). docs/CRITTERS.md,
+   * "New behaviours", lists every input a host passes for them (all in
+   * `opts`, all optional) and what each animal does.
+   *
+   * The rules every one keeps:
+   *  - Left out, an input changes nothing: a host that passes none of them
+   *    draws exactly what it drew before.
+   *  - Still, serious and a wake-up's quiet switch every one off; calm
+   *    makes them smaller (newOf). Eased, as the weights themselves are.
+   *  - None while waiting on you (approval) or after something went wrong
+   *    (error), except the small reaction as either arrives, and none
+   *    asleep or dozing.
+   *  - The mouth is never touched: it follows Jarvis's real voice only.
+   *  - Each is eased in and out (bump, envAHR, ease), so nothing jumps or
+   *    changes speed suddenly, and nothing but a blink moves faster than
+   *    three times a second.
+   *  - A moment (a pause heard, a phrase ending, a fact saved...) is given
+   *    as seconds since it happened, and turned into the clock it happened
+   *    at (optsOf) - so the settling, which works poses out at earlier
+   *    clocks, sees each one where it was.
+   * ------------------------------------------------------------------ */
+  const NEVER = 1e9;
+  const ZERO2 = [0, 0], ZERO4 = [0, 0, 0, 0], ZERO5 = [0, 0, 0, 0, 0];
+  /** How much of a new behaviour the options leave: none under still, serious or a wake-up's quiet; calm makes it smaller. */
+  function newOf(o) { return (1 - o.still) * (1 - o.serious) * (1 - o.quiet) * (1 - 0.6 * o.calm); }
+  /** The variants of listening, thinking and the arrivals: the host's `variety` (it passes 1), with the options. */
+  function varOf(o) { return o.variety * newOf(o); }
+  /** Working beside you in a focus session: none under still or serious. */
+  function focusOf(o) { return o.focus * o.focusBuddy * (1 - o.still) * (1 - o.serious); }
+  /** Being stroked. */
+  function petOf(o) { return o.pet * o.petting * newOf(o); }
+  /** The two cute idle moments: the owner's switch, none in a focus session. */
+  function cuteOf(o) { return o.cute * newOf(o) * (1 - o.focus); }
+  // Where each can happen: awake and not in a serious look.
+  const AWAKE = { idle: 1, listening: 1, thinking: 1, speaking: 1 };
+
+  /**
+   * The k-th of `n` things in a shuffled order that never gives the same
+   * one twice running: the numbers are dealt in shuffled hands of k (a
+   * "shuffle bag"), and a hand that would start with the one the last hand
+   * ended with swaps its first two. Pure: hand b is a hash of b. For k of
+   * 3 or more. n counts from 0.
+   */
+  function bagOrder(b, k, salt) {
+    const a = [];
+    for (let i = 0; i < k; i++) a.push(i);
+    for (let i = k - 1; i > 0; i--) {
+      const j = Math.min(i, Math.floor(hash01(((b & 4095) * 8 + i) * 256 + salt) * (i + 1)));
+      const s = a[i]; a[i] = a[j]; a[j] = s;
+    }
+    return a;
+  }
+  function bagKind(n, k, salt) {
+    const b = Math.floor(n / k), i = n - b * k;
+    const cur = bagOrder(b, k, salt);
+    if (i < 2 && b > 0 && cur[0] === bagOrder(b - 1, k, salt)[k - 1]) {
+      const s = cur[0]; cur[0] = cur[1]; cur[1] = s;
+    }
+    return cur[i];
+  }
+
+  /**
+   * A listening nod, in one of the owner's pauses (o.heardAt, counted by
+   * o.heardN - see pauseStep). Three kinds, never the same twice running:
+   * [0] a small nod, [1] a smaller one with a tilt and a flick of the ears
+   * (the owl: a fluff), [2] two little nods with a slow blink ("mm-hm").
+   * About 3 degrees at most. Returns [head pitch, head roll, eyes shut
+   * 0..1, ears] to add, with the options folded in.
+   */
+  const NOD_S = 1.3;
+  function listenNod(t, o, salt) {
+    const x = t - o.heardAt;
+    if (!(x > 0 && x < NOD_S) || o.heardN < 0) return ZERO4;
+    const w = o.nods * newOf(o), k = bagKind(o.heardN, 3, salt);
+    if (k === 0) return [-w * 0.05 * (bump(x / 0.7) - 0.3 * bump((x - 0.55) / 0.7)), 0, 0, 0];
+    if (k === 1) {
+      return [-w * 0.035 * bump(x / 0.8), w * 0.05 * bump(x / 1.2), 0,
+              w * (bump(x / 0.5) - 0.3 * bump((x - 0.35) / 0.5))];
+    }
+    return [-w * 0.03 * (bump(x / 0.5) + 0.8 * bump((x - 0.5) / 0.5)), 0, 0.5 * w * bump((x - 0.1) / 0.8), 0];
+  }
+
+  /**
+   * A talking gesture at the end of one of Jarvis's phrases (o.phraseAt,
+   * counted by o.phraseN), in place of beat()'s: the same three kinds, in a
+   * shuffle bag so never the same twice running, and - like beat() - none
+   * when the eyes move to look somewhere within LOOK_CLEAR of it. Returns
+   * happening()'s three numbers.
+   */
+  function phraseBeat(t, o, salt, gazeSalt, lo, hi, contact) {
+    const x = t - o.phraseAt;
+    if (!(x >= 0 && x < 2)) return NONE;
+    if (!clearOfLooks(o.phraseAt, gazeSalt, lo, hi, contact)) return NONE;
+    return [bagKind(Math.max(0, o.phraseN), 3, salt), x, o.phraseAt];
+  }
+
+  /** The nod when a fact is saved (o.nodAt): [head pitch, ears] to add. About 2.5 degrees. */
+  const ACK_S = 1.2;
+  function ackNodOf(t, o) {
+    const x = t - o.nodAt;
+    if (!(x > 0 && x < ACK_S)) return ZERO2;
+    const w = o.acks * newOf(o);
+    return [-w * 0.045 * (bump(x / 0.75) - 0.3 * bump((x - 0.6) / 0.6)),
+            w * (bump((x - 0.05) / 0.45) - 0.3 * bump((x - 0.4) / 0.5))];
+  }
+  /** The orb swelling once as a long answer is ready (o.glowAt): 0..1. */
+  const GLOW_S = 1.8;
+  function ackGlowOf(t, o) {
+    const x = t - o.glowAt;
+    return x > 0 && x < GLOW_S ? o.acks * newOf(o) * bump(x / GLOW_S) : 0;
+  }
+  /** The small stretch as a focus session ends (o.focusEndAt): 0..1. */
+  const FOCUS_END_S = 3.2;
+  function focusEndOf(t, o) {
+    const x = t - o.focusEndAt;
+    return x > 0 && x < FOCUS_END_S ? o.focusBuddy * newOf(o) * envAHR(x - 0.3, 0.9, 0.6, 1.4) : 0;
+  }
+
+  /**
+   * A variant of listening or thinking, now and then: an 8-second slot has
+   * one with chance `chance`, never the same kind as the slot before
+   * (happening's rule). Returns [kind, envelope 0..1] - the envelope eases
+   * up over 1.2 s, holds 1.4 s and eases down over 1.2 s - or [-1, 0].
+   */
+  function variant(t, o, salt, chance) {
+    const w = varOf(o);
+    if (w <= 0) return [-1, 0];
+    const h = happening(t, 8, 0.5, 3.0, salt, chance, 3);
+    return h[0] < 0 ? [-1, 0] : [h[0], w * envAHR(h[1], 1.2, 1.4, 1.2)];
+  }
+
+  /**
+   * The small reaction as waiting on you or something going wrong arrives,
+   * `x` seconds in, variant o.arrive (see arriveKind), then still. Returns
+   * [head pitch, head roll, lean, eyes shut 0..1, ears] to add.
+   *  - waiting on you: [0] it perks up a little, ears up; [1] a double
+   *    blink and a small lean in; [2] a small tilt of interest.
+   *  - something wrong: [0] a small start back, with a blink; [1] the head
+   *    dips and the ears go back a touch; [2] one slow blink and a small
+   *    tilt.
+   */
+  const ARRIVE_S = 1.3;
+  function arrivalOf(state, o, x) {
+    const w = o.arrive >= 0 && x > 0 && x < ARRIVE_S ? varOf(o) : 0;
+    if (w <= 0) return ZERO5;
+    const k = o.arrive;
+    if (state === "approval") {
+      if (k === 0) return [w * 0.05 * bump(x / 1.1), 0, 0, 0, w * bump(x / 1.1)];
+      if (k === 1) return [0, 0, w * 0.02 * bump(x / 1.2), w * 0.9 * (bump(x / 0.25) + bump((x - 0.35) / 0.25)), 0];
+      return [0, w * 0.05 * bump(x / 1.2), 0, 0, 0];
+    }
+    if (k === 0) return [0.01 * w * bump(x / 0.9), 0, -w * 0.03 * bump(x / 0.9), w * 0.8 * bump(x / 0.3), 0];
+    if (k === 1) return [-w * 0.04 * bump(x / 1.2), 0, 0, 0, -w * bump(x / 1.2)];
+    return [0, -w * 0.035 * bump(x / 1.2), 0, w * 0.85 * bump(x / 0.9), 0];
+  }
+  /**
+   * Which variant the reaction to arriving in `state` (approval or error)
+   * plays, `since` seconds into it, its own change being past[i]: a hash of
+   * the 8-second slot it arrived in, never the variant the same state played
+   * when it last arrived - if that was within the host's last few changes
+   * (ARRIVE_BACK of them), which is when a repeat would be seen. -1 for any
+   * other state.
+   */
+  const ARRIVE_BACK = 4;
+  function arriveKind(state, past, i, since, t, salt) {
+    if (state !== "approval" && state !== "error") return -1;
+    let c = t - since;
+    const at = [c];
+    for (let j = i; j < i + ARRIVE_BACK && j < HIST_MAX && j < past.length; j++) {
+      const pv = past[j];
+      if (!pv || !pv.state || !(pv.gap < 1e8)) break;
+      c -= pv.gap;
+      if (pv.state === state) at.push(c);
+    }
+    let k = -1;
+    for (let q = at.length - 1; q >= 0; q--) k = pickKind(hash01((Math.floor(at[q] / 8) & 4095) * 256 + salt), EVEN[2], k);
+    return k;
+  }
+
+  /**
+   * The two cute idle moments. Time is cut into CUTE_SLOT-second slots
+   * (about four minutes), each with one moment starting 30 to 200 s in -
+   * the two kinds taking turns, slot by slot - that plays only if the
+   * animal had then been idle at least CUTE_AFTER seconds (`since` is how
+   * long it has been idle). `lens` is how long each kind lasts. Returns
+   * [kind, seconds since it started, the clock it started at] or NONE.
+   */
+  const CUTE_SLOT = 256, CUTE_AFTER = 150;
+  function cuteAt(t, since, salt, lens) {
+    const n = Math.floor(t / CUTE_SLOT);
+    const id = slotId(n, CUTE_SLOT);
+    const kind = id & 1;
+    const start = n * CUTE_SLOT + 30 + 170 * hash01(id * 256 + salt);
+    const x = t - start;
+    if (x < 0 || x >= lens[kind] || since - x < CUTE_AFTER) return NONE;
+    return [kind, x, start];
+  }
+  /**
+   * A whole turn (2 pi), played from `a` seconds into a cute moment over
+   * `len` seconds, at the moment's weight w: the otter rolling over, the
+   * monkey twirling its banana. A turn cannot be made smaller and still end
+   * where it began, so it plays only near full weight (q, from w 0.8 to 1)
+   * - under calm the moment keeps only its other, smaller parts. Should the
+   * weight change part way through, what is left over is turned back the
+   * short way over the last 0.8 s before `end`, so it never jumps: it ends
+   * on a whole number of turns, which is where it began.
+   */
+  function fullTurn(x, a, len, end, w) {
+    const q = smooth(clamp((w - 0.8) / 0.2, 0, 1));
+    return TAU * q * ease((x - a) / len) + TAU * (Math.floor(q + 0.5) - q) * ease((x - end + 0.8) / 0.8);
+  }
+  /** How much of the idle happenings a cute moment x seconds into its `len` leaves: none while it plays. */
+  function cuteQuiet(x, len) { return envAHR(x, 0.8, len - 1.6, 0.8); }
+
+  /**
+   * Finding the pauses in someone talking, from a loudness (0..1) - the
+   * owner's (the microphone, for the listening nods) or Jarvis's (its
+   * voice, for the gestures at the phrase ends). Pure: the host keeps the
+   * record and hands it back each frame with the seconds since the last
+   * one, and puts rec.ago and rec.n in opts (heard/heardN or
+   * phraseEnd/phraseN). A pause counts when the loudness has stayed under
+   * PAUSE.OFF for `quietMin` seconds after at least PAUSE.TALK_MIN seconds
+   * over PAUSE.ON, and the last pause counted was at least `gapMin` seconds
+   * before - so a nod or a gesture always finishes before the next starts.
+   * rec: {talk, quiet, ago, n} (null to start).
+   */
+  const PAUSE = Object.freeze({
+    ON: 0.10, OFF: 0.05, TALK_MIN: 0.6,
+    NOD_QUIET: 0.3, NOD_GAP: 3.0,         // the owner's pauses: a nod at most every 3 s
+    PHRASE_QUIET: 0.15, PHRASE_GAP: 2.0,  // Jarvis's phrase ends: a gesture at most every 2 s
+  });
+  function pauseStep(rec, dt, level, quietMin, gapMin) {
+    const r = rec || { talk: 0, quiet: 0, ago: NEVER, n: 0 };
+    let talk = r.talk, quiet = r.quiet, ago = Math.min(NEVER, r.ago + Math.max(0, dt)), n = r.n;
+    if (level >= PAUSE.ON) { talk += dt; quiet = 0; }
+    else if (level <= PAUSE.OFF) quiet += dt;
+    if (quiet >= quietMin && talk > 0) {
+      if (talk >= PAUSE.TALK_MIN && ago >= gapMin) { ago = 0; n += 1; }
+      talk = 0;
+    }
+    return { talk, quiet, ago, n };
+  }
+
   // The panda's own dice.
   const S_GAZE = 0, S_EVENT = 16, S_ROLL = 24, S_LEAN = 32, S_BEAT = 40, S_BLINK = 48;
+  // ...and for the new behaviours: listening's and thinking's variants, the
+  // focus looks (twelve), the listening nods, the phrase-end gestures, the
+  // cute moments.
+  const S_LISTEN = 56, S_THINK = 59, S_FOCUS = 62, S_NOD = 74, S_PHRASE = 75, S_CUTE = 76;
+  // How long each cute moment lasts: hugging its tail, playing with its orb.
+  const CUTE_LEN = [7.0, 5.0];
   // Its idle happenings, and how often each comes up: the small ones (a
   // tail flick, an ear turning to a sound) most; the big ones (a stretch, a
   // scratch) about one time in eight each.
@@ -507,8 +787,18 @@
   const HAPPENING_S = 5.5;
   function playing(ev) { return ev[0] >= 0 && ev[1] >= 0 && ev[1] < HAPPENING_S; }
   /** The panda's: an idle happening (the same dice its idle pose rolls) is playing at clock t. */
-  function busy(state, t) {
-    return state === "idle" && playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS));
+  function busy(state, t, since, opts) {
+    return state === "idle" && (playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS))
+      || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
+  }
+  /**
+   * Whether a cute moment is playing, for the frame pacer: only when the
+   * host passes how long the animal has been idle (`since`) and its opts,
+   * so a host that passes neither is told exactly what it was before.
+   */
+  function cuteBusy(t, since, opts, salt, lens) {
+    if (typeof since !== "number") return false;
+    return cuteAt(t, since, salt, lens)[0] >= 0 && cuteOf(optsOf(opts, t)) > 0;
   }
 
   /**
@@ -528,8 +818,17 @@
    */
   function stateTargets(state, t, amp, look, since, o) {
     if (typeof since !== "number") since = 1e9;
-    o = o || optsOf();
-    const m = mods(o), hap = m[0], sw = m[2], play = m[3];
+    o = optsOf(o, t);
+    const m = mods(o);
+    // Idle: a focus session takes the happenings away, and so does a cute
+    // moment while it plays (m[0] is what tailAt's flick reads too).
+    const cu = state === "idle" ? cuteAt(t, since, S_CUTE, CUTE_LEN) : NONE;
+    const cw = cu[0] >= 0 ? cuteOf(o) : 0;
+    const fw = state === "idle" ? focusOf(o) : 0;
+    // (and so do the stretch as a focus session ends, and being stroked)
+    const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
+    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
+    const hap = m[0], sw = m[2], play = m[3];
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, lean: 0, bob: 0, breath: 1,
       earL: 0.2, earR: 0.2, eyeL: 1, eyeR: 1, brow: 0, speak: 0, lookX: 0, lookY: 0,
@@ -542,7 +841,7 @@
     };
     // 256 cycles a loop is one breath every 4 seconds.
     let breathK = 256, breathDepth = 1, blinkSlow = 1, blinks = true, turnBlink = 0;
-    let eyeK = 1, deepBreath = 0, scratch = 0, lift = 0;
+    let eyeK = 1, deepBreath = 0, scratch = 0, lift = 0, ackK = 1, hug = 0;
 
     if (state === "listening") {
       // Ears up and forward, head tilted about 15 degrees - the dog-hearing-
@@ -560,6 +859,16 @@
       P.brow = 0.3 + 0.4 * play;
       P.lookX = g[0] - 0.4 * g[2]; P.lookY = 0.1 + g[1] - 0.4 * g[3];
       P.orbGlow = 0.55 + 0.5 * amp;
+      // Now and then (variety): it tilts its head the other way, leans in a
+      // little closer, or turns an ear.
+      const v = variant(t, o, S_LISTEN, 0.4);
+      if (v[0] === 0) P.headRoll -= 0.39 * play * v[1];
+      else if (v[0] === 1) { P.lean += 0.04 * v[1]; P.eyeL += 0.05 * v[1]; P.eyeR += 0.05 * v[1]; }
+      else if (v[0] === 2) P.earTwR += 0.3 * v[1];
+      // A small nod in your pauses.
+      const nd = listenNod(t, o, S_NOD);
+      P.headPitch += nd[0]; P.headRoll += play * nd[1]; eyeK *= 1 - nd[2];
+      P.earL += 0.3 * nd[3]; P.earR += 0.3 * nd[3];
       turnBlink = g[4];
     } else if (state === "thinking") {
       // Holds the orb up in both paws and gazes into it - glancing up and
@@ -578,6 +887,17 @@
       P.brow = 0.25;
       P.lean = 0.06;
       P.orbGlow = 0.95 + 0.2 * wave(t, 424, 0);
+      // Now and then (variety): it turns the orb in its paws, brings it
+      // closer and peers in, or tilts its head, thinking.
+      const v = variant(t, o, S_THINK, 0.5);
+      if (v[0] === 0) {
+        const r = 0.03 * v[1] * wave(t, 300, 0);
+        P.pawLy += r; P.pawRy -= r; P.pawLz -= 0.6 * r; P.pawRz += 0.6 * r;
+      } else if (v[0] === 1) {
+        P.orbY += 0.04 * v[1]; P.orbZ -= 0.03 * v[1];
+        P.pawLy += 0.04 * v[1]; P.pawRy += 0.04 * v[1]; P.pawLz -= 0.03 * v[1]; P.pawRz -= 0.03 * v[1];
+        P.headPitch -= 0.05 * v[1]; eyeK *= 1 - 0.15 * v[1];
+      } else if (v[0] === 2) { P.headRoll += 0.12 * play * v[1]; P.brow += 0.1 * v[1]; }
       turnBlink = g[4];
     } else if (state === "speaking") {
       // Leans in and talks with its eyes, its head and one paw - in PHRASES:
@@ -589,8 +909,11 @@
       // (uniforms' `mouth`); `speak` only says how much of it to show - 1
       // here, 0 in every other state, settling between them.
       const g = looks(t, S_GAZE, 1.8, 6, 0.65, 0.5, 0.18, 0, 0.06, 1.1, o);
-      const b = beat(t, S_BEAT, S_GAZE, 1.8, 6, 0.65);
+      // (With the host's phrase ends, the gestures land on them instead.)
+      const b = o.phraseN >= 0 ? phraseBeat(t, o, S_PHRASE, S_GAZE, 1.8, 6, 0.65) : beat(t, S_BEAT, S_GAZE, 1.8, 6, 0.65);
       const x = b[1];
+      // A fact's nod waits while a gesture plays, so two never stack up.
+      ackK = b[0] >= 0 ? 1 - bump(clamp(x / 1.6, 0, 1)) : 1;
       P.speak = 1;
       P.lean = 0.05;
       P.headPitch = 0.03;
@@ -632,6 +955,10 @@
       P.lookX = g[0]; P.lookY = g[1];
       P.orbGlow = 0.9;
       lift = 0.015; blinkSlow = 1.4;
+      // The small reaction as it arrives (variety), then still.
+      const ar = arrivalOf(state, o, since);
+      P.headPitch += ar[0]; P.headRoll += play * ar[1]; P.lean += ar[2]; eyeK *= 1 - ar[3];
+      P.earL += 0.3 * ar[4]; P.earR += 0.3 * ar[4];
     } else if (state === "standby") {
       // Asleep: eyes shut, head drooped, ears down, the tail wrapped round,
       // breathing slow and deep. Once in a while a sigh - one deeper breath
@@ -662,6 +989,9 @@
       P.lookX = g[0]; P.lookY = -0.3 + g[1];
       P.orbGlow = 0.35;
       blinkSlow = 1.4;
+      const ar = arrivalOf(state, o, since);
+      P.headPitch += ar[0]; P.headRoll += play * ar[1]; P.lean += ar[2]; eyeK *= 1 - ar[3];
+      P.earL += 0.3 * ar[4]; P.earR += 0.3 * ar[4];
     } else if (state === "banked") {
       // Things are waiting, but it is keeping them to itself: dozing,
       // half-lidded, blinking slowly - and now and then nodding off, its
@@ -736,13 +1066,86 @@
         eyeK = 1 - 0.45 * scratch;
       }
       turnBlink = g[4];
+      if (fw > 0) {
+        // Working beside you (a focus session): it settles to gaze into the
+        // orb in its lap, head a little down, looking up now and then - far
+        // fewer looks, and no happenings (hap, above).
+        const f = gaze(t, S_FOCUS, 4, 12, 0.75, 0.3, 0.12, 0, 0.03, 1.6);
+        P.lookX += (f[0] - 0.4 * f[2] - P.lookX) * fw;
+        P.lookY += (-0.6 + f[1] - 0.4 * f[3] - P.lookY) * fw;
+        P.headYaw += (0.2 * f[2] - P.headYaw) * fw;
+        P.headPitch += (-0.16 + 0.1 * f[3] - P.headPitch) * fw;
+        P.lean += 0.02 * fw;
+        turnBlink *= 1 - fw;
+      }
+      // The small stretch as a focus session ends (the idle stretch's).
+      if (fe > 0) {
+        P.lean -= 0.05 * fe; P.headPitch += 0.10 * fe; eyeK *= 1 - 0.55 * fe;
+        P.pawLx -= 0.06 * fe; P.pawRx += 0.06 * fe; P.pawLy += 0.03 * fe; P.pawRy += 0.03 * fe;
+        P.earL -= 0.35 * fe; P.earR -= 0.35 * fe; P.tailCurl -= 0.12 * fe;
+        deepBreath = Math.max(deepBreath, fe);
+      }
+      if (cw > 0 && cu[0] === 0) {
+        // Cute moment: it hugs its tail. The tail curls round across its
+        // front (the orb moved aside in its lap), both paws hold it, its head
+        // tips down onto it, eyes half shut and content, nuzzling a little.
+        hug = cw * envAHR(cu[1], 1.4, 4.0, 1.6);
+        P.tailCurl += (1 - P.tailCurl) * hug;
+        P.orbX += (-0.17 - P.orbX) * hug; P.orbZ += (-0.40 - P.orbZ) * hug;
+        P.pawRx += (0.30 - P.pawRx) * hug; P.pawRy += (0.38 - P.pawRy) * hug; P.pawRz += (-0.53 - P.pawRz) * hug;
+        P.pawLx += (0.08 - P.pawLx) * hug; P.pawLy += (0.45 - P.pawLy) * hug; P.pawLz += (-0.53 - P.pawLz) * hug;
+        P.lookX += (0.3 - P.lookX) * hug; P.lookY += (-0.55 - P.lookY) * hug;
+        P.headYaw += (0.14 - P.headYaw) * hug;
+        P.headPitch += (-0.14 - P.headPitch) * hug;
+        P.headRoll += hug * play * (0.14 + 0.03 * wave(t, 205, 0));
+        P.brow += 0.15 * hug; eyeK *= 1 - 0.55 * hug;
+        turnBlink *= 1 - hug;
+      } else if (cw > 0 && cu[0] === 1) {
+        // Cute moment: it plays with its orb - tosses it up a little from
+        // its paws, watching it, catches it, and a smaller toss again.
+        const e = cw * envAHR(cu[1], 0.6, 3.6, 0.8);
+        const h = cw * 0.2 * (bump((cu[1] - 0.9) / 1.0) + 0.6 * bump((cu[1] - 2.3) / 0.9));
+        P.orbY += 0.06 * e + h; P.orbZ -= 0.04 * e;
+        P.pawLy += 0.06 * e + 0.35 * h; P.pawRy += 0.06 * e + 0.35 * h;
+        P.pawLz -= 0.04 * e; P.pawRz -= 0.04 * e;
+        P.pawLx += 0.03 * e; P.pawRx -= 0.03 * e;
+        P.lookX += (0 - P.lookX) * e; P.lookY += (-0.2 + 3.5 * h - P.lookY) * e;
+        P.headYaw += (0 - P.headYaw) * e;
+        P.headPitch += (-0.05 + 0.5 * h - P.headPitch) * e;
+        P.brow += 0.2 * e;
+        turnBlink *= 1 - e;
+      }
     }
+
+    // Stroked (petting): it leans into your hand, eyes soft and half shut,
+    // ears back happily - and follows the stroke a little.
+    if (pw > 0) {
+      P.headRoll += pw * play * (0.10 * o.petX + 0.03 * o.petDir);
+      P.headPitch += 0.04 * pw;
+      P.bodyRoll += 0.02 * pw * o.petX;
+      P.earL -= 0.25 * pw; P.earR -= 0.25 * pw;
+      P.brow += 0.15 * pw;
+      eyeK *= 1 - 0.45 * pw;
+    }
+    // A fact saved: one small nod, ears flicking. A long answer ready: the
+    // orb swells once.
+    const an = AWAKE[state] ? ackNodOf(t, o) : ZERO2;
+    P.headPitch += ackK * an[0];
+    P.earL += 0.4 * ackK * an[1]; P.earR += 0.4 * ackK * an[1];
+    const gl = AWAKE[state] ? ackGlowOf(t, o) : 0;
+    P.orbGlow += 0.4 * gl; P.orbR *= 1 + 0.2 * gl;
 
     P.tailSwing = tailAt(state, t, m);
     P.tail2 = tailAt(state, t - TAIL_LAG, m);
     P.tail3 = tailAt(state, t - 2 * TAIL_LAG, m);
     P.tail4 = tailAt(state, t - 3 * TAIL_LAG, m);
     P.tail5 = tailAt(state, t - 4 * TAIL_LAG, m);
+    if (hug > 0) {
+      // (Hugged, the tail keeps still, swung round across its front.)
+      const sw0 = -0.45 * hug;
+      P.tailSwing += (sw0 - P.tailSwing) * hug; P.tail2 += (sw0 - P.tail2) * hug; P.tail3 += (sw0 - P.tail3) * hug;
+      P.tail4 += (sw0 - P.tail4) * hug; P.tail5 += (sw0 - P.tail5) * hug;
+    }
 
     // Breathing: the chest swells and the whole body rises a little.
     const b = wave(t, breathK, 0) * (1 + 0.6 * deepBreath);
@@ -771,10 +1174,73 @@
       P.pawRz += (q[2] - P.pawRz) * scratch - 0.10 * arc;
     }
 
+    farewell(P, state, o);
+
     const q = 1 - (o.quiet || 0);
     const k = eyeK * (1 - q * Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 2, 10) : 0, turnBlink));
     P.eyeL *= k; P.eyeR *= k;
     return P;
+  }
+
+  /**
+   * Hello and goodbye, when the owner switches faces (owner, 2026-09-28):
+   * the HOST plays them, handing over how far each has got - `o.goodbye`
+   * 0..1 on the face that is leaving, then `o.hello` 0..1 on the one coming
+   * in (about HELLO_S and GOODBYE_S seconds each). Left out: none. Every
+   * animal's is built the same way (see the owl's, the otter's and the
+   * monkey's):
+   *  - Goodbye: a little wave (a small bow while waiting on you or after
+   *    something went wrong; nothing while asleep or dozing), looking at
+   *    you, then out of view - the panda ducks down below the picture.
+   *  - Hello: it comes back up into view, a small bounce past its place,
+   *    and looks at you.
+   * Under still, calm or a serious moment (E, the same weight as the
+   * wake-up's extras) the pose plays none of it and the host cross-fades
+   * the faces instead - switchAlpha() says how much.
+   */
+  const HELLO_S = 1.0, GOODBYE_S = 1.0;
+  const DROP = 2.1;   // how far down it goes to be out of view, ear tips and all
+  function farewell(P, state, o) {
+    const g = o.goodbye, h = o.hello;
+    if (g <= 0 && h >= 1) return;
+    const E = extras(o);
+    const awake = AWAKE[state] || state === "approval" || state === "error" ? 1 : 0;
+    const wave1 = AWAKE[state] ? 1 : 0;
+    if (g > 0) {
+      const a = E * bump(clamp(g / 0.6, 0, 1));
+      const at = E * awake * ease(g / 0.2);
+      P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+      P.headYaw += (0 - P.headYaw) * at;
+      // The wave: its right paw up by its shoulder, waving side to side
+      // about one and a half times a second (by how far the goodbye has got).
+      const wv = a * wave1;
+      P.pawRx += 0.12 * wv + 0.06 * wv * Math.sin(TAU * 1.6 * g);
+      P.pawRy += 0.36 * wv; P.pawRz -= 0.08 * wv;
+      P.brow += 0.2 * wv;
+      // The bow, instead, while waiting on you or after something wrong.
+      const bw = a * (awake - wave1);
+      P.headPitch -= 0.22 * bw; P.lean += 0.05 * bw;
+      P.bob -= E * DROP * ease((g - 0.4) / 0.6);
+    }
+    if (h < 1) {
+      P.bob -= E * DROP * (1 - ease(h / 0.45));
+      P.bob += E * 0.045 * bump((h - 0.3) / 0.45);
+      const at = E * awake * ease((h - 0.25) / 0.25) * (1 - ease((h - 0.8) / 0.2));
+      P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+      P.headYaw += (0 - P.headYaw) * at; P.headPitch += (0.04 - P.headPitch) * at;
+      P.brow += 0.2 * at * wave1;
+    }
+  }
+  /**
+   * How opaque the host draws an animal while it says hello or goodbye:
+   * 1 while the pose plays the piece itself; under still, calm or a serious
+   * moment (when it does not) the host cross-fades instead - the leaving
+   * face fading out as its goodbye goes 0 to 1, the new one in with its
+   * hello. `opts` is what the host hands the pose.
+   */
+  function switchAlpha(opts) {
+    const o = optsOf(opts, 0), E = extras(o);
+    return clamp(1 - (1 - E) * Math.max(o.goodbye, 1 - o.hello), 0, 1);
   }
 
   /* ------------------------------------------------------------------ *
@@ -847,7 +1313,7 @@
   function quietOf(x) { return 1 - smooth(clamp((x - 1.5) / (WAKE_S - 1.5), 0, 1)); }
   /** How much of the extras (a stretch, a fluff, a rub) the options leave. */
   function extras(o) { return (1 - o.still) * (1 - o.calm) * (1 - o.serious); }
-  function withQuiet(o, q) { return { calm: o.calm, serious: o.serious, still: o.still, quiet: q }; }
+  function withQuiet(o, q) { return Object.assign({}, o, { quiet: q }); }
   /** a, moved toward b by w (0..1). */
   function toward(a, b, w) { return a + (b - a) * w; }
   // Waking into these, only the eyes open: the looks stay still.
@@ -961,6 +1427,7 @@
   const LN2 = 0.6931471805599453;
   const FD = 1 / 120;   // the step the screen's speed at the change is measured over
   const HIST_MAX = 6;   // the most changes a pose looks back through
+  const S_ARRIVE = 255; // the dice for which reaction an arrival plays (every animal's)
   /** How much slower than usual a change from `prev` to `state` settles. */
   function slowBy(state, prev) {
     if (state === "standby") return 5;       // nodding off
@@ -996,7 +1463,11 @@
     // change it came from) - and, when `both`, the pose FD seconds earlier
     // as well, which is what the change after this one needs to know how
     // fast the screen was moving. The walk back is one call per change.
-    function level(state, past, i, since, t, amp, look, o, both) {
+    function level(state, past, i, since, t, amp, look, o0, both) {
+      // Arriving in waiting on you or something wrong: which small reaction
+      // it plays (arriveKind), kept with the options this state is drawn with.
+      const ak = arriveKind(state, past, i, since, t, S_ARRIVE);
+      const o = ak >= 0 ? Object.assign({}, o0, { arrive: ak }) : o0;
       // Waking up or nodding off: how long ago, how far the change before it
       // had got (far), how much of the extras to play (ex), and - nodding off -
       // the pose it is letting go of (F: the old state's at the change, its
@@ -1028,7 +1499,7 @@
       const k = slowBy(state, pv.state);
       if (since >= longest * k) return [cur, curB];
       const s = Math.max(0, since), sB = Math.max(0, since - FD), tc = t - s;
-      const on = level(pv.state, past, i + 1, pv.gap, tc, pv.amp, look, o, true);
+      const on = level(pv.state, past, i + 1, pv.gap, tc, pv.amp, look, o0, true);
       const nwA = at(tc, 0, -s);
       const nwB = at(tc - FD, -FD, -s - FD);
       const outA = {}, outB = both ? {} : null;
@@ -1049,7 +1520,7 @@
       look = look || {};
       hist = hist || {};
       const past = pastOf(prevState, hist, amp);
-      const P = level(state, past, 0, since, t, amp, look, optsOf(opts), false)[0];
+      const P = level(state, past, 0, since, t, amp, look, optsOf(opts, t), false)[0];
       if (moves) P.asleep = zsOf(depth(state, past, 0, since));
       return P;
     };
@@ -1369,17 +1840,25 @@
 
   const api = {
     KEYS, BLEND_S, hash01, blink, blinkAt, stateTargets, pose, uniforms, mouthOf, overlay, ZS, zs, HAPPENING_S,
+    // The new behaviours' helpers for a host: the pause finder and its
+    // numbers, how opaque to draw a face while it says hello or goodbye, and
+    // how long each of those takes.
+    PAUSE, pauseStep, switchAlpha, HELLO_S, GOODBYE_S,
     // Every animal, by face id. The owl and the otter add themselves. Each
     // has `mouth(P, mouth)` too (the same mouthOf), for a drawing that is not
     // the shader - the flat fallback - to open the same mouth, and
     // `overlay(P, view)` for where its sleeping Zs rise from, and
     // `busy(state, t)`: whether an idle happening is playing (the frame pacer's).
-    species: { redpanda: { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy } },
+    species: { redpanda: { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, HELLO_S, GOODBYE_S } },
     // Shared with the other animals' files, so all three do their sums alike.
     util: { makePose, halfLives, mouthOf, clamp, smooth, ease, rx, ry, rz, mul, apply, add, invRow,
             wave, bump, envAHR, happening, beat, shift, gaze, looks, restingGaze, optsOf, mods, chain,
             gauss, blinkAt, overlayAt, phaseOf, LOOP, PERIOD, TAU, playing,
-            toward, eyesOpen, eyesClose, WAKE_S, SLEEP_S },
+            toward, eyesOpen, eyesClose, WAKE_S, SLEEP_S,
+            // The new behaviours' shared parts (see "New behaviours").
+            NEVER, NONE, ZERO2, ZERO4, ZERO5, AWAKE, newOf, varOf, focusOf, petOf, cuteOf, extras, bagKind,
+            listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt, cuteQuiet, fullTurn,
+            cuteBusy, HELLO_S, GOODBYE_S },
   };
   root.CritterPose = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

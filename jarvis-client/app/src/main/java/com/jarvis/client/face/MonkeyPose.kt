@@ -24,6 +24,25 @@ import com.jarvis.client.face.CritterPose.shift
 import com.jarvis.client.face.CritterPose.smooth
 import com.jarvis.client.face.CritterPose.toward
 import com.jarvis.client.face.CritterPose.wave
+import com.jarvis.client.face.CritterPose.NONE
+import com.jarvis.client.face.CritterPose.ZERO2
+import com.jarvis.client.face.CritterPose.ackGlowOf
+import com.jarvis.client.face.CritterPose.ackNodOf
+import com.jarvis.client.face.CritterPose.arrivalOf
+import com.jarvis.client.face.CritterPose.awake
+import com.jarvis.client.face.CritterPose.cuteAt
+import com.jarvis.client.face.CritterPose.cuteBusy
+import com.jarvis.client.face.CritterPose.cuteOf
+import com.jarvis.client.face.CritterPose.cuteQuiet
+import com.jarvis.client.face.CritterPose.extras
+import com.jarvis.client.face.CritterPose.focusEndOf
+import com.jarvis.client.face.CritterPose.focusOf
+import com.jarvis.client.face.CritterPose.fullTurn
+import com.jarvis.client.face.CritterPose.gaze
+import com.jarvis.client.face.CritterPose.listenNod
+import com.jarvis.client.face.CritterPose.petOf
+import com.jarvis.client.face.CritterPose.phraseBeat
+import com.jarvis.client.face.CritterPose.variant
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.exp
@@ -141,10 +160,20 @@ object MonkeyPose {
     private val EVENTS = floatArrayOf(10f, 16f, 20f, 16f, 20f, 18f)
     private const val SLOT = 16f
     private const val CHANCE = 0.85f
+    // ...and for the new behaviours (critter-pose.js's note).
+    private const val S_LISTEN = 100
+    private const val S_THINK = 103
+    private const val S_FOCUS = 106
+    private const val S_NOD = 118
+    private const val S_PHRASE = 119
+    private const val S_CUTE = 121
+    /** How long each cute moment lasts: sniffing its banana, twirling it. */
+    private val CUTE_LEN = floatArrayOf(5.5f, 4.4f)
 
     /** Whether one of its idle happenings is playing at clock [t] - the desktop's busy(state, t). */
-    fun busy(state: FaceState, t: Float): Boolean =
-        state == FaceState.IDLE && CritterPose.playing(happening(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS))
+    fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
+        state == FaceState.IDLE && (CritterPose.playing(happening(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS)) ||
+            cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
     private fun headTurn(p: FloatArray): FloatArray = mul(ry(-p[HEAD_YAW]), mul(rx(p[HEAD_PITCH]), rz(-p[HEAD_ROLL])))
 
@@ -167,22 +196,30 @@ object MonkeyPose {
     }
 
     /** The pendulum swing at clock [t] (the desktop's swingAt). */
-    private fun swingAt(state: FaceState, t: Float, o: Opts): Float {
+    private fun swingAt(state: FaceState, t: Float, hap: Float, sway: Float): Float {
         val k = swingOf(state)
         var a = 0.014f * (1f + 0.25f * wave(t, 41f, 1.3f))
         if (state == FaceState.IDLE) {
             val ev = happening(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS)
-            if (ev[0] == 3f) a += o.hap * 0.007f * envAHR(ev[1], 1.5f, 3.0f, 2.0f)
+            if (ev[0] == 3f) a += hap * 0.007f * envAHR(ev[1], 1.5f, 3.0f, 2.0f)
         }
-        return k * o.sway * a * wave(t, 293f, 0f)
+        return k * sway * a * wave(t, 293f, 0f)
     }
     private const val TAIL_LAG = 0.14f
 
     /** Which way a happening starting at clock [at] looks, 0..1 (the desktop's sideOf). */
     private fun sideOf(at: Float): Float = CritterPose.hash01((floor(at / SLOT).toInt() and 255) * 256 + S_EVENT + 3)
 
-    fun stateTargets(state: FaceState, t: Float, amp: Float, look: Look, since: Float = 1e9f, o: Opts = Opts()): FloatArray {
-        val hap = o.hap
+    fun stateTargets(state: FaceState, t: Float, amp: Float, look: Look, since: Float = 1e9f, o0: Opts = Opts()): FloatArray {
+        val o = o0.norm(t)
+        // Idle: a focus session, and a cute moment while it plays, take the happenings away.
+        val cu = if (state == FaceState.IDLE) cuteAt(t, since, S_CUTE, CUTE_LEN) else NONE
+        val cw = if (cu[0] >= 0f) cuteOf(o) else 0f
+        val fw = if (state == FaceState.IDLE) focusOf(o) else 0f
+        // (and so do the stretch as a focus session ends, and being stroked)
+        val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
+        val pw = if (awake(state)) petOf(o) else 0f
+        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw)
         val sw = o.sway
         val play = o.play
         val p = FloatArray(N)
@@ -206,6 +243,9 @@ object MonkeyPose {
         var deepBreath = 0f
         var scratch = 0f
         var peel = 0f
+        var ackK = 1f
+        var sniff = 0f
+        var twirl = 0f
 
         when (state) {
             FaceState.LISTENING -> {
@@ -220,6 +260,15 @@ object MonkeyPose {
                 p[BROW] = 0.3f + 0.4f * play
                 p[LOOK_X] = g[0] - 0.4f * g[2]; p[LOOK_Y] = 0.1f + g[1] - 0.4f * g[3]
                 p[ORB_GLOW] = 0.55f + 0.5f * amp
+                // Now and then (variety): the other tilt, leaning closer, an ear turned to you.
+                val v = variant(t, o, S_LISTEN, 0.4f)
+                if (v[0] == 0f) p[HEAD_ROLL] -= 0.39f * play * v[1]
+                else if (v[0] == 1f) p[LEAN] += 0.04f * v[1]
+                else if (v[0] == 2f) p[EAR_R] -= 0.3f * v[1]
+                // A small nod in your pauses.
+                val nd = listenNod(t, o, S_NOD)
+                p[HEAD_PITCH] += nd[0]; p[HEAD_ROLL] += play * nd[1]; eyeK *= 1f - nd[2]
+                p[EAR_L] -= 0.25f * nd[3]; p[EAR_R] -= 0.25f * nd[3]
                 turnBlink = g[4]
             }
             FaceState.THINKING -> {
@@ -239,13 +288,20 @@ object MonkeyPose {
                 p[BROW] = 0.25f
                 p[LEAN] = 0.05f
                 p[ORB_GLOW] = 0.95f + 0.2f * wave(t, 424f, 0f)
+                // Now and then (variety): a look up, the banana turned to look at, a slow tilt.
+                val v = variant(t, o, S_THINK, 0.5f)
+                if (v[0] == 0f) { p[HEAD_PITCH] += 0.25f * v[1]; p[LOOK_Y] += 0.8f * v[1] }
+                else if (v[0] == 1f) p[BAN_YAW] += 0.3f * v[1] * wave(t, 160f, 0f)
+                else if (v[0] == 2f) { p[HEAD_ROLL] += 0.12f * play * v[1]; p[BROW] += 0.1f * v[1] }
                 turnBlink = g[4]
             }
             FaceState.SPEAKING -> {
                 // Talks with its eyes, head and banana hand, in phrases (beat()).
                 val g = looks(t, S_GAZE, 1.6f, 5.5f, 0.65f, 0.5f, 0.18f, 0f, 0.06f, 1.1f, o)
-                val b = beat(t, S_BEAT, S_GAZE, 1.6f, 5.5f, 0.65f)
+                // (With the host's phrase ends, the gestures land on them instead.)
+                val b = if (o.phraseN >= 0) phraseBeat(t, o, S_PHRASE, S_GAZE, 1.6f, 5.5f, 0.65f) else beat(t, S_BEAT, S_GAZE, 1.6f, 5.5f, 0.65f)
                 val x = b[1]
+                ackK = if (b[0] >= 0f) 1f - bump(clamp(x / 1.6f, 0f, 1f)) else 1f
                 p[SPEAK] = 1f
                 p[LEAN] = 0.05f
                 p[HEAD_PITCH] = 0.03f
@@ -283,6 +339,10 @@ object MonkeyPose {
                 p[LOOK_X] = g[0]; p[LOOK_Y] = g[1]
                 p[ORB_GLOW] = 0.9f
                 blinkSlow = 1.4f
+                // The small reaction as it arrives (variety), then still.
+                val ar = arrivalOf(state, o, since)
+                p[HEAD_PITCH] += ar[0]; p[HEAD_ROLL] += play * ar[1]; p[LEAN] += ar[2]; eyeK *= 1f - ar[3]
+                p[EAR_L] -= 0.3f * ar[4]; p[EAR_R] -= 0.3f * ar[4]
             }
             FaceState.STANDBY -> {
                 // Asleep, sitting on the vine, tail round it, hugging its banana.
@@ -315,6 +375,9 @@ object MonkeyPose {
                 p[LOOK_X] = g[0]; p[LOOK_Y] = -0.3f + g[1]
                 p[ORB_GLOW] = 0.35f
                 blinkSlow = 1.4f
+                val ar = arrivalOf(state, o, since)
+                p[HEAD_PITCH] += ar[0]; p[HEAD_ROLL] += play * ar[1]; p[LEAN] += ar[2]; eyeK *= 1f - ar[3]
+                p[EAR_L] -= 0.3f * ar[4]; p[EAR_R] -= 0.3f * ar[4]
             }
             FaceState.BANKED -> {
                 // Dozing where it hangs; now and then its head sinks and it catches itself.
@@ -378,15 +441,67 @@ object MonkeyPose {
                     p[TAIL_CURL] += hap * 0.9f * envAHR(x, 0.7f, 1.0f, 1.0f)
                 }
                 turnBlink = g[4]
+                if (fw > 0f) {
+                    // Working beside you: it hangs steadier and looks at its banana, far fewer looks.
+                    val f = gaze(t, S_FOCUS, 4f, 12f, 0.75f, 0.3f, 0.12f, 0f, 0.03f, 1.6f)
+                    p[HEAD_YAW] += (-0.05f + 0.2f * f[2] - p[HEAD_YAW]) * fw
+                    p[HEAD_PITCH] += (-0.12f + 0.1f * f[3] - p[HEAD_PITCH]) * fw
+                    p[LOOK_X] += (-0.3f + f[0] - 0.4f * f[2] - p[LOOK_X]) * fw
+                    p[LOOK_Y] += (-0.4f + f[1] - 0.4f * f[3] - p[LOOK_Y]) * fw
+                    turnBlink *= 1f - fw
+                }
+                // The small stretch as a focus session ends (its waking stretch).
+                if (fe > 0f) {
+                    p[LEG_LF] += 0.25f * fe; p[LEG_RF] += 0.25f * fe; p[LEG_LK] -= 0.2f * fe; p[LEG_RK] -= 0.2f * fe
+                    p[HEAD_PITCH] += 0.06f * fe; p[EAR_L] -= 0.2f * fe; p[EAR_R] -= 0.2f * fe; eyeK *= 1f - 0.45f * fe
+                    deepBreath = max(deepBreath, fe)
+                }
+                if (cw > 0f && cu[0] == 0f) {
+                    // Cute moment: it sniffs its banana, under its nose, eyes shut happily.
+                    val x = cu[1]
+                    sniff = cw * envAHR(x, 0.9f, 3.4f, 1.2f)
+                    p[HEAD_PITCH] += (-0.04f - p[HEAD_PITCH]) * sniff + cw * 0.025f * (bump((x - 1.3f) / 0.45f) + bump((x - 1.9f) / 0.45f))
+                    p[HEAD_YAW] += (-0.04f - p[HEAD_YAW]) * sniff
+                    p[LOOK_X] += (-0.1f - p[LOOK_X]) * sniff; p[LOOK_Y] += (-0.45f - p[LOOK_Y]) * sniff
+                    eyeK *= 1f - 0.6f * cw * envAHR(x - 1.1f, 0.4f, 1.9f, 0.6f)
+                    p[BROW] += 0.2f * sniff
+                    turnBlink *= 1f - sniff
+                } else if (cw > 0f && cu[0] == 1f) {
+                    // Cute moment: it twirls its banana round once, and gives you a pleased look.
+                    val x = cu[1]
+                    twirl = cw * envAHR(x, 0.6f, 2.9f, 0.8f)
+                    p[BAN_ROLL] += fullTurn(x, 0.8f, 1.8f, CUTE_LEN[1], cw)
+                    val w = cw * envAHR(x, 0.6f, 1.9f, 0.5f)
+                    p[LOOK_X] += (-0.3f - p[LOOK_X]) * w; p[LOOK_Y] += (-0.25f - p[LOOK_Y]) * w
+                    val at = cw * envAHR(x - 2.8f, 0.3f, 0.6f, 0.6f)
+                    p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
+                    p[HEAD_YAW] += (0f - p[HEAD_YAW]) * max(w, at)
+                    p[BROW] += 0.25f * at
+                    turnBlink *= 1f - twirl
+                }
             }
         }
 
+        // Stroked: it swings a little toward your hand and leans its head in, eyes happy.
+        if (pw > 0f) {
+            p[HEAD_ROLL] += pw * play * (0.10f * o.petX + 0.03f * o.petDir)
+            p[HEAD_PITCH] += 0.04f * pw
+            p[BROW] += 0.15f * pw
+            eyeK *= 1f - 0.45f * pw
+        }
+        // A fact saved: one small nod, ears forward. A long answer ready: the banana glows up once.
+        val an = if (awake(state)) ackNodOf(t, o) else ZERO2
+        p[HEAD_PITCH] += ackK * an[0]; p[EAR_L] -= 0.3f * ackK * an[1]; p[EAR_R] -= 0.3f * ackK * an[1]
+        val gl = if (awake(state)) ackGlowOf(t, o) else 0f
+        p[ORB_GLOW] += 0.4f * gl; p[ORB_R] *= 1f + 0.2f * gl
+
         // The swing, and what trails it (follow-through); the head stays more level.
-        p[SWING] = swingAt(state, t, o)
-        val s1 = swingAt(state, t - TAIL_LAG, o)
-        val s2 = swingAt(state, t - 2f * TAIL_LAG, o)
-        val s3 = swingAt(state, t - 3f * TAIL_LAG, o)
-        val s4 = swingAt(state, t - 4f * TAIL_LAG, o)
+        val swSway = o.sway * (1f - 0.6f * fw)   // (a focus session: it hangs steadier)
+        p[SWING] = swingAt(state, t, hap, swSway)
+        val s1 = swingAt(state, t - TAIL_LAG, hap, swSway)
+        val s2 = swingAt(state, t - 2f * TAIL_LAG, hap, swSway)
+        val s3 = swingAt(state, t - 3f * TAIL_LAG, hap, swSway)
+        val s4 = swingAt(state, t - 4f * TAIL_LAG, hap, swSway)
         p[TAIL_1] = 0.9f * (s1 - p[SWING]); p[TAIL_2] = 1.4f * (s2 - p[SWING]); p[TAIL_3] = 1.9f * (s3 - p[SWING])
         p[TAIL_4] = 2.4f * (s4 - p[SWING])
         val tw = sw * 0.06f * wave(t, 77f, 0.9f)
@@ -395,6 +510,7 @@ object MonkeyPose {
         val legLag = 1.5f * (s2 - p[SWING])
         p[LEG_LO] -= legLag; p[LEG_RO] += legLag
         p[HEAD_ROLL] -= 0.4f * p[SWING]
+        p[SWING] += 0.02f * pw * o.petX   // (stroked: toward your hand)
 
         val b = wave(t, breathK, 0f) * (1f + 0.6f * deepBreath)
         p[BREATH] = 1f + 0.02f * breathDepth * b
@@ -426,6 +542,20 @@ object MonkeyPose {
             p[BAN_YAW] += 0.25f * peel * wave(t, 160f, 0f); p[BAN_ROLL] += 0.45f * peel
         }
 
+        if (sniff > 0f) {
+            // Under its nose, wherever the head has turned, the banana lying across it.
+            val q = onHead(p, -0.10f, 0.15f, -0.38f)
+            p[B_EX] += (-0.25f - p[B_EX]) * sniff; p[B_EY] += (0.0f - p[B_EY]) * sniff; p[B_EZ] += (-0.16f - p[B_EZ]) * sniff
+            p[B_HX] += (q[0] - p[B_HX]) * sniff; p[B_HY] += (q[1] - p[B_HY]) * sniff; p[B_HZ] += (q[2] - p[B_HZ]) * sniff
+            p[BAN_YAW] += (1.1f - p[BAN_YAW]) * sniff; p[BAN_ROLL] += (0.1f - p[BAN_ROLL]) * sniff
+        }
+        if (twirl > 0f) {
+            // Up in front of its chest, to twirl it.
+            p[B_EX] += (-0.26f - p[B_EX]) * twirl; p[B_EY] += (0.0f - p[B_EY]) * twirl; p[B_EZ] += (-0.12f - p[B_EZ]) * twirl
+            p[B_HX] += (-0.16f - p[B_HX]) * twirl; p[B_HY] += (0.10f - p[B_HY]) * twirl; p[B_HZ] += (-0.30f - p[B_HZ]) * twirl
+        }
+        farewell(p, state, o)
+
         // The banana rides in the hand holding it.
         val off = apply(banFrame(p), BAN_AT[0], BAN_AT[1], BAN_AT[2])
         p[ORB_X] = p[B_HX] + off[0]; p[ORB_Y] = p[B_HY] + off[1]; p[ORB_Z] = p[B_HZ] + off[2]
@@ -435,6 +565,46 @@ object MonkeyPose {
         p[EYE_L] *= k
         p[EYE_R] *= k
         return p
+    }
+
+    /**
+     * Hello and goodbye - the desktop's monkey farewell(): a little wave of
+     * its banana (a bow while waiting on you or after something wrong;
+     * nothing asleep), then its vine draws it up out of the picture; hello,
+     * it drops in on its vine with a small springy bounce, and looks at you.
+     */
+    private const val LIFT = 2.2f
+    private fun farewell(p: FloatArray, state: FaceState, o: Opts) {
+        val g = o.goodbye
+        val h = o.hello
+        if (g <= 0f && h >= 1f) return
+        val e = extras(o)
+        val aw = if (awake(state) || state == FaceState.APPROVAL || state == FaceState.ERROR) 1f else 0f
+        val wave1 = if (awake(state)) 1f else 0f
+        if (g > 0f) {
+            val a = e * bump(clamp(g / 0.6f, 0f, 1f))
+            val at = e * aw * ease(g / 0.2f)
+            p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
+            p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
+            val wv = a * wave1
+            val sn = sin(CritterPose.TAU_F * 1.6f * g)
+            p[B_EX] += (-0.30f - p[B_EX]) * wv; p[B_EY] += (0.12f - p[B_EY]) * wv; p[B_EZ] += (-0.08f - p[B_EZ]) * wv
+            p[B_HX] += (-0.34f + 0.05f * sn - p[B_HX]) * wv; p[B_HY] += (0.30f - p[B_HY]) * wv
+            p[B_HZ] += (-0.14f - p[B_HZ]) * wv
+            p[BAN_ROLL] += 0.4f * wv * sn
+            p[BROW] += 0.2f * wv
+            val bw = a * (aw - wave1)
+            p[HEAD_PITCH] -= 0.2f * bw; p[LEAN] += 0.04f * bw
+            p[VINE_Y_K] += LIFT * e * ease((g - 0.4f) / 0.6f)
+        }
+        if (h < 1f) {
+            p[VINE_Y_K] += e * LIFT * (1f - ease(h / 0.45f))
+            p[DIP] += e * 0.05f * bump((h - 0.35f) / 0.45f)
+            val at = e * aw * ease((h - 0.25f) / 0.25f) * (1f - ease((h - 0.8f) / 0.2f))
+            p[LOOK_X] += (0f - p[LOOK_X]) * at; p[LOOK_Y] += (0f - p[LOOK_Y]) * at
+            p[HEAD_YAW] += (0f - p[HEAD_YAW]) * at
+            p[BROW] += 0.2f * at * wave1
+        }
     }
 
     /** The banana's turn in the body's frame. */
@@ -502,7 +672,10 @@ object MonkeyPose {
             BAN_YAW, BAN_ROLL, BAN_PITCH, GRIP,
         ),
         intArrayOf(EAR_L, EAR_R, LEG_LF, LEG_LO, LEG_LK, LEG_RF, LEG_RO, LEG_RK, TAIL_1, TAIL_2, TAIL_3, TAIL_4, TAIL_CURL, TAIL_WRAP),
-    )
+    ).also { h ->
+        // (banRoll is an angle: twirled right round, it settles the short way.)
+        h.cut[BAN_ROLL] = PI.toFloat()
+    }
 
     /** How much this pose is speaking, 0..1 - what [uniforms] scales the mouth by. */
     fun speakingWeight(p: FloatArray): Float = clamp(p[SPEAK], 0f, 1f)
