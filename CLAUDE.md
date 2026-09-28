@@ -676,7 +676,7 @@ testers, scouts and integration scouts; `.claude/agents/`):
   at any time, plus showing Jarvis the phone's camera. The voice check still
   runs on every clip, cards are still decided by tapping (never by voice),
   and everything stays on the owner's own devices. Not full-duplex (that
-  skips the voice check), so a turn takes a second or two. The camera
+  skips the voice check), so a turn takes about 2-4 seconds (estimated; corrected by the design). The camera
   understands pictures only with the 12 GB card (Qwen 3.5 9B or Qwen3-VL
   8B, unmeasured); with one card it reads text only. The camera part stays
   off until the card is in and a photo test passes. Designed in
