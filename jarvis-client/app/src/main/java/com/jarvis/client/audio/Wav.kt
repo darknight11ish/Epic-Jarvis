@@ -159,6 +159,40 @@ object Wav {
         return if (rate in 4_000..192_000) rate else SAMPLE_RATE
     }
 
+    /** The id of the mouth-shapes chunk the PC may add after `data`. */
+    const val MOUTH_CHUNK = "jmth"
+    private const val MOUTH_MAX = 1 shl 20
+
+    /**
+     * The payload of the "jmth" chunk, as text (one char per byte), or null.
+     *
+     * The PC may append it AFTER `data`: its ASCII payload is
+     * "v1;src=kokoro;" + a packed mouth track (the mouth shapes from the voice
+     * engine's own timing - [LipSync.mouthFrom] reads it; docs/LIPSYNC.md).
+     * It is never sound: [decode] stops at the end of `data`. Only a chunk
+     * after `data` counts, and only one that is whole: any chunk on the way
+     * whose declared size runs past the end of the file ends the search, as
+     * the desktop's `lipsync.js` does. What the text says is checked by
+     * [LipSync.mouthFrom], not here.
+     */
+    fun mouthChunk(wav: ByteArray): String? {
+        if (wav.size < 12) return null
+        var i = 12
+        var afterData = false
+        while (i + 8 <= wav.size) {
+            val id = String(wav, i, 4, Charsets.US_ASCII)
+            val size = le32(wav, i + 4)
+            if (size < 0 || size > wav.size - i - 8) return null
+            if (afterData && id == MOUTH_CHUNK) {
+                if (size > MOUTH_MAX) return null
+                return String(wav, i + 8, size, Charsets.ISO_8859_1)
+            }
+            if (id == "data") afterData = true
+            i += 8 + size + (size and 1) // chunks are word-aligned
+        }
+        return null
+    }
+
     /** Offset of a chunk's payload, or null if the file does not contain it. */
     private fun chunkOffset(wav: ByteArray, want: String): Int? {
         if (wav.size < 12) return null

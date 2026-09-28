@@ -107,9 +107,12 @@ await check("the faces are painted once they are on screen", async () => {
   // every card on screen has drawn (up to 10 s a step), and a card counts as
   // painted the first time any pixel of it is seen - so a card that stops
   // animating once it scrolls away still counts.
+  // Every face the spec lists, read from the spec: this was a literal 20,
+  // and the red panda made it 21.
+  const faces = JSON.parse(read("src/jarvis-visual-spec.json")).faces.length;
   const page = await open();
-  await page.waitForFunction(() => document.querySelectorAll("#grid canvas").length >= 20,
-    null, { timeout: 30000 });
+  await page.waitForFunction((n) => document.querySelectorAll("#grid canvas").length >= n,
+    faces, { timeout: 30000 });
   const got = await page.evaluate(async () => {
     const canvases = [...document.querySelectorAll("#grid canvas")];
     const seen = new Set();
@@ -144,7 +147,7 @@ await check("the faces are painted once they are on screen", async () => {
     };
   });
   await page.close();
-  assert.equal(got.n, 20,
+  assert.equal(got.n, faces,
     `${got.n} of ${got.total} canvases drew anything (never painted: #${got.missing.join(", #")})`);
 });
 
@@ -454,6 +457,143 @@ await check("Membrane no longer draws the outer rim circle", async () => {
   for (const src of [read("src/faces.html"), read("../docs/reference/jarvis-reactor-kit.html")]) {
     assert.ok(!src.includes("this.rim("), "a call to the removed rim() method is still present");
     assert.ok(!/\brim\(g, w, h, mid,/.test(src), "the removed rim() method definition is still present");
+  }
+});
+
+/* ── The red panda, the first animal face ────────────────────────────────── */
+
+await check("the animals' generated shaders, phone copies and pose fixture are up to date", async () => {
+  // One .sksl source feeds both apps, and the phone's pose maths is checked
+  // against answers this page's critter-pose.js gave. If this fails, someone
+  // edited a generated file, or changed the source without re-running it.
+  try {
+    execFileSync("python3", [join(ROOT, "..", "tools", "gen_critters.py"), "--check"],
+      { cwd: join(ROOT, ".."), stdio: "pipe" });
+  } catch (e) {
+    assert.fail(String(e.stdout || e.message));
+  }
+});
+
+await check("every animal's shader is within the size Android's compiler accepts", async () => {
+  // Android refuses a shader whose flattened size is over 100,000 and the
+  // phone app crashes when the face is drawn; this page's WebGL accepts it
+  // regardless. tools/shader_size.py measures it the way Skia does.
+  //
+  // It needs glslangValidator. CI's backend job installs it and runs this
+  // same check; the frontend job, which runs this file, does not have it -
+  // so without it this says so and stops, rather than failing a job whose
+  // real check lives elsewhere.
+  try {
+    execFileSync("glslangValidator", ["--version"], { stdio: "pipe" });
+  } catch {
+    console.log("      (skipped: glslangValidator is not installed - CI's backend job runs this check)");
+    return;
+  }
+  try {
+    execFileSync("python3", [join(ROOT, "..", "tools", "shader_size.py"), "--check"],
+      { cwd: join(ROOT, ".."), stdio: "pipe" });
+  } catch (e) {
+    assert.fail(String(e.stdout || "") + String(e.stderr || e.message));
+  }
+});
+
+const ANIMALS = ["redpanda", "pygmyowl", "seaotter"];
+
+await check("every animal is handed every real state, not a borrowed movement", async () => {
+  // Most faces have four motion tables and the shell borrows for the other
+  // four states. A character cannot borrow: asleep has to look asleep, not
+  // idle with a grey tint. drawSurface() passes the real state to any face
+  // whose `st` declares it, so each animal must declare all eight - and its
+  // pose must actually differ where it matters.
+  const spec = JSON.parse(read("src/jarvis-visual-spec.json"));
+  const page = await open();
+  await page.waitForTimeout(1000);
+  const got = await page.evaluate((ids) => ids.map((id) => {
+    const th = THEME[id], api = CritterPose.species[id];
+    const pose = (st) => api.uniforms(api.pose(st, st, 9, 3, 0, {}));
+    // "Waving": whichever limb each animal waves with, raised well clear of
+    // where it rests.
+    const wave = {
+      redpanda: () => pose("approval").uPawL[1] - pose("idle").uPawL[1],
+      pygmyowl: () => pose("idle").uWingR0[0] - pose("approval").uWingR0[0],
+      seaotter: () => pose("approval").uPawR[1] - pose("idle").uPawR[1],
+    }[id]();
+    return {
+      id,
+      states: th ? Object.keys(th.st) : null,
+      standbyEyes: pose("standby").uFace.slice(0, 2),
+      idleEyes: pose("idle").uFace.slice(0, 2),
+      wave,
+    };
+  }), ANIMALS);
+  await page.close();
+  for (const a of got) {
+    assert.deepEqual(a.states, spec.states.map((s) => s.id), `${a.id}: not all eight states`);
+    assert.deepEqual(a.standbyEyes, [0, 0], `${a.id}: asleep, but its eyes are open`);
+    assert.ok(a.idleEyes[0] > 0.5, `${a.id}: idle, but its eyes are shut`);
+    assert.ok(a.wave > 0.1, `${a.id}: waiting on you, but not waving (${a.wave})`);
+  }
+});
+
+await check("every animal's 3D shader builds in WebGL", async () => {
+  // A shader that does not compile makes the face quietly fall back to its
+  // flat drawing - easy to miss by eye. Asked directly: one small frame each,
+  // through the GPU path.
+  const page = await open();
+  await page.waitForTimeout(1000);
+  const got = await page.evaluate((ids) => {
+    const out = {};
+    const saveOk = GPUOK, savePx = GPUPX, saveView = VIEW;
+    GPUOK = true; GPUPX = 64; VIEW = { yaw: 0, pitch: 0, zoom: 1 };
+    try {
+      for (const id of ids) {
+        const th = THEME[id];
+        const c = document.createElement("canvas"); c.width = c.height = 64;
+        const P = th.pose(2, "idle", 0);
+        out[id] = GPU.dead ? "no WebGL here" : th.gpu(c.getContext("2d"), 64, 64, 2, "idle", 0, P);
+      }
+    } finally { GPUOK = saveOk; GPUPX = savePx; VIEW = saveView; }
+    return out;
+  }, ANIMALS);
+  await page.close();
+  for (const id of ANIMALS) {
+    if (got[id] === "no WebGL here") { console.log("      (skipped: this browser has no WebGL)"); return; }
+    assert.equal(got[id], true, `${id}: its shader did not build or draw`);
+  }
+});
+
+await check("without a GPU every animal is still drawn, in every state", async () => {
+  // The flat fallback: what the owner sees on a PC whose WebGL is blocked or
+  // slower than the canvas (the GPU watchdog hands it back). It must draw
+  // something in each state and must not throw.
+  const page = await open();
+  await page.waitForTimeout(1000);
+  const got = await page.evaluate((ids) => {
+    const out = {};
+    const saveOk = GPUOK, saveView = VIEW;
+    GPUOK = false; VIEW = { yaw: 0, pitch: 0, zoom: 1 };
+    try {
+      for (const id of ids) {
+        const th = THEME[id];
+        for (const st of Object.keys(th.st)) {
+          const c = document.createElement("canvas"); c.width = c.height = 160;
+          const g = c.getContext("2d");
+          g.fillStyle = "#000"; g.fillRect(0, 0, 160, 160);
+          try { th.draw(g, 160, 160, 2, st, 0.3); } catch (e) { out[id + " " + st] = "threw: " + e.message; continue; }
+          const d = g.getImageData(0, 0, 160, 160).data;
+          let lit = 0;
+          for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 60) lit++;
+          out[id + " " + st] = lit;
+        }
+      }
+    } finally { GPUOK = saveOk; VIEW = saveView; }
+    return out;
+  }, ANIMALS);
+  await page.close();
+  assert.equal(Object.keys(got).length, ANIMALS.length * 8);
+  for (const [key, lit] of Object.entries(got)) {
+    assert.ok(typeof lit === "number", `${key}: ${lit}`);
+    assert.ok(lit > 160 * 160 * 0.15, `${key}: only ${lit} pixels drawn`);
   }
 });
 

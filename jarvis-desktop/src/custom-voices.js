@@ -15,7 +15,9 @@
  * it the owner?" check. How fast every voice speaks (Slower / Normal /
  * Faster) is the PC's `speed` block: no card either way. Which of Kokoro's
  * own voices the built-in one uses is the PC's `speaker` block, the same
- * shape: no card either way.
+ * shape: no card either way. "Voice follows the face" (an animal face
+ * speaks in its own built-in voice) is the PC's `face_voice` block, an
+ * on/off switch: no card either way.
  *
  * The server's sentences (`why`, `error`, `fallback`) are written for the
  * owner and are shown as they are, first letter raised.
@@ -88,6 +90,27 @@ export function speakerView(status) {
     title: String(sk.title || "Jarvis's built-in voice"),
     detail: String(sk.detail || ""),
     note: String(sk.note || ""),
+  };
+}
+
+/**
+ * "Voice follows the face": `{show, enabled, speaking, title, detail, line}`
+ * from the PC's `face_voice` block - an on/off switch, no card either way.
+ * `line` is the PC's own sentence about what is happening now; `show` is
+ * false on a PC too old to have it.
+ */
+export function faceVoiceView(status) {
+  const fv = obj(status).face_voice;
+  if (!fv || typeof fv !== "object" || Array.isArray(fv) || typeof fv.enabled !== "boolean") {
+    return { show: false, enabled: false, speaking: false, title: "", detail: "", line: "" };
+  }
+  return {
+    show: true,
+    enabled: fv.enabled,
+    speaking: yes(fv.speaking),
+    title: String(fv.title || "Voice follows the face"),
+    detail: String(fv.detail || ""),
+    line: String(fv.line || ""),
   };
 }
 

@@ -116,6 +116,10 @@ permissions = [
   # clip (GET /api/voice/moment).
   "allow-get-voice-flow",
   "allow-get-voice-moment",
+  # Lip-sync (face-voice.js; voice.rs `face_voice`): the mouth track and
+  # playback clock of the clip playing here, handed to every window's face.
+  # Only that checked shape - no words, no audio - and it decides nothing.
+  "allow-face-voice",
 ]
 
 # The HUD's mic button, and nothing else. The HUD loads a page vendored from
@@ -484,6 +488,9 @@ permissions = [
   # Which of Kokoro's own voices the built-in voice uses: the same shape,
   # no card either way.
   "allow-set-voice-speaker",
+  # "Voice follows the face" (an animal face speaks in its own built-in
+  # voice): an on/off switch, the same shape - no card either way.
+  "allow-set-voice-face",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",

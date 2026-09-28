@@ -352,6 +352,38 @@ class CustomVoicesTest {
     }
 
     @Test
+    fun `Voice follows the face - an on-off switch, the PC's words and line, no card`() {
+        // No face saved yet: on by default, and it says there is nothing to follow.
+        val none = requireNotNull(status("empty").faceVoice) { "no face_voice block" }
+        assertTrue("on by default", none.enabled)
+        assertFalse(none.speaking)
+        assertEquals(CustomVoices.FACE_TITLE, none.title)
+        assertEquals("No face is saved on this PC yet, so there is no animal voice to use.", none.line)
+        // The red panda showing: its own voice speaks, and the built-in
+        // voice choice says so.
+        val panda = requireNotNull(status("face_showing").faceVoice)
+        assertTrue(panda.speaking)
+        assertEquals("Speaking as the Red Panda: Bella, a little higher.", panda.line)
+        assertTrue(status("face_showing").speaker!!.note.contains("Red Panda face is showing"))
+        val off = requireNotNull(status("face_off").faceVoice)
+        assertFalse(off.enabled)
+        assertEquals("Off: the built-in voice stays the same whatever the face.", off.line)
+        assertEquals("{\"enabled\":true}", CustomVoices.faceBody(true))
+        assertEquals("{\"enabled\":false}", CustomVoices.faceBody(false))
+        val a = answer("face_off")
+        assertTrue(a.accepted)
+        assertFalse("no card for the face's voice", a.pending)
+        assertEquals("Jarvis's voice now stays the same whatever the face.", CustomVoices.answerLine(a))
+        val b = answer("face_on")
+        assertTrue(b.accepted)
+        assertFalse("no card for the face's voice", b.pending)
+        assertEquals("Jarvis's voice now follows the face.", CustomVoices.answerLine(b))
+        assertEquals("Choose on or off.", CustomVoices.answerLine(answer("face_bad")))
+        // A PC too old to have it sends no `face_voice`: nothing is shown.
+        assertNull(CustomVoices.parse(JsonObject(raw("empty") - "face_voice"))?.faceVoice)
+    }
+
+    @Test
     fun `Pocket TTS, if it ever replaces ZipVoice, is named in ZipVoice's place`() {
         assertEquals("Pocket TTS, on your PC's processor", CustomVoices.engineWords("pocket"))
         val s = status("fallback")

@@ -740,6 +740,86 @@ pub fn summon_push_to_talk(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// The longest mouth track [`face_voice`] passes on, in characters: about
+/// ten minutes of speech at lipsync.js's 100 frames a second, far past any
+/// one sentence. The same limit as face-voice.js's `MAX_TRACK_CHARS`.
+const FACE_VOICE_MAX_TRACK: usize = 262_144;
+
+/// One lip-sync message about the clip the Jarvis bar is playing
+/// (face-voice.js `followClip`; docs/LIPSYNC.md).
+///
+/// `track` is the clip's packed mouth track - how loud, how open, how wide
+/// and how round the mouth is, 100 times a second, worked out from the WAV
+/// in the Jarvis bar. It is in the first message about a clip only. The
+/// rest are its PLAYBACK CLOCK: `t` seconds into the clip (the audio
+/// element's own position, the sound actually being heard), read at `at`
+/// (milliseconds since 1970, this PC's clock), `playing` or not, at speed
+/// `rate`. `id` names the clip and only ever goes up; `n` counts the
+/// messages about it, so a late one is recognised; `end` says it is over.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FaceVoiceCue {
+    pub id: u64,
+    pub n: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track: Option<String>,
+    pub t: f64,
+    pub at: f64,
+    pub playing: bool,
+    #[serde(default = "one")]
+    pub rate: f64,
+    #[serde(default)]
+    pub end: bool,
+}
+
+fn one() -> f64 {
+    1.0
+}
+
+/// Whether a [`FaceVoiceCue`] is the shape the faces expect. The track may
+/// only hold what lipsync.js's `pack` writes (`100:` then base64), so what
+/// reaches every window can only ever be a mouth track and a clock.
+fn check_face_voice(cue: &FaceVoiceCue) -> Result<(), String> {
+    if !(cue.t.is_finite() && (0.0..=3600.0).contains(&cue.t)) {
+        return Err("face_voice: `t` is not a position in a clip".into());
+    }
+    if !(cue.at.is_finite() && cue.at > 0.0) {
+        return Err("face_voice: `at` is not a time".into());
+    }
+    if !(cue.rate.is_finite() && (0.25..=4.0).contains(&cue.rate)) {
+        return Err("face_voice: `rate` is not a playback speed".into());
+    }
+    if let Some(track) = &cue.track {
+        let ok = !track.is_empty()
+            && track.len() <= FACE_VOICE_MAX_TRACK
+            && track
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b':'));
+        if !ok {
+            return Err("face_voice: `track` is not a packed mouth track".into());
+        }
+    }
+    Ok(())
+}
+
+/// Lip-sync: hands one [`FaceVoiceCue`] from the Jarvis bar to every window,
+/// as the `face-voice` event, so the faces in the Widget, the floating face
+/// and the HUD move with Jarvis's voice (face-voice.js `relayFaceVoice`).
+///
+/// Why a command: a page may not send an event itself (no
+/// `core:event:allow-emit` anywhere; tests/security.mjs), and a command that
+/// can only send this one checked shape is far narrower than that would be.
+/// It carries no words and no audio - a few numbers per hundredth of a
+/// second about sound already playing on this PC, between this app's own
+/// windows. It decides nothing, and nothing leaves the PC (rule 1). In the
+/// quickbar's `voice` set only: the Jarvis bar is the one window that plays
+/// Jarvis's voice.
+#[tauri::command]
+pub fn face_voice(app: AppHandle, cue: FaceVoiceCue) -> Result<(), String> {
+    check_face_voice(&cue)?;
+    crate::emit_all(&app, crate::events::FACE_VOICE, cue);
+    Ok(())
+}
+
 /// Opens the default microphone and starts buffering. Sends nothing
 /// anywhere - the clip is only posted once `stop_voice_capture` is called.
 /// Refuses while automatic listening already owns the microphone.
@@ -793,7 +873,7 @@ pub fn start_voice_capture(
                 let level = rms(&buf[read_to..]);
                 read_to = buf.len();
                 drop(buf);
-                crate::emit_quickbar(&app, VOICE_LEVEL, level_from_rms(level));
+                crate::emit_all(&app, VOICE_LEVEL, level_from_rms(level));
             }
         },
     );
@@ -1820,7 +1900,7 @@ fn run_vad_loop(
         // The face's mic-level meter (item 1, UI-AUDIT-2026-09-26.md): this
         // loop already computed `level` for the wake-word trigger below and
         // used to throw it away once it had. One number, never the audio.
-        crate::emit_quickbar(app, VOICE_LEVEL, level_from_rms(level));
+        crate::emit_all(app, VOICE_LEVEL, level_from_rms(level));
         let now = Instant::now();
         let voiced = level >= start_threshold(floor);
         // How much audio this tick looked at: the new samples, as time.
@@ -2731,4 +2811,84 @@ pub async fn speak_reply(app: AppHandle, text: String) -> Result<String, String>
         return Err("the server sent an empty reply".to_string());
     }
     Ok(format!("data:audio/wav;base64,{}", BASE64.encode(&bytes)))
+}
+
+#[cfg(test)]
+mod face_voice_tests {
+    use super::{check_face_voice, FaceVoiceCue, FACE_VOICE_MAX_TRACK};
+
+    fn clock() -> FaceVoiceCue {
+        FaceVoiceCue {
+            id: 1_790_000_000_000,
+            n: 3,
+            track: None,
+            t: 1.25,
+            at: 1_790_000_000_250.0,
+            playing: true,
+            rate: 1.0,
+            end: false,
+        }
+    }
+
+    #[test]
+    fn a_clock_and_a_packed_track_pass() {
+        assert!(check_face_voice(&clock()).is_ok());
+        let first = FaceVoiceCue {
+            track: Some("100:AAAA/+9z".into()),
+            n: 0,
+            t: 0.0,
+            ..clock()
+        };
+        assert!(check_face_voice(&first).is_ok());
+    }
+
+    #[test]
+    fn anything_else_in_the_track_is_refused() {
+        for bad in ["", "100:<script>", "100:AA AA", "100:\u{e9}"] {
+            let cue = FaceVoiceCue {
+                track: Some(bad.into()),
+                ..clock()
+            };
+            assert!(check_face_voice(&cue).is_err(), "{bad:?} passed");
+        }
+        let long = FaceVoiceCue {
+            track: Some("A".repeat(FACE_VOICE_MAX_TRACK + 1)),
+            ..clock()
+        };
+        assert!(check_face_voice(&long).is_err());
+    }
+
+    #[test]
+    fn a_clock_that_is_not_one_is_refused() {
+        for (t, at, rate) in [
+            (-1.0, 1.0, 1.0),
+            (f64::INFINITY, 1.0, 1.0),
+            (1.0, 0.0, 1.0),
+            (1.0, 1.0, 0.0),
+            (1.0, 1.0, 9.0),
+        ] {
+            let cue = FaceVoiceCue {
+                t,
+                at,
+                rate,
+                ..clock()
+            };
+            assert!(check_face_voice(&cue).is_err(), "{t} {at} {rate} passed");
+        }
+    }
+
+    #[test]
+    fn the_wire_shape_is_what_face_voice_js_sends() {
+        let cue: FaceVoiceCue = serde_json::from_value(serde_json::json!({
+            "id": 1_790_000_000_000u64, "n": 0, "track": "100:AAAA",
+            "t": 0, "at": 1_790_000_000_000u64, "playing": false
+        }))
+        .expect("parses");
+        assert_eq!(cue.rate, 1.0);
+        assert!(!cue.end);
+        let back = serde_json::to_value(&cue).expect("serialises");
+        assert_eq!(back["track"], "100:AAAA");
+        let clock = serde_json::to_value(clock()).expect("serialises");
+        assert!(clock.get("track").is_none(), "a clock carries no track");
+    }
 }

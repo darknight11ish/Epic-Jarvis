@@ -364,9 +364,9 @@ await check("a tool that starts halfway: reading stops there", async () => {
 const filler = (n) => Array.from({ length: n }, () => delta(""));
 const spokenSlowly = async (heard, reply) => {
   const page = await quickbar({ heard, chatReplies: [reply], speakDelayMs: 30 });
-  await K.slowSpeaker(page, 400);
+  await K.slowSpeaker(page, 1500);
   await holdAndRelease(page);
-  await page.waitForTimeout(1600);
+  await page.waitForTimeout(4000);
   const log = await K.speechLog(page);
   const errors = page.__errors;
   await page.close();

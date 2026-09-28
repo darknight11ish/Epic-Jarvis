@@ -122,6 +122,8 @@ SHIPPED = (
     "jarvis_learning_switch.py",
     "jarvis_voicebank.py",
     "jarvis_voice_flow.py",
+    # the animals' mouths timed by Kokoro itself: jarvis_speech.py calls it
+    "jarvis_mouth.py",
     "jarvis_chat_log.py",
     # "Paste guard" (feasibility I115): masks a pasted password, PIN or
     # one-time code before jarvis_chat_log.py writes a message to the

@@ -1,0 +1,252 @@
+// THE SEA OTTER - its body, its water and its colours.
+//
+// One part of three: tools/gen_critters.py builds the full shader as
+// common_head.sksl + this file + common_tail.sksl. Read common_head.sksl
+// first: it explains the scheme and the size rule every animal must keep to
+// (tools/shader_size.py measures it).
+//
+// An otter floating on its back in a small round pool, head raised, paws on
+// its chest holding a glowing pebble - the orb. The camera looks down on it
+// (CAM_PITCH). Its body lies along x, head at the viewer's left; in the
+// body's own frame y points out of its belly (up, at rest) and z is its side.
+// The head has the same frame as every other animal's: its face looks down
+// -z, so the eyes and nose sit where they do on the panda and the owl.
+
+uniform float3 uBodyPos;
+uniform float3 uBodyR0;
+uniform float3 uBodyR1;
+uniform float3 uBodyR2;
+uniform float uBreath;
+uniform float3 uNeck;
+uniform float3 uHeadR0;
+uniform float3 uHeadR1;
+uniform float3 uHeadR2;
+uniform float3 uFace;      // eye open L, eye open R, feet paddle
+uniform float3 uMouth;     // open, wide, round - all 0 unless it is speaking
+uniform float2 uLook;      // where the eyes look, -1..1
+uniform float3 uShL;
+uniform float3 uShR;
+uniform float3 uPawL;
+uniform float3 uPawR;
+uniform float4 uWater;     // water level, ripple phase, ripple strength, -
+
+const float ID_BODY = 1.0;
+const float ID_PAW = 2.0;
+const float ID_HEAD = 3.0;
+const float ID_EYE = 4.0;
+const float ID_NOSE = 5.0;
+const float ID_WATER = 6.0;
+const float ID_FEET = 7.0;
+
+// Linear-light colours: dark chocolate fur, a pale grizzled face, black nose
+// and eyes, deep teal water.
+const float3 FUR = float3(0.045, 0.019, 0.011);
+const float3 FUR_LIGHT = float3(0.110, 0.056, 0.032);
+const float3 FACE = float3(0.640, 0.540, 0.400);
+const float3 INK = float3(0.004, 0.004, 0.006);
+const float3 WATER = float3(0.006, 0.060, 0.090);
+const float3 FOAM = float3(0.700, 0.820, 0.880);
+
+const float3 CAM_TARGET = float3(0.0, -0.30, 0.0);
+const float CAM_DIST = 3.30;
+const float CAM_PITCH = 0.50;
+const float BOUND_R = 1.25;
+// The pool: a thin round disc of water, this wide.
+const float POOL_R = 1.02;
+
+float3 toBody(float3 p) {
+    float3 v = p - uBodyPos;
+    return float3(dot(uBodyR0, v), dot(uBodyR1, v), dot(uBodyR2, v));
+}
+float3 toHead(float3 p) {
+    float3 v = p - uNeck;
+    return float3(dot(uHeadR0, v), dot(uHeadR1, v), dot(uHeadR2, v));
+}
+float2 eyeAt() { return float2(0.095, 0.060); }
+
+// --- the parts ----------------------------------------------------------
+
+// A long body, rounder at the chest, with a flat paddle of a tail.
+float partBody(float3 b) {
+    float br = uBreath;
+    float d = sdCapsule(b, float3(-0.34, 0.0, 0.0), float3(0.38, -0.02, 0.0), 0.25 * br);
+    return smin(d, sdEllipsoid(b - float3(0.70, -0.04, 0.0), float3(0.20, 0.05, 0.10)), 0.08);
+}
+// Hind feet, sticking up out of the water, paddling now and then.
+float partFeet(float3 b) {
+    float3 bs = float3(b.x, b.y, abs(b.z));
+    return sdEllipsoid(bs - float3(0.58, 0.17 + 0.05 * uFace.z, 0.14), float3(0.12, 0.045, 0.085));
+}
+// Short arms; the round end of each is its paw.
+float partArms(float3 p) {
+    return min(sdCapsule(p, uShL, uPawL, 0.072), sdCapsule(p, uShR, uPawR, 0.072));
+}
+// The mouth, drawn (mouthPaint in common_head.sksl) and carved into the
+// muzzle behind the drawing exactly as the red panda's is: open drops the
+// jaw, wide pulls the corners out and flattens it, round draws it in,
+// taller and a little forward.
+// The drawing's size: where the stem meets the lip, how much higher the
+// corners sit, the half-width, and how far the lower lip has dropped.
+float4 mouthSize() {
+    float3 m = uMouth;
+    return float4(-0.11, 0.010 + 0.006 * m.y, 0.05 + 0.026 * m.y - 0.018 * m.z + 0.016 * m.x,
+                  m.x * (0.09 - 0.032 * m.y + 0.024 * m.z));
+}
+// The hollow's half-height; it sits just inside the drawing, its top under
+// the upper lip's line, so the drawn line always covers its edge.
+float mouthH() { return 0.0015 + uMouth.x * (0.031 - 0.011 * uMouth.y + 0.008 * uMouth.z); }
+// It bends up toward the corners, as the drawn smile does (a parabola,
+// near enough, and cheap: this runs in every march step). Inside so flat
+// a shape sdEllipsoid's estimate runs far too deep - it cut a slit along
+// the middle even with the hollow pulled out - so it is held to the
+// half-height, which is as deep as the inside of it can really be.
+float mouthShape(float3 h) {
+    float3 m = uMouth;
+    float a = 0.030 + 0.022 * m.y - 0.014 * m.z + 0.016 * m.x;
+    float hh = mouthH();
+    float bend = (0.0036 + 0.0022 * m.y) * h.x * h.x / (a * a);
+    return max(sdEllipsoid(h - float3(0.0, -0.113 - hh + bend, -0.255 - 0.008 * m.z), float3(a, hh, 0.050)), -hh);
+}
+// What is actually carved. Shut, the hollow is pulled back out of the
+// surface altogether (by more than the fillet), so no groove is left under
+// the drawn line; it sinks in over the first quarter of an opening, while
+// the drawing is already parting, so nothing pops.
+float mouthCarve(float3 h) { return mouthShape(h) + 0.02 * (1.0 - min(uMouth.x * 4.0, 1.0)); }
+// A round head with a whiskery muzzle and two tiny ears.
+float partHead(float3 h) {
+    float3 hs = float3(abs(h.x), h.y, h.z);
+    float d = sdEllipsoid(h, float3(0.25, 0.23, 0.23));
+    // The muzzle; its chin drops as the jaw opens.
+    d = smin(d, sdEllipsoid(h - float3(0.0, -0.075 - 0.020 * uMouth.x, -0.18 - 0.008 * uMouth.z),
+                            float3(0.135, 0.090 + 0.020 * uMouth.x, 0.105)), 0.06);
+    d = smin(d, length(hs - float3(0.19, 0.14, 0.03)) - 0.045, 0.03);
+    return smax(d, -mouthCarve(h), 0.01);
+}
+float partNose(float3 h) {
+    return sdEllipsoid(h - float3(0.0, -0.035, -0.285), float3(0.048, 0.030, 0.032));
+}
+float partEyes(float3 h) {
+    float open = h.x < 0.0 ? uFace.x : uFace.y;
+    float2 ea = eyeAt();
+    float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.19);
+    return sdEllipsoid(ep, float3(0.036, max(0.006, 0.040 * open), 0.028));
+}
+// The water: a thin round disc, its top rippling with rings that spread
+// out from the otter. Thin, so its rounded rim is all that shows of its
+// side - a deep column of water read as a drum.
+float waterAt(float3 p) {
+    float r = length(p.xz - uBodyPos.xz);
+    float ripple = uWater.z * sin(r * 13.0 - uWater.y) / (1.0 + r * 3.0);
+    float slab = max(p.y - (uWater.x + ripple), (uWater.x - 0.05) - p.y);
+    return smax(slab, length(p.xz) - POOL_R, 0.04);
+}
+
+float map(float3 p) {
+    float3 b = toBody(p);
+    float d = smin(partBody(b), partFeet(b), 0.05);
+    d = smin(d, partArms(p), 0.05);
+    float3 h = toHead(p);
+    float hd = length(h) - 0.40;
+    if (hd < 0.2) {
+        hd = min(smin(partHead(h), partNose(h), 0.015), partEyes(h));
+    }
+    d = smin(hd, d, 0.10);
+    d = min(d, waterAt(p));
+    return min(d, orbDist(p));
+}
+
+float partAt(float3 p) {
+    float3 b = toBody(p);
+    float3 h = toHead(p);
+    float best = partBody(b);
+    float id = ID_BODY;
+    float d = partFeet(b);
+    if (d < best) { best = d; id = ID_FEET; }
+    d = partArms(p);
+    if (d < best) { best = d; id = ID_PAW; }
+    d = partHead(h);
+    if (d < best) { best = d; id = ID_HEAD; }
+    d = partNose(h);
+    if (d < best) { best = d; id = ID_NOSE; }
+    d = partEyes(h);
+    if (d < best) { best = d; id = ID_EYE; }
+    d = waterAt(p);
+    if (d < best) { best = d; id = ID_WATER; }
+    if (orbDist(p) < best) { id = ID_ORB; }
+    return id;
+}
+
+// A rough otter for shadows and occlusion, inside the real one. The water
+// is left out: it does not cast shadows on the otter worth the cost.
+float mapLite(float3 p) {
+    float d = sdCapsule(toBody(p), float3(-0.30, 0.0, 0.0), float3(0.34, -0.02, 0.0), 0.21);
+    d = min(d, length(toHead(p)) - 0.20);
+    return min(d, partArms(p) + 0.01);
+}
+
+// --- colours ------------------------------------------------------------
+
+float3 headColour(float3 h) {
+    // Pale and grizzled on the face, darkening to chocolate behind and at
+    // the neck. (The mouth is drawn on top of this - see material().)
+    float pale = (1.0 - smoothstep(-0.10, 0.12, h.z)) * smoothstep(-0.26, -0.05, h.y + 0.1 * h.z);
+    float grizzle = 0.85 + 0.15 * felt(h * 2.0);
+    return mix(FUR_LIGHT, FACE * grizzle, pale);
+}
+
+float4 material(float id, float3 pos, float3 n) {
+    float3 h = toHead(pos);
+    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_NOSE) return float4(INK * 2.0, 0.7);
+    if (id == ID_HEAD) {
+        // The drawn mouth on the front of the muzzle, and the walls of the
+        // hollow behind it - darker the deeper in they are.
+        if (h.z < -0.20) {
+            float carved = (1.0 - smoothstep(0.002, 0.008, mouthCarve(h))) * smoothstep(0.03, 0.12, uMouth.x);
+            float4 c = mouthPaint(headColour(h), INK * 3.0, h.xy, mouthSize(), 0.04, uMouth.y, carved);
+            return float4(c.rgb * mix(1.0, 0.7, smoothstep(-0.27, -0.23, h.z) * carved), c.w);
+        }
+        return float4(headColour(h), 0.0);
+    }
+    if (id == ID_WATER) {
+        // Deep teal, with white foam where the water meets the otter.
+        float foam = 1.0 - smoothstep(0.0, 0.06, mapLite(pos) - 0.02);
+        float edge = smoothstep(POOL_R - 0.25, POOL_R, length(pos.xz));
+        float3 c = mix(WATER, FOAM, foam * 0.8);
+        return float4(mix(c, WATER * 0.4, edge), 0.12);
+    }
+    // Arms in the body's own brown, so they read as part of it; the paws
+    // and feet a shade darker.
+    if (id == ID_PAW) {
+        float paw = 1.0 - smoothstep(0.05, 0.10, min(length(pos - uPawL), length(pos - uPawR)));
+        return float4(mix(FUR_LIGHT, FUR * 0.7, paw), 0.0);
+    }
+    if (id == ID_FEET) return float4(FUR * 0.8, 0.0);
+    // The belly is a touch lighter than the back and sides.
+    float3 b = toBody(pos);
+    return float4(mix(FUR, FUR_LIGHT, smoothstep(0.05, 0.22, b.y)), 0.0);
+}
+
+// A painted catchlight in each eye.
+float3 sparkle(float id, float3 pos) {
+    if (id != ID_EYE) return float3(0.0);
+    float3 h = toHead(pos);
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float2 ea = eyeAt();
+    float2 q = float2(h.x - side * ea.x, h.y - ea.y);
+    float2 at = float2(-0.010 + 0.008 * uLook.x, 0.014 + 0.006 * uLook.y);
+    float spark = 1.0 - smoothstep(0.006, 0.011, length(q - at));
+    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y));
+    return float3(1.5) * spark * lit * (h.z < -0.19 ? 1.0 : 0.0);
+}
+
+// What a ray that ran out of march steps without reaching anything sees
+// (common_tail.sksl). Rays that skim the otter's outline use up their steps
+// creeping along its fur before they reach the pool behind it: meet the
+// water directly, so the edge shows water rather than see-through specks.
+float stuckRay(float3 ro, float3 rd) {
+    if (rd.y > -0.001) return -1.0;
+    float t = (uWater.x - ro.y) / rd.y;
+    float3 q = ro + rd * t;
+    return length(q.xz) < POOL_R - 0.02 ? t : -1.0;
+}

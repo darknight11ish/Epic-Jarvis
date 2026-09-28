@@ -1,0 +1,28 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3468,6 +3468,25 @@
+             body = {k: v for k, v in body.items() if k not in _CHAT_CLIENT_FIELDS}
+             if "messages" in body:
+                 body["messages"] = _chat_client_fields_off(body["messages"])
++            if lane == local_model and isinstance(body.get("messages"), list):
++                # rules-first-relay.patch. Ollama puts the Modelfile's SYSTEM
++                # block (the Jarvis rules) in front only when the first
++                # message is NOT a system message. memory-prefix.patch puts
++                # the recalled facts just before the newest question - on a
++                # conversation's first question that is position 0 - and the
++                # desktop sends attached clipboard text as a system message
++                # in the same place. jarvis_agent.keep_rules_first() puts the
++                # rules back in front, word for word; it already runs on
++                # every request the tool loop makes, and this is the same
++                # call for a turn that never reaches the tool loop (no tools
++                # enabled). Nothing else is changed, and a list starting with
++                # a user message is sent as it was. If jarvis_agent cannot be
++                # loaded, the request goes as it did before this patch.
++                try:
++                    import jarvis_agent
++                    body["messages"] = jarvis_agent.keep_rules_first(body["messages"])
++                except Exception:
++                    pass
+             if lane != local_model:
+                 # cloud-one-turn.patch. A lane that is not the local model gets
+                 # the NEWEST user turn and nothing else - not the earlier ones.

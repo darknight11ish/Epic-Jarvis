@@ -1077,6 +1077,19 @@ const reactor = (() => {
   }
   window.addEventListener("jarvis-appearance", e => adopt(e.detail));
 
+  // Lip-sync: Jarvis's voice (played by the Jarvis bar) and the owner's
+  // microphone level, passed into the face - face-voice.js, the same relay
+  // the Widget and the floating face use. Tauri delivers an event to this
+  // page, never to a frame inside it, so the face cannot listen for itself.
+  // Only inside the shell (capabilities/hud.json holds the listen grant); a
+  // plain browser has no events, and the face stays as it was.
+  const tauriEvent = window.__TAURI__ && window.__TAURI__.event;
+  if (tauriEvent && typeof tauriEvent.listen === "function") {
+    import("./face-voice.js")
+      .then(m => m.relayFaceVoice(frame, (name, fn) => Promise.resolve(tauriEvent.listen(name, fn)).catch(() => {})))
+      .catch(() => { /* the face keeps its own made-up beat */ });
+  }
+
   if (window.__jarvisAppearance) {
     adopt(window.__jarvisAppearance);
   } else if (typeof window.__jarvisFeed === "function") {

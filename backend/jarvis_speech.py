@@ -15,6 +15,10 @@ missing module):
         which microphone, so the clip is checked against that microphone's
         own voice print (voice-mic.patch passes `?mic=`; TAKES_MIC says so)
     jarvis_speech.say(text)                -> bytes | None  (a WAV)
+        since 2026-09-28 a Kokoro WAV may end with a "jmth" chunk after its
+        sound: the animals' mouth shapes from Kokoro's own timing
+        (jarvis_mouth.py, docs/LIPSYNC.md); status()'s tts.mouth says if
+        they can be made on this PC, or why not
         since 2026-09-24 in the owner's chosen custom voice when there is one
         (jarvis_voices.py: ZipVoice on the processor, or F5-TTS on the second
         card), falling back to Kokoro with the reason recorded; every call's
@@ -467,7 +471,32 @@ def _build_tts_engine():
         )
         model_cfg = sherpa_onnx.OfflineTtsModelConfig(
             kokoro=kokoro, num_threads=_threads("tts_threads"))
-        return sherpa_onnx.OfflineTts(sherpa_onnx.OfflineTtsConfig(model=model_cfg))
+        config = sherpa_onnx.OfflineTtsConfig(model=model_cfg)
+        engine = sherpa_onnx.OfflineTts(config)
+    except Exception:
+        return None
+    # How much sherpa-onnx shortens Kokoro's pauses (its own setting, read
+    # from the config it was built with): the mouth timing shortens them
+    # the same way itself (jarvis_mouth.speak).
+    global _TTS_SILENCE_SCALE
+    try:
+        _TTS_SILENCE_SCALE = float(config.silence_scale)
+    except Exception:
+        _TTS_SILENCE_SCALE = 0.2
+    _mouth("warm", paths)
+    return engine
+
+
+#: sherpa-onnx's silence_scale for the built engine (0.2 is its default).
+_TTS_SILENCE_SCALE = 0.2
+
+
+def _mouth(name: str, *args, **kwargs):
+    """jarvis_mouth.<name>(...), or None when that file is missing or the
+    call fails - the mouth shapes are an extra, never a reason to fail."""
+    try:
+        import jarvis_mouth
+        return getattr(jarvis_mouth, name)(*args, **kwargs)
     except Exception:
         return None
 
@@ -1282,6 +1311,9 @@ def status() -> dict:
             # the whole picture.
             "voice": _custom_voice_brief(),
             "timings": say_timings()[-5:],
+            # The animals' mouths timed by Kokoro itself (jarvis_mouth.py):
+            # ready, or why not in plain words (a one-time step to run).
+            "mouth": _mouth_status(),
         },
         "vad": {"engine": "silero (sherpa-onnx)", "available": vad_ok,
                 "status": vad_status},
@@ -2212,7 +2244,8 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     # The delay (jarvis_voice_flow): the first sentence of a spoken turn's
     # answer marks when its first sound was ready. Numbers only.
     mark = _flow("say_started")
-    samples, rate, engine, voice, fallback, note, failed = _synthesise(text)
+    mouth: list = []
+    samples, rate, engine, voice, fallback, note, failed = _synthesise(text, mouth=mouth)
     if samples is None:
         _note_timing("none", voice, text, t0, 0.0, fallback, note, failed=failed)
         return None
@@ -2227,6 +2260,10 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
         except Exception:
             pass
     wav = _write_wav(samples, rate)
+    if mouth and mouth[0]:
+        # The mouth shapes from Kokoro's own timing, as a "jmth" block after
+        # the sound (jarvis_mouth.py; docs/JARVIS-API.md). None: no block.
+        wav = _mouth("add_chunk", wav, mouth[0]) or wav
     if mark is not None:
         try:
             mark.audio_ready((time.monotonic() - t0) * 1000.0)
@@ -2235,16 +2272,108 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     return wav
 
 
+def _voices_mod(voices_module=None):
+    if voices_module is not None:
+        return voices_module
+    try:
+        import jarvis_voices
+        return jarvis_voices
+    except Exception:
+        return None
+
+
+def tts_voice(voices_module=None) -> tuple:
+    """(Kokoro voice number, speed, pitch rise) for the built-in voice, read
+    ONCE - so one sentence never mixes two faces' settings if the face
+    changes halfway through reading them. Never raises."""
+    V = _voices_mod(voices_module)
+    if V is not None and hasattr(V, "builtin_voice"):
+        try:
+            sid, speed, semis, _face = V.builtin_voice()
+            return int(sid), float(speed), max(0.0, min(4.0, float(semis)))
+        except Exception:
+            pass
+    return tts_speaker(V), tts_speed(V), 0.0
+
+
+def tts_pitch(voices_module=None) -> float:
+    """How many semitones higher the built-in voice speaks: 0, except while
+    "Voice follows the face" speaks for an animal face (jarvis_voices.
+    builtin_voice()), then that animal's small rise. Never raises."""
+    V = _voices_mod(voices_module)
+    if V is not None and hasattr(V, "builtin_voice"):
+        try:
+            return max(0.0, min(4.0, float(V.builtin_voice()[2])))
+        except Exception:
+            pass
+    return 0.0
+
+
+def pitch_up(samples, semitones: float):
+    """The sound `semitones` higher, by playing it faster: every frequency
+    rises by 2^(semitones/12) and the sound gets shorter by the same factor
+    (which is also what makes a voice sound SMALLER - the cute part). The
+    caller asks Kokoro for slower speech first (kokoro_speak), so the pace
+    comes out as chosen. numpy only, milliseconds. 0, or no numpy, hands the
+    samples back untouched."""
+    if np is None or not semitones or semitones <= 0:
+        return samples
+    x = np.asarray(samples, dtype=np.float32)
+    if len(x) < 2:
+        return x
+    f = 2.0 ** (float(semitones) / 12.0)
+    n = int(len(x) / f)
+    return np.interp(np.arange(n, dtype=np.float64) * f,
+                     np.arange(len(x), dtype=np.float64), x).astype(np.float32)
+
+
+def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0.0,
+                 mouth: Optional[list] = None):
+    """(samples, sample_rate) from Kokoro in the built-in voice, with the
+    animal pitch rise applied - or None. THE one way the built-in voice is
+    made: the spoken answer (_synthesise) and jarvis_voice_flow's two copies
+    of it (the "One moment." clip and the barge-in reference voice) all come
+    through here, so all three sound the same.
+
+    `mouth`: a list to receive the mouth shapes (jarvis_mouth.py) - the
+    "jmth" payload, or None - when the caller wants them (say() does). The
+    sound is the same either way: jarvis_mouth asks sherpa-onnx for it with
+    its pause-shortening off and shortens the pauses with an exact copy of
+    sherpa-onnx's own (checked byte for byte, docs/LIPSYNC.md); whenever it
+    cannot, this speaks exactly as it always did."""
+    if mouth is not None:
+        try:
+            import jarvis_mouth
+            got = jarvis_mouth.speak(engine, text, sid, speed, semitones, pitch_up=pitch_up,
+                                     silence_scale=_TTS_SILENCE_SCALE,
+                                     lang=str(_cfg("tts_lang", "en-us") or "en-us"),
+                                     paths=_sherpa_tts_paths())
+        except Exception:
+            got = False  # anything at all: speak exactly as before
+        if got is None:
+            return None
+        if got:
+            mouth.append(got[2])
+            return got[0], got[1]
+    f = 2.0 ** (max(0.0, float(semitones or 0.0)) / 12.0)
+    audio = engine.generate(text, sid=int(sid), speed=float(speed) / f)
+    if audio is None or len(audio.samples) == 0:
+        return None
+    return pitch_up(audio.samples, semitones), audio.sample_rate
+
+
 def tts_speed(voices_module=None) -> float:
     """How fast the built-in voice speaks: the owner's speaking-speed setting
-    (jarvis_voices.speed(), both apps' "How fast Jarvis speaks"), or - with
-    an older jarvis_voices.py, or none - `[voice] tts_speed`, as before."""
-    V = voices_module
-    if V is None:
+    (jarvis_voices.speed(), both apps' "How fast Jarvis speaks") - times the
+    animal's own pace while "Voice follows the face" speaks for an animal
+    face (jarvis_voices.builtin_voice()) - or, with an older
+    jarvis_voices.py, or none, `[voice] tts_speed`, as before."""
+    V = _voices_mod(voices_module)
+    if V is not None and hasattr(V, "builtin_voice"):
         try:
-            import jarvis_voices as V
+            return float(V.builtin_voice()[1])
         except Exception:
-            V = None
+            pass
     if V is not None and hasattr(V, "speed"):
         try:
             return float(V.speed())
@@ -2260,14 +2389,16 @@ def tts_speed(voices_module=None) -> float:
 def tts_speaker(voices_module=None) -> int:
     """Which of Kokoro's own voices the built-in voice uses: the owner's
     voice-choice setting (jarvis_voices.speaker(), both apps' "Jarvis's
-    built-in voice"), or - with an older jarvis_voices.py, or none -
-    `[voice] tts_speaker_id`, as before (ease-of-use audit row 13)."""
-    V = voices_module
-    if V is None:
+    built-in voice") - or the animal's own voice while "Voice follows the
+    face" speaks for an animal face (jarvis_voices.builtin_voice()) - or,
+    with an older jarvis_voices.py, or none, `[voice] tts_speaker_id`, as
+    before (ease-of-use audit row 13)."""
+    V = _voices_mod(voices_module)
+    if V is not None and hasattr(V, "builtin_voice"):
         try:
-            import jarvis_voices as V
+            return int(V.builtin_voice()[0])
         except Exception:
-            V = None
+            pass
     if V is not None and hasattr(V, "speaker"):
         try:
             return int(V.speaker())
@@ -2280,7 +2411,8 @@ def tts_speaker(voices_module=None) -> int:
     return v if v >= 0 else 0
 
 
-def _synthesise(text: str, *, start_better: bool = True) -> tuple:
+def _synthesise(text: str, *, start_better: bool = True,
+                mouth: Optional[list] = None) -> tuple:
     """The sound for `text`, and nothing else - no timing row, nothing
     remembered: (samples | None, sample_rate, engine, voice, fallback, note,
     failed). say() is this plus its bookkeeping; jarvis_voice_flow makes the
@@ -2290,7 +2422,9 @@ def _synthesise(text: str, *, start_better: bool = True) -> tuple:
     the built-in voice is the one chosen; a result without audio means the
     custom voice could not be used, and says why - then Kokoro speaks.
     `start_better=False` never STARTS the better voice's program on the
-    second card for this sound (it is used if it is already running)."""
+    second card for this sound (it is used if it is already running).
+    `mouth`: a list that receives the Kokoro mouth shapes' payload (say()
+    only; kokoro_speak) - nothing is added for a custom voice."""
     voice, fallback, note = "builtin", "", ""
     try:
         import jarvis_voices
@@ -2315,16 +2449,14 @@ def _synthesise(text: str, *, start_better: bool = True) -> tuple:
     if engine is None:
         return None, 0, "none", voice, fallback, note, "no Kokoro voice is installed"
     try:
-        audio = engine.generate(
-            text,
-            sid=tts_speaker(jarvis_voices),
-            speed=tts_speed(jarvis_voices),
-        )
+        # The animal's pitch rise (tts_pitch) is 0 unless "Voice follows the
+        # face" speaks for an animal face.
+        audio = kokoro_speak(engine, text, *tts_voice(jarvis_voices), mouth=mouth)
     except Exception:
         return None, 0, "none", voice, fallback, note, "Kokoro failed"
-    if audio is None or len(audio.samples) == 0:
+    if audio is None:
         return None, 0, "none", voice, fallback, note, "Kokoro made no sound"
-    return audio.samples, audio.sample_rate, "kokoro", voice, fallback, note, ""
+    return audio[0], audio[1], "kokoro", voice, fallback, note, ""
 
 
 # --------------------------------------------------------------------------
@@ -2426,6 +2558,15 @@ def say_timings() -> list:
     """Copies of the timing rows, oldest first."""
     with _TIMINGS_LOCK:
         return [dict(r) for r in _TIMINGS]
+
+
+def _mouth_status() -> dict:
+    got = _mouth("status")
+    if isinstance(got, dict):
+        return got
+    return {"available": False, "made": 0, "skipped": 0, "last_skip_why": "", "last_ms": None,
+            "status": "jarvis_mouth.py is not in the backend folder: the apps work the "
+                      "mouth out from the sound"}
 
 
 def _custom_voice_brief() -> dict:

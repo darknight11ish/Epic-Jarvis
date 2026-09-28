@@ -488,6 +488,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
+        "mouth": {
+          "available": false,
+          "last_ms": null,
+          "last_skip_why": "",
+          "made": 0,
+          "skipped": 0,
+          "status": "the Kokoro voice is not installed"
+        },
         "status": "no Kokoro model files on disk yet",
         "timings": [],
         "voice": {
@@ -994,6 +1002,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
+        "mouth": {
+          "available": false,
+          "last_ms": null,
+          "last_skip_why": "",
+          "made": 0,
+          "skipped": 0,
+          "status": "the Kokoro voice is not installed"
+        },
         "status": "no Kokoro model files on disk yet",
         "timings": [],
         "voice": {
@@ -1510,6 +1526,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
+        "mouth": {
+          "available": false,
+          "last_ms": null,
+          "last_skip_why": "",
+          "made": 0,
+          "skipped": 0,
+          "status": "the Kokoro voice is not installed"
+        },
         "status": "no Kokoro model files on disk yet",
         "timings": [],
         "voice": {
@@ -2026,6 +2050,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
+        "mouth": {
+          "available": false,
+          "last_ms": null,
+          "last_skip_why": "",
+          "made": 0,
+          "skipped": 0,
+          "status": "the Kokoro voice is not installed"
+        },
         "status": "no Kokoro model files on disk yet",
         "timings": [],
         "voice": {
@@ -2552,6 +2584,14 @@
         "available": true,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
+        "mouth": {
+          "available": false,
+          "last_ms": null,
+          "last_skip_why": "",
+          "made": 0,
+          "skipped": 0,
+          "status": "the Kokoro voice is not installed"
+        },
         "status": "ready",
         "timings": [],
         "voice": {
@@ -3079,6 +3119,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
+        "mouth": {
+          "available": false,
+          "last_ms": null,
+          "last_skip_why": "",
+          "made": 0,
+          "skipped": 0,
+          "status": "the Kokoro voice is not installed"
+        },
         "status": "no Kokoro model files on disk yet",
         "timings": [],
         "voice": {
@@ -3595,6 +3643,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
+        "mouth": {
+          "available": false,
+          "last_ms": null,
+          "last_skip_why": "",
+          "made": 0,
+          "skipped": 0,
+          "status": "the Kokoro voice is not installed"
+        },
         "status": "no Kokoro model files on disk yet",
         "timings": [],
         "voice": {
@@ -4111,6 +4167,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
+        "mouth": {
+          "available": false,
+          "last_ms": null,
+          "last_skip_why": "",
+          "made": 0,
+          "skipped": 0,
+          "status": "the Kokoro voice is not installed"
+        },
         "status": "no Kokoro model files on disk yet",
         "timings": [],
         "voice": {

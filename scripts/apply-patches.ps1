@@ -665,6 +665,13 @@ $PATCHES = @(
     # like every new patch. Needs jarvis_live.py copied in; without it, or
     # on any error, the banner says so and the route is simply not there.
     'live.patch'
+    # The Jarvis rules stay first on a turn with no tools enabled, too: one
+    # hunk in the relay's _open(), right after chat-history.patch's
+    # _chat_client_fields_off lines (so it goes after it, like every new
+    # patch), calling jarvis_agent.keep_rules_first() - the same call the
+    # tool loop already makes - for the local model only. Needs nothing new
+    # copied in: jarvis_agent.py is already in this list.
+    'rules-first-relay.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -726,6 +733,7 @@ $SHIPPED = @(
     'jarvis_learning_switch.py'  # learning-asks.patch: turning learning on raises an approval card
     'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
     'jarvis_voice_flow.py'       # voice-flow.patch: interrupting by talking, the delay in numbers, the "One moment." clip; jarvis_speech.py calls it
+    'jarvis_mouth.py'            # the animals' mouths timed by Kokoro itself (a "jmth" chunk in say()'s WAV); jarvis_speech.py calls it, no patch. One-time step: backend\README.md "Mouths that match the words"
     'jarvis_chat_log.py'         # chat-history.patch: chat history kept on this PC, encrypted
     'jarvis_paste_guard.py'      # feasibility I115, "Paste guard": masks a pasted password, PIN or one-time code before it is written to the encrypted database
     'jarvis_auto_learn.py'       # auto-learn.patch: facts from the owner's own words saved without a card

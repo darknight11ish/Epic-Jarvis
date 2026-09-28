@@ -15,7 +15,8 @@ Two halves, both the backend's own code run with the outside world replaced:
            real jarvis_voice.enroll().
   voices   Custom voices (section 15). GET /api/voice/voices is
            backend/jarvis_voices.status(); the POST answers are its create(),
-           switch(), delete(), set_better() and set_speed(). The "sounds like you"
+           switch(), delete(), set_better(), set_speed(), set_speaker() and
+           set_face_voice(). The "sounds like you"
            refusal is the real owner_check() against a print the real
            jarvis_voice.enroll() made from the same voice.
 
@@ -592,7 +593,7 @@ def vpost(fn, body, g=None, spawn=run_now, check=not_owner):
     kw = {"gate": g or gate(), "tier_of": ask, "spawn": spawn}
     if fn in (VS.create, VS.switch):
         kw["check"] = check
-    if fn in (VS.delete, VS.set_speed, VS.set_speaker):
+    if fn in (VS.delete, VS.set_speed, VS.set_speaker, VS.set_face_voice):
         return fn(body)
     return fn(body, **kw)
 
@@ -651,6 +652,16 @@ def voices_cases():
         answers["speaker_9"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "9"})), w)
         status["speaker_9"] = scrub(VS.status(), w)
         answers["speaker_bad"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "99"})), w)
+        # The voice follows the face: an on/off switch, no card either way.
+        # With the red panda showing (appearance.json, the one place both
+        # apps keep the face), its own voice stands in.
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
+                                               encoding="utf-8")
+        status["face_showing"] = scrub(VS.status(), w)
+        answers["face_off"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": False})), w)
+        status["face_off"] = scrub(VS.status(), w)
+        answers["face_on"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": True})), w)
+        answers["face_bad"] = scrub(answer(vpost(VS.set_face_voice, {"enabled": "yes"})), w)
 
     with VoicesWorld(zipvoice=False) as w:
         vpost(VS.create, create_body())
