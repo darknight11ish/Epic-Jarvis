@@ -3521,6 +3521,25 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * One Today card (backend jarvis_today.py, 2026-09-28): the owner's own
+     * [text], shown from [at] ("HH:MM") on [days] (0 = Monday). The PC sets it
+     * up at once, with no card - the desktop's `brain_schedule_add_today`.
+     * Held on a stale link, like every change. @return whether the PC took
+     * it, and the sentence to show.
+     */
+    suspend fun addTodayCard(text: String, at: String, days: Set<Int>): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val (body, why) = com.jarvis.client.net.Today.addBody(text, at, days)
+        if (body == null) return false to (why ?: com.jarvis.client.net.Today.NO_WORDS)
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not added. " + describe(r.error))
+        }
+    }
+
     private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?, eventId: String? = null) {
         _scheduleTick.update { it + 1 }
         val obj = data as? JsonObject
