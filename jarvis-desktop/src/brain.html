@@ -481,9 +481,20 @@
               <div id="chatbot-limits" class="chatbot-limits" hidden></div>
               <div id="chatbot-log"></div>
               <form id="chatbot-form" class="chatbot-form" autocomplete="off" novalidate hidden>
-                <label class="lbl">Chatbot
+                <label class="lbl chatbot-compare-toggle" id="chatbot-compare-toggle">
+                  <input id="chatbot-compare" type="checkbox">
+                  Ask several and compare
+                </label>
+                <p class="note" id="chatbot-compare-detail" hidden>Jarvis asks two or more chatbots the same goal, one after another, each in its own conversation under the same limits. One approval card lists every chatbot it will ask. At the end, one summary shows where they agree, where they disagree, and the sources each gave.</p>
+                <label class="lbl" id="chatbot-which-label">Chatbot
                   <select id="chatbot-which" class="field"></select>
                 </label>
+                <!-- "Ask several and compare": one tick box per chatbot, painted
+                     by brain.js (paintChatbotSeveral). -->
+                <fieldset id="chatbot-several" class="chatbot-several" hidden>
+                  <legend class="lbl" id="chatbot-several-legend"></legend>
+                  <div id="chatbot-several-list"></div>
+                </fieldset>
                 <label class="lbl">What should Jarvis find out?
                   <textarea id="chatbot-goal" class="field chatbot-goal" rows="3" maxlength="1000" spellcheck="true"></textarea>
                 </label>
@@ -496,6 +507,7 @@
                     <input id="chatbot-minutes" class="field" type="number" min="1" max="30" required>
                   </label>
                 </div>
+                <p class="note" id="chatbot-compare-note" hidden>Most messages and most minutes apply to each chatbot on its own.</p>
                 <label class="lbl">Words it must never send (optional, separated by commas)
                   <input id="chatbot-never" class="field" type="text" maxlength="600" spellcheck="false">
                 </label>

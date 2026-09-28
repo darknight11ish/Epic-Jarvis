@@ -19,6 +19,12 @@
  *   pause, takes the owner's words out while the private lists are hidden,
  *   and the commands are the Brain's alone; nothing in this window speaks a
  *   chatbot's words.
+ * - "Ask several and compare": the tick box shows one box per chatbot and
+ *   asks for ONE card with the ticked ones; a comparison shows each
+ *   chatbot's line, Pause/Resume/Stop for the whole of it, each conversation
+ *   under its name, and at the end ONE summary (agree, disagree - who said
+ *   what -, sources not checked, who dropped out) as outside text; Start is
+ *   held on a stale link, Stop is not.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -26,6 +32,13 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   actionsOf,
+  chatbotGroups,
+  usageLine,
+  compareFormProblem,
+  compareStatusLine,
+  compareTalkingLine,
+  memberLine,
+  pickLine,
   formProblem,
   limitOf,
   neverWords,
@@ -61,6 +74,9 @@ await check("the words are the PC's and the phone's, word for word", async () =>
   assert.ok(html.includes(`>${WORDS.detail}</p>`));
   assert.ok(html.includes(`>${WORDS.goal_note}</p>`), "the form does not say the goal is sent");
   assert.ok(html.includes(`>${WORDS.start_note}</p>`));
+  assert.ok(html.includes(WORDS.compare_toggle), "the form has no compare tick box");
+  assert.ok(html.includes(`>${WORDS.compare_detail}</p>`));
+  assert.ok(html.includes(`>${WORDS.compare_limits_note}</p>`));
   assert.ok(read("src-tauri/src/brain/chatbot.rs").includes(`"${WORDS.missing}"`));
 });
 
@@ -113,24 +129,101 @@ await check("every real answer reads: version, conversation, buttons", async () 
   assert.equal(formProblem(built, { chatbot: "gemini_web", goal: "x", messages: "5", minutes: "10" }), "");
 });
 
+await check("a comparison reads: every chatbot, its lines, the summary, the form's checks", async () => {
+  const none = readChatbot(CASES.compare_none);
+  assert.equal(none.compare, null);
+  assert.equal(none.tier.compareMin, 2);
+  assert.equal(none.tier.compareMax, 3);
+  assert.equal(none.canCompare, true);
+  assert.equal(pickLine(none), "Chatbots to ask (pick 2 to 3)");
+  assert.equal(readChatbot(CASES.not_ready).canCompare, false, "nothing usable, yet it could compare");
+  const asking = readChatbot(CASES.compare_asking).compare;
+  assert.equal(compareTalkingLine(asking), "Waiting for your yes to ask 3 chatbots");
+  assert.deepEqual(actionsOf(asking), ["stop"]);
+  const run = readChatbot(CASES.compare_running);
+  assert.equal(run.session, null, "a comparison's conversation read as the single one");
+  assert.equal(compareTalkingLine(run.compare), "Comparing 3 chatbots: asking ChatGPT, 2 of 3");
+  assert.deepEqual(actionsOf(run.compare), ["pause", "stop"]);
+  assert.deepEqual(run.compare.members.map((m) => memberLine(m, run.compare)), [
+    "Gemini: It used all 3 messages you allowed.", "ChatGPT: Talking now.", "Claude: Waiting its turn."]);
+  assert.ok(run.compare.members.every((m) => m.transcript.filter((t) => t.who === "chatbot")
+    .every((t) => t.outside)));
+  const paused = readChatbot(CASES.compare_paused).compare;
+  assert.deepEqual(actionsOf(paused), ["resume", "stop"]);
+  assert.equal(compareStatusLine(paused), CASES.compare_paused.compare.paused);
+  assert.equal(compareTalkingLine(paused), "Paused: comparing 2 chatbots");
+  const done = readChatbot(CASES.compare_done).compare;
+  assert.equal(done.live, false);
+  assert.equal(compareTalkingLine(done), "");
+  const sm = done.summary;
+  assert.ok(sm.answer && sm.agree.length === 2 && sm.byModel);
+  assert.deepEqual(sm.disagree[0].views.map((v) => v.who), ["Gemini", "ChatGPT"]);
+  assert.deepEqual(sm.dropped.map((d) => d.who), ["Claude"]);
+  assert.match(sm.dropped[0].why, /captcha/);
+  assert.deepEqual(sm.sources.map((x) => x.who), ["Gemini", "ChatGPT"]);
+  const stopped = readChatbot(CASES.compare_stopped).compare;
+  assert.equal(stopped.paused, "", "a stopped comparison still read as paused");
+  assert.deepEqual(actionsOf(stopped), []);
+  const form = { goal: "x", messages: "3", minutes: "10" };
+  assert.equal(compareFormProblem(none, { ...form, chatbots: ["gemini_web"] }),
+    "Pick at least 2 chatbots to compare.");
+  const four = JSON.parse(JSON.stringify(CASES.compare_none));
+  four.chatbots.push({ id: "grok_web", name: "Grok", host: "grok.com", built: true, ready: true, note: "" });
+  assert.equal(compareFormProblem(readChatbot(four),
+    { ...form, chatbots: ["gemini_web", "chatgpt_web", "claude_web", "grok_web"] }),
+  "Pick at most 3 chatbots in this version.");
+  assert.equal(compareFormProblem(none, { ...form, goal: " ", chatbots: ["gemini_web", "chatgpt_web"] }),
+    "Say what Jarvis should find out.");
+  assert.equal(compareFormProblem(none, { ...form, chatbots: ["gemini_web", "chatgpt_web"] }), "");
+  assert.equal(compareFormProblem(readChatbot(CASES.not_ready), { ...form, chatbots: ["gemini_web", "x"] }),
+    WORDS.compare_not_enough);
+  assert.equal(CASES.compare_too_few.body.error, WORDS.compare_too_few.replace("{min}", "2"));
+  assert.equal(CASES.compare_card_lists.names.length, 3, "the card did not list every chatbot");
+  assert.equal(CASES.compare_card_lists.goal_word_for_word, true);
+});
+
+await check("a long list is grouped by how each chatbot is reached; an API conversation's counts read", async () => {
+  const v = readChatbot(CASES.long_list);
+  assert.deepEqual(chatbotGroups(v).map((g) => [g.kind, g.title, g.chatbots.map((c) => c.id)]), [
+    ["website", WORDS.kind_website, ["chatgpt_web", "gemini_web", "perplexity_web"]],
+    ["api", WORDS.kind_api, ["openai_api", "deepseek_api", "groq_api"]],
+    ["local", WORDS.kind_local, ["local_ai"]],
+  ]);
+  assert.deepEqual(v.chatbots.filter((c) => c.built).map((c) => c.id), ["openai_api", "gemini_web"]);
+  assert.ok(v.chatbots.filter((c) => !c.built).every((c) => c.note), "a chatbot not ready gave no reason");
+  const old = readChatbot({ ...CASES.long_list, chatbots: [{ id: "x", name: "X", built: true }] });
+  assert.equal(old.chatbots[0].kind, "website", "an older PC's chatbot was not read as a website");
+  const u = readChatbot(CASES.usage_done).session;
+  assert.equal(usageLine(u.usage), "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini");
+  const members = readChatbot(CASES.compare_usage).compare.members;
+  assert.deepEqual(members.map((m) => usageLine(m.usage)),
+    ["", "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"]);
+  assert.equal(usageLine({ requests: 1, tokens: 1234567, model: "" }),
+    "Used so far: 1 request, 1,234,567 word-pieces (tokens)");
+  assert.equal(readChatbot(CASES.running).session.usage, null, "a website conversation grew a usage line");
+});
+
 await check("CONTROL: Rust holds what sends, hides the owner's words, Brain only", async () => {
   const rs = read("src-tauri/src/brain/chatbot.rs");
   const fn = (name) => {
     const f = rs.slice(rs.indexOf(`pub async fn ${name}(`));
     return f.slice(0, f.indexOf("\n}\n"));
   };
-  for (const held of ["chatbot_start", "chatbot_limits", "chatbot_resume"]) {
+  for (const held of ["chatbot_start", "chatbot_limits", "chatbot_resume", "chatbot_compare_start"]) {
     const f = fn(held);
     assert.ok(f.indexOf("require_link_live") >= 0 && f.indexOf("require_link_live") < f.indexOf("post("),
       `${held} is not held on a stale link`);
   }
-  for (const free of ["chatbot_stop", "chatbot_pause", "chatbot_status"]) {
+  for (const free of ["chatbot_stop", "chatbot_pause", "chatbot_status", "chatbot_compare_stop"]) {
     assert.ok(!fn(free).includes("require_link_live"), `${free} is held on a stale link`);
   }
   assert.match(fn("chatbot_status"), /private_hidden\(&app\)[\s\S]*hide_words\(answer\)/);
+  assert.match(rs, /get_mut\("compare"\)[\s\S]*get_mut\("members"\)[\s\S]*hide_session\(m\)/,
+    "a comparison's words are not hidden with the private lists");
   assert.match(fn("chatbot_pause"), /"\/api\/task\/pause"/);
   assert.match(fn("chatbot_resume"), /"\/api\/task\/resume"/);
-  const cmds = ["chatbot_status", "chatbot_start", "chatbot_limits", "chatbot_stop", "chatbot_pause", "chatbot_resume"];
+  const cmds = ["chatbot_status", "chatbot_start", "chatbot_limits", "chatbot_stop", "chatbot_pause",
+    "chatbot_resume", "chatbot_compare_start", "chatbot_compare_stop"];
   for (const cmd of cmds) {
     assert.match(read("src-tauri/build.rs"), new RegExp(`"${cmd}"`));
     assert.match(read("src-tauri/src/lib.rs"), new RegExp(`brain::chatbot::${cmd},`));
@@ -360,6 +453,193 @@ await check("Brain: an activity event reads it again", async () => {
   const after = await page.evaluate(() => window.__chatbot.reads);
   await page.close();
   assert.ok(after > before, `${before} -> ${after}`);
+});
+
+/* ── A long list, grouped; what an API conversation used ────────────── */
+
+await check("Brain, a long list: grouped under three headings, each not-ready one says why", async () => {
+  const page = await workTab({ chatbot: { status: CASES.long_list } });
+  const groups = await page.locator("#chatbot-which optgroup").evaluateAll((gs) => gs.map((g) => [
+    g.label, [...g.querySelectorAll("option")].map((o) => [o.value, o.disabled])]));
+  const picked = await page.locator("#chatbot-which").inputValue();
+  await page.locator("#chatbot-compare").check();
+  await page.waitForTimeout(200);
+  const rows = await page.locator("#chatbot-several-list > *").evaluateAll((ns) => ns.map((n) =>
+    n.tagName === "LABEL" ? ["box", n.querySelector("input").value, n.querySelector("input").disabled]
+      : [n.className.includes("chatbot-kind") ? "heading" : "why", n.textContent]));
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(groups, [
+    [WORDS.kind_website, [["chatgpt_web", true], ["gemini_web", false], ["perplexity_web", true]]],
+    [WORDS.kind_api, [["openai_api", false], ["deepseek_api", true], ["groq_api", true]]],
+    [WORDS.kind_local, [["local_ai", true]]],
+  ]);
+  assert.equal(picked, "gemini_web", "the first usable chatbot was not picked");
+  const note = (id) => CASES.long_list.chatbots.find((c) => c.id === id).note;
+  assert.deepEqual(rows, [
+    ["heading", WORDS.kind_website], ["box", "chatgpt_web", true], ["why", note("chatgpt_web")],
+    ["box", "gemini_web", false], ["box", "perplexity_web", true], ["why", note("perplexity_web")],
+    ["heading", WORDS.kind_api], ["box", "openai_api", false], ["box", "deepseek_api", true],
+    ["why", note("deepseek_api")], ["box", "groq_api", true], ["why", note("groq_api")],
+    ["heading", WORDS.kind_local], ["box", "local_ai", true], ["why", note("local_ai")],
+  ]);
+  assert.deepEqual(errors, []);
+});
+
+await check("Brain, what an API conversation used: one line, alone and per chatbot in a comparison", async () => {
+  let page = await workTab({ chatbot: { status: CASES.usage_done } });
+  const one = await page.locator("#chatbot .chatbot-usage").allInnerTexts();
+  await page.close();
+  assert.deepEqual(one, ["Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"]);
+  page = await workTab({ chatbot: { status: CASES.compare_usage } });
+  const each = await page.locator("#chatbot .chatbot-members li").evaluateAll((ls) => ls.map((l) => {
+    const u = l.querySelector(".chatbot-usage");
+    return u ? u.textContent : "";
+  }));
+  await page.close();
+  assert.deepEqual(each, ["", "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"]);
+});
+
+/* ── Ask several and compare ─────────────────────────────────────────── */
+
+async function tickTwoAndStart(page, ids) {
+  await page.locator("#chatbot-compare").check();
+  await page.waitForTimeout(200);
+  for (const id of ids) await page.locator(`#chatbot-several-list input[value="${id}"]`).check();
+  await page.locator("#chatbot-goal").fill("Which ferns suit a dark bathroom?");
+  await page.locator("#chatbot-messages").fill("3");
+  await page.locator("#chatbot-start").click();
+  await page.waitForTimeout(600);
+}
+
+await check("Brain, compare: the tick box shows every chatbot, and Start asks for ONE card", async () => {
+  const page = await workTab({ chatbot: { status: CASES.compare_none } });
+  const offBefore = await page.locator("#chatbot-several").isHidden();
+  await page.locator("#chatbot-compare").check();
+  await page.waitForTimeout(200);
+  const legend = await page.locator("#chatbot-several-legend").innerText();
+  const which = await page.locator("#chatbot-which-label").isHidden();
+  const note = await page.locator("#chatbot-compare-note").isVisible();
+  const detail = await page.locator("#chatbot-compare-detail").isVisible();
+  const boxes = await page.locator("#chatbot-several-list input").evaluateAll(
+    (bs) => bs.map((b) => [b.value, b.disabled]));
+  await page.locator('#chatbot-several-list input[value="gemini_web"]').check();
+  await page.locator('#chatbot-several-list input[value="claude_web"]').check();
+  await page.locator("#chatbot-goal").fill("Which ferns suit a dark bathroom?");
+  await page.locator("#chatbot-never").fill("Project Nimbus");
+  await page.locator("#chatbot-start").click();
+  await page.waitForTimeout(500);
+  const sent = await page.evaluate(() => window.__chatbotCalls);
+  const toast = await page.locator("#toast").innerText();
+  const errors = page.__errors;
+  await page.close();
+  assert.equal(offBefore, true, "the tick boxes showed before compare was ticked");
+  assert.equal(legend, "Chatbots to ask (pick 2 to 3)");
+  assert.equal(which, true, "the single chatbot picker still showed");
+  assert.equal(note && detail, true);
+  assert.deepEqual(boxes, [["gemini_web", false], ["chatgpt_web", false], ["claude_web", false]]);
+  assert.deepEqual(sent, [{ cmd: "chatbot_compare_start", chatbots: ["gemini_web", "claude_web"],
+    goal: "Which ferns suit a dark bathroom?", maxMessages: 5, maxMinutes: 10,
+    neverSend: ["Project Nimbus"] }]);
+  assert.match(toast, /An approval card lists every chatbot/);
+  assert.deepEqual(errors, []);
+});
+
+await check("Brain, compare: one tick is refused here, nothing asked", async () => {
+  const page = await workTab({ chatbot: { status: CASES.compare_none } });
+  await tickTwoAndStart(page, ["chatgpt_web"]);
+  const sent = await page.evaluate(() => window.__chatbotCalls);
+  const toast = await page.locator("#toast").innerText();
+  await page.close();
+  assert.deepEqual(sent, []);
+  assert.equal(toast.trim(), "Pick at least 2 chatbots to compare.");
+});
+
+await check("Brain, comparing: each chatbot's line, Pause and Stop for the whole, each conversation as outside text", async () => {
+  const page = await workTab({ chatbot: { status: CASES.compare_running } });
+  const head = await page.locator("#chatbot .chatbot-head").innerText();
+  const members = await page.locator("#chatbot .chatbot-members li").allInnerTexts();
+  const buttons = await page.locator("#chatbot .row-actions button").allInnerTexts();
+  const form = await page.locator("#chatbot-form").isHidden();
+  const limits = await page.locator("#chatbot-limits").isHidden();
+  const logs = await page.locator("#chatbot-log .chatbot-member-log").evaluateAll((ps) => ps.map((p) => [
+    p.dataset.chatbot, p.querySelector("h4").textContent,
+    [...p.querySelectorAll(".chatbot-turn")].every((t) => (t.dataset.who === "chatbot")
+      === (t.classList.contains("chatbot-outside") && Boolean(t.querySelector(".history-mark-taint"))))]));
+  const text = await page.locator("#chatbot-card").evaluate((n) => n.textContent);
+  await page.getByRole("button", { name: "Pause" }).click();
+  await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.waitForTimeout(300);
+  const sent = await page.evaluate(() => window.__chatbotCalls);
+  await page.close();
+  assert.equal(head, "Comparing 3 chatbots: asking ChatGPT, 2 of 3");
+  assert.deepEqual(members, ["Gemini: It used all 3 messages you allowed.", "ChatGPT: Talking now.",
+    "Claude: Waiting its turn."]);
+  assert.deepEqual(buttons, ["Pause", "Stop"]);
+  assert.equal(form, true, "the start form showed during a comparison");
+  assert.equal(limits, true, "Change limits showed for a comparison");
+  assert.deepEqual(logs, [["gemini_web", "Gemini", true], ["chatgpt_web", "ChatGPT", true]]);
+  assert.ok(text.includes(WORDS.conversations_title) && text.includes(WORDS.outside_note));
+  assert.deepEqual(sent, [{ cmd: "chatbot_pause" },
+    { cmd: "chatbot_compare_stop", id: CASES.compare_running.compare.id }]);
+});
+
+await check("Brain, after a comparison: ONE summary stays - agree, disagree by name, sources not checked, who dropped out", async () => {
+  // The window only knows a comparison's id once it has started one; the
+  // PC then answers the read by that id with the finished comparison.
+  const page = await workTab({ chatbot: { status: CASES.compare_none, namedCompare: CASES.compare_done } });
+  await tickTwoAndStart(page, ["gemini_web", "chatgpt_web"]);
+  const summary = await page.locator("#chatbot-log .chatbot-compare-summary").evaluate((n) => n.textContent);
+  const outside = await page.locator("#chatbot-log .chatbot-compare-summary .history-mark-taint").count();
+  const compares = await page.evaluate(() => window.__chatbot.compares);
+  const head = await page.locator("#chatbot .chatbot-head").innerText();
+  const form = await page.locator("#chatbot-form").isVisible();
+  await page.close();
+  const sm = CASES.compare_done.compare.summary;
+  assert.ok(compares.includes("cmp_000000000001"), JSON.stringify(compares));
+  assert.equal(head, `${WORDS.compare_title}: ${CASES.compare_done.compare.ended}`);
+  for (const words of [WORDS.compare_summary_title, WORDS.compare_summary_note, sm.answer,
+    WORDS.agree_title, sm.agree[0], WORDS.disagree_title, sm.disagree[0].point,
+    `Gemini: ${sm.disagree[0].views[0].said}`, `ChatGPT: ${sm.disagree[0].views[1].said}`,
+    WORDS.sources_title, "ChatGPT: https://example.org/low-light-plants", WORDS.dropped_title,
+    `Claude - ${sm.dropped[0].why}`, WORDS.open_title]) {
+    assert.ok(summary.includes(words), `the summary does not say: ${words}`);
+  }
+  assert.equal(outside, 1, "the summary is not marked outside text");
+  assert.equal(form, true, "a new one could not be started after the comparison ended");
+});
+
+await check("Brain, stale link: a comparison's Resume and Start wait, Stop does not", async () => {
+  let page = await workTab({ chatbot: { status: CASES.compare_paused }, link: { stale: true } });
+  const states = await page.locator("#chatbot button").evaluateAll(
+    (bs) => bs.map((b) => [b.textContent, b.disabled]));
+  const text = await page.locator("#chatbot").innerText();
+  await page.close();
+  assert.deepEqual(states, [["Resume", true], ["Stop", false]]);
+  assert.ok(text.includes(CASES.compare_paused.compare.paused));
+  page = await workTab({ chatbot: { status: CASES.compare_none }, link: { stale: true } });
+  await page.locator("#chatbot-compare").check();
+  const start = await page.locator("#chatbot-start").isDisabled();
+  await page.close();
+  assert.equal(start, true, "Start (compare) was offered on a stale link");
+});
+
+await check("Brain: a comparison's words are hidden with the private lists", async () => {
+  // What Rust sends while "Hide memory lists and chat history" hides them.
+  const hidden = JSON.parse(JSON.stringify(CASES.compare_running));
+  Object.assign(hidden.compare, { goal: "", summary: null, ended: "", never_send: [], hidden: true });
+  for (const m of hidden.compare.members) {
+    Object.assign(m, { goal: "", transcript: [], summary: null, question: "", ended: "", hidden: true });
+  }
+  const page = await workTab({ chatbot: { status: hidden } });
+  const text = await page.locator("#chatbot").innerText();
+  const log = await page.locator("#chatbot-log").innerText();
+  await page.close();
+  assert.ok(!text.includes(CASES.compare_running.compare.goal), text);
+  assert.ok(text.includes(WORDS.hidden));
+  assert.ok(text.includes("Comparing 3 chatbots: asking ChatGPT, 2 of 3"));
+  assert.equal(log.trim(), "");
 });
 
 await browser.close();

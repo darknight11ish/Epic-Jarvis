@@ -233,6 +233,10 @@ SHIPPED = (
     # rules, pause rules, caps and the Never look at list (no route yet, no
     # patch; the Windows readers are step 3)
     "jarvis_screen.py",
+    # "Ask several and compare": several of the conversations above, ONE
+    # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
+    # chatbot-routes.patch already installs the routes that reach it.
+    "jarvis_chatbot_compare.py",
 )
 
 

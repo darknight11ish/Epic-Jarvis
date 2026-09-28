@@ -414,8 +414,12 @@ def t_install():
             self.sent = (code, obj)
 
     fresh()
+    CB.ROUTED = False
     line = R.install(H, origin_ok=lambda h: h.origin, token_ok=lambda h: h.token,
                      read_body=lambda h: h._body)
+    import jarvis_reach
+    check("install marks the chatbot driver routed, so 'What Jarvis can reach' can say On",
+          CB.ROUTED is True and jarvis_reach._chatbot_status()["routed"] is True)
     check("install says what it turned on, naming the chatbots built", "Talk to a chatbot for me" in line
           and "Gemini" in line, line)
     check("installing twice does not wrap twice", "already on" in R.install(

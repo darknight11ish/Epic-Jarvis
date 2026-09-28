@@ -26,8 +26,14 @@ case registers the stand-in UNDER Gemini's own entry (its name, host and
 card wording, ready) so the answers look the way a working one will - that
 is a test double, not a claim that Gemini works.
 
-Session ids are numbered here (chat_000000000001, ...) so the file is the
-same on every run.
+"Ask several and compare" (jarvis_chatbot_compare.py): the `compare_*`
+cases register stand-ins under ChatGPT's and Claude's own entries too (their
+names, hosts and card wording), again a test double, not a claim that
+either works. The one card lists every chatbot; Claude's stand-in shows a
+captcha, so the finished comparison shows one dropping out.
+
+Session ids are numbered here (chat_000000000001, ...), and comparison ids
+too (cmp_000000000001, ...), so the file is the same on every run.
 """
 import dataclasses
 import json
@@ -52,6 +58,7 @@ sys.modules["jarvis_framework"] = _fw
 
 import jarvis_chatbot as CB  # noqa: E402
 import jarvis_chatbot_routes as R  # noqa: E402
+import jarvis_chatbot_compare as CMP  # noqa: E402
 import jarvis_task_control as TC  # noqa: E402
 
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "chatbot-cases.json"
@@ -72,6 +79,25 @@ REPLIES = [
     "A grow lamp gives steady light; a windowsill changes with the seasons.",
     "Parlour palms, calatheas and spider plants are generally considered pet friendly.",
 ]
+OTHER_REPLIES = [
+    "Low light suits pothos and philodendrons; see https://example.org/low-light-plants.",
+    "Calatheas are fussy: they want bright, indirect light and steady humidity.",
+    "A small LED grow lamp on a timer for ten hours a day is plenty.",
+    "Spider plants and parlour palms are safe around cats.",
+]
+COMPARE_SUMMARY = {
+    "answer": "Both suggest a low-light plant such as a snake plant or pothos, with a small grow "
+              "lamp for a very dark corner.",
+    "agree": ["Snake plants and pothos cope with little light",
+              "A grow lamp helps in a very dark corner"],
+    "disagree": [{"point": "Whether calatheas suit a dark flat",
+                  "views": [{"who": "Gemini", "said": "Calatheas are generally pet friendly "
+                                                      "and fine indoors"},
+                            {"who": "ChatGPT", "said": "Calatheas want bright, indirect "
+                                                       "light"}]}],
+    "sources": [{"who": "Gemini", "source": "horticultural extension services"}],
+    "open": ["Which grow lamp to buy"],
+}
 SUMMARY = {"answer": "Pick a low-light plant such as a snake plant, ZZ plant or pothos, "
                      "and add a small grow lamp if the corner is very dark.",
            "claims": [{"claim": "Snake plants cope with dim light", "source_given": True},
@@ -103,6 +129,8 @@ class Model:
     def __call__(self, url, body):
         if body.get("format") == CB.SUMMARY_SCHEMA:
             return {"message": {"content": json.dumps(SUMMARY)}}
+        if body.get("format") == CMP.SUMMARY_SCHEMA:
+            return {"message": {"content": json.dumps(COMPARE_SUMMARY)}}
         self.n += 1
         if self.stop_at and self.n >= self.stop_at:
             mv = {"move": "stop", "message": "", "reason": "the three easiest plants are named",
@@ -122,8 +150,31 @@ def _next_id():
     return f"chat_{_N[0]:012x}"
 
 
+_C = [0]
+
+
+def _next_compare_id():
+    _C[0] += 1
+    return f"cmp_{_C[0]:012x}"
+
+
 CB._new_id = _next_id
+CMP._new_id = _next_compare_id
 _SHIPPED_GEMINI = CB.ADAPTERS["gemini_web"]
+_SHIPPED_CHATGPT = CB.ADAPTERS["chatgpt_web"]
+_SHIPPED_CLAUDE = CB.ADAPTERS["claude_web"]
+#: Every chatbot as shipped, for the long-list case (read once, here).
+_SHIPPED_ALL = dict(CB.ADAPTERS)
+
+
+class ApiBot(CB.FakeChatbot):
+    """A stand-in for an API adapter: it counts like jarvis_chatbot_api does
+    (fixed numbers, so the file is the same everywhere)."""
+
+    def usage(self):
+        n = len(self.sent)
+        return {"model": "gpt-5-mini", "requests": n, "prompt_tokens": 1200 * n,
+                "completion_tokens": 205 * n, "total_tokens": 1405 * n, "retries": 0}
 
 
 def fresh():
@@ -160,8 +211,10 @@ def answer(code_body):
     return {"code": code, "body": body}
 
 
-def status(d, sid=""):
-    code, body = R.handle_get(f"id={sid}" if sid else "", deps=d)
+def status(d, sid="", compare_id=""):
+    q = "&".join(x for x in (f"id={sid}" if sid else "",
+                             f"compare={compare_id}" if compare_id else "") if x)
+    code, body = R.handle_get(q, deps=d)
     assert code == 200, (code, body)
     return body
 
@@ -245,11 +298,110 @@ def cases() -> dict:
     sid = start(d)[1]["session"]
     out["card_denied"] = status(d, sid)
     out["gone"] = status(d, "chat_0000000000ff")
+
+    # ---- "Ask several and compare" ----------------------------------------
+    fresh()
+    gem, gpt, cla = (CB.FakeChatbot(REPLIES), CB.FakeChatbot(OTHER_REPLIES),
+                     CB.FakeChatbot(REPLIES, statuses={1: CB.Status("needs_owner", "captcha")}))
+    seen = {}
+
+    def gate_sees_compare(a, det, pr):
+        seen.setdefault("asking", status(d))
+        seen.setdefault("card", det.get("text", ""))
+        return Verdict(True, "approved")
+    d = world(gem, model=Model(stop_at=None), gate=gate_sees_compare)
+    both(gpt, cla)
+    out["compare_none"] = status(d)
+    out["compare_too_few"] = answer(compare(d, chatbots=["gemini_web"]))
+    snap = {}
+
+    def on_read_gpt(n):
+        if n == 2 and "running" not in snap:
+            snap["running"] = status(d)
+    gpt.on_read = on_read_gpt
+    started = compare(d)
+    out["compare_start_asking"] = answer(started)
+    out["compare_asking"] = seen["asking"]
+    out["compare_running"] = snap["running"]
+    cid = started[1]["compare"]
+    out["compare_done"] = status(d, compare_id=cid)
+    out["compare_stop_ended"] = answer(R.handle_post(R.COMPARE_STOP_ROUTE, {"id": cid}, deps=d))
+    out["compare_card_lists"] = {
+        "names": [n for n in ("Gemini (gemini.google.com)", "ChatGPT (chatgpt.com)",
+                              "Claude (claude.ai)") if n in seen["card"]],
+        "goal_word_for_word": ("\n" + GOAL + "\n") in seen["card"],
+    }
+
+    # Paused by the owner, then stopped: the whole comparison.
+    fresh()
+    gem = CB.FakeChatbot(REPLIES, on_send=lambda t, n: n == 2 and TC.handle_post(
+        "/api/task/pause", {}))
+    gpt = CB.FakeChatbot(OTHER_REPLIES)
+    d = world(gem)
+    both(gpt, None)
+    cid = compare(d, chatbots=["gemini_web", "chatgpt_web"])[1]["compare"]
+    out["compare_paused"] = status(d)
+    out["compare_start_while_paused"] = answer(compare(d))
+    out["compare_stop_paused"] = answer(R.handle_post(R.COMPARE_STOP_ROUTE, {"id": cid},
+                                                      deps=d))
+    out["compare_stopped"] = status(d, compare_id=cid)
+    out["compare_gone"] = status(d, compare_id="cmp_0000000000ff")
+
+    # ---- a long list, every kind, some not ready (the chooser's groups) ---
+    fresh()
+    CB.ADAPTERS.clear()
+    import jarvis_chatbot_api as A
+    import jarvis_chatbot_local as L
+    import jarvis_chatbot_chatgpt as GPT
+    import jarvis_chatbot_perplexity as PPX
+
+    def entry(cid, note, bot=None):
+        info = _SHIPPED_ALL[cid]
+        extra = {"ready": (lambda n=note: n)}
+        if bot is not None:
+            extra["factory"] = (lambda b=bot: b)
+        CB.register_adapter(dataclasses.replace(info, built=True, **extra))
+    # Registered out of order on purpose: both apps group them by kind.
+    entry("chatgpt_web", GPT.SITE.not_signed_in)
+    api_bot = ApiBot(OTHER_REPLIES)
+    entry("openai_api", "", api_bot)
+    entry("local_ai", L.NO_MODEL)
+    gem = CB.FakeChatbot(REPLIES)
+    entry("gemini_web", "", gem)
+    entry("deepseek_api", A.no_key_words(A.PRESETS["deepseek_api"]))
+    entry("perplexity_web", PPX.SITE.not_signed_in)
+    entry("groq_api", A.no_key_words(A.PRESETS["groq_api"]))
+    d = world(model=Model(stop_at=None))
+    out["long_list"] = status(d)
+
+    # An API conversation's counts ("usage"), alone and inside a comparison.
+    sid = start(d, chatbot="openai_api", max_messages=3)[1]["session"]
+    out["usage_done"] = status(d, sid)
+    api_bot.sent.clear()
+    cid = compare(d, chatbots=["gemini_web", "openai_api"])[1]["compare"]
+    out["compare_usage"] = status(d, compare_id=cid)
     return out
+
+
+def both(gpt, cla):
+    """ChatGPT's and Claude's own entries, answered by stand-ins."""
+    CB.register_adapter(dataclasses.replace(_SHIPPED_CHATGPT, factory=lambda: gpt, built=True,
+                                            ready=None))
+    if cla is not None:
+        CB.register_adapter(dataclasses.replace(_SHIPPED_CLAUDE, factory=lambda: cla,
+                                                built=True, ready=None))
+
+
+def compare(d, **extra):
+    body = {"chatbots": ["gemini_web", "chatgpt_web", "claude_web"], "goal": GOAL,
+            "max_messages": 3, "max_minutes": 10, "never_send": ["Project Nimbus"]}
+    body.update(extra)
+    return R.handle_post(R.COMPARE_START_ROUTE, body, deps=d, wait=True)
 
 
 def render() -> str:
     _N[0] = 0
+    _C[0] = 0
     return json.dumps(cases(), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 

@@ -816,6 +816,8 @@ pub fn run() {
             brain::chatbot::chatbot_stop,
             brain::chatbot::chatbot_pause,
             brain::chatbot::chatbot_resume,
+            brain::chatbot::chatbot_compare_start,
+            brain::chatbot::chatbot_compare_stop,
             brain::briefing::brain_briefing,
             brain::briefing::brain_briefing_now,
             brain::briefing::get_briefing_setup,

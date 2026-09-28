@@ -21,8 +21,15 @@
 //!   `/api/task/pause` and `/api/task/resume` (a conversation runs as a
 //!   task). Pause is never held; Resume raises its own card and is held.
 //!
-//! Stop everything (the hotkey) already stops a conversation: the backend's
-//! `jarvis_chatbot` registers with `jarvis_stop_all`.
+//! * [`chatbot_compare_start`] - `POST /api/chatbot/compare/start` ("Ask
+//!   several and compare", `jarvis_chatbot_compare.py`): two or more
+//!   chatbots, ONE approval card listing every one. Held on a stale link.
+//! * [`chatbot_compare_stop`] - `POST /api/chatbot/compare/stop`: the whole
+//!   comparison. Never held.
+//!
+//! Stop everything (the hotkey) already stops a conversation and a
+//! comparison: the backend's `jarvis_chatbot` and `jarvis_chatbot_compare`
+//! register with `jarvis_stop_all`.
 
 use tauri::AppHandle;
 
@@ -60,6 +67,19 @@ fn valid_id(id: &str) -> bool {
             .chars()
             .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
 }
+
+/// A comparison's id (`jarvis_chatbot_compare._new_id`): `cmp_` and 12 hex.
+fn valid_compare_id(id: &str) -> bool {
+    id.len() == 16
+        && id.starts_with("cmp_")
+        && id[4..]
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+}
+
+/// The most chatbots one comparison may name (the two-card version's; the PC
+/// checks the real cap for the version that runs).
+const MOST_COMPARED: usize = 4;
 
 /// [`chatbot_status`]'s reading of the answer.
 pub(crate) fn status_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
@@ -171,6 +191,44 @@ pub(crate) fn start_body(
     Ok(body)
 }
 
+/// The body for "Ask several and compare": the same goal and limits as a
+/// single conversation, and the chatbots as a list of ids, no repeats.
+pub(crate) fn compare_body(
+    chatbots: &[String],
+    goal: &str,
+    max_messages: Option<u32>,
+    max_minutes: Option<u32>,
+    never_send: &[String],
+) -> Result<serde_json::Value, String> {
+    let mut ids: Vec<String> = Vec::new();
+    for raw in chatbots {
+        let id = raw.trim();
+        if id.is_empty()
+            || id.len() > 40
+            || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err("Choose the chatbots to ask.".to_string());
+        }
+        if !ids.iter().any(|x| x == id) {
+            ids.push(id.to_string());
+        }
+    }
+    if ids.len() < 2 {
+        return Err("Pick at least 2 chatbots to compare.".to_string());
+    }
+    if ids.len() > MOST_COMPARED {
+        return Err(format!(
+            "Pick at most {MOST_COMPARED} chatbots in this version."
+        ));
+    }
+    let mut body = start_body(&ids[0], goal, max_messages, max_minutes, never_send)?;
+    if let Some(o) = body.as_object_mut() {
+        o.remove("chatbot");
+        o.insert("chatbots".into(), serde_json::json!(ids));
+    }
+    Ok(body)
+}
+
 /// The body for a limits change: only what was given.
 pub(crate) fn limits_body(
     id: &str,
@@ -200,29 +258,49 @@ pub(crate) fn limits_body(
 /// conversation) - and `hidden` set. Counts, the state and the version stay.
 pub(crate) fn hide_words(mut answer: serde_json::Value) -> serde_json::Value {
     if let Some(s) = answer.get_mut("session").and_then(|s| s.as_object_mut()) {
-        s.insert("goal".into(), serde_json::json!(""));
-        s.insert("never_send".into(), serde_json::json!([]));
-        s.insert("transcript".into(), serde_json::json!([]));
-        s.insert("summary".into(), serde_json::Value::Null);
-        s.insert("question".into(), serde_json::json!(""));
-        s.insert("ended".into(), serde_json::json!(""));
-        s.insert("hidden".into(), serde_json::json!(true));
+        hide_session(s);
+    }
+    // A comparison: its goal, summary and end words, and every conversation
+    // in it, the same way. Its counts, state and chatbots' names stay.
+    if let Some(c) = answer.get_mut("compare").and_then(|c| c.as_object_mut()) {
+        c.insert("goal".into(), serde_json::json!(""));
+        c.insert("never_send".into(), serde_json::json!([]));
+        c.insert("summary".into(), serde_json::Value::Null);
+        c.insert("ended".into(), serde_json::json!(""));
+        c.insert("hidden".into(), serde_json::json!(true));
+        if let Some(members) = c.get_mut("members").and_then(|m| m.as_array_mut()) {
+            for m in members.iter_mut().filter_map(|m| m.as_object_mut()) {
+                hide_session(m);
+            }
+        }
     }
     answer
 }
 
-/// The chatbots, the version, and one conversation: the one named, or the
-/// latest one still going. A read.
+fn hide_session(s: &mut serde_json::Map<String, serde_json::Value>) {
+    s.insert("goal".into(), serde_json::json!(""));
+    s.insert("never_send".into(), serde_json::json!([]));
+    s.insert("transcript".into(), serde_json::json!([]));
+    s.insert("summary".into(), serde_json::Value::Null);
+    s.insert("question".into(), serde_json::json!(""));
+    s.insert("ended".into(), serde_json::json!(""));
+    s.insert("hidden".into(), serde_json::json!(true));
+}
+
+/// The chatbots, the version, one conversation (the one named, or the latest
+/// one still going) and one comparison (likewise). A read.
 #[tauri::command]
 pub async fn chatbot_status(
     app: AppHandle,
     id: Option<String>,
+    compare: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let base = commands::jarvis_base(&app);
     let id = id.filter(|i| valid_id(i)).unwrap_or_default();
+    let compare = compare.filter(|c| valid_compare_id(c)).unwrap_or_default();
     let response = commands::jarvis_client(Some(READ_TIMEOUT))?
         .get(format!("{base}/api/chatbot/status"))
-        .query(&[("id", id)])
+        .query(&[("id", id), ("compare", compare)])
         .headers(commands::jarvis_headers(&app)?)
         .send()
         .await
@@ -288,6 +366,36 @@ pub async fn chatbot_pause(app: AppHandle) -> Result<serde_json::Value, String> 
 pub async fn chatbot_resume(app: AppHandle) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
     post(&app, "/api/task/resume", serde_json::json!({})).await
+}
+
+/// "Ask several and compare": ONE approval card on the PC listing every
+/// chatbot; nothing is sent before a yes. Held on a stale link.
+#[tauri::command]
+pub async fn chatbot_compare_start(
+    app: AppHandle,
+    chatbots: Vec<String>,
+    goal: String,
+    max_messages: Option<u32>,
+    max_minutes: Option<u32>,
+    never_send: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    let body = compare_body(&chatbots, &goal, max_messages, max_minutes, &never_send)?;
+    post(&app, "/api/chatbot/compare/start", body).await
+}
+
+/// Stop the whole comparison. Never held, never a card.
+#[tauri::command]
+pub async fn chatbot_compare_stop(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    if !valid_compare_id(&id) {
+        return Err("Say which comparison to stop.".to_string());
+    }
+    post(
+        &app,
+        "/api/chatbot/compare/stop",
+        serde_json::json!({ "id": id }),
+    )
+    .await
 }
 
 async fn post(
@@ -375,6 +483,55 @@ mod tests {
         assert!(start_body("gemini_web", "goal", None, Some(31), &[]).is_err());
         assert!(start_body("gemini_web", &"x".repeat(1001), None, None, &[]).is_err());
         assert!(start_body("gemini_web", "goal", None, None, &["y".repeat(61)]).is_err());
+    }
+
+    #[test]
+    fn a_comparison_names_two_to_four_chatbots_and_the_goal_as_typed() {
+        let ids = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let b = compare_body(
+            &ids(&["gemini_web", "chatgpt_web", "gemini_web"]),
+            "  Ferns ",
+            Some(3),
+            None,
+            &["Nimbus".into()],
+        )
+        .unwrap();
+        assert_eq!(
+            b["chatbots"],
+            serde_json::json!(["gemini_web", "chatgpt_web"])
+        );
+        assert!(b.get("chatbot").is_none());
+        assert_eq!(b["goal"], "Ferns");
+        assert_eq!(b["max_messages"], 3);
+        assert_eq!(b["never_send"], serde_json::json!(["Nimbus"]));
+        assert_eq!(
+            compare_body(&ids(&["gemini_web"]), "g", None, None, &[]).unwrap_err(),
+            "Pick at least 2 chatbots to compare."
+        );
+        assert!(compare_body(&ids(&["a", "b", "c", "d", "e"]), "g", None, None, &[]).is_err());
+        assert!(compare_body(&ids(&["a", "../b"]), "g", None, None, &[]).is_err());
+        assert!(compare_body(&ids(&["a", "b"]), "  ", None, None, &[]).is_err());
+        assert!(valid_compare_id("cmp_0123456789ab"));
+        assert!(!valid_compare_id("chat_0123456789ab"));
+        assert!(!valid_compare_id("cmp_../../etc/p"));
+    }
+
+    #[test]
+    fn a_comparisons_words_are_hidden_too() {
+        let out = hide_words(serde_json::json!({"session": null, "compare": {
+            "goal": "the tax return", "summary": {"answer": "x"}, "ended": "e",
+            "never_send": ["a"], "messages_used": 3, "members": [
+                {"goal": "the tax return", "transcript": [{"who": "chatbot", "text": "t"}],
+                 "question": "q", "name": "Gemini"}]}}));
+        let c = &out["compare"];
+        assert_eq!(c["goal"], "");
+        assert!(c["summary"].is_null());
+        assert_eq!(c["hidden"], true);
+        assert_eq!(c["messages_used"], 3);
+        assert_eq!(c["members"][0]["goal"], "");
+        assert_eq!(c["members"][0]["transcript"], serde_json::json!([]));
+        assert_eq!(c["members"][0]["question"], "");
+        assert_eq!(c["members"][0]["name"], "Gemini");
     }
 
     #[test]

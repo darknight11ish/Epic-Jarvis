@@ -40,7 +40,7 @@ object ChatbotNotifier {
     private const val TAG = "ChatbotNotifier"
     const val NOTIFICATION_ID = 0x3200
 
-    /** The conversation id a Stop carries. */
+    /** The conversation (or comparison) id a Stop carries. */
     const val EXTRA_SESSION_ID = "com.jarvis.client.extra.CHATBOT_SESSION"
 
     private fun allowed(context: Context): Boolean =
@@ -48,8 +48,17 @@ object ChatbotNotifier {
             PackageManager.PERMISSION_GRANTED
 
     /** Shows (or updates) the line for [s]; takes it away once [s] has ended. */
-    fun post(context: Context, s: Chatbot.Session) {
-        val line = Chatbot.talkingLine(s)
+    fun post(context: Context, s: Chatbot.Session) = show(context, Chatbot.talkingLine(s), s.id)
+
+    /**
+     * The same line for "Ask several and compare" ("Comparing 3 chatbots:
+     * asking ChatGPT, 2 of 3"). Its Stop carries the comparison's id, so it
+     * stops the whole comparison.
+     */
+    fun postCompare(context: Context, c: Chatbot.Compare) =
+        show(context, Chatbot.compareTalkingLine(c), c.id)
+
+    private fun show(context: Context, line: String, stopId: String) {
         if (line.isEmpty()) {
             cancel(context)
             return
@@ -70,7 +79,7 @@ object ChatbotNotifier {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(locked(context))
             .setContentIntent(open(context))
-            .addAction(0, Chatbot.STOP, stopIntent(context, s.id))
+            .addAction(0, Chatbot.STOP, stopIntent(context, stopId))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, n) }
             .onFailure { Log.w(TAG, "could not post the chatbot line", it) }

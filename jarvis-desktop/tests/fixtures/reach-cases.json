@@ -694,7 +694,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 18,
+   "on": 20,
    "rows": [
     {
      "asks": "Yes, every question",
@@ -827,24 +827,24 @@
      "where": "the websites on each approved plan"
     },
     {
-     "asks": "-",
+     "asks": "Yes, every time",
      "id": "chatbot",
-     "line": "Ready on this PC (Gemini), but neither app can start a conversation yet - that comes in a later step.",
+     "line": "Holds a conversation with an AI chatbot website for you: one approval card per conversation shows the goal word for word and the most messages and minutes. Nothing private is sent, and it stops and asks you at any captcha or sign-in page. What the chatbot says is outside text.",
      "name": "Chatbot conversations",
-     "on": false,
-     "state": "off",
-     "state_words": "Off",
-     "where": ""
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "gemini.google.com (a browser window you can see)"
     },
     {
-     "asks": "-",
+     "asks": "Yes, every time",
      "id": "chatbot_api",
-     "line": "A key is saved on this PC for ChatGPT (OpenAI API), but neither app can start a conversation yet - that comes in a later step.",
+     "line": "Holds a conversation with an AI chatbot through its official API, with the key saved on this PC, sent only to that service: one approval card per conversation shows the service, the model, the goal word for word and the most messages and minutes. Each message costs a little on that account. Nothing private is sent, and what the chatbot says is outside text.",
      "name": "Chatbot conversations with a key (API)",
-     "on": false,
-     "state": "off",
-     "state_words": "Off",
-     "where": ""
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "api.openai.com"
     },
     {
      "asks": "Yes, every time",

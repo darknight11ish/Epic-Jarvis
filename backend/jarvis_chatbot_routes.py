@@ -24,6 +24,23 @@ This file only turns HTTP into those calls:
                                       once and the outcome rides on the next
                                       GET (`limits`).
 
+"Ask several and compare" (jarvis_chatbot_compare.py, the owner's decision
+of 2026-09-28; JARVIS-API section 60.7):
+
+    GET  /api/chatbot/status          also carries `compare`: the latest
+         (?compare=)                  comparison still going, or the one
+                                      named, with every conversation in it
+                                      and the ONE summary at the end; and
+                                      `tier.compare_min` / `compare_max`
+    POST /api/chatbot/compare/start   plan() then start(): ONE approval card
+                                      listing every chatbot. `chatbots` is a
+                                      list of ids. A refused plan is a 400
+                                      with the reason, and no card.
+    POST /api/chatbot/compare/stop    stop(): the whole comparison. Never a
+                                      card. /api/chatbot/stop with one of
+                                      its conversations' ids stops the whole
+                                      comparison too.
+
 Pause and Resume are the existing /api/task/pause and /api/task/resume
 (Resume is its own card); Stop everything (/api/stop_all) stops a
 conversation too. Every route sits behind the server's own origin and token
@@ -55,15 +72,20 @@ from typing import Callable, Optional
 from urllib.parse import parse_qs, urlsplit
 
 import jarvis_chatbot as CB
+import jarvis_chatbot_compare as CMP
 
 STATUS_ROUTE = "/api/chatbot/status"
 START_ROUTE = "/api/chatbot/start"
 STOP_ROUTE = "/api/chatbot/stop"
 LIMITS_ROUTE = "/api/chatbot/limits"
-POST_ROUTES = (START_ROUTE, STOP_ROUTE, LIMITS_ROUTE)
+COMPARE_START_ROUTE = "/api/chatbot/compare/start"
+COMPARE_STOP_ROUTE = "/api/chatbot/compare/stop"
+POST_ROUTES = (START_ROUTE, STOP_ROUTE, LIMITS_ROUTE, COMPARE_START_ROUTE, COMPARE_STOP_ROUTE)
 
 #: What a conversation id looks like (jarvis_chatbot._new_id).
 _ID = re.compile(r"^chat_[0-9a-f]{12}$")
+#: What a comparison's id looks like (jarvis_chatbot_compare._new_id).
+_CMP_ID = re.compile(r"^cmp_[0-9a-f]{12}$")
 
 #: The sentences both apps show, word for word (tools/gen_chatbot_cases.py).
 WORDS = {
@@ -110,6 +132,43 @@ WORDS = {
     "notify_waiting": "Waiting for your yes to talk to {name}",
     "notify_paused": "Paused: talking to {name}, {used} of {max}",
     "notify_locked": "Jarvis is talking to a chatbot for you.",
+    # "Ask several and compare" (jarvis_chatbot_compare.py).
+    "compare_toggle": "Ask several and compare",
+    "compare_detail": ("Jarvis asks two or more chatbots the same goal, one after another, each "
+                       "in its own conversation under the same limits. One approval card lists "
+                       "every chatbot it will ask. At the end, one summary shows where they "
+                       "agree, where they disagree, and the sources each gave."),
+    "compare_pick": "Chatbots to ask (pick {min} to {max})",
+    "compare_limits_note": "Most messages and most minutes apply to each chatbot on its own.",
+    "compare_title": "Comparing chatbots",
+    "compare_summary_title": "Where they agree and disagree",
+    "compare_summary_note": ("Written on this PC from the chatbots' words, so it is outside "
+                             "text too."),
+    "agree_title": "They agree",
+    "disagree_title": "They disagree",
+    "sources_title": "Sources each gave (not checked by Jarvis)",
+    "dropped_title": "Dropped out",
+    "conversations_title": "Each conversation",
+    "compare_too_few": "Pick at least {min} chatbots to compare.",
+    "compare_too_many": "Pick at most {max} chatbots in this version.",
+    "compare_not_enough": ("Fewer than two chatbots can be reached from this PC, so there is "
+                           "nothing to compare yet."),
+    "compare_gone": ("That comparison is gone: Jarvis on the PC restarted, and comparisons are "
+                     "kept in memory only."),
+    "notify_compare_running": "Comparing {count} chatbots: asking {name}, {at} of {count}",
+    "notify_compare_waiting": "Waiting for your yes to ask {count} chatbots",
+    "notify_compare_paused": "Paused: comparing {count} chatbots",
+    "member_waiting": "Waiting its turn.",
+    # The chooser, grouped by how each chatbot is reached (`kind` in
+    # jarvis_chatbot.choices()), in this order, in both apps.
+    "kind_website": "Websites (a browser window on the PC)",
+    "kind_api": "With a key (each message costs a little)",
+    "kind_local": "On this PC",
+    # What an API (or local) conversation has used so far (`usage` on the
+    # session); {requests} is "3 requests" / "1 request", {tokens} is
+    # grouped with commas ("4,210"). ", model {model}" is left out when the
+    # PC names no model.
+    "usage_line": "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}",
 }
 
 #: The states in which a conversation is still going (jarvis_chatbot._live).
@@ -186,8 +245,10 @@ def _end_forgotten(deps) -> None:
 
 def handle_get(query: str = "", *, deps=None) -> tuple:
     """GET /api/chatbot/status. A read: no card; the one thing it may change
-    is ending a paused conversation that can no longer be resumed."""
+    is ending a paused conversation (or comparison) that can no longer be
+    resumed."""
     _end_forgotten(deps)
+    CMP.sweep_forgotten(deps, grace=UNHELD_GRACE, now=_now)
     q = parse_qs(str(query or ""))
     raw = (q.get("id") or [""])[0]
     sid = ""
@@ -195,9 +256,19 @@ def handle_get(query: str = "", *, deps=None) -> tuple:
         sid = _valid_id(raw) or ""
         if not sid:
             return 400, {"error": "that is not a conversation id"}
+    raw_cmp = (q.get("compare") or [""])[0]
+    cid = ""
+    if raw_cmp:
+        cid = raw_cmp if _CMP_ID.match(raw_cmp) else ""
+        if not cid:
+            return 400, {"error": "that is not a comparison id"}
     out = CB.view(sid, deps=deps)
     out["routed"] = True
     out["available"] = True
+    if isinstance(out.get("tier"), dict):
+        out["tier"]["compare_min"] = CMP.MIN_AIS
+        out["tier"]["compare_max"] = CMP.max_ais(out["tier"].get("id", ""))
+    out["compare"] = CMP.view(cid)
     s = out.get("session")
     out["limits"] = _limits_view(s["id"]) if isinstance(s, dict) else {"waiting": False,
                                                                          "said": ""}
@@ -218,6 +289,9 @@ def _start(body: dict, deps, wait: bool) -> tuple:
         return 409, {"ok": False, "session": live["id"],
                      "error": "Another chatbot conversation is still running or paused - "
                               "stop it or let it finish first."}
+    if CMP.live():
+        return 409, {"ok": False, "error": "A comparison of several chatbots is still running "
+                                           "or paused - stop it or let it finish first."}
     s = CB.plan(body.get("chatbot"), body.get("goal"),
                 max_turns=body.get("max_messages"), max_minutes=body.get("max_minutes"),
                 never_send=body.get("never_send"), deps=deps)
@@ -231,7 +305,13 @@ def _stop(body: dict, deps) -> tuple:
     sid = _valid_id(body.get("id"))
     if not sid:
         return 400, {"ok": False, "error": "Say which conversation to stop."}
-    code, out = CB.stop(sid, deps=deps)
+    c = CMP.of_session(sid)
+    if c is not None:
+        # One of a comparison's conversations: Stop means the whole
+        # comparison (the phone's ongoing notification carries this id).
+        code, out = CMP.stop(c.id, deps=deps)
+    else:
+        code, out = CB.stop(sid, deps=deps)
     if "error" in out:
         out["error"] = _sentence(out["error"])
     return code, out
@@ -244,6 +324,8 @@ def _limits(body: dict, deps, spawn: Callable) -> tuple:
     s = CB.get(sid)
     if s is None:
         return 404, {"ok": False, "error": "No such conversation."}
+    if s.compare:
+        return 409, {"ok": False, "error": _sentence(CB.COMPARE_LIMITS)}
     if s.state not in ("running", "paused"):
         return 409, {"ok": False, "error": "Only a running or paused conversation's limits "
                                            "can change."}
@@ -294,13 +376,44 @@ def _limits(body: dict, deps, spawn: Callable) -> tuple:
                             "they apply only if you approve it."}
 
 
+def _compare_start(body: dict, deps, wait: bool) -> tuple:
+    why = CB.tier_problem(deps)
+    if why:
+        return 409, {"ok": False, "error": _sentence(why)}
+    live = _live_session()
+    if live:
+        return 409, {"ok": False, "session": live["id"],
+                     "error": "Another chatbot conversation is still running or paused - "
+                              "stop it or let it finish first."}
+    if CMP.live():
+        return 409, {"ok": False, "error": "Another comparison is still running or paused - "
+                                           "stop it or let it finish first."}
+    c = CMP.plan(body.get("chatbots"), body.get("goal"),
+                 max_turns=body.get("max_messages"), max_minutes=body.get("max_minutes"),
+                 never_send=body.get("never_send"), deps=deps)
+    code, out = CMP.start(c, deps=deps, wait=wait)
+    if "error" in out:
+        out["error"] = _sentence(out["error"])
+    return code, out
+
+
+def _compare_stop(body: dict, deps) -> tuple:
+    cid = str(body.get("id") or "")
+    if not _CMP_ID.match(cid):
+        return 400, {"ok": False, "error": "Say which comparison to stop."}
+    code, out = CMP.stop(cid, deps=deps)
+    if "error" in out:
+        out["error"] = _sentence(out["error"])
+    return code, out
+
+
 def _thread(fn: Callable) -> None:
     threading.Thread(target=fn, name="jarvis-chatbot-limits", daemon=True).start()
 
 
 def handle_post(route: str, body, *, deps=None, spawn: Optional[Callable] = None,
                 wait: bool = False) -> tuple:
-    """Everything the three POST routes do. Returns (http status, body).
+    """Everything the five POST routes do. Returns (http status, body).
     `wait` and `spawn` are for the tests: the route itself asks the card on
     a background thread, because the gate waits for the owner."""
     if not isinstance(body, dict):
@@ -311,6 +424,10 @@ def handle_post(route: str, body, *, deps=None, spawn: Optional[Callable] = None
         return _stop(body, deps)
     if route == LIMITS_ROUTE:
         return _limits(body, deps, spawn or _thread)
+    if route == COMPARE_START_ROUTE:
+        return _compare_start(body, deps, wait)
+    if route == COMPARE_STOP_ROUTE:
+        return _compare_stop(body, deps)
     return 404, {"ok": False, "error": "no such route"}
 
 
@@ -319,6 +436,10 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     answered here, after the server's own origin and token checks. Every
     other request goes straight to the original."""
     get0, post0 = handler_cls.do_GET, handler_cls.do_POST
+    # Both apps can reach a conversation from here on: "What Jarvis can
+    # reach" (jarvis_reach._chatbot_status) reads this, and without it
+    # showed every chatbot way out as Off.
+    CB.ROUTED = True
     if getattr(post0, "_jarvis_chatbot", False):
         return "  chatbot    Talk to a chatbot for me (already on)"
 
@@ -376,3 +497,4 @@ def _reset_for_tests() -> None:
     with _LOCK:
         _LIMITS.clear()
         _UNHELD.clear()
+    CMP._reset_for_tests()

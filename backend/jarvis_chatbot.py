@@ -136,8 +136,9 @@ from typing import Any, Callable, Optional
 
 #: The gate action every conversation is asked under. Tier "ask" only.
 ACTION = "chatbot_session"
-#: No route reaches this module yet; both apps' "What Jarvis can reach"
-#: (jarvis_reach._chatbot) reads this to say "not from either app yet".
+#: True once jarvis_chatbot_routes.install() has put the routes on the
+#: server (chatbot-routes.patch); both apps' "What Jarvis can reach"
+#: (jarvis_reach._chatbot) reads it. False only where the routes are not on.
 ROUTED = False
 #: The name the running conversation has in jarvis_task_control.
 TASK_TOOL = "chatbot_session"
@@ -239,6 +240,9 @@ SUMMARY_WAIT = 120.0
 FACTS_CHECKED = 20
 
 IF_REFUSED = "nothing is sent, and no chatbot window is opened."
+#: A conversation inside a comparison keeps the comparison's limits.
+COMPARE_LIMITS = ("a comparison's limits cannot change while it runs - stop it and start a "
+                  "new one")
 
 
 # ============================================================================
@@ -510,6 +514,11 @@ class Session:
     #: What the adapter counted (an API adapter's token counts), for the
     #: session view; {} for an adapter that counts nothing.
     usage: dict = field(default_factory=dict)
+    #: The comparison this conversation is part of (jarvis_chatbot_compare,
+    #: "Ask several and compare"), or "". Such a conversation writes no
+    #: summary of its own - the comparison writes ONE for all of them - and
+    #: is never "the latest conversation" in view().
+    compare: str = ""
     adapter: Any = field(default=None, repr=False, compare=False)
 
 
@@ -703,6 +712,20 @@ DEPS = Deps()
 
 _LOCK = threading.RLock()
 _SESSIONS: dict = {}
+#: Callables() -> bool: something else that holds the one chatbot window is
+#: going (jarvis_chatbot_compare appends its own), so no new conversation
+#: may start. One that raises counts as busy.
+OTHER_BUSY: list = []
+
+
+def _other_busy() -> bool:
+    for f in list(OTHER_BUSY):
+        try:
+            if f():
+                return True
+        except Exception:
+            return True
+    return False
 
 
 # ============================================================================
@@ -994,6 +1017,9 @@ def plan(chatbot, goal, *, max_turns=None, max_minutes=None, never_send=None,
         if len(busy) >= MAX_SESSIONS:
             problem = ("another chatbot conversation is still running or paused - stop it "
                        "or let it finish first")
+        elif _other_busy():
+            problem = ("a comparison of several chatbots is still running or paused - stop "
+                       "it or let it finish first")
     if not problem:
         chk = last_check(g, s, deps=d, goal_check=True)
         if not chk.ok:
@@ -1721,8 +1747,10 @@ def _end_now(s: Session, code: str, words: str, d: Deps) -> None:
         except Exception:
             pass
     # A stop means "do less": no model call for the summary then. The
-    # limited version lets the owner's own chat go first, for a while.
-    use_model = code != "stopped"
+    # limited version lets the owner's own chat go first, for a while. A
+    # conversation in a comparison has no summary of its own: the
+    # comparison writes one for all of them.
+    use_model = code != "stopped" and not s.compare
     if use_model and s.tier.id == ONE_CARD:
         waited = 0.0
         while waited < SUMMARY_WAIT:
@@ -1839,7 +1867,7 @@ def start(s: Session, *, deps: Optional[Deps] = None, wait: bool = False) -> tup
     if s.problem:
         return 400, {"ok": False, "error": s.problem, "session": s.id}
     with _LOCK:
-        if any(_live(x) for x in _SESSIONS.values() if x is not s):
+        if any(_live(x) for x in _SESSIONS.values() if x is not s) or _other_busy():
             return 409, {"ok": False, "error": "another chatbot conversation is still "
                                                "running or paused"}
         _SESSIONS[s.id] = s
@@ -1922,6 +1950,9 @@ def change_limits(session_id: str, *, max_turns=None, max_minutes=None, never_se
     s = get(session_id)
     if s is None:
         return 404, {"ok": False, "error": "no such conversation"}
+    if s.compare:
+        # Its limits are on the comparison's card, for every chatbot at once.
+        return 409, {"ok": False, "error": COMPARE_LIMITS}
     if s.state not in ("running", "paused"):
         return 409, {"ok": False, "error": "only a running or paused conversation's limits "
                                            "can change"}
@@ -1984,16 +2015,21 @@ def session_view(s: Session, *, transcript: bool = True) -> dict:
            "paused": s.paused_why, "ended": s.ended_words, "question": s.question,
            "problem": s.problem, "summary": dict(s.summary) if s.summary else None,
            "usage": dict(s.usage) if s.usage else None, "read_aloud": False}
+    if s.compare:
+        out["compare"] = s.compare
     if transcript:
         out["transcript"] = [dict(t) for t in s.transcript]
     return out
 
 
 def view(session_id: str = "", *, deps: Optional[Deps] = None) -> dict:
-    """The whole picture for GET /api/chatbot/status (jarvis_chatbot_routes)."""
+    """The whole picture for GET /api/chatbot/status (jarvis_chatbot_routes).
+    "The latest live conversation" is never one of a comparison's: those are
+    shown inside the comparison (jarvis_chatbot_compare.view)."""
     with _LOCK:
         s = _SESSIONS.get(session_id) if session_id else next(
-            (x for x in reversed(list(_SESSIONS.values())) if _live(x)), None)
+            (x for x in reversed(list(_SESSIONS.values())) if _live(x) and not x.compare),
+            None)
     return {"routed": ROUTED, "chatbots": choices(), "tier": tier_view(deps),
             "session": session_view(s) if s else None}
 
@@ -2028,5 +2064,11 @@ except ImportError:  # pragma: no cover - shipped beside it on the PC
     pass
 try:
     import jarvis_chatbot_local  # noqa: F401,E402
+except ImportError:  # pragma: no cover - shipped beside it on the PC
+    pass
+# "Ask several and compare": several of the conversations above, one card,
+# one summary. Loaded here so Stop everything reaches a comparison too.
+try:
+    import jarvis_chatbot_compare  # noqa: F401,E402
 except ImportError:  # pragma: no cover - shipped beside it on the PC
     pass

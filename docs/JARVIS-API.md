@@ -8958,6 +8958,9 @@ owner's answers (2026-09-28)"); the owner's decisions are in `CLAUDE.md`
   against a fake OpenAI-style server), and §60.4.2,
   `backend/jarvis_chatbot_local.py` (another Ollama model on this PC, tested
   by `backend/test_chatbot_local.py` against a fake Ollama).
+- **Ask several and compare** (the same decision, point 4): §60.7,
+  `backend/jarvis_chatbot_compare.py` - two or more chatbots, ONE card, one
+  after another, ONE summary; on both apps' screens.
 
 ### 60.1 What it is
 
@@ -8992,7 +8995,7 @@ other route; both apps send the token and `X-Jarvis-Client: hud`.
 
 | route | body | answer |
 |---|---|---|
-| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()` plus `"available": true` and `"limits": {"waiting", "said"}` (the last limits change for the conversation shown): `{"routed": true, "chatbots": [{"id","name","host","built","note"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max"}, "session": <session> or null, "limits"}`. With no `id`, the latest conversation still going (null when none - an ended one is read by its id); an unknown id is `session: null` (conversations are kept in memory only, so a backend restart loses them); an id that is not `chat_` and 12 hex digits is a 400. The one thing a read may change: a paused conversation that can no longer be resumed (Stop on the task, or its hour ran out, so `jarvis_task_control` no longer holds it) is ended - "stopped", its window closed - once a read has seen it so for 10 seconds; before, it stayed "paused" with a Resume that could only fail until a new conversation was planned |
+| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()` plus `"available": true` and `"limits": {"waiting", "said"}` (the last limits change for the conversation shown): `{"routed": true, "chatbots": [{"id","name","host","built","ready","note","kind"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max","compare_min","compare_max"}, "session": <session> or null, "limits"}`. With no `id`, the latest conversation still going (null when none - an ended one is read by its id); an unknown id is `session: null` (conversations are kept in memory only, so a backend restart loses them); an id that is not `chat_` and 12 hex digits is a 400. The one thing a read may change: a paused conversation that can no longer be resumed (Stop on the task, or its hour ran out, so `jarvis_task_control` no longer holds it) is ended - "stopped", its window closed - once a read has seen it so for 10 seconds; before, it stayed "paused" with a Resume that could only fail until a new conversation was planned |
 | `POST /api/chatbot/start` | `{"chatbot", "goal", "max_messages"?, "max_minutes"?, "never_send"?: [..]}` | 202 `{"ok", "session", "asking": true, "message"}` - the card is asked on a background thread and nothing is sent until a person approves it; 400 `{"ok": false, "error", "session"}` when `plan()` refused it (the reason as a sentence: "Gemini through its website is not built yet.", "The goal cannot be sent: it held an email address. Nothing would be sent.", "At most 8 messages in this version."), with no card; 409 while another conversation is going (asking, running or paused), and 409 when `chatbot_session` is not tier "ask" (switched off, or a tier that would ask nobody) - no card either way |
 | `POST /api/chatbot/stop` | `{"id"}` | 200 `{"ok", "session", "message"}`; never a card, never held on a stale link; 400 for a bad id, 404 for an unknown one, 409 when it has already ended |
 | `POST /api/chatbot/limits` | `{"id", "max_messages"?, "max_minutes"?, "never_send"?}` | 202 `{"ok", "asking": true, "session", "message"}` - a NEW card, asked on a background thread; the limits change only on a yes, and the outcome is on the next GET's `limits` (`waiting` while the card is up, then `said`). 200 `{"changed": false}` for the limits it already has; 400 for a number past this version's most (checked now, before any card); 404 unknown; 409 when it is not running or paused, when a limits card is already waiting, or when the tier is not "ask" |
@@ -9024,7 +9027,7 @@ everything (`/api/stop_all`) stops a conversation too.
 `stopped`, `refused`), `tier`, `tier_name`, `messages_used`,
 `max_messages`, `minutes_used`, `max_minutes`, `never_send`, `paused` (why,
 in plain words), `ended` (why), `question` (the chatbot's question about
-the owner, handed back), `problem`, `summary`, `read_aloud: false`, and
+the owner, handed back), `problem`, `summary`, `read_aloud: false`, `usage`, and
 `transcript`: `[{"who": "jarvis" | "chatbot", "n", "text", "at",
 "outside_text", "source"?, "move"?}]`.
 
@@ -9033,6 +9036,23 @@ the owner, handed back), `problem`, `summary`, `read_aloud: false`, and
 `source_given`, `open`, `messages`, `minutes`, `ended`) is outside text
 too. Apps show them, never read them aloud, and never offer to remember
 anything from them.
+
+`chatbots[].kind` is how each is reached: `"website"` (a browser window on
+the PC), `"api"` (an official API with a key, §60.4.1) or `"local"` (a
+second AI on this PC, §60.4.2). Both apps group their chooser by it, in
+that order, under the PC's own headings (`WORDS` `kind_website`,
+`kind_api`, `kind_local`: "Websites (a browser window on the PC)", "With a
+key (each message costs a little)", "On this PC"), one chatbot per line
+with the `note` under any that is not ready. An older PC that sends no
+`kind` is read as all websites.
+
+`session.usage` is what an API (or local) conversation has used so far -
+`{"model", "requests", "prompt_tokens", "completion_tokens",
+"total_tokens", "retries"}` as the adapter counted it - or `null` for a
+website conversation. Both apps show one line from `WORDS.usage_line`:
+"Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"
+(the model part left out when there is none); in a comparison, one line per
+chatbot. Counts only, so it stays shown while the private lists are hidden.
 
 `chatbots[].ready` is false, and `note` says why in plain words with the
 one line that fixes it, when the chatbot is built but cannot run on this PC
@@ -9246,6 +9266,107 @@ it about X too"); keeping the transcript in the encrypted chat history
 (today it is in memory only and lost on a restart); the two-card version's
 measurements; checking the selectors of every website on the owner's PC (the
 self-checks in §60.4 and §60.5).
+
+### 60.7 Ask several and compare (`jarvis_chatbot_compare.py`, 2026-09-28)
+
+The owner's decision (CLAUDE.md, "The chatbot driver becomes versatile",
+point 4): "ask several AIs the same question, one card listing every AI it
+will ask, one summary of agreements, disagreements and sources". Built on
+the backend and both apps; like everything else in §60, **not yet tried
+against the real sites**. Tested by `backend/test_chatbot_compare.py`;
+the routes' real answers are the `compare_*` cases in both apps' contract
+file (`tools/gen_chatbot_cases.py`).
+
+**What it does.** Two or more chatbots from `chatbots` (built AND ready -
+the same check a single conversation makes) are asked the same goal, **one
+after another**, each in its own ordinary conversation (§60.1): the same
+driver loop, the same clean context (the goal and THAT chatbot's replies
+only - the chatbots never see each other's answers), the same last check
+before every message, the same never-send words, and the same per-chatbot
+limits (the form's most messages and most minutes apply to each chatbot on
+its own). When the last one ends, Jarvis's own model on this PC writes ONE
+summary.
+
+**How many chatbots (proposed - the owner can change them):** 2 to 3 on one
+graphics card, 2 to 4 on two (`jarvis_chatbot_compare.MAX_AIS`); one after
+another in both. The numbers are in `tier.compare_min` / `tier.compare_max`.
+
+**One card.** Gate action `chatbot_session` (the same card kind, tier `ask`
+only, a risky approval, no "always allow"). `describe()` lists every
+chatbot, numbered, by name and address (and each one's own card note, e.g.
+the website terms), the goal word for word "sent first to each of them",
+the limits per chatbot AND in all ("at most 3 messages to each chatbot, the
+goal included (9 in all)"), the never-send words, that the chatbots never
+see each other's answers, what happens when one drops out, the version, and
+"If you say no: nothing is sent, and no chatbot window is opened." The goal
+meets the last check before the card; a goal that fails raises no card. A
+"no" leaves every chatbot unopened.
+
+**When one cannot go on.** An error, a closed page, no reply, two blocked
+messages, a question about the owner, or a captcha / sign-in / "unusual
+activity" page: that chatbot is **left out** (its window closed; a captcha
+is never solved or skipped) and the others carry on. A single conversation
+would pause and ask; a comparison does not, so one chatbot's page never
+holds up the others. The summary's `dropped` says who and why, in plain
+words from the backend (never the model's).
+
+**Pause, Resume, Stop.** The comparison is ONE `jarvis_task_control` task
+(tool `chatbot_compare`): `/api/task/pause` pauses the whole comparison
+(the reply on its way is read first), `/api/task/resume` is one card naming
+every chatbot and what each has done so far. Stop - `POST
+/api/chatbot/compare/stop`, `/api/chatbot/stop` with any of its
+conversations' ids, `/api/task/stop`, or Stop everything - ends every
+conversation in it; the ones not asked yet are never opened. A stop writes
+no model summary.
+
+| route | body | answer |
+|---|---|---|
+| `GET /api/chatbot/status` (`?compare=`) | - | as §60.3, plus `"compare": <compare> or null` (with no `compare`, the latest comparison still going; an ended one is read by its id; an unknown id is null; an id that is not `cmp_` and 12 hex digits is a 400) and `tier.compare_min`, `tier.compare_max`. `session` is never one of a comparison's conversations. A paused comparison `jarvis_task_control` no longer holds is ended after 10 seconds, like a single one |
+| `POST /api/chatbot/compare/start` | `{"chatbots": [ids], "goal", "max_messages"?, "max_minutes"?, "never_send"?}` | 202 `{"ok", "compare", "asking": true, "message"}` - ONE card on a background thread; 400 `{"ok": false, "error", "compare"}` when `plan()` refused it ("Pick at least 2 chatbots to compare.", "Pick at most 3 chatbots in this version.", a chatbot that is not ready says why, the goal's last check), no card; 409 while a comparison or a single conversation is going, or when `chatbot_session` is not tier "ask" |
+| `POST /api/chatbot/compare/stop` | `{"id"}` | 200 `{"ok", "compare", "message"}`; never a card, never held on a stale link; 400 bad id, 404 unknown, 409 already ended |
+
+`POST /api/chatbot/start` answers 409 while a comparison is going (one
+browser window, one card on screen at a time), and a comparison cannot
+start while a single conversation is going.
+
+`<compare>`: `id`, `goal`, `state` (as a session's), `tier`, `tier_name`,
+`chatbots: [{"id","name"}]`, `count`, `current` (index of the chatbot being
+asked), `current_name`, `messages_used` (in all), `max_messages` and
+`max_minutes` (each), `never_send`, `paused`, `ended`, `problem`,
+`read_aloud: false`, `members` (each a `<session>` as §60.3, with `compare`
+set and `summary: null` - a conversation in a comparison has no summary of
+its own), and `summary`:
+
+```
+{"answer", "agree": [..], "disagree": [{"point", "views": [{"who", "said"}]}],
+ "sources": [{"who", "items": [..], "checked": false}], "sources_checked": false,
+ "dropped": [{"who", "why"}], "answered": [names], "open": [..], "by_model",
+ "messages", "ended", "outside_text": true, "read_aloud": false,
+ "source": "chatbot_transcript"}
+```
+
+`who` is always one of the chatbots asked: a view or source the model gives
+to any other name is dropped. `sources` are the web addresses found in each
+chatbot's own replies by plain code, then the ones the model lists; Jarvis
+opens none of them and checks none of them. The summary is outside text:
+shown, never learned from, never read aloud.
+
+**In the apps.** The same form, with "Ask several and compare": one tick
+box (desktop) or pick-several list (phone) per chatbot, "Chatbots to ask
+(pick 2 to 3)". Start (compare) is held on a stale link; Stop and Pause are
+not; Resume is. While it runs: "Comparing 3 chatbots: asking ChatGPT, 2 of
+3", each chatbot's line ("Claude: Waiting its turn."), each conversation
+under its chatbot's name in the outside-text style, and at the end the
+summary. While "Hide memory lists and chat history" is on, the goal, the
+never-send words, every conversation, the questions and the summary are not
+shown (the desktop's Rust takes them out; the phone's plate leaves them
+out). The phone's ongoing notification reads "Comparing 3 chatbots: asking
+ChatGPT, 2 of 3" and its Stop stops the whole comparison. No change to
+limits mid-comparison: stop it and start a new one.
+
+Activity lines: each conversation's own, prefixed "Comparing (2 of 3): ",
+and "You paused the comparison. ..." - the phone's `isChatbotActivity`
+knows both, and "Continuing chatbot_compare..." after a Resume.
 
 ## 61. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
 

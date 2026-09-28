@@ -3645,10 +3645,51 @@ object JarvisRuntime {
     /** The last conversation this phone showed or started, so its summary stays after it ends. */
     @Volatile var chatbotLastId: String? = null
 
+    /** The last comparison this phone showed or started ("Ask several and compare"), likewise. */
+    @Volatile var chatbotLastCompareId: String? = null
+
     private var chatbotWatcher: kotlinx.coroutines.Job? = null
 
     /** `GET /api/chatbot/status` - the one [id] names, or the latest still going. A read. */
     suspend fun chatbotStatus(id: String?): ApiResult<JsonObject> = api.chatbotStatus(id)
+
+    /** `GET /api/chatbot/status?compare=` - the comparison [id] names. A read. */
+    suspend fun chatbotCompareStatus(id: String): ApiResult<JsonObject> = api.chatbotStatus(null, id)
+
+    /**
+     * "Ask several and compare": the PC raises ONE approval card listing every
+     * chatbot, and nothing is sent before a yes. Held on a stale link (rule 4).
+     */
+    suspend fun chatbotCompareStart(
+        chatbots: List<String>,
+        goal: String,
+        maxMessages: Int?,
+        maxMinutes: Int?,
+        never: List<String>,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Chatbot.compareBody(chatbots, goal, maxMessages, maxMinutes, never)
+            ?: return false to "That cannot be sent: check the chatbots, the goal and the never-send words."
+        return when (val r = api.chatbotWrite(com.jarvis.client.net.Chatbot.COMPARE_START_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Chatbot.said(r.value).also { (ok, _) ->
+                if (ok) {
+                    val id = (r.value.body?.get("compare") as? kotlinx.serialization.json.JsonPrimitive)
+                        ?.takeIf { it.isString }?.content
+                    if (id != null) chatbotLastCompareId = id
+                    watchChatbot()
+                }
+                _chatbotTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not started. " + describe(r.error))
+        }
+    }
+
+    /** Stop the whole comparison. Never held, never a card: it only makes Jarvis do less. */
+    suspend fun chatbotCompareStop(id: String): Pair<Boolean, String> {
+        val body = com.jarvis.client.net.Chatbot.compareStopBody(id)
+            ?: return false to "That is not a comparison this phone knows."
+        return chatbotPost(com.jarvis.client.net.Chatbot.COMPARE_STOP_PATH, body)
+    }
 
     /**
      * Ask the PC for a conversation: it raises ONE approval card, and nothing
@@ -3743,10 +3784,16 @@ object JarvisRuntime {
                 val ctx = appContext
                 if (r is ApiResult.Ok) {
                     misses = 0
-                    val s = com.jarvis.client.net.Chatbot.parse(r.value)?.session
+                    val v = com.jarvis.client.net.Chatbot.parse(r.value)
+                    val s = v?.session
+                    val c = v?.compare
                     if (s != null && s.live) {
                         chatbotLastId = s.id
                         if (ctx != null) com.jarvis.client.service.ChatbotNotifier.post(ctx, s)
+                    } else if (c != null && c.live) {
+                        // "Ask several and compare": the same line, for the whole comparison.
+                        chatbotLastCompareId = c.id
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.postCompare(ctx, c)
                     } else {
                         if (ctx != null) com.jarvis.client.service.ChatbotNotifier.cancel(ctx)
                         _chatbotTick.update { n -> n + 1 }

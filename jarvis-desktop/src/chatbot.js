@@ -14,6 +14,13 @@
  * outside-text style, never read aloud (nothing here speaks), never offered
  * to be remembered.
  *
+ * "Ask several and compare" (backend jarvis_chatbot_compare.py): the same
+ * form asks two or more chatbots the same goal - ONE card listing every one,
+ * one conversation each, one after another - and the PC writes ONE summary
+ * (where they agree, where they disagree and who said what, the sources each
+ * gave, who dropped out and why). Pause / Resume / Stop act on the whole
+ * comparison. The summary is outside text too.
+ *
  * The phone says the same words (net/Chatbot.kt); tests/chatbot.mjs and the
  * phone's ChatbotTest check them against tools/gen_chatbot_cases.py's file,
  * which takes them from the PC's own jarvis_chatbot_routes.WORDS.
@@ -66,7 +73,41 @@ export const WORDS = {
   notify_waiting: "Waiting for your yes to talk to {name}",
   notify_paused: "Paused: talking to {name}, {used} of {max}",
   notify_locked: "Jarvis is talking to a chatbot for you.",
+  compare_toggle: "Ask several and compare",
+  compare_detail:
+    "Jarvis asks two or more chatbots the same goal, one after another, each in its own " +
+    "conversation under the same limits. One approval card lists every chatbot it will ask. " +
+    "At the end, one summary shows where they agree, where they disagree, and the sources " +
+    "each gave.",
+  compare_pick: "Chatbots to ask (pick {min} to {max})",
+  compare_limits_note: "Most messages and most minutes apply to each chatbot on its own.",
+  compare_title: "Comparing chatbots",
+  compare_summary_title: "Where they agree and disagree",
+  compare_summary_note:
+    "Written on this PC from the chatbots' words, so it is outside text too.",
+  agree_title: "They agree",
+  disagree_title: "They disagree",
+  sources_title: "Sources each gave (not checked by Jarvis)",
+  dropped_title: "Dropped out",
+  conversations_title: "Each conversation",
+  compare_too_few: "Pick at least {min} chatbots to compare.",
+  compare_too_many: "Pick at most {max} chatbots in this version.",
+  compare_not_enough:
+    "Fewer than two chatbots can be reached from this PC, so there is nothing to compare yet.",
+  compare_gone:
+    "That comparison is gone: Jarvis on the PC restarted, and comparisons are kept in memory only.",
+  notify_compare_running: "Comparing {count} chatbots: asking {name}, {at} of {count}",
+  notify_compare_waiting: "Waiting for your yes to ask {count} chatbots",
+  notify_compare_paused: "Paused: comparing {count} chatbots",
+  member_waiting: "Waiting its turn.",
+  kind_website: "Websites (a browser window on the PC)",
+  kind_api: "With a key (each message costs a little)",
+  kind_local: "On this PC",
+  usage_line: "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}",
 };
+
+/** How each chatbot is reached (`kind`), in the order the chooser groups them. */
+export const KINDS = ["website", "api", "local"];
 
 /** The states in which a conversation is still going. */
 export const LIVE = new Set(["asking", "approved", "running", "paused"]);
@@ -106,6 +147,30 @@ function readTurn(t) {
     outside: who === "chatbot" || o.outside_text === true,
     move: text(o.move),
   };
+}
+
+/** What an API (or local) conversation has used so far, or null. */
+export function readUsage(u) {
+  const o = obj(u);
+  if (!o) return null;
+  const requests = num(o.requests);
+  const tokens = num(o.total_tokens) || num(o.prompt_tokens) + num(o.completion_tokens);
+  if (!requests && !tokens) return null;
+  return { requests, tokens, model: text(o.model) };
+}
+
+/** 4215 as "4,215" - the same on every machine (no locale). */
+export function grouped(n) {
+  return String(Math.round(num(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/** "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini", or "". */
+export function usageLine(u) {
+  if (!u) return "";
+  let line = WORDS.usage_line;
+  if (!u.model) line = line.replace(", model {model}", "");
+  return line.replace("{requests}", `${u.requests} request${u.requests === 1 ? "" : "s"}`)
+    .replace("{tokens}", grouped(u.tokens)).replace("{model}", u.model);
 }
 
 function readSummary(s) {
@@ -149,6 +214,7 @@ export function readSession(s) {
     problem: text(o.problem),
     summary: readSummary(o.summary),
     transcript: Array.isArray(o.transcript) ? o.transcript.map(readTurn).filter(Boolean) : [],
+    usage: readUsage(o.usage),
     hidden: o.hidden === true,
   };
 }
@@ -173,24 +239,89 @@ export function readChatbot(body) {
     built: c.built === true && c.ready !== false,
     made: c.built === true,
     note: text(c.note),
+    // "website", "api" or "local" (an older PC sends none: its chatbots
+    // were all websites).
+    kind: text(c.kind) || "website",
   }));
   const lim = obj(o.limits) || {};
+  const tier = {
+    id: text(t.id),
+    name: text(t.name),
+    words: text(t.words),
+    why: text(t.why),
+    turnsDefault: num(t.turns_default, 5),
+    turnsMax: num(t.turns_max, 8),
+    minutesDefault: num(t.minutes_default, 10),
+    minutesMax: num(t.minutes_max, 15),
+    // An older PC has no comparisons: 0 means "cannot compare".
+    compareMin: num(t.compare_min, 2),
+    compareMax: num(t.compare_max, 0),
+  };
+  const usable = chatbots.filter((c) => c.built).length;
   return {
     available: true,
     chatbots,
-    anyBuilt: chatbots.some((c) => c.built),
-    tier: {
-      id: text(t.id),
-      name: text(t.name),
-      words: text(t.words),
-      why: text(t.why),
-      turnsDefault: num(t.turns_default, 5),
-      turnsMax: num(t.turns_max, 8),
-      minutesDefault: num(t.minutes_default, 10),
-      minutesMax: num(t.minutes_max, 15),
-    },
+    anyBuilt: usable > 0,
+    canCompare: tier.compareMax >= tier.compareMin && usable >= tier.compareMin,
+    tier,
     session: readSession(o.session),
+    compare: readCompare(o.compare),
     limits: { waiting: lim.waiting === true, said: text(lim.said) },
+  };
+}
+
+const texts = (v) => (Array.isArray(v) ? v.map(text).filter(Boolean) : []);
+
+function readCompareSummary(s) {
+  const o = obj(s);
+  if (!o) return null;
+  const list = (v) => (Array.isArray(v) ? v.map(obj).filter(Boolean) : []);
+  return {
+    answer: text(o.answer),
+    agree: texts(o.agree),
+    disagree: list(o.disagree).map((d) => ({
+      point: text(d.point),
+      views: list(d.views).map((v) => ({ who: text(v.who), said: text(v.said) }))
+        .filter((v) => v.who && v.said),
+    })).filter((d) => d.point && d.views.length),
+    // Every source is the chatbot's own and NOT checked by Jarvis, whatever
+    // the flag says.
+    sources: list(o.sources).map((x) => ({ who: text(x.who), items: texts(x.items) }))
+      .filter((x) => x.who && x.items.length),
+    dropped: list(o.dropped).map((x) => ({ who: text(x.who), why: text(x.why) }))
+      .filter((x) => x.who),
+    open: texts(o.open),
+    byModel: o.by_model === true,
+  };
+}
+
+/** One comparison as the PC described it, or null. */
+export function readCompare(c) {
+  const o = obj(c);
+  if (!o || typeof o.id !== "string" || typeof o.state !== "string") return null;
+  const chatbots = Array.isArray(o.chatbots)
+    ? o.chatbots.map(obj).filter(Boolean).map((b) => ({ id: text(b.id), name: text(b.name) || text(b.id) }))
+    : [];
+  return {
+    id: o.id,
+    goal: typeof o.goal === "string" ? o.goal : "",
+    state: o.state,
+    live: LIVE.has(o.state),
+    tierName: text(o.tier_name),
+    chatbots,
+    count: num(o.count, chatbots.length),
+    current: num(o.current),
+    currentName: text(o.current_name),
+    used: num(o.messages_used),
+    max: num(o.max_messages),
+    maxMinutes: num(o.max_minutes),
+    never: texts(o.never_send),
+    paused: o.state === "paused" ? text(o.paused) : "",
+    ended: text(o.ended),
+    problem: text(o.problem),
+    summary: readCompareSummary(o.summary),
+    members: Array.isArray(o.members) ? o.members.map(readSession).filter(Boolean) : [],
+    hidden: o.hidden === true,
   };
 }
 
@@ -238,6 +369,29 @@ export function formProblem(view, { chatbot, goal, messages, minutes }) {
   return "";
 }
 
+/** What is wrong with the "Ask several and compare" form, or "". */
+export function compareFormProblem(view, { chatbots, goal, messages, minutes }) {
+  if (!view || !view.available) return WORDS.missing;
+  if (!view.canCompare) return WORDS.compare_not_enough;
+  const picked = [...new Set(chatbots || [])];
+  const usable = picked.filter((id) => view.chatbots.some((c) => c.id === id && c.built));
+  if (usable.length < picked.length) return "Choose only chatbots that can be reached now.";
+  if (usable.length < view.tier.compareMin) {
+    return WORDS.compare_too_few.replace("{min}", String(view.tier.compareMin));
+  }
+  if (usable.length > view.tier.compareMax) {
+    return WORDS.compare_too_many.replace("{max}", String(view.tier.compareMax));
+  }
+  return formProblem(view, { chatbot: usable[0], goal, messages, minutes });
+}
+
+/** "Chatbots to ask (pick 2 to 3)". */
+export function pickLine(view) {
+  if (!view || !view.available) return "";
+  return WORDS.compare_pick.replace("{min}", String(view.tier.compareMin))
+    .replace("{max}", String(view.tier.compareMax));
+}
+
 /** "Message 2 of 4 · 1.5 of 10 minutes". */
 export function progressLine(s) {
   if (!s) return "";
@@ -268,4 +422,49 @@ export function talkingLine(s) {
   if (s.state === "asking") return fill(WORDS.notify_waiting);
   if (s.state === "paused") return fill(WORDS.notify_paused);
   return fill(WORDS.notify_running);
+}
+
+/** A comparison's heading while it is going ("Comparing 3 chatbots: asking ChatGPT, 2 of 3"). */
+export function compareTalkingLine(c) {
+  if (!c || !c.live) return "";
+  const fill = (w) => w.split("{count}").join(String(c.count)).replace("{name}", c.currentName)
+    .replace("{at}", String(c.current + 1));
+  if (c.state === "asking") return fill(WORDS.notify_compare_waiting);
+  if (c.state === "paused") return fill(WORDS.notify_compare_paused);
+  return fill(WORDS.notify_compare_running);
+}
+
+/** A comparison's status line: the PC's own words when it has them. */
+export function compareStatusLine(c) {
+  if (!c) return "";
+  if (c.state === "paused" && c.paused) return c.paused;
+  if (!c.live && c.ended) return c.ended;
+  return STATE_WORDS[c.state] || c.state;
+}
+
+/** "4 messages sent in all · at most 3 messages and 10 minutes with each chatbot". */
+export function compareProgress(c) {
+  if (!c) return "";
+  return `${c.used} message${c.used === 1 ? "" : "s"} sent in all · at most ${c.max} messages ` +
+    `and ${c.maxMinutes} minutes with each chatbot`;
+}
+
+/** One chatbot's line inside a comparison. */
+export function memberLine(m, compare) {
+  if (!m) return "";
+  const waiting = (m.state === "approved" || m.state === "planned") && compare && compare.live;
+  return `${m.name}: ${waiting ? WORDS.member_waiting : statusLine(m)}`;
+}
+
+/**
+ * The chooser's groups, in KINDS order, each with its heading; empty ones
+ * left out. A kind this app does not know goes last, with no heading.
+ */
+export function chatbotGroups(view) {
+  if (!view || !view.available) return [];
+  const titles = { website: WORDS.kind_website, api: WORDS.kind_api, local: WORDS.kind_local };
+  const out = KINDS.map((kind) => ({ kind, title: titles[kind],
+    chatbots: view.chatbots.filter((c) => c.kind === kind) }));
+  out.push({ kind: "other", title: "", chatbots: view.chatbots.filter((c) => !KINDS.includes(c.kind)) });
+  return out.filter((g) => g.chatbots.length);
 }
