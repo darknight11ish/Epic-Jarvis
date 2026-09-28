@@ -548,6 +548,23 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   off", "make the animal sharper"). Asking Jarvis follows the same rules as
   the switch: cosmetic options change at once; anything that opens a way
   out of the PC (online weather) still raises its approval card.
+  **Look-and-behaviour options are shared between the PC and the phone**
+  (one request changes both); sharpness and frame rate stay per device.
+- **A picked frame rate rounds UP** when the screen cannot match it exactly
+  (120 on a 165 Hz screen draws 165) - never slower than the pick.
+- **New animal behaviours, all four chosen** (after the ideas research,
+  `scratchpad` report "animal-ideas"): listening nods in the owner's pauses
+  and gestures landing on Jarvis's sentence ends; a focus buddy (works
+  quietly beside the owner in a focus session, a stretch at the end; never
+  sees the screen, never scolds) and small acknowledgements (a nod when a
+  fact is saved - not while App lock or "Hide memory lists" is on - and a
+  glow when a long answer is ready); petting (stroke it and it leans in;
+  a long press on the phone that does not open Brain); seasonal touches
+  from the date (off by default). Each is an option in the one animal
+  options place and changeable by asking Jarvis. Still and serious moments
+  switch every one off; calm makes them smaller. Never: humming, yawning,
+  mood-guessing, reacting to email or screen content, guilt or streaks,
+  roaming the screen, anything cute during an approval or error.
 
 ## Every new feature gets its own audit, without being asked
 
