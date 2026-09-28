@@ -626,6 +626,17 @@ $PATCHES = @(
     # rest of this feature as ordinary code, needing no patch (they are
     # whole shipped modules, copied in like every other one in this list).
     'second-card-suggest.patch'
+    # "Talk to a chatbot for me" (the owner's decisions of 2026-09-27 and
+    # 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md, JARVIS-API section 60): GET
+    # /api/chatbot/status, POST /api/chatbot/start (ONE approval card per
+    # conversation; nothing is sent before a person's yes), /api/chatbot/stop
+    # (never a card) and /api/chatbot/limits (a NEW card). Its jarvis_hud.py
+    # context is answer-sources.patch's own install block (second-card-
+    # suggest.patch, just above, touches a different part of the file), so it
+    # goes after it - last, like every new patch. Needs jarvis_chatbot.py and
+    # jarvis_chatbot_routes.py copied in; without them, or on any error, the
+    # banner says so and the routes are simply not there.
+    'chatbot.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -758,8 +769,9 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
-    # --- talking to an AI chatbot for the owner (2026-09-28): the core only, no route, no patch yet ---
-    'jarvis_chatbot.py'          # the driver, the last check before every message, one card per conversation; not reachable from the apps yet
+    # --- talking to an AI chatbot for the owner (2026-09-28; chatbot.patch) ---
+    'jarvis_chatbot.py'          # the driver, the last check before every message, one card per conversation
+    'jarvis_chatbot_routes.py'   # chatbot.patch: GET /api/chatbot/status, POST /api/chatbot/start (ONE card), /stop and /limits (a new card)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -58,6 +58,19 @@ import {
   toneOf as focusToneOf,
 } from "./focus.js";
 import {
+  actionsOf as chatbotActionsOf,
+  formProblem as chatbotFormProblem,
+  limitOf as chatbotLimitOf,
+  neverWords,
+  POLL_MS as CHATBOT_POLL_MS,
+  progressLine as chatbotProgress,
+  readChatbot,
+  statusLine as chatbotStatusLine,
+  talkingLine as chatbotTalkingLine,
+  versionLine as chatbotVersionLine,
+  WORDS as CHATBOT,
+} from "./chatbot.js";
+import {
   actionsOf,
   addPlaceholder,
   anyTicking,
@@ -338,6 +351,15 @@ const dom = {
   focusOn: $("focus-on"),
   focusStart: $("focus-start"),
   focusReport: $("focus-report"),
+  chatbot: $("chatbot"),
+  chatbotVersion: $("chatbot-version"),
+  chatbotForm: $("chatbot-form"),
+  chatbotWhich: $("chatbot-which"),
+  chatbotGoal: $("chatbot-goal"),
+  chatbotMessages: $("chatbot-messages"),
+  chatbotMinutes: $("chatbot-minutes"),
+  chatbotNever: $("chatbot-never"),
+  chatbotStart: $("chatbot-start"),
   comingUp: $("coming-up"),
   todoList: $("todo-list"),
   todoForm: $("todo-form"),
@@ -716,6 +738,7 @@ function render(name) {
       break;
     case "work":
       renderFocus();
+      renderChatbot();
       renderComingUp();
       renderBriefing();
       renderJobs();
@@ -1617,6 +1640,7 @@ async function revealPrivate() {
   // The deep questions, on the Memory tab, come back with the lists.
   deep.at = 0;
   fx.at = 0;
+  cb.at = 0;
   if (state.view !== "memory") render(state.view);
   else loadDeep();
 }
@@ -3903,6 +3927,334 @@ if (dom.focusStart) {
 }
 
 /* ==========================================================================
+   Talk to a chatbot for me (the owner's decisions of 2026-09-27 and
+   2026-09-28; JARVIS-API.md section 60; chatbot.js, brain/chatbot.rs).
+
+   The form (which chatbot, the goal - "these words will be sent" - the
+   most messages and minutes within the version's caps, never-send words)
+   asks the PC for ONE approval card; nothing is sent before a yes. Then the
+   conversation: its state in the PC's words, the counts, Pause / Resume /
+   Stop, Change limits (a NEW card), the transcript with the chatbot's words
+   in the outside-text style, and at the end the summary - kept on screen,
+   never read aloud (nothing in this window speaks). There is no event of
+   its own: it is read again every few seconds while a conversation is
+   live, and on every activity event. The last conversation's id is kept
+   here so its summary stays on screen after it ends.
+   ========================================================================== */
+
+const cb = { view: null, error: "", loading: false, again: false, at: 0, id: "", gone: false,
+  timer: null, filled: false };
+const CHATBOT_READ_MS = 15000;
+
+async function loadChatbot() {
+  if (!IS_TAURI) return;
+  if (cb.loading) {
+    cb.again = true;
+    return;
+  }
+  cb.loading = true;
+  try {
+    // The latest live conversation first (it may have been started on the
+    // phone); else the one this window last showed, for its summary.
+    let view = readChatbot(await invoke("chatbot_status", { id: null }));
+    cb.gone = false;
+    if (view.available && !view.session && cb.id) {
+      const named = readChatbot(await invoke("chatbot_status", { id: cb.id }));
+      if (named.available && named.session) view = named;
+      else if (named.available) {
+        cb.gone = true;
+        cb.id = "";
+      }
+    }
+    if (view.available && view.session) cb.id = view.session.id;
+    cb.view = view;
+    cb.error = "";
+  } catch (error) {
+    cb.error = errorText(error);
+  } finally {
+    cb.loading = false;
+    cb.at = Date.now();
+  }
+  if (cb.again) {
+    cb.again = false;
+    await loadChatbot();
+    return;
+  }
+  if (state.view === "work") paintChatbot();
+}
+
+/** The PC's refusals are sometimes lower-case fragments ("nothing is running"). */
+function asSentence(text) {
+  const t = String(text || "").trim();
+  if (!t) return "Not changed.";
+  const s = t[0].toUpperCase() + t.slice(1);
+  return /[.!?]$/.test(s) ? s : `${s}.`;
+}
+
+async function chatbotAct(cmd, args = {}) {
+  try {
+    const out = await invoke(cmd, args);
+    const said = out && (out.message || out.said);
+    toast(asSentence(said || "Done."), "ok");
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  }
+  await loadChatbot();
+}
+
+async function chatbotStart() {
+  const v = cb.view;
+  const form = {
+    chatbot: dom.chatbotWhich ? dom.chatbotWhich.value : "",
+    goal: dom.chatbotGoal ? dom.chatbotGoal.value : "",
+    messages: dom.chatbotMessages ? dom.chatbotMessages.value : "",
+    minutes: dom.chatbotMinutes ? dom.chatbotMinutes.value : "",
+  };
+  const problem = chatbotFormProblem(v, form);
+  if (problem) {
+    toast(problem, "bad");
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("chatbot_start", {
+      chatbot: form.chatbot,
+      goal: form.goal,
+      maxMessages: chatbotLimitOf(form.messages, v.tier.turnsMax),
+      maxMinutes: chatbotLimitOf(form.minutes, v.tier.minutesMax),
+      neverSend: neverWords(dom.chatbotNever ? dom.chatbotNever.value : ""),
+    });
+    if (out && out.session) cb.id = out.session;
+    toast(asSentence((out && out.message) || CHATBOT.start_note), "ok");
+    if (dom.chatbotGoal) dom.chatbotGoal.value = "";
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  }
+  await loadChatbot();
+}
+
+function chatbotTurn(t, name) {
+  const item = el("div", `chatbot-turn${t.outside ? " chatbot-outside" : ""}`);
+  item.dataset.who = t.who;
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("span", "chatbot-who", t.who === "jarvis" ? `Jarvis, message ${t.n}` : name));
+  if (t.outside) head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  item.append(head);
+  item.append(el("p", "chatbot-text", t.text));
+  return item;
+}
+
+function chatbotSummary(s) {
+  const box = el("div", "chatbot-summary chatbot-outside");
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("h3", "subhead", CHATBOT.summary_title));
+  head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  box.append(head);
+  box.append(el("p", "note", CHATBOT.summary_note));
+  if (s.summary.answer) box.append(el("p", "chatbot-text", s.summary.answer));
+  if (s.summary.claims.length) {
+    const list = el("ul", "chatbot-claims");
+    for (const c of s.summary.claims) {
+      list.append(el("li", "", `${c.claim} - ${c.sourced ? CHATBOT.claim_sourced : CHATBOT.claim_unsourced}`));
+    }
+    box.append(list);
+  }
+  if (s.summary.open.length) {
+    box.append(el("p", "note", CHATBOT.open_title));
+    const list = el("ul", "chatbot-open");
+    for (const o of s.summary.open) list.append(el("li", "", o));
+    box.append(list);
+  }
+  return box;
+}
+
+function chatbotLimitsRow(v, s) {
+  const wrap = el("div", "chatbot-limits");
+  const row = el("div", "row");
+  const field = (label, value, max, id) => {
+    const lab = el("label", "lbl", label);
+    const input = el("input", "field");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(max);
+    input.value = String(value);
+    input.id = id;
+    lab.append(input);
+    row.append(lab);
+    return input;
+  };
+  const msgs = field(CHATBOT.messages_label, s.max, v.tier.turnsMax, "chatbot-new-messages");
+  const mins = field(CHATBOT.minutes_label, s.maxMinutes, v.tier.minutesMax, "chatbot-new-minutes");
+  wrap.append(row);
+  const neverLab = el("label", "lbl", CHATBOT.never_label);
+  const never = el("input", "field");
+  never.type = "text";
+  never.id = "chatbot-new-never";
+  never.value = s.never.join(", ");
+  never.disabled = s.hidden;
+  neverLab.append(never);
+  wrap.append(neverLab);
+  const go = button(CHATBOT.change_limits, async () => {
+    const m = chatbotLimitOf(msgs.value, v.tier.turnsMax);
+    const n = chatbotLimitOf(mins.value, v.tier.minutesMax);
+    if (m === null || n === null) {
+      toast(`Most messages: 1 to ${v.tier.turnsMax}; most minutes: 1 to ${v.tier.minutesMax}.`, "bad");
+      return;
+    }
+    await chatbotAct("chatbot_limits", {
+      id: s.id, maxMessages: m, maxMinutes: n,
+      // While the words are hidden the box shows none: keep the PC's list.
+      neverSend: s.hidden ? null : neverWords(never.value),
+    });
+  }, { live: true });
+  go.id = "chatbot-limits-go";
+  if (v.limits.waiting) {
+    go.dataset.busy = "true";
+    syncLiveButton(go);
+  }
+  wrap.append(go);
+  wrap.append(el("p", "note", CHATBOT.limits_note));
+  if (v.limits.waiting) wrap.append(el("p", "note", "A card for new limits is waiting for your answer."));
+  else if (v.limits.said) wrap.append(el("p", "note", v.limits.said));
+  return wrap;
+}
+
+function paintChatbot() {
+  const box = dom.chatbot;
+  if (!box) return;
+  const v = cb.view;
+  if (dom.chatbotVersion) dom.chatbotVersion.textContent = v ? chatbotVersionLine(v) : "";
+  if (!v) {
+    const line = el("p", "empty", cb.error ? `Could not read it: ${cb.error}` : "Reading…");
+    if (cb.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadChatbot));
+    }
+    box.replaceChildren(line);
+    if (dom.chatbotForm) dom.chatbotForm.hidden = true;
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || CHATBOT.missing));
+    if (dom.chatbotForm) dom.chatbotForm.hidden = true;
+    return;
+  }
+  const s = v.session;
+  const out = [];
+  if (cb.error) out.push(el("p", "empty failed", `Could not read it again: ${cb.error}`));
+  if (!v.anyBuilt) out.push(el("p", "note chatbot-none", CHATBOT.none_built));
+  if (cb.gone) out.push(el("p", "note", CHATBOT.gone));
+  if (s) {
+    const now = el("div", "chatbot-now");
+    now.dataset.state = s.state;
+    now.append(el("p", "chatbot-head", s.live ? chatbotTalkingLine(s) : `${s.name}: ${chatbotStatusLine(s)}`));
+    if (s.live) now.append(el("p", "chatbot-line", chatbotStatusLine(s)));
+    if (s.state !== "refused") now.append(el("p", "note", chatbotProgress(s)));
+    if (s.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${s.tierName}`));
+    if (s.hidden) {
+      const hid = el("div", "private-hidden");
+      hid.append(el("p", "empty", CHATBOT.hidden));
+      hid.append(button("Show", revealPrivate,
+        { title: "Asks Windows Hello - your PIN, fingerprint or face - then shows the conversation." }));
+      now.append(hid);
+    } else if (s.goal) {
+      now.append(el("p", "note", `Your goal (sent word for word): ${s.goal}`));
+    }
+    if (s.question) {
+      const q = el("div", "chatbot-question chatbot-outside");
+      q.append(el("p", "subhead", CHATBOT.question_title));
+      q.append(el("p", "chatbot-text", s.question));
+      q.append(el("p", "note", CHATBOT.question_note));
+      now.append(q);
+    }
+    const actions = el("div", "row-actions");
+    for (const a of chatbotActionsOf(s)) {
+      if (a === "pause") actions.append(button(CHATBOT.pause, () => chatbotAct("chatbot_pause")));
+      if (a === "resume") actions.append(button(CHATBOT.resume, () => chatbotAct("chatbot_resume"), { live: true }));
+      if (a === "stop") actions.append(button(CHATBOT.stop, () => chatbotAct("chatbot_stop", { id: s.id }), { danger: true }));
+    }
+    if (actions.childElementCount) now.append(actions);
+    if (s.state === "running" || s.state === "paused") now.append(chatbotLimitsRow(v, s));
+    if (s.summary && !s.hidden) now.append(chatbotSummary(s));
+    if (s.transcript.length) {
+      const tr = el("div", "chatbot-transcript");
+      tr.append(el("h3", "subhead", CHATBOT.transcript_title));
+      tr.append(el("p", "note", CHATBOT.outside_note));
+      for (const t of s.transcript) tr.append(chatbotTurn(t, s.name));
+      now.append(tr);
+    }
+    out.push(now);
+  } else if (v.anyBuilt) {
+    out.push(el("p", "empty", "No conversation yet."));
+  }
+  box.replaceChildren(...out);
+  paintChatbotForm(v, s);
+  const live = Boolean(s && s.live);
+  if (live && !cb.timer) {
+    cb.timer = setInterval(() => {
+      if (state.view === "work" && !cb.loading) loadChatbot();
+    }, CHATBOT_POLL_MS);
+  }
+  if (!live && cb.timer) {
+    clearInterval(cb.timer);
+    cb.timer = null;
+  }
+}
+
+function paintChatbotForm(v, s) {
+  const form = dom.chatbotForm;
+  if (!form) return;
+  form.hidden = Boolean(s && s.live);
+  if (form.hidden) return;
+  const which = dom.chatbotWhich;
+  if (which) {
+    const was = which.value;
+    which.replaceChildren(...v.chatbots.map((c) => {
+      const o = el("option", "", c.built ? c.name : `${c.name} - ${c.note || "Not built yet."}`);
+      o.value = c.id;
+      o.disabled = !c.built;
+      return o;
+    }));
+    const pick = v.chatbots.find((c) => c.id === was && c.built) || v.chatbots.find((c) => c.built)
+      || v.chatbots[0];
+    if (pick) which.value = pick.id;
+  }
+  if (dom.chatbotMessages) dom.chatbotMessages.max = String(v.tier.turnsMax);
+  if (dom.chatbotMinutes) dom.chatbotMinutes.max = String(v.tier.minutesMax);
+  if (!cb.filled) {
+    if (dom.chatbotMessages) dom.chatbotMessages.value = String(v.tier.turnsDefault);
+    if (dom.chatbotMinutes) dom.chatbotMinutes.value = String(v.tier.minutesDefault);
+    cb.filled = true;
+  }
+  if (dom.chatbotStart) {
+    // Nothing built: Start stays greyed, with the reason as its title.
+    dom.chatbotStart.dataset.title = v.anyBuilt ? "" : CHATBOT.none_built;
+    dom.chatbotStart.dataset.busy = v.anyBuilt ? "false" : "true";
+    syncLiveButton(dom.chatbotStart);
+    if (!v.anyBuilt) dom.chatbotStart.title = CHATBOT.none_built;
+  }
+}
+
+function renderChatbot() {
+  paintChatbot();
+  if (IS_TAURI && !cb.loading && Date.now() - cb.at > CHATBOT_READ_MS) loadChatbot();
+}
+
+if (dom.chatbotForm) {
+  dom.chatbotForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    chatbotStart();
+  });
+}
+if (dom.chatbotStart) {
+  liveButtons.add(dom.chatbotStart);
+  syncLiveButton(dom.chatbotStart);
+}
+
+/* ==========================================================================
    Coming up - timers, alarms, reminders and the to-do list (the owner's
    decisions of 2026-09-25; JARVIS-API.md section 21; coming-up.js).
 
@@ -5994,6 +6346,13 @@ onEvent((frame) => {
   if (kind === "focus") {
     fx.at = 0;
     if (state.view === "work") loadFocus();
+  }
+  // A chatbot conversation has no event of its own: its progress travels on
+  // the one activity line ("Talking to Gemini: message 3 of 5."). Read it
+  // again on every activity change while the Work tab is showing.
+  if (kind === "activity") {
+    cb.at = 0;
+    if (state.view === "work") loadChatbot();
   }
   if (kind === "schedule") {
     upL.at = 0;

@@ -451,7 +451,7 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus,
-  folders }) {
+  folders, chatbot }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
@@ -1475,6 +1475,45 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             f.status = { ...f.status, on: true, minutes: args.minutes, left_s: args.minutes * 60 };
             return { ok: true, said: `Focus for ${args.minutes} minutes.` };
           }
+          // brain/chatbot.rs ("Talk to a chatbot for me"). `window.__chatbot`
+          // is null - a PC without the routes, answered as `null` like any
+          // unknown command - unless the scenario names `chatbot: {status,
+          // named?, startRefuses?}`: real GET /api/chatbot/status answers from
+          // fixtures/chatbot-cases.json (`status` for the latest live one,
+          // `named` for a read by id). Every change is recorded; start,
+          // limits and resume are refused on a stale link, as Rust does.
+          case "chatbot_status": {
+            const c = window.__chatbot;
+            if (!c) return null;
+            c.reads += 1;
+            c.ids.push(args.id);
+            const out = args.id && c.named ? c.named : c.status;
+            return JSON.parse(JSON.stringify(out));
+          }
+          case "chatbot_start":
+          case "chatbot_limits":
+          case "chatbot_stop":
+          case "chatbot_pause":
+          case "chatbot_resume": {
+            window.__chatbotCalls.push({ cmd, ...args });
+            if (state.stale && ["chatbot_start", "chatbot_limits", "chatbot_resume"].includes(cmd)) {
+              throw new Error("the event stream is stale, so this cannot be confirmed live - nothing can be sent until it reconnects");
+            }
+            const c = window.__chatbot;
+            if (cmd === "chatbot_start") {
+              if (c.startRefuses) throw new Error(c.startRefuses);
+              return { ok: true, asking: true, session: "chat_000000000001",
+                message: "Nothing has been sent yet. An approval card shows the goal, word for word, and every limit; the conversation starts only if you approve it." };
+            }
+            if (cmd === "chatbot_limits") {
+              return { ok: true, asking: true, session: args.id,
+                message: "Nothing has changed yet. An approval card shows the new limits; they apply only if you approve it." };
+            }
+            if (cmd === "chatbot_stop") {
+              return { ok: true, session: args.id, message: "Stopping. Nothing more is sent; messages already sent stay sent." };
+            }
+            return { ok: true, message: cmd === "chatbot_pause" ? "Pausing at the next step." : "Resume asks you first." };
+          }
           case "brain_schedule_add_todo": {
             window.__scheduleCalls.push({ cmd, ...args });
             const sc = window.__schedule;
@@ -1815,6 +1854,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__scheduleCalls = [];
   window.__focus = focus ? JSON.parse(JSON.stringify({ reads: 0, ...focus })) : null;
   window.__focusCalls = [];
+  window.__chatbot = chatbot ? JSON.parse(JSON.stringify({ reads: 0, ids: [], ...chatbot })) : null;
+  window.__chatbotCalls = [];
   window.__briefing = briefing ? JSON.parse(JSON.stringify({
     briefing: null, setups: [], sources: {}, reads: 0, fails: null, ...briefing })) : null;
   window.__briefingCalls = [];

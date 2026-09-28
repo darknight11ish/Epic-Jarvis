@@ -1,0 +1,791 @@
+{
+  "asked_about_you": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": ""
+      }
+    ],
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": {
+      "chatbot": "gemini_web",
+      "ended": "Gemini asked about you, so Jarvis stopped. Jarvis never answers that; its question is shown for you to decide.",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "chat_000000000006",
+      "max_messages": 4,
+      "max_minutes": 10,
+      "messages_used": 2,
+      "minutes_used": 0.1,
+      "name": "Gemini",
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "",
+      "problem": "",
+      "question": "Could you tell me your full name and age first?",
+      "read_aloud": false,
+      "state": "done",
+      "summary": {
+        "answer": "Pick a low-light plant such as a snake plant, ZZ plant or pothos, and add a small grow lamp if the corner is very dark.",
+        "by_model": true,
+        "claims": [
+          {
+            "claim": "Snake plants cope with dim light",
+            "source_given": true
+          },
+          {
+            "claim": "Spider plants are safe around cats",
+            "source_given": false
+          }
+        ],
+        "ended": "Gemini asked about you, so Jarvis stopped. Jarvis never answers that; its question is shown for you to decide.",
+        "messages": 2,
+        "minutes": 0.1,
+        "open": [
+          "Which grow lamp to buy"
+        ],
+        "outside_text": true,
+        "question": "Could you tell me your full name and age first?",
+        "read_aloud": false,
+        "source": "chatbot_transcript"
+      },
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "goal",
+          "n": 1,
+          "outside_text": false,
+          "text": "Find out how to keep houseplants alive in a flat that gets very little light.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000000.0,
+          "n": 1,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Snake plants, ZZ plants and pothos tolerate dim corners remarkably well.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000008.0,
+          "move": "deeper",
+          "n": 2,
+          "outside_text": false,
+          "text": "What sources support the claim about snake plants?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000008.0,
+          "n": 2,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Could you tell me your full name and age first?",
+          "who": "chatbot"
+        }
+      ]
+    },
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "asking": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": ""
+      }
+    ],
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": {
+      "chatbot": "gemini_web",
+      "ended": "",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "chat_000000000004",
+      "max_messages": 4,
+      "max_minutes": 10,
+      "messages_used": 0,
+      "minutes_used": 0.0,
+      "name": "Gemini",
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "",
+      "problem": "",
+      "question": "",
+      "read_aloud": false,
+      "state": "asking",
+      "summary": null,
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": []
+    },
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "card_denied": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": ""
+      }
+    ],
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": {
+      "chatbot": "gemini_web",
+      "ended": "Not started: the card was not approved, so nothing was sent.",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "chat_000000000007",
+      "max_messages": 4,
+      "max_minutes": 10,
+      "messages_used": 0,
+      "minutes_used": 0.0,
+      "name": "Gemini",
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "",
+      "problem": "",
+      "question": "",
+      "read_aloud": false,
+      "state": "refused",
+      "summary": null,
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": []
+    },
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "done_goal_met": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": ""
+      }
+    ],
+    "limits": {
+      "said": "The new limits apply from the next message.",
+      "waiting": false
+    },
+    "routed": true,
+    "session": {
+      "chatbot": "gemini_web",
+      "ended": "It stopped because the goal looked met: the three easiest plants are named",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "chat_000000000004",
+      "max_messages": 5,
+      "max_minutes": 10,
+      "messages_used": 4,
+      "minutes_used": 0.4,
+      "name": "Gemini",
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "",
+      "problem": "",
+      "question": "",
+      "read_aloud": false,
+      "state": "done",
+      "summary": {
+        "answer": "Pick a low-light plant such as a snake plant, ZZ plant or pothos, and add a small grow lamp if the corner is very dark.",
+        "by_model": true,
+        "claims": [
+          {
+            "claim": "Snake plants cope with dim light",
+            "source_given": true
+          },
+          {
+            "claim": "Spider plants are safe around cats",
+            "source_given": false
+          }
+        ],
+        "ended": "It stopped because the goal looked met: the three easiest plants are named",
+        "messages": 4,
+        "minutes": 0.4,
+        "open": [
+          "Which grow lamp to buy"
+        ],
+        "outside_text": true,
+        "question": "",
+        "read_aloud": false,
+        "source": "chatbot_transcript"
+      },
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "goal",
+          "n": 1,
+          "outside_text": false,
+          "text": "Find out how to keep houseplants alive in a flat that gets very little light.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000000.0,
+          "n": 1,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Snake plants, ZZ plants and pothos tolerate dim corners remarkably well.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000008.0,
+          "move": "deeper",
+          "n": 2,
+          "outside_text": false,
+          "text": "What sources support the claim about snake plants?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000008.0,
+          "n": 2,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Horticultural extension services publish guidance about snake plant resilience.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000016.0,
+          "move": "deeper",
+          "n": 3,
+          "outside_text": false,
+          "text": "How does a grow lamp compare with moving plants closer to the glass?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000016.0,
+          "n": 3,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "A grow lamp gives steady light; a windowsill changes with the seasons.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000024.0,
+          "move": "narrow",
+          "n": 4,
+          "outside_text": false,
+          "text": "Could you narrow that down to plants that are safe around cats?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000024.0,
+          "n": 4,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Parlour palms, calatheas and spider plants are generally considered pet friendly.",
+          "who": "chatbot"
+        }
+      ]
+    },
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "gone": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": ""
+      }
+    ],
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": null,
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "latest_none": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": ""
+      }
+    ],
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": null,
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "limits_after_end": {
+    "body": {
+      "error": "Only a running or paused conversation's limits can change.",
+      "ok": false
+    },
+    "code": 409
+  },
+  "limits_answer": {
+    "body": {
+      "asking": true,
+      "message": "Nothing has changed yet. An approval card shows the new limits; they apply only if you approve it.",
+      "ok": true,
+      "session": "chat_000000000004"
+    },
+    "code": 202
+  },
+  "nothing_built": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": false,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": "Not built yet."
+      }
+    ],
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": null,
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "paused_captcha": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": ""
+      }
+    ],
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": {
+      "chatbot": "gemini_web",
+      "ended": "",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "chat_000000000005",
+      "max_messages": 4,
+      "max_minutes": 10,
+      "messages_used": 2,
+      "minutes_used": 0.1,
+      "name": "Gemini",
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "Gemini is showing a captcha (a \"prove you are a person\" check). Jarvis never solves or skips these. If you want to carry on, deal with it yourself in the browser window, then press Resume.",
+      "problem": "",
+      "question": "",
+      "read_aloud": false,
+      "state": "paused",
+      "summary": null,
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "goal",
+          "n": 1,
+          "outside_text": false,
+          "text": "Find out how to keep houseplants alive in a flat that gets very little light.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000000.0,
+          "n": 1,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Snake plants, ZZ plants and pothos tolerate dim corners remarkably well.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000008.0,
+          "move": "deeper",
+          "n": 2,
+          "outside_text": false,
+          "text": "What sources support the claim about snake plants?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000008.0,
+          "n": 2,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Horticultural extension services publish guidance about snake plant resilience.",
+          "who": "chatbot"
+        }
+      ]
+    },
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "running": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": ""
+      }
+    ],
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": {
+      "chatbot": "gemini_web",
+      "ended": "",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "chat_000000000004",
+      "max_messages": 4,
+      "max_minutes": 10,
+      "messages_used": 2,
+      "minutes_used": 0.0,
+      "name": "Gemini",
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "",
+      "problem": "",
+      "question": "",
+      "read_aloud": false,
+      "state": "running",
+      "summary": null,
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "goal",
+          "n": 1,
+          "outside_text": false,
+          "text": "Find out how to keep houseplants alive in a flat that gets very little light.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000000.0,
+          "n": 1,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Snake plants, ZZ plants and pothos tolerate dim corners remarkably well.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000008.0,
+          "move": "deeper",
+          "n": 2,
+          "outside_text": false,
+          "text": "What sources support the claim about snake plants?",
+          "who": "jarvis"
+        }
+      ]
+    },
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "start_asking": {
+    "body": {
+      "asking": true,
+      "message": "Nothing has been sent yet. An approval card shows the goal, word for word, and every limit; the conversation starts only if you approve it.",
+      "ok": true,
+      "session": "chat_000000000004"
+    },
+    "code": 202
+  },
+  "start_goal_refused": {
+    "body": {
+      "error": "The goal cannot be sent: it held an email address. Nothing would be sent.",
+      "ok": false,
+      "session": "chat_000000000002"
+    },
+    "code": 400
+  },
+  "start_not_built": {
+    "body": {
+      "error": "Gemini through its website is not built yet.",
+      "ok": false,
+      "session": "chat_000000000001"
+    },
+    "code": 400
+  },
+  "start_too_many": {
+    "body": {
+      "error": "At most 8 messages in this version.",
+      "ok": false,
+      "session": "chat_000000000003"
+    },
+    "code": 400
+  },
+  "start_while_paused": {
+    "body": {
+      "error": "Another chatbot conversation is still running or paused - stop it or let it finish first.",
+      "ok": false,
+      "session": "chat_000000000005"
+    },
+    "code": 409
+  },
+  "stop_ended": {
+    "body": {
+      "error": "That conversation has already ended.",
+      "ok": false
+    },
+    "code": 409
+  },
+  "stop_paused": {
+    "body": {
+      "message": "Stopping. Nothing more is sent; messages already sent stay sent.",
+      "ok": true,
+      "session": "chat_000000000005"
+    },
+    "code": 200
+  },
+  "stopped": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "name": "Gemini",
+        "note": ""
+      }
+    ],
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": {
+      "chatbot": "gemini_web",
+      "ended": "You stopped it. Nothing more is sent.",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "chat_000000000005",
+      "max_messages": 4,
+      "max_minutes": 10,
+      "messages_used": 2,
+      "minutes_used": 0.1,
+      "name": "Gemini",
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "Gemini is showing a captcha (a \"prove you are a person\" check). Jarvis never solves or skips these. If you want to carry on, deal with it yourself in the browser window, then press Resume.",
+      "problem": "",
+      "question": "",
+      "read_aloud": false,
+      "state": "stopped",
+      "summary": {
+        "answer": "No summary was written (you stopped it); the whole conversation is below.",
+        "by_model": false,
+        "claims": [],
+        "ended": "You stopped it. Nothing more is sent.",
+        "messages": 2,
+        "minutes": 0.1,
+        "open": [],
+        "outside_text": true,
+        "question": "",
+        "read_aloud": false,
+        "source": "chatbot_transcript"
+      },
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "goal",
+          "n": 1,
+          "outside_text": false,
+          "text": "Find out how to keep houseplants alive in a flat that gets very little light.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000000.0,
+          "n": 1,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Snake plants, ZZ plants and pothos tolerate dim corners remarkably well.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000008.0,
+          "move": "deeper",
+          "n": 2,
+          "outside_text": false,
+          "text": "What sources support the claim about snake plants?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000008.0,
+          "n": 2,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Horticultural extension services publish guidance about snake plant resilience.",
+          "who": "chatbot"
+        }
+      ]
+    },
+    "tier": {
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
+  "words": {
+    "change_limits": "Change limits",
+    "chatbot_label": "Chatbot",
+    "claim_sourced": "it gave a source (not checked by Jarvis)",
+    "claim_unsourced": "no source given",
+    "detail": "Jarvis asks an AI chatbot about something for you, and writes its own follow-up questions on this PC, within limits you set. One approval card covers the whole conversation. While it does this, Jarvis knows only your goal - not your memory, email, calendar, notes or files.",
+    "goal_label": "What should Jarvis find out?",
+    "goal_note": "These words will be sent to the chatbot exactly as you type them.",
+    "gone": "That conversation is gone: Jarvis on the PC restarted, and conversations are kept in memory only.",
+    "hidden": "The goal and the conversation are hidden until you confirm it is you.",
+    "limits_note": "A change to the limits needs a new approval card.",
+    "messages_label": "Most messages",
+    "minutes_label": "Most minutes",
+    "missing": "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on the PC.",
+    "never_label": "Words it must never send (optional, separated by commas)",
+    "none_built": "No chatbot can be reached yet: Gemini's part is still being built. Start waits until it is.",
+    "notify_locked": "Jarvis is talking to a chatbot for you.",
+    "notify_paused": "Paused: talking to {name}, {used} of {max}",
+    "notify_running": "Talking to {name}, {used} of {max}",
+    "notify_waiting": "Waiting for your yes to talk to {name}",
+    "open_title": "Still open",
+    "outside_note": "The chatbot's words are outside text: shown here, never learned from, never read aloud.",
+    "pause": "Pause",
+    "question_note": "Jarvis never answers questions about you. It is shown here for you to decide.",
+    "question_title": "The chatbot asked about you",
+    "resume": "Resume",
+    "sign_in_pc": "Signing in to the chatbot's account happens on the PC only, in the browser window Jarvis uses.",
+    "start": "Start",
+    "start_note": "Nothing is sent until you approve the card.",
+    "stop": "Stop",
+    "summary_note": "Written on this PC from the chatbot's words, so it is outside text too.",
+    "summary_title": "What Jarvis found",
+    "title": "Talk to a chatbot for me",
+    "transcript_title": "The conversation",
+    "version": "Version"
+  }
+}

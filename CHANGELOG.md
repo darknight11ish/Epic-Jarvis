@@ -6,6 +6,17 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **"Talk to a chatbot for me" now has its screens in both apps - but no
+  chatbot can be reached yet.** On the PC it is a card in Brain -> Work; on
+  the phone, a card in Brain. You choose the chatbot, type what Jarvis
+  should find out (the card says these words are sent exactly as typed),
+  set the most messages and minutes and any words it must never send, and
+  Start asks for one approval card - nothing is sent before your yes. While
+  it talks you see the conversation, with the chatbot's words marked
+  "outside text", plus Pause, Resume and Stop; changing a limit asks a new
+  card; the summary stays on screen at the end and is never read aloud. The
+  phone also shows "Talking to Gemini, 3 of 5" with a Stop button. Gemini's
+  part is still being built, so today Start says so and does nothing.
 - **The core of the chatbot driver - not usable yet.** The part of Jarvis
   that will hold a conversation with an AI chatbot for you (Gemini first)
   is written and tested on the PC side: one approval card per

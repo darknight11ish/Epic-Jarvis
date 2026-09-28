@@ -434,6 +434,19 @@ fun BrainScreen(
                 FocusSection(canAct = canAct, privateHidden = privateHidden)
             }
 
+            // "Talk to a chatbot for me" (the owner's decisions of 2026-09-27
+            // and 2026-09-28): start one (ONE approval card on the PC), the
+            // conversation with the chatbot's words marked outside text,
+            // Pause/Resume/Stop, new limits, the summary (ChatbotPlate.kt) -
+            // the desktop's Brain -> Work, the same card.
+            item(key = "chatbot") {
+                ChatbotSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    onOpenApprovals = onOpenApprovals,
+                )
+            }
+
             // "Morning briefing" (the owner's decisions of 2026-09-25): the
             // latest one, "Brief me now", and when it arrives
             // (BriefingPlate.kt) - the desktop's Brain -> Work and Settings.

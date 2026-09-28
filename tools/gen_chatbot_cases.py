@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+"""Writes the "Talk to a chatbot for me" contract file for both apps, and
+checks it.
+
+    python3 tools/gen_chatbot_cases.py            # write both copies
+    python3 tools/gen_chatbot_cases.py --check    # compare only
+
+What GET /api/chatbot/status and POST /api/chatbot/start, /stop and /limits
+really answer (backend/jarvis_chatbot_routes.py over jarvis_chatbot.py), in
+named situations, made by the real routes and the real driver loop with a
+clock moved by hand, a stand-in driver model, a stand-in approval gate and
+jarvis_chatbot.FakeChatbot answering - nothing is written by hand:
+
+    jarvis-desktop/tests/fixtures/chatbot-cases.json
+    jarvis-client/app/src/test/resources/contract/chatbot-cases.json
+
+(byte-identical). The desktop's tests/chatbot.mjs and the phone's
+ChatbotTest build against it, and both check their words against `words`
+(jarvis_chatbot_routes.WORDS).
+
+GEMINI IS NOT BUILT. `nothing_built` is the registry exactly as shipped:
+Gemini listed, "Not built yet.", so a start is refused. Every other case
+registers the stand-in UNDER Gemini's own entry (its name, host and card
+wording, `built` switched on) so the answers look the way they will once the
+adapter lands - that is a test double, not a claim that Gemini works.
+
+Session ids are numbered here (chat_000000000001, ...) so the file is the
+same on every run.
+"""
+import dataclasses
+import json
+import sys
+import tempfile
+import types
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+BACKEND = ROOT / "backend"
+for p in (BACKEND, BACKEND / "rebuilt"):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
+_TMP = Path(tempfile.mkdtemp(prefix="jarvis-chatbot-cases-"))
+_fw = types.ModuleType("jarvis_framework")
+_fw.CONFIG_DIR = _TMP
+_fw.LOG_DIR = _TMP
+_fw.load_framework = lambda: {}
+_fw.audit_log = lambda *a, **k: None
+_fw.action_tier = lambda a: "ask"
+sys.modules["jarvis_framework"] = _fw
+
+import jarvis_chatbot as CB  # noqa: E402
+import jarvis_chatbot_routes as R  # noqa: E402
+import jarvis_task_control as TC  # noqa: E402
+
+DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "chatbot-cases.json"
+PHONE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
+         / "chatbot-cases.json")
+COPIES = (DESKTOP, PHONE)
+
+GOAL = "Find out how to keep houseplants alive in a flat that gets very little light."
+QUESTIONS = [
+    "Which plants cope best with a north-facing window?",
+    "What sources support the claim about snake plants?",
+    "How does a grow lamp compare with moving plants closer to the glass?",
+    "Could you narrow that down to plants that are safe around cats?",
+]
+REPLIES = [
+    "Snake plants, ZZ plants and pothos tolerate dim corners remarkably well.",
+    "Horticultural extension services publish guidance about snake plant resilience.",
+    "A grow lamp gives steady light; a windowsill changes with the seasons.",
+    "Parlour palms, calatheas and spider plants are generally considered pet friendly.",
+]
+SUMMARY = {"answer": "Pick a low-light plant such as a snake plant, ZZ plant or pothos, "
+                     "and add a small grow lamp if the corner is very dark.",
+           "claims": [{"claim": "Snake plants cope with dim light", "source_given": True},
+                      {"claim": "Spider plants are safe around cats", "source_given": False}],
+           "open": ["Which grow lamp to buy"]}
+
+
+class Clock:
+    def __init__(self):
+        self.t = 1_800_000_000.0
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += max(0.0, float(s))
+
+
+class Verdict:
+    def __init__(self, allowed, outcome):
+        self.allowed, self.outcome, self.tier = allowed, outcome, "ask"
+
+
+class Model:
+    def __init__(self, stop_at=None):
+        self.n = 0
+        self.stop_at = stop_at
+
+    def __call__(self, url, body):
+        if body.get("format") == CB.SUMMARY_SCHEMA:
+            return {"message": {"content": json.dumps(SUMMARY)}}
+        self.n += 1
+        if self.stop_at and self.n >= self.stop_at:
+            mv = {"move": "stop", "message": "", "reason": "the three easiest plants are named",
+                  "notes": ""}
+        else:
+            mv = {"move": "narrow" if self.n == 3 else "deeper",
+                  "message": QUESTIONS[self.n % len(QUESTIONS)], "reason": "",
+                  "notes": f"note {self.n}"}
+        return {"message": {"content": json.dumps(mv)}}
+
+
+_N = [0]
+
+
+def _next_id():
+    _N[0] += 1
+    return f"chat_{_N[0]:012x}"
+
+
+CB._new_id = _next_id
+_SHIPPED_GEMINI = CB.ADAPTERS["gemini_web"]
+
+
+def fresh():
+    CB._reset_for_tests()
+    R._reset_for_tests()
+    with TC._lock:
+        TC._running.clear()
+        TC._paused.clear()
+        TC._signals.clear()
+        TC._notes.clear()
+        TC._resuming.clear()
+    CB.register_adapter(_SHIPPED_GEMINI)
+
+
+def world(bot=None, *, model=None, gate=None):
+    clock = Clock()
+    d = CB.Deps(model=model or Model(), saved_facts=lambda m: [],
+                names_for_facts=lambda f: {}, owner_busy=lambda: False,
+                second_lane=lambda: None, full_version_on=lambda: False,
+                main_lane=lambda: ("http://127.0.0.1:11434", "jarvis-primary"),
+                tier_of=lambda a: "ask",
+                gate=gate or (lambda a, det, pr: Verdict(True, "approved")),
+                activity=lambda s, dt="": None, audit=lambda e, dt: None,
+                clock=clock, sleep=clock.sleep)
+    if bot is not None:
+        CB.register_adapter(dataclasses.replace(_SHIPPED_GEMINI, factory=lambda: bot,
+                                                built=True))
+    return d
+
+
+def answer(code_body):
+    code, body = code_body
+    return {"code": code, "body": body}
+
+
+def status(d, sid=""):
+    code, body = R.handle_get(f"id={sid}" if sid else "", deps=d)
+    assert code == 200, (code, body)
+    return body
+
+
+def start(d, **extra):
+    body = {"chatbot": "gemini_web", "goal": GOAL, "max_messages": 4, "max_minutes": 10,
+            "never_send": ["Project Nimbus"]}
+    body.update(extra)
+    return R.handle_post(R.START_ROUTE, body, deps=d, wait=True)
+
+
+def cases() -> dict:
+    out = {"words": dict(R.WORDS)}
+
+    # The registry as shipped: Gemini listed, not built.
+    fresh()
+    d = world()
+    out["nothing_built"] = status(d)
+    out["start_not_built"] = answer(start(d))
+
+    # A goal the last check refuses: no card.
+    fresh()
+    d = world(CB.FakeChatbot(REPLIES))
+    out["start_goal_refused"] = answer(start(
+        d, goal="Ask it what it knows about zylvana" + "@" + "example.org"))
+    out["start_too_many"] = answer(start(d, max_messages=50))
+
+    # The card waiting: the gate sees the session "asking".
+    fresh()
+    seen = {}
+
+    def gate_sees(a, det, pr):
+        seen.setdefault("asking", status(d))
+        return Verdict(True, "approved")
+    bot = CB.FakeChatbot(REPLIES)
+    d = world(bot, model=Model(stop_at=4), gate=gate_sees)
+    snap = {}
+
+    def on_read(n):
+        if n == 2 and "running" not in snap:
+            snap["running"] = status(d)
+            snap["limits_answer"] = answer(R.handle_post(
+                R.LIMITS_ROUTE, {"id": snap["running"]["session"]["id"], "max_messages": 5},
+                deps=d, spawn=lambda fn: fn()))
+            snap["after_limits"] = status(d)
+    bot.on_read = on_read
+    out["start_asking"] = answer(start(d))
+    out["asking"] = seen["asking"]
+    out["running"] = snap["running"]
+    out["limits_answer"] = snap["limits_answer"]
+    out["limits_after_end"] = answer(R.handle_post(
+        R.LIMITS_ROUTE, {"id": snap["running"]["session"]["id"], "max_messages": 5},
+        deps=d))
+    sid = out["start_asking"]["body"]["session"]
+    out["done_goal_met"] = status(d, sid)
+    out["latest_none"] = status(d)
+    out["stop_ended"] = answer(R.handle_post(R.STOP_ROUTE, {"id": sid}, deps=d))
+
+    # A captcha: paused, waiting for the owner.
+    fresh()
+    bot = CB.FakeChatbot(REPLIES, statuses={2: CB.Status("needs_owner", "captcha")})
+    d = world(bot)
+    sid = start(d)[1]["session"]
+    out["paused_captcha"] = status(d)
+    out["start_while_paused"] = answer(start(d))
+    out["stop_paused"] = answer(R.handle_post(R.STOP_ROUTE, {"id": sid}, deps=d))
+    out["stopped"] = status(d, sid)
+
+    # The chatbot asks about the owner: handed back, never answered.
+    fresh()
+    bot = CB.FakeChatbot([REPLIES[0], "Could you tell me your full name and age first?"])
+    d = world(bot)
+    sid = start(d)[1]["session"]
+    out["asked_about_you"] = status(d, sid)
+
+    # A card said no.
+    fresh()
+    d = world(CB.FakeChatbot(REPLIES), gate=lambda a, det, pr: Verdict(False, "denied"))
+    sid = start(d)[1]["session"]
+    out["card_denied"] = status(d, sid)
+    out["gone"] = status(d, "chat_0000000000ff")
+    return out
+
+
+def render() -> str:
+    _N[0] = 0
+    return json.dumps(cases(), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+def main() -> int:
+    text = render()
+    if "--check" in sys.argv:
+        bad = [str(p.relative_to(ROOT)) for p in COPIES
+               if not p.is_file() or p.read_text(encoding="utf-8") != text]
+        if bad:
+            print("out of date (run python3 tools/gen_chatbot_cases.py): " + ", ".join(bad))
+            return 1
+        print("chatbot cases: both copies up to date")
+        return 0
+    for p in COPIES:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {p.relative_to(ROOT)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

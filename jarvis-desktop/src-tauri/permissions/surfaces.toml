@@ -740,6 +740,26 @@ permissions = [
   "allow-focus-start",
 ]
 
+# "Talk to a chatbot for me" (backend/chatbot.patch; the owner's decisions of
+# 2026-09-27 and 2026-09-28): Jarvis asks an AI chatbot about something for
+# the owner, within limits approved on ONE card. Reading the conversation is
+# a read (the goal and the transcript taken out in Rust while the private
+# lists are hidden). Starting one and changing its limits each raise a card
+# on the PC and are held on a stale link; Stop and Pause only make Jarvis do
+# less and are not held; Resume raises the task's own card and is held. The
+# Brain's alone.
+[[set]]
+identifier = "chatbot"
+description = "Talk to a chatbot for me: read the conversation, start one (ONE approval card), change its limits (a NEW card), stop, pause and resume it. Start, limits and resume are held on a stale link."
+permissions = [
+  "allow-chatbot-status",
+  "allow-chatbot-start",
+  "allow-chatbot-limits",
+  "allow-chatbot-stop",
+  "allow-chatbot-pause",
+  "allow-chatbot-resume",
+]
+
 # The morning briefing (backend/briefing.patch; the owner's decisions of
 # 2026-09-25): read the latest one, and "Brief me now". Both only READ - the
 # PC puts it together without the model and reads the calendar and the

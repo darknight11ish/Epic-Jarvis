@@ -195,9 +195,10 @@ SHIPPED = (
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
     # A conversation with an AI chatbot for the owner: the driver, the last
-    # check, one card per conversation (the core only; not routed yet, no
-    # patch)
+    # check, one card per conversation
     "jarvis_chatbot.py",
+    # ...and its routes, /api/chatbot/* (chatbot.patch)
+    "jarvis_chatbot_routes.py",
 )
 
 

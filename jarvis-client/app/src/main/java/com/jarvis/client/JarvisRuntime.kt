@@ -1105,6 +1105,13 @@ object JarvisRuntime {
                 // `value.detail`, where the bus puts it - see ActivityEvent.
                 // This read `activity_detail`, which no backend sends.
                 _activityDetail.value = ActivityEvent.detail(event.data, ACTIVITY_DETAIL_MAX)
+                // A chatbot conversation has no event of its own; its progress
+                // rides on this line ("Talking to Gemini: message 3 of 5.").
+                // Start watching it - even one started on the desktop - so the
+                // ongoing notification and Brain's card keep up.
+                if (com.jarvis.client.net.Chatbot.isChatbotActivity(_activityDetail.value)) {
+                    watchChatbot()
+                }
                 refreshStatus()
             }
             "power", "persona" -> refreshStatus()
@@ -3561,6 +3568,146 @@ object JarvisRuntime {
             }
             is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
         }
+
+    // ------------------------------------------ Talk to a chatbot for me ----
+    // The owner's decisions of 2026-09-27 and 2026-09-28 - see
+    // [com.jarvis.client.net.Chatbot] and ui/screens/ChatbotPlate.kt. Jarvis
+    // asks an AI chatbot about something for the owner, within limits
+    // approved on ONE card on the PC. This phone starts one, shows it, pauses,
+    // resumes and stops it, asks for new limits, and keeps an ongoing
+    // notification while one is going (service/ChatbotNotifier.kt).
+
+    private val _chatbotTick = MutableStateFlow(0)
+
+    /**
+     * Goes up while a conversation is going (every [Chatbot.POLL_MS], from
+     * [watchChatbot]) and after every change made from this phone, so Brain's
+     * "Talk to a chatbot for me" reads itself again.
+     */
+    val chatbotTick: StateFlow<Int> = _chatbotTick.asStateFlow()
+
+    /** The last conversation this phone showed or started, so its summary stays after it ends. */
+    @Volatile var chatbotLastId: String? = null
+
+    private var chatbotWatcher: kotlinx.coroutines.Job? = null
+
+    /** `GET /api/chatbot/status` - the one [id] names, or the latest still going. A read. */
+    suspend fun chatbotStatus(id: String?): ApiResult<JsonObject> = api.chatbotStatus(id)
+
+    /**
+     * Ask the PC for a conversation: it raises ONE approval card, and nothing
+     * is sent before a yes. Held on a stale link (rule 4).
+     */
+    suspend fun chatbotStart(
+        chatbot: String,
+        goal: String,
+        maxMessages: Int?,
+        maxMinutes: Int?,
+        never: List<String>,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Chatbot.startBody(chatbot, goal, maxMessages, maxMinutes, never)
+            ?: return false to "That cannot be sent: check the goal and the never-send words."
+        return when (val r = api.chatbotWrite(com.jarvis.client.net.Chatbot.START_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Chatbot.said(r.value).also { (ok, _) ->
+                if (ok) {
+                    val id = (r.value.body?.get("session") as? kotlinx.serialization.json.JsonPrimitive)
+                        ?.takeIf { it.isString }?.content
+                    if (id != null) chatbotLastId = id
+                    watchChatbot()
+                }
+                _chatbotTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not started. " + describe(r.error))
+        }
+    }
+
+    /** Stop one conversation. Never held, never a card: it only makes Jarvis do less. */
+    suspend fun chatbotStop(id: String): Pair<Boolean, String> {
+        val body = com.jarvis.client.net.Chatbot.stopBody(id)
+            ?: return false to "That is not a conversation this phone knows."
+        return chatbotPost(com.jarvis.client.net.Chatbot.STOP_PATH, body)
+    }
+
+    /** New limits: a NEW card on the PC. Held on a stale link. */
+    suspend fun chatbotLimits(
+        id: String,
+        maxMessages: Int?,
+        maxMinutes: Int?,
+        never: List<String>?,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Chatbot.limitsBody(id, maxMessages, maxMinutes, never)
+            ?: return false to "That is not a conversation this phone knows."
+        return chatbotPost(com.jarvis.client.net.Chatbot.LIMITS_PATH, body)
+    }
+
+    /** Pause: the conversation runs as a task, so this is the task's own Pause. Never held. */
+    suspend fun chatbotPause(): Pair<Boolean, String> =
+        when (val r = pauseTask()) {
+            is ApiResult.Ok -> {
+                _chatbotTick.update { n -> n + 1 }
+                true to "Pausing. The reply on its way is read first, then it stops."
+            }
+            is ApiResult.Failed -> false to ("Not paused. " + describe(r.error))
+        }
+
+    /** Resume: the task's own Resume, which raises its own card on the PC. Held on a stale link. */
+    suspend fun chatbotResume(): Pair<Boolean, String> =
+        when (val r = resumeTask()) {
+            is ApiResult.Ok -> {
+                _chatbotTick.update { n -> n + 1 }
+                true to com.jarvis.client.net.TaskControl.RESUME_ASKED
+            }
+            is ApiResult.Failed -> false to ("Not resumed. " + describe(r.error))
+        }
+
+    private suspend fun chatbotPost(path: String, body: String): Pair<Boolean, String> =
+        when (val r = api.chatbotWrite(path, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Chatbot.said(r.value).also {
+                _chatbotTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+
+    /**
+     * While a conversation is going: read it every [Chatbot.POLL_MS], keep the
+     * ongoing notification ("Talking to Gemini, 3 of 5" with Stop) in step,
+     * and tick [chatbotTick]. Ends - and takes the notification away - once
+     * nothing is going, or after the PC could not be read five times running
+     * (a Stop that cannot reach the PC is no use; an activity event or the
+     * plate starts it again). One watcher at a time.
+     */
+    fun watchChatbot() {
+        if (chatbotWatcher?.isActive == true) return
+        chatbotWatcher = scope.launch {
+            var misses = 0
+            while (true) {
+                val r = api.chatbotStatus(null)
+                val ctx = appContext
+                if (r is ApiResult.Ok) {
+                    misses = 0
+                    val s = com.jarvis.client.net.Chatbot.parse(r.value)?.session
+                    if (s != null && s.live) {
+                        chatbotLastId = s.id
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.post(ctx, s)
+                    } else {
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.cancel(ctx)
+                        _chatbotTick.update { n -> n + 1 }
+                        break
+                    }
+                } else {
+                    misses += 1
+                    if (misses >= 5) {
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.cancel(ctx)
+                        break
+                    }
+                }
+                _chatbotTick.update { n -> n + 1 }
+                kotlinx.coroutines.delay(com.jarvis.client.net.Chatbot.POLL_MS)
+            }
+        }
+    }
 
     // ------------------------------------------------ Morning briefing ----
     // The owner's decisions of 2026-09-25 - see [com.jarvis.client.net.Briefing]
