@@ -827,6 +827,8 @@ $SHIPPED = @(
     # --- "Bring in chats from ChatGPT, Claude or Gemini" (2026-09-28) ---
     'import_history.py'          # the old-chats importer itself; still runs from this repository on the command line too
     'jarvis_history_import.py'   # history-import.patch: the Brain's button runs import_history.run() in the background; every fact waits for a yes
+    # --- "Widgets you describe" (2026-09-28, no patch of its own) ---
+    'jarvis_widgets.py'          # a widget as a small checked description (never code): the model's JSON from a fixed menu; /api/widgets routes, switched on by jarvis_brain_reads.py
 )
 
 # The settings file. Installed only where none exists; never overwritten.

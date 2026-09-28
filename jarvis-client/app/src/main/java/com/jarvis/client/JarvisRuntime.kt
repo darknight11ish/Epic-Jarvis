@@ -505,6 +505,7 @@ object JarvisRuntime {
     private var watchdog: Job? = null
     private var faceJob: Job? = null
     private var widgetJob: Job? = null
+    private var boardJob: Job? = null
 
     /** The forced restart in flight, so two taps on Reconnect do not stack. */
     private var restartJob: Job? = null
@@ -685,6 +686,16 @@ object JarvisRuntime {
                 ApprovalWidget().updateAll(app)
                 QuickLinkWidget().updateAll(app)
             }
+        }
+        // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
+        // so read again from the PC - when the link comes or goes stale, when
+        // a timer or reminder changes, when the saved widgets change here, or
+        // when a slot is given another widget. Never on a clock of its own
+        // beyond the launcher's half-hourly update.
+        boardJob?.cancel()
+        boardJob = scope.launch {
+            combine(_link, _stale, _scheduleTick, _widgetsTick, settings.homeWidgets) { _, _, _, _, _ -> }
+                .collect { com.jarvis.client.widget.JarvisBoardWidgets.updateAll(app) }
         }
     }
 
@@ -3423,6 +3434,73 @@ object JarvisRuntime {
             is ApiResult.Failed -> false to ("Not erased. " + describe(r.error))
         }
     }
+
+    // --------------------------------------------------------- Widgets ----
+    // "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
+    // version; docs/JARVIS-API.md section 86) - see
+    // [com.jarvis.client.net.JarvisWidgets], ui/screens/WidgetsPlate.kt and
+    // widget/JarvisBoardWidget.kt. The PC keeps the widgets; this phone keeps
+    // only which one each home-screen slot shows.
+
+    private val _widgetsTick = MutableStateFlow(0)
+
+    /** Goes up when a widget is added or deleted here, so the list and the home screen redraw. */
+    val widgetsTick: StateFlow<Int> = _widgetsTick.asStateFlow()
+
+    /** `GET /api/widgets`. A read. */
+    suspend fun widgets(): ApiResult<JsonObject> = api.widgets()
+
+    /** `GET /api/widgets/show?id=`: one widget, filled in now. A read. */
+    suspend fun widgetShow(id: String): ApiResult<JsonObject> = api.widgetShow(id)
+
+    /**
+     * A PREVIEW from the owner's typed words - the PC's model makes a small
+     * checked description; nothing is added. Not held on a stale link (it
+     * adds nothing), like "Photo to reminder". @return whether a preview was
+     * made, and the sentence to show.
+     */
+    suspend fun widgetDraft(words: String): Pair<Boolean, String> {
+        val body = com.jarvis.client.net.JarvisWidgets.draftBody(words)
+            ?: return false to com.jarvis.client.net.JarvisWidgets.NO_WORDS
+        return widgetPost(com.jarvis.client.net.JarvisWidgets.DRAFT_PATH, body, "Not made. ")
+    }
+
+    /** Keep ONE preview, exactly as shown. No card. Held on a stale link. */
+    suspend fun widgetAdd(draft: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (!com.jarvis.client.net.JarvisWidgets.validDraft(draft)) return false to "That preview has expired."
+        return widgetPost(
+            com.jarvis.client.net.JarvisWidgets.ADD_PATH,
+            com.jarvis.client.net.JarvisWidgets.idBody("draft", draft), "Not added. ",
+        )
+    }
+
+    /** Drop ONE preview. Not held: it only drops. */
+    suspend fun widgetDiscard(draft: String): Pair<Boolean, String> {
+        if (!com.jarvis.client.net.JarvisWidgets.validDraft(draft)) return true to "Discarded."
+        return widgetPost(
+            com.jarvis.client.net.JarvisWidgets.DISCARD_PATH,
+            com.jarvis.client.net.JarvisWidgets.idBody("draft", draft), "Not discarded. ",
+        )
+    }
+
+    /** Delete ONE widget, at once. Held on a stale link, like Coming up's Delete. */
+    suspend fun widgetDelete(id: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (!com.jarvis.client.net.JarvisWidgets.validId(id)) return false to "That widget is not there any more."
+        return widgetPost(
+            com.jarvis.client.net.JarvisWidgets.DELETE_PATH,
+            com.jarvis.client.net.JarvisWidgets.idBody("id", id), "Not deleted. ",
+        )
+    }
+
+    private suspend fun widgetPost(path: String, body: String, failed: String): Pair<Boolean, String> =
+        when (val r = api.widgetPost(path, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.JarvisWidgets.said(r.value.first, r.value.second).also {
+                _widgetsTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to (failed + describe(r.error))
+        }
 
     // ------------------------------------------------------- Coming up ----
     // Timers, alarms, reminders and the to-do list (the owner's decisions of

@@ -49,6 +49,7 @@ pub mod schedule;
 pub mod shared;
 pub mod sources;
 pub mod used;
+pub mod widgets;
 use routes::{first_line, route_for};
 
 /// Reads are small JSON. The graph (`/api/graph`), which walks several SQLite

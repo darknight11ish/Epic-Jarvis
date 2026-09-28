@@ -988,3 +988,114 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* "Your widget" (widget-board.js; JARVIS-API.md section 86): the owner's
+   own widget, drawn in place of the face from a fixed menu of blocks. */
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board[hidden],
+.board-blocks[hidden] {
+  display: none;
+}
+
+.board-pick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-2xs);
+}
+
+.board-pick-label {
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
+  font-weight: 600;
+}
+
+.board-pick {
+  max-width: 180px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-chip, 4px);
+  padding: 2px 4px;
+}
+
+.board-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.board-part {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-2xs);
+}
+
+.board-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.board-value {
+  color: var(--text);
+}
+
+.board-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-2xs);
+}
+
+.board-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.board-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-when {
+  color: var(--text-muted);
+  flex: none;
+}
+
+.board-note {
+  margin: 0;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.board-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

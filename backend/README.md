@@ -14973,3 +14973,57 @@ the answer, where this check cannot see them).
   claim ("I've sent the email" after only a reminder was set is not
   caught), because a wrong "nothing was done" after something really was
   done would be worse than a missed one.
+
+# Widgets you describe: `jarvis_widgets.py` (2026-09-28)
+
+## In plain words
+
+The owner says what a small widget should show - "make me a widget showing
+my next 3 reminders and a 10-minute timer button" - and Jarvis makes a
+**preview**. The AI model's only job is to turn those words into a small
+description in a fixed shape (a heading, numbers, short lists, a bar, up to
+four buttons). It never writes code. Plain code on the PC then checks the
+description and throws away anything that is not on the menu. The owner
+sees the preview in either app and taps **Add**; nothing exists before that.
+Widgets are shown on the phone's home screen ("Jarvis widget 1-3") and in
+the desktop's widget window. Contract: `docs/JARVIS-API.md` section 86.
+
+## What changed
+
+- `jarvis_widgets.py` (new, shipped whole, **no patch**): the menu (eleven
+  sources, five buttons - the Quick Settings tile actions), the strict check
+  (`validate`, `parse_model`: unknown keys, blocks, sources or buttons, a
+  web address or markup in a text, a repeated key, NaN, a far too long
+  answer, deep nesting - all refused), the model call (this PC's own model
+  only, structured output), the drafts (memory only, 30 minutes, at most 5),
+  the store (`widgets.json` beside the settings, at most 12, checked again
+  on every read), `show()` (each source read now; private words marked), and
+  the six routes.
+- `jarvis_brain_reads.py`: `install()` also switches the widget routes on,
+  so no new patch is needed (brain-reads.patch already calls it).
+- `jarvis_quick.py`: "make me a widget showing ..." makes a PREVIEW only,
+  from the owner's own typed or spoken words; refused in a chat that has
+  read outside text (`jarvis_widgets.chat_tainted`, which fails closed).
+- `_where.py`, `scripts/apply-patches.ps1`: the new module in both lists.
+- `test_widgets.py` (new); `tools/gen_widget_cases.py` writes the two apps'
+  shared cases.
+
+## Owner steps
+
+1. Run `apply-patches.ps1` as usual - it copies `jarvis_widgets.py` in.
+   Restart Jarvis. The startup lines should include
+   `widgets    Widgets you describe: on`.
+2. In the desktop's Brain, Work tab, Widgets: type "my next 3 reminders and a
+   10-minute timer button", press **Make a preview**, read it, press **Add**.
+3. Expand the desktop widget window and pick it under "Your widget".
+4. On the phone: Brain, Widgets, give it slot "Jarvis widget 1"; then touch
+   and hold the home screen, Widgets, Jarvis, "Jarvis widget 1".
+
+## Not checked, said plainly
+
+- **No real model has made a widget yet.** The tests use a stand-in. How
+  often the owner's model turns plain words into a description that passes
+  the check is unknown until it is tried on the PC; a refusal says so in
+  plain words and adds nothing.
+- The phone half is not compiled here (CI compiles it); the Rust tests run
+  only on Windows.

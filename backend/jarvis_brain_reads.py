@@ -36,6 +36,13 @@ model and no chat turn can call them (jarvis_agent.py offers nothing that
 reaches here), so what they return never reaches the AI model. Neither
 writes anything.
 
+"Widgets you describe" (2026-09-28; JARVIS-API section 86) rides on this
+module's install() too, so it needs no patch of its own: install() also
+calls jarvis_widgets.install(), which wraps do_GET and do_POST for the
+/api/widgets routes (the list, one widget filled in, and the draft, add,
+discard and delete POSTs) behind the same token and origin checks. Without
+jarvis_widgets.py the banner says so and those routes are simply not there.
+
 Wired the same way as jarvis_news.py and jarvis_sources.py: install() wraps
 the server's Handler.do_GET before anything listens, answers these two
 paths, and passes every other request to the original, untouched
@@ -107,10 +114,13 @@ def handle_get(path: str, query: str = "") -> tuple:
 def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     """Wrap `handler_cls.do_GET` so PATHS are answered here, after the
     server's own origin and token checks; every other request goes straight
-    to the original `do_GET`. `read_body` is taken only for the signature
-    the other install() functions share (every route here is GET-only)."""
+    to the original `do_GET`. `read_body` is handed on to
+    jarvis_widgets.install() (its POSTs); every route of this module's own
+    is GET-only."""
+    widgets = _install_widgets(handler_cls, origin_ok, token_ok, read_body)
     if getattr(handler_cls.do_GET, "_jarvis_brain_reads", False):
-        return "  brain      Search old chats, fact history, a chat's facts and PC help (already on)"
+        return ("  brain      Search old chats, fact history, a chat's facts and PC help "
+                "(already on)" + widgets)
     get0 = handler_cls.do_GET
 
     def _allowed(self) -> bool:
@@ -138,4 +148,19 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
 
     do_GET._jarvis_brain_reads = True
     handler_cls.do_GET = do_GET
-    return "  brain      Search old chats, fact history, a chat's facts and PC help: on"
+    return "  brain      Search old chats, fact history, a chat's facts and PC help: on" + widgets
+
+
+def _install_widgets(handler_cls, origin_ok, token_ok, read_body) -> str:
+    """"Widgets you describe" (jarvis_widgets.py): its own routes, wrapped
+    round the same Handler. Never raises; the banner line says what
+    happened, on a line of its own."""
+    if read_body is None:
+        return "\n  widgets    NOT ON (no request reader) - Widgets you describe is off"
+    try:
+        import jarvis_widgets
+        return "\n" + jarvis_widgets.install(handler_cls, origin_ok=origin_ok,
+                                              token_ok=token_ok, read_body=read_body)
+    except Exception as exc:
+        return (f"\n  widgets    NOT ON ({type(exc).__name__}) - Widgets you describe is off "
+                "until jarvis_widgets.py is back: run apply-patches.ps1 again")

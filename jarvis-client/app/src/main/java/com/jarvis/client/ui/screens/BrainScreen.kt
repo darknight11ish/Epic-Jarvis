@@ -416,6 +416,14 @@ fun BrainScreen(
                 )
             }
 
+            // "Widgets" (the owner's choice of 2026-09-28, the SAFE version):
+            // widgets described in the owner's words, previewed before Add,
+            // and which one each home-screen "Jarvis widget" shows
+            // (WidgetsPlate.kt) - the desktop's Brain -> Work -> Widgets.
+            item(key = "widgets") {
+                WidgetsSection(canAct = canAct, privateHidden = privateHidden)
+            }
+
             // "Coming up" (the owner's decisions of 2026-09-25): timers,
             // alarms, reminders and the to-do list, each with its own
             // buttons (ComingUpPlate.kt) - the desktop's Brain -> Work ->

@@ -236,6 +236,10 @@ SHIPPED = (
     # background run of it - every fact it finds waits for a yes
     "import_history.py",
     "jarvis_history_import.py",
+    # "Widgets you describe" (2026-09-28): a small checked description (never
+    # code) of what a home-screen / desktop widget shows; switched on by
+    # jarvis_brain_reads.install(), no patch of its own
+    "jarvis_widgets.py",
 )
 
 

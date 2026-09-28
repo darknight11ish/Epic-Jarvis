@@ -331,5 +331,44 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_quicklink_info" />
         </receiver>
+
+        <!-- "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): each draws
+             the saved widget the owner gave its slot under Brain, Widgets.
+             Three fixed receivers, like the three Quick Settings tile slots:
+             Android cannot add a widget type while the app runs. Exported
+             for the same reason as the two above. -->
+        <receiver
+            android:name=".widget.JarvisBoardWidgetOneReceiver"
+            android:exported="true"
+            android:label="@string/widget_board_name_1">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_board_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.JarvisBoardWidgetTwoReceiver"
+            android:exported="true"
+            android:label="@string/widget_board_name_2">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_board_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.JarvisBoardWidgetThreeReceiver"
+            android:exported="true"
+            android:label="@string/widget_board_name_3">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_board_info" />
+        </receiver>
     </application>
 </manifest>

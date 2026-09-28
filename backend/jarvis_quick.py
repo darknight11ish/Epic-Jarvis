@@ -765,6 +765,12 @@ def _match(text, now: float) -> Optional[Intent]:
                     r"|(?:clear|empty|delete)\s+(?:my|the)\s+todo\s+list", s):
         return Intent("bulk")
 
+    # --- "make me a widget ..." (jarvis_widgets.py, 2026-09-28) ---------------
+    # Before timers and reminders: "make me a widget with a 10-minute timer
+    # button" is about a widget, not a timer to set now.
+    if _WIDGET.fullmatch(s):
+        return Intent("widget_make", {"words": str(text)})
+
     # --- focus sessions (jarvis_focus.py) --------------------------------------
     got = _focus(s)
     if got is not None:
@@ -1490,6 +1496,28 @@ def _run_pc_help(intent: Intent) -> Result:
     out = PCH.answer(str(intent.f.get("topic") or ""))
     return Result(str(out.get("said") or ""), intent.name, private=bool(out.get("private")),
                   read=list(out.get("read") or []))
+
+
+#: "Widgets you describe" (jarvis_widgets.py, 2026-09-28): the sentence must
+#: START by asking for a widget, and name what it shows after that.
+_WIDGET = re.compile(
+    r"(?:make|create|build|design|add|set\s+up|give)\s+(?:me\s+)?(?:a|an|another|one|my)\s+"
+    r"(?:new\s+|small\s+|little\s+)?(?:jarvis\s+)?widget\s+"
+    r"(?:showing|that\s+shows|with|for|to\s+show|which\s+shows|of|listing|that\s+has)\s+.+")
+
+WIDGETS_MISSING = ("Your PC's Jarvis cannot make widgets yet - run apply-patches.ps1 on the PC.")
+
+
+def _run_widget(f: dict, conversation, messages) -> Result:
+    """A widget PREVIEW from the owner's own words, never a widget: the
+    owner sees it under Brain, Widgets and taps Add. Refused in a
+    conversation that has read outside text (jarvis_widgets.chat_tainted)."""
+    try:
+        import jarvis_widgets as W
+    except Exception:
+        return Result(WIDGETS_MISSING, "widget_make")
+    return Result(W.from_chat(str(f.get("words") or ""), conversation=conversation,
+                              messages=messages), "widget_make")
 
 
 #: "Ring my phone" (jarvis_find_phone.py, 2026-09-28). A phone the owner
@@ -2769,7 +2797,7 @@ def _run_settings_tool(f: dict, peer, local) -> Result:
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         seen: Optional[float] = None, temporary: bool = False,
-        peer=None, local=None) -> Optional[Result]:
+        peer=None, local=None, messages=None) -> Optional[Result]:
     """Do it. None hands the sentence to the model after all.
     `conversation`: the request's conversation_id ("cancel that" works only
     within one). `seen`: when the owner last talked to Jarvis before this
@@ -2781,6 +2809,9 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     n, f = intent.name, intent.f
     if n == "where_put":
         return _run_where_put(f, now, temporary)
+    if n == "widget_make":
+        # `messages`: the request's, as they arrived - for the taint check.
+        return _run_widget(f, conversation, messages)
     import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
@@ -3386,7 +3417,7 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
 
 def answer(text, *, sched=None, now: Optional[float] = None,
            conversation: Optional[str] = None, seen: Optional[float] = None,
-           temporary: bool = False, peer=None, local=None) -> Optional[Result]:
+           temporary: bool = False, peer=None, local=None, messages=None) -> Optional[Result]:
     """Match and act. None: not ours - ask the model. `conversation`: the
     request's conversation_id, so "cancel that" takes back only what was set
     in it; `seen`: when the owner last talked to Jarvis before this turn;
@@ -3401,7 +3432,7 @@ def answer(text, *, sched=None, now: Optional[float] = None,
         import jarvis_schedule
         sched = jarvis_schedule.get()
     res = run(intent, sched, now, conversation=conversation, seen=seen, temporary=temporary,
-             peer=peer, local=local)
+             peer=peer, local=local, messages=messages)
     if res is not None:
         try:
             sched.mark_command(text)
@@ -3568,7 +3599,8 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     text = newest_own_words(body)
     res = None if text is None else answer(text, sched=sched, now=now,
                                            conversation=conversation, seen=seen,
-                                           temporary=temporary, peer=peer, local=local)
+                                           temporary=temporary, peer=peer, local=local,
+                                           messages=body.get("messages"))
     if res is None and conversation:
         # The model answers this turn: "cancel that" after it is about the
         # model's answer, never about a reminder set before it.
