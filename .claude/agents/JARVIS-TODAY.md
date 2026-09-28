@@ -126,10 +126,22 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   the voice setting "Answers about your screen after "Hey Jarvis""
   (`hands_free_screen`, `screen_aloud` on the utterance reply) is in both
   apps).
-- **Third graphics card: detection only** - on
-  `claude/jarvis-continuation-03kls1` (2026-09-28): a third NVIDIA card is
-  now detected and explained, but runs nothing yet. The owner asked that
-  session about a third card; research here still plans for one or two.
+- **Third graphics card: its own lane, off by default** - on
+  `claude/jarvis-continuation-03kls1` (2026-09-28, 5cc47a9c): a third
+  NVIDIA card is detected, and one of the five second-card features can be
+  moved onto it with its own approval card (`second_card_third_assign`); a
+  third copy of Ollama on its own port. The owner asked that session for
+  it; research here still plans for one or two cards unless told otherwise.
+- **The plan card is wired into the tool list** there too (7675da4d,
+  `propose_plan`, gate `run_plan`), still switched off until a passing
+  `tool_eval_results.json` exists.
+- **Being built on this branch's builders (2026-09-28):** Jarvis Live
+  (`docs/LIVE-DESIGN.md`, branch `studio-live`; voice conversation plus a
+  camera kept off until the 12 GB card passes a photo test), and the money
+  limit's hard stop (answer-length caps, `studio-money-hardstop`). Built and
+  merged: the money limit, Compare, the screen-answers voice setting.
+  `docs/studio-2026-09-28/gemini-live-comparison.md` compares Live with
+  Gemini Live.
 
 ## Decided but not built yet (don't propose these as new)
 
