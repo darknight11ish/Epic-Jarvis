@@ -141,6 +141,29 @@ existing behaviour until it's switched on. Each gets the usual new-feature audit
   recalled facts late, to keep the cache warm; this measures whether that
   works before anything is changed. Numbers only - never prompt text.
 
+### Milestones 8-11 (queued 2026-09-28, the owner's picks from the leftovers)
+
+- **8. Close the crisis "wrong" gap.** A "wrong" mark on a crisis answer
+  must not count toward "suggest the bigger model", the same as the other
+  crisis exclusions. The owner gave the go-ahead that `CLAUDE.md` was waiting
+  for. The fix joins the turn's crisis flag (`chat-stream.patch`) to its id
+  (`second-card-suggest.patch`). Test: a crisis turn marked wrong leaves the
+  counters where they were.
+- **9. Match the owner's speaking pace.** A "How Jarvis talks" setting, off to
+  start, in both apps: after a spoken question, Jarvis's speech runs a little
+  faster when the owner spoke quickly and a little slower when they spoke
+  quietly or slowly, within a small range (about 0.9x to 1.15x). Never
+  applied to crisis answers, which keep Jarvis's plain voice. It changes only
+  the pace, never the words.
+- **10. microWakeWord in the wake-word trial.** Add kahrendt/microWakeWord
+  (code Apache-2.0) as a contestant beside livekit-wakeword. The licence no
+  longer matters (EpicJarvis will never be sold), so it replaces today's
+  detector only if it measures better on the owner's own recordings.
+- **11. Offline developer docs.** Android and JavaScript docsets (the Dash
+  and Zeal format: a folder of pages and a small search database), searched
+  like "Folders Jarvis may look in" and treated as outside text. Downloaded
+  once, by the owner. Most useful alongside the app builder.
+
 ## 7. Rounds three and four (later on 2026-09-28)
 
 Two more batches of suggestions from Gemini, checked the same way.
@@ -179,8 +202,8 @@ in `docs/APP-BUILDER-DESIGN.md`):
 - crawl4ai, RepoMapper/Aider RepoMap, bolt.diy, Roo Code and Plandex (AGPL):
   ideas only, placed in the design doc's milestones or its "not adopted"
   list.
-- **Offline developer docs (Dash/Zeal docsets):** a candidate for later, not
-  queued (owner, 2026-09-28).
+- **Offline developer docs (Dash/Zeal docsets):** first noted as a candidate,
+  then queued as milestone 11 (owner, 2026-09-28).
 
 **Round five** (memory, speed and voice; later on 2026-09-28):
 - Queued as milestones 4-7 (section 6): lessons from "wrong" marks,

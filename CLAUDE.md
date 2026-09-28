@@ -491,7 +491,8 @@ here rather than patched blind:
   across two separate patches (`chat-stream.patch`, which has the flag, and
   `second-card-suggest.patch`, which has the id) - mechanical, but not done
   without the owner's go-ahead given how carefully this project already
-  treats crisis handling.
+  treats crisis handling. **Go-ahead given 2026-09-28: queued as milestone 8**
+  (`docs/AUDIT-2026-09-28-REPO-REFS.md`).
 
 Decided 2026-09-27, when the owner asked for a 3D animal face (with
 Gemini's notes as input, not instructions):
@@ -537,6 +538,10 @@ before acting on any outside review; its disproven findings stay closed):
   multi-hop memory, kept only if the memory self-tests improve; (6) a skill
   that fails twice in a row stops being offered and asks "keep or turn
   off?"; (7) record how much of each prompt Ollama reuses from its cache.
+- **Milestones 8-11, the same day:** (8) close the crisis "wrong" gap below -
+  the owner's go-ahead is given; (9) a "match my speaking pace" setting, off
+  to start, both apps; (10) microWakeWord joins the wake-word trial; (11)
+  offline developer docs. Details in the audit, section 6.
 - **Copying the owner's own voice stays refused** (`jarvis_voices.py`): a
   Jarvis speaking in the owner's voice could pass its own voice check.
 
@@ -553,7 +558,7 @@ Decided 2026-09-28, after the app-builder suggestions
 - **Every merge into an app and every command (npm, Gradle) asks with a
   card**; a git worktree keeps changes apart but is not a sandbox for
   running programs.
-- Offline developer docs (Dash/Zeal docsets): a candidate, not queued.
+- Offline developer docs (Dash/Zeal docsets): queued as milestone 11 (below).
 
 ## Every new feature gets its own audit, without being asked
 
