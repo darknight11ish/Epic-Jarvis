@@ -656,6 +656,14 @@ testers, scouts and integration scouts; `.claude/agents/`):
   be closed); **identity checks** (last digits of a card, security
   questions, codes) **are always handed to the owner** in the window, never
   answered by Jarvis.
+- **A captcha can be handed to the owner's phone** (owner, 2026-09-28):
+  when a chatbot or support site shows a captcha or sign-in page, the phone
+  gets an alert, and offers **"Solve it here"** - a live picture of that one
+  browser window only, sent PC to phone over Tailscale/Meshnet, never
+  saved, and the owner's taps and typing passed to that window only while
+  Jarvis is paused there. Solving it on the PC still works. Jarvis itself
+  never solves a captcha. The app says plainly that some captchas may
+  reject taps passed on this way. Queued after customer-support chats.
 - **Jarvis may look at the owner's screen, on the PC and the phone**
   (owner, 2026-09-28), two ways: **"Look at this"** - one look when the
   owner asks (a key on the PC; the assistant gesture on the phone), nothing
