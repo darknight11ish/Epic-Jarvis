@@ -222,7 +222,12 @@
     // Floating: the whole otter bobs and rocks with the water (179 and 130
     // cycles a loop: a swell every 5.7 seconds, a rock every 7.9) - gently,
     // and less again under the calm, serious and still options.
-    const water = calm * (1 - 0.5 * o.calm) * (1 - 0.6 * o.serious) * (1 - o.still);
+    const settle = (1 - 0.5 * o.calm) * (1 - 0.6 * o.serious) * (1 - o.still);
+    const water = calm * settle;
+    // The small waves and rings on the water (seaotter.sksl's waterSlope)
+    // quieten with the options too - calm halves them, still stops them.
+    // (Only the options: each state already sets its own ripple.)
+    P.ripple *= settle;
     P.bob = 0.009 * water * wave(t, 179, 0);
     P.rock += 0.025 * water * wave(t, 130, 0.6);
     const b = wave(t, breathK, 0) * (1 + 0.6 * deepBreath);

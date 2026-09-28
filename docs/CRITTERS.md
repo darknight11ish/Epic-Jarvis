@@ -68,6 +68,42 @@ orb floats beside it.
 An otter floating on its back in a small round pool, a glowing pebble - its
 orb - on its chest. Rings spread across the water as it bobs.
 
+**More detail (the owner, 2026-09-28: "the otter looks too plain ... the
+water around the otter is too plain as well").** All of it is painted on
+in its colours, once a pixel, not built into its shape - so it cost almost
+nothing of the phone's size limit (below):
+
+- *Fur.* Soft wavy strands in short tufts along the body and arms, with
+  finer hairs inside each tuft when the picture is big enough to hold them;
+  on the face the fur fans out from the nose. The strands show more at the
+  outline, so its edge reads soft and furry rather than smooth. A dark
+  back, a lighter belly and a pale chest under the chin; darker paws and
+  feet, with faint toe creases. Three staggered rows of whisker dots on
+  each side of the muzzle (the mouth is drawn over them).
+- *Water.* Small wavelets crossing each other, shading the water and
+  catching the light in soft broken glints; rings spreading out from the
+  otter, stronger while its feet paddle; a thin, broken line of foam where
+  it meets the water; lighter water close in, deepening to near-dark at the
+  pool's edge, so the edge melts into the background instead of looking
+  like a plastic ring. Everything moves slowly - a wavelet travels about
+  its own length in two to three seconds - and asleep it is half as strong.
+  It all runs off the water's own clock from the pose (`uWater.y`, one
+  turn every 2.6 seconds), in whole turns, so nothing jumps when that
+  clock wraps round; the shared `uTime` was not used, because it speeds
+  up, slows and even reverses with the state, and wraps differently on
+  the two apps.
+- *Never sparkling when small.* Each pattern fades out as the picture gets
+  too small to hold it (it uses `uPx`, the size of a pixel): at 96 px the
+  otter looks almost as it did before, smooth; the tufts come in from
+  about 85 px (full by about 235), the whisker dots from about 160 (full
+  by about 450) and the fine hairs from about 210 (full by about 580).
+- *Calm, serious and still quieten it too.* The pose scales the ripple
+  strength it sends (`uWater.z`) by the same option weights as the
+  otter's rocking: calm halves the waves and rings, serious takes 60
+  percent off, and "Keep the animal still" stops them altogether (a still,
+  flat pool). Only the options - each state already sets its own strength
+  (asleep is half).
+
 | Jarvis is... | The otter... |
 |---|---|
 | Idle | Floats and rocks gently with the water and looks about. About every 20 seconds it does one small thing: most often rubs its pebble, kicks its feet or rolls a little to one side; now and then washes its face (its pebble resting on its chest meanwhile). |
@@ -601,7 +637,7 @@ Sketchfab). Four reasons:
   afford on march steps: **panda 59,637 (36 steps), owl 48,520 (48
   steps), otter 55,497 (48 steps)**. The mouth-drawing fixes (see "Mouth
   drawing" under "How the mouths talk") paid for themselves with a one-division smooth minimum:
-  now **panda 58,730, owl 48,113, otter 54,594**. The panda has about
+  now **panda 58,730, owl 48,158, otter 54,124** (the owl after its sine-free spots, the otter after its fur and water). The panda has about
   1,270 to spare, so any change to it must still save as much as it adds. CI runs that check on
   every push, so none of them can quietly grow over.
 - **Cost.** Measured through Skia (the engine Android draws with), per

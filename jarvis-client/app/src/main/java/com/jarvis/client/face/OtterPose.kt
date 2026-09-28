@@ -268,7 +268,12 @@ object OtterPose {
         }
 
         // Floating: the whole otter bobs and rocks with the water, gently.
-        val water = calm * (1f - 0.5f * o.calm) * (1f - 0.6f * o.serious) * (1f - o.still)
+        val settle = (1f - 0.5f * o.calm) * (1f - 0.6f * o.serious) * (1f - o.still)
+        val water = calm * settle
+        // The small waves and rings on the water (seaotter.sksl's waterSlope)
+        // quieten with the options too - calm halves them, still stops them.
+        // (Only the options: each state already sets its own ripple.)
+        p[RIPPLE] *= settle
         p[BOB] = 0.009f * water * wave(t, 179f, 0f)
         p[ROCK] += 0.025f * water * wave(t, 130f, 0.6f)
         val b = wave(t, breathK, 0f) * (1f + 0.6f * deepBreath)
