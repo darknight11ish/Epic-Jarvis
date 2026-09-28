@@ -212,6 +212,10 @@ SHIPPED = (
     # The overnight tidy (2026-09-28): "Still true?" and "Which is true
     # now?" review cards only, a kind of job on the one scheduler, no patch
     "jarvis_tidy.py",
+    # "Photo to reminder" (2026-09-28, photo-reminder.patch): POST
+    # /api/photo/scan reads a picture's dates with plain code and PROPOSES a
+    # reminder; it sets nothing up itself
+    "jarvis_photo_remind.py",
 )
 
 

@@ -364,6 +364,8 @@ data class HomeState(
      * picture itself is never in this state - only its size, in words.
      */
     val pictureLine: String? = null,
+    /** True while the PC reads the attached picture for "Photo to reminder". */
+    val photoFinding: Boolean = false,
     /**
      * The chip for text shared from another app, waiting to go with the next
      * question as its own message ("Shared text · 1,204 characters"), or null
@@ -530,6 +532,12 @@ data class HomeActions(
     val onAttachPicture: () -> Unit = {},
     /** Drop the attached picture without sending it. */
     val onRemovePicture: () -> Unit = {},
+    /**
+     * "Photo to reminder": send the attached picture to the PC, which
+     * PROPOSES a reminder ([com.jarvis.client.net.PhotoReminder]). Sets
+     * nothing up.
+     */
+    val onFindDateInPicture: () -> Unit = {},
     /** Drop the shared text without sending it. */
     val onDropShared: () -> Unit = {},
     /** Open the release page in the browser. Downloads nothing itself. */
@@ -2462,6 +2470,16 @@ private fun Composer(
         VoiceStrip("Preparing the picture…", tone = chrome.textMid)
     } else if (state.pictureLine != null) {
         VoiceStrip(state.pictureLine, tone = chrome.textMid, onDismiss = actions.onRemovePicture)
+        // "Photo to reminder": the PC reads the dates in it and proposes.
+        Quiet(
+            if (state.photoFinding) {
+                com.jarvis.client.net.PhotoReminder.READING
+            } else {
+                com.jarvis.client.net.PhotoReminder.FIND_LABEL
+            },
+            enabled = !state.photoFinding && state.link == LinkState.CONNECTED,
+            onClick = actions.onFindDateInPicture,
+        )
     }
     // Text shared from another app: sent as its own message, before what is
     // typed, never mixed into it. Dismiss drops it.

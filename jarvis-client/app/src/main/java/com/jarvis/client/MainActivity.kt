@@ -52,6 +52,7 @@ import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatPicture
+import com.jarvis.client.net.PhotoReminder
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.NoteCapture
@@ -86,6 +87,7 @@ import com.jarvis.client.ui.screens.FaqScreen
 import com.jarvis.client.ui.screens.HistoryScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
+import com.jarvis.client.ui.screens.PhotoReminderDialog
 import com.jarvis.client.ui.screens.HomeState
 import com.jarvis.client.ui.screens.InboxScreen
 import com.jarvis.client.ui.screens.LockedScreen
@@ -254,6 +256,34 @@ class MainActivity : FragmentActivity() {
 
     /** True while a picked photo is being decoded and shrunk. */
     private val pictureBusy = mutableStateOf(false)
+
+    /**
+     * "Photo to reminder" ([PhotoReminder]): what the PC found in the
+     * attached picture, on screen only. In memory, never in a Bundle; Close
+     * drops it and the words read from the picture with it.
+     */
+    private val photoScan = mutableStateOf<PhotoReminder.Scan?>(null)
+
+    /** True while the PC reads the attached picture. */
+    private val photoFinding = mutableStateOf(false)
+
+    /**
+     * "Find a date in it" under the attached picture: the same picture that
+     * would go with a question - already shrunk, in memory only - is sent to
+     * the PC, which PROPOSES a reminder. Nothing is set up here.
+     */
+    private fun findDateInPicture() {
+        val pic = picture.value ?: return
+        if (photoFinding.value) return
+        photoFinding.value = true
+        lifecycleScope.launch {
+            when (val out = JarvisRuntime.scanPhotoForDate(pic.dataUri)) {
+                is PhotoReminder.Outcome.Ok -> photoScan.value = out.scan
+                is PhotoReminder.Outcome.Failed -> JarvisRuntime.setNotice(out.why)
+            }
+            photoFinding.value = false
+        }
+    }
 
     /**
      * Android's photo picker (API 33+ has it built in): the owner chooses one
@@ -715,6 +745,19 @@ class MainActivity : FragmentActivity() {
         val faceState by JarvisRuntime.face.collectAsState()
         val power by JarvisRuntime.power.collectAsState()
         val lockdown by JarvisRuntime.lockdown.collectAsState()
+
+        // "Photo to reminder": the PC's proposal for the attached picture.
+        // Nothing is set up until one of its buttons is tapped; the add is
+        // held on a stale link here and in the runtime. Never over App
+        // lock's lock screen: nothing behind it is shown.
+        photoScan.value?.takeIf { !locked }?.let { scan ->
+            PhotoReminderDialog(
+                scan = scan,
+                canAct = link == LinkState.CONNECTED && !stale,
+                onAdd = { what, date, time -> JarvisRuntime.addPhotoReminder(what, date, time) },
+                onClose = { photoScan.value = null },
+            )
+        }
         val status by JarvisRuntime.status.collectAsState()
         val version by JarvisRuntime.version.collectAsState()
         val pending by JarvisRuntime.pending.collectAsState()
@@ -2070,6 +2113,7 @@ class MainActivity : FragmentActivity() {
                             },
                             sharedLine = sharedHeld?.let { Provenance.sharedLine(it) },
                             pictureBusy = pictureBusy.value,
+                            photoFinding = photoFinding.value,
                             noteTargets = noteTargets,
                             updateLine = updateState.newerLine.takeIf { updateChecks },
                             temporary = temporaryChat,
@@ -2162,6 +2206,7 @@ class MainActivity : FragmentActivity() {
                                     )
                                 },
                                 onRemovePicture = { picture.value = null },
+                                onFindDateInPicture = ::findDateInPicture,
                                 onInterrupt = { chat.cancel() },
                                 onNewConversation = { chat.newConversation() },
                                 // A temporary chat: no card and no hold - it only

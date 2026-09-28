@@ -654,6 +654,17 @@ $PATCHES = @(
     # question is being answered. Needs nothing new copied in: jarvis_agent.py
     # is already in this list; without it, nothing changes.
     'warm-prefix.patch'
+    # "Photo to reminder" (the owner's choice, 2026-09-28; docs/JARVIS-API.md
+    # section 83): POST /api/photo/scan reads the words in a picture with
+    # Windows' own text recognition (jarvis_ocr.py), finds a date and time
+    # with jarvis_quick.py's own parser, and PROPOSES a reminder - it sets
+    # nothing up; the owner's tap adds it through /api/schedule/add. Its
+    # jarvis_hud.py context is brain-reads.patch's own install block, so it
+    # goes after it - last, like every new patch; warm-prefix.patch, above,
+    # touches the learner thread, not these lines. Needs
+    # jarvis_photo_remind.py copied in; without it the banner says so and the
+    # route is simply not there (404).
+    'photo-reminder.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -795,6 +806,7 @@ $SHIPPED = @(
     # --- smarter memory dates, "Where did I put ...?" (2026-09-28) ---
     'jarvis_places.py'           # "where is my passport?" answered from the places the owner said, no model; jarvis_quick.py and jarvis_auto_learn.py call it, no patch
     'jarvis_tidy.py'             # the overnight tidy: "Still true?" / "Which is true now?" review cards only, on the one scheduler, only while its switch is on; no patch
+    'jarvis_photo_remind.py'     # "Photo to reminder": the dates in a picture, read on this PC and PROPOSED, never set by itself (photo-reminder.patch)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

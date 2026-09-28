@@ -3920,7 +3920,7 @@ repeating job then moves to its next time - never once per missed time.
 |---|---|---|---|
 | `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "went_off": [job], "lists": [{"name", "title", "open"}], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items of every list, oldest first (each with its `list`). Since 2026-09-25 (21.9): `went_off` - timers, alarms and reminders that went off in the last hour and are not snoozed, newest first, at most five; `lists` - the named lists with open items. An older PC sends neither. |
 | `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
-| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add only a to-do item here, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
+| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}` (since 2026-09-28, section 83: read on THIS PC's clock; 200 adds `"said"`, "Reminder set for 14:00 on Monday 12 October."; 400 for a time that has passed or a date not on the calendar) · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add a to-do item here, a one-off reminder from "Photo to reminder" (section 83, the owner's tap),, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
 | `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. |
 
 A `job`:
@@ -10027,3 +10027,95 @@ bubble; that screenshot blocking (`FLAG_SECURE`, on while App lock or "Hide
 memory lists and chat history" is on) also covers the bubble's window; and
 that `launchMode="singleTask"` does not pull the full app out of the
 bubble.
+
+## 83. Photo to reminder (added 2026-09-28)
+
+The owner's choice after the research audit (`docs/RESEARCH-AUDIT-2026-09-28.md`
+section 3, idea 11 - after Siri's Visual Intelligence). The owner gives
+Jarvis a picture of a flyer, a ticket or a message ("Summer fair, Sat 12 Oct,
+2pm"); Jarvis finds the event in it and **proposes** a reminder. Nothing is
+set up until the owner taps.
+
+### 83.1 The route
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `POST /api/photo/scan` | `{"image": "data:image/jpeg;base64,..."}` (JPEG, PNG, BMP, GIF or TIFF as a `data:` address - a web address is never fetched) | 200 `{"ok": true, "outside": true, "found": [proposal], "said", "note", "text", "left_out"}`; 400 not a picture; 413 over 4 MiB; 503 `{"ok": false, "error": <sentence>}` when Windows could not read it (not Windows, no text-recognition language, too big, too slow) | Token + origin, like every route. **No card and no gate: it sets nothing up.** Not held on a stale link (a read). Not a tool: the model cannot call it. |
+
+A `proposal` is `{"title", "date": "YYYY-MM-DD", "time": "HH:MM", "at": <epoch
+seconds>, "time_found", "passed", "when", "line"}` - at most three, in the
+order they appear. `time_found: false` means no time was found and 09:00 is
+filled in; `passed: true` means that moment has gone. `said` is one of:
+"Found a date. Check it, change anything, then tap to add it.", "Found N
+dates. ...", "No date or time found in the picture. You can still type one
+in and add the reminder yourself.", or "No words could be read in the
+picture." `note` is the outside-text line both apps show under it. `text`
+is the words read (at most `jarvis_ocr.MAX_CHARS`), shown under "Words read
+from the picture".
+
+### 83.2 How it finds a date - plain code, not the model
+
+1. The words: Windows' own text recognition (`jarvis_ocr.read_text`, section
+   36's reader), the picture on standard input, never written to disk.
+2. Dates and times: every run of up to six words is tried against
+   `jarvis_quick.py`'s own parser - the one "remind me at 6 to ..." uses.
+   It learned calendar dates for this (2026-09-28): "12 Oct", "Sat 12th
+   October 2026", "October 12", "2026-10-12", "10/12" and "13/10". A slashed
+   date is month first when both numbers could be the month
+   (`SLASH_MONTH_FIRST`, US order); "13/10" can only be day first. With no
+   year, the next one: this year's, or next year's once it has gone. A day
+   not on the calendar (31 February) is not a date. Said to Jarvis, the same
+   dates now work too: "remind me on 12 October at 2pm to pay the deposit".
+3. A time counts only when it is plainly one ("2pm", "14:00", "7.30",
+   "noon") - a bare "7" is a room number as often as a time. A range gives
+   its start ("2-5pm" is 14:00). "Today" and "tomorrow" on a picture are not
+   dates: the day the picture was made is not known.
+4. The title: the words left on the date's own line (without addresses,
+   phone numbers or prices), or the first line that reads like a heading.
+
+### 83.3 Outside text, and nothing kept
+
+The words were written by someone else. They are outside text
+(ARCHITECTURE section 3): they never reach the model, a tool, the gate or
+the learner from here; nothing in them can act - "delete all my reminders"
+on a flyer is only a suggested title the owner can see; and nothing is kept:
+the PC writes no file, row or log line with the picture or its words, and
+both apps drop them when the proposal is closed. If the owner then asks
+about the picture in chat, that is the ordinary picture path (section 36),
+outside text as usual.
+
+### 83.4 The owner's tap
+
+- **Add a Jarvis reminder** - both apps: ONE `POST /api/schedule/add
+  {"kind": "reminder", "date", "time", "text"}` (section 21.2) with the
+  boxes as the owner left them. A one-off reminder: no card, like any the
+  owner sets. Held on a stale link. A time that has passed is refused in
+  words.
+- **Also on my phone** - the phone only (ARCHITECTURE section 8): the
+  phone's own calendar opens with the event filled in (15 minutes long, as
+  section 21.10), and the owner saves it there. Nothing is sent to the PC.
+
+### 83.5 Where it is in each app
+
+- **Desktop, the Jarvis bar:** Alt+Shift+S captures the screen; the
+  capture's chip has "Find a date in it" (Rust `photo_scan`, Brain module
+  `brain/photo_reminder.rs`). The proposal opens under it; removing the
+  capture closes it.
+- **Desktop, the Brain -> Coming up:** "Photo to reminder" with "Choose a
+  picture..." for an image file, shrunk first to a screen capture's limits
+  (1920 pixels, JPEG quality 82).
+- **Phone:** share a photo or screenshot to Jarvis (the share target, as
+  for chat - attached only while the PC can read the words in pictures);
+  "Find a date in it" under the attached picture on Home opens the proposal
+  (`PhotoReminderDialog.kt`, `net/PhotoReminder.kt`). The phone reads no
+  text itself.
+
+### 83.6 Known limits, said plainly
+
+- Windows' reading of real pictures was not tested here (no Windows in the
+  development container); everything around it is, with a stand-in reader
+  (`backend/test_photo_remind.py`).
+- Only English month and weekday names, like the rest of the fast path.
+- A slashed date like "5/10" is read as **May 10** (month first, US
+  order); a flyer written day first ("5/10" meaning 5 October) comes out
+  wrong. The date box shows it, so the owner can put it right before adding.

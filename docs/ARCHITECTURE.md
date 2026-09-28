@@ -331,6 +331,16 @@ further tool call of the answer being written, even one whose card is
 approved after the press: a stop wins over an approval of the earlier
 question.
 
+**"Photo to reminder" (2026-09-28, JARVIS-API section 83) reads outside
+text without a model turn at all.** `POST /api/photo/scan` reads the words
+in a picture (`jarvis_ocr.py`) and finds a date with `jarvis_quick.py`'s own
+parser - plain code. The words never reach the model, a tool, the gate or
+the learner, and nothing is kept: the apps show a proposal in boxes, and
+only the owner's tap adds ONE one-off reminder through the ordinary
+`POST /api/schedule/add` (no card, like any one-off reminder the owner
+sets; held on a stale link). A command printed on a flyer is at most a
+suggested title the owner can see and change.
+
 ### Two rules that are easy to get wrong
 
 **`allowed` is not "a human decided".** `jarvis_gate.check()` returns
@@ -1668,6 +1678,7 @@ backend routes, in both directions; the rest are listed here only.
 |---|---|
 | The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
 | "Also on my phone" (the owner's decision of 2026-09-26; `net/AlsoOnPhone.kt`, a button on an alarm or reminder in Brain -> Coming up) | Written with the feature. It hands an alarm to the PHONE's own Clock app, or a reminder to its calendar, by the owner's tap, so it rings with the PC off - the gap it closes is the phone's alone (the PC is Jarvis's clock, and the phone hears of a job only while connected). On the desktop the PC already rings it; Windows' Clock app offers no way for another program to add an alarm; and putting an event into Google Calendar from the desktop would be a new way out of the PC (a link to Google carrying the event's words), which the creativity audit (usefulness #12) said needs the owner's OK first - not built. No route is involved, so `tools/check_parity.py` has nothing to check. |
+| "Also on my phone" on a "Photo to reminder" proposal (the owner's choice of 2026-09-28; `net/PhotoReminder.kt` `calendarOffer`, `PhotoReminderDialog.kt`; JARVIS-API section 83) | Written with the feature. Both apps have "Photo to reminder" (the Jarvis bar's screen capture and the Brain's "Choose a picture..." on the PC; a picture shared to Jarvis on the phone), and both add a Jarvis reminder on the owner's tap. Only the phone's proposal also has "Also on my phone" - the same hand-over as the row above, to the phone's own calendar - for the same reasons: on the PC Jarvis's own reminder already rings, and putting the event into a calendar from the PC would be a new way out of the PC. The picture's words are outside text on both. |
 | **Blocking screenshots while a lock is on** (`FLAG_SECURE`, `SecurityRules.blockScreenCapture`) | **Undecided on the desktop - the owner's call.** The owner decided it for the phone (apps security audit L5, 2026-09-25), where screenshots, screen recording and casting are all a tap away. Windows could do the same for Jarvis's windows (Tauri's `set_content_protected`, which keeps a window out of screenshots, recordings and screen sharing), but it was not part of that decision and is not built. |
 | **Smartwatch notifications** (`GET`/`POST /api/notifications/watch`, `phone-only` in `tools/check_parity.py`; the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17) | A smartwatch pairs with a phone, never with a Windows PC - there is nothing on the desktop for this to mean. The setting itself still lives on the PC, the same as every other approval-card switch (`docs/ARCHITECTURE.md` §3: one permission model, one place cards come from), so a stolen or borrowed phone cannot flip it on its own; only the phone ever reads it or acts on it (`.setLocalOnly(...)` on its own `NotificationCompat.Builder`s). Off by default - every notification stays on the phone; turning it on raises one card (`watch_notifications_enable`), turning it off is instant. There is no Jarvis watch app and none is built for this: Android's own, already-built-in notification bridging does the copying, to whatever companion device is paired, once this setting stops refusing it. |
 | **"Playing on your PC" buttons** (`GET /api/media`, `POST /api/media/control`, `phone-only` in `tools/check_parity.py`; the owner's choice of 2026-09-28, `docs/JARVIS-API.md` §74.2) | Written with the feature. The desktop IS the PC: Windows' own media keys and media flyout are already there, and "pause the music" said or typed to the Jarvis bar is answered without the model (§47.1). A Jarvis copy of those buttons on the PC would add a second control for the same thing. On the phone they are one tap on Home, greyed on a stale link (rule 4), no card. |

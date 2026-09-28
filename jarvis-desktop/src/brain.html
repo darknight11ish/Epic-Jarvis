@@ -486,6 +486,13 @@
               <p class="note" id="tellme-hint">Say or type "tell me when an email from Alex arrives", "tell me when the washing machine finishes", "tell me when a search for Kokoro voices shows something new", "tell me when the price on https://example.com/kettle drops below 25" or "tell me when CI fails on owner/repo" - add "urgently" to make it ring until you look. Setting one up asks once with an approval card; when it happens, Jarvis only tells you. If a watch stops working, Jarvis tells you once.</p>
               <h3 class="subhead">Reminder for next time</h3>
               <p class="note" id="next-time-hint">Say or type "remind me next time I talk about the dentist to ask about the bill". Jarvis brings it up in the chat when your own words mention it - at most 3 times, a day apart at least - and it is gone after 90 days. No card; Delete stops it.</p>
+              <h3 class="subhead">Photo to reminder</h3>
+              <p class="note" id="photo-note">Choose a photo or screenshot of a flyer, a ticket or a message. Your PC reads the words in it and suggests a reminder; nothing is set up until you tap Add. In the Jarvis bar, Alt+Shift+S then "Find a date in it" does the same for your screen.</p>
+              <div>
+                <input id="photo-file" type="file" accept="image/jpeg,image/png,image/bmp,image/gif,image/webp,image/tiff" hidden>
+                <button id="photo-choose" class="btn small" type="button">Choose a picture…</button>
+              </div>
+              <div class="photo-box" id="photo-proposal" hidden></div>
               <h3 class="subhead">To-do list</h3>
               <div id="todo-list"></div>
               <form id="todo-form" class="todo-form" autocomplete="off">

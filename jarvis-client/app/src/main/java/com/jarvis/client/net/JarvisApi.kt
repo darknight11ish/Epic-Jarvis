@@ -689,6 +689,38 @@ class JarvisApi(
     suspend fun setBriefingSenders(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(Briefing.SENDERS_PATH, Briefing.sendersBody(on))
 
+    /** Windows gets 30 seconds to read the words in one picture (backend jarvis_ocr.TIMEOUT_S). */
+    private val photoCall: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(50, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * `POST /api/photo/scan` ("Photo to reminder", JARVIS-API.md section 83):
+     * the PC reads the dates in one picture and PROPOSES a reminder
+     * ([PhotoReminder.parse] reads the answer). It sets nothing up, so it is
+     * not held on a stale link, like every read. The body is
+     * [PhotoReminder.scanBody]'s: a `data:image/` picture only.
+     */
+    suspend fun photoScan(json: String): ApiResult<Pair<Int, JsonObject?>> = withContext(Dispatchers.IO) {
+        val target = url(PhotoReminder.SCAN_PATH) ?: return@withContext ApiResult.Failed(noAddress())
+        val body = json.toRequestBody("application/json".toMediaType())
+        val req = Request.Builder().url(target).post(body).authed().build()
+        runCatching {
+            photoCall.newCall(req).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                if (resp.code == 401 || resp.code == 403) {
+                    ApiResult.Failed(ApiError.BadToken)
+                } else {
+                    ApiResult.Ok(resp.code to obj)
+                }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+    }
+
     /** "Brief me now" can wait for a slow calendar or mail server: the PC gives them 25 seconds. */
     private val briefingCall: OkHttpClient by lazy {
         client.newBuilder()

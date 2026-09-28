@@ -95,6 +95,12 @@ import {
   readMissed,
 } from "./briefing.js";
 import {
+  CHOOSE_NOTE as PHOTO_NOTE,
+  mountProposal as mountPhotoProposal,
+  READING as PHOTO_READING,
+  shrinkPicture,
+} from "./photo-reminder.js";
+import {
   HISTORY_BUTTON,
   HISTORY_BUTTON_TITLE,
   hasOtherVersions,
@@ -377,6 +383,10 @@ const dom = {
   focusStart: $("focus-start"),
   focusReport: $("focus-report"),
   comingUp: $("coming-up"),
+  photoFile: $("photo-file"),
+  photoChoose: $("photo-choose"),
+  photoNote: $("photo-note"),
+  photoProposal: $("photo-proposal"),
   todoList: $("todo-list"),
   todoForm: $("todo-form"),
   todoText: $("todo-text"),
@@ -4617,6 +4627,52 @@ function paintComingUp() {
 function renderComingUp() {
   paintComingUp();
   if (IS_TAURI && !upL.loading && Date.now() - upL.at > SCHEDULE_READ_MS) loadComingUp();
+}
+
+/* "Photo to reminder" (photo-reminder.js; JARVIS-API.md section 83): a
+   picture file, shrunk here to a screen capture's limits, goes to the PC,
+   which reads its words and PROPOSES a reminder. Nothing is set up until
+   "Add a Jarvis reminder" (ONE photo_add_reminder, held on a stale link).
+   The picture and its words live only in this page's memory, and go when
+   the proposal is closed. */
+let photoView = null;
+
+async function findDateInFile(file) {
+  if (!dom.photoProposal) return;
+  if (photoView) photoView.close();
+  photoView = null;
+  dom.photoProposal.hidden = false;
+  dom.photoProposal.textContent = PHOTO_READING;
+  dom.photoChoose.disabled = true;
+  let out;
+  try {
+    const image = await shrinkPicture(file, window);
+    out = await invoke("photo_scan", { image });
+  } catch (error) {
+    dom.photoProposal.textContent = errorText(error);
+    return;
+  } finally {
+    dom.photoChoose.disabled = false;
+  }
+  photoView = mountPhotoProposal(dom.photoProposal, out, {
+    invoke,
+    canAct: () => linkWords(currentLink()).canAct,
+    say: (said) => toast(said, "ok"),
+    onDone: () => loadComingUp(),
+    onClose: () => { photoView = null; },
+  });
+}
+
+if (dom.photoNote) dom.photoNote.textContent = PHOTO_NOTE;
+if (dom.photoChoose && dom.photoFile) {
+  dom.photoChoose.addEventListener("click", () => dom.photoFile.click());
+  dom.photoFile.addEventListener("change", () => {
+    const file = dom.photoFile.files && dom.photoFile.files[0];
+    // Cleared at once, so the same file can be chosen again and no
+    // reference to it is left on the input.
+    dom.photoFile.value = "";
+    if (file) findDateInFile(file);
+  });
 }
 
 if (dom.todoForm) {

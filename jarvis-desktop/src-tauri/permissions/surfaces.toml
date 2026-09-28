@@ -740,6 +740,20 @@ permissions = [
   "allow-brain-schedule-clear-list",
 ]
 
+# "Photo to reminder" (photo-reminder.patch; the owner's choice of
+# 2026-09-28): a picture - a screen capture in the Jarvis bar, a picture file
+# in the Brain's Coming up - goes to the PC, which reads its words with
+# Windows' own text recognition and PROPOSES a reminder; a scan sets nothing
+# up. The owner's tap then adds ONE one-off reminder (no card, like any
+# one-off reminder they set), held on a stale link.
+[[set]]
+identifier = "photo-reminder"
+description = "Send one picture to the PC to find a date in it (a proposal only - nothing is set up), and add ONE one-off reminder on the owner's tap."
+permissions = [
+  "allow-photo-scan",
+  "allow-photo-add-reminder",
+]
+
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
 # timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
 # is a read. ONE thing per call to the running session - pause, resume, +10
