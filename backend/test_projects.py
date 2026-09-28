@@ -34,7 +34,9 @@ anything tries):
     target; removing one number; limits;
   - sensitive: health and money names are marked from the name and unit
     ("Weight", "Savings", "Resting heart rate"), or by the owner; they are
-    `keep_on_screen`; the owner's mark can be taken off, the name's cannot;
+    `keep_on_screen`; the owner's mark comes off at once, the name's only
+    with ONE change_own_config card (the owner, 2026-09-28) - and comes
+    back when the name or unit changes;
   - the quick command: "log 5 km run", "I ran 5 km", "my weight is 72 kg"
     and friends parse (and near misses do not); a sentence is ours only
     when a life benchmark fits it; the answer is private for a sensitive
@@ -480,8 +482,158 @@ def t_sensitive_marking():
     # Written down in docs/PROJECTS-DESIGN.md "Build notes" as the owner's
     # call: jarvis_sensitive reads "5k" as money. Pinned here so a change to
     # that shows up, instead of the note quietly going stale.
-    check("KNOWN false alarm: \"5k time\" is marked money (owner's call to change)",
-          P.auto_sensitive("5k time", "min") == "money")
+    check("KNOWN false alarm: \"5k time\" is marked money (the owner can take it off "
+          "with a card)", P.auto_sensitive("5k time", "min") == "money")
+
+
+def t_unmark_automatic_mark_with_a_card():
+    """The owner's answer of 2026-09-28: an automatic private mark can be
+    removed by the owner, with a card first; the owner's own mark comes
+    off with no card."""
+    s = fresh()
+    p = s.create({"name": "Half marathon", "kind": "life"}, here=False)
+    b = s.add_benchmark(p["id"], {"name": "5k time", "unit": "min", "better": "lower"},
+                        here=False)
+    check("\"5k time\" starts marked (money), and says a card takes it off",
+          b["sensitive"] and b["sensitive_why"] == "money" and b["mark_auto"] == "money"
+          and b["unmark"] == "card" and b["mark_auto_removed"] is False
+          and b["unmark_waiting"] is False)
+    cards = []
+
+    class V:
+        def __init__(self, allowed, outcome, tier="ask"):
+            self.allowed, self.outcome, self.tier = allowed, outcome, tier
+
+    def gate_says(v):
+        def g(action, detail, prompt):
+            cards.append((action, detail, prompt))
+            return v
+        return g
+
+    now = lambda fn: fn()  # noqa: E731
+    pid, bid = p["id"], b["id"]
+
+    def view():
+        return s.results(pid, bid, 5)
+
+    code, out = P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(False, "denied")),
+                                 tier_of=lambda a: "ask", spawn=now)
+    check("removing an automatic mark raises ONE change_own_config card", code == 202
+          and out["waiting"] is True and len(cards) == 1
+          and cards[0][0] == "change_own_config")
+    text = cards[0][2]
+    check("the card names the benchmark, the project and why, in plain words",
+          "\"5k time\"" in text and "\"Half marathon\"" in text and "looked like money" in text
+          and "read these numbers aloud" in text and "If you say no: nothing changes" in text
+          and "If you did not just do this, say no." in text)
+    check("the card detail never leaves the PC", cards[0][1]["leaves_this_pc"] is False)
+    check("a no keeps it private, and says so", view()["sensitive"] is True
+          and view()["unmark_last"]["outcome"] == "denied"
+          and "stay private" in view()["unmark_last"]["message"])
+    P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(False, "timed_out")),
+                     tier_of=lambda a: "ask", spawn=now)
+    check("a timed-out card keeps it private", view()["sensitive"] is True)
+    P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(True, "approved", tier="auto")),
+                     tier_of=lambda a: "ask", spawn=now)
+    check("an 'allowed' at a tier that is not a person's yes keeps it private",
+          view()["sensitive"] is True and view()["unmark_last"]["outcome"] == "refused")
+    code, _ = P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(True, "approved")),
+                               tier_of=lambda a: "auto", spawn=now)
+    check("change_own_config not at tier ask: refused before any card", code == 503)
+    n = len(cards)
+    code, _ = P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(True, "approved")),
+                               tier_of=lambda a: "ask", spawn=now)
+    got = view()
+    check("a real yes takes the automatic mark off", code == 202 and len(cards) == n + 1
+          and got["sensitive"] is False and got["keep_on_screen"] is False
+          and got["mark_auto"] == "money" and got["mark_auto_removed"] is True
+          and got["unmark"] == "" and got["unmark_last"]["outcome"] == "off")
+    lb = [x for x in s.life_benchmarks() if x["id"] == bid][0]
+    check("the quick command sees it as not private any more", lb["sensitive"] is False)
+    said = P.quick_log({"match": lb, "value": 24, "unit": "min"}, store=s)
+    check("... so logging it by voice is no longer a private answer",
+          said["private"] is False and "Logged 24 min" in said["said"])
+    # The owner marks it again, then takes their OWN mark off: no card.
+    m = s.update_benchmark(pid, bid, {"sensitive": True}, here=False)
+    check("the owner can mark it private again, at once", m["sensitive"] is True
+          and m["unmark"] == "instant" and m["sensitive_why"] == "you marked it")
+    n = len(cards)
+    code, out = P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(True, "approved")),
+                                 tier_of=lambda a: "ask", spawn=now)
+    check("the owner's own mark comes off with no card", code == 200 and len(cards) == n
+          and out["changed"] is True and out["benchmark"]["sensitive"] is False)
+    code, out = P.request_unmark(pid, bid, {}, store=s, tier_of=lambda a: "ask", spawn=now)
+    check("unmarking an unmarked benchmark changes nothing", code == 200
+          and out["changed"] is False)
+    # A rename checks the name again.
+    r = s.update_benchmark(pid, bid, {"name": "Best 5k time"}, here=False)
+    check("renaming it checks the name again: the automatic mark is back",
+          r["sensitive"] is True and r["unmark"] == "card" and r["mark_auto_removed"] is False)
+    r = s.update_benchmark(pid, bid, {"better": "lower"}, here=False)
+    check("an edit that is not the name or unit keeps it as it is", r["sensitive"] is True)
+    # Renamed while the card waits: the late yes changes nothing.
+    held = []
+    code, _ = P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(True, "approved")),
+                               tier_of=lambda a: "ask", spawn=held.append)
+    check("while a card waits, the benchmark says so",
+          code == 202 and view()["unmark_waiting"] is True)
+    code2, _ = P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(True, "approved")),
+                                tier_of=lambda a: "ask", spawn=held.append)
+    check("a second card for the same benchmark is refused while one waits", code2 == 409)
+    s.update_benchmark(pid, bid, {"name": "My 5k time"}, here=False)
+    held[0]()
+    got = view()
+    check("renamed while the card waits: the late yes keeps it private",
+          got["sensitive"] is True and got["unmark_last"]["outcome"] == "withdrawn"
+          and got["unmark_waiting"] is False)
+    # The owner marks it while the card waits: the late yes changes nothing.
+    held = []
+    P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(True, "approved")),
+                     tier_of=lambda a: "ask", spawn=held.append)
+    s.update_benchmark(pid, bid, {"sensitive": True}, here=False)
+    held[0]()
+    got = view()
+    check("marked again by the owner while the card waits: stays private",
+          got["sensitive"] is True and got["mark_auto_removed"] is False
+          and got["unmark_last"]["outcome"] == "withdrawn")
+    # Both marks: the owner's comes off at once, Jarvis's asks.
+    n = len(cards)
+    code, out = P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(False, "denied")),
+                                 tier_of=lambda a: "ask", spawn=now)
+    got = view()
+    check("both marks: the owner's comes off at once, Jarvis's waits for the card",
+          code == 202 and out["changed"] is True and len(cards) == n + 1
+          and got["marked_by_you"] is False and got["sensitive"] is True)
+    # A card whose benchmark is deleted while it waits.
+    held = []
+    P.request_unmark(pid, bid, {}, store=s, gate=gate_says(V(True, "approved")),
+                     tier_of=lambda a: "ask", spawn=held.append)
+    s.delete_benchmark(pid, bid)
+    held[0]()
+    check("a benchmark deleted while its card waits: nothing is written",
+          P._M_STATE["last"][bid]["outcome"] == "withdrawn")
+    # The route.
+    b2 = s.add_benchmark(pid, {"name": "Savings", "unit": "$"}, here=False)
+    code, out = P.handle_post(f"/api/projects/{pid}/benchmarks/{b2['id']}/unmark", {},
+                              store=s, gate=gate_says(V(False, "denied")),
+                              tier_of=lambda a: "ask", spawn=now)
+    check("the unmark route is reachable through handle_post", code == 202)
+    code, _ = P.handle_post(f"/api/projects/{pid}/benchmarks/{'9' * 32}/unmark", {}, store=s)
+    check("unmarking an unknown benchmark is a 404", code == 404)
+
+
+def t_an_older_projects_db_gains_the_new_column():
+    import sqlite3
+    path = _TMP / "old-projects.db"
+    c = sqlite3.connect(str(path))
+    c.executescript(P._SCHEMA.replace("    auto_cleared TEXT,\n", ""))
+    c.commit()
+    c.close()
+    s = P.Projects(path)
+    p = s.create({"name": "Old", "kind": "life"}, here=False)
+    b = s.add_benchmark(p["id"], {"name": "Weight", "unit": "kg"}, here=False)
+    check("a projects.db from steps 1 and 2 opens and gains auto_cleared",
+          b["sensitive"] is True and b["unmark"] == "card")
 
 
 # --------------------------------------------------------------------------
@@ -659,6 +811,7 @@ def t_routes():
           and pr(f"/api/projects/{pid}/benchmarks") == ("benchmarks", pid)
           and pr(f"/api/projects/{pid}/benchmarks/{bid}") == ("bench", pid, bid)
           and pr(f"/api/projects/{pid}/benchmarks/{bid}/log") == ("log", pid, bid)
+          and pr(f"/api/projects/{pid}/benchmarks/{bid}/unmark") == ("unmark", pid, bid)
           and pr(f"/api/projects/{pid}/benchmarks/{bid}/delete") == ("bench_delete", pid, bid)
           and pr(f"/api/projects/{pid}/benchmarks/{bid}/results/{rid}/delete")
           == ("result_delete", pid, bid, rid))

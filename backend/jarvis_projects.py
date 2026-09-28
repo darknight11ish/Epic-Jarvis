@@ -67,9 +67,12 @@ WHO MAY DO WHAT, AND WHICH NEED A CARD (ARCHITECTURE section 3)
     "weight" or "resting heart rate"), or because the owner marked it. Its
     numbers are flagged `keep_on_screen`: never read aloud (the quick
     command's answer is `private`, so the apps keep it on screen), and
-    never to be sent anywhere. The owner can mark more; an automatic mark
-    cannot be taken off from here (the owner's call - see the design's
-    Build notes).
+    never to be sent anywhere. The owner can mark more, and take their own
+    mark off at once. A mark Jarvis made by itself from the name can come
+    off too, but only with ONE card first (change_own_config, like
+    Shareable ON) - because afterwards the numbers may be read aloud (the
+    owner's answer of 2026-09-28: `jarvis_sensitive` reads "5k" as money).
+    Renaming the benchmark or changing its unit checks the name again.
 
 WHAT IS KEPT, AND WHERE
 `projects.db` in the Jarvis settings folder, beside schedule.db and
@@ -126,8 +129,9 @@ KINDS = ("coding", "life")
 BENCH_KINDS = ("number", "command")
 BETTER = ("higher", "lower")
 
-#: The one card this module raises: turning Shareable ON. The same action
-#: "Folders Jarvis may look in" raises, so the gate needs no new line.
+#: The card this module raises: turning Shareable ON, and taking an
+#: automatic private mark off a benchmark. The same action "Folders Jarvis
+#: may look in" raises, so the gate needs no new line.
 CARD_ACTION = "change_own_config"
 
 TITLE = "Projects"
@@ -379,6 +383,20 @@ def auto_sensitive(name: str, unit: str = "") -> str:
     return t or ""
 
 
+def marks(name: str, unit: str, owner, cleared) -> dict:
+    """Both private marks of one benchmark, worked out the same way
+    everywhere (the view, the quick command): {"auto": the topic the name
+    looks like, "auto_holds": that topic unless the owner took it off with
+    a card, "owner": the owner's own mark, "sensitive": either holds}.
+    `cleared` is the topic the owner's yes took off; a different topic
+    (after a rename) holds again."""
+    auto = auto_sensitive(name, unit)
+    holds = auto if auto and (cleared or "") != auto else ""
+    own = bool(owner)
+    return {"auto": auto, "auto_holds": holds, "owner": own,
+            "sensitive": bool(holds) or own}
+
+
 # --------------------------------------------------------------------------
 #   The store
 # --------------------------------------------------------------------------
@@ -407,6 +425,7 @@ CREATE TABLE IF NOT EXISTS benchmarks (
     target REAL,
     command TEXT,
     owner_sensitive INTEGER NOT NULL DEFAULT 0,
+    auto_cleared TEXT,
     created REAL NOT NULL,
     changed REAL NOT NULL
 );
@@ -464,6 +483,12 @@ class Projects:
         c.row_factory = sqlite3.Row
         if not self._ready:
             c.executescript(_SCHEMA)
+            cols = {r[1] for r in c.execute("PRAGMA table_info(benchmarks)").fetchall()}
+            if "auto_cleared" not in cols:
+                # A projects.db from build steps 1 and 2, before an automatic
+                # mark could be taken off.
+                c.execute("ALTER TABLE benchmarks ADD COLUMN auto_cleared TEXT")
+            c.commit()
             self._ready = True
         return c
 
@@ -492,9 +517,8 @@ class Projects:
     # ---- views --------------------------------------------------------------------
 
     def _bench_view(self, c, b, *, points: int = 0) -> dict:
-        auto = auto_sensitive(b["name"], b["unit"])
-        owner = bool(b["owner_sensitive"])
-        sensitive = bool(auto) or owner
+        m = marks(b["name"], b["unit"], b["owner_sensitive"], b["auto_cleared"])
+        auto, owner, sensitive = m["auto_holds"], m["owner"], m["sensitive"]
         rows = c.execute("SELECT id, value, at, source FROM results WHERE bench = ? "
                          "ORDER BY at DESC, logged DESC LIMIT 2", (b["id"],)).fetchall()
         count = c.execute("SELECT COUNT(*) FROM results WHERE bench = ?",
@@ -505,8 +529,16 @@ class Projects:
             "id": b["id"], "name": b["name"], "kind": b["kind"], "unit": b["unit"],
             "better": b["better"], "target": b["target"],
             "sensitive": sensitive,
-            "sensitive_why": ("you marked it" if owner and not auto else auto),
+            "sensitive_why": (auto or ("you marked it" if owner else "")),
             "marked_by_you": owner,
+            # The automatic mark: what the name looks like ("money"), and
+            # whether the owner took it off with a card.
+            "mark_auto": m["auto"],
+            "mark_auto_removed": bool(m["auto"]) and not auto,
+            # How the private mark comes off: "instant" (only the owner's
+            # own mark holds it), "card" (Jarvis's own mark holds it), or
+            # "" (not marked).
+            "unmark": ("card" if auto else "instant" if owner else ""),
             "keep_on_screen": sensitive,
             "keep_on_screen_words": KEEP_ON_SCREEN if sensitive else "",
             "results": int(count),
@@ -517,6 +549,11 @@ class Projects:
                               b["better"], target=b["target"]),
             "created": b["created"], "changed": b["changed"],
         }
+        with _P_LOCK:
+            waiting = _M_STATE["pending"].get(b["id"])
+            last = _M_STATE["last"].get(b["id"])
+        v["unmark_waiting"] = bool(waiting)
+        v["unmark_last"] = dict(last) if last else None
         if b["kind"] == "command":
             v["command"] = b["command"] or ""
             v["runnable"] = False
@@ -719,6 +756,8 @@ class Projects:
             c.execute("DELETE FROM benchmarks WHERE project = ?", (pid,))
             c.execute("DELETE FROM projects WHERE id = ?", (pid,))
         _withdraw_share(pid)
+        for bid in benches:
+            _withdraw_unmark(bid)
         _audit("projects.delete", {"id": pid, "benchmarks": len(benches)})
         return True
 
@@ -779,6 +818,13 @@ class Projects:
     def update_benchmark(self, pid: str, bid: str, body: dict, *, here: bool) -> dict:
         if not isinstance(body, dict):
             raise ValueError("send the fields to change")
+        # A late yes on an "unmark" card and a rename or a new mark of the
+        # owner's never interleave: the card's write takes this lock too.
+        with _P_SWITCH:
+            return self._update_benchmark(pid, bid, body, here=here)
+
+    def _update_benchmark(self, pid: str, bid: str, body: dict, *, here: bool) -> dict:
+        recheck = False
         with self._lock, self._db() as c:
             self._project_row(c, pid)
             b = self._bench_row(c, pid, bid)
@@ -791,11 +837,14 @@ class Projects:
                     raise OverflowError("this project already has a benchmark with that name")
                 sets.append("name = ?")
                 args.append(name)
+                recheck = recheck or name != b["name"]
             if "kind" in body and body.get("kind") != b["kind"]:
                 raise ValueError("a benchmark's kind cannot change - make a new one")
             if "unit" in body:
+                unit = _one_line(body.get("unit"), MAX_UNIT, "the unit")
                 sets.append("unit = ?")
-                args.append(_one_line(body.get("unit"), MAX_UNIT, "the unit"))
+                args.append(unit)
+                recheck = recheck or unit != b["unit"]
             if "better" in body:
                 if body.get("better") not in (None,) + BETTER:
                     raise ValueError('"better" is "higher", "lower" or null')
@@ -807,7 +856,8 @@ class Projects:
             if "sensitive" in body:
                 if not isinstance(body.get("sensitive"), bool):
                     raise ValueError("sensitive is true or false")
-                # Only YOUR mark changes; a mark made from the name stays.
+                # Only YOUR mark changes; a mark made from the name stays
+                # (it comes off only through request_unmark(), with a card).
                 sets.append("owner_sensitive = ?")
                 args.append(int(body["sensitive"]))
             if "command" in body:
@@ -818,21 +868,56 @@ class Projects:
                 sets.append("command = ?")
                 args.append(_one_line(body.get("command"), MAX_COMMAND, "the command",
                                       required=True))
+            if recheck:
+                # A new name or unit is checked again: an automatic mark the
+                # owner took off comes back if the new words still look like
+                # health or money.
+                sets.append("auto_cleared = NULL")
             if sets:
                 now = self.clock()
                 sets.append("changed = ?")
                 args.append(now)
                 c.execute(f"UPDATE benchmarks SET {', '.join(sets)} WHERE id = ?", (*args, bid))
+        if recheck or body.get("sensitive") is True:
+            # The card showed the old words, or the owner marked it again:
+            # a waiting "unmark" card no longer counts.
+            _withdraw_unmark(bid)
+        with self._lock, self._db() as c:
             v = self._bench_view(c, self._bench_row(c, pid, bid))
         _audit("projects.benchmark.update", {"project": pid, "id": bid, "fields": len(sets)})
         return v
 
-    def delete_benchmark(self, pid: str, bid: str) -> bool:
+    def unmark_owner(self, pid: str, bid: str) -> bool:
+        """Take the owner's own private mark off at once. True when it was on."""
         with self._lock, self._db() as c:
+            self._project_row(c, pid)
+            b = self._bench_row(c, pid, bid)
+            if not b["owner_sensitive"]:
+                return False
+            c.execute("UPDATE benchmarks SET owner_sensitive = 0, changed = ? WHERE id = ?",
+                      (self.clock(), bid))
+        _audit("projects.benchmark.unmark", {"project": pid, "id": bid, "whose": "owner"})
+        return True
+
+    def clear_auto_mark(self, pid: str, bid: str, name: str, unit: str, topic: str) -> None:
+        """After a person's yes on the card: take off the automatic mark -
+        only if the benchmark still has the words the card showed."""
+        with self._lock, self._db() as c:
+            self._project_row(c, pid)
+            b = self._bench_row(c, pid, bid)
+            if (b["name"], b["unit"]) != (name, unit) or auto_sensitive(name, unit) != topic:
+                raise LookupError("the benchmark changed while the card waited")
+            c.execute("UPDATE benchmarks SET auto_cleared = ?, changed = ? WHERE id = ?",
+                      (topic, self.clock(), bid))
+        _audit("projects.benchmark.unmark", {"project": pid, "id": bid, "whose": "auto"})
+
+    def delete_benchmark(self, pid: str, bid: str) -> bool:
+        with _P_SWITCH, self._lock, self._db() as c:
             self._project_row(c, pid)
             self._bench_row(c, pid, bid)
             c.execute("DELETE FROM results WHERE bench = ?", (bid,))
             c.execute("DELETE FROM benchmarks WHERE id = ?", (bid,))
+        _withdraw_unmark(bid)
         _audit("projects.benchmark.delete", {"project": pid, "id": bid})
         return True
 
@@ -901,13 +986,13 @@ class Projects:
             return []
         with self._lock, self._db() as c:
             rows = c.execute("SELECT b.id, b.project, b.name, b.unit, b.owner_sensitive, "
-                             "p.name AS project_name FROM benchmarks b JOIN projects p ON "
-                             "p.id = b.project WHERE b.kind = 'number' ORDER BY b.created"
-                             ).fetchall()
+                             "b.auto_cleared, p.name AS project_name FROM benchmarks b "
+                             "JOIN projects p ON p.id = b.project WHERE b.kind = 'number' "
+                             "ORDER BY b.created").fetchall()
         return [{"id": r["id"], "project": r["project"], "name": r["name"], "unit": r["unit"],
                  "project_name": r["project_name"],
-                 "sensitive": bool(r["owner_sensitive"]) or bool(auto_sensitive(r["name"],
-                                                                                r["unit"]))}
+                 "sensitive": marks(r["name"], r["unit"], r["owner_sensitive"],
+                                    r["auto_cleared"])["sensitive"]}
                 for r in rows]
 
 
@@ -1387,6 +1472,160 @@ def request_shareable(pid: str, body, *, store: Optional[Projects] = None,
 
 
 # --------------------------------------------------------------------------
+#   Taking a private mark off a benchmark: the owner's own mark at once;
+#   Jarvis's automatic mark with ONE card (the owner, 2026-09-28)
+# --------------------------------------------------------------------------
+
+_M_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}}
+
+UNMARK_WORDS = {
+    "off": "The private mark is off. Jarvis may read these numbers aloud now.",
+    "denied": "The numbers stay private - you said no.",
+    "timed_out": "The numbers stay private - the card timed out.",
+    "refused": "The numbers stay private.",
+    "withdrawn": "The numbers stay private - the benchmark changed, or you marked it "
+                 "again, before you answered.",
+    "failed": "The numbers stay private - the benchmark changed while the card waited.",
+}
+
+TOPIC_WORDS = {"health": "health", "money": "money"}
+
+
+def unmark_card(name: str, project: str, topic: str, unit: str = "") -> str:
+    looks = TOPIC_WORDS.get(topic, f"a private topic ({topic})")
+    words = f"\"{name}\"" + (f" (in {unit})" if unit else "")
+    return "\n".join([
+        f"Take the private mark off \"{name}\" in the project \"{project}\"?",
+        "",
+        f"Jarvis marked this benchmark private by itself, because its name {words} "
+        f"looked like {looks}. While it is marked, its numbers stay on screen: never read "
+        "aloud, and never sent anywhere.",
+        "",
+        "If you take the mark off, Jarvis may read these numbers aloud, like any other "
+        "answer.",
+        "",
+        "Renaming the benchmark or changing its unit checks it again. You can mark it "
+        "private yourself at any time, instantly.",
+        "",
+        "If you did not just do this, say no.",
+        "",
+        "If you say no: nothing changes. The numbers stay private.",
+    ])
+
+
+def _finish_unmark(bid: str, token: str, outcome: str, why: str = "") -> None:
+    with _P_LOCK:
+        p = _M_STATE["pending"].get(bid)
+        if p and p.get("token") == token:
+            _M_STATE["pending"].pop(bid, None)
+        _M_STATE["withdrawn"].discard(token)
+        _M_STATE["last"][bid] = {"outcome": outcome, "why": why, "at": time.time(),
+                                 "message": UNMARK_WORDS.get(outcome, "")}
+    _audit("projects.unmark.card", {"id": bid, "outcome": outcome})
+
+
+def _withdraw_unmark(bid: str) -> None:
+    with _P_LOCK:
+        p = _M_STATE["pending"].pop(bid, None)
+        if p:
+            _M_STATE["withdrawn"].add(p["token"])
+
+
+def _decide_unmark(pid: str, bid: str, token: str, bench: dict, project: str,
+                   store: Projects, gate: Callable, tier_of: Callable) -> None:
+    text = unmark_card(bench["name"], project, bench["topic"], bench["unit"])
+    detail = {"text": text, "what": "take the private mark off one benchmark",
+              "setting": "Private mark", "to": bench["name"], "leaves_this_pc": False}
+    try:
+        v = gate(CARD_ACTION, detail, text)
+    except Exception as exc:
+        return _finish_unmark(bid, token, "refused",
+                              f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(CARD_ACTION) != "ask":
+        return _finish_unmark(bid, token, "refused", f"the gate answered at tier {vtier!r}, "
+                                                     f"which is not a person saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _finish_unmark(bid, token, outcome)
+        return _finish_unmark(bid, token, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _P_SWITCH:
+        with _P_LOCK:
+            withdrawn = token in _M_STATE["withdrawn"]
+        if withdrawn:
+            return _finish_unmark(bid, token, "withdrawn")
+        try:
+            store.clear_auto_mark(pid, bid, bench["name"], bench["unit"], bench["topic"])
+        except Exception as exc:
+            return _finish_unmark(bid, token, "failed", type(exc).__name__)
+    _finish_unmark(bid, token, "off")
+
+
+def _bench_only(store: Projects, pid: str, bid: str) -> dict:
+    out = store.results(pid, bid, 1)
+    out.pop("points", None)
+    out.pop("points_shown", None)
+    return out
+
+
+def request_unmark(pid: str, bid: str, body=None, *, store: Optional[Projects] = None,
+                   gate: Optional[Callable] = None, tier_of: Optional[Callable] = None,
+                   spawn: Optional[Callable] = None) -> tuple:
+    """POST /api/projects/<id>/benchmarks/<bid>/unmark {}. The owner's own
+    mark comes off at once, no card. A mark Jarvis made from the name: 202
+    and ONE card; it comes off only on a person's yes."""
+    store = store or get()
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    if body is not None and not isinstance(body, dict):
+        return 400, {"ok": False, "error": "send a JSON object"}
+    try:
+        with store._lock, store._db() as c:
+            p = store._project_row(c, pid)
+            b = store._bench_row(c, pid, bid)
+            m = marks(b["name"], b["unit"], b["owner_sensitive"], b["auto_cleared"])
+            project = p["name"]
+            bench = {"name": b["name"], "unit": b["unit"], "topic": m["auto_holds"]}
+    except KeyError:
+        return 404, {"ok": False, "error": "no such project, benchmark or number"}
+    if m["auto_holds"]:
+        t = tier_of(CARD_ACTION)
+        if t != "ask":
+            return 503, {"ok": False, "error": (
+                f"{CARD_ACTION} is tier {t!r} in jarvis-framework.toml; taking Jarvis's own "
+                f"private mark off needs a person to say yes, so it must be 'ask'")}
+        with _P_LOCK:
+            if bid in _M_STATE["pending"]:
+                return 409, {"ok": False, "error": "A card for this is already waiting - "
+                                                   "answer it first."}
+    with _P_SWITCH:
+        mine = store.unmark_owner(pid, bid) if m["owner"] else False
+    if not m["auto_holds"]:
+        return 200, {"ok": True, "changed": mine, "benchmark": _bench_only(store, pid, bid),
+                     "message": ("Your private mark is off." if mine
+                                 else "This benchmark has no private mark.")}
+    with _P_LOCK:
+        if bid in _M_STATE["pending"]:
+            return 409, {"ok": False, "error": "A card for this is already waiting - answer "
+                                               "it first."}
+        token = uuid.uuid4().hex
+        _M_STATE["pending"][bid] = {"token": token, "since": time.time()}
+    try:
+        spawn(lambda: _decide_unmark(pid, bid, token, bench, project, store, gate, tier_of))
+    except Exception:
+        with _P_LOCK:
+            _M_STATE["pending"].pop(bid, None)
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True, "changed": mine,
+                 "benchmark": _bench_only(store, pid, bid),
+                 "message": ("Your own mark is off. " if mine else "")
+                 + "Waiting for your approval. The numbers stay private unless you approve "
+                   "the card."}
+
+
+# --------------------------------------------------------------------------
 #   The one store this backend uses
 # --------------------------------------------------------------------------
 
@@ -1419,6 +1658,7 @@ def parse_route(route: str) -> Optional[tuple]:
         ("bench", pid, bid)                         .../benchmarks/<bid>
         ("bench_delete", pid, bid)                  .../benchmarks/<bid>/delete
         ("log", pid, bid)                           .../benchmarks/<bid>/log
+        ("unmark", pid, bid)                        .../benchmarks/<bid>/unmark
         ("result_delete", pid, bid, rid)            .../benchmarks/<bid>/results/<rid>/delete
     """
     if not isinstance(route, str):
@@ -1440,8 +1680,9 @@ def parse_route(route: str) -> Optional[tuple]:
         bid = p[2]
         if len(p) == 3:
             return ("bench", pid, bid)
-        if len(p) == 4 and p[3] in ("delete", "log"):
-            return ("bench_delete" if p[3] == "delete" else "log", pid, bid)
+        if len(p) == 4 and p[3] in ("delete", "log", "unmark"):
+            return ({"delete": "bench_delete", "log": "log", "unmark": "unmark"}[p[3]],
+                    pid, bid)
         if len(p) == 6 and p[3] == "results" and p[4] and p[5] == "delete":
             return ("result_delete", pid, bid, p[4])
     return None
@@ -1521,6 +1762,8 @@ def handle_post(route: str, body, *, here: bool = False,
         if kind == "result_delete":
             store.delete_result(hit[1], hit[2], hit[3])
             return 200, {"ok": True, "deleted": True}
+        if kind == "unmark":
+            return request_unmark(hit[1], hit[2], body, store=store, **card)
     except Exception as exc:
         return _err(exc)
     return 404, {"ok": False, "error": "no such route"}
@@ -1608,6 +1851,9 @@ def _reset_for_tests() -> None:
         _P_STATE["pending"].clear()
         _P_STATE["withdrawn"].clear()
         _P_STATE["last"].clear()
+        _M_STATE["pending"].clear()
+        _M_STATE["withdrawn"].clear()
+        _M_STATE["last"].clear()
     with _ONE_LOCK:
         _ONE = None
     _ARMED = False
