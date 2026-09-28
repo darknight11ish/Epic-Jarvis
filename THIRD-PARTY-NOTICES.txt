@@ -554,6 +554,27 @@ https://huggingface.co/BAAI/bge-small-en-v1.5
   from memory, NOT re-checked here (huggingface.co is blocked from where
   this was written).
 
+MEMORY SELF-TEST DATA (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+LoCoMo (Snap Research), CC BY-NC 4.0 -
+https://github.com/snap-research/locomo
+  Test data only, never shipped to the PC's backend folder or in either
+  app: backend/fixtures/locomo_multihop.json holds the chat turns of five
+  of the ten conversations in its data/locomo10.json and their multi-hop
+  questions (answers and evidence turn ids), read out at commit
+  3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376 by tools/build_locomo_fixture.py
+  - cut down, with a few malformed evidence ids mended or dropped, as the
+  fixture's own "fixes" list says; the text itself is unchanged. Used by
+  `backend/eval_memory.py --locomo` (the memory self-test, milestone 13).
+  No LoCoMo code is used.
+  From "Evaluating Very Long-Term Conversational Memory of LLM Agents",
+  Adyasha Maharana, Dong-Ho Lee, Sergey Tulyakov, Mohit Bansal, Francesco
+  Barbieri and Yuwei Fang, ACL 2024. Licensed under the Creative Commons
+  Attribution-NonCommercial 4.0 International licence
+  (https://creativecommons.org/licenses/by-nc/4.0/legalcode), the text in
+  LoCoMo's LICENSE.txt. Non-commercial use only, which this build is
+  (rule 5).
+
 THE PHONE APP (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 The Android app's own list - AndroidX, Kotlin and kotlinx, OkHttp and Okio,
