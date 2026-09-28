@@ -107,13 +107,25 @@ const drawn = (frame) => frame.evaluate(() => ({
   ...window.__faceVoice.now(), lastMouth: window.__faceVoice.lastMouth, lastState: window.__faceVoice.lastState,
 }));
 const near = (a, b, tol, what) => assert.ok(Math.abs(a - b) <= tol, `${what}: ${a} is not ${b} (±${tol})`);
+/** Tell the face it is speaking and wait until the pose has melted fully
+ *  into it, so the mouth is drawn at full size. The half-second melt starts
+ *  on the first frame DRAWN in the new state, not when the message is
+ *  posted - on a slow machine that frame comes late (CI once read the mouth
+ *  at 0.88 of the track's 0.99, still melting, after a fixed 0.7 s wait). */
+async function speakingSettled(page, frame) {
+  await state(page, "speaking");
+  for (const until = Date.now() + 3000; Date.now() < until;) {
+    if ((await drawn(frame)).lastState === "speaking") break;
+    await page.waitForTimeout(50);
+  }
+  await page.waitForTimeout(700);            // past the pose's half-second melt into speaking
+}
 
 /* ── The face ────────────────────────────────────────────────────────────── */
 
 await check("the animal's mouth follows the track at the playback clock", async () => {
   const { page, frame, errors } = await host();
-  await state(page, "speaking");
-  await page.waitForTimeout(700);            // past the pose's half-second melt into speaking
+  await speakingSettled(page, frame);
   const id = 1790000000000;
   await cue(page, { id, n: 0, track: PACKED, t: 0, at: Date.now(), playing: false });
   let opens = [];
@@ -165,8 +177,7 @@ await check("speaking with no real voice keeps an animal's mouth shut", async ()
 
 await check("a paused clip freezes where it stopped and shuts the mouth; play carries on from there", async () => {
   const { page, frame } = await host();
-  await state(page, "speaking");
-  await page.waitForTimeout(700);
+  await speakingSettled(page, frame);
   const id = 1790000001000;
   await cue(page, { id, n: 0, track: PACKED, t: 0, at: Date.now(), playing: false });
   await clock(page, { id, n: 1, t: 0.45, playing: true });
