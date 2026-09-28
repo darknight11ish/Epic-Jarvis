@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Jarvis widget" 1-3 (JarvisBoardWidget.kt; docs/JARVIS-API.md section
+     87). initialLayout is required for the same reason as
+     widget_approval_info.xml. updatePeriodMillis is the launcher's half-hour
+     floor: the widget also redraws whenever the link, a timer or reminder,
+     or the saved widgets change while Jarvis is running. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:description="@string/widget_board_desc"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:maxResizeWidth="500dp"
+    android:maxResizeHeight="400dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

@@ -80,6 +80,13 @@
     <string name="widget_quicklink_desc">The link status, and a one-tap Talk button that opens the
         app with the hold-to-talk mic ready - it does not record from the widget itself.</string>
 
+    <!-- "Widgets you describe" (widget/JarvisBoardWidget.kt; JARVIS-API.md section 87). -->
+    <string name="widget_board_name_1">Jarvis widget 1</string>
+    <string name="widget_board_name_2">Jarvis widget 2</string>
+    <string name="widget_board_name_3">Jarvis widget 3</string>
+    <string name="widget_board_desc">A widget you described to Jarvis - choose which under Brain,
+        Widgets. Its buttons are the small Quick Settings tile actions only.</string>
+
     <!-- "Floating Jarvis": Overlay (data/FloatingAvatar.kt, service/AvatarOverlayService.kt). -->
     <string name="fgs_avatar_overlay_reason">Draws the small "Floating Jarvis" avatar
         the owner turned on, over other apps, so it stays reachable by voice

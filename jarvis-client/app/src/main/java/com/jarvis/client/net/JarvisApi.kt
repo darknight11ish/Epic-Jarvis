@@ -721,6 +721,50 @@ class JarvisApi(
         }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
+    /** A widget preview waits for the PC's AI model: it gets 40 seconds there. */
+    private val widgetDraftCall: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(65, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /** `GET /api/widgets` - the saved widgets, the previews and the menu ([JarvisWidgets]). A read. */
+    suspend fun widgets(): ApiResult<JsonObject> = probe(JarvisWidgets.LIST_PATH)
+
+    /** `GET /api/widgets/show?id=` - one widget, filled in now on the PC. A read. */
+    suspend fun widgetShow(id: String): ApiResult<JsonObject> {
+        if (!JarvisWidgets.validId(id)) return ApiResult.Failed(ApiError.Malformed("not a widget id"))
+        return probe(JarvisWidgets.SHOW_PATH + "?id=" + id)
+    }
+
+    /**
+     * One of the widget POSTs ([JarvisWidgets.POST_PATHS]) - anything else is
+     * refused here, before anything is sent. The answer's status and body
+     * come back together, so the PC's own sentence is shown for a refusal.
+     */
+    suspend fun widgetPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            if (path !in JarvisWidgets.POST_PATHS) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a widget route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            val caller = if (path == JarvisWidgets.DRAFT_PATH) widgetDraftCall else shortCall
+            runCatching {
+                caller.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(resp.code to obj)
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     /** "Brief me now" can wait for a slow calendar or mail server: the PC gives them 25 seconds. */
     private val briefingCall: OkHttpClient by lazy {
         client.newBuilder()

@@ -152,6 +152,31 @@ class ClientSettings(context: Context) {
         _quickTiles.value = _quickTiles.value.toMutableList().also { it[slot] = action }
     }
 
+    private val _homeWidgets = MutableStateFlow(
+        (0 until com.jarvis.client.net.JarvisWidgets.SLOTS).map { slot ->
+            prefs.getString(KEY_HOME_WIDGET_PREFIX + slot, null)
+                ?.takeIf { com.jarvis.client.net.JarvisWidgets.validId(it) }
+        },
+    )
+
+    /**
+     * Which saved widget each home-screen "Jarvis widget" slot shows
+     * ([com.jarvis.client.net.JarvisWidgets], docs/JARVIS-API.md section
+     * 87), always [com.jarvis.client.net.JarvisWidgets.SLOTS] long; null is
+     * "nothing chosen". Only the widget's id is kept here, on this phone -
+     * never its words.
+     */
+    val homeWidgets: StateFlow<List<String?>> = _homeWidgets.asStateFlow()
+
+    fun setHomeWidget(slot: Int, id: String?) {
+        if (slot !in 0 until com.jarvis.client.net.JarvisWidgets.SLOTS) return
+        val keep = id?.takeIf { com.jarvis.client.net.JarvisWidgets.validId(it) }
+        prefs.edit {
+            if (keep == null) remove(KEY_HOME_WIDGET_PREFIX + slot) else putString(KEY_HOME_WIDGET_PREFIX + slot, keep)
+        }
+        _homeWidgets.value = _homeWidgets.value.toMutableList().also { it[slot] = keep }
+    }
+
     private val _security = MutableStateFlow(SecurityRules.fromStored { prefs.getString(it, null) })
 
     /**
@@ -239,5 +264,6 @@ class ClientSettings(context: Context) {
         const val KEY_LISTEN_WANTED = "phone_listening_wanted"
         /** `quick_tile_0`, `quick_tile_1`, ... - one per tile slot. */
         const val KEY_TILE_PREFIX = "quick_tile_"
+        const val KEY_HOME_WIDGET_PREFIX = "home_widget_"
     }
 }

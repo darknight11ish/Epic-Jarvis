@@ -154,9 +154,12 @@ abstract class QuickTileService(private val slot: Int) : TileService() {
         }
     }
 
-    private companion object {
+    // Internal, not private, since 2026-09-28: the home-screen "Jarvis
+    // widget" buttons (widget/JarvisBoardWidget.kt) run the SAME actions
+    // through the same [perform], so the two can never drift apart.
+    internal companion object {
         /** Distinct from the link tile's request code 0, one per slot. */
-        const val REQUEST_BASE = 0x51
+        private const val REQUEST_BASE = 0x51
 
         private val main = Handler(Looper.getMainLooper())
 
