@@ -75,8 +75,9 @@ own-networks-only addresses, prompt-injection tests (AgentDojo cases),
 "What asks first" page.
 
 **Apps** - desktop: Tauri 2 (`jarvis-desktop/`), HUD, Brain, Settings,
-widget, floating face, 20 faces plus the red panda (owl and otter planned,
-`docs/CRITTERS.md` on the mascot branch). Phone: `jarvis-client/` (Compose):
+widget, floating face, 20 faces plus three animals - red panda, pygmy owl,
+sea otter - with "voice follows the face" (`docs/CRITTERS.md`, on the
+mascot branch until merged). Phone: `jarvis-client/` (Compose):
 widgets, quick tile, share target, assistant role (no speech-to-text),
 "Also on my phone", floating Jarvis.
 

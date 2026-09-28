@@ -536,7 +536,12 @@ testers, scouts and integration scouts; `.claude/agents/`):
 - **Animal faces offer their own voice once** (owner, 2026-09-28): the
   first time the owner picks an animal face, one line asks "The panda has
   its own voice. Use it?" (Use it / Keep my voice), remembered per face. A
-  face never changes the voice by itself. Animal voices are Kokoro voices,
+  face never changes the voice by itself. **Confirmed 2026-09-28 over the
+  mascot branch's "Voice follows the face" switch, which was built on by
+  default:** that switch stays, but starts off, and the one-time question
+  turns it on. **The sea otter must not use Kokoro's "Sky" voice** (its name
+  matches the voice OpenAI withdrew in 2024 over a likeness complaint);
+  give it another Kokoro voice with the same playful pitch. Animal voices are Kokoro voices,
   blends and pitch from Jarvis's own sources only - never a real person's
   voice - and must pass the "not the owner's voice" check.
 - **Upgrade the voice pack to Kokoro v1.0** (owner, 2026-09-28): the best
