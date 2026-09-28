@@ -2321,12 +2321,17 @@ pub(crate) fn stop_listening_because(app: &AppHandle, why: String) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .take();
-    if LIVE_MODE.load(Ordering::SeqCst) {
+    let live = LIVE_MODE.load(Ordering::SeqCst);
+    if live {
         // The microphone is gone: Jarvis Live cannot carry on either.
         crate::live::listener_stopped(app);
     }
+    // A paused Live has no listener open, but it still ends here: say why.
+    let tell = live || taken.is_some();
     if let Some(active) = taken {
         let _ = active.stop_tx.send(());
+    }
+    if tell {
         let _ = app.emit(VOICE_HEARD, HeardReply::unavailable(why));
     }
 }

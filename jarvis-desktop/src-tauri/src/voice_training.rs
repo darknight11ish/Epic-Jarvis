@@ -88,6 +88,8 @@ const VOICES_TIMEOUT: Duration = Duration::from_secs(60);
 const VOICE_CLIP_MAX_BYTES: usize = 2_900_000;
 
 /// What push-to-talk and "hey Jarvis" listening say while Settings records.
+/// Settings' recorder took the microphone while Jarvis Live was on.
+pub(crate) const LIVE_ENDED_FOR_SETTINGS: &str = "Jarvis Live ended because Settings is recording.";
 pub(crate) const MIC_IN_SETTINGS: &str =
     "Settings is recording with the microphone. Finish or cancel that first.";
 /// What a backend without the training route, or too old for it, is told.
@@ -234,12 +236,15 @@ pub fn start_voice_sample(
     if app.state::<crate::talk_type::TalkTypeState>().mic_busy() {
         return Err(crate::voice::TALK_TYPE_HAS_MIC.to_string());
     }
-    stop_listening_because(
-        &app,
+    // Jarvis Live has this microphone too (even while paused): recording
+    // ends Live, and the owner is told that - not that "hey Jarvis" stopped.
+    let why = if crate::voice::LIVE_MODE.load(std::sync::atomic::Ordering::SeqCst) {
+        LIVE_ENDED_FOR_SETTINGS
+    } else {
         "This PC stopped listening for \"hey Jarvis\" while you record in Settings. Turn \
          it back on here when you are done."
-            .to_string(),
-    );
+    };
+    stop_listening_because(&app, why.to_string());
     let mut guard = state.active.lock().map_err(poisoned)?;
     if guard.is_some() {
         return Err("Already recording. Press Stop first.".to_string());

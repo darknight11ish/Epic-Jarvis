@@ -624,6 +624,7 @@ const live = {
   stale: false,
   lockUnknown: false,
   callUnknown: false,
+  micWait: "",
   thinking: false,
   short: false,
   flashUntil: 0,
@@ -4737,6 +4738,7 @@ function paintLive() {
   if (show) {
     dom.liveTitle.textContent = sign.show ? sign.title : TITLE;
     let detail = sign.detail;
+    if (!detail && sign.stop && live.micWait) detail = live.micWait;
     if (!detail && sign.stop && live.lockUnknown) detail = LOCK_UNKNOWN_WORDS;
     if (!detail && sign.stop && live.callUnknown) detail = SEEN.call_unknown;
     if (!detail && sign.stop && now < live.troubleUntil) detail = SEEN.trouble;
@@ -5186,6 +5188,8 @@ function liveTake(p) {
   live.stale = p.stale === true;
   live.lockUnknown = p.lockUnknown === true;
   live.callUnknown = p.callUnknown === true;
+  // live.rs WAIT_TALK_TYPE: talk-to-type holds the microphone for now.
+  live.micWait = typeof p.micWait === "string" ? p.micWait : "";
   const s = live.status || {};
   if (s.state === "ended") {
     if (!(before && before.state === "ended" && before.session === s.session)) {

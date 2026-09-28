@@ -909,15 +909,23 @@ permissions = [
 # the owner can always end Live from the sign that says it is on.
 [[set]]
 identifier = "live"
-description = "Jarvis Live: read the session (fixed words and minutes, never what was said), start it (no card; held on a stale link and under App lock), stop it, more time, carry on, mute or unmute, and keep the microphone closed while a card is shown or an answer is spoken under \"Interrupt by tap only\"."
+description = "Jarvis Live: read the session (fixed words and minutes, never what was said), start it (no card; held on a stale link and under App lock), stop it, more time, carry on, mute or unmute."
 permissions = [
   "allow-live-status",
   "allow-live-start",
   "allow-live-stop",
   "allow-live-act",
   "allow-live-mute",
-  "allow-live-hold",
 ]
+
+# Live's microphone holds - closed while a card is shown or an answer is
+# spoken under "Interrupt by tap only" (live.rs `live_hold`). Only the Jarvis
+# bar shows cards and plays answers, so only it holds this; the badge never
+# calls it (the 2026-09-28 desktop audit, #5).
+[[set]]
+identifier = "live-hold"
+description = "Jarvis Live: keep the microphone closed while the Jarvis bar shows a card or speaks an answer under \"Interrupt by tap only\", and open it again after."
+permissions = ["allow-live-hold"]
 
 [[set]]
 identifier = "focus"
