@@ -523,7 +523,7 @@ export const HANDS_FREE_LIVE = Object.freeze([
   },
   {
     id: "live_like_hey_jarvis",
-    label: "Be as careful as with Hey Jarvis",
+    label: "Be as careful as with \"Hey Jarvis\"",
     detail: "Everything said in Jarvis Live gets the \"Hey Jarvis\" caution: no facts learned without a card, and memory or private answers stay on screen.",
   },
 ]);

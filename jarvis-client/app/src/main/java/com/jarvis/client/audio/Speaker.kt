@@ -479,6 +479,15 @@ class Speaker(private val context: Context) {
         }
     }
 
+    /**
+     * Called when something else takes the audio focus while Jarvis is
+     * speaking (a call ringing or starting). Jarvis Live uses it to stop
+     * talking and pause for the call (JarvisRuntime.liveFocusLost - which
+     * checks the phone's call state itself, so a focus change of Jarvis's
+     * own is never taken for a call).
+     */
+    @Volatile var onFocusLost: (() -> Unit)? = null
+
     private fun requestFocus(): AudioFocusRequest? {
         val manager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             ?: return null
@@ -489,6 +498,11 @@ class Speaker(private val context: Context) {
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build(),
             )
+            .setOnAudioFocusChangeListener { change ->
+                if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                    runCatching { onFocusLost?.invoke() }
+                }
+            }
             .build()
         val granted = runCatching { manager.requestAudioFocus(request) }
             .getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)

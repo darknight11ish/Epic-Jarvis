@@ -292,12 +292,14 @@ object VoiceStrict {
         else -> SCREEN_ON_SCREEN
     }
 
-    /** `gate.hands_free_live` as the screen reads it: "" stays "", known values stay, anything else is the strictest. */
-    fun handsFreeLive(raw: String): String = when (raw) {
-        "" -> ""
-        in LIVE_ORDER -> raw
-        else -> LIVE_LIKE_WAKE
-    }
+    /**
+     * `gate.hands_free_live` as the screen reads it: known values stay;
+     * "" (an older PC) and anything unknown (a newer PC's choice this phone
+     * does not know) are "" - not offered, as on the desktop (the Live
+     * review, M3: the phone used to show an unknown value as the strictest
+     * choice, which was not what the PC had).
+     */
+    fun handsFreeLive(raw: String): String = if (raw in LIVE_ORDER) raw else ""
 
     /** Reads the stricter check out of a whole `/api/voice/status` body. Never throws. */
     fun parse(status: JsonObject?): View {

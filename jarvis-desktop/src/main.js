@@ -193,6 +193,7 @@ import {
   liveTransition,
   loadInterrupt,
   LOCK_UNKNOWN_WORDS,
+  deviceWords,
   moveWords,
   NEEDS_VOICE,
   onHere,
@@ -4537,6 +4538,7 @@ onEvent((frame) => {
 const LIVE_TRAIN_PLACE = "voice";
 /** Shown once, the first time Live is on here, until the first answer. */
 const LIVE_EXPLAINED_KEY = "jarvis.live.explained";
+const LIVE_TYPE_HINT = "Type to Jarvis - typed answers stay on screen";
 const LIVE_EXPLAINER =
   "Jarvis now listens after every answer - just talk, no \"Hey Jarvis\" needed. Every sentence is checked for your voice first.";
 
@@ -4615,6 +4617,14 @@ function paintLive() {
     dom.liveFix.hidden = !(notice && live.noticeNeedsVoice);
     dom.liveStopTalking.hidden = !(on && jarvisTalking() && loadInterrupt() !== "off");
     dom.liveMove.hidden = !(sign.move || offer);
+  }
+  // Typing in Live: the same hint the phone's text box gives.
+  if (on && !dom.prompt.dataset.livePlaceholder) {
+    dom.prompt.dataset.livePlaceholder = dom.prompt.placeholder;
+    dom.prompt.placeholder = LIVE_TYPE_HINT;
+  } else if (!on && dom.prompt.dataset.livePlaceholder) {
+    dom.prompt.placeholder = dom.prompt.dataset.livePlaceholder;
+    delete dom.prompt.dataset.livePlaceholder;
   }
   // The tap buttons sit under the answer, not in the sign's row.
   const chips = on && !liveCardHolds() ? live.chips : [];
@@ -4889,6 +4899,8 @@ function liveHeard(heard) {
         live.elsewhere = "";
         paintLive();
       }, 30000);
+      // Said, in fixed words, as the phone does - the offer was easy to miss.
+      sayAside(`${SEEN.elsewhere.replace("{device}", deviceWords(live.elsewhere))}.`);
       break;
     case "stop":
       if (loadInterrupt() !== "off") {

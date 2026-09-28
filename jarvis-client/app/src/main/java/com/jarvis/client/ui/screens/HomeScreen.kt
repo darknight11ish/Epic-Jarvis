@@ -58,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -792,6 +793,9 @@ fun HomeScreen(
             NavRow(state, actions)
         }
         state.updateLine?.let { UpdateLine(it, actions.onOpenUpdate) }
+        // Jarvis Live's sign on Home while it is on (here or on the PC) -
+        // the review's C2: Live was invisible here, and hard to find.
+        HomeLiveStrip(onOpen = actions.onOpenLive)
         state.keepAliveOffer?.let { KeepAliveOffer(it, actions.onKeepLinkAlive, actions.onDismissKeepAlive) }
 
         val listState = rememberLazyListState()
@@ -1401,6 +1405,39 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
  * about Jarvis, and it must not push the approval cards down. Not inside
  * [NavRow] either, which is hidden by default.
  */
+/**
+ * Jarvis Live on Home (the review of 2026-09-28, C2): "Jarvis Live · 24 min
+ * left" with End Live and Open while it is on here; "Jarvis Live is on your
+ * PC" with Move it here while it runs there. Fixed words only. The talk
+ * button meanwhile says Live is already listening (VoiceSession.begin).
+ */
+@Composable
+private fun HomeLiveStrip(onOpen: () -> Unit) {
+    val status by com.jarvis.client.JarvisRuntime.liveStatus.collectAsState()
+    val pending by com.jarvis.client.JarvisRuntime.pending.collectAsState()
+    val stale by com.jarvis.client.JarvisRuntime.stale.collectAsState()
+    val rules = com.jarvis.client.voice.LiveRules
+    val on = rules.onHere(status)
+    val cardHolds = remember(pending, status) { com.jarvis.client.JarvisRuntime.liveCardHolds() }
+    val sign = rules.sign(status, stale = stale, cardShown = cardHolds, endedAgo = Int.MAX_VALUE)
+    // On here, or on the PC; never an old end.
+    if (!sign.show || (!on && !sign.move)) return
+    val chrome = LocalChrome.current
+    Row(
+        Modifier.fillMaxWidth().background(chrome.surface1).padding(start = 16.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+            Text(sign.title, style = MaterialTheme.typography.labelLarge, color = chrome.textHi)
+            if (sign.detail.isNotEmpty()) {
+                Text(sign.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            }
+        }
+        if (on) Quiet(rules.END_LIVE, onClick = { com.jarvis.client.JarvisRuntime.liveEndNow("owner") })
+        Quiet(if (sign.move) "Move it here" else "Open", onClick = onOpen)
+    }
+}
+
 @Composable
 private fun UpdateLine(line: String, onOpen: () -> Unit) {
     val chrome = LocalChrome.current

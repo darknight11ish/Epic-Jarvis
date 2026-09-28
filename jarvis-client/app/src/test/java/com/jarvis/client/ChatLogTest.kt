@@ -137,6 +137,9 @@ class ChatLogTest {
         assertEquals(listOf(true, true, true, false), t.turns.map { it.answerKept })
         assertEquals(1790000004L, t.turns[2].at)
         assertNull(ChatLog.transcript(obj("""{"turns":[]}""")))
+        // Jarvis Live's side-talk marker in an older chat: "(not for Jarvis)", never raw.
+        val side = ChatLog.transcript(obj("""{"id":"c-3","turns":[{"role":"assistant","text":"[not for me]"}]}"""))
+        assertEquals("(not for Jarvis)", side!!.turns[0].text)
     }
 
     @Test

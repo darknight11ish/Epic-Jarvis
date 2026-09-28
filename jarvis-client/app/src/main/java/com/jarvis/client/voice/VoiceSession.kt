@@ -97,6 +97,10 @@ class VoiceSession(
      * runtime acts on it; nothing here speaks it.
      */
     private val onLive: (Heard) -> Unit = {},
+    /** A Live answer made its first sound ("Heard you - thinking" goes). */
+    private val onLiveSound: () -> Unit = {},
+    /** A Live answer was side talk: never spoken, "(not for Jarvis)" shown. */
+    private val onLiveSideTalk: () -> Unit = {},
     /**
      * Sends a turn and returns the reply, or null if it could not be sent.
      * `onRoute` is called once with the answer's `X-Jarvis-Route` header (or
@@ -669,10 +673,12 @@ class VoiceSession(
      * One FIXED line of Jarvis Live's ("I'm listening.", "Two minutes
      * left..."), in the PC's voice - or this phone's own offline voice when
      * the PC says it may. Never anything heard, and not a turn: nothing goes
-     * to the model. Not over a reply that is being spoken.
+     * to the model. Not over a reply that is being spoken: false then (the
+     * caller may try again when it ends), true when it was said or tried.
      */
-    suspend fun sayLine(text: String) {
-        if (text.isBlank() || _phase.value == Phase.SPEAKING) return
+    suspend fun sayLine(text: String): Boolean {
+        if (text.isBlank()) return true
+        if (_phase.value == Phase.SPEAKING) return false
         lineSpeaking = true
         try {
             if (_phase.value == Phase.OFF) speaker.arm()
@@ -686,6 +692,7 @@ class VoiceSession(
         } finally {
             lineSpeaking = false
         }
+        return true
     }
 
     /** Jarvis Live: stop the answer being spoken and the one being written (End, a card). */
@@ -747,6 +754,13 @@ class VoiceSession(
      *   which is why this is passed through rather than assumed.
      */
     fun begin(source: String = JarvisApi.SOURCE_PUSH_TO_TALK) {
+        // Jarvis Live has the microphone - even while it is closed for a
+        // pause: the talk button does not open a second recorder beside it
+        // (the Live audit, fit 3). The PC's own words, as on the PC.
+        if (liveOn()) {
+            _notice.value = LiveRules.SEEN.getValue("busy_mic") + "."
+            return
+        }
         val previous = job
         if (previous != null && !previous.isCompleted) {
             // Not silent. The old guard returned having done nothing — no
@@ -1087,6 +1101,7 @@ class VoiceSession(
             }
             lastAnswer = reply.orEmpty()
             val sideTalk = turn.live && LiveRules.isSideTalk(reply)
+            if (sideTalk) onLiveSideTalk()
             val remainder = (if (sideTalk) "" else reply.orEmpty())
                 .let { if (spokenUpTo <= it.length) it.substring(spokenUpTo) else "" }
                 .let(SpeechText::stripMarkdownForSpeech)
@@ -1141,6 +1156,7 @@ class VoiceSession(
         moment.replyStarted()
         momentJob?.join()
         if (turn.silenced) return
+        if (!turn.sounded && turn.live) onLiveSound()
         turn.sounded = true
         interrupt.replyStarted(SystemClock.elapsedRealtime())
         // Only the answer's own words count as where the owner cut it off -

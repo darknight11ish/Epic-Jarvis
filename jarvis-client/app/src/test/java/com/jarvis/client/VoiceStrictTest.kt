@@ -1007,7 +1007,7 @@ class VoiceStrictTest {
         assertEquals(VoiceStrict.LIVE_LIKE_WAKE, view("live_trusted_denied").handsFreeLive)
         assertEquals(VoiceStrict.LIVE_TRUST_FULLY, view("live_trusted").handsFreeLive)
         assertEquals("", VoiceStrict.handsFreeLive(""))
-        assertEquals(VoiceStrict.LIVE_LIKE_WAKE, VoiceStrict.handsFreeLive("loud"))
+        assertEquals("an unknown value is not offered, as on the desktop", "", VoiceStrict.handsFreeLive("loud"))
     }
 
     @Test
@@ -1044,7 +1044,7 @@ class VoiceStrictTest {
     @Test
     fun `Jarvis Live - the same words as the desktop's, and the plate only when the PC reports it`() {
         assertEquals(
-            listOf("Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with Hey Jarvis"),
+            listOf("Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with \"Hey Jarvis\""),
             StrictVoice.HANDS_FREE_LIVE.map { it.label },
         )
         assertEquals(VoiceStrict.LIVE_ORDER, StrictVoice.HANDS_FREE_LIVE.map { it.value })

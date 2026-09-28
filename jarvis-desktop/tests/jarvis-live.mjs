@@ -224,7 +224,7 @@ await check("Settings -> Voice: the Live trust setting's three choices, the same
   assert.deepEqual(VT.HANDS_FREE_LIVE.map((c) => c.id),
     ["live_trust_fully", "live_button_start_only", "live_like_hey_jarvis"]);
   assert.deepEqual(VT.HANDS_FREE_LIVE.map(VT.choiceText),
-    ["Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with Hey Jarvis"]);
+    ["Trust Live fully (default)", "Only when I start it with the button", "Be as careful as with \"Hey Jarvis\""]);
   // Which way is looser depends on the choice now; unknown counts as the strictest.
   assert.equal(VT.loosens("hands_free_live", "live_button_start_only", "live_trust_fully"), false);
   assert.equal(VT.loosens("hands_free_live", "live_button_start_only", "live_like_hey_jarvis"), true);

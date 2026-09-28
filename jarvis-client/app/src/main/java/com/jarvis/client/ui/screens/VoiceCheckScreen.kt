@@ -33,7 +33,6 @@ import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.JarvisRuntime
-import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceRounds
 import com.jarvis.client.voice.VoiceTraining
@@ -374,10 +373,11 @@ private fun CheckPlates(
                         onPick = onPick,
                     )
                 }
-                // "Interrupting Jarvis in Live": this phone's own choice, kept
-                // on this phone - it changes only how this phone listens while
-                // Jarvis talks, never what is trusted, so it needs no card.
-                LiveInterruptPlate()
+                // "Interrupting Jarvis" is this phone's own, ONE setting for
+                // Live and ordinary replies (the owner's answer of 2026-09-28):
+                // on Platform checks, beside the other listening switches -
+                // not here, above a footnote about cards that does not apply
+                // to it (the review of 2026-09-28).
                 Text(
                     "Making it stricter applies at once. Making it looser asks first: an approval " +
                         "card on your PC or this phone's Home screen, and nothing changes until you " +
@@ -528,28 +528,3 @@ private fun SettingPlate(
     }
 }
 
-/**
- * "Interrupting Jarvis in Live" (voice.LiveRules.INTERRUPT - the PC's own
- * words): by voice (the default) or by tap only. Kept on this phone
- * (ClientSettings.liveInterrupt); no card either way, since it changes only
- * how this phone listens while Jarvis talks.
- */
-@Composable
-private fun LiveInterruptPlate() {
-    val chrome = LocalChrome.current
-    val chosen by JarvisRuntime.settings.liveInterrupt.collectAsState()
-    Plate {
-        Text(LiveRules.INTERRUPT_TITLE, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
-        LiveRules.INTERRUPT.forEach { c ->
-            Gap(8)
-            OptionChip(
-                label = if (c.recommended) "${c.label} (recommended)" else c.label,
-                isSelected = chosen == c.id,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { JarvisRuntime.settings.setLiveInterrupt(c.id) },
-            )
-            Gap(4)
-            Text(c.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
-        }
-    }
-}
