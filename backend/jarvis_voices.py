@@ -42,6 +42,8 @@ THE ROUTES (voices.patch):
     POST /api/voice/voices/speed     {"speed": "slower" | "normal" | "faster"}
     POST /api/voice/voices/speaker   {"speaker": "0" .. "10"} - which Kokoro voice
     POST /api/voice/voices/face      {"enabled": true | false} - voice follows the face
+    POST /api/voice/voices/face_offer {"face": <animal>, "answer": "use" | "keep"} - the
+                                     one-time "has its own voice. Use it?" answer
 
 THE PERMISSION MODEL (docs/ARCHITECTURE.md section 3). Creating a voice and
 switching Jarvis to one each raise ONE approval card through jarvis_gate,
@@ -479,7 +481,8 @@ def set_speaker(body) -> tuple:
 # falls back to the built-in voice, and so to the face's voice. The owner's speaking speed still applies ON TOP of the
 # animal's pace, so "Faster" makes the owl faster too.
 #
-# A switch, ON by default (the owner picked "voice follows the face"), set
+# A switch, OFF by default (the owner, 2026-09-28; the one-time question below
+# turns it on for an animal face - OFFER_QUESTION), set
 # from either app (POST /api/voice/voices/face), kept in voices/state.json.
 # NO CARD EITHER WAY: like the speed and the built-in voice, it is cosmetic -
 # it never changes what Jarvis does, asks or remembers.
@@ -546,6 +549,18 @@ PACE_LABEL = {"slower": "Slower", "normal": "Normal", "faster": "Faster"}
 #: "Try it": the one line an animal says. Fixed here - an app never sends
 #: words to be spoken this way.
 TRY_LINE = "Hello, it's Jarvis. This is how I sound as the {name}."
+
+# THE ONE-TIME QUESTION (the owner, 2026-09-28): the first time the owner
+# picks an animal face, one line asks "The Red Panda has its own voice. Use
+# it?" (Use it / Keep my voice), remembered per face in state.json
+# `face_offered`. "Use it" turns "Voice follows the face" on; "Keep my
+# voice" leaves it off. A face never changes the voice by itself. Shown only
+# while the switch is off - with it on, the animal already speaks. No card:
+# the switch it can turn on has none.
+OFFER_QUESTION = "The {name} has its own voice. Use it?"
+OFFER_USE = "Use it"
+OFFER_KEEP = "Keep my voice"
+OFFER_ANSWERS = ("use", "keep")
 
 
 def appearance_face() -> str:
@@ -678,10 +693,23 @@ def _animal_row(face: str) -> dict:
                      f"{_pace_words(av['pace'])}.")}
 
 
+def face_offer() -> Optional[dict]:
+    """The one-time question both apps show, or None: only while the face
+    showing is an animal, "Voice follows the face" is off, and that face was
+    not asked about yet."""
+    face = appearance_face()
+    row = FACE_VOICES.get(face)
+    if row is None or face_voice_on() or face in _read_state()["face_offered"]:
+        return None
+    return {"face": face, "question": OFFER_QUESTION.format(name=row["name"]),
+            "use": OFFER_USE, "keep": OFFER_KEEP}
+
+
 def face_voice_view() -> dict:
     """GET /api/voice/voices `face_voice`: the switch, the one line both
-    apps show under it saying what is happening now, and each animal's
-    voice with the choices and words for changing it."""
+    apps show under it saying what is happening now, each animal's voice
+    with the choices and words for changing it, and the one-time question
+    (`offer`, face_offer())."""
     on = face_voice_on()
     face = appearance_face()
     row = animal_voice(face)
@@ -721,7 +749,8 @@ def face_voice_view() -> dict:
             "animal_choices": {
                 "voices": [{"id": k, "label": v} for k, v in KOKORO_VOICES],
                 "paces": [{"id": k, "label": PACE_LABEL[k]} for k, _ in SPEEDS],
-                "pitch": {"min": MIN_SEMITONES, "max": MAX_SEMITONES, "step": PITCH_STEP}}}
+                "pitch": {"min": MIN_SEMITONES, "max": MAX_SEMITONES, "step": PITCH_STEP}},
+            "offer": face_offer()}
 
 
 def set_face_voice(body) -> tuple:
@@ -743,6 +772,40 @@ def set_face_voice(body) -> tuple:
 
 
 _NO_ANIMAL = "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey"
+
+
+def answer_face_offer(body) -> tuple:
+    """POST /api/voice/voices/face_offer {"face": <animal id>, "answer":
+    "use" | "keep"}: the one-time question answered, at once, no card (see
+    OFFER_QUESTION). The face is marked asked either way, so the question
+    never comes back for it; "use" also turns "Voice follows the face" on."""
+    if not isinstance(body, dict) or set(body) != {"face", "answer"}:
+        return 400, {"ok": False, "error": 'send the face and the answer, "use" or "keep"'}
+    if not isinstance(body["face"], str) or body["face"] not in FACE_VOICES:
+        return 400, {"ok": False, "error": _NO_ANIMAL}
+    if not isinstance(body["answer"], str) or body["answer"] not in OFFER_ANSWERS:
+        return 400, {"ok": False, "error": 'the answer must be "use" or "keep"'}
+    face, answer = body["face"], body["answer"]
+    name = FACE_VOICES[face]["name"]
+    with _STATE_LOCK:
+        asked = list(_read_state()["face_offered"])
+        if face not in asked:
+            asked.append(face)
+        changes = {"face_offered": asked}
+        if answer == "use":
+            changes["face_voice"] = True
+        err = _write_state(**changes)
+    if err:
+        return 500, {"ok": False, "error": err}
+    _audit("voices.face_offer", {"face": face, "answer": answer})
+    _publish({"what": "face_offer", "outcome": answer})
+    if answer == "use":
+        message = (f"The {name} speaks in its own voice now. \"{FACE_VOICE_TITLE}\" is on; "
+                   f"turn it off in the voice settings to go back.")
+    else:
+        message = (f"Jarvis keeps your voice. You can still turn on \"{FACE_VOICE_TITLE}\" "
+                   f"in the voice settings.")
+    return 200, {"ok": True, "message": message, "face_voice": face_voice_view()}
 
 
 def set_face_animal(body) -> tuple:
@@ -905,11 +968,12 @@ _STATE_LOCK = threading.RLock()
 def _read_state() -> dict:
     """{"active": id, "better_voice": bool, "speed": choice or None,
     "speaker": choice or None, "face_voice": bool or None, "face_animals":
-    {face: {"speaker", "semitones", "pace"}}}. Missing or broken is the
-    built-in voice, the better voice off and no speed, built-in-voice,
-    face-voice or animal-voice choice made - the safe reading."""
+    {face: {"speaker", "semitones", "pace"}}, "face_offered": [face, ...]}.
+    Missing or broken is the built-in voice, the better voice off and no
+    speed, built-in-voice, face-voice or animal-voice choice made, and no
+    face asked about yet - the safe reading."""
     out = {"active": BUILTIN, "better_voice": False, "speed": None, "speaker": None,
-           "face_voice": None, "face_animals": {}}
+           "face_voice": None, "face_animals": {}, "face_offered": []}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -930,6 +994,9 @@ def _read_state() -> dict:
     if isinstance(fv, bool):
         out["face_voice"] = fv
     out["face_animals"] = _clean_animals(raw.get("face_animals"))
+    fo = raw.get("face_offered")
+    if isinstance(fo, list):
+        out["face_offered"] = [f for f in FACE_VOICES if f in fo]
     return out
 
 
@@ -2978,7 +3045,8 @@ ROUTES = {"/api/voice/voices/create": create, "/api/voice/voices/active": switch
           "/api/voice/voices/speed": set_speed, "/api/voice/voices/speaker": set_speaker,
           "/api/voice/voices/face": set_face_voice,
           "/api/voice/voices/face_animal": set_face_animal,
-          "/api/voice/voices/face_animal/try": try_face_animal}
+          "/api/voice/voices/face_animal/try": try_face_animal,
+          "/api/voice/voices/face_offer": answer_face_offer}
 
 
 def handle_post(route: str, body) -> tuple:

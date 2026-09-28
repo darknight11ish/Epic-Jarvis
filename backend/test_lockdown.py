@@ -281,6 +281,51 @@ def t_the_ways_out_the_table_cannot_reach():
     check("off: a search from the owner's own question runs without a card", lines == [])
 
 
+def t_turning_it_on_stops_what_is_already_talking():
+    """Security audit 2026-09-28 #2: ON ends a running chatbot conversation
+    or comparison at once (each module's stop_for_lockdown), and the words
+    and the card name chatbots and the online weather."""
+    off()
+    called = []
+    saved = {n: sys.modules.get(n) for n in AF.LOCKDOWN_STOPPERS}
+    try:
+        for n in AF.LOCKDOWN_STOPPERS:
+            m = type(sys)(n)
+            m.stop_for_lockdown = (lambda n=n: called.append(n) or f"{n} stopped")
+            sys.modules[n] = m
+        boom = type(sys)("jarvis_chatbot")
+        code, out = AF.request_lockdown(True, here=True)
+        check("ON calls every stopper once", sorted(called) == sorted(AF.LOCKDOWN_STOPPERS)
+              and code == 200, called)
+        off()
+        called.clear()
+
+        def raises():
+            raise RuntimeError("broken")
+        boom.stop_for_lockdown = raises
+        sys.modules["jarvis_chatbot"] = boom
+        code, out = AF.request_lockdown(True, here=True)
+        check("a stopper that raises does not stop Lockdown coming on",
+              code == 200 and AF.lockdown_on() and "jarvis_chatbot_compare" in called, called)
+        off()
+        called.clear()
+        for n in AF.LOCKDOWN_STOPPERS:
+            sys.modules.pop(n, None)
+        code, out = AF.request_lockdown(True, here=True)
+        check("nothing loaded: nothing imported just to stop it",
+              code == 200 and not any(n in sys.modules for n in AF.LOCKDOWN_STOPPERS))
+    finally:
+        for n, m in saved.items():
+            if m is None:
+                sys.modules.pop(n, None)
+            else:
+                sys.modules[n] = m
+        off()
+    check("the words name chatbots and the online weather",
+          "chatbot" in AF.LOCKDOWN_DETAIL and "weather" in AF.LOCKDOWN_DETAIL
+          and "chatbot" in AF.LOCKDOWN_ON_SAYS and "weather" in AF.LOCKDOWN_CARD)
+
+
 # ======================================================== 6. the fast path
 
 def t_the_fast_path():
@@ -316,7 +361,8 @@ sys.modules["jarvis_events"] = events_mod
 if __name__ == "__main__":
     for fn in (t_the_setting_fails_closed, t_it_bites_through_the_tier_table,
                t_on_at_once_off_one_card_on_the_pc, t_while_on_nothing_loosens,
-               t_the_ways_out_the_table_cannot_reach, t_the_fast_path):
+               t_the_ways_out_the_table_cannot_reach,
+               t_turning_it_on_stops_what_is_already_talking, t_the_fast_path):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

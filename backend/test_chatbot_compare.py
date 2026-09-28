@@ -218,7 +218,11 @@ def clean():
         TC._resuming.clear()
     CARDS.clear()
     TIERS.clear()
+    LOCKDOWN["on"] = False
     register()
+
+
+LOCKDOWN = {"on": False}
 
 
 def deps(bots, model=None, *, gate=approve, full=False, lane=None, facts=None, busy=None):
@@ -230,7 +234,8 @@ def deps(bots, model=None, *, gate=approve, full=False, lane=None, facts=None, b
                    tier_of=lambda a: TIERS.get(a, "ask"), gate=gate,
                    activity=lambda s, d="": None, audit=lambda e, d: None,
                    clock=clock, sleep=clock.sleep,
-                   make_adapter=lambda cid: bots[cid], allow_test_adapters=True)
+                   make_adapter=lambda cid: bots[cid], allow_test_adapters=True,
+                   lockdown_on=lambda: LOCKDOWN["on"])
 
 
 def go(bots, d=None, ids=None, **kw):
@@ -546,6 +551,42 @@ def t_stop_stops_all():
     CMP.start(c, deps=d, wait=True)
     check("a stop pressed while the card waited wins over its approval",
           c.state == "stopped" and all(not b.sent for b in bots.values()), c.state)
+
+
+def t_lockdown_stops_the_comparison():
+    """Lockdown (security audit 2026-09-28 #2): the chatbot being asked stops
+    before its next message, the rest are never opened, a paused comparison
+    ends at once, and a new one raises no card."""
+    clean()
+    bots = {"fake_a": bot("fake_a", on_send=lambda t, n: n == 2 and LOCKDOWN.update(on=True)),
+            "fake_b": bot("fake_b")}
+    c, *_ = go(bots, max_turns=3)
+    check("Lockdown mid-comparison: nothing more is sent, the next chatbot never opened",
+          len(bots["fake_a"].sent) == 2 and not bots["fake_b"].opened
+          and c.state == "stopped" and c.ended_code == "lockdown", (c.state, c.ended_code))
+    check("... it says why, and writes no model summary",
+          "Lockdown" in c.ended_words and c.summary["by_model"] is False, c.ended_words)
+    check("... and each member's words say Lockdown, not 'you stopped it'",
+          c.members[0].ended_code == "lockdown", c.members[0].ended_code)
+
+    clean()
+    bots = {"fake_a": bot("fake_a", on_send=lambda t, n: n == 1 and TC.handle_post(
+        "/api/task/pause", {})), "fake_b": bot("fake_b")}
+    c, *_ = go(bots, max_turns=3)
+    paused = c.state
+    LOCKDOWN["on"] = True
+    said = CMP.stop_for_lockdown()
+    check("a paused comparison ends at once under Lockdown, its window closed",
+          paused == "paused" and c.state == "stopped" and c.ended_code == "lockdown"
+          and bots["fake_a"].closed == 1 and said, (paused, c.state, said))
+
+    clean()
+    LOCKDOWN["on"] = True
+    bots = {k: bot(k) for k in ("fake_a", "fake_b")}
+    c, d, code, out = go(bots)
+    check("a new comparison while Lockdown is on raises no card and sends nothing",
+          not CARDS and all(not b.sent for b in bots.values()) and code >= 400,
+          (CARDS, code, out))
 
 
 def t_pause_and_resume_the_whole():

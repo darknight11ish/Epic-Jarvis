@@ -83,8 +83,8 @@ def t_a_valid_plan_is_shaped_correctly():
 def t_from_step_forces_its_own_card_even_if_not_marked_risky():
     steps = [
         {"tool": "web_search", "args": {}, "why": "find the price"},
-        {"tool": "send_email", "args": {}, "why": "tell them the price we found",
-         "from_step": 0},  # NOT marked risky
+        {"tool": "send_email", "args": {"body": "{{step 1}}"},
+         "why": "tell them the price we found", "from_step": 0},  # NOT marked risky
     ]
     p = P.propose("do a thing", steps)
     check("a step filled in from an earlier result needs its own card, "
@@ -104,11 +104,86 @@ def t_describe_shows_every_step_and_marks_which_ask_again():
 def t_describe_marks_a_result_filled_step_distinctly():
     steps = [
         {"tool": "web_search", "args": {}, "why": "find the price"},
-        {"tool": "send_email", "args": {}, "why": "tell them", "from_step": 0},
+        {"tool": "send_email", "args": {"body": "The price: {{step 1}}"}, "why": "tell them",
+         "from_step": 0},
     ]
     p = P.propose("do a thing", steps)
     text = P.describe(p)
     check("names which earlier step it depends on", "step 1" in text.lower())
+
+
+def t_the_card_shows_every_steps_arguments_in_full():
+    """Bug audit 2026-09-28, F1: the card showed `tool - why` only, so a safe
+    step ran with values the owner never saw."""
+    steps = [{"tool": "append_obsidian_daily", "args": {"text": "Called the roofer at 3pm"},
+              "why": "log it"},
+             {"tool": "web_search", "args": {"query": "roofers near me"}, "why": "find more"},
+             {"tool": "calendar_read", "why": "check the week"}]
+    text = P.describe(P.propose("sort the roof", steps))
+    check("the note's exact text is on the card", "Called the roofer at 3pm" in text, text)
+    check("the search words are on the card", "roofers near me" in text, text)
+    check("a step with no arguments says so rather than showing nothing",
+          "(nothing else)" in text, text)
+
+
+def t_a_result_filled_step_must_say_where_the_result_goes():
+    """Bug audit 2026-09-28, F3: from_step was only a flag. Now the step names
+    the argument the earlier result goes into ("{{step N}}"), or is refused."""
+    cases = [
+        ([{"tool": "web_search", "args": {"query": "x"}, "why": "a"},
+          {"tool": "append_obsidian_daily", "args": {"text": "found it"}, "why": "b",
+           "from_step": 0}], "from_step with no {{step N}} anywhere"),
+        ([{"tool": "web_search", "args": {"query": "x"}, "why": "a"},
+          {"tool": "web_search", "args": {"query": "y"}, "why": "a"},
+          {"tool": "append_obsidian_daily", "args": {"text": "{{step 1}}"}, "why": "b",
+           "from_step": 1}], "{{step N}} naming a different step than from_step"),
+        ([{"tool": "web_search", "args": {"query": "x"}, "why": "a"},
+          {"tool": "append_obsidian_daily", "args": {"text": "{{step 1}}"}, "why": "b"}],
+         "{{step N}} with no from_step"),
+    ]
+    for steps, label in cases:
+        try:
+            P.propose("goal", steps)
+            check(f"refused: {label}", False)
+        except P.Refused as exc:
+            check(f"refused: {label}, in plain words", "step" in str(exc), str(exc))
+    p = P.propose("goal", [{"tool": "web_search", "args": {"query": "x"}, "why": "a"},
+                           {"tool": "append_obsidian_daily",
+                            "args": {"text": "Price: {{ step 1 }}", "tags": ["{{step 1}}"]},
+                            "why": "b", "from_step": 0}])
+    check("a well-formed one is accepted (spaces and nested lists allowed)",
+          p.steps[1].from_step == 0)
+    text = P.describe(p)
+    check("... and its card says where the real result goes",
+          "Where it says {{step 1}}" in text, text)
+
+
+def t_a_result_filled_step_really_receives_the_earlier_result():
+    """F3: the step that is asked about on its own card, and the step that
+    runs, both hold step 1's real result - never the proposal-time text."""
+    p = P.propose("goal", [{"tool": "web_search", "args": {"query": "price"}, "why": "a"},
+                           {"tool": "append_obsidian_daily",
+                            "args": {"text": "Found: {{step 1}}"}, "why": "b",
+                            "from_step": 0}])
+    asked, ran = [], []
+
+    def run_step(step):
+        ran.append(dict(step.args))
+        return {"ok": True, "price": "42 pounds"} if step.tool == "web_search" else {"ok": True}
+
+    out = P.run(p, run_step=run_step,
+                gate_check=lambda s: asked.append(dict(s.args)) or Verdict(True),
+                approved=True)
+    want = 'Found: {"ok": true, "price": "42 pounds"}'
+    check("its own card was asked with the real value", asked == [{"text": want}], asked)
+    check("and it ran with the same real value", ran[-1] == {"text": want}, ran)
+    check("the plan's record shows the value it really used",
+          out["done"][1]["args"] == {"text": want}, out["done"])
+    check("the plan itself is unchanged (a later run starts from the proposal again)",
+          p.steps[1].args == {"text": "Found: {{step 1}}"})
+    long = P.result_text({"x": "y" * (P.MAX_FILL + 50)})
+    check("a long result is cut, and says so",
+          len(long) <= P.MAX_FILL + 20 and long.endswith("[cut short]"))
 
 
 def t_run_without_approval_does_nothing():
@@ -158,7 +233,8 @@ def t_a_risky_step_with_no_gate_check_stops_rather_than_skipping():
 def t_a_result_filled_step_gets_its_own_card_even_though_the_first_is_safe():
     steps = [
         {"tool": "web_search", "args": {}, "why": "find the price"},
-        {"tool": "send_email", "args": {}, "why": "tell them", "from_step": 0},
+        {"tool": "send_email", "args": {"body": "The price: {{step 1}}"}, "why": "tell them",
+         "from_step": 0},
     ]
     p = P.propose("do a thing", steps)
     gate_calls = []

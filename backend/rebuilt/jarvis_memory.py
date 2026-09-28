@@ -3278,8 +3278,16 @@ class MemoryStore:
         merged into them), most of them named first, then newest first.
         Never an erased fact; by default only facts true at `at`."""
         ids = []
+        most = self._common_cut(c) if _ENTITY_COMMON_CUT else None
         for r in roots:
-            for e in self._group(c, r):
+            group = self._group(c, r)
+            if most is not None and self._linked_count(c, group) > most:
+                # "Too common to help" (effectiveness audit 2026-09-28, 3.1):
+                # someone linked to most of memory brings back only the
+                # newest facts about them, pushing the relevant ones out.
+                # OFF unless JARVIS_MEMORY_ENTITY_COMMON_CUT=1.
+                continue
+            for e in group:
                 if e not in ids:
                     ids.append(e)
         if not ids:
@@ -3298,6 +3306,28 @@ class MemoryStore:
             f" WHERE fe.entity_id IN ({marks}) AND f.erased_at IS NULL{where}"
             " GROUP BY fe.fact_id ORDER BY n DESC, fe.fact_id DESC LIMIT ?",
             (*ids, *args, int(limit)))]
+
+    @staticmethod
+    def _common_cut(c) -> int:
+        """How many facts one entry may be linked to before it counts as too
+        common to help: max(ENTITY_COMMON_MIN, ENTITY_COMMON_SHARE of every
+        fact not erased)."""
+        total = c.execute("SELECT COUNT(*) FROM facts WHERE erased_at IS NULL").fetchone()[0]
+        return max(ENTITY_COMMON_MIN, int(int(total or 0) * ENTITY_COMMON_SHARE))
+
+    @staticmethod
+    def _linked_count(c, group) -> int:
+        """How many facts (not erased) are linked to this entry or anything
+        merged into it."""
+        group = list(group)
+        if not group:
+            return 0
+        marks = ",".join("?" * len(group))
+        return int(c.execute(
+            "SELECT COUNT(DISTINCT fe.fact_id) FROM fact_entities fe"
+            " JOIN facts f ON f.id = fe.fact_id"
+            f" WHERE fe.entity_id IN ({marks}) AND f.erased_at IS NULL",
+            tuple(group)).fetchone()[0] or 0)
 
     def _note_likely_same(self, c, eid: int, name: str, now: float) -> None:
         """A NEW entry whose name is a likely typo of one already there
@@ -4388,6 +4418,19 @@ ENTITY_KINDS = ("person", "pet", "place", "organisation", "project", "thing")
 #: Chat recall uses the entity layer unless JARVIS_MEMORY_ENTITIES=0.
 _ENTITY_RECALL = os.environ.get("JARVIS_MEMORY_ENTITIES", "1").strip().lower() not in (
     "0", "false", "off", "no")
+
+#: "Too common to help" (the effectiveness audit, 2026-09-28, 3.1): in chat
+#: recall's third list, skip an entry linked to more than
+#: max(ENTITY_COMMON_MIN, ENTITY_COMMON_SHARE x every fact) facts - a person
+#: named in most of memory only floods the top results with their newest
+#: facts. OFF BY DEFAULT, like the tie-breaker: kept only if the memory
+#: self-test on the PC (eval_memory.py, and --locomo) shows no number
+#: getting worse. JARVIS_MEMORY_ENTITY_COMMON_CUT=1 turns it on
+#: (eval_memory.py --common-cut does the same for one run).
+_ENTITY_COMMON_CUT = os.environ.get(
+    "JARVIS_MEMORY_ENTITY_COMMON_CUT", "0").strip().lower() in ("1", "on", "true", "yes")
+ENTITY_COMMON_MIN = 20
+ENTITY_COMMON_SHARE = 0.05
 
 #: An alias that names more than this many different entries ("friend",
 #: with thirty friends in memory) does not say which one - it is ignored.

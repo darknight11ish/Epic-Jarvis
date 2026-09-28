@@ -224,6 +224,9 @@ def replies(text, n):
     return REPLIES[(n - 1) % len(REPLIES)]
 
 
+LOCKDOWN = {"on": False}
+
+
 def deps(model=None, bot=None, *, busy=None, lane=None, full=False, gate=approve,
          facts=None):
     clock = Clock()
@@ -236,7 +239,7 @@ def deps(model=None, bot=None, *, busy=None, lane=None, full=False, gate=approve
                    activity=lambda s, d="": None,
                    audit=lambda e, d: AUDIT.append((e, d)), clock=clock, sleep=clock.sleep,
                    make_adapter=(lambda cid: bot) if bot is not None else None,
-                   allow_test_adapters=True)
+                   allow_test_adapters=True, lockdown_on=lambda: LOCKDOWN["on"])
 
 
 def clean():
@@ -251,6 +254,7 @@ def clean():
     AUDIT.clear()
     TIERS.clear()
     CFG.clear()
+    LOCKDOWN["on"] = False
 
 
 def session(bot=None, d=None, **kw):
@@ -1115,6 +1119,82 @@ def t_stop_and_pause():
     CB.start(s, deps=d, wait=True)
     check("a stop pressed while the card waited wins over its approval",
           not bot.sent and s.state == "stopped", s.state)
+
+
+def t_lockdown():
+    """Lockdown (jarvis_asks_first.py; security audit 2026-09-28 #2): a
+    running conversation stops before its next message, a paused one ends
+    at once, a new one is not started, and a local chatbot is untouched."""
+    clean()
+    bot = FakeBot(on_send=lambda t, n: n == 2 and LOCKDOWN.update(on=True))
+    s, *_ = go(bot, max_turns=6)
+    check("Lockdown turned on mid-conversation: nothing more is sent",
+          s.ended_code == "lockdown" and len(bot.sent) == 2 and s.state == "stopped"
+          and bot.closed == 1, (s.ended_code, len(bot.sent), s.state))
+    check("... and it says why, in plain words", "Lockdown" in s.ended_words
+          and "Nothing more is sent" in s.ended_words, s.ended_words)
+    check("... with no model call for the summary", s.summary.get("by_model") is False)
+
+    clean()
+    waits = {"n": 0}
+
+    def on_read(n):
+        waits["n"] += 1
+        if waits["n"] == 2:
+            LOCKDOWN["on"] = True
+    bot = FakeBot(slow=3, on_read=on_read)
+    s, *_ = go(bot, max_turns=6)
+    check("Lockdown while a reply is awaited: stops there, no second message",
+          s.ended_code == "lockdown" and len(bot.sent) == 1, (s.ended_code, bot.sent))
+
+    clean()
+    bot = FakeBot(statuses={1: CB.Status("needs_owner", "captcha")})
+    s, *_ = go(bot)
+    LOCKDOWN["on"] = True
+    said = CB.stop_for_lockdown()
+    check("a paused conversation ends at once, its window closed, so Resume cannot "
+          "pick it up", s.state == "stopped" and s.ended_code == "lockdown"
+          and bot.closed == 1 and said, (s.state, s.ended_code, said))
+
+    clean()
+    LOCKDOWN["on"] = True
+    bot = FakeBot()
+    s, d, code, out = go(bot)
+    check("a new conversation while Lockdown is on: refused before any card, in words",
+          not CARDS and not bot.sent and s.state == "refused" and code == 400
+          and s.problem == CB.LOCKDOWN_WORDS and out.get("error") == CB.LOCKDOWN_WORDS,
+          (CARDS, s.state, s.problem, code))
+    LOCKDOWN["on"] = False
+    s3, d3 = session(bot)
+    LOCKDOWN["on"] = True
+    CB.start(s3, deps=d3, wait=True)
+    check("... (planned before Lockdown, started after: still no card)",
+          not CARDS and s3.state == "refused" and s3.problem == CB.LOCKDOWN_WORDS,
+          (CARDS, s3.state, s3.problem))
+
+    clean()
+    bot = FakeBot()
+    s, d = session(bot)
+
+    def lock_while_card_waits(a, det, pr):
+        LOCKDOWN["on"] = True
+        return Verdict(True, "approved")
+    d.gate = lock_while_card_waits
+    CB.start(s, deps=d, wait=True)
+    check("Lockdown turned on while the card waited: approving it sends nothing and "
+          "opens no window", not bot.sent and bot.opened == 0
+          and s.ended_code == "lockdown", (bot.sent, bot.opened, s.ended_code))
+
+    clean()
+    d = deps()
+    d.lockdown_on = lambda: (_ for _ in ()).throw(OSError("unreadable"))
+    check("a Lockdown check that cannot be read counts as on",
+          CB.lockdown_problem(["fake"], d) == CB.LOCKDOWN_WORDS)
+    check("a chatbot on this PC only (kind local) is not a way out",
+          CB.lockdown_problem(["local"], d) == ""
+          if "local" in CB.ADAPTERS and CB.ADAPTERS["local"].kind == "local"
+          else CB.goes_out("local") is True)
+    check("an unknown chatbot counts as outside", CB.goes_out("no-such-bot") is True)
 
 
 def t_one_conversation_at_a_time():

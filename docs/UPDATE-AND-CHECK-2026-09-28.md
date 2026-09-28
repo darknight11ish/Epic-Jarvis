@@ -213,6 +213,29 @@ happen, write down which line and what you saw instead.
    [Environment]::SetEnvironmentVariable('JARVIS_MEMORY_ENTITIES', '0', 'User'); Write-Host "Done. Quit Jarvis from the tray and start it again."
    ```
 
+   **A possible fix to try first: "skip very common names".** The entity
+   layer loses mostly because a person named in most of memory floods the
+   answers with their newest facts. There is now a switch that skips such
+   a name (built 2026-09-28, **off** until your PC's numbers say it helps).
+   On the build machine (words only, no real model) it took LoCoMo's
+   "Found all @5" from 3.6% back up to 8.3% and left the main self-test
+   unchanged - your PC's meaning search may differ. After Round 1, this one
+   line runs both tests twice, without and with it, and opens the folder
+   (`jarvis-memory-eval\common-cut` in your user folder, with an `off` and
+   an `on` folder inside). It takes a while:
+
+   ```powershell
+   cd "$env:USERPROFILE\Epic-Jarvis"; $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; Remove-Item Env:JARVIS_MEMORY_ENTITY_COMMON_CUT -ErrorAction SilentlyContinue; $o = "$env:USERPROFILE\jarvis-memory-eval\common-cut"; py -3 backend\eval_memory.py --out "$o\off"; py -3 backend\eval_memory.py --common-cut --out "$o\on"; py -3 backend\eval_memory.py --locomo --out "$o\off"; py -3 backend\eval_memory.py --locomo --common-cut --out "$o\on"; Write-Host "Done. The results are in $o (off and on)"; explorer $o
+   ```
+
+   Each result file says near the top whether the cut was on. Send the
+   four files back; if no number gets worse with it on, this keeps it on
+   (then quit Jarvis from the tray and start it again):
+
+   ```powershell
+   [Environment]::SetEnvironmentVariable('JARVIS_MEMORY_ENTITY_COMMON_CUT', '1', 'User'); Write-Host "Done. Quit Jarvis from the tray and start it again."
+   ```
+
 2. **The tool test** (it decides whether the plan card may ever be switched
    on; results land in `tools\tool_eval\tool_eval_results.json` in the
    repository folder):

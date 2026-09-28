@@ -838,11 +838,11 @@
    },
    "lockdown": {
     "can_turn_off": true,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": true,
-    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.",
+    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email, chatbot conversations, the online weather) has stopped.",
     "waiting": true,
     "why": ""
    },
@@ -1732,11 +1732,11 @@
    },
    "lockdown": {
     "can_turn_off": true,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": true,
-    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.",
+    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email, chatbot conversations, the online weather) has stopped.",
     "waiting": false,
     "why": ""
    },
@@ -2621,7 +2621,7 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": false,
@@ -3505,7 +3505,7 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": false,
@@ -4389,7 +4389,7 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": false,
@@ -5287,11 +5287,11 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": true,
-    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.",
+    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email, chatbot conversations, the online weather) has stopped.",
     "waiting": false,
     "why": ""
    },
@@ -6176,7 +6176,7 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": false,
@@ -6263,12 +6263,12 @@
   "lights_label": "Lights, plugs and fans without a card",
   "lights_waiting": "Waiting for your yes on the approval card, on your PC or phone.",
   "lockdown_action": "lockdown",
-  "lockdown_detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+  "lockdown_detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
   "lockdown_label": "Lockdown",
   "lockdown_off_label": "Turn off Lockdown",
   "lockdown_off_says": "Lockdown is off: everything asks first as your settings say.",
   "lockdown_on_label": "Turn on Lockdown",
-  "lockdown_on_says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.",
+  "lockdown_on_says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email, chatbot conversations, the online weather) has stopped.",
   "lockdown_pc_only": "Lockdown can only be turned off on the PC (Settings, What asks first), with an approval card and Windows Hello.",
   "lockdown_row_note": "Lockdown is on, so this asks you first - or stops, if it runs by itself.",
   "lockdown_waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC.",

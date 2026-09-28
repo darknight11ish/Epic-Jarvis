@@ -44,6 +44,7 @@ gate-outcome.patch	gate-outcome/3fe5486.patch	3fe5486e240d54cd0ca8f77dd9dbc3b9ce
 gate-outcome.patch	gate-outcome/37fad26.patch	37fad2683a8941a4d26ae5ce6909cc9c984d6a4d	2026-09-16T20:38:00+00:00	gate: a denial can propose a standing rule, never apply one
 gate-outcome.patch	gate-outcome/10db67c.patch	10db67c2111fb8d61d0954380cd764052c5717d5	2026-09-15T04:28:13+00:00	There was an approve-all in the gate, and a timeout looked like a refusal
 gate-push.patch	gate-push/5cb5947.patch	5cb5947da824b6d2faf13f16a5335674a2cdabd5	2026-09-15T00:16:24+00:00	Stop the two paths that send private content off the machine
+goals.patch	goals/d68f7b2.patch	d68f7b240737ac081d91b26c85410738520d8f42	2026-09-27T23:29:50+00:00	Backend: Goals - a plan the owner edits, one card per acting step
 media.patch	media/13d23ad.patch	13d23adc6d839d9e9a41ef2e935ed1a0def53d3c	2026-09-26T22:12:58+00:00	Add news headlines, "tell me when this page changes", and music/video control
 memory-intake.patch	memory-intake/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
 memory-intake.patch	memory-intake/c870ceb.patch	c870cebfff6cebd437ac56e4aa8ff78a8b915f93	2026-09-23T09:02:25+00:00	Learning jobs integrated: patch order, retire card vs "Both are true", script fix
@@ -76,6 +77,7 @@ temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a50393
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27+00:00	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47+00:00	backend: jarvis_agent.py - the model can finally use a tool, local lane only
 voice-503.patch	voice-503/8d2c6f6.patch	8d2c6f615e4db690c28465fc892805f3d74a70a0	2026-09-15T01:07:41+00:00	The voice routes were telling four different stories, and one was a leak
+voices.patch	voices/e7ee631.patch	e7ee6314ac1884c8600e3251ddd07db8b5cb832e	2026-09-28T06:15:08+00:00	Each animal's voice: pick a voice, pitch and pace per animal, in both apps
 voices.patch	voices/15d1300.patch	15d1300e6f10b21b724535bb9ca761388700d761	2026-09-27T23:23:06+00:00	Voice follows the face: each animal face speaks in its own voice (PC side)
 voices.patch	voices/1262208.patch	126220810bc58273cd6196d6a8fbce1b538655de	2026-09-26T19:47:59+00:00	Grow "What did I miss?" and add a built-in-voice-choice setting
 voices.patch	voices/ca53319.patch	ca5331976dca4cfaa937bb04b690306707d0a70d	2026-09-26T07:41:16+00:00	Voice upgrades: the bake-off, Pocket TTS and a newer "hey Jarvis" built but off, and the speaking speed in both apps

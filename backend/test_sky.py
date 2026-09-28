@@ -367,6 +367,58 @@ def t_home_assistant_reads():
     fresh()
 
 
+def t_lockdown_stops_the_weather():
+    """Lockdown (jarvis_asks_first.py; security audit 2026-09-28 #2): no
+    Open-Meteo fetch and no Home Assistant read while it is on, the weather
+    already drawn is dropped, and it reads again once Lockdown is off."""
+    fresh()
+    SK.handle_post({"place": "Denver"}, here=True)
+    SK.request_weather("open_meteo", gate=APPROVE, tier_of=ASK, spawn=run_now)
+    urls, t, locked = [], [1000.0], {"on": False}
+
+    def fetch(url):
+        urls.append(url)
+        return OM_ANSWER
+    deps = SK.Deps(open_meteo_fetch=fetch, clock=_clock(t), spawn=run_now,
+                   lockdown_on=lambda: locked["on"])
+    SK.refresh(deps)
+    check("before Lockdown: read once", len(urls) == 1 and SK.view()["weather"]["now"])
+    locked["on"] = True
+    t[0] += SK.REFRESH_S + 1
+    SK.refresh(deps)
+    w = SK.view()["weather"]
+    check("Lockdown on: no fetch, and the drawn weather is dropped",
+          len(urls) == 1 and w["now"] is None, (len(urls), w["now"]))
+    check("... it says why, with no promise to try again",
+          "Lockdown is on" in w["status"] and "tries again" not in w["status"], w["status"])
+    with NoSocket():
+        got, why = SK.read_open_meteo(SK.load()["place"], SK.load(), deps)
+    check("the Open-Meteo read itself refuses under Lockdown, before any socket",
+          got is None and why == SK.LOCKDOWN_WHY and len(urls) == 1)
+    deps_bad = SK.Deps(open_meteo_fetch=fetch, clock=_clock(t), spawn=run_now,
+                       lockdown_on=lambda: (_ for _ in ()).throw(OSError("unreadable")))
+    SK.refresh(deps_bad)
+    check("a Lockdown check that cannot be read counts as on", len(urls) == 1)
+    locked["on"] = False
+    t[0] += 1
+    SK.refresh(deps)
+    check("Lockdown off: read again at once, no retry wait",
+          len(urls) == 2 and SK.view()["weather"]["now"] is not None, len(urls))
+
+    gates = []
+
+    def gate(a, d, p):
+        gates.append(a)
+        return Verdict(True, None, "auto")
+    hd = SK.Deps(gate=gate, tier_of=lambda a: "auto", home_fetch=lambda q: {},
+                 clock=_clock(t), home_ready=lambda: {"state": "on", "said": ""},
+                 spawn=run_now, lockdown_on=lambda: True)
+    got, why = SK.read_home(SK.load()["place"], hd)
+    check("Home Assistant is not read under Lockdown either, and Lockdown is the reason",
+          got is None and why == SK.LOCKDOWN_WHY and gates == [], why)
+    fresh()
+
+
 def t_get_reads_only_when_asked():
     fresh()
     SK.handle_post({"place": "Denver"}, here=True)
@@ -489,7 +541,7 @@ def t_the_patch():
 if __name__ == "__main__":
     for fn in (t_off_by_default, t_find_place_offline, t_place_pc_only_and_forget,
                t_weather_source_cards, t_open_meteo_reads, t_home_assistant_reads,
-               t_get_reads_only_when_asked, t_install_wraps_the_route, t_the_patch):
+               t_lockdown_stops_the_weather, t_get_reads_only_when_asked, t_install_wraps_the_route, t_the_patch):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
