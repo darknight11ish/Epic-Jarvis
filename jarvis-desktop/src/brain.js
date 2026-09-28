@@ -48,6 +48,9 @@ import { validToFromText } from "./valid-to.js";
 import { CANNOT_CHAT, canChat } from "./model-chat.js";
 // Brain -> Projects: its own module (projects-panel.js, projects.js).
 import { showProjects } from "./projects-panel.js";
+// Brain -> History -> "Forget a time frame": its own module too.
+import { openForgetRange, showForgetRange, takePlace } from "./forget-range-panel.js";
+import { BRAIN_PLACE_KEY } from "./forget-range.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -763,6 +766,7 @@ function render(name) {
       break;
     case "history":
       renderHistory();
+      showForgetRange();
       break;
     case "work":
       renderFocus();
@@ -6722,8 +6726,27 @@ onEvent((frame) => {
   }
 
   repaintTrace();
-  await showView("memory");
+  // "Forget what you learned last week", said or typed in the Jarvis bar:
+  // main.js left the place, so the Brain opens at History -> "Forget a time
+  // frame" with the list filled in (forget-range-panel.js). Navigation only.
+  if (takePlace()) {
+    await showView("history");
+    await openForgetRange();
+  } else {
+    await showView("memory");
+  }
 })();
+
+/** The Brain was already open when the Jarvis bar asked for the place. */
+async function goToForgetRange() {
+  if (!takePlace()) return;
+  await showView("history");
+  await openForgetRange();
+}
+window.addEventListener("focus", goToForgetRange);
+window.addEventListener("storage", (e) => {
+  if (e.key === BRAIN_PLACE_KEY && e.newValue) goToForgetRange();
+});
 
 console.info(
   `[brain] ready — backend ${IS_TAURI ? "connected" : "absent (browser preview)"}`

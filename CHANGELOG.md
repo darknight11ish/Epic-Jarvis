@@ -6,6 +6,21 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Forget a time frame.** Say or type "forget what you learned last
+  week" or "delete my chats from 1 to 15 September", or open it yourself:
+  the desktop's Brain -> History, or the phone's Brain. Jarvis lists every
+  fact it saved in those days and every chat from them, each ticked; untick
+  anything to keep and tap **Forget these**. One approval card lists
+  everything, and you approve it by tapping - saying "yes" does nothing.
+  The facts are forgotten, exactly like Forget, and the chats deleted; for
+  **10 minutes one tap on Undo puts it all back** (the Undo is kept in
+  memory only, so it also ends if Jarvis restarts). A chat that also has
+  messages from other days is marked, because the whole chat goes. At most
+  200 at once. If a date could mean two things ("on Monday" said on a
+  Monday, "3/9"), Jarvis asks. Erasing a fact's words for good is still
+  "Erase the words", one fact at a time. This is the one place Jarvis
+  deletes many things at once. Not yet tried on your PC's real memory.
+
 - **The money limit for chatbots with a key is now a hard stop.** Every
   message asks the service to keep its answer short enough to fit in what
   is left of your monthly limit (at most 8,000 word-pieces, fewer as the

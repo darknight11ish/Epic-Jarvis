@@ -74,6 +74,10 @@ object OpenPlace {
         "second-card" to Where.Go(Screen.BRAIN, "second-card"),
         "big-model" to Where.Go(Screen.BRAIN, "big-model"),
         "backend-supports" to Where.Go(Screen.BRAIN, "capabilities"),
+        // "Forget a time frame" (2026-09-28): not a settings section - the
+        // place "forget what you learned last week" opens, named by the
+        // answer's `open_brain` (net/ForgetRange.kt, ChatSession).
+        com.jarvis.client.net.ForgetRange.PLACE to Where.Go(Screen.BRAIN, "forget-range"),
     )
 
     /**

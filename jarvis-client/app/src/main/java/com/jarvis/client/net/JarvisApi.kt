@@ -808,6 +808,44 @@ class JarvisApi(
         }
 
     /**
+     * "Forget a time frame" (docs/JARVIS-API.md section 64): a read (`json`
+     * null, a GET - the status or the list for some days) or ONE change (a
+     * POST of `json` - "Forget these", which makes the PC raise ONE card, or
+     * Undo). The path comes from [ForgetRange] and nothing outside
+     * `/api/memory/forget_range` is sent. The status and body come back
+     * whole ([ForgetRange.Reply]): a 404 the PC sent itself and a 404 from a
+     * PC without the routes read differently.
+     */
+    suspend fun forgetRangeCall(path: String, json: String?): ApiResult<ForgetRange.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != ForgetRange.PATH && !path.startsWith(ForgetRange.PATH + "/")) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a forget-range route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(ForgetRange.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * Projects (docs/JARVIS-API.md section 61): a read (`json` null, a GET)
      * or ONE change (a POST of `json`). The path comes from [Projects] -
      * [Projects.PATH], [Projects.projectPath], [Projects.benchPath] or

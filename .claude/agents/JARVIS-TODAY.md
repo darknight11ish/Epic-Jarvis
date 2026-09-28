@@ -48,7 +48,12 @@ mind"), people and aliases, "Used in this answer", temporary chat. Search:
 fastembed bge-small-en-v1.5 + sqlite-vec + FTS5/bm25, a MiniLM re-ranker
 (off until measured). Self-tests: `backend/eval_memory.py`,
 `backend/eval_learner.py`, `docs/MEMORY-SCOREBOARD.md`. Encrypted chat
-history on the PC with History search in the apps.
+history on the PC with History search in the apps. **"Forget a time frame"**
+(2026-09-28, `jarvis_forget_range.py`, JARVIS-API §64, both apps; branch
+`studio-forget-timeframe` until merged): a checked list of the facts saved
+and chats from some days, ONE card (`memory_forget_range`), forgotten as
+Forget does, 10 minutes of Undo; also by voice ("forget what you learned
+last week" fills in the list - never removes anything).
 
 **Voice** (all speech work happens on the PC; the phone never does
 speech-to-text) - "Hey Jarvis" (openWakeWord; livekit-wakeword candidate),

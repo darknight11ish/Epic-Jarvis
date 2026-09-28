@@ -566,6 +566,20 @@ fun BrainScreen(
                     )
                 }
             }
+            // "Forget a time frame" (the owner's decision of 2026-09-28;
+            // ForgetRangePlate.kt): the days, the ticked list of facts and
+            // chats, "Forget these" (ONE approval card), then 10 minutes of
+            // Undo - next to History, as the desktop puts it on its History
+            // tab. "forget what you learned last week" opens this item
+            // (OpenPlace, "forget-range").
+            item(key = "forget-range") {
+                ForgetRangeSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
             if (privateHidden) {
                 item(key = "memory-hidden") {
                     HiddenSection("Memory awaiting review", busy = showPrivateBusy, onShow = onShowPrivate)

@@ -367,6 +367,14 @@ fn main() {
             "projects_read",
             "projects_write",
             "projects_choose_folder",
+            // "Forget a time frame" (backend/forget-range.patch; JARVIS-API
+            // section 64; the owner's decision of 2026-09-28): read the
+            // status or the list for some days (hidden in Rust with the
+            // private lists), and ONE of two things - "Forget these" (the
+            // PC raises ONE card; held on a stale link, refused while the
+            // list is hidden) or Undo (no card, never held). Brain only.
+            "forget_range_read",
+            "forget_range_write",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on

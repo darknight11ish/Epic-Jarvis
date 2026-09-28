@@ -278,6 +278,12 @@ CLASSIFICATION = {
     # sends them and shows "Set on your PC", and the PC refuses them from any
     # other device (ARCHITECTURE section 8). Every change is held on a stale
     # link in both apps except Shareable OFF.
+    # "Forget a time frame" (the owner's decision of 2026-09-28;
+    # backend/jarvis_forget_range.py, forget-range.patch; JARVIS-API section
+    # 64). Both apps: the desktop's Brain -> History, the phone's Brain.
+    "/api/memory/forget_range": ("ported", "Forget a time frame: the status (GET - a card waiting, the 10-minute Undo, the days a spoken request filled in) and \"Forget these\" (POST - the ticked ids; the PC raises ONE approval card listing every item). Both apps; held on a stale link and refused while the list is hidden."),
+    "/api/memory/forget_range/preview": ("ported", "Forget a time frame: the facts saved and the chats from some days, each with its words (GET). Both apps; the words hidden with the private lists."),
+    "/api/memory/forget_range/undo": ("ported", "Forget a time frame: Undo within 10 minutes of the card's approval - one tap, no card, never held on a stale link. Both apps."),
     "/api/projects": ("ported", "Projects: the list (GET) and creating one (POST). Both apps; the phone creates life projects only (a coding project's folder is chosen on the PC)."),
     "/api/projects/{id}": ("ported", "One project: read it (GET) or change what the owner typed (POST) - instructions, notes, and clearing the folder. Both apps; choosing the folder is the desktop's (the Windows picker, projects_choose_folder)."),
     "/api/projects/{id}/delete": ("ported", "Delete one project after \"are you sure?\". Both apps."),

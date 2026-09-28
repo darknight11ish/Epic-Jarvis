@@ -143,6 +143,7 @@ on a throwaway copy instead.
 | `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py`, `jarvis_chatbot_gemini.py` and the other website adapters (`jarvis_chatbot_web.py` and a site file each), shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window" and "... more chatbot websites, the same open way", at the very end. |
 | `live.patch` | `jarvis_hud.py` | **Jarvis Live: talking back and forth** (the owner's decision and answers of 2026-09-28, `docs/LIVE-DESIGN.md`). One call at start-up, `jarvis_live.install(Handler, ...)`, answers `GET`/`POST /api/voice/live` (JARVIS-API section 63): start (no card; refused until your voice is trained), stop, more time, carry on, mute. Last in the list; its context is `chatbot-routes.patch`'s install block. Needs `jarvis_live.py` - without it, or on any error, the banner says so. See "Jarvis Live", at the very end. |
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
+| `forget-range.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Forget a time frame"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 64). Adds `GET /api/memory/forget_range` and `/preview` (what Jarvis learned and the chats from some days, as a list the owner unticks), `POST /api/memory/forget_range` (ONE approval card, `memory_forget_range`, listing every item - nothing changes before a person approves) and `/undo` (10 minutes, no card), and the gate's risk line for the new action (local, not reversible: a risky approval). Last in the list: its context is `chatbot.patch`'s gate lines and `live.patch`'s install block. Needs `jarvis_forget_range.py` - see "Forget a time frame", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -15157,3 +15158,60 @@ the relay did not call `keep_rules_first()` before this patch.
 That needs a first question on a turn with no tools enabled, where Jarvis
 recalls a fact, and a look at whether the answer follows the rules (for
 example "say what is a guess and what is verified").
+
+---
+
+# Forget a time frame: `forget-range.patch` (2026-09-28)
+
+## In plain words
+
+You can now ask Jarvis to forget a stretch of time - "forget what you
+learned last week", "delete my chats from 1 to 15 September" - by voice,
+by typing, or from the Brain in either app. Nothing goes at once. Jarvis
+shows you every fact it saved in those days and every chat from them, each
+ticked. You untick anything you want to keep and tap **Forget these**. One
+approval card then lists everything, word for word, and you approve it by
+tapping (saying "yes" does nothing). Approved, the facts are forgotten -
+exactly like pressing Forget on each - and the chats are deleted. For 10
+minutes, one tap on **Undo** puts it all back.
+
+## What to do on the PC
+
+Run `apply-patches.ps1` as usual. It copies `jarvis_forget_range.py` in
+and applies `forget-range.patch` last. Nothing to install. Your settings
+file needs no change: a file without the `memory_forget_range` line asks
+anyway, and the shipped one says `"ask"`.
+
+## What the code does
+
+- **Which facts:** the ones Jarvis SAVED in those days (by when it learned
+  them, not by a date in their words), and only ones still in use.
+- **Which chats:** any chat with a message in those days. The whole chat is
+  deleted, and the list says so when it also has messages from other days.
+- **Days** are this PC's own time, first and last day included. At most 200
+  facts and chats in one go; more, and it asks for fewer days.
+- **The card** (`memory_forget_range`) must be "ask" or nothing happens. It
+  counts as a risky approval (Windows Hello on the PC, the screen lock on
+  the phone), because after 10 minutes the chats cannot come back.
+- **Undo** keeps the deleted chats in memory only, still encrypted, never on
+  disk: it ends after 10 minutes or when Jarvis stops, whichever is first.
+  A fact whose words you erased in the meantime stays erased.
+- **By voice**, `jarvis_quick.py` only fills in the list and says where it
+  is. When a date could mean two things ("on Monday" said on a Monday,
+  "3/9", "the 3rd"), it asks instead of guessing.
+
+## Test it
+
+`py -3 backend\test_forget_range.py` (154 checks, no network, no model).
+The words and real answers both apps are tested against:
+`python3 tools/gen_forget_range_cases.py --check`.
+
+## Not checked, said plainly
+
+- Not tried on your PC's real memory and chat history. The tests use real
+  SQLite files and real encryption in a temporary folder.
+- The phone's screen (`ForgetRangePlate.kt`) is compiled only by CI; its
+  pure logic (`net/ForgetRange.kt`) and test were compiled and run here.
+- "A forgotten fact is not learned again automatically" is on the audit
+  branch, not this one yet. These forgets use Forget's own mark, so it will
+  cover them when it lands.

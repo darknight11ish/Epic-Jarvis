@@ -1,0 +1,50 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -604,5 +604,6 @@
+     "watch_notifications_enable",  # jarvis_watch_notify.py acts only on tier "ask" (watch-notifications.patch)
+     "enable_reading_tool",  # jarvis_asks_first.py acts only on tier "ask" (tools-enable.patch)
+     "restore_backup",  # jarvis_backup.py acts only on tier "ask" (backup.patch)
+     "chatbot_session",  # jarvis_chatbot.py acts only on tier "ask": ONE card per conversation (chatbot.patch)
++    "memory_forget_range",  # jarvis_forget_range.py acts only on tier "ask": ONE card per time frame (forget-range.patch)
+ })
+@@ -725,6 +726,16 @@
+     # on the phone). It was already treated as risky before this line, as
+     # an action the gate had not classified; this line gives it its words.
+     "chatbot_session": ("no", "outbound", "holds a conversation with an AI chatbot website for you - Gemini first - sending the goal you approved word for word and then its own follow-up questions, typed into a browser window you can see, within the messages and minutes on the card; nothing private is sent, and what is sent cannot be taken back"),
++    # forget-range.patch (jarvis_forget_range.py, the owner's decision of
++    # 2026-09-28, "Forget a time frame"). ONE card listing every fact and
++    # every chat from the days the owner chose, each one they left ticked:
++    # the facts are forgotten (retired, as Forget does) and the chats
++    # deleted from this PC. Nothing is sent anywhere, so "local". Undo puts
++    # everything back for 10 minutes; after that the chats are gone for
++    # good, so "no": a risky approval (Windows Hello on the PC, a screen
++    # lock on the phone). Without this line the action would be read as
++    # "unknown", and the notice would say it might leave the machine.
++    "memory_forget_range": ("no", "local", "forgets the facts and deletes the chats listed on the card, on this PC; nothing is sent anywhere; for 10 minutes one tap on Undo puts them all back, and after that the chats are gone for good and the facts stay forgotten"),
+ }
+
+ _UNKNOWN_RISK = ("no", "outbound",
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3308,6 +3308,21 @@
+     except Exception as exc:
+         print(f"  live       NOT ON ({type(exc).__name__}) - Jarvis Live is off")
+         print("             until jarvis_live.py is back: run apply-patches.ps1 again")
++    # forget-range.patch ("Forget a time frame", the owner's decision of
++    # 2026-09-28; JARVIS-API section 64): GET /api/memory/forget_range and
++    # /preview (what Jarvis learned and the chats from some days, as a list
++    # the owner unticks), POST /api/memory/forget_range (ONE approval card,
++    # memory_forget_range, listing every item - nothing changes before a
++    # person approves it) and /undo (one tap, no card, for 10 minutes).
++    # Wrapped round Handler here, before anything listens, like live above;
++    # every rule is in jarvis_forget_range.py.
++    try:
++        import jarvis_forget_range
++        print(jarvis_forget_range.install(Handler, origin_ok=_origin_ok,
++                                          token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  forget     NOT ON ({type(exc).__name__}) - Forget a time frame is off")
++        print("             until jarvis_forget_range.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

@@ -4389,6 +4389,47 @@ object JarvisRuntime {
         }
     }
 
+    // ----------------------------------------------- forget a time frame ----
+    // docs/JARVIS-API.md section 64 (the owner's decision of 2026-09-28) -
+    // see [com.jarvis.client.net.ForgetRange] and ui/screens/ForgetRangePlate.kt.
+    // The phone keeps nothing of the list: it reads it from the PC each time.
+
+    private val _forgetRangeTick = MutableStateFlow(0)
+
+    /** Goes up by one after "Forget these" or Undo from this phone, so the plate reads itself again. */
+    val forgetRangeTick: StateFlow<Int> = _forgetRangeTick.asStateFlow()
+
+    /** A read: the status, or the list for some days. Never held. */
+    suspend fun forgetRangeRead(path: String): ApiResult<com.jarvis.client.net.ForgetRange.Reply> =
+        api.forgetRangeCall(path, null)
+
+    /**
+     * "Forget these" (`action` "forget": the PC raises ONE approval card
+     * listing every item) or Undo (`action` "undo": no card). "Forget these"
+     * is held on a stale link (rule 4), like the desktop's
+     * `forget_range_write` - it acts on a list read over a link that cannot
+     * be confirmed live. Undo is never held: it only puts back what the
+     * owner had a few minutes ago, and holding it could let the ten minutes
+     * run out. When a card was raised, the queue is read at once so it
+     * shows here.
+     */
+    suspend fun forgetRangeWrite(action: String, json: String): com.jarvis.client.net.ForgetRange.Outcome {
+        val fr = com.jarvis.client.net.ForgetRange
+        if (fr.heldOnStale(action)) {
+            actionBlocker()?.let { return com.jarvis.client.net.ForgetRange.Outcome(false, false, it) }
+        }
+        val path = if (action == "undo") fr.UNDO_PATH else fr.PATH
+        return when (val r = api.forgetRangeCall(path, json)) {
+            is ApiResult.Ok -> fr.said(r.value, if (action == "undo") "Put back." else fr.w("waiting")).also {
+                if (it.waiting) refreshPending()
+                _forgetRangeTick.update { n -> n + 1 }
+                // Undo put facts back: "Always keep in mind" reads itself again.
+                if (action == "undo" && it.done) _profileTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.ForgetRange.Outcome(false, false, "Not done. " + describe(r.error))
+        }
+    }
+
     // ---------------------------------------------------- chat history ----
     // docs/JARVIS-API.md section 18 (2026-09-24) - see
     // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The

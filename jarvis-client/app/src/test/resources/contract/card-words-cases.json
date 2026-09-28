@@ -159,6 +159,10 @@
       "title": "Jarvis wants to let one action go ahead without asking you first"
     },
     {
+      "action": "memory_forget_range",
+      "title": "Jarvis wants to forget what it learned and delete chats from the days you chose"
+    },
+    {
       "action": "memory_manage",
       "title": "Jarvis wants to change what it remembers"
     },

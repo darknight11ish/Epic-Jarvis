@@ -320,6 +320,19 @@ narrower still: it is read-only navigation, matched only against a fixed
 list of real section ids, so it changes nothing by construction.
 `docs/JARVIS-API.md` §58 has the whole design.
 
+**One card for a whole time frame, never a bulk switch** ("Forget a time
+frame", the owner's decision of 2026-09-28; `jarvis_forget_range.py`,
+docs/JARVIS-API.md §64). The one place a single card forgets and deletes
+many things at once - and it keeps the four steps: `preview()` lists every
+fact and chat from the chosen days (touching nothing), the apps show each
+one ticked and the owner unticks any to keep; `card_text()` lists EVERY
+item still ticked in full - each fact word for word, each chat's title and
+dates; the gate asks once (action `memory_forget_range`, tier `ask` only,
+never loosened; risky, so Windows Hello or the phone's lock); `apply()`
+runs only on a person's "approved", and only on ids re-checked against the
+days. A spoken "yes" approves nothing. Undo (10 minutes, no card) only
+puts back what that card removed.
+
 **Stopping is never gated.** Stop, Pause and "Stop everything"
 (`/api/task/stop`, `/api/task/pause`, `/api/stop_all`) need no card and are
 never held on a stale event stream or by a waiting card: rule 4 blocks
@@ -789,6 +802,19 @@ out, is deleted from chat history too (docs/JARVIS-API.md §6, §18.1) -
 never the earlier wordings `erase()` cascades to alongside it, which may
 have been said in a different chat.
 
+**"Forget a time frame" forgets; it never erases** (the owner's decision
+of 2026-09-28; `jarvis_forget_range.py`, docs/JARVIS-API.md §64). Each fact
+on its ONE approved card is `retire()`d exactly as Forget retires it -
+`forgotten_at` included, so the past-recall rule and "not learned again"
+treat it like any Forget - picked by `created` (when Jarvis SAVED it), never
+by `valid_from`. For 10 minutes one tap on Undo un-forgets it
+(`MemoryStore.unforget()`, the only way back from a retirement, and only
+for a row still exactly as that Forget left it: an erase in the meantime
+wins). The chats on the card are taken out of `chat-history.db` at once and
+held in memory only, still sealed, until Undo or the 10 minutes or a
+restart, whichever comes first. Wiping words stays "Erase the words", one
+fact at a time.
+
 **"Between us" is a label, not a new door into `facts`** (the owner's
 decision, 2026-09-27; `memory-shared.patch`). `meta.kind = "shared"`, the
 owner's own tap, marks a fact that already exists as a shared joke or
@@ -1161,7 +1187,10 @@ reads from on its own. Three things about it are invariants:
   switch and its encryption.
 - **Turning it back on is a card; off is immediate. No delete-all.**
   One conversation per delete, and both apps hold deleting and shortening
-  the keep period on a stale link.
+  the keep period on a stale link. The one exception is "Forget a time
+  frame" (2026-09-28, docs/JARVIS-API.md §64): the chats from some days, on
+  a list the owner checks, deleted only after ONE approval card listing
+  every one, with 10 minutes to Undo.
 - **A temporary chat is never kept** (2026-09-25): nothing of it reaches
   `chat-history.db`, whether history is on or off (§5, "A temporary chat
   uses and makes no memory").
