@@ -2137,7 +2137,9 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    anything that repeats is set up by one card, like `schedule_repeat` -
    unless the owner decided otherwise for that kind: since 2026-09-26 plain
    alarms, reminders and the standby schedule have none
-   (`register_kind(plain_repeat=True)`; a new kind asks by default).
+   (`register_kind(plain_repeat=True)`; a new kind asks by default), and
+   since 2026-09-28 Today cards (`jarvis_today.py`, JARVIS-API §82): the
+   owner's own words shown back to them, reading nothing new.
    A kind that must look more often than hourly ("tell me when",
    `jarvis_tellme.py`) brings its own rule check (`register_kind(check=)`)
    with its own floor and an end date; the shared check keeps the hourly

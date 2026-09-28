@@ -9911,3 +9911,116 @@ apps' words together.
 
 **Not checked:** the phone half is not compiled here (CI compiles it);
 the desktop's Rust tests compile but run only on Windows.
+
+## 82. Today cards (added 2026-09-28)
+
+The owner chose this on 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md
+section 3, idea 6; the pattern is Samsung's Now Brief and Gemini's Daily
+Brief). Short cards in the owner's own words - "Gym bag" on Mondays and
+Wednesdays from 07:00, "Bins out" on Thursday evenings - show on a **Today**
+section in both apps at a time, on chosen days, from that time until the end
+of that day. Beside them, on the same section, the parts of the latest
+briefing made today: the weather (from the owner's own Home Assistant), the
+calendar, new email (the count, and who from, under the owner's existing
+"Show who new emails are from" setting) and what is still to come today.
+
+One new shipped module, `backend/jarvis_today.py`, no patch and **no new
+route**: a Today card is a job of kind `today` on the one scheduler
+(section 21), added, listed, paused and deleted through the scheduler's own
+routes.
+
+### 82.1 Where the "Today page" is
+
+The Today page was **designed but never built**
+(docs/CUTTING-EDGE-2026-09-26-round2-experience.md section 4), and the
+feasibility audit ruled that it may only be built by growing what is already
+there - "never a fourth view" (docs/FEASIBILITY-AUDIT-2026-09-26.md row 24).
+So this is not a new screen: it is one **Today** section on the screen that
+already holds Coming up and Morning briefing - the desktop's Brain -> Work
+tab, and the phone's Brain - placed just above Coming up. The design's four
+bands (Next, Waiting on you, Done today, This evening) are **not** built;
+only the owner's cards ("This evening" in spirit: a card set for the evening
+shows under "Later today" until its time) and the briefing's parts.
+
+### 82.2 No approval card, and no new way out of this PC
+
+Like a plain repeating reminder (the owner's decision of 2026-09-26), a Today
+card needs **no card**: only the owner's own words or taps can set one, it
+acts on nothing - it only shows the owner's own words back to them - and
+Delete is immediate. It is `Kind.plain_repeat`.
+
+Nothing new is read. The cards come from `GET /api/schedule`; the briefing's
+parts from `GET /api/briefing` - the latest briefing, kept in the PC's
+memory, exactly as Morning briefing shows it. The Today section makes **no
+calendar, email, weather or news request of its own**, and
+`jarvis_today.py` opens no socket (`test_today.py` checks). If no briefing
+was made today, the section says so and points at "Brief me now" - it does
+not put one together by itself. News headlines are left off the section (a
+headline is outside text; they stay under Morning briefing).
+
+### 82.3 The job
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `POST /api/schedule/add` | `{"kind": "today", "text", "repeat": {"every": "day" \| "weekday" \| "week", "at": "HH:MM", "days"?: [0-6]}}` | 200 `{"ok": true, "waiting": false, "job", "said"}` - set up at once ("Set: “Gym bag” shows on your Today page every Monday and Wednesday at 07:00. Next: 07:00 today, ... No card needed - delete it under Coming up to stop it."); the same words at the same times again: 200 `{"already": true}`; **400** no words, more than 80 characters, no `repeat` (a card always repeats), or a repeat that is not a time of day ("every N hours" is refused); **409** 20 cards already | No card. Desktop: `brain_schedule_add_today {text, at, days}` (Brain window only, held on a stale link; all seven days is sent as "every day", Monday to Friday as "every weekday"). Phone: `JarvisRuntime.addTodayCard` (held on a stale link). |
+| `GET /api/schedule` | - | each card is a row of `jobs`, kind `today`, with two more fields: `today` - `"showing"` (today is one of its days and its time has come), `"later"` (later today) or `""` - and `shows_at` (`"07:00"`) | Worked out from the PC's clock at the time of the read, not from when the job last went off, so a PC that slept through 07:00 still shows the card when it wakes. A paused card has `today: ""`. |
+| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete"}` | as 21.2 | Pause hides it until resumed; Delete removes it. Immediate, no card. |
+
+**Its time rings no doorbell.** At its time the job goes off only to tell
+both apps the list changed: the kind is `silent` and `notify: false`, so the
+`schedule` event is `{"id", "kind": "today", "state": "changed"}` - never
+`fired` - and there is no notification, toast or sound. It is never in "Just
+went off", "What did I miss?", the briefing's own "Today" list, or its
+"Coming up" (it does not go off; it shows).
+
+### 82.4 By words
+
+Answered without the AI model (`jarvis_quick.py`), like a reminder, only
+from the owner's own typed or spoken words:
+
+- "show gym bag on my Today page on Mondays and Wednesdays at 7", "put bins
+  out on my today page on Thursday evenings" (18:00, the same default a
+  reminder uses for "evening"), "add a today card saying water the plants
+  every day at 8", "... every weekday at 6pm". **"On Monday" means every
+  Monday** here: a Today card always repeats.
+- No time said: Jarvis asks for one and sets nothing. A time that is not a
+  time of day ("every 2 hours", "tomorrow at 7"): said plainly, nothing set.
+- "What's on my Today page?" lists them (a private answer, like a list of
+  reminders). "Remove gym bag from my Today page" deletes ONE; two cards
+  with the same words are named, never both deleted. "Cancel that" takes
+  back the one just set.
+- The sentence is never learned as a fact (`is_command`).
+
+### 82.5 Privacy
+
+The words are the owner's own: plain SQLite on this PC, beside every
+reminder, never in a log (ids and the kind only), never on the event bus,
+and **never sent to the AI model** - the Today section is drawn by the apps
+from the scheduler's list. The one way the model sees them is the owner
+asking: the model's own "coming up" tool lists the scheduler's jobs when the
+owner asks what is coming up, as it does for every reminder. "Windows Hello
+for memory lists and chat history" (desktop; `brain/schedule.rs`
+`redact_list` blanks `text`) and "Hide memory lists and chat history"
+(phone; `Schedule.hide`) hide the words and the briefing's lines; the times
+and counts stay.
+
+### 82.6 Where it lives
+
+Backend: `jarvis_today.py` (a kind on `jarvis_schedule.py`'s
+`KIND_MODULES`), `jarvis_quick.py` (`_today`, `today_when`, `_run_today`),
+`jarvis_briefing.py` (`_next_section` leaves Today cards out),
+`test_today.py`. Desktop: `src/today.js` (the words, `cardsOf`,
+`todayCards`, `briefingCards`, `addArgs`), `brain.html` (`#today-card`),
+`brain.js` (`paintToday`, `addToday`), `coming-up.js` (the row's tag and
+title), `src-tauri/src/brain/schedule.rs` (`today_body`,
+`brain_schedule_add_today`, in the Brain's `brain-schedule` permission set),
+`tests/today.mjs`. Phone: `net/Today.kt` (the same words and rules),
+`net/Schedule.kt` (`today`, `showsAt`, the tag and title),
+`JarvisRuntime.addTodayCard`, `ui/screens/TodayPlate.kt`, `BrainScreen.kt`
+(`item("today")`), `TodayTest.kt`. `tests/today.mjs` holds the two apps'
+words, the Rust's and the PC's together.
+
+**Not checked:** the phone half is not compiled here (CI compiles it); the
+desktop's Rust tests compile but run only on Windows; "is this briefing from
+today" is judged by each app's own clock, which on a phone in another time
+zone from the PC can differ from the PC's day near midnight.
