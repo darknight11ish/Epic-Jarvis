@@ -526,6 +526,13 @@ before acting on any outside review; its disproven findings stay closed):
   as a warning only, after the owner gets Meta's access and it is measured;
   (3) "quiz me on my notes" with FSRS, deferred until a note-review screen
   is designed. Details and limits are in that audit, section 6.
+  Added the same day, as milestones 4-7: (4) a one-line lesson from each
+  "wrong" mark, offered on a card and saved only on the owner's yes; (5)
+  multi-hop memory, kept only if the memory self-tests improve; (6) a skill
+  that fails twice in a row stops being offered and asks "keep or turn
+  off?"; (7) record how much of each prompt Ollama reuses from its cache.
+- **Copying the owner's own voice stays refused** (`jarvis_voices.py`): a
+  Jarvis speaking in the owner's voice could pass its own voice check.
 
 Decided 2026-09-28, after the app-builder suggestions
 (`docs/APP-BUILDER-DESIGN.md` has the plan):

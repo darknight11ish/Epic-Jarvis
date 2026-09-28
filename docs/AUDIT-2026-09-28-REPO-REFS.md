@@ -93,6 +93,54 @@ existing behaviour until it's switched on. Each gets the usual new-feature audit
   kind on the existing scheduler, not a second scheduler, and notes stay
   outside text (never learned as facts).
 
+### Milestone 4 - Learn from "wrong" marks (queued 2026-09-28)
+
+- **What.** When the owner marks an answer wrong (`/api/feedback/mark`,
+  `jarvis_feedback.py`), the local model writes one short lesson: what went
+  wrong, and what to do next time (the idea of Reflexion,
+  noahshinn/reflexion, MIT; no code copied). The lesson is only OFFERED, on a
+  card; it is saved only on the owner's yes, with Forget like any fact.
+- **Why a card.** Automatic learning takes the owner's own words only
+  (`ARCHITECTURE.md`, "the owner's own words only"). A lesson written by the
+  model is not the owner's words.
+- **Limits.** Never for a crisis turn, a temporary chat, or an answer built
+  on outside text. (A "wrong" mark on a crisis answer still counts toward
+  "suggest the bigger model" today - a known gap in `CLAUDE.md`, waiting for
+  the owner's go-ahead.) Today a "wrong" mark
+  only counts toward retiring the facts that answer used. That keeps working
+  as it is.
+
+### Milestone 5 - Better multi-hop memory (queued 2026-09-28)
+
+- **What.** Try following links between facts across chats (sister -> her
+  dog -> its breed), building on the entity layer and "one step out"
+  (`backend/rebuilt/jarvis_memory.py`). HippoRAG
+  (OSU-NLP-Group/HippoRAG) is the idea to test: Personalized PageRank over
+  the entity links, on the processor.
+- **The rule.** It is kept only if `eval_memory.py` and `eval_learner.py`
+  get better on the PC, with the numbers on the memory scoreboard. Add
+  multi-hop questions to the self-test first, so there is something to
+  measure. "One step out" hurt when it ran on every question, which is why
+  it now runs only for "who" questions.
+
+### Milestone 6 - Skill health check (queued 2026-09-28)
+
+- **What.** If a saved skill (a `SKILL.md` routine) fails twice in a row,
+  Jarvis stops offering it to the model and raises one card: "This routine
+  failed twice recently. Keep it or turn it off?". The rolling success count
+  is the idea of memorizz (RichmondAlake/memorizz); no code copied.
+- **Limits.** "Turn it off" is immediate; turning it back on is a card, like
+  other settings. Failures count only when a step really ran and failed, not
+  when the owner refused a card.
+
+### Milestone 7 - Measure the prompt cache (queued 2026-09-28)
+
+- **What.** Record, on every turn, how much of the prompt Ollama reused from
+  its cache, and show it with the speed numbers
+  (`CUTTING-EDGE-2026-09-26-engine.md`, idea 3). Jarvis's prompt already puts
+  recalled facts late, to keep the cache warm; this measures whether that
+  works before anything is changed. Numbers only - never prompt text.
+
 ## 7. Rounds three and four (later on 2026-09-28)
 
 Two more batches of suggestions from Gemini, checked the same way.
@@ -133,4 +181,28 @@ in `docs/APP-BUILDER-DESIGN.md`):
   list.
 - **Offline developer docs (Dash/Zeal docsets):** a candidate for later, not
   queued (owner, 2026-09-28).
+
+**Round five** (memory, speed and voice; later on 2026-09-28):
+- Queued as milestones 4-7 (section 6): lessons from "wrong" marks,
+  multi-hop memory, skill health, and measuring the prompt cache.
+- **Already there:** facts about the same person are linked (the entity
+  layer); "both are true" on the memory review screen (the agent-memory
+  idea); facts placed late in the prompt; the phone's echo canceller with a
+  grace period at the start of each reply; the overnight tidy (already
+  decided, cards only), which is where TiMem's summary levels would go.
+- **Refused on purpose:** copying the owner's own voice (F5-TTS training, a
+  Kokoro style vector). `jarvis_voices.py` refuses it because a Jarvis
+  speaking in the owner's voice could pass its own voice check.
+- **Wrong:** "PARAMETER spec_type ngram-mod" is not an Ollama setting. The
+  research read Ollama's source, and its only guess-ahead switch is
+  `draft_num_predict`, for models with MTP layers. First sound takes roughly
+  2.5-4 s today, not ~500 ms (`ARCHITECTURE.md` section 11).
+- **Not needed:** rkyv (the desktop's internal data is small); transformers.js
+  (the desktop's code has no outside libraries, and the approved History
+  search is on-screen only); dnomia-knowledge (recall already falls back to
+  word search while meaning search is not ready); voice models that listen
+  and talk at once (they can't show a card before acting).
+- **Not queued, but possible later:** matching the owner's speaking pace
+  (faster when they are quick, slower when quiet), as a "How Jarvis talks"
+  setting.
 
