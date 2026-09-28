@@ -538,7 +538,7 @@ before acting on any outside review; its disproven findings stay closed):
   multi-hop memory, kept only if the memory self-tests improve; (6) a skill
   that fails twice in a row stops being offered and asks "keep or turn
   off?"; (7) record how much of each prompt Ollama reuses from its cache.
-- **Milestones 8-11, the same day:** (8) close the crisis "wrong" gap below -
+- **Milestones 8-11, the same day:** (8) close the crisis "wrong" gap (the 2026-09-27 re-check above) -
   the owner's go-ahead is given; (9) a "match my speaking pace" setting, off
   to start, both apps; (10) microWakeWord joins the wake-word trial; (11)
   offline developer docs. Details in the audit, section 6.
