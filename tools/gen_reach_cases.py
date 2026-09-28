@@ -90,8 +90,8 @@ OFF = {"master": False, "features": {}}
 NO_PLUGINS = {"servers": [], "running": [], "problem": "", "card_every_start": False}
 
 # Chatbot conversations (jarvis_chatbot.py): the Gemini adapter as the PC
-# would list it - never signed in, or ready but not reachable from the apps
-# yet (no route exists). Fixed here, so the file does not depend on whether
+# would list it - never signed in, or ready and reachable from both apps
+# (the routes are installed). Fixed here, so the file does not depend on whether
 # Playwright happens to be installed on the machine that writes it.
 # The API adapters (jarvis_chatbot_api.py) likewise: every service listed,
 # with a key saved for OpenAI only when `ready` - never read from this
@@ -107,7 +107,9 @@ def _gemini(ready: bool) -> dict:
         ok = ready and pid == "openai_api"
         bots.append({"id": pid, "name": p.name, "host": p.host, "built": True, "ready": ok,
                      "note": "" if ok else _A.no_key_words(p), "kind": "api"})
-    return {"routed": False, "chatbots": bots}
+    # Routed: on the PC, chatbot-routes.patch installs the routes and
+    # install() sets jarvis_chatbot.ROUTED (it was never set before).
+    return {"routed": True, "chatbots": bots}
 
 
 def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=None,

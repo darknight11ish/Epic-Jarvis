@@ -426,6 +426,10 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     answered here, after the server's own origin and token checks. Every
     other request goes straight to the original."""
     get0, post0 = handler_cls.do_GET, handler_cls.do_POST
+    # Both apps can reach a conversation from here on: "What Jarvis can
+    # reach" (jarvis_reach._chatbot_status) reads this, and without it
+    # showed every chatbot way out as Off.
+    CB.ROUTED = True
     if getattr(post0, "_jarvis_chatbot", False):
         return "  chatbot    Talk to a chatbot for me (already on)"
 

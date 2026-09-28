@@ -136,8 +136,9 @@ from typing import Any, Callable, Optional
 
 #: The gate action every conversation is asked under. Tier "ask" only.
 ACTION = "chatbot_session"
-#: No route reaches this module yet; both apps' "What Jarvis can reach"
-#: (jarvis_reach._chatbot) reads this to say "not from either app yet".
+#: True once jarvis_chatbot_routes.install() has put the routes on the
+#: server (chatbot-routes.patch); both apps' "What Jarvis can reach"
+#: (jarvis_reach._chatbot) reads it. False only where the routes are not on.
 ROUTED = False
 #: The name the running conversation has in jarvis_task_control.
 TASK_TOOL = "chatbot_session"
