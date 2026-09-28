@@ -52,7 +52,8 @@ export const FRAME_RATES = [
 /** The Frame rate row's one-line note - the phone's Face editor says the same. */
 export const FRAME_RATE_NOTE =
   "How many times a second the face is drawn. Higher is smoother but uses more battery and graphics work. " +
-  "It keeps to whole steps of the screen's rate, so 90 becomes 72 on a 144 Hz screen.";
+  "It keeps to whole steps of the screen's rate and never goes below your pick, so on a 144 Hz screen " +
+  "90 draws 144 - the next rate the screen can do evenly.";
 
 /**
  * Slow-down only. The phone's reason, copied: some faces pulse their own
@@ -121,11 +122,13 @@ export function saveFaceTuning(value, storage = globalThis.localStorage) {
 }
 
 /**
- * The divisor rule, with the spec's pick rule (`frame_rate.pick_rule`): draw
- * every Nth vsync so frames land on real vsyncs, the nearest whole share of
- * the screen's rate but never more than a fifth faster than what was picked -
- * 90 is 72 on a 144 Hz screen and 60 on a 120 Hz one. `hz` is the display's
- * refresh rate. Auto and Max are the display's own rate on the web. The same
+ * The divisor rule, with the spec's pick rule (`frame_rate.pick_rule`, owner
+ * 2026-09-28): draw every Nth vsync so frames land on real vsyncs, rounding
+ * UP to a whole share of the screen's rate - never slower than what was
+ * picked. N is the largest whole number that still draws at least the pick;
+ * a pick at or above the screen's rate is every frame. 90 draws 144 on a
+ * 144 Hz screen and 120 on a 120 Hz one; 60 draws 72 on 144 Hz. `hz` is the
+ * display's refresh rate. Auto and Max are the display's own rate on the web. The same
  * sum as face-pace.js's strideNear (which faces.html uses) and the phone's
  * FramePacing.strideNear; tests/face-pace.mjs checks the first two agree.
  */
@@ -133,7 +136,5 @@ export function strideFor(frameRate, hz) {
   const rate = Number(hz) > 0 ? Number(hz) : 60;
   const n = Number(frameRate);
   const want = Math.min(Number.isFinite(n) && n > 0 ? n : rate, rate);
-  let s = Math.max(1, Math.round(rate / want));
-  if (rate / s > want * 1.2) s++;
-  return s;
+  return Math.max(1, Math.floor(rate / want + 0.01));
 }

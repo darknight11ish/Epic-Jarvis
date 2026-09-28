@@ -86,7 +86,8 @@ class FaceBudgetTest {
         assertFalse(QualityTier.entries.any { it.label.contains("saver", ignoreCase = true) })
         for (q in QualityTier.entries) assertTrue(q.note, q.note.length in 20..110)
         assertEquals(listOf("auto", "30", "60", "90", "120", "max"), FrameRateTarget.entries.map { it.id })
-        assertTrue(FrameRateTarget.NOTE.contains("90 becomes 72 on a 144 Hz screen"))
+        assertTrue(FrameRateTarget.NOTE.contains("on a 144 Hz screen 90 draws 144"))
+        assertFalse(FrameRateTarget.NOTE.contains("becomes 72"))
     }
 
     /** How much of the phone's resolution an animal is traced at: 0.4, 0.5, 0.75, 1. */
@@ -105,7 +106,7 @@ class FaceBudgetTest {
 
     // ------------------------------------------------------ divisor rule ----
 
-    /** The kit's applyTarget: stride = max(1, round(hz / want)). */
+    /** The pick rule: stride = max(1, floor(hz / want + 0.01)), want capped at hz. */
     @Test
     fun strideIsAWholeDivisorOfThePanel() {
         assertEquals(1, FramePacing.strideFor(FrameRateTarget.AUTO, 120f))
@@ -114,29 +115,42 @@ class FaceBudgetTest {
         assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_60, 60f))
         // Asking for more than the panel has is capped at the panel.
         assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_120, 60f))
-        // 90 / 60 = 1.5, which the kit's Math.round takes up to 2.
-        assertEquals(2, FramePacing.strideFor(FrameRateTarget.FPS_60, 90f))
+        // 90 / 60 = 1.5: rounded up to the panel's 90, never down to 45.
+        assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_60, 90f))
         assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_120, 144f))
     }
 
     /**
-     * The spec's pick rule: the nearest whole divisor, but never more than a
-     * fifth faster than the pick. The Frame rate note's own example: 90 is 72
-     * on a 144 Hz screen - and 60, not 120, on a 120 Hz one.
+     * The spec's pick rule, rounded UP (owner, 2026-09-28): the largest whole
+     * divisor that still draws at least the pick - never slower than it. The
+     * Frame rate note's own example: 90 draws 144 on a 144 Hz screen.
      */
     @Test
-    fun aPickedRateLandsOnWholeVsyncsAndNeverFarAboveThePick() {
+    fun aPickedRateLandsOnWholeVsyncsAndNeverBelowThePick() {
         fun fps(t: FrameRateTarget, hz: Float) = hz / FramePacing.strideFor(t, hz)
-        assertEquals(72f, fps(FrameRateTarget.FPS_90, 144f), 0.01f)
-        assertEquals(60f, fps(FrameRateTarget.FPS_90, 120f), 0.01f)
+        assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_120, 165f))
+        assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_90, 120f))
+        assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_90, 144f))
+        assertEquals(2, FramePacing.strideFor(FrameRateTarget.FPS_60, 144f))
+        assertEquals(4, FramePacing.strideFor(FrameRateTarget.FPS_30, 144f))
+        assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_60, 60f))
+        assertEquals(1, FramePacing.strideFor(FrameRateTarget.FPS_120, 60f))
+        assertEquals(144f, fps(FrameRateTarget.FPS_90, 144f), 0.01f)
+        assertEquals(120f, fps(FrameRateTarget.FPS_90, 120f), 0.01f)
+        assertEquals(165f, fps(FrameRateTarget.FPS_120, 165f), 0.01f)
         assertEquals(90f, fps(FrameRateTarget.FPS_90, 90f), 0.01f)
         assertEquals(30f, fps(FrameRateTarget.FPS_30, 60f), 0.01f)
         assertEquals(30f, fps(FrameRateTarget.FPS_30, 120f), 0.01f)
         assertEquals(72f, fps(FrameRateTarget.FPS_60, 144f), 0.01f)
+        assertEquals(36f, fps(FrameRateTarget.FPS_30, 144f), 0.01f)
+        // A panel reporting a hair under its nominal rate still halves evenly.
+        assertEquals(2, FramePacing.strideNear(59.94f, 30f))
         for (hz in listOf(60f, 75f, 90f, 100f, 120f, 144f, 165f, 240f)) {
             for (t in FrameRateTarget.entries) {
                 val want = if (t.hz > 0f) minOf(t.hz, hz) else hz
-                assertTrue("$t at $hz Hz draws ${fps(t, hz)}", fps(t, hz) <= want * 1.2f + 0.01f)
+                val s = FramePacing.strideFor(t, hz)
+                assertTrue("$t at $hz Hz draws ${fps(t, hz)}", fps(t, hz) >= want - 0.01f)
+                assertTrue("$t at $hz Hz: stride ${s + 1} still reaches the pick", hz / (s + 1) < want)
             }
         }
     }

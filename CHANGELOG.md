@@ -365,7 +365,9 @@ number as the last part - `0.2.57` is a build of 0.2.
   animal starts at High and goes up to Maximum by itself only when its
   frames are very cheap; it steps down Maximum, then 60 fps, then Balanced,
   then 30 fps, then Lower. Battery saver on the phone still overrides it
-  all. **Frame rate** adds 30 and 90 (on a 144 Hz screen 90 becomes 72).
+  all. **Frame rate** adds 30 and 90. When the screen cannot match a pick
+  exactly it rounds up, never down: on a 144 Hz screen 90 draws 144, and
+  120 on a 165 Hz screen draws 165.
   An animal at rest is drawn 60 times a second when there is room (else
   30), and smoothly at full rate while it stretches or scratches; picking a
   rate lifts its rest to that. The PC's widget, HUD and floating face now

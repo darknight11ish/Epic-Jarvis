@@ -54,7 +54,8 @@ await check("one set of words: the spec, Settings and the Faces window agree", a
   assert.ok(!levels.some((l) => /battery saver/i.test(l.label)), "the phone already has a Battery saver switch");
   assert.deepEqual(tuning.FRAME_RATES.map((f) => f.id), SPEC.frame_rate.targets);
   for (const l of levels) assert.ok(l.note.length < 110, `${l.label}'s note is not one plain line`);
-  assert.match(tuning.FRAME_RATE_NOTE, /90 becomes 72 on a 144 Hz screen/);
+  assert.match(tuning.FRAME_RATE_NOTE, /on a 144 Hz screen 90 draws 144/);
+  assert.doesNotMatch(tuning.FRAME_RATE_NOTE, /becomes 72/, "the note still has the old round-to-nearest example");
 });
 
 await check("the animal scales: desktop 0.62 / 0.8 / 1 / 2x2, phone 0.4 / 0.5 / 0.75 / 1", async () => {
@@ -82,24 +83,33 @@ await check("traced pixels: High is the screen's own, Maximum 2x2 capped at 2400
   assert.equal(P.noShadow(600, "max"), false);
 });
 
-await check("the pick rule: whole shares of the screen, never a fifth over the pick", async () => {
+await check("the pick rule: whole shares of the screen, rounded up - never slower than the pick", async () => {
   const hzs = [60, 75, 90, 100, 120, 144, 165, 240];
   const fps = (t, hz) => hz / P.strideFor(t, hz);
-  assert.equal(fps("90", 144), 72, "the note says 90 becomes 72 on 144 Hz");
-  assert.equal(fps("90", 120), 60);
+  // The owner's decision of 2026-09-28: round UP.
+  assert.equal(P.strideFor("120", 165), 1, "120 on 165 Hz draws 165, not 82.5");
+  assert.equal(P.strideFor("90", 120), 1, "90 on 120 Hz draws 120, not 60");
+  assert.equal(P.strideFor("90", 144), 1, "the note says 90 draws 144 on 144 Hz");
+  assert.equal(P.strideFor("60", 144), 2, "60 on 144 Hz draws 72");
+  assert.equal(P.strideFor("30", 144), 4, "30 on 144 Hz draws 36");
+  assert.equal(P.strideFor("60", 60), 1);
+  assert.equal(P.strideFor("120", 60), 1, "a pick above the screen's rate is every frame");
   assert.equal(fps("90", 90), 90);
-  assert.equal(fps("60", 144), 72);
   assert.equal(fps("60", 120), 60);
   assert.equal(fps("30", 60), 30);
   assert.equal(fps("30", 120), 30);
   assert.equal(fps("120", 144), 144);
   assert.equal(fps("auto", 165), 165);
   assert.equal(fps("max", 240), 240);
+  // A screen reporting a hair under its nominal rate still halves evenly.
+  assert.equal(P.strideNear(59.94, 30), 2);
   for (const hz of hzs) {
     for (const t of tuning.FRAME_RATES.map((f) => f.id)) {
-      assert.equal(tuning.strideFor(t, hz), P.strideFor(t, hz), `Settings and the face disagree on ${t} at ${hz} Hz`);
-      const want = Number(t) || hz;
-      assert.ok(fps(t, hz) <= Math.min(want, hz) * 1.2 + 1e-9, `${t} at ${hz} Hz draws ${fps(t, hz)}`);
+      const s = P.strideFor(t, hz);
+      assert.equal(tuning.strideFor(t, hz), s, `Settings and the face disagree on ${t} at ${hz} Hz`);
+      const want = Math.min(Number(t) || hz, hz);
+      assert.ok(hz / s >= want - 1e-9, `${t} at ${hz} Hz draws ${hz / s}, slower than the pick`);
+      assert.ok(hz / (s + 1) < want, `${t} at ${hz} Hz: stride ${s + 1} would still reach the pick`);
     }
   }
 });
@@ -292,7 +302,7 @@ if (K) {
     const notes = await page.locator("#face-quality-levels li").allTextContents();
     assert.equal(notes.length, 4);
     assert.match(notes[3], /^Maximum - The sharpest edges/);
-    assert.match(await page.locator("#face-fps-note").textContent(), /90 becomes 72/);
+    assert.match(await page.locator("#face-fps-note").textContent(), /90 draws 144/);
     await page.locator('#face-fps .choice[data-value="90"]').click();
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("jarvis.faceTuning")));
     assert.equal(saved.frameRate, "90");
