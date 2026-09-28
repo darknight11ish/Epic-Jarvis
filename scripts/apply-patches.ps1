@@ -645,6 +645,15 @@ $PATCHES = @(
     # chain). Needs jarvis_brain_reads.py copied in; without it the banner
     # says so and the two routes are simply not there (404).
     'brain-reads.patch'
+    # Warm-up with words, after a learning pass (speed fix, 2026-09-28): one
+    # hunk in the learner thread's _loop, whose lines are extraction-
+    # wiring.patch's own (nothing after it in this list touches them), so
+    # it goes last, like every new patch. After each pass that asked a
+    # model it calls jarvis_agent.warm_after_learning(), which re-reads the
+    # start every question shares only on a one-card PC and never while a
+    # question is being answered. Needs nothing new copied in: jarvis_agent.py
+    # is already in this list; without it, nothing changes.
+    'warm-prefix.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

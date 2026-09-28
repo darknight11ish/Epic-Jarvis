@@ -14106,3 +14106,161 @@ The owner chose this group on 2026-09-28, from
 - While one search runs, the opened words sit in the backend's memory, as
   they already do when a conversation is opened. Python cannot wipe them
   afterwards; it can only let them go.
+
+# Warm-up with words: `warm-prefix.patch`, `jarvis_agent.py`, `jarvis_power_switch.py` (2026-09-28)
+
+From `docs/RESEARCH-AUDIT-2026-09-28.md` section 1.5, rows 2 and 3.
+
+## In plain words
+
+Every question Jarvis answers on this PC starts with the same text: Jarvis's
+rules and the list of tools it may use. The model has to read that text
+before it can answer. Ollama remembers what it has already read and skips
+it next time - but only while nothing else has been read since. Two things
+made it forget:
+
+- **Waking up.** After standby, Jarvis loaded the model with no words at all,
+  so the first question still read the rules and tools from nothing.
+- **Background learning, on a PC with one graphics card.** About 45 seconds
+  after you stop talking, the learner asks the same model about what you
+  said. Ollama keeps only one conversation's worth, so the next question read
+  everything again.
+
+Now, after the model is loaded on waking, and after each learning pass that
+used the chat's own model, Jarvis sends the model exactly the start a real
+question sends, with the single word "hi" as the question and a one-word
+answer that is thrown away. The next real question finds the start already
+read.
+
+How much it saves depends on how many tools are switched on: with only web
+search (the shipped setting) the shared start is roughly 550 tokens, a
+fraction of a second; with every tool on it is roughly 3,000, the "3-4 s"
+the code's own comments estimate for this card. Measured here only by
+Jarvis's own (pessimistic) estimate, not on your PC.
+
+It never:
+
+- carries any words from your conversations (only "hi");
+- is written to chat history or the speed record, shows up as a step in
+  Brain -> Live, or is learned from;
+- loads a model (it runs only when Ollama says the model is already loaded),
+  so it cannot undo standby or make Ollama swap models;
+- sends anything a real question does not send (no `num_ctx`, no `options`,
+  no `keep_alive`), so Ollama has no reason to reload the model;
+- goes to a cloud model or to another machine;
+- runs while a question is being answered, a task is running or Jarvis is on
+  standby, or after a temporary chat (or a game);
+- runs after learning when the second graphics card does the learning, or
+  at all while questions go to "One bigger model on both cards".
+
+**A question you ask while it runs does not wait for it:** the question cuts
+the warm-up's connection the moment it starts, and Ollama stops work for a
+caller that has gone. At worst the question waits for the one step Ollama
+is in the middle of.
+
+**It is on by default. To switch it off**, add this line under `[power]` in
+your `jarvis-framework.toml`, and it stops at once (no restart needed):
+
+```
+warm_prefix = false
+```
+
+## Check it worked (on the PC)
+
+This PowerShell line prints your last 40 answers and changes nothing. It
+reads `speed.jsonl` in the `.openjarvis` folder in your user folder (if you
+set `OPENJARVIS_CONFIG_DIR`, the file is in that folder instead, and the line
+needs that path):
+
+`$f = Join-Path $env:USERPROFILE ".openjarvis\speed.jsonl"; Get-Content $f -Tail 40 | ForEach-Object { $r = $_ | ConvertFrom-Json; if ($r.prompt_tokens) { "{0}  prompt {1}  reused {2}  first word {3} ms" -f ([DateTimeOffset]::FromUnixTimeSeconds([int64]$r.at).LocalDateTime), $r.prompt_tokens, $r.cached_tokens, $r.first_word_ms } }`
+
+What to look at: the first answer after waking Jarvis from standby, and the
+first answer after a pause of a minute or more.
+
+- **It worked** if "reused" on those answers is no longer near 0: roughly
+  500 or more with only web search on, roughly 2,500 or more with every tool
+  on - and "first word" is shorter than it was on such answers before.
+- **It did not help** if "reused" stays near 0 on them. Then tell me: the
+  most likely reason is the one under "Not checked" below.
+- A spoken question, or one where Jarvis recalled a saved fact, may reuse
+  less - see below.
+
+## What changed
+
+- `jarvis_agent.py`:
+  - one place builds the start of every local turn, used by BOTH the real
+    turn and the warm-up so they cannot drift apart: `dress_messages` (the
+    manner, focus, spoken, cut-off and crisis notes, then
+    `keep_rules_first`), `chat_body` (the request's fields, in their order),
+    `_allowed_tools`, `_new_offer`, `_fill_offer` (the tools shown, with the
+    short-list setting), and `chat_prefix(enabled_tools, ...)` ->
+    `(messages_head, tools)`;
+  - `warm_prefix()` (the warm-up itself, over a plain connection to this PC
+    that a starting turn can cut), `warm_after_waking()`,
+    `warm_after_learning()`, `warm_prefix_on()` (the `[power] warm_prefix`
+    switch, on unless a real `false`);
+  - `run_local_turn` is now counted while it runs (`turns_running()`), cuts
+    off a warm-up on the wire when it starts, and remembers the last turn's
+    settings - the address, the model, the enabled tools and whether it was
+    a temporary chat, never its words - which the warm-ups use.
+- `jarvis_power_switch.py`: `warm_up()` calls `warm_after_waking()` once the
+  model is loaded and Jarvis is not back on standby. `warm_status()["why"]`
+  says whether the rules were read ahead; the state is "ready" either way.
+- `warm-prefix.patch` (new, last in `apply-patches.ps1`): one hunk in the
+  learner thread's `_loop` in `jarvis_hud.py`. After a pass that asked a
+  model, it calls `jarvis_agent.warm_after_learning()`, which decides and,
+  if it warms, does so on its own thread. Its lines are
+  `extraction-wiring.patch`'s own, which nothing later touches. Needs nothing
+  new copied in; without `jarvis_agent.py`, nothing changes.
+
+No route changed, so `docs/JARVIS-API.md` is unchanged.
+
+## Test it
+
+```
+python3 backend/test_warm_prefix.py
+```
+
+Against a fake Ollama on 127.0.0.1 (real sockets), with nothing from the PC:
+the warm-up's request is byte for byte the request `run_local_turn` sends
+for the question "hi", except `max_tokens` - with the warm and plain manner,
+a focus session, the short tool list, only web search, no tools and a model
+that cannot use tools; and for a real question every message before it and
+the tool list are the same. Neither sends `num_ctx`, `options` or
+`keep_alive`. The warm-up touches no chat-history, speed, event, feedback or
+learner module and writes no file. Every "never" in the list above is
+checked. A question arriving mid-warm-up cuts its connection (the fake sees
+the caller go) and is answered at once. The patch is last in the list, keeps
+only `extraction-wiring.patch`'s lines, applies to the stand-in of
+`jarvis_hud.py` and comes off again, and its lines, run as they are, call
+the warm-up only after a pass that asked a model and never raise.
+`test_manner.py` and `test_rules_first_relay.py` were updated for the moved
+code and the new last patch.
+
+## Not checked, said plainly
+
+- **Nothing here ran against a real Ollama.** That the one-word warm-up
+  really leaves the start in Ollama's memory, and that a real question
+  reuses it, is shown only by the PowerShell line above on your PC.
+- **Which part a question shares may be smaller than hoped.** Ollama gathers
+  every system message into one block (I read this in Ollama's
+  `template/template.go`, `collate()`). I could not read the chat template
+  of the model on your PC. If that template prints that block before the
+  tool list, then on a spoken question, or one where Jarvis recalled a saved
+  fact, the text differs from the warm-up before the tool list, and only the
+  rules are reused on those questions. The "reused" numbers will show it.
+  Fixing that would mean moving those notes, which changes what the model
+  is shown - a separate change, to be measured.
+- Newer Ollama versions may keep more than one conversation's worth in the
+  computer's memory (the research audit's engine report mentions
+  llama-server's prompt cache). If so, the learner may not have been
+  pushing the chat out at all, and the warm-up after learning finds its text
+  already there and costs almost nothing.
+- Cutting a warm-up off relies on Ollama stopping work when its caller
+  disconnects (Go's server cancels the request). Read, not tested on
+  Windows.
+- A model switch (Brain -> Models) is done by your own `jarvis_models.py`,
+  which is not in this repository, so it is not followed by a warm-up; the
+  first question after a switch reads everything, as before. The same for
+  the first question after the PC starts (nothing has been asked yet, so
+  there is no tool list to copy).

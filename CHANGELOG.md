@@ -93,6 +93,12 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 **Faster**
 
+- **A faster first answer after waking, and after a pause.** Jarvis now
+  reads its rules and tool list into the model ahead of time - a one-word
+  warm-up whose answer is thrown away and never recorded. It never loads the
+  model by itself, never runs while you are asking something, and gives way
+  the moment you do. To switch it off: `warm_prefix = false` under `[power]`
+  in `jarvis-framework.toml`.
 - **Jarvis speaks sooner.** Speech-to-text and the voice now use 4 processor
   threads instead of 2 on a PC with cores to spare (2 on a small one), which
   measured about 0.3 s sooner to the first sound. Your own `stt_threads` /

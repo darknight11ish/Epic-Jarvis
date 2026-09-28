@@ -462,8 +462,16 @@ def t_patch_and_shipping():
     import _stack
     import _where
     order = _stack.order()
-    check("brain-reads.patch is last in apply-patches.ps1", order[-1] == "brain-reads.patch",
+    # Last when it was written; warm-prefix.patch (the learner thread's
+    # _loop) now follows it. What matters is that nothing after it touches
+    # the lines it builds on (answer-sources' install block) - and that the
+    # whole list applies, which stand_in() below proves.
+    check("brain-reads.patch is in apply-patches.ps1", "brain-reads.patch" in order,
           order[-3:])
+    for later in order[order.index("brain-reads.patch") + 1:] if "brain-reads.patch" in order else []:
+        body = (REPO / "backend" / later).read_text(encoding="utf-8")
+        check(f"{later}, after it, leaves answer-sources' install block alone",
+              "jarvis_sources" not in body and "answer-sources" not in body)
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("jarvis_brain_reads.py is shipped by the script and in _where.SHIPPED",
           "'jarvis_brain_reads.py'" in ps1 and "jarvis_brain_reads.py" in _where.SHIPPED)
