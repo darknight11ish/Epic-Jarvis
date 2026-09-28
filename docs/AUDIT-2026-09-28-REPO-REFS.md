@@ -299,3 +299,24 @@ were not opened, so their names and contents are unverified):
 - **BuilderIO/agent-native:** not adopted. It's a whole TypeScript app
   framework, and the desktop's code uses no outside libraries.
 
+**Round eight** (coding agents and workspaces, later on 2026-09-28): nothing
+adopted.
+- **All-Hands-AI/OpenHands, huggingface/smolagents:** each lets the model run
+  code step after step without a card for each step - the standing grant
+  `docs/UFO-SAFETY-DESIGN.md` rejects, and rule 4 needs a card per command.
+  OpenHands also runs its sandbox in Docker, which Jarvis chose against. The
+  coding-engine question is covered by the locked-down aider trial
+  (`docs/APP-BUILDER-DESIGN.md`, D2).
+- **daytonaio/daytona:** container infrastructure (the Docker route again).
+  Its licence was not checked here.
+- **earthwalker17/agent-os, OpenLoaf/OpenLoaf** (planner plus worker agents;
+  repositories not opened, names unverified): the app builder already keeps
+  planning (milestone D, through a card) apart from editing (a task's own
+  copy). A second orchestration layer is refused, as in round seven.
+- **NousResearch/hermes-agent:** already cited (`ANDROID-FEATURE-AUDIT.md`).
+  Better tool use by small models is already built or planned: a short tool
+  list with more on request, "ask, don't guess", and multi-step tool tests.
+- **MintplexLabs/anything-llm:** document reading is already covered
+  (MarkItDown, "Folders Jarvis may look in", the Notion import). Its
+  telemetry was not checked.
+
