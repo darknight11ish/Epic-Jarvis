@@ -281,9 +281,19 @@ class FaceShellRulesTest {
             assertTrue("$from -> $to: wrapped", a.t - b.t >= FaceClock.WRAP_S - 1.0)
             val pa = animals(a)
             val pb = animals(b)
+            // FaceHost keeps its clock in a Double but hands it on as a Float, so
+            // before the wrap the pose sees the time (and the time since the
+            // change) rounded to a step of Math.ulp(a.t) - half a millisecond at
+            // 4096 s - and after it, almost exactly. Mid-blink an eyelid moves
+            // about 1% per millisecond (the robot's did, at this very instant,
+            // and failed CI), so allow what one rounding step moves each value
+            // and nothing more: a real jump at the wrap is far bigger than that.
+            val step = Math.ulp(a.t)
+            val pn = animals(a.copy(t = a.t + step, hitchPhase = a.hitchPhase + step))
             for ((id, u) in pa) for ((name, v) in u) for (i in v.indices) {
                 if (name == "uWater" && i == 1) continue   // a phase: the same modulo a full turn
-                assertEquals("$id $from -> $to: $name[$i]", v[i], pb.getValue(id).getValue(name)[i], 2e-3f)
+                val rounding = abs(pn.getValue(id).getValue(name)[i] - v[i])
+                assertEquals("$id $from -> $to: $name[$i]", v[i], pb.getValue(id).getValue(name)[i], 2e-3f + rounding)
             }
             // The orb's swirl (the shaders' uTime * 1.3, uTime = the angle).
             assertEquals(sin(a.angle * 1.3f), sin(b.angle * 1.3f), 2e-3f)
