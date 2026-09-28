@@ -147,6 +147,16 @@ number as the last part - `0.2.57` is a build of 0.2.
   reads; program names never leave the PC and are not saved. Changing Windows
   settings (Night light, dark mode) is not built yet.
 
+**New: widgets you describe**
+
+- **Say or type what a small widget should show** - "my next 3 reminders and
+  a 10-minute timer button" - and Jarvis makes a preview; tap Add to keep it.
+  It is built from a fixed menu of five block kinds and eleven sources, never
+  code, and plain code on the PC checks it. It shows on the phone's home
+  screen (Jarvis widget 1-3) and in the desktop widget window, in place of
+  the face. Its buttons are only the Quick Settings tile actions. Delete is
+  instant. Email text, saved facts and web pages are never on the menu.
+
 **New: smarter answers**
 
 - **Big tool results (long files, emails, web pages) are shortened to their
