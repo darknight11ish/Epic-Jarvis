@@ -159,6 +159,16 @@ WORDS = {
     "notify_compare_waiting": "Waiting for your yes to ask {count} chatbots",
     "notify_compare_paused": "Paused: comparing {count} chatbots",
     "member_waiting": "Waiting its turn.",
+    # The chooser, grouped by how each chatbot is reached (`kind` in
+    # jarvis_chatbot.choices()), in this order, in both apps.
+    "kind_website": "Websites (a browser window on the PC)",
+    "kind_api": "With a key (each message costs a little)",
+    "kind_local": "On this PC",
+    # What an API (or local) conversation has used so far (`usage` on the
+    # session); {requests} is "3 requests" / "1 request", {tokens} is
+    # grouped with commas ("4,210"). ", model {model}" is left out when the
+    # PC names no model.
+    "usage_line": "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}",
 }
 
 #: The states in which a conversation is still going (jarvis_chatbot._live).

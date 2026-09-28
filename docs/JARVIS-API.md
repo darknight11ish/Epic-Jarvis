@@ -8941,7 +8941,7 @@ other route; both apps send the token and `X-Jarvis-Client: hud`.
 
 | route | body | answer |
 |---|---|---|
-| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()` plus `"available": true` and `"limits": {"waiting", "said"}` (the last limits change for the conversation shown): `{"routed": true, "chatbots": [{"id","name","host","built","note"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max"}, "session": <session> or null, "limits"}`. With no `id`, the latest conversation still going (null when none - an ended one is read by its id); an unknown id is `session: null` (conversations are kept in memory only, so a backend restart loses them); an id that is not `chat_` and 12 hex digits is a 400. The one thing a read may change: a paused conversation that can no longer be resumed (Stop on the task, or its hour ran out, so `jarvis_task_control` no longer holds it) is ended - "stopped", its window closed - once a read has seen it so for 10 seconds; before, it stayed "paused" with a Resume that could only fail until a new conversation was planned |
+| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()` plus `"available": true` and `"limits": {"waiting", "said"}` (the last limits change for the conversation shown): `{"routed": true, "chatbots": [{"id","name","host","built","ready","note","kind"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max","compare_min","compare_max"}, "session": <session> or null, "limits"}`. With no `id`, the latest conversation still going (null when none - an ended one is read by its id); an unknown id is `session: null` (conversations are kept in memory only, so a backend restart loses them); an id that is not `chat_` and 12 hex digits is a 400. The one thing a read may change: a paused conversation that can no longer be resumed (Stop on the task, or its hour ran out, so `jarvis_task_control` no longer holds it) is ended - "stopped", its window closed - once a read has seen it so for 10 seconds; before, it stayed "paused" with a Resume that could only fail until a new conversation was planned |
 | `POST /api/chatbot/start` | `{"chatbot", "goal", "max_messages"?, "max_minutes"?, "never_send"?: [..]}` | 202 `{"ok", "session", "asking": true, "message"}` - the card is asked on a background thread and nothing is sent until a person approves it; 400 `{"ok": false, "error", "session"}` when `plan()` refused it (the reason as a sentence: "Gemini through its website is not built yet.", "The goal cannot be sent: it held an email address. Nothing would be sent.", "At most 8 messages in this version."), with no card; 409 while another conversation is going (asking, running or paused), and 409 when `chatbot_session` is not tier "ask" (switched off, or a tier that would ask nobody) - no card either way |
 | `POST /api/chatbot/stop` | `{"id"}` | 200 `{"ok", "session", "message"}`; never a card, never held on a stale link; 400 for a bad id, 404 for an unknown one, 409 when it has already ended |
 | `POST /api/chatbot/limits` | `{"id", "max_messages"?, "max_minutes"?, "never_send"?}` | 202 `{"ok", "asking": true, "session", "message"}` - a NEW card, asked on a background thread; the limits change only on a yes, and the outcome is on the next GET's `limits` (`waiting` while the card is up, then `said`). 200 `{"changed": false}` for the limits it already has; 400 for a number past this version's most (checked now, before any card); 404 unknown; 409 when it is not running or paused, when a limits card is already waiting, or when the tier is not "ask" |
@@ -8973,7 +8973,7 @@ everything (`/api/stop_all`) stops a conversation too.
 `stopped`, `refused`), `tier`, `tier_name`, `messages_used`,
 `max_messages`, `minutes_used`, `max_minutes`, `never_send`, `paused` (why,
 in plain words), `ended` (why), `question` (the chatbot's question about
-the owner, handed back), `problem`, `summary`, `read_aloud: false`, and
+the owner, handed back), `problem`, `summary`, `read_aloud: false`, `usage`, and
 `transcript`: `[{"who": "jarvis" | "chatbot", "n", "text", "at",
 "outside_text", "source"?, "move"?}]`.
 
@@ -8982,6 +8982,23 @@ the owner, handed back), `problem`, `summary`, `read_aloud: false`, and
 `source_given`, `open`, `messages`, `minutes`, `ended`) is outside text
 too. Apps show them, never read them aloud, and never offer to remember
 anything from them.
+
+`chatbots[].kind` is how each is reached: `"website"` (a browser window on
+the PC), `"api"` (an official API with a key, §60.4.1) or `"local"` (a
+second AI on this PC, §60.4.2). Both apps group their chooser by it, in
+that order, under the PC's own headings (`WORDS` `kind_website`,
+`kind_api`, `kind_local`: "Websites (a browser window on the PC)", "With a
+key (each message costs a little)", "On this PC"), one chatbot per line
+with the `note` under any that is not ready. An older PC that sends no
+`kind` is read as all websites.
+
+`session.usage` is what an API (or local) conversation has used so far -
+`{"model", "requests", "prompt_tokens", "completion_tokens",
+"total_tokens", "retries"}` as the adapter counted it - or `null` for a
+website conversation. Both apps show one line from `WORDS.usage_line`:
+"Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"
+(the model part left out when there is none); in a comparison, one line per
+chatbot. Counts only, so it stays shown while the private lists are hidden.
 
 `chatbots[].ready` is false, and `note` says why in plain words with the
 one line that fixes it, when the chatbot is built but cannot run on this PC

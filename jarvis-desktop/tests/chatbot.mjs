@@ -32,6 +32,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   actionsOf,
+  chatbotGroups,
+  usageLine,
   compareFormProblem,
   compareStatusLine,
   compareTalkingLine,
@@ -178,6 +180,27 @@ await check("a comparison reads: every chatbot, its lines, the summary, the form
   assert.equal(CASES.compare_too_few.body.error, WORDS.compare_too_few.replace("{min}", "2"));
   assert.equal(CASES.compare_card_lists.names.length, 3, "the card did not list every chatbot");
   assert.equal(CASES.compare_card_lists.goal_word_for_word, true);
+});
+
+await check("a long list is grouped by how each chatbot is reached; an API conversation's counts read", async () => {
+  const v = readChatbot(CASES.long_list);
+  assert.deepEqual(chatbotGroups(v).map((g) => [g.kind, g.title, g.chatbots.map((c) => c.id)]), [
+    ["website", WORDS.kind_website, ["chatgpt_web", "gemini_web", "perplexity_web"]],
+    ["api", WORDS.kind_api, ["openai_api", "deepseek_api", "groq_api"]],
+    ["local", WORDS.kind_local, ["local_ai"]],
+  ]);
+  assert.deepEqual(v.chatbots.filter((c) => c.built).map((c) => c.id), ["openai_api", "gemini_web"]);
+  assert.ok(v.chatbots.filter((c) => !c.built).every((c) => c.note), "a chatbot not ready gave no reason");
+  const old = readChatbot({ ...CASES.long_list, chatbots: [{ id: "x", name: "X", built: true }] });
+  assert.equal(old.chatbots[0].kind, "website", "an older PC's chatbot was not read as a website");
+  const u = readChatbot(CASES.usage_done).session;
+  assert.equal(usageLine(u.usage), "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini");
+  const members = readChatbot(CASES.compare_usage).compare.members;
+  assert.deepEqual(members.map((m) => usageLine(m.usage)),
+    ["", "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"]);
+  assert.equal(usageLine({ requests: 1, tokens: 1234567, model: "" }),
+    "Used so far: 1 request, 1,234,567 word-pieces (tokens)");
+  assert.equal(readChatbot(CASES.running).session.usage, null, "a website conversation grew a usage line");
 });
 
 await check("CONTROL: Rust holds what sends, hides the owner's words, Brain only", async () => {
@@ -430,6 +453,51 @@ await check("Brain: an activity event reads it again", async () => {
   const after = await page.evaluate(() => window.__chatbot.reads);
   await page.close();
   assert.ok(after > before, `${before} -> ${after}`);
+});
+
+/* ── A long list, grouped; what an API conversation used ────────────── */
+
+await check("Brain, a long list: grouped under three headings, each not-ready one says why", async () => {
+  const page = await workTab({ chatbot: { status: CASES.long_list } });
+  const groups = await page.locator("#chatbot-which optgroup").evaluateAll((gs) => gs.map((g) => [
+    g.label, [...g.querySelectorAll("option")].map((o) => [o.value, o.disabled])]));
+  const picked = await page.locator("#chatbot-which").inputValue();
+  await page.locator("#chatbot-compare").check();
+  await page.waitForTimeout(200);
+  const rows = await page.locator("#chatbot-several-list > *").evaluateAll((ns) => ns.map((n) =>
+    n.tagName === "LABEL" ? ["box", n.querySelector("input").value, n.querySelector("input").disabled]
+      : [n.className.includes("chatbot-kind") ? "heading" : "why", n.textContent]));
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(groups, [
+    [WORDS.kind_website, [["chatgpt_web", true], ["gemini_web", false], ["perplexity_web", true]]],
+    [WORDS.kind_api, [["openai_api", false], ["deepseek_api", true], ["groq_api", true]]],
+    [WORDS.kind_local, [["local_ai", true]]],
+  ]);
+  assert.equal(picked, "gemini_web", "the first usable chatbot was not picked");
+  const note = (id) => CASES.long_list.chatbots.find((c) => c.id === id).note;
+  assert.deepEqual(rows, [
+    ["heading", WORDS.kind_website], ["box", "chatgpt_web", true], ["why", note("chatgpt_web")],
+    ["box", "gemini_web", false], ["box", "perplexity_web", true], ["why", note("perplexity_web")],
+    ["heading", WORDS.kind_api], ["box", "openai_api", false], ["box", "deepseek_api", true],
+    ["why", note("deepseek_api")], ["box", "groq_api", true], ["why", note("groq_api")],
+    ["heading", WORDS.kind_local], ["box", "local_ai", true], ["why", note("local_ai")],
+  ]);
+  assert.deepEqual(errors, []);
+});
+
+await check("Brain, what an API conversation used: one line, alone and per chatbot in a comparison", async () => {
+  let page = await workTab({ chatbot: { status: CASES.usage_done } });
+  const one = await page.locator("#chatbot .chatbot-usage").allInnerTexts();
+  await page.close();
+  assert.deepEqual(one, ["Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"]);
+  page = await workTab({ chatbot: { status: CASES.compare_usage } });
+  const each = await page.locator("#chatbot .chatbot-members li").evaluateAll((ls) => ls.map((l) => {
+    const u = l.querySelector(".chatbot-usage");
+    return u ? u.textContent : "";
+  }));
+  await page.close();
+  assert.deepEqual(each, ["", "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"]);
 });
 
 /* ── Ask several and compare ─────────────────────────────────────────── */

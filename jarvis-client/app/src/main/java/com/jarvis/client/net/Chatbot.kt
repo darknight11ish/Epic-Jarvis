@@ -131,6 +131,10 @@ object Chatbot {
     const val NOTIFY_COMPARE_WAITING = "Waiting for your yes to ask {count} chatbots"
     const val NOTIFY_COMPARE_PAUSED = "Paused: comparing {count} chatbots"
     const val MEMBER_WAITING = "Waiting its turn."
+    const val KIND_WEBSITE = "Websites (a browser window on the PC)"
+    const val KIND_API = "With a key (each message costs a little)"
+    const val KIND_LOCAL = "On this PC"
+    const val USAGE_LINE = "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}"
 
     /** Every sentence above by the PC's own key, for ChatbotTest. */
     val WORDS: Map<String, String> = mapOf(
@@ -158,7 +162,12 @@ object Chatbot {
         "notify_compare_running" to NOTIFY_COMPARE_RUNNING,
         "notify_compare_waiting" to NOTIFY_COMPARE_WAITING,
         "notify_compare_paused" to NOTIFY_COMPARE_PAUSED, "member_waiting" to MEMBER_WAITING,
+        "kind_website" to KIND_WEBSITE, "kind_api" to KIND_API, "kind_local" to KIND_LOCAL,
+        "usage_line" to USAGE_LINE,
     )
+
+    /** How each chatbot is reached (`kind`), in the order the chooser groups them. */
+    val KINDS = listOf("website", "api", "local")
 
     /** The states in which a conversation is still going. */
     val LIVE = setOf("asking", "approved", "running", "paused")
@@ -190,7 +199,15 @@ object Chatbot {
      * e.g. Gemini's window signed in). [made] is built at all.
      */
     data class Choice(val id: String, val name: String, val host: String, val built: Boolean,
-                      val note: String, val made: Boolean = built)
+                      val note: String, val made: Boolean = built,
+                      /** "website", "api" or "local"; an older PC sends none (all websites). */
+                      val kind: String = "website")
+
+    /** One of the chooser's groups: its heading ("" for a kind this app does not know). */
+    data class Group(val kind: String, val title: String, val chatbots: List<Choice>)
+
+    /** What an API (or local) conversation has used so far. */
+    data class Usage(val requests: Int, val tokens: Long, val model: String)
 
     data class Tier(
         val id: String,
@@ -230,6 +247,7 @@ object Chatbot {
         val question: String,
         val summary: Summary?,
         val transcript: List<Turn>,
+        val usage: Usage? = null,
     ) {
         val live: Boolean get() = state in Chatbot.LIVE
     }
@@ -303,7 +321,8 @@ object Chatbot {
             val id = c.text("id") ?: return@mapNotNull null
             val made = c.flag("built") == true
             Choice(id, c.text("name") ?: id, c.text("host") ?: "",
-                made && c.flag("ready") != false, c.text("note") ?: "", made)
+                made && c.flag("ready") != false, c.text("note") ?: "", made,
+                c.text("kind") ?: "website")
         }
         val lim = body["limits"] as? JsonObject
         return View(
@@ -435,8 +454,53 @@ object Chatbot {
             question = o.text("question") ?: "",
             summary = sum,
             transcript = turns,
+            usage = parseUsage(o["usage"] as? JsonObject),
         )
     }
+
+    /** `usage` on a session, or null when it has none (a website conversation). */
+    fun parseUsage(o: JsonObject?): Usage? {
+        if (o == null) return null
+        val requests = o.num("requests")?.toInt() ?: 0
+        val total = o.num("total_tokens")?.toLong() ?: 0L
+        val tokens = if (total > 0) total
+        else (o.num("prompt_tokens")?.toLong() ?: 0L) + (o.num("completion_tokens")?.toLong() ?: 0L)
+        if (requests == 0 && tokens == 0L) return null
+        return Usage(requests, tokens, o.text("model") ?: "")
+    }
+
+    /** 4215 as "4,215" - the same on every phone (no locale). */
+    fun grouped(n: Long): String {
+        val digits = kotlin.math.abs(n).toString()
+        val out = StringBuilder()
+        digits.forEachIndexed { i, ch ->
+            if (i > 0 && (digits.length - i) % 3 == 0) out.append(',')
+            out.append(ch)
+        }
+        return (if (n < 0) "-" else "") + out.toString()
+    }
+
+    /** "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini", or "". */
+    fun usageLine(u: Usage?): String {
+        if (u == null) return ""
+        val line = if (u.model.isEmpty()) USAGE_LINE.replace(", model {model}", "") else USAGE_LINE
+        return line.replace("{requests}", "${u.requests} request${if (u.requests == 1) "" else "s"}")
+            .replace("{tokens}", grouped(u.tokens)).replace("{model}", u.model)
+    }
+
+    /**
+     * The chooser's groups, in [KINDS] order, each with its heading; empty
+     * ones left out. A kind this app does not know goes last, with no heading.
+     */
+    fun groups(v: View): List<Group> {
+        val titles = mapOf("website" to KIND_WEBSITE, "api" to KIND_API, "local" to KIND_LOCAL)
+        val out = KINDS.map { k -> Group(k, titles.getValue(k), v.chatbots.filter { it.kind == k }) } +
+            Group("other", "", v.chatbots.filter { it.kind !in KINDS })
+        return out.filter { it.chatbots.isNotEmpty() }
+    }
+
+    /** The chatbots in the order the chooser shows them. */
+    fun ordered(v: View): List<Choice> = groups(v).flatMap { it.chatbots }
 
     /** A read that failed because this PC has no chatbot routes. */
     fun missing(error: ApiError): Boolean =

@@ -159,8 +159,9 @@ internal fun ChatbotSection(
                     if (messages.isEmpty()) messages = shown.tier.turnsDefault.toString()
                     if (minutes.isEmpty()) minutes = shown.tier.minutesDefault.toString()
                     if (shown.chatbots.none { it.id == which && it.built }) {
-                        which = (shown.chatbots.firstOrNull { it.built } ?: shown.chatbots.firstOrNull())
-                            ?.id ?: ""
+                        // The first usable one as the list shows it (grouped by kind).
+                        val listed = Chatbot.ordered(shown)
+                        which = (listed.firstOrNull { it.built } ?: listed.firstOrNull())?.id ?: ""
                     }
                     view = shown
                 }
@@ -288,8 +289,8 @@ internal fun ChatbotSection(
                             onNever = { never = it.take(600) },
                             onStart = {
                                 if (several && v.tier.compareMax > 0) {
-                                    // Picked, in the PC's own order.
-                                    val ids = v.chatbots.filter { it.id in picked }.map { it.id }
+                                    // Picked, in the order the list shows them.
+                                    val ids = Chatbot.ordered(v).filter { it.id in picked }.map { it.id }
                                     val problem = Chatbot.compareFormProblem(v, ids, goal, messages, minutes)
                                     if (problem != null) {
                                         said = problem
@@ -375,6 +376,10 @@ private fun SessionPart(
     }
     if (s.state != "refused") {
         Text(Chatbot.progressLine(s), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    }
+    val usage = Chatbot.usageLine(s.usage)
+    if (usage.isNotEmpty()) {
+        Text(usage, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
     }
     if (s.tierName.isNotEmpty()) {
         Text("${Chatbot.VERSION}: ${s.tierName}", style = MaterialTheme.typography.labelSmall,
@@ -547,6 +552,11 @@ private fun ComparePart(
     }
     c.members.forEach { m ->
         Text("• ${Chatbot.memberLine(m, c)}", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        // An API conversation's counts, per chatbot.
+        val used = Chatbot.usageLine(m.usage)
+        if (used.isNotEmpty()) {
+            Text("  $used", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
     }
     if (!privateHidden) {
         c.members.filter { it.question.isNotEmpty() }.forEach { m ->
@@ -654,15 +664,25 @@ private fun FormPart(
         style = MaterialTheme.typography.labelMedium,
         color = chrome.textMid,
     )
-    // One per line: there are more chatbots than fit across a phone.
-    v.chatbots.forEach { c ->
-        val chosen = if (several) c.id in picked else c.id == which
-        Quiet(
-            if (c.built) (if (chosen) "✓ ${c.name}" else c.name)
-            else "${c.name} - ${c.note.ifEmpty { "Not built yet." }}",
-            enabled = c.built && !busy,
-            onClick = { if (several) onPick(c.id) else onWhich(c.id) },
-        )
+    // Grouped by how each is reached, one per line (there are more chatbots
+    // than fit across a phone); one that cannot be used yet says why under it.
+    Chatbot.groups(v).forEach { g ->
+        if (g.title.isNotEmpty()) {
+            Gap(4)
+            Text(g.title, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        g.chatbots.forEach { c ->
+            val chosen = if (several) c.id in picked else c.id == which
+            Quiet(
+                if (c.built && chosen) "✓ ${c.name}" else c.name,
+                enabled = c.built && !busy,
+                onClick = { if (several) onPick(c.id) else onWhich(c.id) },
+            )
+            if (!c.built) {
+                Text(c.note.ifEmpty { "Not built yet." }, style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo)
+            }
+        }
     }
     TextInput(
         value = goal,

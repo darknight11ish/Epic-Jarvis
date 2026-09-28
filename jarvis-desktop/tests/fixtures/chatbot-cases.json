@@ -1432,6 +1432,328 @@
     },
     "code": 400
   },
+  "compare_usage": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "chatgpt.com",
+        "id": "chatgpt_web",
+        "kind": "website",
+        "name": "ChatGPT",
+        "note": "Jarvis's ChatGPT window has never been signed in. Sign in once, by hand, to the spare OpenAI account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_chatgpt.py sign-in",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "api.openai.com",
+        "id": "openai_api",
+        "kind": "api",
+        "name": "ChatGPT (OpenAI API)",
+        "note": "",
+        "ready": true
+      },
+      {
+        "built": true,
+        "host": "this PC",
+        "id": "local_ai",
+        "kind": "local",
+        "name": "A second AI on this PC",
+        "note": "Choose which model on this PC Jarvis should talk to: add the line local_model = \"<name>\" under [chatbot] in jarvis-framework.toml, using a name that `ollama list` shows, then restart Jarvis.",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "kind": "website",
+        "name": "Gemini",
+        "note": "",
+        "ready": true
+      },
+      {
+        "built": true,
+        "host": "api.deepseek.com",
+        "id": "deepseek_api",
+        "kind": "api",
+        "name": "DeepSeek (API)",
+        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys.",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "www.perplexity.ai",
+        "id": "perplexity_web",
+        "kind": "website",
+        "name": "Perplexity",
+        "note": "Jarvis's Perplexity window has never been signed in. Sign in once, by hand, to the spare Perplexity account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_perplexity.py sign-in",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "api.groq.com",
+        "id": "groq_api",
+        "kind": "api",
+        "name": "Groq (API)",
+        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys.",
+        "ready": false
+      }
+    ],
+    "compare": {
+      "chatbots": [
+        {
+          "id": "gemini_web",
+          "name": "Gemini"
+        },
+        {
+          "id": "openai_api",
+          "name": "ChatGPT (OpenAI API)"
+        }
+      ],
+      "count": 2,
+      "current": 1,
+      "current_name": "ChatGPT (OpenAI API)",
+      "ended": "Finished: Jarvis has been through every chatbot on the card.",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "cmp_000000000004",
+      "max_messages": 3,
+      "max_minutes": 10,
+      "members": [
+        {
+          "chatbot": "gemini_web",
+          "compare": "cmp_000000000004",
+          "ended": "It used all 3 messages you allowed.",
+          "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+          "id": "chat_00000000000e",
+          "max_messages": 3,
+          "max_minutes": 10,
+          "messages_used": 3,
+          "minutes_used": 0.3,
+          "name": "Gemini",
+          "never_send": [
+            "Project Nimbus"
+          ],
+          "paused": "",
+          "problem": "",
+          "question": "",
+          "read_aloud": false,
+          "state": "done",
+          "summary": null,
+          "tier": "one_card",
+          "tier_name": "the limited version (one graphics card)",
+          "transcript": [
+            {
+              "at": 1800000016.0,
+              "move": "goal",
+              "n": 1,
+              "outside_text": false,
+              "text": "Find out how to keep houseplants alive in a flat that gets very little light.",
+              "who": "jarvis"
+            },
+            {
+              "at": 1800000016.0,
+              "n": 1,
+              "outside_text": true,
+              "source": "chatbot_transcript",
+              "text": "Snake plants, ZZ plants and pothos tolerate dim corners remarkably well.",
+              "who": "chatbot"
+            },
+            {
+              "at": 1800000024.0,
+              "move": "narrow",
+              "n": 2,
+              "outside_text": false,
+              "text": "Could you narrow that down to plants that are safe around cats?",
+              "who": "jarvis"
+            },
+            {
+              "at": 1800000024.0,
+              "n": 2,
+              "outside_text": true,
+              "source": "chatbot_transcript",
+              "text": "Horticultural extension services publish guidance about snake plant resilience.",
+              "who": "chatbot"
+            },
+            {
+              "at": 1800000032.0,
+              "move": "deeper",
+              "n": 3,
+              "outside_text": false,
+              "text": "Which plants cope best with a north-facing window?",
+              "who": "jarvis"
+            },
+            {
+              "at": 1800000032.0,
+              "n": 3,
+              "outside_text": true,
+              "source": "chatbot_transcript",
+              "text": "A grow lamp gives steady light; a windowsill changes with the seasons.",
+              "who": "chatbot"
+            }
+          ],
+          "usage": null
+        },
+        {
+          "chatbot": "openai_api",
+          "compare": "cmp_000000000004",
+          "ended": "It used all 3 messages you allowed.",
+          "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+          "id": "chat_00000000000f",
+          "max_messages": 3,
+          "max_minutes": 10,
+          "messages_used": 3,
+          "minutes_used": 0.3,
+          "name": "ChatGPT (OpenAI API)",
+          "never_send": [
+            "Project Nimbus"
+          ],
+          "paused": "",
+          "problem": "",
+          "question": "",
+          "read_aloud": false,
+          "state": "done",
+          "summary": null,
+          "tier": "one_card",
+          "tier_name": "the limited version (one graphics card)",
+          "transcript": [
+            {
+              "at": 1800000032.0,
+              "move": "goal",
+              "n": 1,
+              "outside_text": false,
+              "text": "Find out how to keep houseplants alive in a flat that gets very little light.",
+              "who": "jarvis"
+            },
+            {
+              "at": 1800000032.0,
+              "n": 1,
+              "outside_text": true,
+              "source": "chatbot_transcript",
+              "text": "Low light suits pothos and philodendrons; see https://example.org/low-light-plants.",
+              "who": "chatbot"
+            },
+            {
+              "at": 1800000040.0,
+              "move": "deeper",
+              "n": 2,
+              "outside_text": false,
+              "text": "What sources support the claim about snake plants?",
+              "who": "jarvis"
+            },
+            {
+              "at": 1800000040.0,
+              "n": 2,
+              "outside_text": true,
+              "source": "chatbot_transcript",
+              "text": "Calatheas are fussy: they want bright, indirect light and steady humidity.",
+              "who": "chatbot"
+            },
+            {
+              "at": 1800000048.0,
+              "move": "deeper",
+              "n": 3,
+              "outside_text": false,
+              "text": "How does a grow lamp compare with moving plants closer to the glass?",
+              "who": "jarvis"
+            },
+            {
+              "at": 1800000048.0,
+              "n": 3,
+              "outside_text": true,
+              "source": "chatbot_transcript",
+              "text": "A small LED grow lamp on a timer for ten hours a day is plenty.",
+              "who": "chatbot"
+            }
+          ],
+          "usage": {
+            "completion_tokens": 615,
+            "model": "gpt-5-mini",
+            "prompt_tokens": 3600,
+            "requests": 3,
+            "retries": 0,
+            "total_tokens": 4215
+          }
+        }
+      ],
+      "messages_used": 6,
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "",
+      "problem": "",
+      "read_aloud": false,
+      "state": "done",
+      "summary": {
+        "agree": [
+          "Snake plants and pothos cope with little light",
+          "A grow lamp helps in a very dark corner"
+        ],
+        "answer": "Both suggest a low-light plant such as a snake plant or pothos, with a small grow lamp for a very dark corner.",
+        "answered": [
+          "Gemini",
+          "ChatGPT (OpenAI API)"
+        ],
+        "by_model": true,
+        "disagree": [
+          {
+            "point": "Whether calatheas suit a dark flat",
+            "views": [
+              {
+                "said": "Calatheas are generally pet friendly and fine indoors",
+                "who": "Gemini"
+              }
+            ]
+          }
+        ],
+        "dropped": [],
+        "ended": "Finished: Jarvis has been through every chatbot on the card.",
+        "messages": 6,
+        "open": [
+          "Which grow lamp to buy"
+        ],
+        "outside_text": true,
+        "read_aloud": false,
+        "source": "chatbot_transcript",
+        "sources": [
+          {
+            "checked": false,
+            "items": [
+              "horticultural extension services"
+            ],
+            "who": "Gemini"
+          },
+          {
+            "checked": false,
+            "items": [
+              "https://example.org/low-light-plants"
+            ],
+            "who": "ChatGPT (OpenAI API)"
+          }
+        ],
+        "sources_checked": false
+      },
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)"
+    },
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": null,
+    "tier": {
+      "compare_max": 3,
+      "compare_min": 2,
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
   "done_goal_met": {
     "available": true,
     "chatbots": [
@@ -1657,6 +1979,93 @@
       "session": "chat_000000000004"
     },
     "code": 202
+  },
+  "long_list": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "chatgpt.com",
+        "id": "chatgpt_web",
+        "kind": "website",
+        "name": "ChatGPT",
+        "note": "Jarvis's ChatGPT window has never been signed in. Sign in once, by hand, to the spare OpenAI account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_chatgpt.py sign-in",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "api.openai.com",
+        "id": "openai_api",
+        "kind": "api",
+        "name": "ChatGPT (OpenAI API)",
+        "note": "",
+        "ready": true
+      },
+      {
+        "built": true,
+        "host": "this PC",
+        "id": "local_ai",
+        "kind": "local",
+        "name": "A second AI on this PC",
+        "note": "Choose which model on this PC Jarvis should talk to: add the line local_model = \"<name>\" under [chatbot] in jarvis-framework.toml, using a name that `ollama list` shows, then restart Jarvis.",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "kind": "website",
+        "name": "Gemini",
+        "note": "",
+        "ready": true
+      },
+      {
+        "built": true,
+        "host": "api.deepseek.com",
+        "id": "deepseek_api",
+        "kind": "api",
+        "name": "DeepSeek (API)",
+        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys.",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "www.perplexity.ai",
+        "id": "perplexity_web",
+        "kind": "website",
+        "name": "Perplexity",
+        "note": "Jarvis's Perplexity window has never been signed in. Sign in once, by hand, to the spare Perplexity account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_perplexity.py sign-in",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "api.groq.com",
+        "id": "groq_api",
+        "kind": "api",
+        "name": "Groq (API)",
+        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys.",
+        "ready": false
+      }
+    ],
+    "compare": null,
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": null,
+    "tier": {
+      "compare_max": 3,
+      "compare_min": 2,
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
   },
   "not_ready": {
     "available": true,
@@ -2018,6 +2427,195 @@
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
+  "usage_done": {
+    "available": true,
+    "chatbots": [
+      {
+        "built": true,
+        "host": "chatgpt.com",
+        "id": "chatgpt_web",
+        "kind": "website",
+        "name": "ChatGPT",
+        "note": "Jarvis's ChatGPT window has never been signed in. Sign in once, by hand, to the spare OpenAI account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_chatgpt.py sign-in",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "api.openai.com",
+        "id": "openai_api",
+        "kind": "api",
+        "name": "ChatGPT (OpenAI API)",
+        "note": "",
+        "ready": true
+      },
+      {
+        "built": true,
+        "host": "this PC",
+        "id": "local_ai",
+        "kind": "local",
+        "name": "A second AI on this PC",
+        "note": "Choose which model on this PC Jarvis should talk to: add the line local_model = \"<name>\" under [chatbot] in jarvis-framework.toml, using a name that `ollama list` shows, then restart Jarvis.",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "gemini.google.com",
+        "id": "gemini_web",
+        "kind": "website",
+        "name": "Gemini",
+        "note": "",
+        "ready": true
+      },
+      {
+        "built": true,
+        "host": "api.deepseek.com",
+        "id": "deepseek_api",
+        "kind": "api",
+        "name": "DeepSeek (API)",
+        "note": "No DeepSeek API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key deepseek - keys are made at https://platform.deepseek.com/api_keys.",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "www.perplexity.ai",
+        "id": "perplexity_web",
+        "kind": "website",
+        "name": "Perplexity",
+        "note": "Jarvis's Perplexity window has never been signed in. Sign in once, by hand, to the spare Perplexity account used only by Jarvis: run this one line in PowerShell in Jarvis's folder: py -3 jarvis_chatbot_perplexity.py sign-in",
+        "ready": false
+      },
+      {
+        "built": true,
+        "host": "api.groq.com",
+        "id": "groq_api",
+        "kind": "api",
+        "name": "Groq (API)",
+        "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys.",
+        "ready": false
+      }
+    ],
+    "compare": null,
+    "limits": {
+      "said": "",
+      "waiting": false
+    },
+    "routed": true,
+    "session": {
+      "chatbot": "openai_api",
+      "ended": "It used all 3 messages you allowed.",
+      "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
+      "id": "chat_00000000000d",
+      "max_messages": 3,
+      "max_minutes": 10,
+      "messages_used": 3,
+      "minutes_used": 0.3,
+      "name": "ChatGPT (OpenAI API)",
+      "never_send": [
+        "Project Nimbus"
+      ],
+      "paused": "",
+      "problem": "",
+      "question": "",
+      "read_aloud": false,
+      "state": "done",
+      "summary": {
+        "answer": "Pick a low-light plant such as a snake plant, ZZ plant or pothos, and add a small grow lamp if the corner is very dark.",
+        "by_model": true,
+        "claims": [
+          {
+            "claim": "Snake plants cope with dim light",
+            "source_given": true
+          },
+          {
+            "claim": "Spider plants are safe around cats",
+            "source_given": false
+          }
+        ],
+        "ended": "It used all 3 messages you allowed.",
+        "messages": 3,
+        "minutes": 0.3,
+        "open": [
+          "Which grow lamp to buy"
+        ],
+        "outside_text": true,
+        "question": "",
+        "read_aloud": false,
+        "source": "chatbot_transcript"
+      },
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "goal",
+          "n": 1,
+          "outside_text": false,
+          "text": "Find out how to keep houseplants alive in a flat that gets very little light.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000000.0,
+          "n": 1,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Low light suits pothos and philodendrons; see https://example.org/low-light-plants.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000008.0,
+          "move": "deeper",
+          "n": 2,
+          "outside_text": false,
+          "text": "What sources support the claim about snake plants?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000008.0,
+          "n": 2,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "Calatheas are fussy: they want bright, indirect light and steady humidity.",
+          "who": "chatbot"
+        },
+        {
+          "at": 1800000016.0,
+          "move": "deeper",
+          "n": 3,
+          "outside_text": false,
+          "text": "How does a grow lamp compare with moving plants closer to the glass?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000016.0,
+          "n": 3,
+          "outside_text": true,
+          "source": "chatbot_transcript",
+          "text": "A small LED grow lamp on a timer for ten hours a day is plenty.",
+          "who": "chatbot"
+        }
+      ],
+      "usage": {
+        "completion_tokens": 615,
+        "model": "gpt-5-mini",
+        "prompt_tokens": 3600,
+        "requests": 3,
+        "retries": 0,
+        "total_tokens": 4215
+      }
+    },
+    "tier": {
+      "compare_max": 3,
+      "compare_min": 2,
+      "id": "one_card",
+      "minutes_default": 10,
+      "minutes_max": 15,
+      "name": "the limited version (one graphics card)",
+      "turns_default": 5,
+      "turns_max": 8,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
+    }
+  },
   "words": {
     "agree_title": "They agree",
     "change_limits": "Change limits",
@@ -2043,6 +2641,9 @@
     "goal_note": "These words will be sent to the chatbot exactly as you type them.",
     "gone": "That conversation is gone: Jarvis on the PC restarted, and conversations are kept in memory only.",
     "hidden": "The goal and the conversation are hidden until you confirm it is you.",
+    "kind_api": "With a key (each message costs a little)",
+    "kind_local": "On this PC",
+    "kind_website": "Websites (a browser window on the PC)",
     "limits_note": "A change to the limits needs a new approval card.",
     "member_waiting": "Waiting its turn.",
     "messages_label": "Most messages",
@@ -2072,6 +2673,7 @@
     "summary_title": "What Jarvis found",
     "title": "Talk to a chatbot for me",
     "transcript_title": "The conversation",
+    "usage_line": "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}",
     "version": "Version"
   }
 }

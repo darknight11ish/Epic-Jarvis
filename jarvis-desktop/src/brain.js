@@ -64,6 +64,8 @@ import {
 } from "./focus.js";
 import {
   actionsOf as chatbotActionsOf,
+  chatbotGroups,
+  usageLine as chatbotUsageLine,
   compareFormProblem,
   compareProgress,
   compareStatusLine,
@@ -4044,8 +4046,8 @@ async function chatbotStart() {
   const several = compareMode();
   const form = {
     chatbot: dom.chatbotWhich ? dom.chatbotWhich.value : "",
-    // Ticked, in the PC's own order.
-    chatbots: v && v.available ? v.chatbots.filter((c) => cb.several.has(c.id)).map((c) => c.id) : [],
+    // Ticked, in the order the list shows them (grouped by kind).
+    chatbots: v && v.available ? chatbotGroups(v).flatMap((g) => g.chatbots).filter((c) => cb.several.has(c.id)).map((c) => c.id) : [],
     goal: dom.chatbotGoal ? dom.chatbotGoal.value : "",
     messages: dom.chatbotMessages ? dom.chatbotMessages.value : "",
     minutes: dom.chatbotMinutes ? dom.chatbotMinutes.value : "",
@@ -4323,6 +4325,8 @@ function compareNow(c) {
     for (const m of c.members) {
       const li = el("li", "", chatbotMemberLine(m, c));
       li.dataset.state = m.state;
+      // An API conversation's counts, per chatbot.
+      if (m.usage) li.append(el("p", "note chatbot-usage", chatbotUsageLine(m.usage)));
       list.append(li);
     }
     now.append(list);
@@ -4387,6 +4391,7 @@ function paintChatbot() {
     now.append(el("p", "chatbot-head", s.live ? chatbotTalkingLine(s) : `${s.name}: ${chatbotStatusLine(s)}`));
     if (s.live) now.append(el("p", "chatbot-line", chatbotStatusLine(s)));
     if (s.state !== "refused") now.append(el("p", "note", chatbotProgress(s)));
+    if (s.usage) now.append(el("p", "note chatbot-usage", chatbotUsageLine(s.usage)));
     if (s.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${s.tierName}`));
     if (s.hidden) {
       now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the conversation."));
@@ -4441,20 +4446,28 @@ function paintChatbotSeveral(v) {
   for (const id of [...cb.several]) {
     if (!v.chatbots.some((c) => c.id === id && c.built)) cb.several.delete(id);
   }
-  list.replaceChildren(...v.chatbots.map((c) => {
-    const lab = el("label", "");
-    const box = el("input", "");
-    box.type = "checkbox";
-    box.value = c.id;
-    box.disabled = !c.built;
-    box.checked = c.built && cb.several.has(c.id);
-    box.addEventListener("change", () => {
-      if (box.checked) cb.several.add(c.id);
-      else cb.several.delete(c.id);
-    });
-    lab.append(box, ` ${c.built ? c.name : `${c.name} - ${c.note || "Not built yet."}`}`);
-    return lab;
-  }));
+  // Grouped by how each is reached, like the single chooser; a chatbot
+  // that cannot be used yet says why under its name.
+  const rows = [];
+  for (const g of chatbotGroups(v)) {
+    if (g.title) rows.push(el("p", "note chatbot-kind", g.title));
+    for (const c of g.chatbots) {
+      const lab = el("label", "");
+      const box = el("input", "");
+      box.type = "checkbox";
+      box.value = c.id;
+      box.disabled = !c.built;
+      box.checked = c.built && cb.several.has(c.id);
+      box.addEventListener("change", () => {
+        if (box.checked) cb.several.add(c.id);
+        else cb.several.delete(c.id);
+      });
+      lab.append(box, ` ${c.name}`);
+      rows.push(lab);
+      if (!c.built) rows.push(el("p", "note chatbot-not-ready", c.note || "Not built yet."));
+    }
+  }
+  list.replaceChildren(...rows);
 }
 
 function paintChatbotForm(v) {
@@ -4473,14 +4486,24 @@ function paintChatbotForm(v) {
   const which = dom.chatbotWhich;
   if (which) {
     const was = which.value;
-    which.replaceChildren(...v.chatbots.map((c) => {
+    // Grouped by how each is reached: websites, with a key, on this PC.
+    const option = (c) => {
       const o = el("option", "", c.built ? c.name : `${c.name} - ${c.note || "Not built yet."}`);
       o.value = c.id;
       o.disabled = !c.built;
       return o;
-    }));
-    const pick = v.chatbots.find((c) => c.id === was && c.built) || v.chatbots.find((c) => c.built)
-      || v.chatbots[0];
+    };
+    which.replaceChildren(...chatbotGroups(v).map((g) => {
+      if (!g.title) return g.chatbots.map(option);
+      const group = el("optgroup", "");
+      group.label = g.title;
+      group.append(...g.chatbots.map(option));
+      return [group];
+    }).flat());
+    // The first usable one as the list shows it (grouped), not as the PC sent it.
+    const shown = chatbotGroups(v).flatMap((g) => g.chatbots);
+    const pick = shown.find((c) => c.id === was && c.built) || shown.find((c) => c.built)
+      || shown[0];
     if (pick) which.value = pick.id;
   }
   if (dom.chatbotMessages) dom.chatbotMessages.max = String(v.tier.turnsMax);

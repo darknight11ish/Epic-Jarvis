@@ -289,6 +289,37 @@ class ChatbotTest {
     }
 
     @Test
+    fun `a long list is grouped by how each chatbot is reached`() {
+        val v = view("long_list")
+        assertEquals(
+            listOf(
+                Triple("website", Chatbot.KIND_WEBSITE, listOf("chatgpt_web", "gemini_web", "perplexity_web")),
+                Triple("api", Chatbot.KIND_API, listOf("openai_api", "deepseek_api", "groq_api")),
+                Triple("local", Chatbot.KIND_LOCAL, listOf("local_ai")),
+            ),
+            Chatbot.groups(v).map { g -> Triple(g.kind, g.title, g.chatbots.map { it.id }) },
+        )
+        assertEquals("gemini_web", Chatbot.ordered(v).first { it.built }.id)
+        assertTrue(v.chatbots.filter { !it.built }.all { it.note.isNotEmpty() })
+        val old = Chatbot.parse(JarvisJson.parseToJsonElement(
+            "{\"chatbots\": [{\"id\": \"x\", \"built\": true}], \"tier\": {}}") as JsonObject)!!
+        assertEquals("website", old.chatbots.single().kind)
+    }
+
+    @Test
+    fun `an API conversation's counts, alone and per chatbot in a comparison`() {
+        val line = "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini"
+        assertEquals(line, Chatbot.usageLine(view("usage_done").session!!.usage))
+        assertEquals(listOf("", line),
+            view("compare_usage").compare!!.members.map { Chatbot.usageLine(it.usage) })
+        assertNull(view("running").session!!.usage)
+        assertEquals("Used so far: 1 request, 1,234,567 word-pieces (tokens)",
+            Chatbot.usageLine(Chatbot.Usage(1, 1234567L, "")))
+        assertEquals("999", Chatbot.grouped(999L))
+        assertEquals("1,000", Chatbot.grouped(1000L))
+    }
+
+    @Test
     fun `an older PC is not a chatbot view`() {
         assertNull(Chatbot.parse(JarvisJson.parseToJsonElement("{\"available\": false}") as JsonObject))
         assertNull(Chatbot.parse(JarvisJson.parseToJsonElement("{}") as JsonObject))

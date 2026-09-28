@@ -1380,6 +1380,17 @@ body {
   gap: 8px;
 }
 
+/* The chooser's group headings ("Websites ...", "With a key ...", "On this
+   PC") and the reason under a chatbot that cannot be used yet. */
+.chatbot-kind {
+  margin: 6px 0 0;
+  font-weight: 600;
+}
+
+.chatbot-not-ready {
+  margin: 0 0 0 26px;
+}
+
 .chatbot-members {
   margin: 4px 0;
   padding-left: 18px;

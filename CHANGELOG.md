@@ -18,6 +18,18 @@ number as the last part - `0.2.57` is a build of 0.2.
   on the whole comparison. Up to 3 chatbots with one graphics card, 4 with
   two - a first proposal you can change. Not yet tried against the real
   chatbot websites.
+- **The chatbot chooser is a list you can read on a phone.** It used to be
+  one row of buttons, and with sixteen chatbots most fell off the screen.
+  Both apps now list them one per line under three headings - "Websites (a
+  browser window on the PC)", "With a key (each message costs a little)",
+  "On this PC" - with the reason under any that is not set up yet.
+- **A conversation through a key shows what it used**: "Used so far: 3
+  requests, 4,215 word-pieces (tokens), model gpt-5-mini" (per chatbot in a
+  comparison). The card already said Jarvis would show this; neither app
+  did.
+- **"What Jarvis can reach" showed the chatbot ways out as Off** although
+  both apps can start conversations: a switch the routes should have set
+  was never set. Fixed.
 - **The chatbot driver can now work eight more chatbot websites - still not
   usable from either app.** ChatGPT, Claude, Microsoft Copilot and
   Perplexity, plus DeepSeek, Grok, Le Chat (Mistral) and Meta AI (these

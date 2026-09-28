@@ -100,7 +100,14 @@ export const WORDS = {
   notify_compare_waiting: "Waiting for your yes to ask {count} chatbots",
   notify_compare_paused: "Paused: comparing {count} chatbots",
   member_waiting: "Waiting its turn.",
+  kind_website: "Websites (a browser window on the PC)",
+  kind_api: "With a key (each message costs a little)",
+  kind_local: "On this PC",
+  usage_line: "Used so far: {requests}, {tokens} word-pieces (tokens), model {model}",
 };
+
+/** How each chatbot is reached (`kind`), in the order the chooser groups them. */
+export const KINDS = ["website", "api", "local"];
 
 /** The states in which a conversation is still going. */
 export const LIVE = new Set(["asking", "approved", "running", "paused"]);
@@ -140,6 +147,30 @@ function readTurn(t) {
     outside: who === "chatbot" || o.outside_text === true,
     move: text(o.move),
   };
+}
+
+/** What an API (or local) conversation has used so far, or null. */
+export function readUsage(u) {
+  const o = obj(u);
+  if (!o) return null;
+  const requests = num(o.requests);
+  const tokens = num(o.total_tokens) || num(o.prompt_tokens) + num(o.completion_tokens);
+  if (!requests && !tokens) return null;
+  return { requests, tokens, model: text(o.model) };
+}
+
+/** 4215 as "4,215" - the same on every machine (no locale). */
+export function grouped(n) {
+  return String(Math.round(num(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/** "Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini", or "". */
+export function usageLine(u) {
+  if (!u) return "";
+  let line = WORDS.usage_line;
+  if (!u.model) line = line.replace(", model {model}", "");
+  return line.replace("{requests}", `${u.requests} request${u.requests === 1 ? "" : "s"}`)
+    .replace("{tokens}", grouped(u.tokens)).replace("{model}", u.model);
 }
 
 function readSummary(s) {
@@ -183,6 +214,7 @@ export function readSession(s) {
     problem: text(o.problem),
     summary: readSummary(o.summary),
     transcript: Array.isArray(o.transcript) ? o.transcript.map(readTurn).filter(Boolean) : [],
+    usage: readUsage(o.usage),
     hidden: o.hidden === true,
   };
 }
@@ -207,6 +239,9 @@ export function readChatbot(body) {
     built: c.built === true && c.ready !== false,
     made: c.built === true,
     note: text(c.note),
+    // "website", "api" or "local" (an older PC sends none: its chatbots
+    // were all websites).
+    kind: text(c.kind) || "website",
   }));
   const lim = obj(o.limits) || {};
   const tier = {
@@ -419,4 +454,17 @@ export function memberLine(m, compare) {
   if (!m) return "";
   const waiting = (m.state === "approved" || m.state === "planned") && compare && compare.live;
   return `${m.name}: ${waiting ? WORDS.member_waiting : statusLine(m)}`;
+}
+
+/**
+ * The chooser's groups, in KINDS order, each with its heading; empty ones
+ * left out. A kind this app does not know goes last, with no heading.
+ */
+export function chatbotGroups(view) {
+  if (!view || !view.available) return [];
+  const titles = { website: WORDS.kind_website, api: WORDS.kind_api, local: WORDS.kind_local };
+  const out = KINDS.map((kind) => ({ kind, title: titles[kind],
+    chatbots: view.chatbots.filter((c) => c.kind === kind) }));
+  out.push({ kind: "other", title: "", chatbots: view.chatbots.filter((c) => !KINDS.includes(c.kind)) });
+  return out.filter((g) => g.chatbots.length);
 }

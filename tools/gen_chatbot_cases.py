@@ -163,6 +163,18 @@ CMP._new_id = _next_compare_id
 _SHIPPED_GEMINI = CB.ADAPTERS["gemini_web"]
 _SHIPPED_CHATGPT = CB.ADAPTERS["chatgpt_web"]
 _SHIPPED_CLAUDE = CB.ADAPTERS["claude_web"]
+#: Every chatbot as shipped, for the long-list case (read once, here).
+_SHIPPED_ALL = dict(CB.ADAPTERS)
+
+
+class ApiBot(CB.FakeChatbot):
+    """A stand-in for an API adapter: it counts like jarvis_chatbot_api does
+    (fixed numbers, so the file is the same everywhere)."""
+
+    def usage(self):
+        n = len(self.sent)
+        return {"model": "gpt-5-mini", "requests": n, "prompt_tokens": 1200 * n,
+                "completion_tokens": 205 * n, "total_tokens": 1405 * n, "retries": 0}
 
 
 def fresh():
@@ -334,6 +346,40 @@ def cases() -> dict:
                                                       deps=d))
     out["compare_stopped"] = status(d, compare_id=cid)
     out["compare_gone"] = status(d, compare_id="cmp_0000000000ff")
+
+    # ---- a long list, every kind, some not ready (the chooser's groups) ---
+    fresh()
+    CB.ADAPTERS.clear()
+    import jarvis_chatbot_api as A
+    import jarvis_chatbot_local as L
+    import jarvis_chatbot_chatgpt as GPT
+    import jarvis_chatbot_perplexity as PPX
+
+    def entry(cid, note, bot=None):
+        info = _SHIPPED_ALL[cid]
+        extra = {"ready": (lambda n=note: n)}
+        if bot is not None:
+            extra["factory"] = (lambda b=bot: b)
+        CB.register_adapter(dataclasses.replace(info, built=True, **extra))
+    # Registered out of order on purpose: both apps group them by kind.
+    entry("chatgpt_web", GPT.SITE.not_signed_in)
+    api_bot = ApiBot(OTHER_REPLIES)
+    entry("openai_api", "", api_bot)
+    entry("local_ai", L.NO_MODEL)
+    gem = CB.FakeChatbot(REPLIES)
+    entry("gemini_web", "", gem)
+    entry("deepseek_api", A.no_key_words(A.PRESETS["deepseek_api"]))
+    entry("perplexity_web", PPX.SITE.not_signed_in)
+    entry("groq_api", A.no_key_words(A.PRESETS["groq_api"]))
+    d = world(model=Model(stop_at=None))
+    out["long_list"] = status(d)
+
+    # An API conversation's counts ("usage"), alone and inside a comparison.
+    sid = start(d, chatbot="openai_api", max_messages=3)[1]["session"]
+    out["usage_done"] = status(d, sid)
+    api_bot.sent.clear()
+    cid = compare(d, chatbots=["gemini_web", "openai_api"])[1]["compare"]
+    out["compare_usage"] = status(d, compare_id=cid)
     return out
 
 
