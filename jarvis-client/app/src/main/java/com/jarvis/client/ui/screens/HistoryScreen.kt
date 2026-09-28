@@ -485,12 +485,18 @@ private fun Conversation(
         items(turns.size, key = { "t-$it" }) { i ->
             val turn = turns[i]
             val mine = turn.role == "user"
+            // A customer-support chat's record (role "support"): who wrote
+            // each line, and the company's own lines marked outside text.
+            val support = turn.role == "support"
             Column(Modifier.fillMaxWidth()) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Kicker(if (mine) "You" else "Jarvis")
+                    Kicker(if (support) ChatLog.supportWho(turn.provenance) else if (mine) "You" else "Jarvis")
+                    if (support && turn.provenance == "support_company") {
+                        Pill("outside text", color = chrome.warnInk)
+                    }
                     if (mine) {
                         ChatLog.provenanceMark(turn.provenance)?.let { Pill(it) }
                         if (turn.readOutside) Pill(ChatLog.TAINT_MARK, color = chrome.warnInk)

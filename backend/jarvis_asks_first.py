@@ -175,6 +175,10 @@ NOTE_TOOL_UPDATES = ("Checking is read-only - it only reports, never installs an
 NOTE_FORGET_RANGE = ("Always asks, with ONE card listing every fact and chat - approved by "
                      "tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. "
                      "This cannot be changed from an app.")
+NOTE_SUPPORT = ("Always asks: one card lists every detail Jarvis may give in that chat. "
+                "This cannot be changed from an app.")
+NOTE_SUPPORT_OFFER = ("Always asks, one card per offer, showing the exact reply - nothing is "
+                      "accepted without it. This cannot be changed from an app.")
 NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell me when\", "
              "which cannot stop to ask.")
 NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
@@ -256,7 +260,7 @@ HARD_LIMITS = frozenset({
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
-    "chatbot_session", "memory_forget_range",
+    "chatbot_session", "memory_forget_range", "support_chat", "support_offer",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -272,6 +276,7 @@ MUST_ASK = frozenset({
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "chatbot_session", "memory_forget_range",
+    "support_chat", "support_offer",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -294,7 +299,8 @@ GROUPS = (
                             "delete_calendar_event"]),
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
                       "control_browser", "post_to_external_service", "open_public_tunnel",
-                      "news_read", "page_read", "chatbot_session"]),
+                      "news_read", "page_read", "chatbot_session", "support_chat",
+                      "support_offer"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage"]),
@@ -482,6 +488,10 @@ def _row(action: str, *, here: bool) -> dict:
             row["note"] = NOTE_TOOL_UPDATES
         elif action == "memory_forget_range":
             row["note"] = NOTE_FORGET_RANGE
+        elif action == "support_chat":
+            row["note"] = NOTE_SUPPORT
+        elif action == "support_offer":
+            row["note"] = NOTE_SUPPORT_OFFER
         else:
             row["note"] = NOTE_ALWAYS
         return row

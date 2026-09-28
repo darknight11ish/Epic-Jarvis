@@ -2140,3 +2140,10 @@ try:
     import jarvis_chatbot_compare  # noqa: F401,E402
 except ImportError:  # pragma: no cover - shipped beside it on the PC
     pass
+# "Chat with customer support for me" (jarvis_support.py): a separate mode,
+# loaded here so Stop everything reaches a support chat too and a support
+# chat and a conversation never run at once.
+try:
+    import jarvis_support  # noqa: F401,E402
+except ImportError:  # pragma: no cover - shipped beside it on the PC
+    pass

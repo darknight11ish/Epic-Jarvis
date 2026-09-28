@@ -141,6 +141,12 @@ KEY_TARGET = "Jarvis Backend/chat history key"
 #: nothing, is recorded as "unknown" - and "unknown" counts as NOT the
 #: owner's own words to everything that cares.
 PROVENANCES = ("typed", "voice", "shared", "clipboard", "pasted", "picture_caption")
+#: The authors of a customer-support chat's rows (record_support, role
+#: "support"): the company's side (outside text), Jarvis writing in the
+#: owner's name, the owner's own words (typed in the window or in an app),
+#: and Jarvis's notes (the details card, offer cards, the reference).
+SUPPORT_PROVENANCES = ("support_company", "support_jarvis", "support_owner", "support_note")
+SUPPORT_MAX_ROWS = 600
 DEVICES = ("desktop", "hud", "phone")
 KEEP_DAYS = (0, 30, 90, 365)
 VOICE_WINDOW = 600          # a transcript counts as voice for 10 minutes
@@ -885,6 +891,55 @@ class ChatLog:
                           (now, device, cid))
         return {"recorded": True, "conversation_id": cid, "answer_kept": answer_kept}
 
+    # -- a customer-support chat (jarvis_support.py) -------------------------
+    def record_support(self, cid, title, rows) -> dict:
+        """Keep a finished customer-support chat as ONE conversation of its
+        own: every row role "support" (never "user", so the learner never
+        reads a word of it - jarvis_intake.owner_turns reads role "user"
+        only), each with its author as `provenance` (SUPPORT_PROVENANCES),
+        read_outside true (the company's words are outside text, so the
+        whole record is tainted) and answer_kept false. It never touches the
+        live-turn registry: nothing here was said to Jarvis by the owner.
+        Encrypted like every other turn; a pasted password or code in any
+        row is masked first (_mask_for_storage). Writing the same chat
+        again replaces it (a Resume after a pause ends in one record)."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+            return {"recorded": False, "why": "not a conversation id"}
+        aead, why = self._recording()
+        if aead is None:
+            return {"recorded": False, "why": why}
+        clean = []
+        for r in list(rows or [])[:SUPPORT_MAX_ROWS]:
+            if not isinstance(r, dict):
+                continue
+            prov = r.get("provenance")
+            prov = prov if prov in SUPPORT_PROVENANCES else "support_note"
+            text = self._mask_for_storage(str(r.get("text") or ""))
+            try:
+                at = float(r.get("at") or self._clock())
+            except (TypeError, ValueError):
+                at = self._clock()
+            if text.strip():
+                clean.append((prov, text, at))
+        if not clean:
+            return {"recorded": False, "why": "nothing was said"}
+        now = self._clock()
+        title = str(title or "Support chat")[:TITLE_CHARS]
+        with self._lock, closing(self._connect()) as c:
+            with c:
+                self._drop(c, [cid])
+                c.execute("INSERT INTO conversations (id, title, started, updated, device)"
+                          " VALUES (?,?,?,?,?)",
+                          (cid, self._seal(aead, title.encode("utf-8"),
+                                           self._aad(cid, "title")), clean[0][2], now, "pc"))
+                for idx, (prov, text, at) in enumerate(clean):
+                    c.execute("INSERT INTO turns (conversation_id, idx, at, role, provenance,"
+                              " device, lane, read_outside, answer_kept, voice_check, text)"
+                              " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                              (cid, idx, at, "support", prov, "pc", "", 1, 0, None,
+                               self._seal(aead, text.encode("utf-8"), self._aad(cid, idx))))
+        return {"recorded": True, "conversation_id": cid, "rows": len(clean)}
+
     # -- reading ------------------------------------------------------------
     def status(self) -> dict:
         st = self.settings()
@@ -972,7 +1027,10 @@ class ChatLog:
             except Exception:
                 text = "(this line could not be opened)"
             t = {"role": role, "text": text, "at": int(at or 0)}
-            if role == "user":
+            if role == "support":
+                # A customer-support chat (record_support): who wrote it.
+                t.update(provenance=prov or "support_note", read_outside=True)
+            elif role == "user":
                 t.update(provenance=prov or "unknown", read_outside=bool(outside),
                          answer_kept=bool(kept))
             turns.append(t)
@@ -1232,6 +1290,12 @@ def delete(conversation_id) -> bool:
     (`jarvis_memory.py` `erase()`, the owner's decision, 2026-09-27) - one
     module function, so both callers delete a conversation the same way."""
     return _log().delete(conversation_id)
+
+
+def record_support(cid, title, rows) -> dict:
+    """A finished customer-support chat (jarvis_support.py), kept encrypted
+    as its own conversation - see ChatLog.record_support."""
+    return _log().record_support(cid, title, rows)
 
 
 def status() -> dict:

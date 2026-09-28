@@ -144,6 +144,7 @@ on a throwaway copy instead.
 | `live.patch` | `jarvis_hud.py` | **Jarvis Live: talking back and forth** (the owner's decision and answers of 2026-09-28, `docs/LIVE-DESIGN.md`). One call at start-up, `jarvis_live.install(Handler, ...)`, answers `GET`/`POST /api/voice/live` (JARVIS-API section 63): start (no card; refused until your voice is trained), stop, more time, carry on, mute. Last in the list; its context is `chatbot-routes.patch`'s install block. Needs `jarvis_live.py` - without it, or on any error, the banner says so. See "Jarvis Live", at the very end. |
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
 | `forget-range.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Forget a time frame"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 64). Adds `GET /api/memory/forget_range` and `/preview` (what Jarvis learned and the chats from some days, as a list the owner unticks), `POST /api/memory/forget_range` (ONE approval card, `memory_forget_range`, listing every item - nothing changes before a person approves) and `/undo` (10 minutes, no card), and the gate's risk line for the new action (local, not reversible: a risky approval). Last in the list: its context is `chatbot.patch`'s gate lines and `live.patch`'s install block. Needs `jarvis_forget_range.py` - see "Forget a time frame", at the very end. |
+| `support-chat.patch` | `jarvis_gate.py` | **"Chat with customer support for me": the gate's words for its two cards** (the owner's decisions of 2026-09-28; docs/JARVIS-API.md section 65). Two hunks: `support_chat` (ONE card per chat, listing every detail Jarvis may give) and `support_offer` (ONE card per offer) get their `_RISK` lines (`"no", "outbound"` - they leave this PC and cannot be taken back, so approving either is a risky approval) and join the list of actions whose "no" proposes no standing rule. No route of its own: `chatbot-routes.patch` already installs `jarvis_chatbot_routes.py`, which reaches `jarvis_support.py`. Last in the list: its context is `forget-range.patch`'s own gate lines. See "Chat with customer support for me", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -15248,3 +15249,125 @@ The words and real answers both apps are tested against:
 - "A forgotten fact is not learned again automatically" is on the audit
   branch, not this one yet. These forgets use Forget's own mark, so it will
   cover them when it lands.
+
+---
+
+# Chat with customer support for me: `support-chat.patch` (2026-09-28)
+
+## In plain words
+
+Jarvis can now chat with a company's customer support for you - Groupon
+first - in your name, in a browser window you can see on the PC. You fill
+in a short form in either app: the company, what you want done ("refund
+order 1234, the spa closed"), and each detail Jarvis may give (a name and
+its exact value, like "Order number: 4481902217"). ONE approval card shows
+all of it, and the company's terms risk (your real account could be
+closed). On a yes, a window opens on the company's help page; you open the
+chat there yourself (its Chat button) and Jarvis starts. Every offer - a
+refund, a credit, a cancellation - gets its own card, and nothing is
+accepted until you approve it. If the agent asks "are you a bot?", or for
+the last digits of your card, a security answer or a code, Jarvis sends
+nothing and hands it to you: you answer in the window, then press Resume.
+Jarvis never says it is a person, and never sends a password, a card
+number or an ID number.
+
+## What to do on the PC
+
+Run `apply-patches.ps1` as usual. It copies `jarvis_support.py` and
+`jarvis_support_widget.py` in and applies `support-chat.patch` last (the
+gate's words for the two new cards). Your settings file needs no change: a
+file without the `support_chat` / `support_offer` lines asks anyway, and
+the shipped one says `"ask"`. The window needs Playwright, the same as the
+chatbot websites (if you already did it for Gemini, skip this):
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 -m pip install playwright; py -3 -m playwright install chromium
+```
+
+## Build step 8 - yours, on Groupon's real help page
+
+Nothing here has been tried against a real site. Three one-line commands,
+each pasted into PowerShell on its own.
+
+**1. Sign in to your own Groupon account in Jarvis's support window** (it
+has its own browser profile; Jarvis never sees the password). Close the
+window when you are signed in:
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_support_widget.py sign-in groupon
+```
+
+**2. The check - it only READS; it types, sends and presses nothing.** When
+the window opens, click Groupon's own "Chat" / "Contact us" button yourself
+and wait. It prints PASS or FAIL for each thing Jarvis needs, and saves the
+same lines in `C:\Users\pcadmin\.openjarvis\chatbot\support-check.txt`:
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_support_widget.py check groupon; Write-Host "Saved in $env:USERPROFILE\.openjarvis\chatbot\support-check.txt"
+```
+
+If the help page's address in Jarvis is wrong (the check says "a page on
+..." or finds no chat), put the right one after `groupon`:
+`py -3 jarvis_support_widget.py check groupon https://<the real help page>`
+- and send me the saved file either way, so the preset and the selectors
+can be fixed.
+
+**3. One real chat**, from either app: Brain -> "Chat with customer support
+for me", Groupon, a real goal and the details you allow. Watch the window.
+
+To forget every sign-in the support window keeps (it deletes that browser
+profile and nothing else):
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_support_widget.py forget-sign-ins
+```
+
+## What the code does
+
+- **The details card** (`support_chat`): the company, its help page and
+  terms risk, the goal, and every detail word for word. Passwords, PINs,
+  security answers, card numbers, ID numbers, sign-in details, codes and
+  bank account numbers are refused on the form.
+- **The last check before every message** hides each listed value exactly
+  as written, then blocks anything else personal (an unlisted email, phone
+  number, long number or address, a saved fact about you). Card numbers,
+  Social-Security-shaped numbers, passwords, keys, codes and "I'm a real
+  person" are blocked even if listed.
+- **Offers** (`support_offer`): plain code looks for an offer in every
+  agent message (tested over 100 written agent lines: 55 offers, none
+  missed; no needless card over the 45 others), and the model can say
+  "offer" too. The card shows the agent's words and the exact reply
+  ("Yes, I accept that. Thank you."). While it waits, Jarvis tells the
+  agent "One moment please, I'm just checking that." at most every 2
+  minutes, 3 times, then pauses. A yes that comes after the pause accepts
+  nothing. In the apps: Decline, Say something else, Take over - never
+  Accept.
+- **Handed to you:** "are you a bot?" (or "am I talking to Alex?"),
+  identity checks, a detail not on the card - nothing is sent.
+- **One or two graphics cards:** the chatbot driver's own logic. One card
+  (today): Jarvis's own model reads the goal, the details and the last six
+  messages. Two cards: the whole chat, once you switch `[chatbot]
+  full_version` on after measuring.
+- **The record:** the whole chat is kept in your encrypted chat history as
+  "Support chat with Groupon - <date>", and "Export transcript" on the PC
+  saves a plain (NOT encrypted) text file where you pick.
+
+## Test it
+
+`py -3 backend\test_support_chat.py` (the rules, no browser, no network)
+and `py -3 backend\test_support_widget.py` (a real browser window against
+fake help pages on this PC, one per chat maker; it skips itself without
+Playwright). Both apps' words and answers:
+`python3 tools/gen_support_cases.py --check`.
+
+## Not checked, said plainly
+
+- Not tried against Groupon or any real chat widget. The help address and
+  every selector and host in the vendor table are guesses (NOT VERIFIED)
+  until your check.
+- Groupon's terms reportedly forbid automated use (a search summary; the
+  page could not be read). Your real account could be closed.
+- The phone's screen (`SupportPlate.kt`) is compiled only by CI; its pure
+  logic (`net/Support.kt`) and test were compiled and run here.
+- The limits (15 messages, 30 minutes of chat, 45 in the queue on one
+  card) are proposals.

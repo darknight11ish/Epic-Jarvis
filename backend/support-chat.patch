@@ -1,0 +1,30 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -605,5 +605,7 @@
+     "enable_reading_tool",  # jarvis_asks_first.py acts only on tier "ask" (tools-enable.patch)
+     "restore_backup",  # jarvis_backup.py acts only on tier "ask" (backup.patch)
+     "chatbot_session",  # jarvis_chatbot.py acts only on tier "ask": ONE card per conversation (chatbot.patch)
+     "memory_forget_range",  # jarvis_forget_range.py acts only on tier "ask": ONE card per time frame (forget-range.patch)
++    "support_chat",  # jarvis_support.py acts only on tier "ask": ONE card per support chat, listing every detail it may give (support-chat.patch)
++    "support_offer",  # jarvis_support.py acts only on tier "ask": ONE card per offer; nothing is accepted without it (support-chat.patch)
+ })
+@@ -736,6 +738,19 @@
+     # lock on the phone). Without this line the action would be read as
+     # "unknown", and the notice would say it might leave the machine.
+     "memory_forget_range": ("no", "local", "forgets the facts and deletes the chats listed on the card, on this PC; nothing is sent anywhere; for 10 minutes one tap on Undo puts them all back, and after that the chats are gone for good and the facts stay forgotten"),
++    # support-chat.patch (jarvis_support.py and jarvis_support_widget.py,
++    # the owner's decisions of 2026-09-28, "Customer-support chats"). ONE
++    # card per support chat: Jarvis chats with a company's customer support
++    # in the owner's name, on the owner's REAL account, in a browser window
++    # the owner can see, giving only the details listed on the card. And
++    # ONE card per offer (a refund, a credit, a cancellation, a change):
++    # nothing is accepted without it, and what is accepted binds the owner.
++    # Both leave this PC and cannot be taken back, so "no" and "outbound":
++    # risky approvals (Windows Hello on the PC, a screen lock on the phone).
++    # They were already treated as risky before these lines, as actions the
++    # gate had not classified; these lines give them their words.
++    "support_chat": ("no", "outbound", "chats with a company's customer support for you, in your name, on your own account there, in a browser window you can see - giving only the details listed on the card; every offer gets its own card, identity checks and \"are you a bot?\" are handed to you, and what is sent cannot be taken back"),
++    "support_offer": ("no", "outbound", "accepts the offer shown on the card, in your name, by sending exactly the reply shown; what you agree to binds you, like any message you send yourself, and cannot be taken back"),
+ }
+
+ _UNKNOWN_RISK = ("no", "outbound",

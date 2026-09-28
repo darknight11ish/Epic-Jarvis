@@ -248,6 +248,12 @@ SHIPPED = (
     # "Forget a time frame" (2026-09-28): a checked list, ONE card, 10
     # minutes to undo; GET/POST /api/memory/forget_range (forget-range.patch)
     "jarvis_forget_range.py",
+    # "Chat with customer support for me" (2026-09-28): the support chat's
+    # rules and its window on the chatbot websites' shared base. No route
+    # patch: chatbot-routes.patch already installs jarvis_chatbot_routes.py,
+    # which reaches it; the gate's risk lines are support-chat.patch.
+    "jarvis_support.py",
+    "jarvis_support_widget.py",
 )
 
 

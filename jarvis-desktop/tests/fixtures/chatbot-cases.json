@@ -12,6 +12,24 @@
         "ready": true
       }
     ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
     "compare": null,
     "limits": {
       "said": "",
@@ -98,6 +116,19 @@
       ],
       "usage": null
     },
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -122,6 +153,24 @@
         "name": "Gemini",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": null,
@@ -154,6 +203,19 @@
       "transcript": [],
       "usage": null
     },
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -178,6 +240,24 @@
         "name": "Gemini",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": null,
@@ -209,6 +289,19 @@
       "tier_name": "the limited version (one graphics card)",
       "transcript": [],
       "usage": null
+    },
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
       "compare_max": 3,
@@ -252,6 +345,24 @@
         "name": "Claude",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": {
@@ -372,6 +483,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -422,6 +546,24 @@
         "name": "Claude",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": {
@@ -715,6 +857,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -750,6 +905,24 @@
         "ready": true
       }
     ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
     "compare": null,
     "limits": {
       "said": "",
@@ -757,6 +930,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -801,6 +987,24 @@
         "ready": true
       }
     ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
     "compare": null,
     "limits": {
       "said": "",
@@ -808,6 +1012,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -841,6 +1058,24 @@
         "name": "ChatGPT",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": {
@@ -965,6 +1200,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -1007,6 +1255,24 @@
         "name": "Claude",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": {
@@ -1201,6 +1467,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -1265,6 +1544,24 @@
         "name": "ChatGPT",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": {
@@ -1411,6 +1708,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -1505,6 +1815,24 @@
         "name": "Groq (API)",
         "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit groq 5",
         "ready": false
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": {
@@ -1751,6 +2079,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -1837,6 +2178,24 @@
         "name": "Groq (API)",
         "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit groq 5",
         "ready": false
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": null,
@@ -1935,6 +2294,19 @@
         "total_tokens": 2810
       }
     },
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -1959,6 +2331,24 @@
         "name": "Gemini",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": null,
@@ -2079,6 +2469,19 @@
       ],
       "usage": null
     },
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -2105,6 +2508,24 @@
         "ready": true
       }
     ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
     "compare": null,
     "limits": {
       "said": "",
@@ -2112,6 +2533,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -2138,6 +2572,24 @@
         "ready": true
       }
     ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
     "compare": null,
     "limits": {
       "said": "",
@@ -2145,6 +2597,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -2249,6 +2714,24 @@
         "ready": false
       }
     ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
     "compare": null,
     "limits": {
       "said": "",
@@ -2256,6 +2739,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -2308,6 +2804,24 @@
         "ready": true
       }
     ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
     "compare": null,
     "limits": {
       "said": "",
@@ -2315,6 +2829,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -2341,6 +2868,24 @@
         "ready": false
       }
     ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
     "compare": null,
     "limits": {
       "said": "",
@@ -2348,6 +2893,19 @@
     },
     "routed": true,
     "session": null,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -2372,6 +2930,24 @@
         "name": "Gemini",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": null,
@@ -2437,6 +3013,19 @@
       ],
       "usage": null
     },
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    },
     "tier": {
       "compare_max": 3,
       "compare_min": 2,
@@ -2461,6 +3050,24 @@
         "name": "Gemini",
         "note": "",
         "ready": true
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": null,
@@ -2517,6 +3124,19 @@
         }
       ],
       "usage": null
+    },
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
       "compare_max": 3,
@@ -2616,6 +3236,24 @@
         "ready": true
       }
     ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
     "compare": null,
     "limits": {
       "said": "",
@@ -2690,6 +3328,19 @@
         }
       ],
       "usage": null
+    },
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
       "compare_max": 3,
@@ -2777,6 +3428,24 @@
         "name": "Groq (API)",
         "note": "No Groq API key is saved on this PC. To add one, run this one line in PowerShell in Jarvis's folder, then paste the key (it will not show): py -3 jarvis_chatbot_api.py key groq - keys are made at https://console.groq.com/keys. Then set a monthly money limit, for example $5: py -3 jarvis_chatbot_api.py limit groq 5",
         "ready": false
+      }
+    ],
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
       }
     ],
     "compare": null,
@@ -2889,6 +3558,19 @@
         "retries": 0,
         "total_tokens": 4215
       }
+    },
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
       "compare_max": 3,

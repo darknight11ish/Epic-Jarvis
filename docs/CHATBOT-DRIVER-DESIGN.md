@@ -412,7 +412,19 @@ version is measured; it is not built. The numbers live in one place,
 
 ## Customer-support chats (design, 2026-09-28)
 
-Status: **designed, not built.** The owner's decision of 2026-09-28 in
+Status (2026-09-28): **built - build steps 2-7 and 9 - on the backend and
+both apps; NOT YET TRIED AGAINST A REAL SITE** (step 8 is the owner's, on
+Groupon's help page: `backend/README.md`, "Chat with customer support for
+me"). `backend/jarvis_support.py` (the rules), `jarvis_support_widget.py`
+(the window, on the shared website base), routes in
+`jarvis_chatbot_routes.py`, `support-chat.patch`; `docs/JARVIS-API.md`
+section 65. Where the build differs from this design, said plainly: the
+company presets are Groupon plus "another company's help page" typed by the
+owner (Amazon, eBay, airlines and phone companies wait for the owner's OK);
+Ada is not in the vendor table (nothing about it could be confirmed); a
+request for a detail not on the card is handed to the owner rather than
+becoming its own card; "find it for me" is not built; the opening AI line
+is gone (the owner's change). The owner's decision of 2026-09-28 in
 `CLAUDE.md` ("Customer-support chats"). Written by the studio's designer.
 Most web facts below are **unverified**: the container could not reach
 groupon.com, tosdr.org or the widget makers' live pages.

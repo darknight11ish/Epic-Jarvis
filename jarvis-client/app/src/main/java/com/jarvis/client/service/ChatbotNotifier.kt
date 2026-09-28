@@ -15,6 +15,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.net.Chatbot
+import com.jarvis.client.net.Support
 
 /**
  * The ongoing notification while Jarvis talks to a chatbot for the owner
@@ -40,6 +41,9 @@ object ChatbotNotifier {
     private const val TAG = "ChatbotNotifier"
     const val NOTIFICATION_ID = 0x3200
 
+    /** A customer-support chat's own line, beside a chatbot conversation's. */
+    const val SUPPORT_NOTIFICATION_ID = 0x3201
+
     /** The conversation (or comparison) id a Stop carries. */
     const val EXTRA_SESSION_ID = "com.jarvis.client.extra.CHATBOT_SESSION"
 
@@ -58,9 +62,29 @@ object ChatbotNotifier {
     fun postCompare(context: Context, c: Chatbot.Compare) =
         show(context, Chatbot.compareTalkingLine(c), c.id)
 
-    private fun show(context: Context, line: String, stopId: String) {
+    /**
+     * A customer-support chat ("Chat with Groupon: offer waiting"). Its Stop
+     * carries the support chat's id. The line never carries the goal, a
+     * detail or a word of the chat; a locked phone shows [Support.NOTIFY_LOCKED].
+     */
+    fun postSupport(context: Context, c: Support.Chat) =
+        show(context, Support.talkingLine(c), c.id, SUPPORT_NOTIFICATION_ID, Support.TITLE,
+            Support.NOTIFY_LOCKED)
+
+    fun cancelSupport(context: Context) {
+        runCatching { NotificationManagerCompat.from(context).cancel(SUPPORT_NOTIFICATION_ID) }
+    }
+
+    private fun show(
+        context: Context,
+        line: String,
+        stopId: String,
+        id: Int = NOTIFICATION_ID,
+        title: String = Chatbot.TITLE,
+        lockedWords: String = Chatbot.NOTIFY_LOCKED,
+    ) {
         if (line.isEmpty()) {
-            cancel(context)
+            runCatching { NotificationManagerCompat.from(context).cancel(id) }
             return
         }
         if (!allowed(context)) return
@@ -70,18 +94,18 @@ object ChatbotNotifier {
             .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(line)
-            .setContentText(Chatbot.TITLE)
+            .setContentText(title)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setPublicVersion(locked(context))
+            .setPublicVersion(locked(context, lockedWords))
             .setContentIntent(open(context))
             .addAction(0, Chatbot.STOP, stopIntent(context, stopId))
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, n) }
+        runCatching { NotificationManagerCompat.from(context).notify(id, n) }
             .onFailure { Log.w(TAG, "could not post the chatbot line", it) }
     }
 
@@ -89,12 +113,12 @@ object ChatbotNotifier {
         runCatching { NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID) }
     }
 
-    private fun locked(context: Context): Notification =
+    private fun locked(context: Context, words: String): Notification =
         NotificationCompat.Builder(context, EventService.CHANNEL_ID)
             .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
-            .setContentText(Chatbot.NOTIFY_LOCKED)
+            .setContentText(words)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
 

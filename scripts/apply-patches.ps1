@@ -684,6 +684,17 @@ $PATCHES = @(
     # it, or on any error, the banner says so and the routes are simply not
     # there.
     'forget-range.patch'
+    # "Chat with customer support for me" (the owner's decisions of
+    # 2026-09-28; JARVIS-API section 65): the gate's _RISK lines for
+    # `support_chat` (ONE card per support chat, listing every detail
+    # Jarvis may give) and `support_offer` (ONE card per offer; nothing is
+    # accepted without it) - both leave this PC and cannot be taken back,
+    # so their approvals are risky ones - and their lines in the "a no is
+    # not a standing rule" list. Two hunks in jarvis_gate.py whose context
+    # is forget-range.patch's own lines, so it goes after it - last, like
+    # every new patch. No route of its own: chatbot-routes.patch already
+    # installs jarvis_chatbot_routes.py, which reaches jarvis_support.py.
+    'support-chat.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -844,6 +855,9 @@ $SHIPPED = @(
     'jarvis_live_photo_test.py'  # the camera's photo test: run once, when the 12 GB card is in; a pass is what lets the camera switch appear on the phone
     # --- "Forget a time frame" (2026-09-28): a checked list, ONE card, 10 minutes to undo ---
     'jarvis_forget_range.py'     # forget-range.patch: GET/POST /api/memory/forget_range, /preview and /undo; jarvis_quick.py (already SHIPPED) calls it for "forget what you learned last week"
+    # --- "Chat with customer support for me" (2026-09-28): Groupon first; the details card, an offer card per offer, identity checks and "are you a bot?" handed to the owner ---
+    'jarvis_support.py'          # the support chat's rules: the details card, the last check before every message, offers, the transcript; routes in jarvis_chatbot_routes.py, risk lines in support-chat.patch
+    'jarvis_support_widget.py'   # the support window on the chatbot websites' shared base: the company's help page, its chat widget (Zendesk, Intercom, LivePerson, Gorgias, Freshchat, Salesforce, unbranded); needs Playwright (not installed by this script)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

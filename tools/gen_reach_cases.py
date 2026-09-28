@@ -112,8 +112,18 @@ def _gemini(ready: bool) -> dict:
     return {"routed": True, "chatbots": bots}
 
 
+# Customer-support chats (jarvis_support.py): the window cannot open without
+# Playwright, or is ready; fixed here for the same reason.
+import jarvis_chatbot_web as _W  # noqa: E402
+
+
+def _support(ready: bool) -> dict:
+    return {"routed": True, "ready": "" if ready else _W.NOT_INSTALLED,
+            "companies": ["Groupon"]}
+
+
 def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=None,
-         second=None, big=None, plugins=None, chatbot=None) -> R.Ctx:
+         second=None, big=None, plugins=None, chatbot=None, support=None) -> R.Ctx:
     tiers = dict(TIERS_SHIPPED, **(tiers or {}))
     return R.Ctx(enabled=set(enabled), tier=lambda a: tiers.get(a, "ask"),
                  env=lambda n: str(os.environ.get(n, "") or "").strip(),
@@ -122,7 +132,7 @@ def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=N
                  key_saved=lambda p: (keys or {}).get(p, False),
                  second_card=second or OFF, big_model=big or {"master": False},
                  gate_action=lambda lookup: None, plugins=plugins or NO_PLUGINS,
-                 chatbot=chatbot or _gemini(False))
+                 chatbot=chatbot or _gemini(False), support=support or _support(False))
 
 
 def cases() -> dict:
@@ -143,7 +153,7 @@ def cases() -> dict:
                                              "vision": True}},
         big={"master": True, "wiki": True, "deep_questions": False},
         plugins={"servers": ["repo"], "running": ["repo"], "problem": "",
-                 "card_every_start": False}, chatbot=_gemini(True)))
+                 "card_every_start": False}, chatbot=_gemini(True), support=_support(True)))
     _set_env(EVERYDAY_ENV)
     out["blocked_and_no_key"] = R.view(_ctx(
         {"web_search", "email_check", "browser_control"}, tiers={"email_read": "never"},

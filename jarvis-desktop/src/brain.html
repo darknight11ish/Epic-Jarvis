@@ -533,6 +533,52 @@
                 <p class="note">Signing in to the chatbot's account happens on the PC only, in the browser window Jarvis uses.</p>
               </form>
             </div>
+            <!-- "Chat with customer support for me" (support.js, brain/support.rs;
+                 JARVIS-API section 65). The details rows are painted by brain.js
+                 (paintSupportRows); the live chat, its offer and its transcript by
+                 paintSupport. -->
+            <div class="card card-wide" id="support-card">
+              <h2>Chat with customer support for me</h2>
+              <p class="note">Jarvis chats with a company's customer support for you (Groupon first), in your name, in a browser window on the PC. One approval card lists exactly which of your details it may give. Every offer - a refund, a credit, a cancellation - gets its own card, and nothing is accepted before you approve it.</p>
+              <p class="note" id="support-version"></p>
+              <div id="support"></div>
+              <div id="support-log"></div>
+              <form id="support-form" class="support-form" autocomplete="off" novalidate hidden>
+                <label class="lbl">Company
+                  <select id="support-company" class="field"></select>
+                </label>
+                <p class="note support-terms" id="support-terms"></p>
+                <label class="lbl" id="support-address-label" hidden>The company's help page (https://...)
+                  <input id="support-address" class="field" type="url" maxlength="500" spellcheck="false">
+                </label>
+                <label class="lbl">What should Jarvis get done?
+                  <textarea id="support-goal" class="field chatbot-goal" rows="3" maxlength="1000" spellcheck="true"></textarea>
+                </label>
+                <p class="note">Jarvis writes its own messages from these words, in your name.</p>
+                <fieldset id="support-details" class="support-details">
+                  <legend class="lbl">Details Jarvis may give (one per row: a name and its exact value)</legend>
+                  <div id="support-rows"></div>
+                  <button id="support-add" class="btn small ghost" type="button">Add a detail</button>
+                  <p class="note">Never a password, PIN, security answer, card number or ID number: those are refused, and if the agent asks, Jarvis hands it to you.</p>
+                </fieldset>
+                <div class="row">
+                  <label class="lbl">Most messages
+                    <input id="support-messages" class="field" type="number" min="1" max="40" required>
+                  </label>
+                  <label class="lbl">Most minutes of chat
+                    <input id="support-minutes" class="field" type="number" min="1" max="60" required>
+                  </label>
+                  <label class="lbl">Most minutes in the queue
+                    <input id="support-queue" class="field" type="number" min="1" max="120" required>
+                  </label>
+                </div>
+                <div class="row">
+                  <button id="support-start" class="btn small" type="submit">Start</button>
+                </div>
+                <p class="note">Nothing is sent until you approve the card.</p>
+                <p class="note">You sign in to your own account by hand in the window on the PC, and open the company's chat there yourself (its Chat or Help button). Jarvis never types, sees or keeps a password.</p>
+              </form>
+            </div>
             <div class="card card-wide" id="coming-up-card">
               <h2>Coming up</h2>
               <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. A repeating reminder or alarm is set up at once, with no card; a repeating briefing or "tell me when" waits for your yes on an approval card.</p>

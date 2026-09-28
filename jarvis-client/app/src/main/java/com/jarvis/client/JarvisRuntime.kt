@@ -1183,6 +1183,11 @@ object JarvisRuntime {
                 if (com.jarvis.client.net.Chatbot.isChatbotActivity(_activityDetail.value)) {
                     watchChatbot()
                 }
+                // A customer-support chat's progress rides on the same line
+                // ("Chat with Groupon: message 2 of 15.").
+                if (com.jarvis.client.net.Support.isSupportActivity(_activityDetail.value)) {
+                    watchSupport()
+                }
                 refreshStatus()
             }
             "power", "persona" -> refreshStatus()
@@ -4378,6 +4383,127 @@ object JarvisRuntime {
                 }
                 _chatbotTick.update { n -> n + 1 }
                 kotlinx.coroutines.delay(com.jarvis.client.net.Chatbot.POLL_MS)
+            }
+        }
+    }
+
+    // ------------------------------- Chat with customer support for me ----
+    // The owner's decisions of 2026-09-28 - see [com.jarvis.client.net.Support]
+    // and ui/screens/SupportPlate.kt. Jarvis chats with a company's customer
+    // support in the owner's name, on the PC; ONE card lists every detail it
+    // may give, and every offer gets its own card. This phone starts one,
+    // shows it, takes over, resumes (the task's own card) and stops it, and
+    // answers a waiting offer with Decline or "Say something else" - never
+    // Accept (that is only ever the offer's card). It keeps an ongoing
+    // notification while one is going (service/ChatbotNotifier.postSupport).
+
+    private val _supportTick = MutableStateFlow(0)
+
+    /** Goes up while a support chat is going, and after every change from this phone. */
+    val supportTick: StateFlow<Int> = _supportTick.asStateFlow()
+
+    /** The last support chat this phone showed or started, so its end stays on screen. */
+    @Volatile var supportLastId: String? = null
+
+    private var supportWatcher: kotlinx.coroutines.Job? = null
+
+    /** `GET /api/chatbot/status?support=` - the one [id] names, or the latest going. A read. */
+    suspend fun supportStatus(id: String?): ApiResult<JsonObject> = api.supportStatus(id)
+
+    /** Ask the PC for a support chat: ONE approval card. Held on a stale link (rule 4). */
+    suspend fun supportStart(
+        company: String,
+        address: String?,
+        goal: String,
+        rows: List<com.jarvis.client.net.Support.Detail>,
+        maxMessages: Int?,
+        maxMinutes: Int?,
+        maxQueueMinutes: Int?,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Support.startBody(company, address, goal, rows, maxMessages,
+            maxMinutes, maxQueueMinutes)
+            ?: return false to "That cannot be sent: check the company, the goal and the details."
+        return when (val r = api.supportWrite(com.jarvis.client.net.Support.START_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Support.said(r.value).also { (ok, _) ->
+                if (ok) {
+                    val id = (r.value.body?.get("support") as? kotlinx.serialization.json.JsonPrimitive)
+                        ?.takeIf { it.isString }?.content
+                    if (id != null) supportLastId = id
+                    watchSupport()
+                }
+                _supportTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not started. " + describe(r.error))
+        }
+    }
+
+    /** Stop a support chat. Never held, never a card: it only makes Jarvis do less. */
+    suspend fun supportStop(id: String): Pair<Boolean, String> {
+        val body = com.jarvis.client.net.Support.idBody(id)
+            ?: return false to "That is not a support chat this phone knows."
+        return supportPost(com.jarvis.client.net.Support.STOP_PATH, body)
+    }
+
+    /** Take over: Jarvis stops sending. Never held, never a card. */
+    suspend fun supportTakeover(id: String): Pair<Boolean, String> {
+        val body = com.jarvis.client.net.Support.idBody(id)
+            ?: return false to "That is not a support chat this phone knows."
+        return supportPost(com.jarvis.client.net.Support.TAKEOVER_PATH, body)
+    }
+
+    /**
+     * Decline or "Say something else" (both send words: held on a stale link)
+     * or Take over (not held) about the waiting offer. Never accept.
+     */
+    suspend fun supportAnswer(id: String, offer: Int, choice: String, text: String?): Pair<Boolean, String> {
+        if (choice != "takeover") actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Support.answerBody(id, offer, choice, text)
+            ?: return false to "That cannot be sent."
+        return supportPost(com.jarvis.client.net.Support.ANSWER_PATH, body)
+    }
+
+    private suspend fun supportPost(path: String, body: String): Pair<Boolean, String> =
+        when (val r = api.supportWrite(path, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Support.said(r.value).also {
+                _supportTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+
+    /**
+     * While a support chat is going: read it every [Support.POLL_MS], keep the
+     * ongoing notification ("Chat with Groupon: offer waiting" with Stop) in
+     * step, and tick [supportTick]. Ends - and takes the notification away -
+     * once nothing is going, or after five failed reads. One watcher at a time.
+     */
+    fun watchSupport() {
+        if (supportWatcher?.isActive == true) return
+        supportWatcher = scope.launch {
+            var misses = 0
+            while (true) {
+                val r = api.supportStatus(null)
+                val ctx = appContext
+                if (r is ApiResult.Ok) {
+                    misses = 0
+                    val c = com.jarvis.client.net.Support.parse(r.value)?.chat
+                    if (c != null && c.live) {
+                        supportLastId = c.id
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.postSupport(ctx, c)
+                    } else {
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.cancelSupport(ctx)
+                        _supportTick.update { n -> n + 1 }
+                        break
+                    }
+                } else {
+                    misses += 1
+                    if (misses >= 5) {
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.cancelSupport(ctx)
+                        break
+                    }
+                }
+                _supportTick.update { n -> n + 1 }
+                kotlinx.coroutines.delay(com.jarvis.client.net.Support.POLL_MS)
             }
         }
     }

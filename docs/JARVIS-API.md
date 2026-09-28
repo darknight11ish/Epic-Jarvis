@@ -10321,3 +10321,244 @@ this forgets, and "Erase the words" is per fact. A spoken "yes" or
   hidden - the counts and the days stay - until Show is confirmed. The
   status (an open Undo) carries no words and stays.
 - The words are the contract's (`words`), in both apps.
+
+## 65. Customer-support chats - Jarvis chats with a company's support for you (added 2026-09-28; built, not yet tried against a real site)
+
+**What it is.** The owner's decisions of 2026-09-28 (CLAUDE.md,
+"Customer-support chats"; design: `docs/CHATBOT-DRIVER-DESIGN.md`,
+"Customer-support chats", sections 1-10). A separate mode of the chatbot
+driver, because the other side is a company acting on the owner's REAL
+account, often a real person. Groupon first. Jarvis sends the messages
+itself, in the owner's name, at a person's pace, in a browser window the
+owner can see on the PC - never hiding from the site's bot detection, no
+captcha solving.
+
+- **ONE card per chat** (gate action `support_chat`, tier `ask` only, a
+  risky approval: Windows Hello on the PC, a screen lock on the phone)
+  lists the company and its help page, **that company's terms risk**, the
+  goal, and **every detail Jarvis may give, word for word** - "Jarvis may
+  give these, and nothing else". Passwords, PINs, security questions and
+  answers, payment card numbers and their digits, ID numbers (a Social
+  Security number, a passport), sign-in details, one-time codes and bank
+  account numbers are **refused on the card**.
+- **EVERY offer gets its own card** (`support_offer`, tier `ask` only,
+  risky): the agent's words, and the exact reply that would be sent
+  ("Yes, I accept that. Thank you."). Nothing is accepted before that
+  card's yes. The apps offer Decline, Say something else and Take over -
+  never Accept.
+- **No opening "I'm an AI" line**: Jarvis writes in the owner's name.
+  **It never claims to be human**: "are you a bot?" (and "am I talking to
+  Alex?") is caught by plain code; Jarvis sends nothing, pauses and hands
+  the question to the owner, who answers in the window.
+- **Identity checks** (the last digits of a card, security questions,
+  codes, a birth date) and **a detail not on the card** are handed to the
+  owner, never answered by Jarvis.
+- The company's words are **outside text**: never learned from, never read
+  aloud. The whole chat is kept in the **encrypted chat history** as a
+  "Support chat" record.
+
+`backend/jarvis_support.py` (the rules) and `backend/jarvis_support_widget.py`
+(the window, on the chatbot websites' shared base `jarvis_chatbot_web.py`),
+both shipped whole. The routes are in `jarvis_chatbot_routes.py`
+(chatbot-routes.patch already installs it: no route patch of its own); the
+gate's risk lines are `support-chat.patch`. Desktop: Brain -> Work ->
+"Chat with customer support for me" (`support.js`, `brain.js`,
+`brain/support.rs`). Phone: Brain -> the same card (`SupportPlate.kt`,
+`net/Support.kt`) and an ongoing notification. Both apps' words and the
+real answers: `support-cases.json` (`tools/gen_support_cases.py`).
+
+### 65.1 Routes
+
+| route | what | card | stale link |
+|---|---|---|---|
+| `GET /api/chatbot/status` (`?support=sup_<12 hex>`) | also carries `support` (the latest chat still going, or the one named; `null` for none or one gone after a restart), `companies`, `support_tier` | - | a read |
+| `POST /api/chatbot/support/start` | `{company, address?, goal, details: [{name, value}], max_messages?, max_minutes?, max_queue_minutes?}`; 202 `{support, asking: true, message}`. A refused plan is a 400 with the reason in a sentence, and no card; another chat or conversation going is a 409 | ONE `support_chat` card | held |
+| `POST /api/chatbot/support/stop` | `{id}` - a running chat within a few seconds, a paused one at once; its window closes | never | never held |
+| `POST /api/chatbot/support/takeover` | `{id}` - Jarvis stops sending within a few seconds and pauses (`paused_code: "takeover"`); the owner types in the window; Resume (`/api/task/resume`, its own card) carries on, with what the owner typed kept as theirs | never | never held |
+| `POST /api/chatbot/support/answer` | `{id, offer, choice, text?}` about the waiting offer, `choice` one of `decline`, `say`, `takeover`. Decline sends "Thank you, but I'd rather not accept that. Is there another option?"; say sends the owner's own words through the same last check; **"accept" is refused (400)**, and so are say-words that read as accepting ("yes", "ok", "I agree", "go ahead"...) - the only yes that can leave is one an offer card showed | never (the offer's own card is the only accept) | decline and say held; takeover not |
+| `GET /api/chatbot/support/export?id=` | `{filename, text, note}` - the transcript as plain text for the desktop's "Export transcript"; writes nothing (the desktop saves where the owner picks, and says the file is NOT encrypted) | - | a read (desktop only, ARCHITECTURE §8) |
+
+Pause and Resume are `/api/task/pause` and `/api/task/resume` (the chat
+runs as a `jarvis_task_control` task, tool `support_chat`); Stop everything
+stops it. While a support chat is going no chatbot conversation or
+comparison starts, and the other way round (one window, one driver model).
+
+### 65.2 `companies` and `support_tier`
+
+`companies`: `[{id, name, host, help_url, terms, verified}]` - Groupon
+(`groupon`, help page `https://www.groupon.com/customer-support`, **not
+verified**: the page could not be reached when this was written; the
+owner's check says whether it is right) and `other` ("Another company (its
+help page)"): the owner types an `https://` address with a public name,
+which becomes the only host the window opens. **Any further company preset
+is the owner's OK first.**
+
+`support_tier` - the chatbot driver's own version logic
+(`jarvis_chatbot.choose_tier`): `{id, name, words, why, messages_default,
+messages_max, minutes_default, minutes_max, queue_default, queue_max}`.
+
+| | one graphics card (the limited version) | two graphics cards (the full version) |
+|---|---|---|
+| the driver model | Jarvis's own, on the card the owner chats on | on the second card's "Longer conversations" lane, once the owner switches `[chatbot] full_version` on after measuring |
+| what it reads | the goal, the details and the **last six** messages | the whole chat |
+| messages (default, most) | 15, 25 | 25, 40 |
+| minutes of chat, from the first answer | 30, 45 | 30, 60 |
+| minutes in the queue | 45, 120 | 45, 120 |
+
+The numbers are proposals (only the queue's are the design's); they are
+the owner's to change. On one card a support reply goes ahead of the
+owner's own chat for its few seconds (the agent is not kept waiting); the
+offer check is plain code either way, so a small model cannot miss one.
+
+### 65.3 `support`
+
+```json
+{"id": "sup_000000000003", "company": "groupon", "company_name": "Groupon",
+ "help_url": "https://www.groupon.com/customer-support", "goal": "...",
+ "details": [{"name": "Order number", "value": "..."}],
+ "state": "running", "tier": "one_card", "tier_name": "...",
+ "messages_used": 2, "max_messages": 15, "minutes_used": 0.2, "max_minutes": 30,
+ "queue_minutes": 0.1, "max_queue_minutes": 45, "in_queue": false,
+ "queue_position": null, "agent": "Priya", "waiting_for_chat": false,
+ "paused": "", "paused_code": "", "take_over": false, "ended": "",
+ "question": "", "problem": "", "terms": "...",
+ "offer": {"id": 1, "words": "...", "reply": "Yes, I accept that. Thank you.",
+           "state": "waiting", "card": "waiting", "holds": 0, "holds_most": 3,
+           "said": "", "choice": ""},
+ "offers": [{"id": 1, "state": "waiting"}], "reference": "",
+ "summary": null, "saved": "", "read_aloud": false,
+ "transcript": [{"who": "jarvis", "n": 1, "text": "...", "at": 0, "outside_text": false, "move": "reply"},
+                {"who": "system", "text": "You are number 2 in the queue.", "outside_text": true, "source": "support_transcript"},
+                {"who": "company", "text": "...", "outside_text": true, "source": "support_transcript"},
+                {"who": "note", "kind": "offer", "offer": 1, "text": "An offer card was raised: ..."}]}
+```
+
+- `state`: `asking` (the card waits) -> `running` -> `paused` / `done` /
+  `stopped`; `refused` when the card said no.
+- `who`: `jarvis` (sent by Jarvis in the owner's name; `button: true` for a
+  menu button it pressed), `owner` (typed by the owner - in the window
+  during Take over, or through "Say something else"), `company` and
+  `system` (the company's side: outside text, ALWAYS, whatever the flag
+  says), `note` (Jarvis's own notes: an offer card raised or answered, a
+  question handed over).
+- `waiting_for_chat`: the window is open but the owner has not opened the
+  company's chat yet (Jarvis never clicks the page's "Chat with us"
+  button); Jarvis waits up to 10 minutes.
+- `offer.card`: `waiting` (the card is up), `no` (it was not approved:
+  nothing accepted; the owner chooses Decline, Say something else or Take
+  over), `yes`. `holds`: how many "One moment please" lines went.
+- `paused_code`: `takeover`, `bot_question`, `identity`, `unlisted`,
+  `handover` (the driver was not sure), `offer_timeout`, `quiet` (no answer
+  after "Are you still there?" and 10 more minutes), `blocked` (two
+  messages in a row failed the last check), `captcha`, `login`, `unusual`,
+  `other` (e.g. "a chat window from <host>, which Jarvis does not
+  recognise"), `paused`. `question`: the agent's words that were handed
+  over.
+- `summary` (at the end): `{answer, agreed, open, reference, by_model,
+  outside_text: true, read_aloud: false}` - written on the PC from the
+  chat.
+- `saved`: `"yes"` when kept in the encrypted history, else why not
+  (history off, for example).
+
+### 65.4 The support last check (`jarvis_support.support_check`)
+
+Right before every message leaves - Jarvis's own, a fixed line, a menu
+button, the owner's "Say something else": empty, too long or hidden
+characters; a **payment card number** (13-19 digits passing the card
+checksum), a **Social-Security-shaped number**, a password- or key-shaped
+value, a one-time code or sign-in link, or a message saying it is a person
+- blocked **even if listed**. Then each listed value is hidden exactly as
+written (an email address regardless of case), and the rest must hold no
+email address, phone or other long number, street address or postcode, and
+repeat no saved fact; nor the credential, ID, bank-account, health or
+crisis words of the chatbot mode's private list. (The words that are the
+subject of a support chat itself - email, bank, invoice, finance, files,
+"credit card" as words - are left out of the topic list; the VALUES are
+what is guarded.) A blocked message gets one rewrite; a second pauses the
+chat.
+
+### 65.5 The record and the export
+
+At the end the whole chat is written to the encrypted chat history
+(`jarvis_chat_log.record_support`) as ONE conversation titled "Support chat
+with <company> - <date>": the details card, every line with its time and
+author, each offer card and its answer, the reference number. Every row is
+role `support` (never `user`), with its author as `provenance`
+(`support_company`, `support_jarvis`, `support_owner`, `support_note`) and
+`read_outside: true`; it never enters the live-turn registry, so the
+learner reads none of it (`eval/learner_cases.jsonl` r06). Both apps'
+History show it, each line with its author ("The company (outside text)",
+"Sent by Jarvis in your name", "You", "Note"). History being off keeps
+nothing, and the chat says so (`saved`).
+
+The audit log gets ids, counts, the company and each detail's NAME when it
+is sent (`support.detail_sent`) - never a value, the goal or a word of the
+chat.
+
+### 65.6 What the apps must do
+
+- The form: the company (and its terms risk), the goal ("Jarvis writes its
+  own messages from these words, in your name"), detail rows (a name and
+  its exact value), the limits; Start asks for the card and sends nothing
+  itself. **Start waits for a live link** (rule 4).
+- A waiting offer: its words, the exact reply its card would send, and
+  Decline / Say something else / Take over - **never an Accept button**.
+  Decline and Say wait for a live link; Take over and Stop never do.
+- A question handed over: its words, and that Jarvis never answers it.
+- The company's words in the outside-text style; nothing here read aloud.
+- Hidden lists (desktop Rust / phone plate): the goal, the details, the
+  transcript, the question, the offer's words and the summary are not
+  shown until Show is confirmed; Export needs them shown.
+- The phone's ongoing notification: "Chat with Groupon: offer waiting"
+  (and the other `notify_*` lines), with Stop; a locked phone shows only
+  "Jarvis is chatting with customer support for you."
+
+### 65.7 The window, and a chat in a frame from another host
+
+`jarvis_support_widget.SupportWidget` opens ONLY the help page's host by
+itself (the shared base's `_goto_here`); any other top-level page pauses.
+It clicks the message box, the chat's Send button, and - only with the
+driver naming its exact label, after the last check - one of the chat's own
+menu buttons; never the page's launcher, a link, an attachment or "email me
+the transcript". Most chat widgets live in an **iframe from the chat
+maker's own host**: Jarvis reads and types inside such a frame ONLY when it
+sits where that maker's widget is known to sit on the page AND the frame's
+own address is on that maker's host list (or the company's own hosts; a
+frame with no address of its own belongs to the page it is in). Anything
+else: "a chat window from <host>, which Jarvis does not recognise", and a
+pause. The vendor table (Zendesk, Intercom, LivePerson, Gorgias, Freshchat,
+Salesforce, and an unbranded fallback on `role="log"`) is **NOT VERIFIED**:
+written without access to any of these widgets. The unbranded fallback is
+held narrow: only the nearest part of the page around a `role="log"` list
+that also holds a text area (never the whole page), only a text area or a
+textbox, and only a button labelled Send - a site's search box or a form's
+submit button is never taken for a chat.
+
+The owner's commands on the PC (one line each, PowerShell, in Jarvis's
+folder):
+
+    py -3 jarvis_support_widget.py sign-in groupon
+    py -3 jarvis_support_widget.py check groupon
+    py -3 jarvis_support_widget.py forget-sign-ins
+
+`check` reads only and sends nothing: it opens the help page, waits for the
+owner to open the chat by hand, and prints PASS or FAIL for the page, the
+chat maker it recognised, the chat frame's host, the message box, the Send
+button, the chat's lines and its menu buttons (labels only), saving the
+report in `<settings folder>\chatbot\support-check.txt`. A help page's
+address may follow the company name (`check groupon https://...`) when the
+preset is wrong.
+
+### 65.8 Not built, said plainly
+
+- **Never tried against a real site**: Groupon's help address, every vendor
+  selector and host are guesses until the owner's `check` (build step 8).
+- "Find it for me" on a detail row (Jarvis looking a value up locally): not
+  built - every value is typed by the owner.
+- A request for a detail not on the card is handed to the owner (Take over
+  and type it in the window), not turned into its own card adding that one
+  value as the design sketched.
+- A search box in History (support records are listed and opened like any
+  chat; no History search exists yet in either app).
+- The prompt-injection detector's warning (the owner's "test two, keep the
+  winner") is not wired to support chats yet.

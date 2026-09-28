@@ -74,6 +74,9 @@ TITLES = {
     "search_the_web": "search the web",
     # jarvis_chatbot.py: ONE card per conversation with an AI chatbot (not routed yet)
     "chatbot_session": "hold a conversation with an AI chatbot for you",
+    # jarvis_support.py (2026-09-28): ONE card per support chat, and ONE per offer
+    "support_chat": "chat with a company's customer support for you",
+    "support_offer": "accept an offer from customer support in your name",
     "stop_asking_before_every_web_search": "stop asking before every web search",
     # --- notes
     "read_joplin_note": "read a note in Joplin",
