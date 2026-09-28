@@ -66,7 +66,9 @@ goes through; this module adds no new lane.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+import json
+import re
+from dataclasses import dataclass, field, asdict, replace
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -91,6 +93,15 @@ MAX_TEXT = 300            # a goal's own words, and a step's `why`
 #: exactly the failure this whole gate exists to catch.
 MULTI_PASS_RATE = 0.9
 TOOL_LIST = "full"        # which of ollama_tool_eval's two lists gates this
+
+#: A result-filled step (`from_step`) says WHERE the earlier result goes: an
+#: argument holding "{{step N}}" (N counted from 1, as the card counts). At
+#: run time that text is replaced by step N's real result (at most
+#: MAX_FILL characters of it), and the step is asked again on its own card
+#: with the real value (condition 2). Bug audit 2026-09-28, F3: before this,
+#: `from_step` was only a flag and the step ran with the model's guess.
+SLOT = re.compile(r"\{\{\s*step\s+(\d+)\s*\}\}", re.I)
+MAX_FILL = 2000
 
 
 # --------------------------------------------------------------------------
@@ -132,6 +143,51 @@ class Refused(ValueError):
     """propose() refuses outright - never becomes a Plan at all."""
 
 
+def _slots(value) -> list:
+    """Every step number named by a "{{step N}}" anywhere in `value` (the
+    step's arguments, nested dicts and lists included)."""
+    found: list = []
+    if isinstance(value, str):
+        found += [int(n) for n in SLOT.findall(value)]
+    elif isinstance(value, dict):
+        for v in value.values():
+            found += _slots(v)
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            found += _slots(v)
+    return found
+
+
+def result_text(out) -> str:
+    """An earlier step's result as the text that goes into "{{step N}}": the
+    result as JSON, cut to MAX_FILL characters (and said so when cut)."""
+    try:
+        text = out if isinstance(out, str) else json.dumps(out, ensure_ascii=False,
+                                                           default=str)
+    except Exception:
+        text = str(out)
+    if len(text) > MAX_FILL:
+        text = text[:MAX_FILL] + " [cut short]"
+    return text
+
+
+def _put(value, text: str):
+    if isinstance(value, str):
+        return SLOT.sub(lambda _m: text, value)
+    if isinstance(value, dict):
+        return {k: _put(v, text) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_put(v, text) for v in value]
+    return value
+
+
+def fill(step: "PlanStep", earlier: str) -> "PlanStep":
+    """A copy of a result-filled step with every "{{step N}}" replaced by the
+    earlier step's real result text. The copy is what is asked about on its
+    own card and what runs - never the proposal-time guess."""
+    return replace(step, args=_put(dict(step.args), earlier))
+
+
 def refusal_for_taint(tainted: bool) -> str:
     return ("A multi-step plan can only come from your own words, never from "
            "something Jarvis read this turn (an email, a file, a web page). "
@@ -169,10 +225,21 @@ def propose(goal: str, steps: list, *, tainted: bool = False) -> Plan:
             raise Refused(f"step {i + 1}'s reason is longer than {MAX_TEXT} characters")
         args = s.get("args") if isinstance(s.get("args"), dict) else {}
         from_step = s.get("from_step")
+        slots = _slots(args)
         if from_step is not None:
             if (not isinstance(from_step, int) or isinstance(from_step, bool)
                     or not 0 <= from_step < i):
                 raise Refused(f"step {i + 1} names an earlier step that does not exist")
+            if not slots:
+                raise Refused(f"step {i + 1} says it uses step {from_step + 1}'s result, but "
+                              f"none of its arguments says where - put {{{{step "
+                              f"{from_step + 1}}}}} in the argument that uses it")
+            if any(n != from_step + 1 for n in slots):
+                raise Refused(f"step {i + 1} can only use the result of step {from_step + 1}, "
+                              f"the one its from_step names")
+        elif slots:
+            raise Refused(f"step {i + 1} uses an earlier step's result ({{{{step "
+                          f"{slots[0]}}}}}) but does not say which step in from_step")
         out.append(PlanStep(tool=tool, args=args, why=why,
                             risky=bool(s.get("risky")), from_step=from_step))
     return Plan(goal=goal, steps=out)
@@ -182,9 +249,21 @@ def propose(goal: str, steps: list, *, tainted: bool = False) -> Plan:
 #   The card
 # --------------------------------------------------------------------------
 
+def args_text(args: dict) -> str:
+    """A step's arguments in full, as the card shows them."""
+    if not args:
+        return "(nothing else)"
+    try:
+        return json.dumps(args, ensure_ascii=False, sort_keys=True, default=str)
+    except Exception:
+        return str(args)
+
+
 def describe(p: Plan) -> str:
     """The one card's text. Every step in full, in the order it would run -
-    condition 1: never a vaguer summary than each step's own card would give."""
+    condition 1: never a vaguer summary than each step's own card would give.
+    Each step's arguments are shown word for word (bug audit 2026-09-28, F1:
+    a safe step used to run with values the owner never saw)."""
     lines = [f"Jarvis would like to do this, in {len(p.steps)} step(s): {p.goal}", ""]
     for i, s in enumerate(p.steps, 1):
         tag = ""
@@ -194,6 +273,11 @@ def describe(p: Plan) -> str:
             tag = (f"  [asks again on its own card before it runs, once step "
                   f"{s.from_step + 1}'s real result is known]")
         lines.append(f"  {i}. {s.tool} - {s.why}{tag}")
+        lines.append(f"     With: {args_text(s.args)}")
+        if s.from_step is not None:
+            lines.append(f"     Where it says {{{{step {s.from_step + 1}}}}}, step "
+                         f"{s.from_step + 1}'s real result goes in, and its own card shows "
+                         f"it.")
     lines.append("")
     lines.append("Steps not marked above run once, right after this card, with no further "
                  "asking. Every marked step above still gets its own separate card when its "
@@ -234,6 +318,7 @@ def run(p: Plan, *, run_step: Callable[[PlanStep], dict],
     tell = announce or (lambda _text: None)
     check = checkpoint or (lambda: None)
     done = []
+    results: dict = {}          # step index (0-based) -> its result, as text
     for i, step in enumerate(p.steps, 1):
         signal = check()
         if signal in ("stop", "pause"):
@@ -247,6 +332,10 @@ def run(p: Plan, *, run_step: Callable[[PlanStep], dict],
                 result["paused"] = True
             return result
         tell(f"Step {i}/{len(p.steps)}")
+        if step.from_step is not None:
+            # Condition 2, for real: the step that is asked about and run is
+            # the one holding the earlier step's actual result.
+            step = fill(step, results.get(step.from_step, ""))
         if step.needs_own_card:
             if gate_check is None:
                 remaining = p.steps[i - 1:]
@@ -277,6 +366,7 @@ def run(p: Plan, *, run_step: Callable[[PlanStep], dict],
         step_dict = step.as_dict()
         if isinstance(out, dict):
             step_dict["result"] = out
+        results[i - 1] = result_text(out)
         done.append(step_dict)
     late = check()
     result = {"ok": True, "done": done, "not_run": []}

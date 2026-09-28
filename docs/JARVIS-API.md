@@ -9620,6 +9620,30 @@ order:
   `watch.stopped()` check every tool already has, threaded to
   `jarvis_plan.run()`'s own `checkpoint` and to a step's own `checkpoint`
   when that step's tool is one of the three that take one.
+- **Fixed 2026-09-28, after the bug audit (F1-F4)** - the plan card is
+  still switched off; these make it keep its own promises once it is on:
+  - **The one card shows every step's arguments in full** (a "With:" line
+    under each step - the note's exact text, the search words), not only
+    the tool's name and the model's reason.
+  - **"Asks again on its own card" is now true for every tool.** A step
+    marked `risky` or `from_step` whose own tool is `auto`/`notify` goes to
+    the gate as `run_plan` (tier `ask`), so a real card is raised, and it
+    runs only on a person's yes; a yes nobody gave (a gate answering
+    `auto`) is refused. `never` stays `never`.
+  - **A result-filled step really receives the earlier result.** The step
+    writes `{{step N}}` in the argument that uses step N's result (N counted
+    from 1, as the card counts); `propose()` refuses a `from_step` step with
+    no such placeholder, one naming a different step, or a placeholder with
+    no `from_step`. At run time the placeholder is replaced with step N's
+    real result (as JSON, at most 2,000 characters, "[cut short]" when
+    longer), and THAT step - with the real value - is what its own card
+    shows and what runs. The plan itself is not changed.
+  - **Each step's result counts as outside text for the rest of the turn**
+    (`_TurnWatch.took_in`, as a direct call's does), so a note write later
+    in the same plan, after a step that read something (email, memory, a
+    web page), waits for a yes on the "after outside text" card
+    (`write_notes_after_outside_text`), the 2026-09-24 rule the direct path
+    already followed; "Where this came from" also gets its sources.
 - Card-count (`CARDS_PER_TURN`) and card-length (`_GATE_DETAIL_LIMIT`)
   limits apply per step, exactly as they do for a direct call - a plan
   cannot use its own steps to get around either. A step naming a plug-in
