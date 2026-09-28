@@ -90,7 +90,8 @@ needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
   ```
 
 **Look how you like**
-- An animated face shows what Jarvis is doing (20 designs), with themes and
+- An animated face shows what Jarvis is doing (23 designs, three of them
+  animals), with themes and
   colours that match on the PC and the phone.
 
 ## Install it

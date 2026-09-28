@@ -6,7 +6,7 @@ list, reasoning_effort "none") and scores what comes back. Five parts
 (`--suites`), one harness - the feasibility audit's I05, I95 and I133:
 
   pick       picks the right tool and fills it in; stays quiet when no tool
-             fits (62 cases, jarvis_tool_cases.CASES + HELD_OUT)
+             fits (65 cases, jarvis_tool_cases.CASES + HELD_OUT)
   ask        "ask, don't guess": a needed value is missing - does it ask, or
              make one up? (ASK_CASES)
   multi      two or three steps with made-up results, judged on the last

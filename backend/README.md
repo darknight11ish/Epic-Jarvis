@@ -5,8 +5,8 @@
 > is the detail.
 
 
-Fifty-one patches against the Jarvis backend (counted 2026-09-24, after
-`chat-history.patch`, `auto-learn.patch`, `memory-erase.patch` and `past-recall.patch`), each with an executable test
+Eighty-three patches against the Jarvis backend (counted 2026-09-28 on `main`; the list grows, so trust
+the `$PATCHES` list in `scripts/apply-patches.ps1` over this number), each with an executable test
 (counted from the `$PATCHES` list in `scripts/apply-patches.ps1`, which
 refuses to run if a `.patch` file here is missing from it). The paragraphs
 below were written as the list grew, so the counts in them are the count at
@@ -141,7 +141,7 @@ on a throwaway copy instead.
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
 
-## Thirty-four of the thirty-six actually apply, and that is correct
+## All but two of the patches apply, and that is correct
 
 Ten backend modules were lost and rebuilt from scratch (`backend/rebuilt/` —
 see the header of any file in there). The rebuild was written against the
@@ -166,7 +166,8 @@ So six of the patches are already half-applied by the rebuild:
 | `event-allowlist.patch` | `jarvis_events.py` | *(nothing — skipped entirely)* |
 
 Because the script installs the rebuilt modules itself, it always applies the
-split versions: 34 patches, four of them as halves, and two skipped. (It used
+split versions: every patch in the list except two, four of them as halves, and two
+(`embedding-guard.patch`, `event-allowlist.patch`) skipped. (It used
 to decide by looking for a marker in your `jarvis_memory.py` only - which
 got it wrong on a backend without the rebuilt modules, and ignored
 `jarvis_events.py`, which two of the six are about. `-Revert` still looks,
@@ -4548,6 +4549,17 @@ is its context. Listed last in `apply-patches.ps1`.
 
 <!-- ===== task controls, notes, power (2026-09-23) - begin ===== -->
 
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_cloud_one_turn.py
+```
+
+Runs the patch's own lines on a request carrying a private earlier question
+(only the newest question comes out), checks the local lane is untouched,
+rehearses the patch with `git apply` against what the earlier patches wrote,
+and - with `JARVIS_BACKEND` set - checks `_open` in your real file.
+
 # `task-control.patch` — Pause, Resume, Stop, and notes, for real
 
 **What was wrong.** Both apps have had Pause, Resume, Stop and "add a note"
@@ -4628,14 +4640,7 @@ nothing if the patch does not fit.
 ## Test it
 
 ```powershell
-$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_cloud_one_turn.py
-```
-
-Runs the patch's own lines on a request carrying a private earlier question
-(only the newest question comes out), checks the local lane is untouched,
-rehearses the patch with `git apply` against what the earlier patches wrote,
-and - with `JARVIS_BACKEND` set - checks `_open` in your real file.
-python backend\test_task_control.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_task_control.py
 ```
 
 103 checks, no network and no real gate: a fake plan module and a fake gate

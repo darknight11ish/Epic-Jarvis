@@ -380,7 +380,7 @@ the Jarvis bar tell you the same thing in plainer words.
 
 ### 2.4 The hotkeys, which may not work
 
-Six are registered at startup:
+Seven are registered at startup:
 
 | key | what it does |
 |---|---|
@@ -389,6 +389,7 @@ Six are registered at startup:
 | `Alt+Shift+S` | attach a screen capture |
 | `Alt+Shift+N` | quick note |
 | `Alt+Shift+W` | show or hide the widget |
+| `Alt+Shift+F` | show or hide the floating face |
 | `Alt+Shift+X` | **Stop everything** - Jarvis stops talking and stops anything it is doing on the screen or the phone, at once |
 
 **`Alt+Space` is the most contested key on
@@ -402,7 +403,7 @@ nothing at all, because release builds have no console.
 → **Shortcuts**. Every binding is editable and each shows whether Windows
 accepted it.
 
-`Alt+Shift+S/N/W/X` clash with the Windows keyboard-layout switch if you have
+`Alt+Shift+S/N/W/X/F` clash with the Windows keyboard-layout switch if you have
 two or more layouts installed. Stop everything is also in the tray menu, so
 it still works if its key was refused.
 
