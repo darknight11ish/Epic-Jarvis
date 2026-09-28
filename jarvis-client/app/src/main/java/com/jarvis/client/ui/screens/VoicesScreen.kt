@@ -83,8 +83,11 @@ fun VoicesScreen(
     setFace: suspend (on: Boolean) -> CustomVoices.Answer?,
     /** One animal's voice, or its reset: the body is CustomVoices.animalBody / animalResetBody. */
     setAnimal: suspend (json: String) -> CustomVoices.Answer?,
-    /** "Try it": plays the PC's line in that animal's voice; the words to show. */
-    tryAnimal: suspend (face: String, name: String) -> String,
+    /**
+     * "Try it": plays the PC's line in that animal's voice; told the words
+     * to show as it starts playing, and returns the words to show after.
+     */
+    tryAnimal: suspend (face: String, name: String, playing: (String) -> Unit) -> String,
     onPickFile: () -> Unit,
     onClearPicked: () -> Unit,
     onRefresh: suspend () -> Unit,
@@ -660,7 +663,7 @@ private fun AnimalVoicesPlate(
     busy: Boolean,
     linkBlocker: String?,
     onSet: (String) -> Unit,
-    onTry: suspend (face: String, name: String) -> String,
+    onTry: suspend (face: String, name: String, playing: (String) -> Unit) -> String,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -747,14 +750,16 @@ private fun AnimalVoicesPlate(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Quiet(
-                    if (trying == a.face) "One moment…" else "Try it",
+                    "Try it",
                     modifier = Modifier.semantics { contentDescription = "Try the ${a.name}'s voice" },
                     enabled = trying == null,
                     onClick = {
                         trying = a.face
+                        // The desktop's words, step by step (CustomVoices `TRY_*`).
+                        said = a.face to CustomVoices.TRY_ASKING
                         scope.launch {
                             try {
-                                said = a.face to onTry(a.face, a.name)
+                                said = a.face to onTry(a.face, a.name) { words -> said = a.face to words }
                             } finally {
                                 trying = null
                             }

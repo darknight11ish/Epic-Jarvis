@@ -457,6 +457,28 @@ class CustomVoicesTest {
     }
 
     @Test
+    fun `Try it - the desktop's words, and one at a time on the PC`() {
+        // The same sentences as custom-voices.js (the desktop's
+        // tests/custom-voices.mjs reads this file and holds the two together).
+        assertEquals("Asking the PC for the sound…", CustomVoices.TRY_ASKING)
+        assertEquals("Playing the Red Panda's voice.", CustomVoices.tryPlaying("Red Panda"))
+        assertEquals("That was the Red Panda's voice.", CustomVoices.tryDone("Red Panda"))
+        assertEquals("Jarvis is busy talking or listening. Try it again in a moment.", CustomVoices.TRY_BUSY)
+        assertEquals("Stopped, because Jarvis is talking or listening now.", CustomVoices.TRY_STOPPED)
+        assertEquals(
+            "Your PC cannot play an animal's voice yet. Run the patch script on the PC first.",
+            CustomVoices.TRY_UPDATE,
+        )
+        // A second Try it while the PC is still making one: its own words.
+        val busy = answer("animal_try_busy")
+        assertEquals(429, busy.code)
+        assertEquals(
+            "The PC is still making the sound for the last Try it. Try it again in a moment.",
+            CustomVoices.sentence(busy.error),
+        )
+    }
+
+    @Test
     fun `Pocket TTS, if it ever replaces ZipVoice, is named in ZipVoice's place`() {
         assertEquals("Pocket TTS, on your PC's processor", CustomVoices.engineWords("pocket"))
         val s = status("fallback")

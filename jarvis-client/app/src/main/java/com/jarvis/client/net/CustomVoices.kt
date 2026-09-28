@@ -518,6 +518,30 @@ object CustomVoices {
         return if (r == Math.floor(r)) r.toLong().toString() else r.toString()
     }
 
+    // "Try it" for one animal, in words. The desktop says exactly the same
+    // (custom-voices.js `TRY_*`, held together by the desktop's
+    // tests/custom-voices.mjs). Refused while Jarvis is talking or
+    // listening, and stopped the moment a question starts
+    // (VoiceSession.tryAnimalVoice / turnStarting).
+
+    /** While the PC makes the sound. */
+    const val TRY_ASKING = "Asking the PC for the sound…"
+
+    /** Refused: Jarvis is talking, or listening to the owner. */
+    const val TRY_BUSY = "Jarvis is busy talking or listening. Try it again in a moment."
+
+    /** Cut short: a question or an answer started while it played. */
+    const val TRY_STOPPED = "Stopped, because Jarvis is talking or listening now."
+
+    /** A PC whose backend has no "Try it" route yet. */
+    const val TRY_UPDATE = "Your PC cannot play an animal's voice yet. Run the patch script on the PC first."
+
+    /** While it plays. */
+    fun tryPlaying(name: String): String = "Playing the $name's voice."
+
+    /** Once it has played to the end. */
+    fun tryDone(name: String): String = "That was the $name's voice."
+
     /** What "Try it" came to: the PC's sound, or its sentence saying why not. */
     sealed interface Tried {
         class Sound(val wav: ByteArray) : Tried

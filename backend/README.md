@@ -6967,7 +6967,10 @@ speed), with **Try it** and **Reset to its own voice** - desktop: Settings
 /api/voice/voices/face_animal` sets or resets one animal (no card either
 way, held on a stale link, kept in `voices/state.json` as `face_animals`);
 `POST /api/voice/voices/face_animal/try` answers a WAV of one fixed line in
-that voice (nothing kept, never any words from the app). Both are routed in
+that voice (nothing kept, never any words from the app), one at a time - a
+second one while the first is still being made is refused at once with a
+429 in words (`jarvis_voices.try_face_animal`'s lock, so `voices.patch` did
+not change for it). Both are routed in
 `voices.patch`, so **run `apply-patches.ps1` again** on the PC; until then
 the apps show the rows but a change answers "your PC does not have this
 yet". A deeper pitch plays the sound slower (`jarvis_speech.pitch_up` with

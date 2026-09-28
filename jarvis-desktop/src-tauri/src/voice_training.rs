@@ -98,6 +98,13 @@ pub(crate) const TRAINING_UPDATE: &str =
 pub(crate) const VOICES_UPDATE: &str =
     "This PC's Jarvis does not have custom voices yet. Update the backend by running \
      apply-patches.ps1, then open this again.";
+/// "Try it" on a PC whose backend has no route for it yet. The phone says
+/// the same (CustomVoices.kt `TRY_UPDATE`; custom-voices.js too).
+pub(crate) const TRY_UPDATE: &str =
+    "Your PC cannot play an animal's voice yet. Run the patch script on the PC first.";
+/// "Try it" while the talk button records: it would be recorded with the
+/// question. The phone says the same (CustomVoices.kt `TRY_BUSY`).
+pub(crate) const TRY_BUSY: &str = "Jarvis is busy talking or listening. Try it again in a moment.";
 /// Asking for a card, or loosening, while the event stream is stale.
 pub(crate) const HELD_STALE: &str =
     "The connection to Jarvis is catching up, so this cannot be sent until it does. \
@@ -1162,10 +1169,20 @@ const TRY_MAX_BYTES: usize = 4_000_000;
 /// `{"ok": true, "audio": "data:audio/wav;base64,..."}` for the page to
 /// play - the same data-URI shape as [`crate::voice::speak_reply`]. Changes
 /// nothing on the PC, so it is not held on a stale link. A refusal is the
-/// PC's own sentence, as for every other voice answer.
+/// PC's own sentence, as for every other voice answer. Refused while the
+/// talk button records ([`TRY_BUSY`]): the sound would go into the question.
+/// Settings also refuses while Jarvis is speaking, from the events it hears
+/// (voice-panel.js `jarvisBusy`).
 #[tauri::command]
-pub async fn try_voice_animal(app: AppHandle, face: String) -> Result<Value, String> {
+pub async fn try_voice_animal(
+    app: AppHandle,
+    capture: State<'_, VoiceCaptureState>,
+    face: String,
+) -> Result<Value, String> {
     let face = animal_id(&face)?;
+    if capture.busy() {
+        return Err(TRY_BUSY.to_string());
+    }
     let base = jarvis_base(&app);
     let response = jarvis_client(Some(VOICES_TIMEOUT))?
         .post(format!("{base}/api/voice/voices/face_animal/try"))
@@ -1188,7 +1205,18 @@ pub async fn try_voice_animal(app: AppHandle, face: String) -> Result<Value, Str
         return try_answer(&bytes);
     }
     let text = response.text().await.unwrap_or_default();
-    voices_answer(status, &text)
+    try_refusal(status, &text)
+}
+
+/// Why "Try it" got no sound. A 404 that is not the PC's own answer means
+/// its backend is older than the route: said in the same words as the
+/// phone ([`TRY_UPDATE`]), not the general "update the backend" one.
+pub(crate) fn try_refusal(status: u16, body: &str) -> Result<Value, String> {
+    let has_ok = parsed_object(body).is_some_and(|m| m.contains_key("ok"));
+    if status == 404 && !has_ok {
+        return Err(TRY_UPDATE.to_string());
+    }
+    voices_answer(status, body)
 }
 
 /// The sound "Try it" got back, as the page plays it - or why not.
@@ -1319,6 +1347,34 @@ mod tests {
         )
         .expect("the PC's own sentence");
         assert_eq!(bad["http"], 400);
+    }
+
+    #[test]
+    fn try_it_on_an_older_pc_says_so_like_the_phone() {
+        // No route: the server's own 404, which is not a voices answer.
+        for body in ["", "{\"error\": \"not found\"}", "<html>404</html>"] {
+            assert_eq!(try_refusal(404, body).unwrap_err(), TRY_UPDATE, "{body:?}");
+        }
+        // The PC's own refusals still come through in its own words.
+        let all = cases();
+        let bad = try_refusal(
+            400,
+            &all["voice_posts"]["animal_try_bad"]["body"].to_string(),
+        )
+        .expect("the PC's own sentence");
+        assert_eq!(bad["http"], 400);
+        let busy = try_refusal(
+            429,
+            &all["voice_posts"]["animal_try_busy"]["body"].to_string(),
+        )
+        .expect("the PC's own sentence");
+        assert_eq!(busy["http"], 429);
+        assert_eq!(busy["ok"], false);
+        // A 503 from a backend without jarvis_voices.py is still the general one.
+        assert_eq!(
+            try_refusal(503, "{\"available\": false, \"error\": \"x\"}").unwrap_err(),
+            VOICES_UPDATE
+        );
     }
 
     #[test]

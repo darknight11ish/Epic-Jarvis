@@ -229,6 +229,9 @@ class WakeWordService : Service() {
                             spotter.reset()
                             continue
                         }
+                        // An animal's "Try it" playing stops before the rest
+                        // of the sentence is recorded.
+                        voice.turnStarting()
                         _state.value = WakeListen.Heard
                         goForeground(getString(R.string.wake_heard_text))
                         var clip: ShortArray? = recordUntilPause(rec, ring.snapshot(), GRACE_SECONDS, turnModel)

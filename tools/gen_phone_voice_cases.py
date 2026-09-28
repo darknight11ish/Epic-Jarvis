@@ -637,6 +637,10 @@ def voices_cases():
         answers["animal_bad"] = scrub(answer(vpost(VS.set_face_animal, {
             "face": "redpanda", "speaker": "3", "semitones": 9, "pace": "normal"})), w)
         answers["animal_try_bad"] = scrub(answer(vpost(VS.try_face_animal, {"face": "orbit"})), w)
+        # "Try it" while another is still being made: one at a time.
+        with VS._TRY_LOCK:
+            answers["animal_try_busy"] = scrub(answer(vpost(VS.try_face_animal,
+                                                            {"face": "redpanda"})), w)
 
     with VoicesWorld(zipvoice=False) as w:
         vpost(VS.create, create_body())

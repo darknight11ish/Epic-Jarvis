@@ -554,6 +554,10 @@ def voices_cases():
                                     "pace": "normal"}), posts)
         keep(w, "animal_try_bad", post("/api/voice/voices/face_animal/try", {"face": "orbit"}),
              posts)
+        # "Try it" while another is still being made: one at a time.
+        with VO._TRY_LOCK:
+            keep(w, "animal_try_busy", post("/api/voice/voices/face_animal/try",
+                                            {"face": "redpanda"}), posts)
 
     # A custom voice chosen, but ZipVoice's files are not on this PC: the
     # built-in voice speaks, and says why.

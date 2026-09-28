@@ -9130,6 +9130,13 @@
       },
       "code": 400
     },
+    "animal_try_busy": {
+      "body": {
+        "error": "the PC is still making the sound for the last Try it. Try it again in a moment",
+        "ok": false
+      },
+      "code": 429
+    },
     "better_no_card": {
       "body": {
         "error": "the better voice cannot be turned on: it needs a capable second graphics card (only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER))",

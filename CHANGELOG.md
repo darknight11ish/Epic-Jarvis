@@ -39,6 +39,10 @@ number as the last part - `0.2.57` is a build of 0.2.
   Faster. **Try it** plays a short line in that voice; **Reset to its own
   voice** puts it back. The mouths still move in step with whatever you
   pick. It never asks first. Needs the patch script run again on the PC.
+  **Try it** never plays over Jarvis: it waits while Jarvis is talking or
+  listening, stops the moment you start a question, and says the same
+  words on the PC and the phone. On the PC it plays in the Settings window,
+  so the faces in the other windows stay still while it plays.
 - **The animals move their bodies, calmly.** Each looks at something (often
   you) and holds the look, its head following its eyes part of the way;
   blinks, small weight shifts, the panda's tail swish, and a small idle

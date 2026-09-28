@@ -132,6 +132,8 @@ let reload = async () => {};
 const recorder = { slot: null, poll: null, auto: null, onLevel: null };
 
 async function startRecording(slot, maxSeconds, onLevel, onAutoStop) {
+  // An animal's "Try it" still playing would be recorded with the owner.
+  stopTry();
   await invoke("start_voice_sample", { slot });
   recorder.slot = slot;
   recorder.onLevel = onLevel;
@@ -1046,7 +1048,7 @@ function paintFace() {
    place, so a repaint never takes the keyboard focus off the slider or list
    the owner is using. A change is sent at once (no card); several quick
    changes to one animal are folded into the last one. */
-const animals = { rows: new Map(), want: new Map(), sending: false, playing: null };
+const animals = { rows: new Map(), want: new Map(), sending: false, playing: null /* {audio, row} */ };
 
 function animalRow(view, a) {
   const row = node("div", "cv-animal");
@@ -1218,16 +1220,52 @@ async function sendAnimal(face, args) {
   await loadVoices();
 }
 
+/*
+ * Is Jarvis talking or listening? "Try it" must never play over a real
+ * answer, and the microphone must never hear it. The phone asks its own
+ * voice session (VoiceSession.tryAnimalVoice); this window plays no voice
+ * of Jarvis's, so it is told by the events every window hears:
+ *  - `face-voice`: the Jarvis bar is playing a spoken answer (a clock at
+ *    least every 250 ms while it plays, face-voice.js `followClip`);
+ *  - `voice-capture-started`: the talk button just opened the microphone
+ *    (voice.rs `start_voice_capture`; the Rust also refuses "Try it" while
+ *    the talk button records);
+ *  - `voice-speech-started` / `voice-heard`: "hey Jarvis" heard a question;
+ *  - `stop-everything`: the hotkey - every sound stops;
+ *  - the link's `activity` (listening, thinking, working, speaking): a
+ *    question is being answered - not trusted on a stale link, where it is
+ *    only the last thing heard.
+ */
+const voiceNow = { speakingUntil: 0, activity: "idle", stale: true };
+const TURN_ACTIVITY = ["listening", "thinking", "working", "speaking"];
+/** How long one `face-voice` clock counts as "still playing". */
+const SPEAKING_HOLD_MS = 1000;
+
+function jarvisBusy() {
+  if (Date.now() < voiceNow.speakingUntil) return true;
+  return !voiceNow.stale && TURN_ACTIVITY.includes(voiceNow.activity);
+}
+
+/** Stops a "Try it" clip that is playing; its row then says `why`. */
+function stopTry(why = "") {
+  const p = animals.playing;
+  if (!p) return;
+  animals.playing = null;
+  p.audio.pause();
+  say(p.row.status, why);
+}
+
 /** "Try it": the PC says one fixed line in that animal's voice as it is now. */
 async function tryAnimal(face) {
   const r = animals.rows.get(face);
   if (!r) return;
-  if (animals.playing) {
-    animals.playing.pause();
-    animals.playing = null;
+  stopTry();
+  if (jarvisBusy()) {
+    say(r.status, CV.TRY_BUSY, "bad");
+    return;
   }
   r.tryIt.disabled = true;
-  say(r.status, "Asking the PC for the sound…");
+  say(r.status, CV.TRY_ASKING);
   try {
     // A change still on its way is heard, not the one before it.
     for (let i = 0; i < 100 && (animals.sending || animals.want.size); i += 1) {
@@ -1239,19 +1277,57 @@ async function tryAnimal(face) {
       say(r.status, words.tone === "bad" ? words.text : "The PC sent no sound.", "bad");
       return;
     }
+    // Asked again: the PC took a moment, and a question may have begun.
+    if (jarvisBusy()) {
+      say(r.status, CV.TRY_BUSY, "bad");
+      return;
+    }
     const audio = new Audio(reply.audio);
-    animals.playing = audio;
-    say(r.status, `Playing the ${r.name}'s voice.`, "ok");
+    const mine = () => animals.playing && animals.playing.audio === audio;
+    animals.playing = { audio, row: r };
+    say(r.status, CV.tryPlaying(r.name), "ok");
     audio.addEventListener("ended", () => {
-      if (animals.playing === audio) animals.playing = null;
-      say(r.status, "");
+      if (!mine()) return;
+      animals.playing = null;
+      say(r.status, CV.tryDone(r.name), "ok");
     });
-    await audio.play();
+    try {
+      await audio.play();
+    } catch (error) {
+      if (mine()) animals.playing = null;
+      throw error;
+    }
   } catch (error) {
     say(r.status, problemWords(error), "bad");
   } finally {
     r.tryIt.disabled = false;
   }
+}
+
+/** Follows whether Jarvis is talking or listening (see `voiceNow`). */
+function followJarvisVoice() {
+  onLink((l) => {
+    voiceNow.stale = Boolean(!l || l.stale);
+    const was = voiceNow.activity;
+    voiceNow.activity = String((l && l.activity) || "idle");
+    if (!voiceNow.stale && was !== voiceNow.activity && TURN_ACTIVITY.includes(voiceNow.activity)) {
+      stopTry(CV.TRY_STOPPED);
+    }
+  });
+  if (!IS_TAURI || !TAURI.event || typeof TAURI.event.listen !== "function") return;
+  const listen = (name, fn) => TAURI.event.listen(name, (event) => fn(event && event.payload));
+  listen("face-voice", (cue) => {
+    if (cue && cue.playing === true && cue.end !== true) {
+      voiceNow.speakingUntil = Date.now() + SPEAKING_HOLD_MS;
+      stopTry(CV.TRY_STOPPED);
+    } else if (cue && (cue.end === true || cue.playing === false)) {
+      voiceNow.speakingUntil = 0;
+    }
+  });
+  for (const name of ["voice-capture-started", "voice-speech-started", "voice-heard"]) {
+    listen(name, () => stopTry(CV.TRY_STOPPED));
+  }
+  listen("stop-everything", () => stopTry());
 }
 
 async function setSpeed(speed) {
@@ -1511,6 +1587,8 @@ export function startVoicePanel(opts = {}) {
   });
   $("cv-better-switch").addEventListener("change", (e) => setBetter(e.target.checked));
   $("cv-face-switch").addEventListener("change", (e) => setFaceVoice(e.target.checked));
+
+  followJarvisVoice();
 
   // A voice card ends, a voice is deleted, the better voice goes off: the
   // `voices` doorbell. A waiting card has no event of its own for its

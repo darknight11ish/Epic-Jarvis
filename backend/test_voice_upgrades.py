@@ -693,6 +693,27 @@ def t_try_it_plays_the_animal_as_it_is_now():
           code == 503 and out["error"] == "this PC has no built-in voice to play it with",
           (code, out))
     S._tts_cache = FakeKokoro()
+    # One at a time: a second "Try it" while one is being made is refused
+    # at once, in words, and the next one after it plays again.
+    V._TRY_LOCK.acquire()
+    try:
+        code, out = V.try_face_animal({"face": "redpanda"})
+    finally:
+        V._TRY_LOCK.release()
+    check("a Try it while another is being made: 429 in words, nothing made",
+          code == 429 and out["ok"] is False and "Try it again in a moment" in out["error"],
+          (code, out))
+    check("a bad body is still a 400 while one is being made",
+          V._TRY_LOCK.acquire(blocking=False)
+          and (V.try_face_animal({"face": "orbit"})[0] == 400)
+          and (V._TRY_LOCK.release() is None))
+    check("the lock is let go after each Try it (and after a failure)",
+          V.try_face_animal({"face": "redpanda"})[0] == 200
+          and not V._TRY_LOCK.locked())
+    S._tts_cache = None
+    V.try_face_animal({"face": "redpanda"})
+    check("... after a 503 too", not V._TRY_LOCK.locked())
+    S._tts_cache = FakeKokoro()
 
 
 # ---------------------------------------------------------- Pocket TTS --

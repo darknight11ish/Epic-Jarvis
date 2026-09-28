@@ -2104,7 +2104,30 @@ the PC says itself ("Hello, it's Jarvis. This is how I sound as the Red
 Panda.") in that animal's voice as it is now - whether or not that face is
 showing or the switch is on - with the `jmth` chunk when the PC makes one.
 It changes and keeps nothing, so it is not held on a stale link; an app
-never sends the words.
+never sends the words. **One at a time**: a second "Try it" while the PC is
+still making one is refused at once, 429 in words (added 2026-09-28).
+
+**"Try it" never plays over Jarvis, in either app** (2026-09-28). Both
+refuse it while Jarvis is talking or listening ("Jarvis is busy talking or
+listening. Try it again in a moment."), and stop it the moment a question
+or an answer starts ("Stopped, because Jarvis is talking or listening
+now."), so the microphone never hears it. The phone asks its own voice
+session and is stopped by the talk button, "hey Jarvis" being heard and
+Train my voice (`VoiceSession.turnStarting`). The desktop's Rust refuses
+while the talk button records, and Settings stops the clip on the
+`voice-capture-started`, `voice-speech-started`, `voice-heard`, `face-voice`
+(the Jarvis bar speaking) and `stop-everything` events, and on the link's
+activity turning to listening, thinking, working or speaking (not trusted
+on a stale link); a recording in Settings stops it too. Both say the same
+words throughout: "Asking the PC for the sound…", "Playing the Red Panda's
+voice.", "That was the Red Panda's voice.", and on a PC without the route
+"Your PC cannot play an animal's voice yet. Run the patch script on the PC
+first." **Where it plays:** on the phone, through the same speaker as every
+answer, so the face on the phone moves with it. On the desktop, in the
+Settings window only - the faces in the other windows (the Widget, the
+floating face, the HUD) do **not** move with it, because only the Jarvis bar
+may send the `face-voice` lip-sync messages (`face_voice` is in its
+permission set alone), and widening that for a preview was not worth it.
 
 **Where the audio goes: nowhere.** The recording is held in the PC's memory
 until the card is answered; approved, it is kept in
@@ -2139,7 +2162,7 @@ owner.
 | `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
 | `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl or the Sea Otter", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
-| `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl or the Sea Otter"}`; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window; the phone only while nothing else is being said or heard). |
+| `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl or the Sea Otter"}`; **429** `{"ok": false, "error": "the PC is still making the sound for the last Try it. Try it again in a moment"}` - one at a time; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window - the faces in its other windows do not move; the phone through its answer speaker), never while Jarvis is talking or listening, and stop it when a question or answer starts (above). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
 Errors from the route itself (not the module): **400** `{"error": "the

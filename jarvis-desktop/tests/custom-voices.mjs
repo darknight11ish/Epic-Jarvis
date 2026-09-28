@@ -20,7 +20,10 @@
  *   either way, held on a stale link like every change;
  * - "Voice follows the face": an on/off switch with the PC's own words and
  *   line, no card either way, held on a stale link like every change;
- * - the last card's outcome and recent timings, in words.
+ * - the last card's outcome and recent timings, in words;
+ * - "Try it" never plays over Jarvis: refused while it talks or listens,
+ *   stopped the moment a question or answer starts, one at a time on the
+ *   PC, and in the phone's own words (CustomVoices.kt `TRY_*`).
  */
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
@@ -613,6 +616,168 @@ await check("CONTROL (Rust): only what raises a card is held on a stale link", a
     assert.ok(fnBody(RUST, `pub async fn ${fn}(`).includes(`"${route}"`), `${fn} does not post to ${route}`);
   }
   assert.match(fnBody(RUST, "pub async fn get_custom_voices("), /\.headers\(jarvis_headers\(&app\)\?\)/);
+});
+
+/* ── "Try it" never plays over Jarvis ───────────────────────────────── */
+
+/** `seconds` of silence as a 24 kHz mono 16-bit WAV data URI. */
+const silence = (seconds) => {
+  const n = Math.round(24000 * seconds);
+  const b = Buffer.alloc(44 + n * 2);
+  b.write("RIFF", 0); b.writeUInt32LE(36 + n * 2, 4); b.write("WAVE", 8);
+  b.write("fmt ", 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(24000, 24); b.writeUInt32LE(48000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34);
+  b.write("data", 36); b.writeUInt32LE(n * 2, 40);
+  return `data:audio/wav;base64,${b.toString("base64")}`;
+};
+const LONG_TRY = { animalTry: { ok: true, http: 200, audio: silence(4) } };
+const rowSays = (page, face) => page.evaluate((f) =>
+  document.querySelector(`.cv-animal[data-face="${f}"] .status`).textContent, face);
+/** Counts every audio pause on the page (the Try it clip is never in the DOM). */
+const countPauses = (page) => page.evaluate(() => {
+  window.__paused = 0;
+  const pause = HTMLMediaElement.prototype.pause;
+  HTMLMediaElement.prototype.pause = function counted() { window.__paused += 1; return pause.call(this); };
+});
+const tryOn = (page, face) => page.click(`.cv-animal[data-face="${face}"] button[aria-label^="Try"]`);
+
+await check("Try it: the same words as the phone, step by step", async () => {
+  assert.equal(CV.TRY_ASKING, "Asking the PC for the sound…");
+  assert.equal(CV.tryPlaying("Red Panda"), "Playing the Red Panda's voice.");
+  assert.equal(CV.tryDone("Red Panda"), "That was the Red Panda's voice.");
+  // The phone's own file says each of them, word for word.
+  const kt = readFileSync(join(HERE, "..", "..", "jarvis-client", "app", "src", "main", "java",
+    "com", "jarvis", "client", "net", "CustomVoices.kt"), "utf8");
+  for (const [name, words] of [["TRY_ASKING", CV.TRY_ASKING], ["TRY_BUSY", CV.TRY_BUSY],
+    ["TRY_STOPPED", CV.TRY_STOPPED], ["TRY_UPDATE", CV.TRY_UPDATE]]) {
+    assert.ok(kt.includes(`const val ${name} = "${words}"`), `the phone's ${name} is not "${words}"`);
+  }
+  assert.ok(kt.includes('fun tryPlaying(name: String): String = "Playing the $name\'s voice."'));
+  assert.ok(kt.includes('fun tryDone(name: String): String = "That was the $name\'s voice."'));
+  // The Rust says the busy and too-old sentences itself (voice_training.rs).
+  for (const [name, words] of [["TRY_BUSY", CV.TRY_BUSY], ["TRY_UPDATE", CV.TRY_UPDATE]]) {
+    const m = RUST.match(new RegExp(`pub\\(crate\\) const ${name}: &str =\\s*"([^"]+)";`));
+    assert.ok(m, `voice_training.rs has no ${name}`);
+    assert.equal(m[1], words, name);
+  }
+
+  const page = await open(V.face_showing, LONG_TRY);
+  await tryOn(page, "redpanda");
+  await page.waitForTimeout(400);
+  const playing = await rowSays(page, "redpanda");
+  await page.close();
+  assert.equal(playing, "Playing the Red Panda's voice.");
+  const short = await open(V.face_showing);
+  await tryOn(short, "seaotter");
+  await short.waitForTimeout(800);
+  const done = await rowSays(short, "seaotter");
+  await short.close();
+  assert.equal(done, "That was the Sea Otter's voice.");
+});
+
+await check("Try it is refused while Jarvis speaks or answers - nothing is asked of the PC", async () => {
+  // The Jarvis bar playing an answer (face-voice's clock, every window).
+  const page = await open(V.face_showing);
+  await page.evaluate(() => window.__emit("face-voice", { id: 1, n: 1, t: 0.4, at: Date.now(), playing: true, rate: 1 }));
+  await tryOn(page, "redpanda");
+  await page.waitForTimeout(250);
+  const said = await rowSays(page, "redpanda");
+  const asked = await calls(page, "try_voice_animal");
+  // It ends: Try it works again.
+  await page.evaluate(() => window.__emit("face-voice", { id: 1, n: 2, t: 1.2, at: Date.now(), playing: false, end: true, rate: 1 }));
+  await tryOn(page, "redpanda");
+  await page.waitForTimeout(250);
+  const after = await calls(page, "try_voice_animal");
+  await page.close();
+  assert.equal(said, CV.TRY_BUSY);
+  assert.deepEqual(asked, []);
+  assert.deepEqual(after, [{ face: "redpanda" }]);
+
+  // A question being answered (the link's activity), on a live link.
+  const busy = await open(V.face_showing, {}, { link: { connected: true, stale: false, activity: "thinking" } });
+  await tryOn(busy, "pygmyowl");
+  await busy.waitForTimeout(250);
+  const busySaid = await rowSays(busy, "pygmyowl");
+  const busyAsked = await calls(busy, "try_voice_animal");
+  await busy.close();
+  assert.equal(busySaid, CV.TRY_BUSY);
+  assert.deepEqual(busyAsked, []);
+
+  // The talk button recording: the Rust refuses, and its words are shown as they are.
+  const ptt = await open(V.face_showing, { fails: { try_voice_animal: CV.TRY_BUSY } });
+  await tryOn(ptt, "redpanda");
+  await ptt.waitForTimeout(250);
+  const pttSaid = await rowSays(ptt, "redpanda");
+  await ptt.close();
+  assert.equal(pttSaid, CV.TRY_BUSY);
+
+  // An older PC: the phone's sentence, not the general "update" one.
+  const old = await open(V.face_showing, { fails: { try_voice_animal: CV.TRY_UPDATE } });
+  await tryOn(old, "redpanda");
+  await old.waitForTimeout(250);
+  const oldSaid = await rowSays(old, "redpanda");
+  await old.close();
+  assert.equal(oldSaid, CV.TRY_UPDATE);
+
+  // Two at once on the PC: its own words.
+  const two = await open(V.face_showing, { animalTry: P("animal_try_busy") });
+  await tryOn(two, "redpanda");
+  await two.waitForTimeout(250);
+  const twoSaid = await rowSays(two, "redpanda");
+  await two.close();
+  assert.equal(twoSaid, "The PC is still making the sound for the last Try it. Try it again in a moment.");
+});
+
+await check("Try it stops the moment a question or an answer starts, and on Stop everything", async () => {
+  for (const [event, payload] of [
+    ["voice-capture-started", null],
+    ["voice-speech-started", null],
+    ["voice-heard", { available: true, text: "what time is it" }],
+    ["face-voice", { id: 2, n: 1, t: 0, at: Date.now(), playing: true, rate: 1 }],
+  ]) {
+    const page = await open(V.face_showing, LONG_TRY);
+    await countPauses(page);
+    await tryOn(page, "redpanda");
+    await page.waitForTimeout(400);
+    const before = await rowSays(page, "redpanda");
+    await page.evaluate(([e, p]) => window.__emit(e, p), [event, payload]);
+    await page.waitForTimeout(150);
+    const after = await rowSays(page, "redpanda");
+    const paused = await page.evaluate(() => window.__paused);
+    await page.close();
+    assert.equal(before, "Playing the Red Panda's voice.", event);
+    assert.equal(after, CV.TRY_STOPPED, event);
+    assert.equal(paused, 1, `${event}: the clip was not paused`);
+  }
+  const page = await open(V.face_showing, LONG_TRY);
+  await countPauses(page);
+  await tryOn(page, "redpanda");
+  await page.waitForTimeout(400);
+  await page.evaluate(() => window.__emit("stop-everything", null));
+  await page.waitForTimeout(150);
+  const hushed = await rowSays(page, "redpanda");
+  const paused = await page.evaluate(() => window.__paused);
+  await page.close();
+  assert.equal(hushed, "");
+  assert.equal(paused, 1);
+});
+
+await check("CONTROL (Rust): Try it is refused while the talk button records, and the talk button tells Settings", async () => {
+  const body = fnBody(RUST, "pub async fn try_voice_animal(");
+  assert.match(body, /if capture\.busy\(\) \{\s+return Err\(TRY_BUSY\.to_string\(\)\);/);
+  assert.match(body, /try_refusal\(status, &text\)/, "an older PC's 404 is said in the phone's words");
+  const voice = read("src-tauri/src/voice.rs");
+  const start = fnBody(voice, "pub fn start_voice_capture(");
+  const told = start.indexOf("VOICE_CAPTURE_STARTED");
+  assert.ok(told > -1, "start_voice_capture does not tell the other windows");
+  assert.ok(told < start.indexOf("spawn_capture_thread"), "told only after the microphone opened");
+  assert.match(read("src-tauri/src/lib.rs"), /pub const VOICE_CAPTURE_STARTED: &str = "voice-capture-started";/);
+  const panel = read("src/voice-panel.js");
+  for (const e of ["voice-capture-started", "voice-speech-started", "voice-heard", "face-voice", "stop-everything"]) {
+    assert.ok(panel.includes(`"${e}"`), `Settings does not hear ${e}`);
+  }
+  assert.match(fnBody(panel, "async function startRecording("), /stopTry\(\)/,
+    "a recording in Settings stops a Try it clip first");
 });
 
 await check("CONTROL: no page error from any of the above", async () => {

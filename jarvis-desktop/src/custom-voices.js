@@ -186,6 +186,26 @@ export function animalVoicesView(status) {
   };
 }
 
+/*
+ * "Try it" for one animal, in words. The phone says exactly the same
+ * (CustomVoices.kt `TRY_*`, held together by tests/custom-voices.mjs).
+ * The sound plays in the window that asked for it - Settings here - and
+ * never over Jarvis: it is refused while Jarvis is talking or listening,
+ * and stopped the moment a question or an answer starts.
+ */
+/** While the PC makes the sound. */
+export const TRY_ASKING = "Asking the PC for the sound…";
+/** Refused: Jarvis is talking, or listening to the owner. */
+export const TRY_BUSY = "Jarvis is busy talking or listening. Try it again in a moment.";
+/** Cut short: a question or an answer started while it played. */
+export const TRY_STOPPED = "Stopped, because Jarvis is talking or listening now.";
+/** A PC whose backend has no "Try it" route yet (said by the Rust, voice_training.rs). */
+export const TRY_UPDATE = "Your PC cannot play an animal's voice yet. Run the patch script on the PC first.";
+/** While it plays. */
+export const tryPlaying = (name) => `Playing the ${name}'s voice.`;
+/** Once it has played to the end. */
+export const tryDone = (name) => `That was the ${name}'s voice.`;
+
 /** Which voice Jarvis speaks in, and what makes the next sentence. */
 export function speakingLine(status) {
   const st = obj(status);

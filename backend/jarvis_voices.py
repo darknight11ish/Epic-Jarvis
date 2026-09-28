@@ -797,7 +797,25 @@ def try_face_animal(body, speech_module=None) -> tuple:
     if not isinstance(body, dict) or set(body) != {"face"} \
             or not isinstance(body["face"], str) or body["face"] not in FACE_VOICES:
         return 400, {"ok": False, "error": _NO_ANIMAL}
-    av = animal_voice(body["face"])
+    # One at a time: the voice is made on the graphics card, and a second
+    # "Try it" (another tap, the other app) while one is being made would
+    # only queue behind it. Refused at once, in words, rather than waited on.
+    if not _TRY_LOCK.acquire(blocking=False):
+        return 429, {"ok": False, "error": _TRY_BUSY}
+    try:
+        return _try_face_animal(body["face"], speech_module)
+    finally:
+        _TRY_LOCK.release()
+
+
+_TRY_LOCK = threading.Lock()
+_TRY_BUSY = "the PC is still making the sound for the last Try it. Try it again in a moment"
+
+
+def _try_face_animal(face: str, speech_module=None) -> tuple:
+    """try_face_animal once its body is checked and the one-at-a-time lock
+    is held."""
+    av = animal_voice(face)
     S = speech_module
     if S is None:
         try:
