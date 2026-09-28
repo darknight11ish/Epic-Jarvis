@@ -49,8 +49,7 @@ fastembed bge-small-en-v1.5 + sqlite-vec + FTS5/bm25, a MiniLM re-ranker
 (off until measured). Self-tests: `backend/eval_memory.py`,
 `backend/eval_learner.py`, `docs/MEMORY-SCOREBOARD.md`. Encrypted chat
 history on the PC with History search in the apps. **"Forget a time frame"**
-(2026-09-28, `jarvis_forget_range.py`, JARVIS-API §64, both apps; branch
-`studio-forget-timeframe` until merged): a checked list of the facts saved
+(2026-09-28, `jarvis_forget_range.py`, JARVIS-API §64, both apps; merged): a checked list of the facts saved
 and chats from some days, ONE card (`memory_forget_range`), forgotten as
 Forget does, 10 minutes of Undo; also by voice ("forget what you learned
 last week" fills in the list - never removes anything).
@@ -94,8 +93,8 @@ own-networks-only addresses, prompt-injection tests (AgentDojo cases),
 
 **Apps** - desktop: Tauri 2 (`jarvis-desktop/`), HUD, Brain, Settings,
 widget, floating face, 20 faces plus three animals - red panda, pygmy owl,
-sea otter - with "voice follows the face" (`docs/CRITTERS.md`, on the
-mascot branch until merged). Phone: `jarvis-client/` (Compose):
+sea otter - with "voice follows the face" and lip-sync (`docs/CRITTERS.md`,
+merged into `main` by PR #20 and into this branch). Phone: `jarvis-client/` (Compose):
 widgets, quick tile, share target, assistant role (no speech-to-text),
 "Also on my phone", floating Jarvis.
 
@@ -125,10 +124,11 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
 - **Goals** (backend, phone and desktop screens) and **"one card, several
   steps" - the plan card, built and switched off** - on
   `claude/jarvis-continuation-03kls1`.
-- **Three animal faces and "voice follows the face"** - on
-  `claude/jarvis-3d-animal-mascot-8dr0tb`. The owner's 2026-09-28 decision
-  (offer the voice once, switch off by default, the otter not on "Sky") was
-  not yet applied there as of 2026-09-28 03:05 UTC (`FACE_VOICE_DEFAULT = True`, the otter still speaker "4"). That branch also has
+- **Three animal faces and "voice follows the face"** - merged into `main`
+  (PR #20) and into this branch. The owner's 2026-09-28 decision (offer the
+  voice once, switch off by default, the otter not on "Sky") was NOT applied
+  there as of 2026-09-28 10:30 UTC (`FACE_VOICE_DEFAULT = True`, the otter
+  still speaker "4"); the owner asked the mascot session to fix it. That branch also has
   **real lip-sync**: the animals' mouths follow Jarvis's voice through a
   mouth track carried in the WAV, timed by Kokoro itself per sentence, on both apps (fixes the studio's finding
   that the desktop mouth ran on a made-up rhythm).
@@ -147,6 +147,8 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   moved onto it with its own approval card (`second_card_third_assign`); a
   third copy of Ollama on its own port. The owner asked that session for
   it; research here still plans for one or two cards unless told otherwise.
+- **Reading phone notifications (the safe version)** - built on
+  `claude/jarvis-continuation-03kls1` (638464b1: backend switch + phone).
 - **The plan card is wired into the tool list** there too (7675da4d,
   `propose_plan`, gate `run_plan`), still switched off until a passing
   `tool_eval_results.json` exists.
@@ -162,7 +164,7 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
 ## Decided but not built yet (don't propose these as new)
 
 QR pairing with per-device keys; talk-to-type on the PC (one card to switch
-on); reading phone notifications (safe version); the Today page; the plan
+on); the Today page; the plan
 card; Kokoro v1.0 and a voice picker with samples; animal voices; the
 12 GB card's long-context lane; the memory re-ranker bake-off and overnight
 tidy; the feasibility audit's small items. The owner's full list of

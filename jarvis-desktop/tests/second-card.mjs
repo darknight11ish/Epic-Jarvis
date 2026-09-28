@@ -675,8 +675,11 @@ await check("CONTROL: the route line passes second_card on, and nothing more", a
   // regardless of the formatting around them.
   const list = /for key in \[([\s\S]*?)\]/.exec(fn);
   assert.ok(list, "no `for key in [...]` string list in route_line_from_header");
-  const keys = [...list[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings"]);
+  // Comments inside the list (the "Forget a time frame" note quotes words)
+  // are not keys: drop them before reading the quoted strings.
+  const body = list[1].replace(/\/\/[^\n]*/g, "");
+  const keys = [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings", "open_brain"]);
 });
 
 await browser.close();
