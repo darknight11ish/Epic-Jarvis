@@ -54,12 +54,12 @@ RULES IT TOUCHES
     anything in this file.
   * "Before you add anything" (docs/ARCHITECTURE.md section 12): this is a
     KIND on the one scheduler (jarvis_schedule.py), not a timer of its own.
-    A new kind asks by default (one schedule_repeat card) unless the owner
-    decided otherwise for it - the owner has not, for Goals specifically, so
-    the weekly check-in gets the default: ONE card, raised when a goal is
-    first accepted, the same shape as the morning briefing's own repeat
-    card. Nothing about an individual acting step is covered by that one
-    card; it only covers "let this goal's weekly check-in exist".
+    The weekly check-in needs NO card (the owner's decision of 2026-09-28,
+    after the post-change audits): like a plain repeating reminder
+    (Kind.plain_repeat, decided 2026-09-26), only the owner's own taps can
+    set one up - accepting their own goal - it reads nothing new and acts
+    on nothing, and Stop tracking takes it down at once. Every acting step
+    still needs its own card, as before; the check-in never covered any.
 
 WHAT IS KEPT, AND WHERE
 `goals.db` in the Jarvis settings folder, beside schedule.db and memory.db
@@ -272,10 +272,10 @@ class Goals:
 
     def accept(self, goal_id: str, plan=None) -> dict:
         """The owner's own edit of the draft (or the draft as it stood) is
-        kept, and the weekly check-in is set up through jarvis_schedule's
-        own repeating-job card - the SAME one mechanism a repeating reminder
-        or the morning briefing already uses, never a mechanism of its own.
-        Approves nothing that acts."""
+        kept, and the weekly check-in is set up on jarvis_schedule's own
+        repeating jobs - at once, with no card (KIND_OPTIONS' plain_repeat,
+        the same as a plain repeating reminder), never a mechanism of its
+        own. Approves nothing that acts."""
         with self._lock, self._db() as c:
             row = self._row(c, goal_id)
             if row is None:
@@ -409,6 +409,16 @@ def get() -> Goals:
         return _ONE
 
 
+#: How KIND is registered on the one scheduler (register() below; the tests
+#: use the same). plain_repeat=True: the weekly check-in is set up at once,
+#: with NO card (the owner, 2026-09-28) - only the owner's own tap on Accept
+#: sets one, it reads nothing new and acts on nothing, and Stop tracking
+#: deletes it at once; the rule plain repeating reminders already follow
+#: (decided 2026-09-26).
+KIND_OPTIONS = dict(has_text=True, repeatable=True, plain_repeat=True,
+                    what="set up a weekly check-in for a goal")
+
+
 def register() -> None:
     """Called once, at import, by jarvis_hud.py's own startup block
     (goals.patch) - registers KIND on the one scheduler with this module's
@@ -417,15 +427,10 @@ def register() -> None:
     import jarvis_schedule
     g = get()
     jarvis_schedule.register_kind(
-        KIND, "goal check-in", "Jarvis: a goal check-in is due.", has_text=True,
-        repeatable=True, plain_repeat=False,
+        KIND, "goal check-in", "Jarvis: a goal check-in is due.",
         on_fire=lambda job_id: g.on_checkin(g.goal_id_for_job(job_id)),
         note=lambda job_id: g.checkin_note(g.goal_id_for_job(job_id)),
-        card_note=("Once a week, Jarvis looks at this goal's own plan and says whether the "
-                   "next step still looks on track. It reads nothing new and calls no tool "
-                   "- only what you already told it about this goal.",),
-        what="set up a weekly check-in for a goal",
-    )
+        **KIND_OPTIONS)
 
 
 # --------------------------------------------------------------------------

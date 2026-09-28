@@ -9439,7 +9439,7 @@ does not touch that gate and was never waiting on it.
 | `/api/goals` | GET | - | `{"ok", "goals": [<goal>, ...], "limits": {"text", "steps", "goals", "by"}}` |
 | `/api/goals` | POST | `{"text", "plan"?}` | `{"ok", "goal"}` - a new DRAFT. `plan`, if given, is the owner's own steps (or something they asked Jarvis to suggest first, in ordinary chat, and pasted in); omitted, the draft's one step is the goal's own words. **No approval card**: a draft is content, not action, exactly like an email draft (§40). |
 | `/api/goals/<id>` | GET | - | `{"ok", "goal"}`; 404 `{"ok": false, "error": "no such goal"}` |
-| `/api/goals/<id>/accept` | POST | `{"plan"?}` | The owner's edited plan (or the draft as it stood) is kept, and the goal becomes `active`. Sets up a weekly check-in through `jarvis_schedule.py`'s existing `schedule_repeat` mechanism (§21) - **the SAME one card a repeating reminder or the morning briefing already raises**, approving nothing that acts. `{"ok", "goal"}` with `goal.checkin` (the scheduler's own job view, `"state": "waiting"` until the card is answered). |
+| `/api/goals/<id>/accept` | POST | `{"plan"?}` | The owner's edited plan (or the draft as it stood) is kept, and the goal becomes `active`. Sets up a weekly check-in on `jarvis_schedule.py`'s repeating jobs (§21) **at once, with no approval card** (the owner, 2026-09-28: like a plain repeating reminder, decided 2026-09-26 - only the owner's own tap sets one, it reads nothing new and acts on nothing, and Stop tracking deletes it at once). `{"ok", "goal"}` with `goal.checkin` (the scheduler's own job view, `"state": "active"` straight away; it is never `"waiting"` any more). Before 2026-09-28 this raised one `schedule_repeat` card. |
 | `/api/goals/<id>/step` | POST | `{"index", "done"}` | Marks one step done or not. **No card** - the same shape as ticking off a to-do item. |
 | `/api/goals/<id>/stop` | POST | - | Stops tracking the goal and deletes its check-in job. **No card, immediate** - the same rule every "stop tracking this" control in this project follows. |
 
@@ -9487,8 +9487,9 @@ up (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
 goals.rs`) - it reads its own limits back from `GET /api/goals` rather
 than hard-coding them, and redacts a goal's and a step's own words under
 the same "Windows Hello for memory lists and chat history" gate Coming up
-already uses. Both apps find the weekly check-in's live state (waiting for
-the card, paused, its next-run note) by reading the SAME Coming up list
+already uses. Both apps find the weekly check-in's live state (paused, its
+next-run note; "waiting for the card" can no longer happen since the
+check-in needs no card, 2026-09-28) by reading the SAME Coming up list
 the job already appears on (kind `goal_checkin`, `owner_listed=True`,
 unchanged from the backend's own default) - the ONLY place that state can
 still be read once a screen's own copy of one `accept` answer is gone,

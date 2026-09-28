@@ -83,10 +83,10 @@ class World:
                                  publish=lambda k, d: self.events.append((k, d)))
         self.g = G.Goals(_TMP / f"goals-{n}.db", clock=self.clock, scheduler=self.sched)
         S.register_kind(
-            G.KIND, "goal check-in", "Jarvis: a goal check-in is due.", has_text=True,
-            repeatable=True, plain_repeat=False,
+            G.KIND, "goal check-in", "Jarvis: a goal check-in is due.",
             on_fire=lambda jid: self.g.on_checkin(self.g.goal_id_for_job(jid)),
             note=lambda jid: self.g.checkin_note(self.g.goal_id_for_job(jid)),
+            **G.KIND_OPTIONS,
         )
 
     def gate(self, action, detail, prompt):
@@ -119,23 +119,26 @@ def t_a_given_plan_is_kept_as_given():
     check("each step keeps its own words", goal["plan"][0]["step"] == "buy flour")
 
 
-def t_accepting_raises_exactly_one_card_and_approves_nothing_that_acts():
-    w = World()
+def t_accepting_raises_no_card_and_approves_nothing_that_acts():
+    """The owner's decision of 2026-09-28: the weekly check-in needs no card,
+    like a plain repeating reminder (2026-09-26) - only the owner's own tap
+    sets it up, and Stop tracking removes it at once."""
+    w = World(answer="denied")      # a card, if one were raised, would be refused
     goal = w.g.create("insulate the garage before winter")
     accepted = w.g.accept(goal["id"], plan=[{"step": "contact 3 installers", "by": "this week"}])
     check("accepting sets the goal active", accepted["status"] == "active")
-    check("exactly one card was raised", len(w.cards) == 1)
-    action, detail, prompt = w.cards[0]
-    check("the card's action is schedule_repeat, like any other repeat",
-          action == S.ACTION, action)
-    check("the card names what it is for", "goal" in detail.get("what", ""), detail)
+    check("no card was raised", w.cards == [], w.cards)
+    check("the check-in the answer carries is already active, not waiting",
+          accepted["checkin"]["state"] == "active", accepted["checkin"])
     job = w.sched.job(accepted["checkin"]["id"])
-    check("the job is active (the stub gate approved it)", job is not None and job["state"] == "active")
+    check("the job is on the list at once", job is not None and job["state"] == "active")
     check("the job repeats weekly", job["repeat"] == "every Monday at 09:00", job.get("repeat"))
-    # The one thing this whole feature must never do: nothing here is a step
-    # that acts. The card's own detail carries no tool, no recipient, no
-    # address - only the goal's plan, as words.
-    check("the card is not an acting step", "leaves_this_pc" not in detail or not detail["leaves_this_pc"])
+    check("the kind is registered as a plain repeat (no card)",
+          G.KIND_OPTIONS["plain_repeat"] is True and S.KINDS[G.KIND].plain_repeat is True)
+    w.g.stop(goal["id"])
+    check("Stop tracking removes the check-in at once",
+          w.sched.job(accepted["checkin"]["id"]) is None
+          or w.sched.job(accepted["checkin"]["id"])["state"] not in ("active", "waiting"))
 
 
 def t_a_second_goal_with_the_same_default_rule_is_not_refused_as_a_duplicate():
