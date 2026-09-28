@@ -180,10 +180,14 @@ class EventService : Service() {
      * says how it went - the app is very likely not on screen.
      */
     private fun stopChatbotFromNotification(id: String?) {
-        if (id == null || !com.jarvis.client.net.Chatbot.validId(id)) return
+        if (id == null) return
+        // A comparison's line carries the comparison's id: Stop ends all of it.
+        val compare = com.jarvis.client.net.Chatbot.validCompareId(id)
+        if (!compare && !com.jarvis.client.net.Chatbot.validId(id)) return
         scope.launch {
             awaitLive()
-            val (stopped, said) = JarvisRuntime.chatbotStop(id)
+            val (stopped, said) =
+                if (compare) JarvisRuntime.chatbotCompareStop(id) else JarvisRuntime.chatbotStop(id)
             runCatching { Toast.makeText(this@EventService, said, Toast.LENGTH_LONG).show() }
             if (stopped) runCatching { ChatbotNotifier.cancel(this@EventService) }
         }

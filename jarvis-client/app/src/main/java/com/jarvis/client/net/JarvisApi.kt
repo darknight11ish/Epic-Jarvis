@@ -1129,17 +1129,24 @@ class JarvisApi(
 
     /**
      * `GET /api/chatbot/status`, for the conversation [id] names or, with
-     * none, the latest one still going ([Chatbot.parse]). A read.
+     * none, the latest one still going ([Chatbot.parse]) - and likewise the
+     * comparison [compare] names ("Ask several and compare"). A read.
      */
-    suspend fun chatbotStatus(id: String?): ApiResult<JsonObject> =
+    suspend fun chatbotStatus(id: String?, compare: String? = null): ApiResult<JsonObject> =
         probe(
-            if (id != null && Chatbot.validId(id)) "${Chatbot.STATUS_PATH}?id=$id"
-            else Chatbot.STATUS_PATH,
+            when {
+                compare != null && Chatbot.validCompareId(compare) ->
+                    "${Chatbot.STATUS_PATH}?compare=$compare"
+                id != null && Chatbot.validId(id) -> "${Chatbot.STATUS_PATH}?id=$id"
+                else -> Chatbot.STATUS_PATH
+            },
         )
 
     /**
-     * `POST /api/chatbot/start`, `/stop` or `/limits`, with a body made by
-     * [Chatbot.startBody], [Chatbot.stopBody] or [Chatbot.limitsBody]. Any
+     * `POST /api/chatbot/start`, `/stop`, `/limits`, `/compare/start` or
+     * `/compare/stop`, with a body made by [Chatbot.startBody],
+     * [Chatbot.stopBody], [Chatbot.limitsBody], [Chatbot.compareBody] or
+     * [Chatbot.compareStopBody]. Any
      * other path is refused here, before anything is sent. The status and
      * body come back whole ([Chatbot.Reply]): a 400 or 409 carries the PC's
      * own sentence (why a goal cannot be sent, another conversation going).

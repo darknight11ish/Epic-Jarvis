@@ -14,7 +14,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -27,6 +30,7 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
+import com.jarvis.client.ui.parts.Toggle
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.launch
@@ -46,6 +50,15 @@ import kotlinx.coroutines.launch
  * asked one (never answered by Jarvis), and the transcript - the chatbot's
  * words in an outlined plate marked "outside text". After it ends: the
  * summary, kept on screen. Nothing here is read aloud.
+ *
+ * "Ask several and compare" (the owner's decision of 2026-09-28): a switch
+ * on the form turns the chatbot row into a pick-several list; Start asks the
+ * PC for ONE card listing every chatbot picked. While it runs: each
+ * chatbot's line, Pause / Resume / Stop for the whole comparison, and each
+ * conversation under its chatbot's name; at the end ONE summary (where they
+ * agree, where they disagree and who said what, the sources each gave - not
+ * checked by Jarvis - and who dropped out), in the same outlined
+ * outside-text plate, never read aloud.
  *
  * While a conversation is going [JarvisRuntime.watchChatbot] keeps the
  * ongoing notification in step and ticks [JarvisRuntime.chatbotTick], which
@@ -77,6 +90,12 @@ internal fun ChatbotSection(
     var limitsFor by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    var several by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf(setOf<String>()) }
+    var compareGone by remember { mutableStateOf(false) }
+    // Which one this plate started or saw going last, so that one's end
+    // stays on screen when both a conversation and a comparison have ended.
+    var lastKind by remember { mutableStateOf("") }
 
     LaunchedEffect(reads, tick) {
         when (val r = JarvisRuntime.chatbotStatus(null)) {
@@ -99,10 +118,37 @@ internal fun ChatbotSection(
                             JarvisRuntime.chatbotLastId = null
                         }
                     }
+                    // The same for a comparison: the latest one still going,
+                    // else the one this phone last showed, for its summary.
+                    compareGone = false
+                    var cmp = latest.compare
+                    val lastCmp = JarvisRuntime.chatbotLastCompareId
+                    if (cmp == null && lastCmp != null) {
+                        val named = JarvisRuntime.chatbotCompareStatus(lastCmp)
+                        val nc = (named as? ApiResult.Ok)?.let { Chatbot.parse(it.value) }?.compare
+                        if (nc != null) {
+                            cmp = nc
+                        } else if (named is ApiResult.Ok) {
+                            compareGone = true
+                            JarvisRuntime.chatbotLastCompareId = null
+                        }
+                    }
+                    shown = shown.copy(compare = cmp)
+                    if (cmp != null) {
+                        JarvisRuntime.chatbotLastCompareId = cmp.id
+                        if (cmp.live) {
+                            lastKind = "compare"
+                            JarvisRuntime.watchChatbot()
+                        }
+                    }
+                    picked = picked.filter { id -> shown.chatbots.any { it.id == id && it.built } }.toSet()
                     val s = shown.session
                     if (s != null) {
                         JarvisRuntime.chatbotLastId = s.id
-                        if (s.live) JarvisRuntime.watchChatbot()
+                        if (s.live) {
+                            lastKind = "session"
+                            JarvisRuntime.watchChatbot()
+                        }
                         if (limitsFor != s.id) {
                             limitsFor = s.id
                             newMessages = s.max.toString()
@@ -169,12 +215,34 @@ internal fun ChatbotSection(
                         Text(Chatbot.NONE_BUILT, style = MaterialTheme.typography.bodySmall,
                             color = chrome.warnInk)
                     }
-                    if (gone) {
+                    val c = v.compare
+                    val sessionLive = v.session?.live == true
+                    // A comparison going is shown; else the one started last.
+                    val showCompare = c != null &&
+                        (c.live || (!sessionLive && (lastKind == "compare" || v.session == null)))
+                    if (gone && !showCompare) {
                         Text(Chatbot.GONE, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                     }
+                    if (compareGone && (showCompare || v.session == null)) {
+                        Text(Chatbot.COMPARE_GONE, style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid)
+                    }
                     Gap(6)
-                    val s = v.session
-                    if (s != null) {
+                    val s = if (showCompare) null else v.session
+                    if (showCompare && c != null) {
+                        ComparePart(
+                            c = c, canAct = canAct, busy = busy, privateHidden = privateHidden,
+                            onAction = { action ->
+                                perform {
+                                    when (action) {
+                                        "pause" -> JarvisRuntime.chatbotPause()
+                                        "resume" -> JarvisRuntime.chatbotResume()
+                                        else -> JarvisRuntime.chatbotCompareStop(c.id)
+                                    }
+                                }
+                            },
+                        )
+                    } else if (s != null) {
                         SessionPart(
                             v = v, s = s, canAct = canAct, busy = busy, privateHidden = privateHidden,
                             newMessages = newMessages, newMinutes = newMinutes, newNever = newNever,
@@ -205,27 +273,57 @@ internal fun ChatbotSection(
                             },
                         )
                     }
-                    if (s == null || !s.live) {
-                        if (s != null) Gap(12)
+                    if (!sessionLive && c?.live != true) {
+                        if (s != null || showCompare) Gap(12)
                         FormPart(
                             v = v, which = which, goal = goal, messages = messages, minutes = minutes,
                             never = never, canAct = canAct, busy = busy,
+                            several = several && v.tier.compareMax > 0, picked = picked,
+                            onSeveral = { several = it },
+                            onPick = { id -> picked = if (id in picked) picked - id else picked + id },
                             onWhich = { which = it },
                             onGoal = { goal = it.take(Chatbot.MAX_GOAL_CHARS) },
                             onMessages = { messages = it.filter(Char::isDigit).take(3) },
                             onMinutes = { minutes = it.filter(Char::isDigit).take(3) },
                             onNever = { never = it.take(600) },
                             onStart = {
-                                val problem = Chatbot.formProblem(v, which, goal, messages, minutes)
-                                if (problem != null) {
-                                    said = problem
+                                if (several && v.tier.compareMax > 0) {
+                                    // Picked, in the PC's own order.
+                                    val ids = v.chatbots.filter { it.id in picked }.map { it.id }
+                                    val problem = Chatbot.compareFormProblem(v, ids, goal, messages, minutes)
+                                    if (problem != null) {
+                                        said = problem
+                                    } else {
+                                        perform {
+                                            JarvisRuntime.chatbotCompareStart(
+                                                ids, goal, Chatbot.limitOf(messages, v.tier.turnsMax),
+                                                Chatbot.limitOf(minutes, v.tier.minutesMax),
+                                                Chatbot.neverWords(never),
+                                            ).also { (ok, _) ->
+                                                if (ok) {
+                                                    goal = ""
+                                                    lastKind = "compare"
+                                                }
+                                            }
+                                        }
+                                    }
                                 } else {
-                                    perform {
-                                        JarvisRuntime.chatbotStart(
-                                            which, goal, Chatbot.limitOf(messages, v.tier.turnsMax),
-                                            Chatbot.limitOf(minutes, v.tier.minutesMax),
-                                            Chatbot.neverWords(never),
-                                        ).also { (ok, _) -> if (ok) goal = "" }
+                                    val problem = Chatbot.formProblem(v, which, goal, messages, minutes)
+                                    if (problem != null) {
+                                        said = problem
+                                    } else {
+                                        perform {
+                                            JarvisRuntime.chatbotStart(
+                                                which, goal, Chatbot.limitOf(messages, v.tier.turnsMax),
+                                                Chatbot.limitOf(minutes, v.tier.minutesMax),
+                                                Chatbot.neverWords(never),
+                                            ).also { (ok, _) ->
+                                                if (ok) {
+                                                    goal = ""
+                                                    lastKind = "session"
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             },
@@ -382,21 +480,130 @@ private fun SessionPart(
         Gap(8)
         Text(Chatbot.TRANSCRIPT_TITLE, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
         Text(Chatbot.OUTSIDE_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
-        s.transcript.forEach { t ->
-            Gap(4)
-            if (t.outside) {
-                Plate(outline = chrome.warnInk) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(s.name, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
-                        Pill("outside text", color = chrome.warnInk)
-                    }
-                    Text(t.text, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
-                }
-            } else {
-                Text("Jarvis, message ${t.n}", style = MaterialTheme.typography.labelSmall,
-                    color = chrome.textLo)
-                Text(t.text, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        s.transcript.forEach { t -> TurnPart(s.name, t) }
+    }
+}
+
+/** One message: Jarvis's plainly, the chatbot's in the outlined outside-text plate. */
+@Composable
+private fun TurnPart(name: String, t: Chatbot.Turn) {
+    val chrome = LocalChrome.current
+    Gap(4)
+    if (t.outside) {
+        Plate(outline = chrome.warnInk) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(name, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                Pill("outside text", color = chrome.warnInk)
             }
+            Text(t.text, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+        }
+    } else {
+        Text("Jarvis, message ${t.n}", style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo)
+        Text(t.text, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+    }
+}
+
+/** A small heading and its bullet lines, inside the comparison's summary. */
+@Composable
+private fun SummaryLines(title: String, lines: List<String>) {
+    if (lines.isEmpty()) return
+    val chrome = LocalChrome.current
+    Text(title, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    lines.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = chrome.textMid) }
+}
+
+/** "Ask several and compare": one comparison, its buttons, its summary and each conversation. */
+@Composable
+private fun ComparePart(
+    c: Chatbot.Compare,
+    canAct: Boolean,
+    busy: Boolean,
+    privateHidden: Boolean,
+    onAction: (String) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Text(
+        if (c.live) Chatbot.compareTalkingLine(c) else "${Chatbot.COMPARE_TITLE}: ${Chatbot.compareStatusLine(c)}",
+        style = MaterialTheme.typography.bodyMedium,
+        color = chrome.textHi,
+    )
+    if (c.live) {
+        Text(Chatbot.compareStatusLine(c), style = MaterialTheme.typography.bodySmall,
+            color = if (c.state == "paused") chrome.warnInk else chrome.textMid)
+    }
+    if (c.state != "refused") {
+        Text(Chatbot.compareProgress(c), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    }
+    if (c.tierName.isNotEmpty()) {
+        Text("${Chatbot.VERSION}: ${c.tierName}", style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo)
+    }
+    if (privateHidden) {
+        Text(Chatbot.HIDDEN, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+    } else if (c.goal.isNotEmpty()) {
+        Text("Your goal (sent word for word to each): ${c.goal}", style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid)
+    }
+    c.members.forEach { m ->
+        Text("• ${Chatbot.memberLine(m, c)}", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+    }
+    if (!privateHidden) {
+        c.members.filter { it.question.isNotEmpty() }.forEach { m ->
+            Gap(6)
+            Plate(outline = chrome.warnInk) {
+                Text("${Chatbot.QUESTION_TITLE}: ${m.name}", style = MaterialTheme.typography.labelMedium,
+                    color = chrome.textMid)
+                Text(m.question, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+                Text(Chatbot.QUESTION_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            }
+        }
+    }
+    val actions = Chatbot.compareActionsOf(c)
+    if (actions.isNotEmpty()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            actions.forEach { action ->
+                val held = action in Chatbot.HELD_WHEN_STALE && !canAct
+                Quiet(
+                    Chatbot.labelOf(action),
+                    color = if (action == "stop") chrome.badInk else null,
+                    enabled = !busy && !held,
+                    onClick = { onAction(action) },
+                )
+            }
+        }
+    }
+    val sm = c.summary
+    if (sm != null && !privateHidden) {
+        Gap(8)
+        Plate(outline = chrome.warnInk) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(Chatbot.COMPARE_SUMMARY_TITLE, style = MaterialTheme.typography.labelMedium,
+                    color = chrome.textMid)
+                Pill("outside text", color = chrome.warnInk)
+            }
+            Text(Chatbot.COMPARE_SUMMARY_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            if (sm.answer.isNotEmpty()) {
+                Text(sm.answer, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+            }
+            SummaryLines(Chatbot.AGREE_TITLE, sm.agree)
+            SummaryLines(Chatbot.DISAGREE_TITLE, sm.disagree.map { d ->
+                d.point + d.views.joinToString("") { o -> "\n    ${o.who}: ${o.said}" }
+            })
+            SummaryLines(Chatbot.SOURCES_TITLE, sm.sources.map { x -> "${x.who}: ${x.items.joinToString("; ")}" })
+            SummaryLines(Chatbot.DROPPED_TITLE, sm.dropped.map { x -> "${x.who} - ${x.why}" })
+            SummaryLines(Chatbot.OPEN_TITLE, sm.open)
+        }
+    }
+    val talked = c.members.filter { it.transcript.isNotEmpty() }
+    if (talked.isNotEmpty() && !privateHidden) {
+        Gap(8)
+        Text(Chatbot.CONVERSATIONS_TITLE, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+        Text(Chatbot.OUTSIDE_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        talked.forEach { m ->
+            Gap(6)
+            Text(m.name, style = MaterialTheme.typography.labelMedium, color = chrome.textHi)
+            m.transcript.forEach { t -> TurnPart(m.name, t) }
         }
     }
 }
@@ -411,6 +618,10 @@ private fun FormPart(
     never: String,
     canAct: Boolean,
     busy: Boolean,
+    several: Boolean,
+    picked: Set<String>,
+    onSeveral: (Boolean) -> Unit,
+    onPick: (String) -> Unit,
     onWhich: (String) -> Unit,
     onGoal: (String) -> Unit,
     onMessages: (String) -> Unit,
@@ -419,16 +630,39 @@ private fun FormPart(
     onStart: () -> Unit,
 ) {
     val chrome = LocalChrome.current
-    Text(Chatbot.CHATBOT_LABEL, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        v.chatbots.forEach { c ->
-            Quiet(
-                if (c.built) (if (c.id == which) "✓ ${c.name}" else c.name)
-                else "${c.name} - ${c.note.ifEmpty { "Not built yet." }}",
-                enabled = c.built && !busy,
-                onClick = { onWhich(c.id) },
+    if (v.tier.compareMax > 0) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(Chatbot.COMPARE_TOGGLE, style = MaterialTheme.typography.labelMedium, color = chrome.textMid,
+                modifier = Modifier.weight(1f))
+            Toggle(
+                checked = several,
+                onCheckedChange = onSeveral,
+                modifier = Modifier.semantics { contentDescription = Chatbot.COMPARE_TOGGLE },
+                enabled = !busy,
             )
         }
+        if (several) {
+            Text(Chatbot.COMPARE_DETAIL, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+    }
+    Text(
+        when {
+            !several -> Chatbot.CHATBOT_LABEL
+            v.canCompare -> Chatbot.pickLine(v)
+            else -> Chatbot.COMPARE_NOT_ENOUGH
+        },
+        style = MaterialTheme.typography.labelMedium,
+        color = chrome.textMid,
+    )
+    // One per line: there are more chatbots than fit across a phone.
+    v.chatbots.forEach { c ->
+        val chosen = if (several) c.id in picked else c.id == which
+        Quiet(
+            if (c.built) (if (chosen) "✓ ${c.name}" else c.name)
+            else "${c.name} - ${c.note.ifEmpty { "Not built yet." }}",
+            enabled = c.built && !busy,
+            onClick = { if (several) onPick(c.id) else onWhich(c.id) },
+        )
     }
     TextInput(
         value = goal,
@@ -457,6 +691,9 @@ private fun FormPart(
                 imeAction = ImeAction.Next),
         )
     }
+    if (several) {
+        Text(Chatbot.COMPARE_LIMITS_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    }
     TextInput(
         value = never,
         onValueChange = onNever,
@@ -465,7 +702,7 @@ private fun FormPart(
     )
     Quiet(
         if (busy) "Asking…" else Chatbot.START,
-        enabled = canAct && !busy && v.anyBuilt,
+        enabled = canAct && !busy && (if (several) v.canCompare else v.anyBuilt),
         onClick = onStart,
     )
     Text(Chatbot.START_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
