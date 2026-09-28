@@ -542,6 +542,12 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   key; it receives the rough location, so turning it on raises an
   approval card, like any new way out of the PC; turning it off is
   immediate).
+- **Every animal option lives in one place in both apps' settings** (Still,
+  sun and moon, weather and its source, resolution, frame rate, and every
+  new one), and **Jarvis can change any of them when asked** ("turn weather
+  off", "make the animal sharper"). Asking Jarvis follows the same rules as
+  the switch: cosmetic options change at once; anything that opens a way
+  out of the PC (online weather) still raises its approval card.
 
 ## Every new feature gets its own audit, without being asked
 
