@@ -481,7 +481,7 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus,
-  folders }) {
+  folders, widgets }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
@@ -1438,6 +1438,76 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { ok: true, waiting: true, job,
                      said: "It repeats, so it waits for your yes on the card." };
           }
+          // "Widgets you describe" (brain/widgets.rs), as Rust answers.
+          case "brain_widgets": {
+            const w = window.__widgets;
+            if (!w) {
+              return { available: false, why: "Your PC's Jarvis cannot make widgets yet - run " +
+                "apply-patches.ps1 on the PC." };
+            }
+            const out = JSON.parse(JSON.stringify({ ok: true, widgets: w.widgets,
+              drafts: w.drafts, no_card: w.noCard }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              for (const x of [...out.widgets, ...out.drafts]) {
+                x.name = ""; x.said = ""; x.parts = []; x.hidden = true;
+              }
+              out.hidden = true;
+            }
+            return out;
+          }
+          case "brain_widgets_draft": {
+            window.__widgetCalls.push({ cmd, ...args });
+            if (args.pasted) {
+              throw new Error("Widgets are made only from your own typed or spoken words - " +
+                "not from pasted or shared text.");
+            }
+            const w = window.__widgets;
+            const d = JSON.parse(JSON.stringify(w.draft));
+            w.drafts.push(d);
+            return { ok: true, draft: d, said: d.said, card: false, no_card: w.noCard };
+          }
+          case "brain_widgets_add": {
+            window.__widgetCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const w = window.__widgets;
+            const d = w.drafts.find((x) => x.id === args.draft);
+            if (!d) throw new Error("That preview has expired or was already used.");
+            w.drafts = w.drafts.filter((x) => x.id !== args.draft);
+            const kept = { ...d, id: "w" + d.id.slice(1) };
+            w.widgets.push(kept);
+            return { ok: true, widget: kept, said: `Added “${kept.name}”.` };
+          }
+          case "brain_widgets_discard": {
+            window.__widgetCalls.push({ cmd, ...args });
+            const w = window.__widgets;
+            w.drafts = w.drafts.filter((x) => x.id !== args.draft);
+            return { ok: true };
+          }
+          case "brain_widgets_delete": {
+            window.__widgetCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const w = window.__widgets;
+            w.widgets = w.widgets.filter((x) => x.id !== args.id);
+            return { ok: true, said: "Widget deleted." };
+          }
+          case "widget_board": {
+            window.__widgetCalls.push({ cmd, ...args });
+            const w = window.__widgets;
+            if (!w) return { available: false, why: "no widgets" };
+            const hidden = Boolean(window.__appLock);
+            return JSON.parse(JSON.stringify({ available: true, hidden,
+              widgets: w.widgets.map((x) => ({ id: x.id, name: hidden ? "" : x.name })),
+              shown: args.id ? (w.shows[args.id] || null) : null }));
+          }
+          case "widget_board_action": {
+            window.__widgetCalls.push({ cmd, ...args });
+            if (state.stale && !["stop_everything", "brief_me"].includes(args.action)) {
+              throw new Error("the event stream is stale");
+            }
+            return { timer: "10-minute timer set on your PC.",
+              stop_everything: "Stop everything sent." }[args.action] || "Done.";
+          }
           // A Today card (jarvis_today.add_route): set up at once, no card.
           case "brain_schedule_add_today": {
             window.__scheduleCalls.push({ cmd, ...args });
@@ -1956,6 +2026,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__schedule = schedule ? JSON.parse(JSON.stringify({
     jobs: [], todo: [], reads: 0, fails: null, ...schedule })) : null;
   window.__scheduleCalls = [];
+  // "Widgets you describe" (brain/widgets.rs). Unset, a PC without it.
+  // `widgets`/`drafts` are the PC's rows (with said and parts); `shows` maps
+  // an id to its GET /api/widgets/show answer; `draft` is the preview the
+  // next brain_widgets_draft makes.
+  window.__widgets = widgets ? JSON.parse(JSON.stringify({
+    widgets: [], drafts: [], shows: {}, draft: null, noCard: "", ...widgets })) : null;
+  window.__widgetCalls = [];
   window.__focus = focus ? JSON.parse(JSON.stringify({ reads: 0, ...focus })) : null;
   window.__focusCalls = [];
   window.__briefing = briefing ? JSON.parse(JSON.stringify({

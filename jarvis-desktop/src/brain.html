@@ -498,6 +498,19 @@
               </form>
               <p class="note" id="today-hint">Or say "show gym bag on my Today page on Mondays and Wednesdays at 7". Delete removes a card at once; it is also under Coming up, where Pause skips it.</p>
             </div>
+            <div class="card card-wide" id="widgets-card">
+              <h2>Widgets</h2>
+              <p class="note" id="widgets-detail">Describe a small widget and Jarvis makes a preview: a heading, numbers, short lists, a bar and up to four buttons, from a fixed menu. You see the preview first, and nothing is added until you tap Add. Delete removes one at once.</p>
+              <div id="widgets"></div>
+              <h3 class="subhead">Describe a widget</h3>
+              <form id="widgets-form" class="todo-form" autocomplete="off">
+                <input id="widgets-words" class="field todo-text" type="text" maxlength="300"
+                       placeholder="What it should show, like my next 3 reminders and a timer button"
+                       aria-label="What the widget should show">
+                <button id="widgets-make" class="btn small" type="submit">Make a preview</button>
+              </form>
+              <p class="note" id="widgets-hint">For example: "my next 3 reminders, my to-do count and a 10-minute timer button". You can also say "make me a widget showing ..." to Jarvis. Show one on your desktop from the widget window's "Your widget" list, or on your phone's home screen as a Jarvis widget.</p>
+            </div>
             <div class="card card-wide" id="coming-up-card">
               <h2>Coming up</h2>
               <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. A repeating reminder or alarm is set up at once, with no card; a repeating briefing or "tell me when" waits for your yes on an approval card.</p>

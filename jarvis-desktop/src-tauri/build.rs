@@ -371,6 +371,16 @@ fn main() {
             // One Today card (2026-09-28, jarvis_today.py): no card, held
             // on a stale link. Brain only.
             "brain_schedule_add_today",
+            // "Widgets you describe" (brain/widgets.rs, JARVIS-API.md section
+            // 87): the Brain manages them; the widget window draws one and
+            // presses ONE of the five tile actions.
+            "brain_widgets",
+            "brain_widgets_draft",
+            "brain_widgets_add",
+            "brain_widgets_discard",
+            "brain_widgets_delete",
+            "widget_board",
+            "widget_board_action",
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",

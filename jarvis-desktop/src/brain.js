@@ -110,6 +110,18 @@ import {
   todayCards,
 } from "./today.js";
 import {
+  ADD_LABEL as WIDGETS_ADD_LABEL,
+  DELETE_LABEL as WIDGETS_DELETE_LABEL,
+  DISCARD_LABEL as WIDGETS_DISCARD_LABEL,
+  draftArgs as widgetDraftArgs,
+  EMPTY as WIDGETS_EMPTY,
+  MAKE_LABEL as WIDGETS_MAKE_LABEL,
+  MAKING_LABEL as WIDGETS_MAKING_LABEL,
+  MISSING as WIDGETS_MISSING,
+  PREVIEW_TITLE as WIDGETS_PREVIEW_TITLE,
+  readList as readWidgets,
+} from "./widget-board.js";
+import {
   CHOOSE_NOTE as PHOTO_NOTE,
   mountProposal as mountPhotoProposal,
   READING as PHOTO_READING,
@@ -416,6 +428,10 @@ const dom = {
   standbyAdd: $("standby-add"),
   standbyIsSet: $("standby-is-set"),
   today: $("today"),
+  widgets: $("widgets"),
+  widgetsForm: $("widgets-form"),
+  widgetsWords: $("widgets-words"),
+  widgetsMake: $("widgets-make"),
   todayForm: $("today-form"),
   todayText: $("today-text"),
   todayAt: $("today-at"),
@@ -4646,7 +4662,140 @@ function paintComingUp() {
   }
 }
 
+/* ==========================================================================
+   Widgets (widget-board.js; JARVIS-API.md section 87; brain/widgets.rs)
+
+   The owner's words become a PREVIEW on the PC (its AI model makes a small
+   description from a fixed menu, never code, and the PC checks it); Add
+   keeps it exactly as shown, Discard drops it, Delete removes a widget at
+   once. No approval card - the PC's own `no_card` sentence says why. Add
+   and Delete are held on a stale link; making a preview is not (it adds
+   nothing). Words pasted into the box are sent as pasted, which the PC
+   refuses: only the owner's own typed or spoken words make a widget.
+   ========================================================================== */
+
+const wid = { view: null, error: "", loading: false, at: 0, making: false, pasted: false };
+const WIDGETS_READ_MS = 15000;
+
+async function loadWidgets() {
+  if (!IS_TAURI || wid.loading) return;
+  wid.loading = true;
+  try {
+    wid.view = readWidgets(await invoke("brain_widgets"));
+    wid.error = "";
+  } catch (error) {
+    wid.error = errorText(error);
+  } finally {
+    wid.loading = false;
+    wid.at = Date.now();
+  }
+  if (state.view === "work") paintWidgets();
+}
+
+function widgetRow(w, draft) {
+  const actions = draft
+    ? [button(WIDGETS_DISCARD_LABEL, () => widgetAct("brain_widgets_discard", { draft: w.id })),
+      button(WIDGETS_ADD_LABEL, () => widgetAct("brain_widgets_add", { draft: w.id }),
+        { live: true })]
+    : [button(WIDGETS_DELETE_LABEL, () => widgetAct("brain_widgets_delete", { id: w.id }),
+      { live: true, danger: true })];
+  const item = row({
+    tag: draft ? "preview" : "widget",
+    state: draft ? "warn" : "ok",
+    title: w.name || (wid.view && wid.view.hidden ? "(hidden) widget" : "Widget"),
+    meta: [w.said, ...w.parts],
+    actions,
+  });
+  item.dataset.id = w.id;
+  return item;
+}
+
+function paintWidgets() {
+  const box = dom.widgets;
+  if (!box) return;
+  const v = wid.view;
+  const out = [];
+  if (!v) {
+    const line = el("p", "empty", wid.error ? `Could not read Widgets: ${wid.error}` : "Reading…");
+    if (wid.error) line.append(" ", button("Retry", loadWidgets));
+    out.push(line);
+  } else if (!v.available) {
+    out.push(el("p", "empty", v.why || WIDGETS_MISSING));
+  } else {
+    if (v.drafts.length) {
+      out.push(el("h3", "subhead", WIDGETS_PREVIEW_TITLE));
+      const list = el("div", "rows");
+      for (const d of v.drafts) list.append(widgetRow(d, true));
+      out.push(list);
+      if (v.noCard) out.push(el("p", "note", v.noCard));
+    }
+    const list = el("div", "rows");
+    for (const w of v.widgets) list.append(widgetRow(w, false));
+    out.push(v.widgets.length ? list : el("p", "empty", WIDGETS_EMPTY));
+    if (v.hidden) out.push(hiddenNode(0, "words"));
+  }
+  if (dom.widgetsForm) dom.widgetsForm.hidden = Boolean(v && !v.available);
+  if (dom.widgetsMake) {
+    dom.widgetsMake.disabled = wid.making;
+    dom.widgetsMake.textContent = wid.making ? WIDGETS_MAKING_LABEL : WIDGETS_MAKE_LABEL;
+  }
+  box.replaceChildren(...out);
+}
+
+async function widgetAct(command, args) {
+  if (command !== "brain_widgets_discard" && !linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke(command, args);
+    if (out && out.said) toast(String(out.said), "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadWidgets();
+}
+
+async function makeWidget() {
+  if (wid.making) return;
+  const args = widgetDraftArgs(dom.widgetsWords && dom.widgetsWords.value, wid.pasted);
+  if (args.error) {
+    toast(args.error, "bad");
+    return;
+  }
+  wid.making = true;
+  paintWidgets();
+  try {
+    const out = await invoke("brain_widgets_draft", args);
+    toast(String((out && out.said) || "Preview made."), "ok");
+    if (dom.widgetsWords) dom.widgetsWords.value = "";
+    wid.pasted = false;
+  } catch (error) {
+    toast(errorText(error), "bad");
+  } finally {
+    wid.making = false;
+  }
+  await loadWidgets();
+}
+
+if (dom.widgetsForm) {
+  dom.widgetsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    makeWidget();
+  });
+}
+if (dom.widgetsWords) {
+  // Pasted words are not the owner's own (ARCHITECTURE section 3): said to
+  // the PC as pasted, which refuses them. Emptying the box starts again.
+  dom.widgetsWords.addEventListener("paste", () => { wid.pasted = true; });
+  dom.widgetsWords.addEventListener("input", () => {
+    if (!dom.widgetsWords.value) wid.pasted = false;
+  });
+}
+
 function renderComingUp() {
+  paintWidgets();
+  if (IS_TAURI && !wid.loading && Date.now() - wid.at > WIDGETS_READ_MS) loadWidgets();
   paintComingUp();
   if (IS_TAURI && !upL.loading && Date.now() - upL.at > SCHEDULE_READ_MS) loadComingUp();
 }
@@ -4723,7 +4872,11 @@ if (dom.standbyAdd) {
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   const rereadSchedule = () => {
     upL.at = 0;
-    if (state.view === "work") loadComingUp();
+    wid.at = 0;
+    if (state.view === "work") {
+      loadComingUp();
+      loadWidgets();
+    }
   };
   TAURI.event.listen("security-changed", rereadSchedule);
   TAURI.event.listen("private-hidden", rereadSchedule);

@@ -745,6 +745,42 @@ permissions = [
   "allow-brain-schedule-clear-list",
 ]
 
+# "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
+# version; brain/widgets.rs, backend jarvis_widgets.py; JARVIS-API.md section
+# 87). The Brain lists the widgets, asks the PC for a PREVIEW from the
+# owner's typed words (the PC's model turns them into a checked description,
+# never code), keeps ONE preview on Add and deletes ONE widget at once. No
+# approval card: a widget only shows what the apps already show, and its
+# buttons are the five Quick Settings tile actions. Add and Delete are held
+# on a stale link; the words are taken out in Rust while the private lists
+# are hidden.
+[[set]]
+identifier = "brain-widgets"
+description = "List the widgets, make a preview from the owner's typed words, keep or drop ONE preview, delete ONE widget. No approval card; no bulk delete."
+permissions = [
+  "allow-brain-widgets",
+  "allow-brain-widgets-draft",
+  "allow-brain-widgets-add",
+  "allow-brain-widgets-discard",
+  "allow-brain-widgets-delete",
+]
+
+# The desktop widget window draws ONE chosen widget in place of the face -
+# the same window, no new webview. It reads the widget filled in (private
+# words taken out in Rust while App lock is on or the lists are hidden), and
+# presses ONE button from a closed list of five in Rust: a focus session, a
+# 10-minute timer, Brief me (opens the Brain, behind App lock), Stop
+# everything, play/pause on the PC. Never Approve or Deny; never a route or
+# a body from the page. Everything but Stop everything and Brief me is held
+# on a stale link.
+[[set]]
+identifier = "widget-board"
+description = "Read the owner's saved widgets and draw one; press ONE of the five safe tile actions. Approves nothing."
+permissions = [
+  "allow-widget-board",
+  "allow-widget-board-action",
+]
+
 # "Photo to reminder" (photo-reminder.patch; the owner's choice of
 # 2026-09-28): a picture - a screen capture in the Jarvis bar, a picture file
 # in the Brain's Coming up - goes to the PC, which reads its words with
