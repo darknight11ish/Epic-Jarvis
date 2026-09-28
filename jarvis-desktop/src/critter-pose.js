@@ -719,11 +719,22 @@
    * over PAUSE.ON, and the last pause counted was at least `gapMin` seconds
    * before - so a nod or a gesture always finishes before the next starts.
    * rec: {talk, quiet, ago, n} (null to start).
+   *
+   * PHRASE_QUIET is 0.05 s, not the 0.15 s it was (the voice-speed check,
+   * 2026-09-28, docs/LIPSYNC.md "At every pace"). The loudness it is handed
+   * takes about 0.15-0.2 s to fall under OFF after the sound stops, and two
+   * of Jarvis's sentences played back to back leave only 0.1-0.15 s of it
+   * at the normal pace and faster: at 0.15 s the finder caught 10 of 36
+   * sentence ends at 1.0x and 1 of 36 at 1.3225x (real Kokoro clips, six
+   * voices). At 0.05 s: 34 and 25 of 36 (the misses are one-word sentences,
+   * under TALK_MIN), and still never inside a sentence at any pace the apps
+   * offer (0.7225x to 1.3225x) - only at the commas, which are phrase ends
+   * too. The microphone's NOD_QUIET is unchanged.
    */
   const PAUSE = Object.freeze({
     ON: 0.10, OFF: 0.05, TALK_MIN: 0.6,
     NOD_QUIET: 0.3, NOD_GAP: 3.0,         // the owner's pauses: a nod at most every 3 s
-    PHRASE_QUIET: 0.15, PHRASE_GAP: 2.0,  // Jarvis's phrase ends: a gesture at most every 2 s
+    PHRASE_QUIET: 0.05, PHRASE_GAP: 2.0,  // Jarvis's phrase ends: a gesture at most every 2 s
   });
   function pauseStep(rec, dt, level, quietMin, gapMin) {
     const r = rec || { talk: 0, quiet: 0, ago: NEVER, n: 0 };

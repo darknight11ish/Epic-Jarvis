@@ -1066,6 +1066,27 @@ class CritterPoseTest {
     }
 
     @Test
+    fun `Jarvis's phrase ends are found in the short quiet between fast sentences, not in a consonant`() {
+        // Voice-speed check (2026-09-28): at the normal pace and faster two
+        // sentences back to back leave about 0.1 s of quiet in the level;
+        // PHRASE_QUIET was 0.15 s and found none of them.
+        assertEquals(0.05f, CritterPose.Pause.PHRASE_QUIET, 0f)
+        fun run(talkS: Float, quietS: Float): Int {
+            var rec: CritterPose.PauseRec? = null
+            val period = ((talkS + quietS) * 60).toInt()
+            for (f in 0 until 60 * 20) {
+                val level = if (f % period < talkS * 60) 0.4f else 0.02f
+                rec = CritterPose.pauseStep(rec, 1f / 60f, level, CritterPose.Pause.PHRASE_QUIET, CritterPose.Pause.PHRASE_GAP)
+            }
+            return rec!!.n
+        }
+        // 2.4 s sentences, 0.1 s apart: one gesture per sentence (20 s / 2.5 s).
+        assertEquals(8, run(2.4f, 0.1f))
+        // A 30 ms silent hold (a "b" or "t") inside the words is never a phrase end.
+        assertEquals(0, run(0.4f, 0.03f))
+    }
+
+    @Test
     fun `a listening nod is small and plays once, all three kinds`() {
         for (a in sleepers) for (n in 0 until 3) {
             var most = 0f
