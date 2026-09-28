@@ -285,19 +285,31 @@ def t_adapters():
     check("the owner is offered Gemini, and never the test stand-in",
           "gemini_web" in ids and "fake" not in ids, ids)
     g = next(c for c in CB.choices() if c["id"] == "gemini_web")
-    check("Gemini is listed as not built yet", g["built"] is False and g["note"], g)
-    try:
-        CB.ADAPTERS["gemini_web"].factory()
-        raised = False
-    except CB.NotBuilt as exc:
-        raised = "not built yet" in str(exc)
-    check("Gemini's adapter says 'not built yet' instead of doing anything", raised)
+    check("Gemini is listed as built (step 2, jarvis_chatbot_gemini.py)",
+          g["built"] is True and CB.ADAPTERS["gemini_web"].ready is not None, g)
+    a = CB.ADAPTERS["gemini_web"].factory()
+    check("Gemini's factory opens nothing by itself (no browser until open())",
+          getattr(a, "_worker", "x") is None and getattr(a, "_ctx", "x") is None)
+    a.close()
+    # Here there is no signed-in profile (and usually no Playwright): plan()
+    # asks the adapter's ready() BEFORE any card, and refuses in plain words.
     d = deps()
+    d.make_adapter = None
     s = CB.plan("gemini_web", GOAL, deps=d)
-    check("a Gemini conversation is refused before any card", bool(s.problem)
-          and "not built yet" in s.problem and s.state == "refused", s.problem)
+    check("a Gemini conversation that is not set up is refused before any card",
+          bool(s.problem) and s.state == "refused" and s.problem == g["note"]
+          and ("Playwright" in s.problem or "signed in" in s.problem), s.problem)
     code, _ = CB.start(s, deps=d, wait=True)
     check("... and start() raises no card", code == 400 and not CARDS)
+    saved = CB.ADAPTERS["gemini_web"]
+    CB.register_adapter(CB.AdapterInfo("gemini_web", "Gemini", "gemini.google.com",
+                                       CB._gemini_not_built, built=False))
+    try:
+        s = CB.plan("gemini_web", GOAL, deps=deps())
+        check("without the adapter file, the stand-in entry still says 'not built yet'",
+              "not built yet" in s.problem and s.state == "refused", s.problem)
+    finally:
+        CB.register_adapter(saved)
     d.allow_test_adapters = False
     s = CB.plan("fake", GOAL, deps=d)
     check("the test stand-in is refused outside the tests", "own tests" in s.problem, s.problem)

@@ -198,6 +198,10 @@ SHIPPED = (
     # check, one card per conversation (the core only; not routed yet, no
     # patch)
     "jarvis_chatbot.py",
+    # ... and its Gemini website adapter: a visible browser window, driven
+    # openly, stopping at any captcha or sign-in page (chatbot.patch gives
+    # the gate its _RISK line)
+    "jarvis_chatbot_gemini.py",
 )
 
 

@@ -626,6 +626,15 @@ $PATCHES = @(
     # rest of this feature as ordinary code, needing no patch (they are
     # whole shipped modules, copied in like every other one in this list).
     'second-card-suggest.patch'
+    # Talking to an AI chatbot for the owner (jarvis_chatbot.py and its
+    # Gemini adapter, jarvis_chatbot_gemini.py, both shipped whole): the
+    # gate's _RISK line for `chatbot_session` (it leaves this PC and cannot
+    # be taken back, so its approval is a risky one), and its line in the
+    # "a no is not a standing rule" list. Two hunks in jarvis_gate.py, whose
+    # context is backup.patch's own lines (so it goes after it, like every
+    # new patch). No route yet: the feature is still not reachable from
+    # either app.
+    'chatbot.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -758,8 +767,9 @@ $SHIPPED = @(
     'jarvis_identity.py'         # fixed text, no model, no romance; jarvis_quick.py (already SHIPPED, above) calls it - no patch of its own
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
-    # --- talking to an AI chatbot for the owner (2026-09-28): the core only, no route, no patch yet ---
+    # --- talking to an AI chatbot for the owner (2026-09-28): the core and the Gemini adapter; no route yet (chatbot.patch: the gate's _RISK line) ---
     'jarvis_chatbot.py'          # the driver, the last check before every message, one card per conversation; not reachable from the apps yet
+    'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

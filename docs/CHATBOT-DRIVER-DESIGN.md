@@ -1,6 +1,9 @@
 # Chatbot driver: Jarvis talks to ChatGPT or Gemini for you (design)
 
-Status: **design only. Nothing here is built.** Written 2026-09-27 by the
+Status: **partly built, not reachable from either app** (2026-09-28): the
+core (`backend/jarvis_chatbot.py`) and Gemini's website adapter
+(`backend/jarvis_chatbot_gemini.py`, driven openly as the owner chose);
+no route or app screen yet (`docs/JARVIS-API.md` section 60). Written 2026-09-27 by the
 studio's designer for the owner's decision in `CLAUDE.md` ("Decided
 2026-09-27, the owner's answers after the studio review"): Jarvis may hold a
 conversation with an AI chatbot for the owner, following up **on its own,

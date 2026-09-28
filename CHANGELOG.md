@@ -6,6 +6,16 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The chatbot driver's Gemini part is written - still not usable from
+  either app.** Jarvis can now open its own Gemini window (gemini.google.com,
+  in a browser window you can see), type a question at a steady pace, and
+  read back only the answer to it. It never hides that it is a program, and
+  at a captcha, a sign-in page or an "unusual activity" page it stops and
+  asks you instead of trying to get past it. It uses its own browser profile,
+  which you sign in to once, by hand, with the spare Google account. Before
+  real use, run the one-line self-check on the PC (`backend/README.md`) - it
+  sends "What is 2 plus 2?" and says PASS or FAIL for each step, because the
+  way it finds Gemini's buttons could not be tested against the real site.
 - **The core of the chatbot driver - not usable yet.** The part of Jarvis
   that will hold a conversation with an AI chatbot for you (Gemini first)
   is written and tested on the PC side: one approval card per

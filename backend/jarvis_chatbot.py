@@ -1,10 +1,10 @@
 """jarvis_chatbot.py - Jarvis holds a conversation with an AI chatbot for the
 owner, following up on its own, within limits the owner approved on ONE card.
 
-NEW MODULE, shipped whole. STEP 1 OF THE BUILD: THE CORE ONLY. Nothing here
-is reachable from either app yet (no route, no patch), and the only chatbot
-that works is FakeChatbot, which lives in this file and talks to nobody.
-Gemini's adapter is listed, and says "not built yet".
+NEW MODULE, shipped whole. STEP 1 OF THE BUILD: THE CORE. Nothing here is
+reachable from either app yet (no route, no patch). Step 2, the Gemini
+website adapter, is jarvis_chatbot_gemini.py (loaded at the end of this
+file); FakeChatbot, in this file, talks to nobody and is for the tests.
 
 THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-27 and 2026-09-28;
 docs/CHATBOT-DRIVER-DESIGN.md, "The owner's answers (2026-09-28)")
@@ -109,10 +109,9 @@ WHAT THIS STEP DOES NOT DO, SAID PLAINLY
   * The transcript is kept in memory only, like jarvis_task_control's state:
     a backend restart loses it. Storing it in the encrypted chat history,
     tagged as outside text, comes with the routes.
-  * No Gemini: its adapter is a stub. No Playwright anywhere in this file.
-  * No row in jarvis_reach.KINDS and no `_RISK` line in the gate yet (an
-    action the gate has not classified is treated as risky, which is the
-    right side to be on) - both come with the Gemini adapter.
+  * No Playwright anywhere in this file: the Gemini adapter
+    (jarvis_chatbot_gemini.py) holds all of it. Its "What Jarvis can reach"
+    row is jarvis_reach._chatbot; the gate's `_RISK` line is chatbot.patch.
 
 Standard library only. No I/O at import.
 """
@@ -134,6 +133,9 @@ from typing import Any, Callable, Optional
 
 #: The gate action every conversation is asked under. Tier "ask" only.
 ACTION = "chatbot_session"
+#: No route reaches this module yet; both apps' "What Jarvis can reach"
+#: (jarvis_reach._chatbot) reads this to say "not from either app yet".
+ROUTED = False
 #: The name the running conversation has in jarvis_task_control.
 TASK_TOOL = "chatbot_session"
 #: This module's name, for jarvis_task_control's Resume (importlib).
@@ -314,6 +316,10 @@ class AdapterInfo:
     test_only: bool = False
     how: str = ""          # how it is reached, for the card
     card_note: str = ""    # anything the owner must know about this one
+    #: None, or a callable() -> "" when this chatbot can be used right now,
+    #: else the plain-words reason and how to fix it (Playwright missing,
+    #: never signed in). plan() asks it BEFORE any card. Opens nothing.
+    ready: Optional[Callable[[], str]] = None
 
 
 class FakeChatbot(Adapter):
@@ -389,8 +395,9 @@ ADAPTERS: dict = {}
 
 
 def register_adapter(info: AdapterInfo) -> None:
-    """Add or replace one chatbot. The next builder registers the real
-    Gemini adapter under "gemini_web" with built=True."""
+    """Add or replace one chatbot. jarvis_chatbot_gemini.py registers the
+    real Gemini adapter under "gemini_web" (loaded at the end of this file);
+    the "not built yet" entry below stays only if that file is missing."""
     ADAPTERS[info.id] = info
 
 
@@ -407,12 +414,30 @@ register_adapter(AdapterInfo(
     how="a stand-in on this PC that talks to nobody"))
 
 
+def _not_ready(info: AdapterInfo) -> str:
+    """"" when `info` can be used now, else why not, in plain words."""
+    if not info.built:
+        return "Not built yet."
+    if info.ready is None:
+        return ""
+    try:
+        return str(info.ready() or "")
+    except Exception as exc:
+        return f"{info.name} cannot be checked ({type(exc).__name__})."
+
+
 def choices() -> list:
     """The chatbots the owner can be offered, for both apps: never the
-    test stand-in; a listed-but-unbuilt one says so."""
-    return [{"id": i.id, "name": i.name, "host": i.host, "built": bool(i.built),
-             "note": "" if i.built else "Not built yet."}
-            for i in ADAPTERS.values() if not i.test_only]
+    test stand-in; one that is unbuilt or not set up says why in `note`
+    (and `ready` is False)."""
+    out = []
+    for i in ADAPTERS.values():
+        if i.test_only:
+            continue
+        note = _not_ready(i)
+        out.append({"id": i.id, "name": i.name, "host": i.host, "built": bool(i.built),
+                    "ready": not note, "note": note})
+    return out
 
 
 # ============================================================================
@@ -937,6 +962,13 @@ def plan(chatbot, goal, *, max_turns=None, max_minutes=None, never_send=None,
         problem = problem or f"{info.name} {info.how.split(',')[0]} is not built yet"
     elif info.test_only and not d.allow_test_adapters:
         problem = problem or f"{info.name} is only for Jarvis's own tests"
+    elif info.ready is not None and d.make_adapter is None and not problem:
+        # (A test that hands in its own adapter answers for that adapter.)
+        try:
+            why = str(info.ready() or "")
+        except Exception as exc:
+            why = f"{info.name} cannot be checked ({type(exc).__name__})"
+        problem = why
     if not problem and not g:
         problem = "there is no goal - say what Jarvis should find out"
     if not problem and len(g) > MAX_GOAL_CHARS:
@@ -1492,7 +1524,10 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
         except _End:
             raise
         except Exception as exc:
-            raise _End("adapter_failed", ENDED["adapter_failed"].format(
+            # An adapter may say why in plain words (jarvis_chatbot_gemini:
+            # Playwright missing, never signed in) - shown as it is.
+            words = str(getattr(exc, "owner_words", "") or "")
+            raise _End("adapter_failed", words or ENDED["adapter_failed"].format(
                 name=name, error=type(exc).__name__))
         look()
         pending: Optional[str] = s.goal if s.turns_used == 0 else None
@@ -1554,8 +1589,11 @@ def run(s: Session, *, approved, announce: Optional[Callable[[str], None]] = Non
                 reply = s.adapter.read_reply(REPLY_SLICE)
                 if reply is None:
                     waited += REPLY_SLICE
+                    # A captcha, sign-in or warning page that appears while
+                    # waiting pauses NOW, not after the whole reply timeout
+                    # (a website adapter's reply never comes past one).
+                    look()
                     if waited >= REPLY_TIMEOUT:
-                        look()
                         raise _End("no_reply", ENDED["no_reply"].format(
                             name=name, seconds=int(REPLY_TIMEOUT)))
                     if elapsed() >= s.limits.max_minutes * 60:
@@ -1898,7 +1936,7 @@ def view(session_id: str = "", *, deps: Optional[Deps] = None) -> dict:
     with _LOCK:
         s = _SESSIONS.get(session_id) if session_id else next(
             (x for x in reversed(list(_SESSIONS.values())) if _live(x)), None)
-    return {"routed": False, "chatbots": choices(), "tier": tier_view(deps),
+    return {"routed": ROUTED, "chatbots": choices(), "tier": tier_view(deps),
             "session": session_view(s) if s else None}
 
 
@@ -1912,4 +1950,11 @@ try:
     import jarvis_stop_all as _STOP_ALL
     _STOP_ALL.register(STOPPER, _stop_everything)
 except Exception:  # pragma: no cover - shipped beside it on the PC
+    pass
+
+# The real Gemini adapter (step 2) replaces the "not built yet" entry. It
+# imports nothing heavy: Playwright is loaded only when a window opens.
+try:
+    import jarvis_chatbot_gemini  # noqa: F401,E402
+except ImportError:  # pragma: no cover - shipped beside it on the PC
     pass

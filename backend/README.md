@@ -139,6 +139,7 @@ on a throwaway copy instead.
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py` and `jarvis_chatbot_gemini.py`, shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -13823,7 +13824,118 @@ python3 backend/run_suites.py
 - The one-card limits (5 messages by default, at most 8; 10 minutes, at
   most 15) are a first guess; the two-card ones (8/20 messages, 10/30
   minutes) are the design's.
-- The gate's `_RISK` table has no line for `chatbot_session` yet (it lives
-  in a patch on the owner's PC); an unclassified action is already treated
-  as risky, so Windows Hello is asked. The "What Jarvis can reach" row
-  comes with the Gemini adapter.
+- ~~The gate's `_RISK` table has no line for `chatbot_session` yet~~ -
+  done in step 2: `chatbot.patch` gives it one, and "What Jarvis can
+  reach" has its row (see the next section).
+
+# Talking to an AI chatbot for you, step 2: Gemini's window, `jarvis_chatbot_gemini.py` (2026-09-28)
+
+Step 2 of the chatbot driver (`docs/CHATBOT-DRIVER-DESIGN.md`;
+`docs/JARVIS-API.md` section 60.4). **Still not usable from either app**:
+no route and no app screen yet. Shipped whole, like the core.
+
+## In plain words
+
+Jarvis can now work its own Gemini window: it opens gemini.google.com in a
+browser window you can see, starts a new chat, types the question at a
+steady pace, and reads back only Gemini's answer to it. It does this
+**openly**, as you decided: nothing hides that a program is typing, and
+nothing changes how the browser looks to Google. At a captcha (a "prove you
+are a person" check), a sign-in page, or an "unusual activity" / "verify
+it's you" page, it **stops and asks you** - it never tries to get past one.
+You deal with it in the window, then press Resume.
+
+The window uses its own browser profile (a folder of its own, under your
+`.openjarvis` folder, in `chatbot\gemini-profile`). You sign in to it
+**once, by hand**, with the spare Google account used only by Jarvis -
+never your main account. Jarvis never types or keeps the password.
+
+## What to do on the PC, in order
+
+1. **Install Playwright** (the program Jarvis uses to work a browser window)
+   and its browser, once. Paste into PowerShell:
+
+   ```
+   py -3 -m pip install playwright; py -3 -m playwright install chromium
+   ```
+
+2. **Sign in once.** This opens Jarvis's Gemini window and waits. Click
+   "Sign in" in that window, sign in to the spare account, and close the
+   window when Gemini's message box shows:
+
+   ```
+   cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_chatbot_gemini.py sign-in
+   ```
+
+3. **Check it works on the real site.** How Jarvis finds Gemini's message
+   box, send button and answer could not be tested against the real
+   gemini.google.com (the place this was built cannot reach it). This line
+   sends ONE harmless fixed question, "What is 2 plus 2?", and prints PASS
+   or FAIL for each step, and which way of finding each part worked:
+
+   ```
+   cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_chatbot_gemini.py check; Write-Host "The results are also saved in $env:USERPROFILE\.openjarvis\chatbot\gemini-check.txt"
+   ```
+
+   If a step says FAIL, paste the printed lines back. The fix is one table
+   (`SELECTORS`, near the top of `jarvis_chatbot_gemini.py`).
+
+`JARVIS_GEMINI_BROWSER=msedge` makes it use Microsoft Edge (already on
+Windows 11) instead of Playwright's own Chromium.
+
+## What changed
+
+- `backend/jarvis_chatbot_gemini.py` (new): the Gemini adapter - one browser
+  thread, the selector table, `status()` for every "needs you" page, the
+  sign-in helper and the self-check (`sign-in` and `check` on its command
+  line). It registers itself as `gemini_web` in the core's list.
+- `backend/jarvis_chatbot.py`: loads the adapter at the end; `AdapterInfo`
+  gains `ready` (asked by `plan()` BEFORE any card, so a card is never
+  raised for something that cannot run - "Playwright is not installed",
+  "never signed in"); `choices()` says `ready` and why not in `note`; an
+  adapter that cannot open says why in plain words instead of an error's
+  name; a captcha or sign-in page that appears while waiting for a reply
+  pauses at once instead of after the 3-minute reply timeout; `ROUTED`.
+- `backend/chatbot.patch` (new): the gate's `_RISK` line (see the table).
+- `backend/jarvis_reach.py`: a "Chatbot conversations" row - "Not set up"
+  with the reason, "Off" while no app can start one, "On" once routed.
+  `tools/gen_reach_cases.py` and both apps' `reach-cases.json` regenerated.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: shipped, and the patch
+  listed. Playwright is NOT installed by the script (it is optional, like
+  for Browser control); `backend/requirements.txt`'s note says so.
+- `THIRD-PARTY-NOTICES.txt`: Playwright for Python (Apache-2.0), with its
+  NOTICE.
+- `backend/test_chatbot_gemini.py` (new); `backend/test_chatbot.py` and
+  `backend/test_reach.py` updated.
+
+## Test it
+
+```
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 backend/test_chatbot_gemini.py
+python3 backend/test_chatbot.py
+```
+
+The first runs a real, visible Chromium (under Xvfb, a pretend screen, on a
+Linux machine with none) against a fake Gemini page on 127.0.0.1: a full
+turn, a reply that pauses before it finishes, each "needs you" page, no
+navigation away, close. It skips its browser half, and says so, where
+Playwright or a browser is missing. Its first half also reads the module's
+own code and fails on any stealth, fingerprint, webdriver-hiding, proxy or
+captcha-solving code, on any headless launch, and on a click anywhere but
+the message box and the send button.
+
+## Not checked, said plainly
+
+- **Not tried against the real gemini.google.com.** Every selector is a
+  best guess from how Gemini's page is known to be built (a
+  `role="textbox"` message box, "Send message" and "Stop response"
+  buttons, `<model-response>` answers). The self-check above is the proof.
+- **Google may block it anyway.** Driving the site openly is exactly what
+  Google's terms forbid; the spare account could be closed. Jarvis will
+  not work around a block.
+- A notice laid over the page (a welcome or "what's new" box) counts as
+  "needs you": Jarvis stops rather than guess which button closes it.
+- If the send button is not found, it stops - it does not press Enter
+  instead.
+- A captcha that appears after a message went means that message counts
+  as sent; after Resume the driver carries on from the next message.

@@ -4955,8 +4955,11 @@ calendar (reading); email (reading); email (sending - "not set up" until
 sending is built; adding it is one `KINDS` entry); Home Assistant (reading);
 Home Assistant (changing things); notes (searching); notes (writing); GitHub
 research; phone notifications (ntfy); computer control; browser control;
-phone control; commands on this PC; plug-in programs (MCP, id `plugins`,
-since 2026-09-26 - section 37); the second graphics card; the big model.
+chatbot conversations (id `chatbot`, since 2026-09-28 - section 60: "Not
+set up" with the reason, "Off" while no app can start one, "On" once
+routed); phone control; commands on this PC; plug-in programs (MCP, id
+`plugins`, since 2026-09-26 - section 37); the second graphics card; the
+big model.
 `tools` is the list the chat's tool loop offers the model
 (`jarvis_agent.offered_tools()` of `[tools].enabled`), in plain names.
 
@@ -8855,17 +8858,20 @@ second version of any of it.
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
 
-## 60. Chatbot conversations - Jarvis talks to an AI chatbot for you (core built 2026-09-28, not routed yet)
+## 60. Chatbot conversations - Jarvis talks to an AI chatbot for you (core and Gemini adapter built 2026-09-28, not routed yet)
 
 **Not routed yet. Neither app calls anything here, and no route exists on
 the backend.** This section is a stub, so both apps build against one
 shape when the routes land. The design is `docs/CHATBOT-DRIVER-DESIGN.md`
 (with "The owner's answers (2026-09-28)"); the owner's decisions are in
-`CLAUDE.md` (2026-09-27 and 2026-09-28). What exists today is step 1 of
-the build, the backend core: `backend/jarvis_chatbot.py`, shipped whole, no
-patch, tested by `backend/test_chatbot.py` against a stand-in chatbot
-(`FakeChatbot`). **No real chatbot works yet**: Gemini is listed, and its
-adapter says "not built yet".
+`CLAUDE.md` (2026-09-27 and 2026-09-28). What exists today is steps 1 and
+2 of the build: the backend core, `backend/jarvis_chatbot.py`, tested by
+`backend/test_chatbot.py` against a stand-in chatbot (`FakeChatbot`); and
+**the Gemini website adapter**, `backend/jarvis_chatbot_gemini.py`, tested
+by `backend/test_chatbot_gemini.py` against a fake Gemini page on
+127.0.0.1 in a real browser. Both are shipped whole; `chatbot.patch` gives
+the gate its `_RISK` line. **Its selectors are not yet checked against the
+real gemini.google.com** - the owner's self-check below does that.
 
 ### 60.1 What it is
 
@@ -8897,7 +8903,7 @@ refused with the reason and no card.
 
 | route | body | answer |
 |---|---|---|
-| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()`: `{"routed", "chatbots": [{"id","name","host","built","note"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max"}, "session": <session> or null}` |
+| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()`: `{"routed", "chatbots": [{"id","name","host","built","ready","note"}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max"}, "session": <session> or null}` |
 | `POST /api/chatbot/start` | `{"chatbot", "goal", "max_messages"?, "max_minutes"?, "never_send"?: [..]}` | 202 `{"ok", "session", "asking": true, "message"}` - nothing is sent until the card is approved; 400 with `error` when `plan()` refused it (the reason in plain words); 409 while another conversation runs or is paused |
 | `POST /api/chatbot/stop` | `{"id"}` | 200; never a card |
 | `POST /api/chatbot/limits` | `{"id", "max_messages"?, "max_minutes"?, "never_send"?}` | a new card; the limits change only on a yes |
@@ -8921,10 +8927,52 @@ the owner, handed back), `problem`, `summary`, `read_aloud: false`, and
 too. Apps show them, never read them aloud, and never offer to remember
 anything from them.
 
-### 60.4 Not decided or not built
+`chatbots[].ready` is false, and `note` says why in plain words with the
+one line that fixes it, when the chatbot is built but cannot run on this PC
+yet (for Gemini: Playwright not installed, or its window never signed in).
+`POST /api/chatbot/start` for a chatbot that is not ready answers 400 with
+that same `note` as `error`, before any card.
 
-The routes; both apps' screens and the phone's ongoing notification; the
-Gemini adapter (Playwright, a visible window, one browser profile, the
-spare account); keeping the transcript in the encrypted chat history (today
-it is in memory only and lost on a restart); the "What Jarvis can reach"
-row and the gate's `_RISK` line; the two-card version's measurements.
+### 60.4 Gemini through its website (`jarvis_chatbot_gemini.py`)
+
+Driven **openly** (the owner's decision of 2026-09-28): Playwright for
+Python drives a real, visible Chromium (or Edge) window, launched
+`headless=False` with Playwright's own defaults. No stealth plug-in, no
+change to how the browser presents itself, nothing that hides that a
+program is driving, no proxy, no captcha solving. It types at a fixed pace
+(45 ms a character; a line break is Shift+Enter so a message is never sent
+in halves), clicks only the message box and the send button, opens a new
+chat every conversation and reads only the newest reply that appeared after
+its own message - never the sidebar or another chat, never a link. The only
+address it opens by itself is `https://gemini.google.com/app`; any other is
+refused. A reply is complete when Gemini's "Stop response" button is gone
+and the text has not changed for 3 seconds.
+
+`status()` answers `needs_owner` - and the adapter does nothing else - at a
+captcha (`captcha`), a sign-in page, sign-in form or "Sign in" button
+(`login`), an "unusual traffic" / "verify it's you" page (`unusual`), a
+notice laid over the page, another host, another chat, or a missing message
+box (each named in `reason`). The driver pauses and asks; the owner deals
+with it in the visible window, then presses Resume.
+
+One browser profile used only for this, at
+`<config>/chatbot/gemini-profile` (normally
+`%USERPROFILE%\.openjarvis\chatbot\gemini-profile`), signed in **once, by
+hand**, to the spare Google account used only by Jarvis. Jarvis never types,
+sees or keeps the password. The owner's three lines, in PowerShell:
+
+- install (once): `py -3 -m pip install playwright; py -3 -m playwright install chromium`
+- sign in (once): `cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_chatbot_gemini.py sign-in`
+- check the selectors (sends the one fixed question "What is 2 plus 2?",
+  prints PASS/FAIL per step and which selector matched):
+  `cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_chatbot_gemini.py check; Write-Host "The results are also saved in $env:USERPROFILE\.openjarvis\chatbot\gemini-check.txt"`
+
+`JARVIS_GEMINI_BROWSER=msedge` (or `chrome`) uses the browser already on
+the PC instead of Playwright's Chromium.
+
+### 60.5 Not decided or not built
+
+The routes; both apps' screens and the phone's ongoing notification;
+keeping the transcript in the encrypted chat history (today it is in memory
+only and lost on a restart); the two-card version's measurements; checking
+the Gemini selectors on the owner's PC (the self-check above).

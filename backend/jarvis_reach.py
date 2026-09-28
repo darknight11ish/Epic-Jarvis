@@ -252,6 +252,9 @@ class Ctx:
     # The plug-in programs (jarvis_mcp.reach_status): {"servers", "running",
     # "problem", "card_every_start"}; None: read them.
     plugins: Optional[dict] = None
+    # Chatbot conversations (jarvis_chatbot.py): {"routed": bool, "chatbots":
+    # jarvis_chatbot.choices()}; None: read them.
+    chatbot: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -777,6 +780,54 @@ def _plugins(ctx: Ctx) -> dict:
                   "permissions." + (f" Running now: {_join(running)}." if running else ""))
 
 
+def _chatbot_status() -> dict:
+    """jarvis_chatbot's own list of chatbots and whether it is routed. Opens
+    nothing: each adapter's ready() only looks for Playwright and the
+    browser profile folder."""
+    try:
+        import jarvis_chatbot as CB
+        return {"routed": bool(getattr(CB, "ROUTED", False)), "chatbots": CB.choices()}
+    except Exception:
+        return {"routed": False, "chatbots": [], "missing": True}
+
+
+def _chatbot(ctx: Ctx) -> dict:
+    """Chatbot conversations (jarvis_chatbot.py + jarvis_chatbot_gemini.py,
+    the owner's decisions of 2026-09-27/28): Jarvis talks to an AI chatbot
+    WEBSITE for the owner, one card per conversation."""
+    name = "Chatbot conversations"
+    st = ctx.chatbot if ctx.chatbot is not None else _chatbot_status()
+    bots = [b for b in st.get("chatbots") or [] if b.get("built")]
+    if st.get("missing") or not bots:
+        return _row("chatbot", name, "not_set_up", "", ASK_NA,
+                    "Not set up: no chatbot is built into this PC's Jarvis yet.")
+    names = _join([str(b.get("name") or b.get("id")) for b in bots])
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("chatbot_session"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("chatbot", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never talks to a chatbot for you.")
+    ready = [b for b in bots if b.get("ready")]
+    if not ready:
+        why = str(bots[0].get("note") or "")
+        return _row("chatbot", name, "not_set_up", "", ASK_NA,
+                    ("Not set up (" + names + "): " + why).strip())
+    ready_names = _join([str(b.get("name") or b.get("id")) for b in ready])
+    if not st.get("routed"):
+        return _row("chatbot", name, "off", "", ASK_NA,
+                    "Ready on this PC (" + ready_names + "), but neither app can start a "
+                    "conversation yet - that comes in a later step.")
+    where = _join([str(b.get("host") or "") for b in ready]) + " (a browser window you can see)"
+    return _row("chatbot", name, "on", where, ASK_EVERY,
+                "Holds a conversation with an AI chatbot website for you: one approval card "
+                "per conversation shows the goal word for word and the most messages and "
+                "minutes. Nothing private is sent, and it stops and asks you at any captcha "
+                "or sign-in page. What the chatbot says is outside text.")
+
+
 #: Every way Jarvis can reach something outside itself, in the order both
 #: apps show them. A new way out is ONE entry here.
 KINDS = (
@@ -793,6 +844,7 @@ KINDS = (
     ("phone_push", _phone_push),
     ("computer", _computer),
     ("browser", _browser),
+    ("chatbot", _chatbot),
     ("phone_control", _phone),
     ("shell", _shell),
     ("plugins", _plugins),
