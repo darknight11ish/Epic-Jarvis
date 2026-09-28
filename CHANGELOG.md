@@ -34,6 +34,23 @@ number as the last part - `0.2.57` is a build of 0.2.
   "Jarvis's built-in voice"; it never asks first. A voice you recorded still
   wins.
 
+**New: watches**
+
+- **"Tell me when a search shows something new."** Jarvis runs your search
+  once a day (every 6 hours at most) through the search service you chose -
+  never another one - and tells you when new results appear.
+- **"Tell me when the price on <address> drops below X."** The price is read
+  by plain code, not the AI, and shown under the watch so you can check it
+  picked the right number. Jarvis never buys anything.
+- **GitHub watches:** "tell me when CI fails (or finishes) on owner/repo" and
+  "tell me when PR #12 on owner/repo merges". Read-only, using the GitHub key
+  you already have. One line to add on the PC: `github_read = "auto"` under
+  `[autonomy.tiers]` in `jarvis-framework.toml` (the refusal message names it).
+- **A watch that stops working tells you once** (at most every 12 hours)
+  instead of failing silently, and clears by itself when it works again.
+- **Page watches ignore hidden page bytes**, so a page nobody changed no
+  longer counts as changed (a fix ported from another branch).
+
 **Fixed**
 
 - **Desktop security update.** The desktop app's framework (Tauri) goes from
