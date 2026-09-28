@@ -378,13 +378,17 @@ fn main() {
             // private lists are hidden), start one (ONE card on the PC; held
             // on a stale link), new limits (a NEW card; held), stop (never
             // held), and pause/resume through /api/task/* (resume held - it
-            // raises its own card). Brain only.
+            // raises its own card). "Ask several and compare": start one (ONE
+            // card listing every chatbot; held) and stop it (never held).
+            // Brain only.
             "chatbot_status",
             "chatbot_start",
             "chatbot_limits",
             "chatbot_stop",
             "chatbot_pause",
             "chatbot_resume",
+            "chatbot_compare_start",
+            "chatbot_compare_stop",
             // The morning briefing (backend/briefing.patch): read the latest
             // one and "Brief me now" (a read, not held on a stale link) -
             // Brain only; and its setup - read it, set one up that repeats

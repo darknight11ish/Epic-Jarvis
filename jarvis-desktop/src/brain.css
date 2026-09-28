@@ -1357,6 +1357,38 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* "Ask several and compare": the tick boxes, each chatbot's line, and each
+   conversation under its own heading. */
+.chatbot-compare-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatbot-several {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chatbot-several label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatbot-members {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.chatbot-member-log {
+  margin-top: 10px;
+}
+
 .standby-time {
   display: inline-flex;
   gap: 6px;

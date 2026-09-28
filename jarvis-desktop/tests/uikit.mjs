@@ -1487,6 +1487,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (!c) return null;
             c.reads += 1;
             c.ids.push(args.id);
+            // `namedCompare`: a read by comparison id ("Ask several and
+            // compare"); `compares` lists the ids asked for.
+            if (args.compare) {
+              c.compares.push(args.compare);
+              return JSON.parse(JSON.stringify(c.namedCompare || c.status));
+            }
             const out = args.id && c.named ? c.named : c.status;
             return JSON.parse(JSON.stringify(out));
           }
@@ -1494,12 +1500,23 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "chatbot_limits":
           case "chatbot_stop":
           case "chatbot_pause":
-          case "chatbot_resume": {
+          case "chatbot_resume":
+          case "chatbot_compare_start":
+          case "chatbot_compare_stop": {
             window.__chatbotCalls.push({ cmd, ...args });
-            if (state.stale && ["chatbot_start", "chatbot_limits", "chatbot_resume"].includes(cmd)) {
+            if (state.stale && ["chatbot_start", "chatbot_limits", "chatbot_resume",
+              "chatbot_compare_start"].includes(cmd)) {
               throw new Error("the event stream is stale, so this cannot be confirmed live - nothing can be sent until it reconnects");
             }
             const c = window.__chatbot;
+            if (cmd === "chatbot_compare_start") {
+              if (c.startRefuses) throw new Error(c.startRefuses);
+              return { ok: true, asking: true, compare: "cmp_000000000001",
+                message: "Nothing has been sent yet. An approval card lists every chatbot Jarvis would ask, the goal word for word, and every limit; the comparison starts only if you approve it." };
+            }
+            if (cmd === "chatbot_compare_stop") {
+              return { ok: true, compare: args.id, message: "Stopping. Nothing more is sent to any of the chatbots; messages already sent stay sent." };
+            }
             if (cmd === "chatbot_start") {
               if (c.startRefuses) throw new Error(c.startRefuses);
               return { ok: true, asking: true, session: "chat_000000000001",
@@ -1854,7 +1871,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__scheduleCalls = [];
   window.__focus = focus ? JSON.parse(JSON.stringify({ reads: 0, ...focus })) : null;
   window.__focusCalls = [];
-  window.__chatbot = chatbot ? JSON.parse(JSON.stringify({ reads: 0, ids: [], ...chatbot })) : null;
+  window.__chatbot = chatbot ? JSON.parse(JSON.stringify({ reads: 0, ids: [], compares: [], ...chatbot })) : null;
   window.__chatbotCalls = [];
   window.__briefing = briefing ? JSON.parse(JSON.stringify({
     briefing: null, setups: [], sources: {}, reads: 0, fails: null, ...briefing })) : null;

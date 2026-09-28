@@ -64,6 +64,12 @@ import {
 } from "./focus.js";
 import {
   actionsOf as chatbotActionsOf,
+  compareFormProblem,
+  compareProgress,
+  compareStatusLine,
+  compareTalkingLine,
+  memberLine as chatbotMemberLine,
+  pickLine as chatbotPickLine,
   formProblem as chatbotFormProblem,
   limitOf as chatbotLimitOf,
   neverWords,
@@ -370,6 +376,14 @@ const dom = {
   chatbotMinutes: $("chatbot-minutes"),
   chatbotNever: $("chatbot-never"),
   chatbotStart: $("chatbot-start"),
+  chatbotCompare: $("chatbot-compare"),
+  chatbotCompareToggle: $("chatbot-compare-toggle"),
+  chatbotCompareDetail: $("chatbot-compare-detail"),
+  chatbotCompareNote: $("chatbot-compare-note"),
+  chatbotWhichLabel: $("chatbot-which-label"),
+  chatbotSeveral: $("chatbot-several"),
+  chatbotSeveralLegend: $("chatbot-several-legend"),
+  chatbotSeveralList: $("chatbot-several-list"),
   comingUp: $("coming-up"),
   todoList: $("todo-list"),
   todoForm: $("todo-form"),
@@ -3934,10 +3948,19 @@ if (dom.focusStart) {
    its own: it is read again every few seconds while a conversation is
    live, and on every activity event. The last conversation's id is kept
    here so its summary stays on screen after it ends.
+
+   "Ask several and compare" (jarvis_chatbot_compare.py): the same form with
+   a tick box per chatbot asks the PC for ONE card listing every one. While
+   it runs: each chatbot's line, Pause / Resume / Stop for the whole
+   comparison, each conversation under its chatbot's name, and at the end
+   ONE summary - where they agree and disagree (who said what), the sources
+   each gave (not checked by Jarvis), who dropped out and why - kept on
+   screen in the outside-text style, never read aloud.
    ========================================================================== */
 
 const cb = { view: null, error: "", loading: false, again: false, at: 0, id: "", gone: false,
-  timer: null, filled: false, starting: false, limitsKey: "", logKey: "", limitsInFlight: false };
+  timer: null, filled: false, starting: false, limitsKey: "", logKey: "", limitsInFlight: false,
+  cmpId: "", cmpGone: false, lastKind: "", several: new Set(), severalKey: "" };
 const CHATBOT_READ_MS = 15000;
 
 async function loadChatbot() {
@@ -3950,17 +3973,31 @@ async function loadChatbot() {
   try {
     // The latest live conversation first (it may have been started on the
     // phone); else the one this window last showed, for its summary.
-    let view = readChatbot(await invoke("chatbot_status", { id: null }));
+    let view = readChatbot(await invoke("chatbot_status", { id: null, compare: null }));
     cb.gone = false;
+    cb.cmpGone = false;
     if (view.available && !view.session && cb.id) {
-      const named = readChatbot(await invoke("chatbot_status", { id: cb.id }));
-      if (named.available && named.session) view = named;
+      const named = readChatbot(await invoke("chatbot_status", { id: cb.id, compare: null }));
+      if (named.available && named.session) view = { ...view, session: named.session, limits: named.limits };
       else if (named.available) {
         cb.gone = true;
         cb.id = "";
       }
     }
+    // The same for a comparison: the latest one still going, else the one
+    // this window last showed, for its summary.
+    if (view.available && !view.compare && cb.cmpId) {
+      const named = readChatbot(await invoke("chatbot_status", { id: null, compare: cb.cmpId }));
+      if (named.available && named.compare) view = { ...view, compare: named.compare };
+      else if (named.available) {
+        cb.cmpGone = true;
+        cb.cmpId = "";
+      }
+    }
     if (view.available && view.session) cb.id = view.session.id;
+    if (view.available && view.compare) cb.cmpId = view.compare.id;
+    if (view.available && view.session && view.session.live) cb.lastKind = "session";
+    if (view.available && view.compare && view.compare.live) cb.lastKind = "compare";
     cb.view = view;
     cb.error = "";
   } catch (error) {
@@ -3996,16 +4033,25 @@ async function chatbotAct(cmd, args = {}) {
   await loadChatbot();
 }
 
+/** "Ask several and compare" is ticked. */
+function compareMode() {
+  return Boolean(dom.chatbotCompare && dom.chatbotCompare.checked
+    && dom.chatbotCompareToggle && !dom.chatbotCompareToggle.hidden);
+}
+
 async function chatbotStart() {
   const v = cb.view;
+  const several = compareMode();
   const form = {
     chatbot: dom.chatbotWhich ? dom.chatbotWhich.value : "",
+    // Ticked, in the PC's own order.
+    chatbots: v && v.available ? v.chatbots.filter((c) => cb.several.has(c.id)).map((c) => c.id) : [],
     goal: dom.chatbotGoal ? dom.chatbotGoal.value : "",
     messages: dom.chatbotMessages ? dom.chatbotMessages.value : "",
     minutes: dom.chatbotMinutes ? dom.chatbotMinutes.value : "",
   };
   if (cb.starting) return;
-  const problem = chatbotFormProblem(v, form);
+  const problem = several ? compareFormProblem(v, form) : chatbotFormProblem(v, form);
   if (problem) {
     toast(problem, "bad");
     return;
@@ -4021,14 +4067,22 @@ async function chatbotStart() {
     syncLiveButton(dom.chatbotStart);
   }
   try {
-    const out = await invoke("chatbot_start", {
-      chatbot: form.chatbot,
+    const limits = {
       goal: form.goal,
       maxMessages: chatbotLimitOf(form.messages, v.tier.turnsMax),
       maxMinutes: chatbotLimitOf(form.minutes, v.tier.minutesMax),
       neverSend: neverWords(dom.chatbotNever ? dom.chatbotNever.value : ""),
-    });
-    if (out && out.session) cb.id = out.session;
+    };
+    let out;
+    if (several) {
+      out = await invoke("chatbot_compare_start", { chatbots: form.chatbots, ...limits });
+      if (out && out.compare) cb.cmpId = out.compare;
+      cb.lastKind = "compare";
+    } else {
+      out = await invoke("chatbot_start", { chatbot: form.chatbot, ...limits });
+      if (out && out.session) cb.id = out.session;
+      cb.lastKind = "session";
+    }
     toast(asSentence((out && out.message) || CHATBOT.start_note), "ok");
     if (dom.chatbotGoal) dom.chatbotGoal.value = "";
   } catch (error) {
@@ -4038,7 +4092,7 @@ async function chatbotStart() {
   }
   await loadChatbot();
   // paintChatbotForm sets busy again only when nothing is built.
-  if (dom.chatbotStart && cb.view && cb.view.available) paintChatbotForm(cb.view, cb.view.session);
+  if (dom.chatbotStart && cb.view && cb.view.available) paintChatbotForm(cb.view);
 }
 
 function chatbotTurn(t, name) {
@@ -4167,7 +4221,7 @@ function paintChatbotLog(s) {
   const box = dom.chatbotLog;
   if (!box) return;
   const shown = s && !s.hidden ? s : null;
-  const key = shown ? JSON.stringify([shown.id, shown.summary, shown.transcript]) : "";
+  const key = shown ? "s" + JSON.stringify([shown.id, shown.summary, shown.transcript]) : "";
   if (key === cb.logKey) return;
   cb.logKey = key;
   const out = [];
@@ -4180,6 +4234,115 @@ function paintChatbotLog(s) {
     out.push(tr);
   }
   box.replaceChildren(...out);
+}
+
+/** A list under a small heading, for the comparison's summary. */
+function summaryList(box, title, items, cls) {
+  if (!items.length) return;
+  box.append(el("p", "note", title));
+  const list = el("ul", cls);
+  for (const item of items) list.append(typeof item === "string" ? el("li", "", item) : item);
+  box.append(list);
+}
+
+function compareSummary(c) {
+  const sm = c.summary;
+  const box = el("div", "chatbot-summary chatbot-outside chatbot-compare-summary");
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("h3", "subhead", CHATBOT.compare_summary_title));
+  head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  box.append(head);
+  box.append(el("p", "note", CHATBOT.compare_summary_note));
+  if (sm.answer) box.append(el("p", "chatbot-text", sm.answer));
+  summaryList(box, CHATBOT.agree_title, sm.agree, "chatbot-agree");
+  summaryList(box, CHATBOT.disagree_title, sm.disagree.map((d) => {
+    const li = el("li", "", d.point);
+    const views = el("ul", "");
+    for (const v of d.views) views.append(el("li", "", `${v.who}: ${v.said}`));
+    li.append(views);
+    return li;
+  }), "chatbot-disagree");
+  summaryList(box, CHATBOT.sources_title, sm.sources.map((x) => `${x.who}: ${x.items.join("; ")}`),
+    "chatbot-sources");
+  summaryList(box, CHATBOT.dropped_title, sm.dropped.map((x) => `${x.who} - ${x.why}`),
+    "chatbot-dropped");
+  summaryList(box, CHATBOT.open_title, sm.open, "chatbot-open");
+  return box;
+}
+
+/** The comparison's summary and each conversation: rebuilt only when they change. */
+function paintCompareLog(c) {
+  const box = dom.chatbotLog;
+  if (!box) return;
+  const shown = c && !c.hidden ? c : null;
+  const key = shown ? "c" + JSON.stringify([shown.id, shown.summary,
+    shown.members.map((m) => m.transcript)]) : "";
+  if (key === cb.logKey) return;
+  cb.logKey = key;
+  const out = [];
+  if (shown && shown.summary) out.push(compareSummary(shown));
+  const talked = shown ? shown.members.filter((m) => m.transcript.length) : [];
+  if (talked.length) {
+    const tr = el("div", "chatbot-transcript");
+    tr.append(el("h3", "subhead", CHATBOT.conversations_title));
+    tr.append(el("p", "note", CHATBOT.outside_note));
+    for (const m of talked) {
+      const part = el("div", "chatbot-member-log");
+      part.dataset.chatbot = m.chatbot;
+      part.append(el("h4", "subhead", m.name));
+      for (const t of m.transcript) part.append(chatbotTurn(t, m.name));
+      tr.append(part);
+    }
+    out.push(tr);
+  }
+  box.replaceChildren(...out);
+}
+
+function hiddenBlock(title) {
+  const hid = el("div", "private-hidden");
+  hid.append(el("p", "empty", CHATBOT.hidden));
+  hid.append(button("Show", revealPrivate, { title }));
+  return hid;
+}
+
+function compareNow(c) {
+  const now = el("div", "chatbot-now chatbot-compare-now");
+  now.dataset.state = c.state;
+  now.append(el("p", "chatbot-head", c.live ? compareTalkingLine(c)
+    : `${CHATBOT.compare_title}: ${compareStatusLine(c)}`));
+  if (c.live) now.append(el("p", "chatbot-line", compareStatusLine(c)));
+  if (c.state !== "refused") now.append(el("p", "note", compareProgress(c)));
+  if (c.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${c.tierName}`));
+  if (c.hidden) {
+    now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the comparison."));
+  } else if (c.goal) {
+    now.append(el("p", "note", `Your goal (sent word for word to each): ${c.goal}`));
+  }
+  if (c.members.length) {
+    const list = el("ul", "chatbot-members");
+    for (const m of c.members) {
+      const li = el("li", "", chatbotMemberLine(m, c));
+      li.dataset.state = m.state;
+      list.append(li);
+    }
+    now.append(list);
+  }
+  for (const m of c.hidden ? [] : c.members) {
+    if (!m.question) continue;
+    const q = el("div", "chatbot-question chatbot-outside");
+    q.append(el("p", "subhead", `${CHATBOT.question_title}: ${m.name}`));
+    q.append(el("p", "chatbot-text", m.question));
+    q.append(el("p", "note", CHATBOT.question_note));
+    now.append(q);
+  }
+  const actions = el("div", "row-actions");
+  for (const a of chatbotActionsOf(c)) {
+    if (a === "pause") actions.append(button(CHATBOT.pause, () => chatbotAct("chatbot_pause")));
+    if (a === "resume") actions.append(button(CHATBOT.resume, () => chatbotAct("chatbot_resume"), { live: true }));
+    if (a === "stop") actions.append(button(CHATBOT.stop, () => chatbotAct("chatbot_compare_stop", { id: c.id }), { danger: true }));
+  }
+  if (actions.childElementCount) now.append(actions);
+  return now;
 }
 
 function paintChatbot() {
@@ -4206,12 +4369,19 @@ function paintChatbot() {
     paintChatbotLog(null);
     return;
   }
-  const s = v.session;
+  const c = v.compare;
+  // A comparison going is shown; else the one this window started last.
+  const showCompare = Boolean(c && (c.live || (!(v.session && v.session.live)
+    && (cb.lastKind === "compare" || !v.session))));
+  const s = showCompare ? null : v.session;
   const out = [];
   if (cb.error) out.push(el("p", "empty failed", `Could not read it again: ${cb.error}`));
   if (!v.anyBuilt) out.push(el("p", "note chatbot-none", CHATBOT.none_built));
-  if (cb.gone) out.push(el("p", "note", CHATBOT.gone));
-  if (s) {
+  if (cb.gone && !showCompare) out.push(el("p", "note", CHATBOT.gone));
+  if (cb.cmpGone && !s) out.push(el("p", "note", CHATBOT.compare_gone));
+  if (showCompare) {
+    out.push(compareNow(c));
+  } else if (s) {
     const now = el("div", "chatbot-now");
     now.dataset.state = s.state;
     now.append(el("p", "chatbot-head", s.live ? chatbotTalkingLine(s) : `${s.name}: ${chatbotStatusLine(s)}`));
@@ -4219,11 +4389,7 @@ function paintChatbot() {
     if (s.state !== "refused") now.append(el("p", "note", chatbotProgress(s)));
     if (s.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${s.tierName}`));
     if (s.hidden) {
-      const hid = el("div", "private-hidden");
-      hid.append(el("p", "empty", CHATBOT.hidden));
-      hid.append(button("Show", revealPrivate,
-        { title: "Asks Windows Hello - your PIN, fingerprint or face - then shows the conversation." }));
-      now.append(hid);
+      now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the conversation."));
     } else if (s.goal) {
       now.append(el("p", "note", `Your goal (sent word for word): ${s.goal}`));
     }
@@ -4247,9 +4413,10 @@ function paintChatbot() {
   }
   box.replaceChildren(...out);
   paintChatbotLimits(v, s);
-  paintChatbotLog(s);
-  paintChatbotForm(v, s);
-  const live = Boolean(s && s.live);
+  if (showCompare) paintCompareLog(c);
+  else paintChatbotLog(s);
+  paintChatbotForm(v);
+  const live = Boolean((v.session && v.session.live) || (c && c.live));
   if (live && !cb.timer) {
     cb.timer = setInterval(() => {
       if (state.view === "work" && !cb.loading) loadChatbot();
@@ -4261,11 +4428,48 @@ function paintChatbot() {
   }
 }
 
-function paintChatbotForm(v, s) {
+/** The tick boxes, one per chatbot: rebuilt only when the list changes. */
+function paintChatbotSeveral(v) {
+  if (dom.chatbotSeveralLegend) {
+    dom.chatbotSeveralLegend.textContent = v.canCompare ? chatbotPickLine(v) : CHATBOT.compare_not_enough;
+  }
+  const list = dom.chatbotSeveralList;
+  if (!list) return;
+  const key = JSON.stringify(v.chatbots);
+  if (key === cb.severalKey) return;
+  cb.severalKey = key;
+  for (const id of [...cb.several]) {
+    if (!v.chatbots.some((c) => c.id === id && c.built)) cb.several.delete(id);
+  }
+  list.replaceChildren(...v.chatbots.map((c) => {
+    const lab = el("label", "");
+    const box = el("input", "");
+    box.type = "checkbox";
+    box.value = c.id;
+    box.disabled = !c.built;
+    box.checked = c.built && cb.several.has(c.id);
+    box.addEventListener("change", () => {
+      if (box.checked) cb.several.add(c.id);
+      else cb.several.delete(c.id);
+    });
+    lab.append(box, ` ${c.built ? c.name : `${c.name} - ${c.note || "Not built yet."}`}`);
+    return lab;
+  }));
+}
+
+function paintChatbotForm(v) {
   const form = dom.chatbotForm;
   if (!form) return;
-  form.hidden = Boolean(s && s.live);
+  form.hidden = Boolean((v.session && v.session.live) || (v.compare && v.compare.live));
   if (form.hidden) return;
+  // An older PC has no comparisons: no tick box then.
+  if (dom.chatbotCompareToggle) dom.chatbotCompareToggle.hidden = !(v.tier.compareMax > 0);
+  const several = compareMode();
+  if (dom.chatbotCompareDetail) dom.chatbotCompareDetail.hidden = !several;
+  if (dom.chatbotCompareNote) dom.chatbotCompareNote.hidden = !several;
+  if (dom.chatbotWhichLabel) dom.chatbotWhichLabel.hidden = several;
+  if (dom.chatbotSeveral) dom.chatbotSeveral.hidden = !several;
+  if (several) paintChatbotSeveral(v);
   const which = dom.chatbotWhich;
   if (which) {
     const was = which.value;
@@ -4304,6 +4508,11 @@ if (dom.chatbotForm) {
   dom.chatbotForm.addEventListener("submit", (event) => {
     event.preventDefault();
     chatbotStart();
+  });
+}
+if (dom.chatbotCompare) {
+  dom.chatbotCompare.addEventListener("change", () => {
+    if (cb.view && cb.view.available) paintChatbotForm(cb.view);
   });
 }
 if (dom.chatbotStart) {

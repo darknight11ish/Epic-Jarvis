@@ -770,7 +770,7 @@ permissions = [
 # Brain's alone.
 [[set]]
 identifier = "chatbot"
-description = "Talk to a chatbot for me: read the conversation, start one (ONE approval card), change its limits (a NEW card), stop, pause and resume it. Start, limits and resume are held on a stale link."
+description = "Talk to a chatbot for me: read the conversation, start one (ONE approval card), change its limits (a NEW card), stop, pause and resume it; ask several and compare (ONE card listing every chatbot) and stop that. Start, compare, limits and resume are held on a stale link."
 permissions = [
   "allow-chatbot-status",
   "allow-chatbot-start",
@@ -778,6 +778,8 @@ permissions = [
   "allow-chatbot-stop",
   "allow-chatbot-pause",
   "allow-chatbot-resume",
+  "allow-chatbot-compare-start",
+  "allow-chatbot-compare-stop",
 ]
 
 # The morning briefing (backend/briefing.patch; the owner's decisions of
