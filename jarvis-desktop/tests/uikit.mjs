@@ -481,12 +481,16 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
-  folders, historyImport, widgets, chatbot }) {
+  folders, historyImport, widgets, chatbot, devices }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
   // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
   window.__folders = folders || null;
+  // devices.rs (docs/PAIRING-DESIGN.md): { list, address, start, startFails,
+  // sessions, removeFails, sharedFails } (devices.mjs). Unset, a PC whose
+  // backend has no pairing yet - the Devices card says so and nothing else.
+  window.__devices = devices || null;
   // App lock on or off, for get_app_lock (apps security audit M3).
   window.__appLock = Boolean(appLock);
   const state = {
@@ -2104,6 +2108,53 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return window.__folders && window.__folders.removeAnswer || { ok: true };
           case "import_notion":
             return window.__folders && window.__folders.importAnswer || { cancelled: true };
+          // devices.rs: Settings -> Devices. The QR picture is Rust's; here a
+          // scenario's `start.qr_svg` stands in for it. `sessions` answers
+          // pair_session in turn (the last one repeats).
+          case "devices_list": {
+            const d = window.__devices;
+            if (!d || !d.list) {
+              return { available: false,
+                       why: "Your PC's Jarvis cannot pair phones by QR code yet - run apply-patches.ps1 on this PC. Until then, your phone keeps using the old shared key (Settings, Connection)." };
+            }
+            return JSON.parse(JSON.stringify({ available: true, ...d.list }));
+          }
+          case "pair_phone_address":
+            return (window.__devices && window.__devices.address) || { address: null, source: null };
+          case "pair_start": {
+            const d = window.__devices || {};
+            if (d.startFails) throw new Error(d.startFails);
+            d.sessionIndex = 0;
+            d.started = (d.started || 0) + 1;
+            return JSON.parse(JSON.stringify(d.start));
+          }
+          case "pair_session": {
+            const d = window.__devices || {};
+            const all = d.sessions || [{ state: "none" }];
+            if (!d.started && !d.openAtLoad) return { state: "none" };
+            const i = Math.min(d.sessionIndex || 0, all.length - 1);
+            d.sessionIndex = i + 1;
+            return JSON.parse(JSON.stringify(all[i]));
+          }
+          case "pair_cancel":
+            window.__devices.cancelled = (window.__devices.cancelled || 0) + 1;
+            return { ok: true, was: "waiting_for_phone", http: 200 };
+          case "devices_remove": {
+            const d = window.__devices;
+            if (d.removeFails) throw new Error(d.removeFails);
+            const row = d.list.devices.find((x) => x.id === args.id);
+            d.list.devices = d.list.devices.filter((x) => x.id !== args.id);
+            return { ok: true, id: args.id, name: row && row.name, was_this_device: false, http: 200 };
+          }
+          case "devices_shared": {
+            const d = window.__devices;
+            if (d.sharedFails) throw new Error(d.sharedFails);
+            if (args.retired === true) {
+              d.list.shared = { ...d.list.shared, retired: true, retired_at: 1790000000 };
+              return { ok: true, retired: true, http: 200 };
+            }
+            return { ok: true, waiting: true, http: 202 };
+          }
           default: return null;
         }
       },
