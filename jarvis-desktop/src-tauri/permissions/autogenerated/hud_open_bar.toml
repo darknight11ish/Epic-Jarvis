@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-open-bar"
+description = "Enables the hud_open_bar command without any pre-configured scope."
+commands.allow = ["hud_open_bar"]
+
+[[permission]]
+identifier = "deny-hud-open-bar"
+description = "Denies the hud_open_bar command without any pre-configured scope."
+commands.deny = ["hud_open_bar"]
